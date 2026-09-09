@@ -33,6 +33,7 @@ Deno.test("resolveScope — org que afrouxa view_org_metrics para o member abre 
 
   assertEquals(scope.kind, "organization");
   assertEquals(scope.teamMemberId, "tm-ana");
+  assertEquals(scope.chatTeamMemberId, "tm-ana");
 });
 
 Deno.test("resolveScope — Master sem cadeira na org lida alcança a organização mesmo assim", () => {

@@ -15,6 +15,7 @@ import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/aut
 interface SummarizeRequest {
   lead_id: string;
   conversation_id?: string;
+  instance_id?: string;
   force_regenerate?: boolean;
 }
 
@@ -77,7 +78,7 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
 
   try {
     const body: SummarizeRequest = await req.json();
-    const { lead_id, conversation_id, force_regenerate } = body;
+    const { lead_id, conversation_id, instance_id, force_regenerate } = body;
 
     if (!lead_id) {
       return new Response(JSON.stringify({ error: "lead_id is required" }), {
@@ -105,11 +106,45 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
     // ── Auth: verify caller belongs to lead's organization ──
     // Service-role (caller interno) já é confiável e não tem userId — pula o
     // check de membership, que é específico de usuários autenticados.
+    let actorMember: { id: string; role: string } | null = null;
     if (!isServiceRole) {
       const hasAccess = await validateOrganizationAccess(supabase, userId!, lead.organization_id);
       if (!hasAccess) {
         return unauthorizedResponse("User does not belong to lead's organization", corsHeaders);
       }
+      const { data: member } = await supabase.from('team_members')
+        .select('id, role').eq('user_id', userId!).eq('organization_id', lead.organization_id)
+        .eq('is_active', true).maybeSingle();
+      actorMember = member;
+    }
+
+    let resolvedInstanceId: string | null = instance_id || null;
+    if (resolvedInstanceId) {
+      const { data: instance } = await supabase.from('whatsapp_instances').select('id')
+        .eq('id', resolvedInstanceId).eq('organization_id', lead.organization_id).maybeSingle();
+      if (!instance) return new Response(JSON.stringify({ error: "Caixa não encontrada." }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } else {
+      const { data: boxes } = await supabase.from('whatsapp_conversation_summary').select('instance_id')
+        .eq('organization_id', lead.organization_id).eq('lead_id', lead_id).limit(2);
+      const distinct = [...new Set((boxes ?? []).map((row) => row.instance_id).filter(Boolean))];
+      if (distinct.length === 1) resolvedInstanceId = distinct[0];
+    }
+
+    if (!isServiceRole && actorMember?.role !== 'admin') {
+      if (!resolvedInstanceId || !actorMember) {
+        return new Response(JSON.stringify({ error: "instance_id é obrigatório para esta conversa." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: allowed } = await supabase.rpc('oraculo_chat_scope_allows', {
+        p_organization_id: lead.organization_id,
+        p_team_member_id: actorMember.id,
+        p_lead_id: lead_id,
+        p_instance_id: resolvedInstanceId,
+      });
+      if (!allowed) return unauthorizedResponse("Conversation is outside caller scope", corsHeaders);
     }
 
     // 2. Buscar a conversa do lead (mais recente)
@@ -122,10 +157,9 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
       conversationQuery = conversationQuery.eq('id', conversation_id);
     }
 
-    const { data: conversation, error: convError } = await conversationQuery
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: conversation, error: convError } = resolvedInstanceId
+      ? { data: null, error: null }
+      : await conversationQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
 
     if (convError) {
       console.error('[summarize-conversation] Error fetching conversation:', convError);
@@ -148,11 +182,13 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
     }
 
     // Também buscar mensagens do WhatsApp como fallback ou complemento
-    const { data: whatsappMessages } = await supabase
+    let whatsappQuery = supabase
       .from('whatsapp_messages')
       .select('direction, content, created_at')
-      .eq('lead_id', lead_id)
-      .order('created_at', { ascending: true });
+      .eq('organization_id', lead.organization_id)
+      .eq('lead_id', lead_id);
+    if (resolvedInstanceId) whatsappQuery = whatsappQuery.eq('instance_id', resolvedInstanceId);
+    const { data: whatsappMessages } = await whatsappQuery.order('created_at', { ascending: true });
 
     if (whatsappMessages && whatsappMessages.length > 0) {
       const formattedWhatsapp = whatsappMessages.map(m => ({
@@ -181,13 +217,16 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
 
     // 3. Verificar se já existe um resumo recente (menos de 1 hora)
     if (!force_regenerate) {
-      const { data: existingSummary } = await supabase
+      let summaryQuery = supabase
         .from('conversation_summaries')
         .select('*')
+        .eq('organization_id', lead.organization_id)
         .eq('lead_id', lead_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      summaryQuery = resolvedInstanceId
+        ? summaryQuery.eq('instance_id', resolvedInstanceId)
+        : summaryQuery.is('instance_id', null);
+      const { data: existingSummary } = await summaryQuery.order('created_at', { ascending: false })
+        .limit(1).maybeSingle();
 
       if (existingSummary) {
         const summaryAge = Date.now() - new Date(existingSummary.created_at).getTime();
@@ -301,6 +340,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         lead_id: lead_id,
         conversation_id: conversation?.id || null,
         organization_id: lead.organization_id,
+        instance_id: resolvedInstanceId,
         summary: summaryData.summary,
         key_points: summaryData.key_points,
         sentiment: summaryData.sentiment,
@@ -312,7 +352,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         message_count: summaryData.message_count,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'lead_id',
+        onConflict: 'organization_id,lead_id,instance_id',
       })
       .select()
       .single();

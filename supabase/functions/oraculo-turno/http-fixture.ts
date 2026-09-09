@@ -4,6 +4,7 @@ export const ANA = "10000000-0000-4000-8000-000000000001";
 export const ORG_A = "20000000-0000-4000-8000-000000000001";
 export const ORG_B = "20000000-0000-4000-8000-000000000002";
 export const CONVERSA_A = "30000000-0000-4000-8000-000000000001";
+export const OWNER_TM = "40000000-0000-4000-8000-000000000001";
 export const SEGREDO = "O contrato confidencial da organização A vale R$ 713.250.";
 
 export class ExternalServices {
@@ -50,6 +51,12 @@ export class ExternalServices {
       return Response.json({ plan_name: "test", features: this.features });
     }
     if (url.pathname === "/rest/v1/rpc/oraculo_metricas") return Response.json({ vendas: 1 });
+    if (url.pathname === "/rest/v1/rpc/oraculo_conversa_detalhe") {
+      const body = await req.json();
+      return Response.json(body.p_team_member_id === OWNER_TM
+        ? [{ papel: "lead", conteudo: SEGREDO }]
+        : []);
+    }
     if (url.pathname === "/rest/v1/rpc/oraculo_save_turn") {
       const body = await req.json();
       const conversation = this.tables.oraculo_conversations.find((row) =>

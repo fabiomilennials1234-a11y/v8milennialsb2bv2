@@ -15,6 +15,8 @@ import { funilTool } from "./tools/funil.ts";
 import { rankingTool } from "./tools/ranking.ts";
 import { perdasTool } from "./tools/perdas.ts";
 import { leadsTool } from "./tools/leads.ts";
+import { conversasTool } from "./tools/conversas.ts";
+import { conversaDetalheTool } from "./tools/conversa-detalhe.ts";
 
 export interface ToolSchema {
   type: string;
@@ -45,6 +47,35 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
       parameters: {
         type: "object",
         properties: { periodo_dias: PERIODO },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "conversas",
+      description:
+        "Visão agregada das conversas comerciais no período: cobertura dos resumos, sentimento, temperatura, objeções e conversas recentes. Cada item traz lead_id e instance_id para abrir o detalhe dentro do mesmo escopo.",
+      parameters: {
+        type: "object",
+        properties: { periodo_dias: PERIODO, limite: LIMITE },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "conversa_detalhe",
+      description:
+        "Transcrição de uma conversa já localizada por `conversas`. Exige lead_id e instance_id. Conversa fora do escopo volta vazia.",
+      parameters: {
+        type: "object",
+        required: ["lead_id", "instance_id"],
+        properties: {
+          lead_id: { type: "string", format: "uuid" },
+          instance_id: { type: "string", format: "uuid" },
+          limite: { type: "integer", description: "Mensagens mais recentes (padrão 100, máximo 200)." },
+        },
       },
     },
   },
@@ -117,7 +148,7 @@ export interface FerramentaDoLaco {
 /** Os executores, na mesma ordem em que o catálogo os anuncia. */
 export function criarFerramentas(db: ToolDb): FerramentaDoLaco[] {
   const deps = { db };
-  return [metricasTool, funilTool, rankingTool, perdasTool, leadsTool].map(
+  return [metricasTool, funilTool, rankingTool, perdasTool, leadsTool, conversasTool, conversaDetalheTool].map(
     (t) => ({
       name: t.name,
       execute: (args: Record<string, unknown>, scope: OracleScope) =>

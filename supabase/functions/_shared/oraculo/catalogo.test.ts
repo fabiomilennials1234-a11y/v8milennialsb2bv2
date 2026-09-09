@@ -17,7 +17,15 @@ Deno.test("catálogo — todo nome anunciado ao modelo tem executor, e vice-vers
   assertEquals(anunciadas, executaveis);
 });
 
-Deno.test("catálogo — as cinco ferramentas da Onda 2 estão no ar", () => {
+Deno.test("catálogo — as sete ferramentas da Onda 2 estão no ar", () => {
   const nomes = TOOL_SCHEMAS.map((s) => s.function.name).sort();
-  assertEquals(nomes, ["funil", "leads", "metricas", "perdas", "ranking"]);
+  assertEquals(nomes, [
+    "conversa_detalhe",
+    "conversas",
+    "funil",
+    "leads",
+    "metricas",
+    "perdas",
+    "ranking",
+  ]);
 });

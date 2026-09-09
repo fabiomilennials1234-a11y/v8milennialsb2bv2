@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertNotEquals } from "@std/assert";
-import { CONVERSA_A, ORG_A, ORG_B, SEGREDO, withOracle } from "./http-fixture.ts";
+import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert@^1.0.0";
+import { CONVERSA_A, ORG_A, ORG_B, OWNER_TM, SEGREDO, withOracle } from "./http-fixture.ts";
 
 Deno.test("HTTP — conversa de outra organização não entra no contexto do usuário multi-org", async () => {
   await withOracle(async (_services, post) => {
@@ -8,6 +8,42 @@ Deno.test("HTTP — conversa de outra organização não entra no contexto do us
     assertEquals(res.status, 200);
     assertNotEquals(body.resposta, SEGREDO);
     assertNotEquals(body.conversa_id, CONVERSA_A);
+  });
+});
+
+Deno.test("HTTP — conversa_detalhe devolve a conversa ao responsável e vazio ao colega", async () => {
+  await withOracle(async (services, post) => {
+    const toolCall = () => Response.json({ model: "test-model", choices: [{ message: {
+      tool_calls: [{ id: "call-conversa", type: "function", function: {
+        name: "conversa_detalhe",
+        arguments: JSON.stringify({
+          lead_id: "50000000-0000-4000-8000-000000000001",
+          instance_id: "60000000-0000-4000-8000-000000000001",
+        }),
+      } }],
+    } }] });
+    services.model = (body) => services.modelRequests.length === 1
+      ? toolCall()
+      : services.completion(JSON.stringify(body.messages).includes(SEGREDO) ? SEGREDO : "[]");
+
+    const member = services.tables.team_members.find((row) => row.organization_id === ORG_A)!;
+    Object.assign(member, { id: OWNER_TM, role: "membro" });
+    const owner = await post({ organization_id: ORG_A, pergunta: "Mostre a conversa." });
+    assertEquals(owner.status, 200);
+    assertEquals((await owner.json()).resposta, SEGREDO);
+
+    services.currentUser = "10000000-0000-4000-8000-000000000099";
+    services.tables.team_members.push({
+      id: "40000000-0000-4000-8000-000000000099",
+      user_id: services.currentUser,
+      organization_id: ORG_A,
+      role: "membro",
+      is_active: true,
+    });
+    services.modelRequests.length = 0;
+    const colleague = await post({ organization_id: ORG_A, pergunta: "Mostre a conversa." });
+    assertEquals(colleague.status, 200);
+    assertEquals((await colleague.json()).resposta, "[]");
   });
 });
 

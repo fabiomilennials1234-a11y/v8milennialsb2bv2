@@ -24,8 +24,19 @@ export interface OraclePermissions {
 }
 
 export type OracleScope =
-  | { kind: "organization"; organizationId: string; teamMemberId: string | null }
-  | { kind: "assigned"; organizationId: string; teamMemberId: string };
+  | {
+    kind: "organization";
+    organizationId: string;
+    teamMemberId: string | null;
+    /** Métricas amplas nunca ampliam acesso às conversas. */
+    chatTeamMemberId?: string;
+  }
+  | {
+    kind: "assigned";
+    organizationId: string;
+    teamMemberId: string;
+    chatTeamMemberId?: string;
+  };
 
 export function resolveScope(
   actor: OracleActor,
@@ -33,11 +44,20 @@ export function resolveScope(
 ): OracleScope {
   // O papel é o default; `view_org_metrics` é a alavanca que uma organização
   // usa para afrouxar o recorte sem que ninguém altere código (ADR-0032 §5).
-  if (actor.isAdmin || perms.viewOrgMetrics) {
+  if (actor.isAdmin) {
     return {
       kind: "organization",
       organizationId: actor.organizationId,
       teamMemberId: actor.teamMemberId || null,
+    };
+  }
+
+  if (perms.viewOrgMetrics) {
+    return {
+      kind: "organization",
+      organizationId: actor.organizationId,
+      teamMemberId: actor.teamMemberId,
+      chatTeamMemberId: actor.teamMemberId,
     };
   }
 
