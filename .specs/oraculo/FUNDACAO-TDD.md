@@ -2,8 +2,8 @@
 
 Data: 2026-09-08
 Branch: `codex/oraculo-fundacao-tdd`
-Base auditada: `55673f90` (`origin/main`).
-Estado: fronteiras confirmadas pelo CTO ("CONFIRMO"). Correções locais implementadas com TDD; validação SQL/RLS real concluída na branch temporária; publicação pendente.
+Base auditada: `bcbf43b2` (`origin/main`).
+Estado: implementação e validação funcional concluídas; pipeline final e revisão do PR pendentes. Produção intacta.
 
 ## Escopo desta entrega
 
@@ -181,3 +181,16 @@ Testes WhatsApp/Confirmação/Propostas passaram a exercitar pipeline_entries/st
 Integração roda em paralelo a quality, como RLS já rodava; todos permanecem gates independentes. Não foram pulados testes nem alteradas permissões do produto.
 
 Main af8d7dc7 adicionou migration de nomes WhatsApp com versão 20271019000000 durante a rodada. Incorporada main e renumeradas migrations Oráculo para **20271019144200** e **20271019144201**. Conteúdos comparados byte a byte: idênticos. Versões anteriores existiram apenas em QA destruído e CI descartável; nenhuma aplicada em produção. Guarda de versões passou sem colisões.
+
+
+### Fechamento da integração e contratos de entrada — 2026-09-09
+
+Replay integral da main chegou a **556 testes de integração aprovados, zero falhas e 50 pulados**. RLS aprovou **2.074 testes em 97 arquivos**. A recuperação do CI não suprimiu casos: fixtures passaram a falhar cedo, contratos aposentados saíram e três defeitos de produto apareceram em vermelho antes da correção:
+
+- `fn_entrada_sistema_criar` aceitava etapa ausente/inativa e gerava cards invisíveis. Migration `20271019144202` resolve somente etapa ativa, usa primeira ativa como fallback e recusa funil sem etapa ativa.
+- `create_lead_with_pipe` referenciava `leads.meeting_date`, coluna já removida. Migration `20271019144203` mantém a assinatura pública e grava somente colunas vivas; data da reunião permanece no metadata da entrada.
+- gestor vinculado era aceito pelo gate externo de organização e recusado pelo gate interno da policy de leads. Migration `20271019144204` restaura leitura apenas nas organizações vinculadas e mantém o controle negativo fora delas.
+
+Teste HTTP real adicional chamou `webhook-new-lead` e `webhook-confirmacao` no runtime local do Supabase, com chave `tq_live_*` hashada e organização isolada. RED: ambos responderam 500/PGRST202 porque enviavam `p_pre_sale_responsible_id` e `p_sale_responsible_id`, parâmetros inexistentes na RPC. As chamadas agora usam o contrato público vigente; `sdr_id`, `closer_id` e `responsible_id` preservam a responsabilidade canônica. GREEN depende da rodada final do PR.
+
+As migrations 20271019144202–204 possuem rollback pareado. Publicação exige aplicar migrations antes das Edge Functions. Nenhuma migration ou função foi implantada em produção nesta entrega.

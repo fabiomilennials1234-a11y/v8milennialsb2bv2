@@ -47,3 +47,10 @@ Testes WhatsApp/Confirmação/Propostas passaram a exercitar pipeline_entries/st
 Integração roda em paralelo a quality, como RLS já rodava; todos permanecem gates independentes. Não foram pulados testes nem alteradas permissões do produto.
 
 Main af8d7dc7 adicionou migration de nomes WhatsApp com versão 20271019000000 durante a rodada. Incorporada main e renumeradas migrations Oráculo para **20271019144200** e **20271019144201**. Conteúdos comparados byte a byte: idênticos. Versões anteriores existiram apenas em QA destruído e CI descartável; nenhuma aplicada em produção. Guarda de versões passou sem colisões.
+
+
+### Fechamento da integração e webhooks — 2026-09-09
+
+Replay integral chegou a 556 testes de integração aprovados, zero falhas e 50 pulados; RLS aprovou 2.074 testes em 97 arquivos. O trabalho revelou e corrigiu três defeitos de produto: card fantasma em etapa inativa (`20271019144202`), RPC de criação usando a coluna removida `leads.meeting_date` (`20271019144203`) e gestor vinculado recusado pela policy de leads (`20271019144204`). Todas possuem rollback pareado.
+
+Teste HTTP real novo cobre `webhook-new-lead` e `webhook-confirmacao` com Edge Runtime, PostgREST e autenticação `tq_live_*`. RED confirmou 500/PGRST202 nos dois endpoints: os callers enviavam parâmetros inexistentes na assinatura vigente de `create_lead_with_pipe`. Argumentos órfãos removidos; campos canônicos de responsabilidade preservados. GREEN depende da rodada final do PR. Produção permanece intacta.
