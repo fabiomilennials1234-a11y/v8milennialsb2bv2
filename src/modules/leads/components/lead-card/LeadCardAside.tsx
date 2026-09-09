@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, Pencil, UserRound } from "lucide-react";
+import { ExternalLink, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadCardMetrics } from "./LeadCardMetrics";
 import { LeadCardNotes } from "./LeadCardNotes";
@@ -168,24 +168,6 @@ export function LeadCardAside({
             )}
           </div>
 
-          {/* "Sem atendente" do print — link azul quando vazio, que é o padrão
-              do DataCrazy inteiro: campo vazio é convite, não lacuna. */}
-          <div className="mt-3 flex w-full items-center justify-center gap-2 border-t border-border pt-3 text-[12.5px]">
-            <UserRound className="size-[15px] shrink-0 text-muted-foreground" aria-hidden="true" />
-            {lead.dono ? (
-              <span className="truncate text-foreground/90" title={lead.dono.papel}>
-                {lead.dono.nome}
-              </span>
-            ) : (
-              <span className="text-primary underline underline-offset-2">Sem atendente</span>
-            )}
-          </div>
-
-          {/* Os controles ficam logo abaixo da linha do atendente porque é a
-              mesma pergunta — "quem cuida disto?" — só que acionável. A linha
-              de cima continua existindo: ela mostra o NOME do responsável
-              efetivo, e os círculos dos slots mostram só as iniciais. Trocar
-              uma pela outra ganharia um clique e perderia a leitura. */}
           {controles && (
             <div className="mt-3 w-full border-t border-border pt-3">{controles}</div>
           )}
