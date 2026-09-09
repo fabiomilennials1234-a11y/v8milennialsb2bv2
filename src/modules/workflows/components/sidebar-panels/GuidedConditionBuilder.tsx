@@ -21,6 +21,7 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
     : condition.field === 'business.trigger.stage' ? !condition.pipelineId || !condition.stageId
     : condition.field === 'business.trigger.value' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
       && (condition.value === '' || !Number.isFinite(condition.value))
+    : condition.field === 'business.trigger.stage_elapsed' ? condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -116,7 +117,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
             return;
           }
           if (fieldType === 'number') {
-            const compatible = condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number');
+            const compatible = condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.trigger.value'
+              || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number');
             setFieldReset(!compatible);
             const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType, fieldLabel };
             if (compatible && (condition.operator === 'is_empty' || condition.operator === 'is_not_empty')) onChange({ ...base, operator: condition.operator });
@@ -137,13 +139,21 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         setFieldReset(condition.field !== field && !(((isGuidedTextField(condition.field) || (condition.field === 'lead.custom' && condition.fieldType === 'text')) && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
         if (field === 'business.trigger.stage') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, operator: 'equals', pipelineId: '', stageId: '' });
+        else if (field === 'business.trigger.stage_elapsed') {
+          if (condition.field === 'business.trigger.stage_elapsed') onChange(condition);
+          else if ((condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score'
+            || (condition.field === 'lead.custom' && condition.fieldType === 'number'))
+            && isGuidedNumberOperator(condition.operator) && 'value' in condition) {
+            onChange({ version: 1, id: condition.id, field, operator: condition.operator, value: condition.value, unit: 'hours' });
+          } else onChange({ version: 1, id: condition.id, field, operator: 'greater_than_or_equal', value: '', unit: 'hours' });
+        }
         else if (field === 'business.trigger.value') {
           const base = { version: 1 as const, id: condition.id, field };
           if ((condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score'
             || (condition.field === 'lead.custom' && condition.fieldType === 'number')) && condition.operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
           else if ((condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score'
             || (condition.field === 'lead.custom' && condition.fieldType === 'number')) && condition.operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
-          else if ((condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score'
+          else if ((condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score'
             || (condition.field === 'lead.custom' && condition.fieldType === 'number')) && isGuidedNumberOperator(condition.operator)
             && 'value' in condition) onChange({ ...base, operator: condition.operator, value: condition.value });
           else onChange({ ...base, operator: 'equals', value: '' });
@@ -154,12 +164,12 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         else if (field === 'lead.tags') onChange({ version: 1, id: condition.id, field: 'lead.tags', operator: 'has_tag', tagId: '' });
         else if (isGuidedNumberField(field)) {
           const base = { version: 1 as const, id: condition.id, field };
-          if (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
+          if (condition.field === 'business.trigger.stage_elapsed' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
             onChange(condition.operator === 'is_empty' || condition.operator === 'is_not_empty'
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
@@ -240,6 +250,25 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         </select>
         {missingValue && <p className="text-xs text-destructive">Escolha Sim, Não ou “está vazio”.</p>}
       </div>}
+    </> : condition.field === 'business.trigger.stage_elapsed' ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => isGuidedNumberOperator(event.target.value) && onChange({ ...condition, operator: event.target.value })}>
+        {Object.entries(GUIDED_NUMBER_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Tempo</Label>
+          <Input id={`guided-value-${condition.id}`} type="number" min="0" step="any" value={condition.value} aria-invalid={missingValue}
+            onChange={event => onChange({ ...condition, value: event.target.value === '' ? '' : event.target.valueAsNumber })} />
+        </div>
+        <div className="space-y-2"><Label htmlFor={`guided-unit-${condition.id}`}>Unidade</Label>
+          <select id={`guided-unit-${condition.id}`} className={selectClass} value={condition.unit}
+            onChange={event => onChange({ ...condition, unit: event.target.value === 'minutes' ? 'minutes' : event.target.value === 'days' ? 'days' : 'hours' })}>
+            <option value="minutes">Minutos</option><option value="hours">Horas</option><option value="days">Dias</option>
+          </select>
+        </div>
+      </div>
+      {missingValue && <p className="text-xs text-destructive">Informe um tempo igual ou maior que zero.</p>}
     </> : (condition.field === 'business.trigger.value' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {

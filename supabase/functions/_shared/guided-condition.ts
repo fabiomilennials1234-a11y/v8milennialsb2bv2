@@ -39,8 +39,11 @@ export type GuidedTriggerBusinessStageRule = {
 
 export type GuidedTriggerBusinessValueRule = { version: 1; id: string; field: 'business.trigger.value' }
   & GuidedNumberComparison;
+export type GuidedElapsedUnit = 'minutes' | 'hours' | 'days';
+export type GuidedTriggerBusinessStageElapsedRule = { version: 1; id: string; field: 'business.trigger.stage_elapsed';
+  operator: Exclude<GuidedNumberComparison['operator'], 'is_empty' | 'is_not_empty'>; value: number; unit: GuidedElapsedUnit };
 
-export type GuidedRule = GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -74,6 +77,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       && typeof rule.stageId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.stageId);
     if (rule.field === 'business.trigger.value') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || (isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value));
+    if (rule.field === 'business.trigger.stage_elapsed') return isGuidedNumberOperator(rule.operator)
+      && typeof rule.value === 'number' && Number.isFinite(rule.value) && rule.value >= 0
+      && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -177,8 +183,8 @@ export async function evaluateGuidedCondition(
   const usesResponsibleReader = Boolean(request.authorization && responsibleFields.length);
   const usesOriginReader = Boolean(request.authorization && requestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
-  const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value');
-  const usesOnlyTriggerBusiness = requestedFields.every(field => field === 'business.trigger.stage' || field === 'business.trigger.value');
+  const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
+  const usesOnlyTriggerBusiness = requestedFields.every(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? usesOnlyTriggerBusiness ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
     : usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
@@ -226,7 +232,7 @@ export async function evaluateGuidedCondition(
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   type BusinessStageData = {
-    entry: { id: string; pipeline_id: string; stage_id: string; value: number | null };
+    entry: { id: string; pipeline_id: string; stage_id: string; value: number | null; stage_elapsed_seconds: number | null };
     pipeline: { id: string; name: string };
     stages: Array<{ id: string; name: string; pipeline_id: string }>;
   };
@@ -254,6 +260,7 @@ export async function evaluateGuidedCondition(
     const candidate = payload as BusinessStageData;
     if (!candidate.entry || typeof candidate.entry.id !== 'string' || typeof candidate.entry.pipeline_id !== 'string'
       || typeof candidate.entry.stage_id !== 'string' || (candidate.entry.value !== null && (typeof candidate.entry.value !== 'number' || !Number.isFinite(candidate.entry.value)))
+      || (candidate.entry.stage_elapsed_seconds !== null && (typeof candidate.entry.stage_elapsed_seconds !== 'number' || !Number.isFinite(candidate.entry.stage_elapsed_seconds)))
       || !candidate.pipeline || typeof candidate.pipeline.id !== 'string' || typeof candidate.pipeline.name !== 'string' || !Array.isArray(candidate.stages)
       || candidate.stages.some(stage => !stage || typeof stage.id !== 'string' || typeof stage.name !== 'string' || typeof stage.pipeline_id !== 'string')) {
       return { status: 'error' as const, code: 'source_unavailable' as const };
@@ -262,6 +269,10 @@ export async function evaluateGuidedCondition(
     const stagePairs = new Set(candidate.stages.map(stage => `${stage.pipeline_id.toLowerCase()}:${stage.id.toLowerCase()}`));
     if (candidate.pipeline.id.toLowerCase() !== candidate.entry.pipeline_id.toLowerCase()
       || [...businessStageReferences.values()].some(reference => !stagePairs.has(`${reference.pipelineId}:${reference.stageId}`))) {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+    if (businessFields.includes('business.trigger.stage_elapsed')
+      && (candidate.entry.stage_elapsed_seconds === null || candidate.entry.stage_elapsed_seconds < 0)) {
       return { status: 'error' as const, code: 'source_unavailable' as const };
     }
   }
@@ -507,6 +518,23 @@ export async function evaluateGuidedCondition(
         }
       }
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        context: { entryId: businessStageData!.entry.id, pipeline: businessStageData!.pipeline } });
+      return matched;
+    }
+    if (condition.field === 'business.trigger.stage_elapsed') {
+      const seconds = businessStageData!.entry.stage_elapsed_seconds!;
+      const unitSeconds = condition.unit === 'minutes' ? 60 : condition.unit === 'hours' ? 3_600 : 86_400;
+      const expectedSeconds = condition.value * unitSeconds;
+      let matched = false;
+      switch (condition.operator) {
+        case 'equals': matched = seconds === expectedSeconds; break;
+        case 'not_equals': matched = seconds !== expectedSeconds; break;
+        case 'greater_than': matched = seconds > expectedSeconds; break;
+        case 'greater_than_or_equal': matched = seconds >= expectedSeconds; break;
+        case 'less_than': matched = seconds < expectedSeconds; break;
+        case 'less_than_or_equal': matched = seconds <= expectedSeconds; break;
+      }
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: seconds / unitSeconds,
         context: { entryId: businessStageData!.entry.id, pipeline: businessStageData!.pipeline } });
       return matched;
     }

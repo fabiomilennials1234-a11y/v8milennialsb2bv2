@@ -17,6 +17,11 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
   if (condition.field === 'business.trigger.value') return condition.operator === 'is_empty' ? 'Negócio do gatilho · Valor está vazio'
     : condition.operator === 'is_not_empty' ? 'Negócio do gatilho · Valor está preenchido'
     : `Negócio do gatilho · Valor ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
+  if (condition.field === 'business.trigger.stage_elapsed') {
+    const unit = condition.unit === 'minutes' ? condition.value === 1 ? 'minuto' : 'minutos'
+      : condition.unit === 'hours' ? condition.value === 1 ? 'hora' : 'horas' : condition.value === 1 ? 'dia' : 'dias';
+    return `Negócio do gatilho · Tempo na etapa ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value} ${unit}`;
+  }
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

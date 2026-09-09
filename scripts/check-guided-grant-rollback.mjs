@@ -125,6 +125,9 @@ const businessVolatilityRollback = readFileSync(`supabase/migrations/rollback/${
 const businessValueMigration = '20271017000042_guided_trigger_business_value.sql';
 const businessValueForward = readFileSync(`supabase/migrations/${businessValueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const businessValueRollback = readFileSync(`supabase/migrations/rollback/${businessValueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessElapsedMigration = '20271017000043_guided_trigger_business_stage_elapsed.sql';
+const businessElapsedForward = readFileSync(`supabase/migrations/${businessElapsedMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessElapsedRollback = readFileSync(`supabase/migrations/rollback/${businessElapsedMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -156,6 +159,15 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${businessElapsedRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.validate_guided_trigger_business_stage_elapsed_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'trigger-business elapsed rollback left trigger function';
+  END IF;
+  IF public.valid_guided_data_scopes(ARRAY['business.trigger.stage_elapsed']) THEN
+    RAISE EXCEPTION 'trigger-business elapsed scope survived rollback';
+  END IF;
+END $$;
 ${businessValueRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_trigger_business_data(uuid,uuid,uuid,text[],jsonb)') IS NOT NULL
@@ -378,6 +390,7 @@ ${businessPersonalForward}
 ${businessAuthorizationForward}
 ${businessVolatilityForward}
 ${businessValueForward}
+${businessElapsedForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
@@ -392,6 +405,16 @@ DO $$ BEGIN
   END IF;
   IF NOT public.valid_guided_data_scopes(ARRAY['business.trigger.stage']) THEN
     RAISE EXCEPTION 'trigger-business scope not restored';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.validate_guided_trigger_business_stage_elapsed_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.validate_guided_trigger_business_stage_elapsed_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.validate_guided_trigger_business_stage_elapsed_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'trigger-business elapsed trigger privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['business.trigger.stage','business.trigger.value','business.trigger.stage_elapsed']) THEN
+    RAISE EXCEPTION 'trigger-business elapsed scope not restored';
   END IF;
 END $$;
 DO $$ BEGIN

@@ -642,3 +642,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Publication validates nested value rules and requires its separate scope. Browser UI adds numeric and empty/filled comparisons under “Negócio do gatilho”, exact business selection and readable scope/result copy.
 - Migration 42 applied and ledger-registered only on preview. Personal and publication endpoints updated there; shared worker and production remain undeployed. Ticket 08 still requires elapsed-stage-time before certification.
 - Final checkpoint evidence: 72 real integration tests, 107 browser tests, 98 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors, Deno and focused lint clean, and 43-migration rollback/reapply passed with approval history preserved.
+
+## 2026-09-09 — ticket 08 elapsed current-stage time vertical slice
+
+- `business.trigger.stage_elapsed` persists numeric threshold plus explicit minutes/hours/days. Comparison converts the threshold to seconds and uses a single PostgreSQL statement-time measurement from exact `pipeline_entries.stage_changed_at`.
+- Null and future stage clocks return source_unavailable. No fallback to updated_at, created_at, entry lookup by lead or zero exists. Existing real clock coverage proves notes do not restart time and stage/funnel transitions, including same-key cross-funnel movement, do restart it.
+- Dedicated scope controls personal/organization reads, publication and current revocation. Browser UI requires the exact trigger business and offers only numeric comparisons, value and unit selectors.
+- Migration 43 applied and ledger-registered only on preview. Personal/publication endpoints updated there; worker and production remain untouched. Rollback/reapply across 44 feature migrations passed after correcting restoration of the existing value-validation trigger.
+- Final checkpoint evidence: 73 real integration tests, 108 Chromium journeys, 106 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors, Deno and focused lint clean. Existing Fast Refresh warning only.

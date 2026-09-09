@@ -91,4 +91,10 @@ Checkpoint does not satisfy full ticket. Value must preserve absence without zer
 
 Editor exposes Valor under “Negócio do gatilho”, typed numeric comparisons, empty/filled operators, exact business selection for personal tests and dedicated approval copy. Publication and automatic evaluation require the separate value scope; granting stage alone cannot expose value, and revocation denies the next read.
 
-Ticket 08 remains open for elapsed-stage-time. Ticket 09 existence semantics remain separate.
+## Ticket 08 — elapsed current-stage time checkpoint
+
+`business.trigger.stage_elapsed` compares nonnegative durations in an explicit minutes/hours/days dropdown. PostgreSQL measures elapsed time from the exact entry's current `stage_changed_at`; null or future clocks fail as unavailable source. Notes preserve the clock, while the previously verified stage/funnel transitions restart it. No generic timestamp or zero fallback exists.
+
+Personal HTTP, organization grant/revocation, immutable publication and pinned execution are covered. Editor requires an exact trigger business, exposes numeric operators and readable unit-aware summaries, and omits empty/filled because an unreliable clock is an operational error.
+
+Ticket 08 implementation slices are present. It remains uncertified until the complete 21-ticket acceptance run. Ticket 09 existence semantics remain separate.

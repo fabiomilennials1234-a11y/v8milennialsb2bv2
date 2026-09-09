@@ -469,6 +469,95 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('measures elapsed time from the exact entry stage clock without generic timestamp fallbacks', async () => {
+    const pipelineId = crypto.randomUUID(), stageId = crypto.randomUUID(), entryId = crypto.randomUUID();
+    const workflowId = crypto.randomUUID(), executionId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `business-elapsed-${entryId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'elapsed', field: 'business.trigger.stage_elapsed',
+      operator: 'greater_than_or_equal', value: 2, unit: 'hours' };
+    await service.from('pipelines').insert({ id: pipelineId, organization_id: orgA, name: 'Comercial', slug: `elapsed-${pipelineId}`, type: 'custom' }).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert({ id: stageId, organization_id: orgA, pipeline_id: pipelineId,
+        stage_key: 'proposal', name: 'Proposta', position: 0 }).throwOnError();
+      await service.from('pipeline_entries').insert({ id: entryId, organization_id: orgA, lead_id: leadA,
+        pipeline_id: pipelineId, stage_id: stageId, stage_key: 'proposal',
+        stage_changed_at: new Date(Date.now() - 125 * 60_000).toISOString() }).throwOnError();
+      const evaluate = (rule: unknown) => evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, entryId, condition: rule });
+      const initial = await evaluate(condition);
+      expect(initial).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ id: 'elapsed', matched: true, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }],
+      });
+      expect(initial.status === 'evaluated' && initial.rules[0].actual).toBeGreaterThanOrEqual(125 / 60);
+      expect(initial.status === 'evaluated' && initial.rules[0].actual).toBeLessThan(2.2);
+      expect(await evaluate({ ...condition, value: 3 })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...condition, value: 120, unit: 'minutes' })).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate({ ...condition, operator: 'less_than', value: 1, unit: 'days' })).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate({ ...condition, value: -1 })).toEqual({ status: 'error', code: 'invalid_configuration' });
+      expect(await evaluate({ ...condition, unit: 'weeks' })).toEqual({ status: 'error', code: 'invalid_configuration' });
+
+      await service.from('pipeline_entries').update({ stage_changed_at: null, updated_at: '2020-01-01T00:00:00Z' }).eq('id', entryId).throwOnError();
+      expect(await evaluate(condition)).toEqual({ status: 'error', code: 'source_unavailable' });
+      await service.from('pipeline_entries').update({ stage_changed_at: new Date(Date.now() + 60_000).toISOString() }).eq('id', entryId).throwOnError();
+      expect(await evaluate(condition)).toEqual({ status: 'error', code: 'source_unavailable' });
+      const reliableTime = new Date(Date.now() - 125 * 60_000).toISOString();
+      await service.from('pipeline_entries').update({ stage_changed_at: reliableTime }).eq('id', entryId).throwOnError();
+      await caller.from('pipeline_entries').update({ notes: 'Não reinicia relógio' }).eq('organization_id', orgA).eq('id', entryId).throwOnError();
+      expect(Date.parse((await service.from('pipeline_entries').select('stage_changed_at').eq('id', entryId).single()).data?.stage_changed_at)).toBe(Date.parse(reliableTime));
+
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, entryId, condition }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true });
+
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'pipeline_stage_changed', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+      const settings = { name: 'Tempo na etapa do negócio do gatilho' };
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: settings }).throwOnError();
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['business.trigger.stage_elapsed'], p_expected_revision: 0 }).throwOnError();
+      const automatic = { organizationId: orgA, leadId: leadA, entryId, condition,
+        authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, automatic)).toMatchObject({ status: 'evaluated', matched: true });
+      const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'c'
+        ? { ...node, data: { guidedCondition: { ...condition, unit: 'weeks' } } } : node) };
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_expected_revision: 1, p_definition: invalidDefinition, p_settings: settings }).throwOnError();
+      const publishBase = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_settings: settings, p_required_fields: ['business.trigger.stage_elapsed'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publishBase,
+        p_expected_revision: 2, p_definition: invalidDefinition })).error?.code).toBe('22023');
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_expected_revision: 2, p_definition: definition, p_settings: settings }).throwOnError();
+      const publishArgs = { ...publishBase, p_expected_revision: 3, p_definition: definition };
+      const finalized = await service.rpc('finalize_guided_workflow_publication', publishArgs);
+      expect(finalized.error).toBeNull();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, pipeline_entry_id: entryId, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        entryId, guidedVersionId: finalized.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} }))
+        .toMatchObject({ success: true, status: 'completed' });
+      expect((await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId)).data?.map(step => step.node_id)).toContain('yes');
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+      await service.from('pipeline_entries').delete().eq('id', entryId).throwOnError();
+      await service.from('pipeline_stages').delete().eq('id', stageId).throwOnError();
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA).throwOnError();
+      await service.from('pipelines').delete().eq('id', pipelineId).throwOnError();
+    }
+  }, 60000);
+
   it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

@@ -1446,6 +1446,7 @@ async function selectInformation(page: Page, field: string) {
     'lead.utm_term': 'UTM Term', 'lead.utm_campaign': 'UTM Campaign',
     'business.trigger.stage': 'Etapa',
     'business.trigger.value': 'Valor',
+    'business.trigger.stage_elapsed': 'Tempo na etapa',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1523,6 +1524,41 @@ test('configura valor numérico e mantém ausência distinta de zero no negócio
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
   await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
   await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Valor está vazio');
+});
+
+test('configura tempo corrido na etapa com unidade explícita e negócio exato', async ({ page }) => {
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000051';
+  const stageId = 'abcd0000-0000-4000-8000-000000000052';
+  const entryId = 'abcd0000-0000-4000-8000-000000000053';
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [{ id: pipelineId, name: 'Comercial' }] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => route.fulfill({ json: [{ id: stageId, name: 'Proposta' }] }));
+  await page.route('**/rest/v1/pipeline_entries?*', route => route.fulfill({ json: [{ id: entryId, pipeline_id: pipelineId, stage_id: stageId }] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'business.trigger.stage_elapsed');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Negócio do gatilho · Tempo na etapa');
+  await expect(page.getByLabel('Comparação', { exact: true }).getByRole('option', { name: 'está vazio' })).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('greater_than_or_equal');
+  await page.getByLabel('Tempo', { exact: true }).fill('2');
+  await page.getByLabel('Unidade', { exact: true }).selectOption('hours');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Tempo na etapa é maior ou igual a 2 horas');
+  await expect(page.getByText('Tempo na etapa do negócio do gatilho em execuções desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true }).selectOption(entryId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ entryId, condition: {
+      field: 'business.trigger.stage_elapsed', operator: 'greater_than_or_equal', value: 2, unit: 'hours',
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: 2.08, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Tempo na etapa é maior ou igual a 2 horas');
+  await page.getByLabel('Unidade', { exact: true }).selectOption('days');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('2 dias');
+  await page.getByLabel('Tempo', { exact: true }).fill('-1');
+  await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
+  await expect(page.getByText('Informe um tempo igual ou maior que zero.')).toBeVisible();
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

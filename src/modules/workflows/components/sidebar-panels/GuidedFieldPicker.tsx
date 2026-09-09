@@ -9,7 +9,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.tags': { label: 'Tags' }, 'lead.origin': { label: 'Origem' },
-  'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' } };
+  'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' },
+  'business.trigger.stage_elapsed': { label: 'Tempo na etapa' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 // This catalogue contains only capabilities supported by the guided evaluator.
 // The ordered record also makes new field types require an explicit discovery entry.
@@ -33,6 +34,7 @@ const vocabulary = {
   'lead.utm_term': ['termo', 'palavra chave'],
   'business.trigger.stage': ['negocio', 'card', 'funil', 'etapa atual'],
   'business.trigger.value': ['negocio', 'valor', 'receita', 'ticket', 'financeiro'],
+  'business.trigger.stage_elapsed': ['negocio', 'tempo', 'duracao', 'permanencia', 'etapa atual'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();

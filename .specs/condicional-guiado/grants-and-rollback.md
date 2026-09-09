@@ -276,3 +276,9 @@ Rollback 41 restores preceding volatility, 40 removes organization reader/public
 Adds `business.trigger.value` as a separate explicit scope. Personal and organization readers return stage and financial value from the same exact `pipeline_entry_id` snapshot. A missing link, missing row or soft-deleted deal returns JSON null; zero remains a present numeric value. The organization reader retains workflow/grant/entry locks and service-only access. Publication validates the numeric or unary rule shape across every nested condition.
 
 Rollback removes the combined readers and value publication trigger, then restores the stage-only scope helper. It retains entries, deals, grants, versions and execution pins. Roll back 42 before 41–39; reapply after 41. The 43-migration rehearsal verifies the value scope disappears, combined RPCs become unavailable, and authenticated-only personal/service-only organization privileges return after reapply. Preview endpoints only; worker and production remain unchanged.
+
+## Migration 43 — trusted elapsed time in current stage
+
+Adds `business.trigger.stage_elapsed` as its own explicit scope. The existing combined readers now calculate elapsed seconds with PostgreSQL `statement_timestamp()` against the exact entry's `stage_changed_at`; they never use `updated_at`, `created_at` or another card. Null or future clocks are returned as unusable source data and the evaluator fails explicitly. Minutes, hours and days remain presentation/comparison units over the same elapsed-second measurement.
+
+Rollback restores migration 42's exact stage/value readers, value publication trigger and scope vocabulary while retaining entries, timestamps, grants, versions and pins. Roll back 43 before 42–39; reapply after 42. The 44-migration rehearsal verifies elapsed scope removal, trigger removal, preserved history and restored no-direct-call trigger ACL. Preview endpoints only; worker and production remain unchanged.

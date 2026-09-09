@@ -365,7 +365,7 @@ it.each([
   const database = createClient('https://db.example.test', 'test-anon-key', {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_trigger_business_data')
-      ? { entry: { id: entryId, pipeline_id: pipelineId, stage_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', value: actual },
+      ? { entry: { id: entryId, pipeline_id: pipelineId, stage_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', value: actual, stage_elapsed_seconds: null },
         pipeline: { id: pipelineId, name: 'Comercial' }, stages: [] }
       : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
   });
@@ -392,7 +392,7 @@ it('reads stage and value for one trigger entry through one atomic business RPC'
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({ p_entry_id: entryId, p_fields: ['business.trigger.stage', 'business.trigger.value'] });
       expect(body.p_references).toEqual([{ pipelineId, stageId }]);
-      return new Response(JSON.stringify({ entry: { id: entryId, pipeline_id: pipelineId, stage_id: stageId, value: 1250.5 },
+      return new Response(JSON.stringify({ entry: { id: entryId, pipeline_id: pipelineId, stage_id: stageId, value: 1250.5, stage_elapsed_seconds: null },
         pipeline: { id: pipelineId, name: 'Comercial' }, stages: [{ id: stageId, name: 'Negociação', pipeline_id: pipelineId }] }),
       { headers: { 'Content-Type': 'application/json' } });
     } },
@@ -405,4 +405,44 @@ it('reads stage and value for one trigger entry through one atomic business RPC'
     ] },
   })).toMatchObject({ status: 'evaluated', matched: true });
   expect(businessReads).toBe(1);
+});
+
+it.each([
+  { operator: 'equals', value: 125, unit: 'minutes', matched: true },
+  { operator: 'not_equals', value: 2, unit: 'hours', matched: true },
+  { operator: 'greater_than', value: 2, unit: 'hours', matched: true },
+  { operator: 'greater_than_or_equal', value: 125, unit: 'minutes', matched: true },
+  { operator: 'less_than', value: 3, unit: 'hours', matched: true },
+  { operator: 'less_than_or_equal', value: 125 / 60 / 24, unit: 'days', matched: true },
+])('compares trusted elapsed stage seconds in explicit $unit with $operator', async ({ operator, value, unit, matched }) => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const pipelineId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_trigger_business_data')
+      ? { entry: { id: entryId, pipeline_id: pipelineId, stage_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', value: null, stage_elapsed_seconds: 7_500 },
+        pipeline: { id: pipelineId, name: 'Comercial' }, stages: [] }
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'elapsed', field: 'business.trigger.stage_elapsed', operator, value, unit },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'elapsed', status: 'evaluated', matched,
+    actual: 7_500 / (unit === 'minutes' ? 60 : unit === 'hours' ? 3_600 : 86_400),
+    context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] });
+});
+
+it.each([null, -1])('rejects an unreliable exact-entry stage clock represented as %s', async stageElapsedSeconds => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const pipelineId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_trigger_business_data')
+      ? { entry: { id: entryId, pipeline_id: pipelineId, stage_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', value: null, stage_elapsed_seconds: stageElapsedSeconds },
+        pipeline: { id: pipelineId, name: 'Comercial' }, stages: [] }
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'elapsed', field: 'business.trigger.stage_elapsed', operator: 'greater_than', value: 1, unit: 'hours' },
+  })).toEqual({ status: 'error', code: 'source_unavailable' });
 });
