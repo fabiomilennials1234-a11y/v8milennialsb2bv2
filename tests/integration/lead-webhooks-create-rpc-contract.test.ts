@@ -14,8 +14,8 @@ const shouldSkip = process.env.SKIP_INTEGRATION === 'true' || (!process.env.SUPA
 
 const ORG_ID = 'aacc0000-0000-0000-0000-000000000001';
 const API_KEY_ID = 'aacc0000-0000-0000-0000-000000000002';
-const SDR_ID = 'aacc0000-0000-0000-0000-000000000003';
-const CLOSER_ID = 'aacc0000-0000-0000-0000-000000000004';
+const SDR_ID = 'aacc0000-0000-4000-8000-000000000003';
+const CLOSER_ID = 'aacc0000-0000-4000-8000-000000000004';
 const RAW_API_KEY = 'tq_live_webhook_contract_20260909';
 const EMAILS = ['webhook-new-contract@milennials.test', 'webhook-confirm-contract@milennials.test'];
 
