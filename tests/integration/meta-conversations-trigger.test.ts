@@ -1,6 +1,8 @@
 // tests/integration/meta-conversations-trigger.test.ts
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { TEST_ADMIN_ID } from './setup';
+import { deleteFixtureOrganization } from './organization-fixture';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -24,11 +26,11 @@ beforeAll(async () => {
   orgId = org!.id;
 
   // create meta_connection + meta_page
-  const { data: conn } = await supabase
+  const { data: conn, error: connError } = await supabase
     .from('meta_connections')
     .insert({
       organization_id: orgId,
-      user_id: '00000000-0000-0000-0000-000000000000',
+      user_id: TEST_ADMIN_ID,
       facebook_user_id: 'fb_user_test',
       facebook_user_name: 'Test',
       access_token: 'test_token',
@@ -39,9 +41,10 @@ beforeAll(async () => {
     })
     .select('id')
     .single();
+  expect(connError).toBeNull();
   connRowId = conn!.id;
 
-  const { data: page } = await supabase
+  const { data: page, error: pageError } = await supabase
     .from('meta_pages')
     .insert({
       meta_connection_id: conn!.id,
@@ -54,6 +57,7 @@ beforeAll(async () => {
     })
     .select('id')
     .single();
+  expect(pageError).toBeNull();
   pageRowId = page!.id;
 });
 
@@ -69,7 +73,7 @@ afterAll(async () => {
   await supabase.from('leads').delete().eq('organization_id', orgId);
   await supabase.from('meta_pages').delete().eq('id', pageRowId);
   await supabase.from('meta_connections').delete().eq('id', connRowId);
-  await supabase.from('organizations').delete().eq('id', orgId);
+  if (orgId) await deleteFixtureOrganization(supabase, orgId);
 });
 
 async function insertMsg(opts: Partial<{
@@ -220,11 +224,11 @@ describe('meta_conversations trigger', () => {
       .select('id')
       .single();
     expect(orgBError).toBeNull();
-    const { data: connB } = await supabase
+    const { data: connB, error: connBError } = await supabase
       .from('meta_connections')
       .insert({
         organization_id: orgB!.id,
-        user_id: '00000000-0000-0000-0000-000000000000',
+        user_id: TEST_ADMIN_ID,
         facebook_user_id: 'fb_iso_B',
         facebook_user_name: 'B',
         access_token: 'tB',
@@ -235,7 +239,8 @@ describe('meta_conversations trigger', () => {
       })
       .select('id')
       .single();
-    const { data: pageB } = await supabase
+    expect(connBError).toBeNull();
+    const { data: pageB, error: pageBError } = await supabase
       .from('meta_pages')
       .insert({
         meta_connection_id: connB!.id,
@@ -248,6 +253,7 @@ describe('meta_conversations trigger', () => {
       })
       .select('id')
       .single();
+    expect(pageBError).toBeNull();
 
     try {
       // Inbound for org A (uses the suite-default page + sender 'user_abc').
@@ -285,7 +291,7 @@ describe('meta_conversations trigger', () => {
       await supabase.from('meta_conversations').delete().eq('organization_id', orgB!.id);
       await supabase.from('meta_pages').delete().eq('id', pageB!.id);
       await supabase.from('meta_connections').delete().eq('id', connB!.id);
-      await supabase.from('organizations').delete().eq('id', orgB!.id);
+      await deleteFixtureOrganization(supabase, orgB!.id);
     }
   });
 });

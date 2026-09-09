@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { deleteFixtureOrganization } from './organization-fixture';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
 const SERVICE_KEY =
@@ -61,74 +62,7 @@ beforeAll(async () => {
   expect(otherOrgError).toBeNull();
   otherOrgId = other!.id;
 
-  // Meta connection + page for org A
-  const { data: conn } = await admin
-    .from('meta_connections')
-    .insert({
-      organization_id: orgId,
-      user_id: '00000000-0000-0000-0000-000000000000',
-      facebook_user_id: `fb_rpc_${Date.now()}`,
-      facebook_user_name: 'T',
-      access_token: 't',
-      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
-      status: 'connected',
-      connected_at: new Date().toISOString(),
-      connection_type: 'facebook',
-    })
-    .select('id')
-    .single();
-  connRowId = conn!.id;
-
-  const { data: page } = await admin
-    .from('meta_pages')
-    .insert({
-      meta_connection_id: connRowId,
-      organization_id: orgId,
-      page_id: pageIdString,
-      page_name: 'P',
-      page_access_token: 'pt',
-      is_active: true,
-      webhook_subscribed: true,
-    })
-    .select('id')
-    .single();
-  pageRowId = page!.id;
-
-  // Meta connection + page for org B
-  const { data: otherConn } = await admin
-    .from('meta_connections')
-    .insert({
-      organization_id: otherOrgId,
-      user_id: '00000000-0000-0000-0000-000000000000',
-      facebook_user_id: `fb_other_${Date.now()}`,
-      facebook_user_name: 'O',
-      access_token: 't',
-      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
-      status: 'connected',
-      connected_at: new Date().toISOString(),
-      connection_type: 'facebook',
-    })
-    .select('id')
-    .single();
-  otherConnRowId = otherConn!.id;
-
-  const { data: otherPage } = await admin
-    .from('meta_pages')
-    .insert({
-      meta_connection_id: otherConnRowId,
-      organization_id: otherOrgId,
-      page_id: 'other_page',
-      page_name: 'OP',
-      page_access_token: 't',
-      is_active: true,
-      webhook_subscribed: true,
-    })
-    .select('id')
-    .single();
-  otherPageRowId = otherPage!.id;
-
-  // Users — one per org. createUser requires admin auth API; surface a clear
-  // error if the env doesn't support it (e.g. remote project without admin key).
+  // Real auth users must exist before meta_connections references them.
   userEmail = `rpc-a-${Date.now()}@test.local`;
   otherUserEmail = `rpc-b-${Date.now()}@test.local`;
 
@@ -148,10 +82,101 @@ beforeAll(async () => {
   if (u2Err) throw new Error(`createUser failed for org B: ${u2Err.message}`);
   otherUserId = u2.user!.id;
 
-  await admin.from('team_members').insert([
-    { organization_id: orgId, user_id: userId, role: 'admin', is_active: true },
-    { organization_id: otherOrgId, user_id: otherUserId, role: 'admin', is_active: true },
+  const { error: quotaError } = await admin.from('org_quotas').upsert([
+    { organization_id: orgId, resource_key: 'max_users', plan_base: 1 },
+    { organization_id: otherOrgId, resource_key: 'max_users', plan_base: 1 },
+  ], { onConflict: 'organization_id,resource_key' });
+  expect(quotaError).toBeNull();
+
+  const { error: memberError } = await admin.from('team_members').insert([
+    {
+      organization_id: orgId,
+      user_id: userId,
+      role: 'admin',
+      name: 'Meta RPC Admin A',
+      email: userEmail,
+      is_active: true,
+    },
+    {
+      organization_id: otherOrgId,
+      user_id: otherUserId,
+      role: 'admin',
+      name: 'Meta RPC Admin B',
+      email: otherUserEmail,
+      is_active: true,
+    },
   ]);
+  expect(memberError).toBeNull();
+
+  // Meta connection + page for org A
+  const { data: conn, error: connError } = await admin
+    .from('meta_connections')
+    .insert({
+      organization_id: orgId,
+      user_id: userId,
+      facebook_user_id: `fb_rpc_${Date.now()}`,
+      facebook_user_name: 'T',
+      access_token: 't',
+      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      status: 'connected',
+      connected_at: new Date().toISOString(),
+      connection_type: 'facebook',
+    })
+    .select('id')
+    .single();
+  expect(connError).toBeNull();
+  connRowId = conn!.id;
+
+  const { data: page, error: pageError } = await admin
+    .from('meta_pages')
+    .insert({
+      meta_connection_id: connRowId,
+      organization_id: orgId,
+      page_id: pageIdString,
+      page_name: 'P',
+      page_access_token: 'pt',
+      is_active: true,
+      webhook_subscribed: true,
+    })
+    .select('id')
+    .single();
+  expect(pageError).toBeNull();
+  pageRowId = page!.id;
+
+  // Meta connection + page for org B
+  const { data: otherConn, error: otherConnError } = await admin
+    .from('meta_connections')
+    .insert({
+      organization_id: otherOrgId,
+      user_id: otherUserId,
+      facebook_user_id: `fb_other_${Date.now()}`,
+      facebook_user_name: 'O',
+      access_token: 't',
+      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      status: 'connected',
+      connected_at: new Date().toISOString(),
+      connection_type: 'facebook',
+    })
+    .select('id')
+    .single();
+  expect(otherConnError).toBeNull();
+  otherConnRowId = otherConn!.id;
+
+  const { data: otherPage, error: otherPageError } = await admin
+    .from('meta_pages')
+    .insert({
+      meta_connection_id: otherConnRowId,
+      organization_id: otherOrgId,
+      page_id: 'other_page',
+      page_name: 'OP',
+      page_access_token: 't',
+      is_active: true,
+      webhook_subscribed: true,
+    })
+    .select('id')
+    .single();
+  expect(otherPageError).toBeNull();
+  otherPageRowId = otherPage!.id;
 
   // Sign each user in to obtain a session JWT and build per-user clients.
   const tmpA = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
@@ -202,8 +227,8 @@ afterAll(async () => {
   await admin.from('meta_pages').delete().eq('id', otherPageRowId);
   await admin.from('meta_connections').delete().eq('id', connRowId);
   await admin.from('meta_connections').delete().eq('id', otherConnRowId);
-  await admin.from('organizations').delete().eq('id', orgId);
-  await admin.from('organizations').delete().eq('id', otherOrgId);
+  if (orgId) await deleteFixtureOrganization(admin, orgId);
+  if (otherOrgId) await deleteFixtureOrganization(admin, otherOrgId);
   if (userId) await admin.auth.admin.deleteUser(userId).catch(() => undefined);
   if (otherUserId) await admin.auth.admin.deleteUser(otherUserId).catch(() => undefined);
 });

@@ -64,6 +64,7 @@ async function cleanupLead(leadId: string) {
 
 describe.skipIf(shouldSkip)('Lead creation — no implicit deal after commit', () => {
   const createdLeadIds: string[] = [];
+  const createdPipelineIds: string[] = [];
 
   beforeAll(async () => {
     pg = new Client({ connectionString: PG_CONN });
@@ -74,6 +75,9 @@ describe.skipIf(shouldSkip)('Lead creation — no implicit deal after commit', (
     // Limpa tudo que foi criado e scratch orgs.
     for (const id of createdLeadIds) {
       await cleanupLead(id);
+    }
+    for (const id of createdPipelineIds) {
+      await pg.query(`DELETE FROM public.pipelines WHERE id = $1`, [id]);
     }
     await pg.query(`UPDATE public.organizations SET default_pipeline_id = NULL WHERE id IN ($1, $2)`, [SCRATCH_ORG_NO_PIPELINE, SCRATCH_ORG_NO_STAGE]);
     await pg.query(`DELETE FROM public.pipeline_stages WHERE organization_id IN ($1, $2)`, [SCRATCH_ORG_NO_PIPELINE, SCRATCH_ORG_NO_STAGE]);
@@ -174,18 +178,16 @@ describe.skipIf(shouldSkip)('Lead creation — no implicit deal after commit', (
     // Create a canonical custom pipeline and stage for this fixture.
     const customPipelineId = '00000000-0000-0000-0000-00000cc00003';
     const customStageId    = '00000000-0000-0000-0000-00000cc00103';
+    createdPipelineIds.push(customPipelineId);
 
     await pg.query(
       `INSERT INTO public.pipelines (id, organization_id, name, slug, type, is_active)
-       VALUES ($1, $2, 'CustomPipe', 'custom-auto-assign-c3', 'custom', true)
-       ON CONFLICT (organization_id, slug)
-       DO UPDATE SET is_active = true`,
+       VALUES ($1, $2, 'CustomPipe', 'custom-auto-assign-c3', 'custom', true)`,
       [customPipelineId, TEST_ORG_ID],
     );
     await pg.query(
       `INSERT INTO public.pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, is_active)
-       VALUES ($1, $2, $3, 'inicio', 'Início', 0, true)
-       ON CONFLICT DO NOTHING`,
+       VALUES ($1, $2, $3, 'inicio', 'Início', 0, true)`,
       [customStageId, TEST_ORG_ID, customPipelineId],
     );
 
@@ -221,9 +223,6 @@ describe.skipIf(shouldSkip)('Lead creation — no implicit deal after commit', (
       [leadId],
     );
     expect(customRows.rows).toHaveLength(1);
-
-    // Cleanup custom pipeline.
-    await pg.query(`DELETE FROM public.pipelines WHERE id = $1`, [customPipelineId]);
   });
 
   it('cenário 4: org sem pipeline whatsapp system → lead criado, sem entry, sem erro', async () => {
