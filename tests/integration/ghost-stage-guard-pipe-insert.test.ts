@@ -1,7 +1,7 @@
 /**
  * Integration tests — ghost-stage guard on the canonical system-entry API.
  *
- * Migration: 20261220000000_ghost_stage_guard_pipe_insert.sql
+ * Migration: 20271019144202_pipeline_entry_requires_active_stage.sql
  *
  * Incidente (2026-06-17, "Dna de Almas"): lead caiu em stage_key='novo' numa org
  * migrada pro Funil B (novo DESATIVADA, novo_lead ATIVA) → invisível no Kanban.
@@ -23,11 +23,12 @@
  *
  * Requer:
  *   1. `supabase start` (Postgres em localhost:54322)
- *   2. Migration 20261220000000 aplicada (db reset / db push)
+ *   2. Migration 20271019144202 aplicada (db reset / db push)
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { Client } from 'pg';
+import { getMaster } from './rls-helpers';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
@@ -181,17 +182,17 @@ describe.skipIf(shouldSkip)('Ghost-stage guard — canonical system-entry API', 
   });
 
   it('cenário 2: Funil B + RPC create_lead_with_pipe(p_pipe_status="novo") → "novo_lead"', async () => {
-    const { rows } = await pg.query(
-      `SELECT public.create_lead_with_pipe(
-         p_name => 'GhostGuard C2 Flavia',
-         p_origin => 'outro',
-         p_organization_id => $1,
-         p_pipe_type => 'whatsapp',
-         p_pipe_status => 'novo'
-       ) AS result`,
-      [ORG_FUNIL_B],
-    );
-    const leadId = rows[0].result.lead_id as string;
+    const master = await getMaster();
+    const { data, error } = await master.rpc('create_lead_with_pipe', {
+      p_name: 'GhostGuard C2 Flavia',
+      p_origin: 'outro',
+      p_organization_id: ORG_FUNIL_B,
+      p_pipe_type: 'whatsapp',
+      p_pipe_status: 'novo',
+    });
+
+    expect(error).toBeNull();
+    const leadId = (data as { lead_id: string }).lead_id;
     createdLeadIds.push(leadId);
 
     expect(await stageKeyOf(leadId)).toBe('novo_lead');
