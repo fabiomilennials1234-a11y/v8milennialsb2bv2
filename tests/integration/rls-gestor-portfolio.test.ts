@@ -25,6 +25,8 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 const GESTOR_EMAIL = 'gestor@test.com';
 const GESTOR_ORG_ID = 'aabb0000-0000-0000-0000-000000009101';
 const GESTOR_LEAD_ID = 'aabb0000-0000-0000-0000-000000009102';
+const UNBOUND_ORG_ID = 'aabb0000-0000-0000-0000-000000009103';
+const UNBOUND_LEAD_ID = 'aabb0000-0000-0000-0000-000000009104';
 
 describe.skipIf(shouldSkip)('RLS Gestor de Portfólio', () => {
   let service: SupabaseClient;
@@ -37,14 +39,25 @@ describe.skipIf(shouldSkip)('RLS Gestor de Portfólio', () => {
 
     await service.from('pipeline_entries').delete().eq('lead_id', GESTOR_LEAD_ID);
     await service.from('leads').delete().eq('id', GESTOR_LEAD_ID);
+    await service.from('pipeline_entries').delete().eq('lead_id', UNBOUND_LEAD_ID);
+    await service.from('leads').delete().eq('id', UNBOUND_LEAD_ID);
     await deleteFixtureOrganization(service, GESTOR_ORG_ID);
+    await deleteFixtureOrganization(service, UNBOUND_ORG_ID);
     await createFixtureOrganization(service, GESTOR_ORG_ID, 'Gestor RLS fixture');
+    await createFixtureOrganization(service, UNBOUND_ORG_ID, 'Gestor unbound fixture');
 
-    const { error: leadErr } = await service.from('leads').insert({
-      id: GESTOR_LEAD_ID,
-      name: 'Gestor isolated lead',
-      organization_id: GESTOR_ORG_ID,
-    });
+    const { error: leadErr } = await service.from('leads').insert([
+      {
+        id: GESTOR_LEAD_ID,
+        name: 'Gestor isolated lead',
+        organization_id: GESTOR_ORG_ID,
+      },
+      {
+        id: UNBOUND_LEAD_ID,
+        name: 'Gestor unbound lead',
+        organization_id: UNBOUND_ORG_ID,
+      },
+    ]);
     if (leadErr) throw new Error(`Falha ao criar lead do gestor: ${leadErr.message}`);
 
     // Cria o auth user do gestor (idempotente: apaga se já existir).
@@ -82,7 +95,10 @@ describe.skipIf(shouldSkip)('RLS Gestor de Portfólio', () => {
     if (gestorUserId) await service.auth.admin.deleteUser(gestorUserId);
     await service.from('pipeline_entries').delete().eq('lead_id', GESTOR_LEAD_ID);
     await service.from('leads').delete().eq('id', GESTOR_LEAD_ID);
+    await service.from('pipeline_entries').delete().eq('lead_id', UNBOUND_LEAD_ID);
+    await service.from('leads').delete().eq('id', UNBOUND_LEAD_ID);
     await deleteFixtureOrganization(service, GESTOR_ORG_ID);
+    await deleteFixtureOrganization(service, UNBOUND_ORG_ID);
   });
 
   // ── Tracer #1: gestor vinculado LÊ dado da org vinculada ──────────────
@@ -93,5 +109,14 @@ describe.skipIf(shouldSkip)('RLS Gestor de Portfólio', () => {
       .eq('id', GESTOR_LEAD_ID);
     expect(error).toBeNull();
     expect((data ?? []).map((r) => r.id)).toContain(GESTOR_LEAD_ID);
+  });
+
+  it('gestor não lê lead de organização sem vínculo', async () => {
+    const { data, error } = await gestor
+      .from('leads')
+      .select('id')
+      .eq('id', UNBOUND_LEAD_ID);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
   });
 });
