@@ -20,6 +20,7 @@
  *      → mantém 'novo'            (orgs default não regridem)
  *   5. Org sem nenhuma etapa whatsapp ativa + criação status='novo'
  *      → rejeita; nenhuma entrada fantasma é criada
+ *   6. Etapa selecionada não pode ser desativada antes do INSERT confirmar
  *
  * Requer:
  *   1. `supabase start` (Postgres em localhost:54322)
@@ -227,5 +228,45 @@ describe.skipIf(shouldSkip)('Ghost-stage guard — canonical system-entry API', 
       .rejects.toThrow(/não possui etapa ativa/);
 
     expect(await stageKeyOf(leadId)).toBeNull();
+  });
+
+  it('cenário 6: mantém lock da etapa ativa até confirmar a entrada', async () => {
+    const leadId = await makeLead(ORG_FUNIL_B, 'GhostGuard C6 Lock');
+    createdLeadIds.push(leadId);
+    await pg.query(`DELETE FROM public.pipeline_entries WHERE lead_id = $1`, [leadId]);
+
+    const contender = new Client({ connectionString: PG_CONN });
+    await contender.connect();
+    let concurrentError: { code?: string } | null = null;
+
+    try {
+      await pg.query('BEGIN');
+      await createWhatsappEntry(ORG_FUNIL_B, leadId, 'abordado');
+      await contender.query(`SET lock_timeout = '200ms'`);
+
+      try {
+        await contender.query(
+          `UPDATE public.pipeline_stages
+              SET is_active = false
+            WHERE organization_id = $1
+              AND stage_key = 'abordado'`,
+          [ORG_FUNIL_B],
+        );
+        await contender.query(
+          `UPDATE public.pipeline_stages
+              SET is_active = true
+            WHERE organization_id = $1
+              AND stage_key = 'abordado'`,
+          [ORG_FUNIL_B],
+        );
+      } catch (error) {
+        concurrentError = error as { code?: string };
+      }
+    } finally {
+      await pg.query('ROLLBACK');
+      await contender.end();
+    }
+
+    expect(concurrentError?.code).toBe('55P03');
   });
 });
