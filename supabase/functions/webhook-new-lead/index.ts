@@ -401,7 +401,6 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       p_rating: rating ? parseInt(String(rating), 10) : 0,
       p_sdr_id: sdr_id || null,
       p_responsible_id: sdr_id || null,
-      p_pre_sale_responsible_id: sdr_id || null,
       p_compromisso_date: compromisso_date || null,
       p_utm_source: utm_source || null,
       p_utm_medium: utm_medium || null,
