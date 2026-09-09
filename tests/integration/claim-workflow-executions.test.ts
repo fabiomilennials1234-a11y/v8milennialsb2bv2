@@ -11,17 +11,18 @@
  * Requires local Supabase with the new migration applied.
  */
 
-import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { supabase, TEST_ORG_ID, TEST_ORG_B_ID } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
-const TEST_ORG_C_ID = '00000000-0000-0000-0000-000000000003';
+const TEST_ORG_C_ID = crypto.randomUUID();
+const createdWorkflowIds: string[] = [];
 const createdExecIds: string[] = [];
 let testWorkflowId: string;
 
 async function ensureWorkflow(orgId: string): Promise<string> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('workflows')
     .insert({
       organization_id: orgId,
@@ -33,6 +34,8 @@ async function ensureWorkflow(orgId: string): Promise<string> {
     })
     .select('id')
     .single();
+  expect(error).toBeNull();
+  createdWorkflowIds.push(data!.id);
   return data!.id as string;
 }
 
@@ -42,7 +45,7 @@ async function insertExecution(
   status: string,
   nextRunAt: string | null,
 ): Promise<string> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('workflow_executions')
     .insert({
       workflow_id: workflowId,
@@ -54,20 +57,36 @@ async function insertExecution(
     })
     .select('id')
     .single();
+  expect(error).toBeNull();
   createdExecIds.push(data!.id as string);
+  expect(error).toBeNull();
   return data!.id as string;
 }
 
 describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', () => {
   beforeAll(async () => {
+    const { error } = await supabase.from('organizations').insert({
+      id: TEST_ORG_C_ID, name: 'Claim fairness fixture', slug: `claim-fairness-${TEST_ORG_C_ID}`,
+    });
+    expect(error).toBeNull();
     testWorkflowId = await ensureWorkflow(TEST_ORG_ID);
   });
 
   afterEach(async () => {
     if (createdExecIds.length > 0) {
-      await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      const { error } = await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      expect(error).toBeNull();
       createdExecIds.length = 0;
     }
+  });
+
+  afterAll(async () => {
+    if (createdWorkflowIds.length) {
+      const { error } = await supabase.from('workflows').delete().in('id', createdWorkflowIds);
+      expect(error).toBeNull();
+    }
+    const { error } = await supabase.from('organizations').delete().eq('id', TEST_ORG_C_ID);
+    expect(error).toBeNull();
   });
 
   it('single overload exists (no duplication)', async () => {
@@ -109,8 +128,7 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
     // All three orgs should have at least some claimed (fairness)
     expect(Object.keys(byOrg).length).toBe(3);
 
-    // Cleanup workflows
-    await supabase.from('workflows').delete().in('id', [wfA, wfB, wfC]);
+    // Cleanup is in afterAll so a failed assertion cannot leak active workflows.
   });
 
   it('reclaims waiting_response with expired next_run_at and sets _wait_resolved=timeout', async () => {
