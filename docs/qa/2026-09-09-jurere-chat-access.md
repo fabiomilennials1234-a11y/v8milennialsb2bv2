@@ -34,9 +34,15 @@ node scripts/test-chat-instance-access.mjs <diretorio-temporario>/node_modules/@
 npx vitest run tests/unit/whatsapp-instance-read-access.test.tsx tests/unit/use-whatsapp-chat.test.ts
 ```
 
-## Aplicação pendente
+## Aplicação em produção
 
-Migration: 20271019000002_enforce_whatsapp_instance_read_access.sql. Criada com a CLI e renumerada após a última migration do repositório para respeitar as dependências existentes (o repositório usa versões futuras).
+Migration: 20271019000003_enforce_whatsapp_instance_read_access.sql. Criada com a CLI e renumerada após a última migration do repositório para respeitar as dependências existentes (o repositório usa versões futuras). A versão 20271019000002 foi ocupada pelo merge concorrente do PR #2056.
+
+Aplicada em produção em 2026-09-09 às 17:15 UTC, após autorização do usuário. O MCP registrou automaticamente a versão **20260909171503**, nome **enforce_whatsapp_instance_read_access**. Existe drift de versão entre esse ledger e o arquivo do repositório: não reaplicar o arquivo sem reconciliar o ledger. O conteúdo SQL aplicado é o mesmo; somente o arquivo foi renumerado para resolver a colisão.
+
+Verificação autenticada em produção: os quatro membros da Café Jurerê mantiveram uma instância visível e não puderam ler mensagens das outras instâncias. O admin consultado manteve as seis instâncias e suas mensagens. Na Alamaster, um membro continuou lendo 7.252 mensagens históricas de uma instância recriada. O advisor de segurança não apresentou novas categorias ou contagens de avisos em relação ao baseline.
+
+O CI passou build, TSC ratchet, lint, RLS pgTAP, CodeQL e testes Deno. A suíte de integração apresentou 34 falhas já presentes na main e três novas causadas pela fixture de Org B sem instance_id. A fixture foi corrigida com uma instância própria e vínculo explícito, preservando as mesmas asserções de isolamento por responsável.
 
 Aplicar somente esta migration, após autorização explícita do CTO, e publicar o frontend via PR/review. Não executar um db push indiscriminado sobre migrations pendentes. Repetir o teste autenticado de produção: instância proibida deve retornar zero mensagens e zero conversas; validar também uma instância permitida e uma conta admin. Atualizar a página para descartar dados já carregados.
 

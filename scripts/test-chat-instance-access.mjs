@@ -39,7 +39,7 @@ try {
   eq(await list('get_whatsapp_conversation_list', box(2)), 1, 'baseline reproduces foreign list');
   console.log('RED reproduced: member reads another instance through messages and single-box RPC');
   await db.exec('RESET ROLE;');
-  const migration = readFileSync(new URL('../supabase/migrations/20271019000002_enforce_whatsapp_instance_read_access.sql', import.meta.url), 'utf8')
+  const migration = readFileSync(new URL('../supabase/migrations/20271019000003_enforce_whatsapp_instance_read_access.sql', import.meta.url), 'utf8')
     .replaceAll('public.', 'chat_access_test.')
     .replaceAll("'public'", "'chat_access_test'")
     .replaceAll('private.', 'chat_access_private_test.')
