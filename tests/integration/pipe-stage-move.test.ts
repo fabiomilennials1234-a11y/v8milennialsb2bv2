@@ -2,7 +2,7 @@
  * Integration tests — Pipeline stage moves (core B2B workflow)
  *
  * Tests the database-level behavior of moving a lead through
- * pipe_whatsapp stages. Covers the gap left by E2E tests: dnd-kit
+ * pipeline_entries stages. Covers the gap left by E2E tests: dnd-kit
  * drag-and-drop cannot be driven by Playwright, so stage moves are
  * verified here at the Supabase/SQL level instead.
  *
@@ -10,24 +10,49 @@
  *
  * Covers:
  *   - novo → abordado → respondeu → agendado (qualification funnel)
- *   - RLS: org-A lead is not visible to org-B queries
+ *   - Organization filter: org-A entries do not match org-B queries
  *   - Idempotent update (same status twice is a no-op, no error)
- *   - Invalid status rejected at DB level
  *   - Cleanup resets lead to original 'novo' state
  */
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID, TEST_ORG_B_ID, TEST_LEAD_ALPHA_ID } from './setup';
+import { supabase, TEST_ORG_ID, TEST_ORG_B_ID, TEST_LEAD_ALPHA_ID, getSystemPipelineId } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
 const WA_STAGES = ['novo', 'abordado', 'respondeu', 'agendado'] as const;
-type WaStage = typeof WA_STAGES[number];
+let pipelineId: string;
+const addedStageIds: string[] = [];
+
+beforeAll(async () => {
+  pipelineId = await getSystemPipelineId(TEST_ORG_ID, 'whatsapp');
+  const { data: stages, error } = await supabase.from('pipeline_stages')
+    .select('stage_key, position').eq('pipeline_id', pipelineId);
+  expect(error).toBeNull();
+  let position = Math.max(-1, ...(stages ?? []).map(stage => stage.position));
+  for (const stageKey of WA_STAGES) {
+    if (stages?.some(stage => stage.stage_key === stageKey)) continue;
+    const { data, error: insertError } = await supabase.from('pipeline_stages').insert({
+      organization_id: TEST_ORG_ID, pipeline_id: pipelineId,
+      stage_key: stageKey, name: stageKey, position: ++position, stage_role: 'open',
+    }).select('id').single();
+    expect(insertError).toBeNull();
+    addedStageIds.push(data!.id);
+  }
+});
+
+afterAll(async () => {
+  if (addedStageIds.length) {
+    const { error } = await supabase.from('pipeline_stages').delete().in('id', addedStageIds);
+    expect(error).toBeNull();
+  }
+});
 
 async function getWaEntry(leadId: string) {
   return supabase
-    .from('pipe_whatsapp')
-    .select('id, status, lead_id, organization_id')
+    .from('pipeline_entries')
+    .select('id, status:stage_key, lead_id, organization_id')
+    .eq('pipeline_id', pipelineId)
     .eq('lead_id', leadId)
     .eq('organization_id', TEST_ORG_ID)
     .single();
@@ -35,31 +60,33 @@ async function getWaEntry(leadId: string) {
 
 async function setWaStatus(leadId: string, status: string) {
   return supabase
-    .from('pipe_whatsapp')
-    .update({ status })
+    .from('pipeline_entries')
+    .update({ stage_key: status })
+    .eq('pipeline_id', pipelineId)
     .eq('lead_id', leadId)
     .eq('organization_id', TEST_ORG_ID)
-    .select('id, status')
+    .select('id, status:stage_key')
     .single();
 }
 
 describe.skipIf(shouldSkip)('Pipe WhatsApp — stage moves', () => {
-  let pipeEntryId: string;
 
   beforeAll(async () => {
     // Reset to 'novo' before all tests so each run starts clean
-    await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    const reset = await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    expect(reset.error).toBeNull();
 
-    const { data } = await getWaEntry(TEST_LEAD_ALPHA_ID);
-    if (data?.id) pipeEntryId = data.id;
+    const { error } = await getWaEntry(TEST_LEAD_ALPHA_ID);
+    expect(error).toBeNull();
   });
 
   afterAll(async () => {
     // Always reset to 'novo' after suite to not break other tests
-    await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    const reset = await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    expect(reset.error).toBeNull();
   });
 
-  it('seeded lead exists in pipe_whatsapp with status novo', async () => {
+  it('seeded lead exists in pipeline_entries with status novo', async () => {
     const { data, error } = await getWaEntry(TEST_LEAD_ALPHA_ID);
 
     expect(error).toBeNull();
@@ -91,7 +118,8 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — stage moves', () => {
 
   it('full qualification sequence: novo → agendado persists each step', async () => {
     // Reset
-    await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    const reset = await setWaStatus(TEST_LEAD_ALPHA_ID, 'novo');
+    expect(reset.error).toBeNull();
 
     for (const stage of WA_STAGES) {
       const { data, error } = await setWaStatus(TEST_LEAD_ALPHA_ID, stage);
@@ -117,11 +145,11 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — stage moves', () => {
     expect(data?.status).toBe('respondeu');
   });
 
-  it('org-B query cannot see org-A pipe_whatsapp entry (RLS)', async () => {
+  it('org-B query cannot see org-A pipeline_entries entry (organization filter)', async () => {
     // Query org-B for the org-A lead — should return nothing
     const { data, error } = await supabase
-      .from('pipe_whatsapp')
-      .select('id, status')
+      .from('pipeline_entries')
+      .select('id, status:stage_key')
       .eq('lead_id', TEST_LEAD_ALPHA_ID)
       .eq('organization_id', TEST_ORG_B_ID);
 
@@ -139,12 +167,15 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
   afterAll(async () => {
     // Cleanup test leads and their pipe entries (cascade delete if configured)
     if (createdLeadIds.length > 0) {
-      await supabase.from('pipe_whatsapp').delete().in('lead_id', createdLeadIds);
-      await supabase.from('leads').delete().in('id', createdLeadIds);
+      const entries = await supabase.from('pipeline_entries').delete()
+        .eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId).in('lead_id', createdLeadIds);
+      expect(entries.error).toBeNull();
+      const leads = await supabase.from('leads').delete().eq('organization_id', TEST_ORG_ID).in('id', createdLeadIds);
+      expect(leads.error).toBeNull();
     }
   });
 
-  it('new lead can be added to pipe_whatsapp in novo stage', async () => {
+  it('new lead can be added to pipeline_entries in novo stage', async () => {
     // Create a lead
     const { data: lead, error: leadErr } = await supabase
       .from('leads')
@@ -160,15 +191,16 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
     expect(lead?.id).toBeTruthy();
     if (lead?.id) createdLeadIds.push(lead.id);
 
-    // Place in pipe_whatsapp at novo
+    // Place in pipeline_entries at novo
     const { data: pipe, error: pipeErr } = await supabase
-      .from('pipe_whatsapp')
+      .from('pipeline_entries')
       .insert({
         lead_id: lead!.id,
         organization_id: TEST_ORG_ID,
-        status: 'novo',
+        stage_key: 'novo',
+        pipeline_id: pipelineId,
       })
-      .select('id, status, lead_id')
+      .select('id, status:stage_key, lead_id')
       .single();
 
     expect(pipeErr).toBeNull();
@@ -176,25 +208,20 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
     expect(pipe?.lead_id).toBe(lead!.id);
   });
 
-  it('same lead cannot have duplicate pipe_whatsapp entry (conflict or upsert)', async () => {
-    // Use the first created lead
-    if (createdLeadIds.length === 0) return;
+  it('same lead can have two distinct deals in the same pipeline', async () => {
+    expect(createdLeadIds).toHaveLength(1);
     const leadId = createdLeadIds[0];
-
-    // Try inserting again — should either fail or upsert
-    const { error } = await supabase
-      .from('pipe_whatsapp')
-      .insert({
-        lead_id: leadId,
-        organization_id: TEST_ORG_ID,
-        status: 'novo',
-      });
-
-    // If there's a unique constraint, error.code = '23505'. If not, data just has two rows.
-    // Either behavior is acceptable, but duplicate is typically avoided.
-    if (error) {
-      expect(['23505', '23503']).toContain(error.code);
-    }
-    // No assertion if no error — duplicate prevention may use ON CONFLICT DO NOTHING
+    const { data: second, error } = await supabase.from('pipeline_entries').insert({
+      lead_id: leadId, organization_id: TEST_ORG_ID,
+      pipeline_id: pipelineId, stage_key: 'novo',
+    }).select('id').single();
+    expect(error).toBeNull();
+    const { data: entries, error: readError } = await supabase.from('pipeline_entries')
+      .select('id').eq('organization_id', TEST_ORG_ID)
+      .eq('pipeline_id', pipelineId).eq('lead_id', leadId);
+    expect(readError).toBeNull();
+    expect(entries).toHaveLength(2);
+    expect(new Set(entries!.map(entry => entry.id)).size).toBe(2);
+    expect(entries!.map(entry => entry.id)).toContain(second!.id);
   });
 });
