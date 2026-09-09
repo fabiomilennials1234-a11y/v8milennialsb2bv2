@@ -1451,11 +1451,103 @@ async function selectInformation(page: Page, field: string) {
     'business.last_won_date': 'Data da última venda ganha',
     'message.trigger.text': 'Texto da mensagem do gatilho',
     'message.period.exists': 'Mensagem recebida no período',
+    'message.search.text': 'Conteúdo de mensagens',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('option', { name: labels[field], exact: true }).click();
 }
+
+test('monta busca de mensagens com seletores, chips e proveniência', async ({ page }) => {
+  const boxId = 'abcd0000-0000-4000-8000-000000000097';
+  const messageId = 'abcd0000-0000-4000-8000-000000000096';
+  await page.route('**/rest/v1/whatsapp_instances?*', route => route.fulfill({ json: [
+    { id: boxId, instance_name: 'Comercial', provider: 'uazapi' },
+  ] }));
+  await page.route('**/rest/v1/messaging_channels?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'message.search.text');
+  const configuration = page.getByRole('complementary', { name: 'Configurar Condição' });
+  await expect(configuration.getByLabel('Conversa', { exact: true })).not.toContainText('Caixa específica');
+  const expression = configuration.getByLabel('Palavra ou expressão', { exact: true });
+  await expression.fill('preço final');
+  await expression.press('Enter');
+  await expression.fill('cotação');
+  await expression.press('Enter');
+  await expect(configuration.getByRole('list', { name: 'Expressões configuradas' })).toContainText('preço final');
+  await configuration.getByRole('button', { name: 'Remover cotação' }).click();
+  await expect(configuration.getByRole('button', { name: 'Remover cotação' })).toHaveCount(0);
+  await expression.fill('cotação');
+  await configuration.getByRole('button', { name: 'Adicionar', exact: true }).click();
+  await expression.fill('PREÇO,   FINAL');
+  await expect(configuration.getByRole('button', { name: 'Adicionar', exact: true })).toBeDisabled();
+  await expression.fill('');
+  await configuration.getByLabel('Origem da mensagem').selectOption('period');
+  await configuration.getByLabel('Conversa', { exact: true }).selectOption('explicit');
+  await configuration.getByLabel('Caixa de entrada').selectOption(`whatsapp_messages:${boxId}:uazapi`);
+  await configuration.getByLabel('Comparação', { exact: true }).selectOption('not_matches');
+  await configuration.getByLabel('Combinação', { exact: true }).selectOption('all');
+  await configuration.getByLabel('Modo de correspondência').selectOption('substring');
+  await configuration.getByLabel('De', { exact: true }).fill('2026-09-01T00:00');
+  await configuration.getByLabel('Até', { exact: true }).fill('2026-09-08T00:00');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Não contém “preço final” E “cotação” · trecho');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ condition: {
+      field: 'message.search.text', source: { kind: 'period' }, operator: 'not_matches', expressionMatch: 'all',
+      matchMode: 'substring', expressions: ['preço final', 'cotação'],
+      conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId, provider: 'uazapi', boxLabel: 'Comercial' },
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false,
+      actual: true, reference: { messageId, textSource: 'transcription', textProvider: 'gemini', textCreatedAt: '2026-09-07T12:00:00Z',
+        provider: 'uazapi', boxId, participantId: '5511999990000' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Fonte: transcrição persistida · gemini');
+});
+
+test('bloqueia negação de busca quando histórico não prova ausência', async ({ page }) => {
+  const condition: GuidedConditionDraft = { version: 1, id: 'rule-1', field: 'message.search.text',
+    conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId: 'abcd0000-0000-4000-8000-000000000095', provider: 'uazapi', boxLabel: 'Comercial' },
+    source: { kind: 'period', from: '2026-09-01T00:00:00.000Z', to: '2026-09-08T00:00:00.000Z' }, operator: 'not_matches',
+    expressionMatch: 'any', matchMode: 'whole_phrase', expressions: ['preço'] };
+  await page.route('**/rest/v1/whatsapp_instances?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/messaging_channels?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, condition);
+  await page.getByText('Não contém “preço”', { exact: false }).click();
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({ status: 422,
+    json: { status: 'error', code: 'history_insufficient' } }));
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Teste da condição' }).getByRole('alert')).toContainText('Histórico insuficiente');
+});
+
+test('salva e publica busca textual guiada completa', async ({ page }) => {
+  const condition: GuidedConditionDraft = { version: 1, id: 'rule-1', field: 'message.search.text', conversation: { kind: 'trigger' },
+    source: { kind: 'trigger' }, operator: 'matches', expressionMatch: 'any', matchMode: 'whole_phrase', expressions: ['preço'] };
+  const operations: string[] = [];
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    operations.push('save');
+    expect(route.request().postDataJSON().p_definition.nodes[1].data.guidedCondition).toMatchObject({
+      field: 'message.search.text', source: { kind: 'trigger' }, expressions: ['preço', 'cotação'],
+    });
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await page.route('**/functions/v1/publish-guided-workflow', route => {
+    operations.push('publish');
+    expect(route.request().postDataJSON()).toEqual({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 4 });
+    return route.fulfill({ json: { status: 'published', version_id: 'version-search', version_number: 2 } });
+  });
+  await openGuidedEditor(page, condition);
+  await page.getByText('Contém “preço”', { exact: false }).click();
+  const expression = page.getByLabel('Palavra ou expressão', { exact: true });
+  await expression.fill('cotação');
+  await expression.press('Enter');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(page.getByText('Versão 2 publicada.')).toBeVisible();
+  expect(operations).toEqual(['save', 'publish']);
+});
 
 test('explica histórico insuficiente na busca de mensagem por período', async ({ page }) => {
   const boxId = 'abcd0000-0000-4000-8000-000000000098';

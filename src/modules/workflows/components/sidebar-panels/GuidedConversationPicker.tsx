@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { GuidedMessagePeriodRuleDraft, GuidedTriggerMessageTextRuleDraft } from '@/types/workflow';
+import type { GuidedMessagePeriodRuleDraft, GuidedMessageSearchRuleDraft, GuidedTriggerMessageTextRuleDraft } from '@/types/workflow';
 import { Label } from '@/components/ui/label';
 
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-type Rule = GuidedTriggerMessageTextRuleDraft | GuidedMessagePeriodRuleDraft;
+type Rule = GuidedTriggerMessageTextRuleDraft | GuidedMessagePeriodRuleDraft | GuidedMessageSearchRuleDraft;
 type Box = { storage: 'whatsapp_messages' | 'channel_messages'; id: string; provider: string; label: string };
 
-export function GuidedConversationPicker({ actorId, organizationId, condition, onChange }: {
-  actorId: string; organizationId: string; condition: Rule; onChange: (condition: Rule) => void;
+export function GuidedConversationPicker({ actorId, organizationId, condition, onChange, triggerOnly = false }: {
+  actorId: string; organizationId: string; condition: Rule; onChange: (condition: Rule) => void; triggerOnly?: boolean;
 }) {
   const boxes = useQuery({
     queryKey: ['workflows', organizationId, 'guided-conversation-boxes', actorId],
@@ -37,7 +37,7 @@ export function GuidedConversationPicker({ actorId, organizationId, condition, o
       onChange={event => onChange({ ...condition, conversation: event.target.value === 'explicit'
         ? { kind: 'explicit', storage: 'whatsapp_messages', boxId: '', provider: '' } : { kind: 'trigger' } })}>
       <option value="trigger">Conversa que iniciou o fluxo</option>
-      <option value="explicit">Caixa específica</option>
+      {!triggerOnly && <option value="explicit">Caixa específica</option>}
     </select>
     {condition.conversation.kind === 'explicit' && <>
       <Label htmlFor={`guided-box-${condition.id}`}>Caixa de entrada</Label>

@@ -45,7 +45,7 @@ export function GuidedConditionResult({ condition, rules, groups }: {
                 ? entry.context.pipeline.name : current.pipelineLabel } : current;
     const lastWonDetail = current.field === 'business.last_won_date' && entry?.status === 'evaluated'
       ? ` · ${namedReference?.name ?? 'Nenhuma venda ganha'} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Vazio'}` : '';
-    const messageReference = current.field === 'message.trigger.text' && entry?.status === 'evaluated' && entry.reference && 'messageId' in entry.reference && 'textSource' in entry.reference
+    const messageReference = (current.field === 'message.trigger.text' || current.field === 'message.search.text') && entry?.status === 'evaluated' && entry.reference && 'messageId' in entry.reference && 'textSource' in entry.reference
       ? ` · Fonte: ${entry.reference.textSource === 'caption' ? 'legenda' : entry.reference.textSource === 'transcription' ? 'transcrição persistida' : entry.reference.textSource === 'interactive' ? 'resposta interativa' : entry.reference.textSource === 'synthetic' ? 'conteúdo estruturado' : 'texto'} · ${entry.reference.textProvider ?? entry.reference.provider}${entry.reference.textCreatedAt ? ` · ${new Date(entry.reference.textCreatedAt).toLocaleString('pt-BR')}` : ''}` : '';
     return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{messageReference}</p>;
   }

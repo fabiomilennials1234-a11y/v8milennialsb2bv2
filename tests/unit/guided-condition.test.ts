@@ -14,6 +14,66 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it.each([
+    ['whole_phrase', ['preço'], 'apreço', false],
+    ['substring', ['preço'], 'apreço', true],
+    ['whole_phrase', ['preço final'], 'PREÇO,\nfinal!', true],
+    ['whole_phrase', ['preço', 'cotação'], 'Preço; cotacao.', true],
+    ['whole_phrase', ['preço', 'cotação'], 'Preço apenas.', false],
+  ])('matches trigger-message expressions with %s boundaries', async (matchMode, expressions, text, matched) => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
+        const url = new URL(String(input));
+        if (url.pathname === '/rest/v1/leads') return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text, text_source: 'text',
+          text_provider: 'uazapi', text_created_at: '2026-09-07T12:00:00Z', provider: 'uazapi',
+          box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participant_id: '5511999990000' }), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      messageContext: { storage: 'whatsapp_messages', messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi', participantId: '5511999990000' },
+      condition: { version: 1, id: 'search', field: 'message.search.text', conversation: { kind: 'trigger' }, source: { kind: 'trigger' },
+        operator: 'matches', expressionMatch: expressions.length > 1 ? 'all' : 'any', matchMode, expressions },
+    })).toMatchObject({ status: 'evaluated', matched });
+  });
+
+  it('maps one period match with source provenance and does not combine different messages', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
+        const path = new URL(String(input)).pathname;
+        if (path === '/rest/v1/leads') return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+        expect(path).toBe('/rest/v1/rpc/test_guided_condition_message_search');
+        return new Response(JSON.stringify({ matched_message_id: null, matched_at: null, matched_text: null, text_source: null,
+          text_provider: null, coverage_status: 'complete' }), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'search', field: 'message.search.text', conversation: { kind: 'explicit', storage: 'whatsapp_messages',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, source: { kind: 'period', from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' },
+      operator: 'not_matches', expressionMatch: 'all', matchMode: 'whole_phrase', expressions: ['preço', 'cotação'],
+    } })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'search', status: 'evaluated', matched: true, actual: false }] });
+  });
+
+  it('rejects more than 20 persisted-message searches before issuing any read', async () => {
+    let searchReads = 0;
+    const caller = createClient('https://db.example.test', 'test-anon-key', { auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => {
+        const path = new URL(String(input)).pathname;
+        if (path.includes('message_search')) searchReads++;
+        return new Response(JSON.stringify(path === '/rest/v1/leads' ? { id: 'lead-1', organization_id: 'org-1', name: null } : {}),
+          { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    const children = Array.from({ length: 21 }, (_, index) => ({ version: 1 as const, id: `search-${index}`,
+      field: 'message.search.text' as const, conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const,
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, source: { kind: 'last_received' as const },
+      operator: 'matches' as const, expressionMatch: 'any' as const, matchMode: 'whole_phrase' as const, expressions: ['preço'] }));
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'group', kind: 'group', match: 'all', children } }))
+      .toEqual({ status: 'error', code: 'invalid_configuration' });
+    expect(searchReads).toBe(0);
+  });
+
   it('proves period message existence from one matching persisted message without requiring complete history', async () => {
     const caller = createClient('https://db.example.test', 'test-anon-key', {
       auth: { persistSession: false, autoRefreshToken: false },

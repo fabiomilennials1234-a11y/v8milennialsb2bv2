@@ -51,6 +51,15 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
     const to = condition.to ? new Date(condition.to).toLocaleString('pt-BR') : '…';
     return `${conversation} · ${condition.operator === 'exists' ? 'Existe' : 'Não existe'} mensagem recebida · ${from} até ${to}`;
   }
+  if (condition.field === 'message.search.text') {
+    const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
+      : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;
+    const source = condition.source.kind === 'trigger' ? 'Mensagem do gatilho'
+      : condition.source.kind === 'last_received' ? 'Última mensagem recebida'
+      : `Mensagens recebidas de ${condition.source.from ? new Date(condition.source.from).toLocaleString('pt-BR') : '…'} até ${condition.source.to ? new Date(condition.source.to).toLocaleString('pt-BR') : '…'}`;
+    const expressions = condition.expressions.length ? condition.expressions.map(value => `“${value}”`).join(condition.expressionMatch === 'all' ? ' E ' : ' OU ') : '…';
+    return `${conversation} · ${source} · ${condition.operator === 'matches' ? 'Contém' : 'Não contém'} ${expressions} · ${condition.matchMode === 'whole_phrase' ? 'expressão inteira' : 'trecho'}`;
+  }
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

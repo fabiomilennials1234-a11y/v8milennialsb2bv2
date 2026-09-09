@@ -143,6 +143,9 @@ const messageCandidatesRollback = readFileSync(`supabase/migrations/rollback/${m
 const messageCoverageMigration = '20271017000048_guided_message_history_coverage.sql';
 const messageCoverageForward = readFileSync(`supabase/migrations/${messageCoverageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const messageCoverageRollback = readFileSync(`supabase/migrations/rollback/${messageCoverageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageSearchMigration = '20271017000049_guided_message_text_search.sql';
+const messageSearchForward = readFileSync(`supabase/migrations/${messageSearchMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageSearchRollback = readFileSync(`supabase/migrations/rollback/${messageSearchMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -174,6 +177,18 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${messageSearchRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_message_search(uuid,uuid,jsonb,jsonb,text[],text,text)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_message_search(uuid,uuid,uuid,jsonb,jsonb,text[],text,text)') IS NOT NULL
+    OR to_regprocedure('public.guided_message_search_payload(uuid,uuid,jsonb,jsonb,text[],text,text)') IS NOT NULL
+    OR to_regprocedure('public.guided_message_search_matches(text,text[],text,text)') IS NOT NULL
+    OR to_regprocedure('public.guided_normalize_message_search(text)') IS NOT NULL
+    OR to_regprocedure('public.valid_guided_message_search_rule(jsonb)') IS NOT NULL
+    OR to_regprocedure('public.validate_guided_message_search_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'message-search rollback left callable objects';
+  END IF;
+END $$;
 ${messageCoverageRollback}
 ${messageCandidatesRollback}
 ${triggerMessageRollback}
@@ -452,6 +467,30 @@ ${lastWonForward}
 ${triggerMessageForward}
 ${messageCandidatesForward}
 ${messageCoverageForward}
+${messageSearchForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_message_search(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_message_search(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_message_search(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.read_guided_condition_message_search(uuid,uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_message_search(uuid,uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_message_search(uuid,uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.guided_message_search_payload(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.guided_message_search_payload(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.guided_message_search_payload(uuid,uuid,jsonb,jsonb,text[],text,text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.guided_normalize_message_search(text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.guided_message_search_matches(text,text[],text,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'message-search reapply privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['message.search.text']) THEN
+    RAISE EXCEPTION 'message-search scope not restored';
+  END IF;
+  IF public.guided_normalize_message_search(E' PREÇO,\n final! ') <> 'preco final'
+    OR public.guided_message_search_matches('apreço',ARRAY['preço'],'whole_phrase','any')
+    OR NOT public.guided_message_search_matches('apreço',ARRAY['preço'],'substring','any') THEN
+    RAISE EXCEPTION 'message-search normalization not restored';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')

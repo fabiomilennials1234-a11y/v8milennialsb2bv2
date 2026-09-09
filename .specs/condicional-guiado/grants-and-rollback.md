@@ -297,6 +297,14 @@ Adds `conversation_history_coverage` and scope `message.period.exists`. Evidence
 
 Rollback removes the table, readers and publication trigger, then the rehearsal replays migration 47 and migration 48. Workflow drafts, grants, versions, execution pins and message rows remain intact. The 49-migration transactional rollback/reapply rehearsal passed. Preview only; worker and production remain undeployed.
 
+## Migration 49 — normalized message expression search
+
+Adds scope `message.search.text`, authenticated personal search and a service-only organization reader requiring the exact current workflow grant. Internal matching normalizes case, diacritics, punctuation and whitespace; `all` is evaluated within one persisted message. Search accepts at most 20 expressions and period absence requires existing conversation coverage.
+
+Publication validates the complete rule shape, normalized uniqueness, expression budgets, conversation identity and bounded `[from,to)` period. The trigger function and structural validator have no API-role EXECUTE. Pure normalization/matching helpers and the RLS-bound payload are available only to authenticated/service roles because the SECURITY INVOKER RPC calls them; anon remains denied.
+
+Rollback drops search readers, helpers and publication trigger, then restores migration 48's scope vocabulary during reverse replay. It does not delete messages, coverage evidence, grants, drafts, versions or execution pins. Reapply 49 after 48. The 50-migration transactional rehearsal passed with synthetic approval history preserved. Preview only; production and worker remain undeployed.
+
 ## Migration 45 — latest currently-won sale date
 
 Adds explicit scope `business.last_won_date`. Personal reads are authenticated-only under caller RLS. Organization reads are service-only and require the current workflow grant while locking workflow, grant, lead, entries and deals. Both return at most one currently-won deal by canonical `outcome_at`, converted with the organization's IANA timezone.

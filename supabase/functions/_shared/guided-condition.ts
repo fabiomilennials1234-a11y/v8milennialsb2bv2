@@ -4,6 +4,19 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GUIDED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function normalizeGuidedMessageSearch(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function guidedMessageTextMatches(text: string, expressions: string[], mode: 'whole_phrase' | 'substring', match: 'any' | 'all'): boolean {
+  const haystack = normalizeGuidedMessageSearch(text);
+  const checks = expressions.map(expression => {
+    const needle = normalizeGuidedMessageSearch(expression);
+    return mode === 'substring' ? haystack.includes(needle) : ` ${haystack} `.includes(` ${needle} `);
+  });
+  return match === 'all' ? checks.every(Boolean) : checks.some(Boolean);
+}
+
 export type GuidedScalarRule = {
   version: 1;
   id: string;
@@ -55,8 +68,12 @@ export type GuidedTriggerMessageTextRule = { version: 1; id: string; field: 'mes
 export type GuidedMessagePeriodRule = { version: 1; id: string; field: 'message.period.exists';
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
   operator: 'exists' | 'not_exists'; from: string; to: string };
+export type GuidedMessageSearchRule = { version: 1; id: string; field: 'message.search.text';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
+  source: { kind: 'trigger' } | { kind: 'last_received' } | { kind: 'period'; from: string; to: string };
+  operator: 'matches' | 'not_matches'; expressionMatch: 'any' | 'all'; matchMode: 'whole_phrase' | 'substring'; expressions: string[] };
 
-export type GuidedRule = GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -132,6 +149,26 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       const to = typeof rule.to === 'string' ? Date.parse(rule.to) : Number.NaN;
       return validConversation && (rule.operator === 'exists' || rule.operator === 'not_exists')
         && Number.isFinite(from) && Number.isFinite(to) && from < to && to - from <= 366 * 86_400_000;
+    }
+    if (rule.field === 'message.search.text') {
+      const conversation = rule.conversation as Record<string, unknown> | undefined;
+      const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
+        && (conversation.storage === 'whatsapp_messages' || conversation.storage === 'channel_messages')
+        && typeof conversation.boxId === 'string' && GUIDED_UUID.test(conversation.boxId)
+        && typeof conversation.provider === 'string' && conversation.provider.trim().length > 0);
+      const source = rule.source as Record<string, unknown> | undefined;
+      let validSource = source?.kind === 'last_received' || (source?.kind === 'trigger' && conversation?.kind === 'trigger');
+      if (source?.kind === 'period') {
+        const from = typeof source.from === 'string' ? Date.parse(source.from) : Number.NaN;
+        const to = typeof source.to === 'string' ? Date.parse(source.to) : Number.NaN;
+        validSource = Number.isFinite(from) && Number.isFinite(to) && from < to && to-from<=366*86_400_000;
+      }
+      if (!Array.isArray(rule.expressions) || rule.expressions.length<1 || rule.expressions.length>20
+        || rule.expressions.some(value => typeof value!=='string' || !normalizeGuidedMessageSearch(value) || value.length>120)) return false;
+      const normalized = rule.expressions.map(value => normalizeGuidedMessageSearch(value));
+      return validConversation && validSource && new Set(normalized).size===normalized.length && normalized.join('').length<=1000
+        && (rule.operator==='matches' || rule.operator==='not_matches') && (rule.expressionMatch==='any' || rule.expressionMatch==='all')
+        && (rule.matchMode==='whole_phrase' || rule.matchMode==='substring');
     }
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
@@ -210,6 +247,7 @@ export async function evaluateGuidedCondition(
   const businessStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
   const businessExistenceStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
   const businessExistenceQueries: GuidedBusinessExistence[] = [];
+  const messageSearchRules: GuidedMessageSearchRule[] = [];
   function collect(current: GuidedCondition): void {
     if ('kind' in current && current.kind === 'business_exists') {
       businessExistenceQueries.push(current);
@@ -240,8 +278,10 @@ export async function evaluateGuidedCondition(
       `${current.pipelineId.toLowerCase()}:${current.stageId.toLowerCase()}`,
       { pipelineId: current.pipelineId.toLowerCase(), stageId: current.stageId.toLowerCase() },
     );
+    else if (current.field === 'message.search.text') messageSearchRules.push(current);
   }
   collect(request.condition);
+  if (messageSearchRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
   const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
   const fields = leadRequestedFields.filter(isGuidedScalarField);
@@ -251,8 +291,9 @@ export async function evaluateGuidedCondition(
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
   const usesLastWonDate = requestedFields.includes('business.last_won_date');
-  const usesTriggerMessage = requestedFields.includes('message.trigger.text');
+  const usesTriggerMessage = requestedFields.includes('message.trigger.text') || messageSearchRules.some(rule => rule.source.kind==='trigger');
   const usesMessagePeriod = requestedFields.includes('message.period.exists');
+  const usesMessageSearch = messageSearchRules.some(rule => rule.source.kind!=='trigger');
   const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -484,6 +525,40 @@ export async function evaluateGuidedCondition(
       if (!candidate.matched_message_id && candidate.coverage_status !== 'complete') return { status: 'error' as const,
         code: candidate.coverage_status === 'in_progress' ? 'history_sync_in_progress' as const : 'history_insufficient' as const };
       messagePeriods.set(rule.id, candidate);
+    }
+  }
+  type MessageSearchData = { matched_message_id: string | null; matched_at: string | null; matched_text: string | null;
+    text_source: string | null; text_provider: string | null; provider?: string; box_id?: string; participant_id?: string;
+    text_state?: string; coverage_status: 'complete' | 'in_progress' | 'gapped' };
+  const messageSearchResults = new Map<string, MessageSearchData>();
+  if (usesMessageSearch) {
+    const searchable = messageSearchRules.filter(rule => rule.source.kind!=='trigger');
+    for (const rule of searchable) {
+      const conversation = rule.conversation.kind==='trigger' ? request.messageContext : rule.conversation;
+      if (!conversation) return { status: 'error' as const, code: 'context_unavailable' as const };
+      const response = await caller.rpc(request.authorization?.kind==='organization'
+        ? 'read_guided_condition_message_search' : 'test_guided_condition_message_search', {
+        ...(request.authorization?.kind==='organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+        p_organization_id: request.organizationId, p_lead_id: request.leadId, p_conversation: conversation,
+        p_source: rule.source, p_expressions: rule.expressions, p_match_mode: rule.matchMode, p_expression_match: rule.expressionMatch,
+      });
+      if (response.error) {
+        const code = response.error.code==='PT404' ? 'context_unavailable' as const
+          : response.error.code==='42501' || response.status===401 || response.status===403 ? 'access_denied' as const
+          : response.status>=500 || response.status===0 || response.status===429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+        return { status: 'error' as const, code };
+      }
+      const candidate=response.data as MessageSearchData|null;
+      if (!candidate || !['complete','in_progress','gapped'].includes(candidate.coverage_status)
+        || (candidate.matched_message_id!==null && (typeof candidate.matched_message_id!=='string' || !GUIDED_UUID.test(candidate.matched_message_id)))
+        || (candidate.matched_text!==null && typeof candidate.matched_text!=='string')) return { status:'error' as const,code:'source_unavailable' as const };
+      if (candidate.text_state==='media_without_text') return { status:'error' as const,code:'message_text_unavailable' as const };
+      if (candidate.matched_message_id && (!candidate.matched_text || !candidate.text_source || !candidate.text_provider
+        || !guidedMessageTextMatches(candidate.matched_text,rule.expressions,rule.matchMode,rule.expressionMatch)))
+        return { status:'error' as const,code:'source_unavailable' as const };
+      if (!candidate.matched_message_id && candidate.coverage_status!=='complete') return { status:'error' as const,
+        code:candidate.coverage_status==='in_progress' ? 'history_sync_in_progress' as const : 'history_insufficient' as const };
+      messageSearchResults.set(rule.id,candidate);
     }
   }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
@@ -797,6 +872,22 @@ export async function evaluateGuidedCondition(
       }
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
         ...(lastWon ? { reference: { id: lastWon.deal_id, name: lastWon.title } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'message.search.text') {
+      const candidate = condition.source.kind==='trigger' ? {
+        matched_message_id: guidedMessageTextMatches(triggerMessage!.text ?? '',condition.expressions,condition.matchMode,condition.expressionMatch)
+          ? triggerMessage!.message_id : null,
+        matched_at: triggerMessage!.text_created_at, matched_text: triggerMessage!.text,
+        text_source: triggerMessage!.text_source, text_provider: triggerMessage!.text_provider,
+        provider: triggerMessage!.provider, box_id: triggerMessage!.box_id, participant_id: triggerMessage!.participant_id,
+      } : messageSearchResults.get(condition.id)!;
+      const found=Boolean(candidate.matched_message_id);
+      const matched=condition.operator==='matches' ? found : !found;
+      rules.push({ id:condition.id,status:'evaluated',matched,actual:found,
+        ...(found ? { reference:{ messageId:candidate.matched_message_id!, textSource:candidate.text_source,
+          textProvider:candidate.text_provider,textCreatedAt:candidate.matched_at,provider:candidate.provider ?? '',
+          boxId:candidate.box_id ?? '',participantId:candidate.participant_id ?? '' } } : {}) });
       return matched;
     }
     if (condition.field === 'message.trigger.text') {

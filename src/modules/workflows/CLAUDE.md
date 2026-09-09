@@ -55,6 +55,8 @@ Track: `workflow_executions` + `workflow_execution_steps`.
 
 O avaliador consome somente `condition_text` ou uma transcrição já persistida com provider e instante. Mídia sem fonte textual é erro `message_text_unavailable`; registro removido é `context_unavailable`. O texto legado em `context.message` permanece porque o gatilho antigo `contains_text` ainda depende dele.
 
+`message.search.text` reutiliza essas fontes persistidas para mensagem do gatilho, última recebida ou período `[from,to)`. Caixa/provider/participante continuam fixos. `all` exige todas as expressões na mesma linha; resultado negativo em histórico exige cobertura completa. Máximo: 20 regras de busca por avaliação, 20 expressões por regra, 120 caracteres cada e 1.000 caracteres normalizados totais. Nenhuma avaliação gera transcrição.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)

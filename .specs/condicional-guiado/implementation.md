@@ -684,3 +684,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Evaluator distinguishes recoverable `history_sync_in_progress` from `history_insufficient`. Editor exposes conversation, inbox, existence/absence and bounded dates; test copy explains the impediment without data values.
 - Real preview integration proves no-evidence, in-progress, complete absence, inclusive start, exclusive end, late arrival and organization-grant behavior. Migration 48 is applied and ledger-registered only on preview. Worker and production remain undeployed.
 - Checkpoint evidence: 77 real integration cases, 113 Chromium journeys, 105 evaluator/API/executor unit tests, 12 worker guard tests, zero introduced TypeScript errors, Deno checks clean and 49-migration rollback/reapply passed.
+
+## 2026-09-09 — ticket 13 message expression search
+
+- `message.search.text` provides dropdowns for conversation, message origin, positive/negative operator, any/all combination and whole-expression/substring matching. Enter creates a chip; a compound phrase remains one expression. Normalized duplicates and empty/oversized lists fail closed.
+- Matching lowercases, removes diacritics and collapses punctuation/whitespace without rewriting stored content. Whole-expression `preço` excludes `apreço`; substring includes it. `all` runs against one effective persisted text source per message, never across rows.
+- Trigger source evaluates the exact pinned message. Last-received chooses the newest incoming row. Period uses `[from,to)` up to 366 days. A found message decides immediately; no match and negation require complete conversation coverage.
+- Text provenance comes from existing `condition_text` or persisted transcription. Evaluation returns source/provider/time and never starts transcription. Media without persisted text remains an explicit error.
+- Dedicated personal and organization RPCs enforce caller RLS or exact `message.search.text` grant. Publication validates shape, limits, normalized uniqueness, time bounds and required scope. Migration 49 and endpoints remain preview-only; worker and production remain untouched.
+- Final checkpoint: 78/78 real integrations, 115/115 Chromium regression journeys plus the focused ticket publication journey, and 99/99 evaluator unit tests passed. TypeScript ratchet, Deno, whitespace and focused ESLint passed; only the pre-existing Fast Refresh warning remains. The 50-migration rollback/reapply rehearsal preserved approval history and restored function ACLs. Migration 49 is ledger-registered on preview.

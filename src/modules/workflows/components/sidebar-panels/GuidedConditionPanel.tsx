@@ -14,13 +14,13 @@ import type { GuidedConditionDraft } from '@/types/workflow';
 import { getGuidedConditionFields } from '../../lib/guided-condition-summary';
 
 const database: SupabaseClient = supabase;
-type MessageRule = Extract<import('@/types/workflow').GuidedRuleDraft, { field: 'message.trigger.text' | 'message.period.exists' }>;
+type MessageRule = Extract<import('@/types/workflow').GuidedRuleDraft, { field: 'message.trigger.text' | 'message.period.exists' | 'message.search.text' }>;
 type MessageCandidate = { message_id: string; storage: 'whatsapp_messages' | 'channel_messages'; box_id: string;
   provider: string; participant_id: string; text_preview: string | null; text_source: string | null; message_type: string; message_at: string };
 function firstMessageRule(condition: GuidedConditionDraft): MessageRule | null {
   if ('kind' in condition && condition.kind === 'business_exists') return null;
   if ('children' in condition) return condition.children.map(firstMessageRule).find(Boolean) ?? null;
-  return !('kind' in condition) && (condition.field === 'message.trigger.text' || condition.field === 'message.period.exists') ? condition : null;
+  return !('kind' in condition) && (condition.field === 'message.trigger.text' || condition.field === 'message.period.exists' || condition.field === 'message.search.text') ? condition : null;
 }
 
 export function GuidedConditionPanel({ actorId, organizationId, condition, onChange }: {
@@ -167,7 +167,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
       </>}
       <Button type="button" disabled={!leadId || (requiresTriggerBusiness && !entryId) || Boolean(requiresMessageCandidate && !messageId) || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.trigger.text' || condition.field === 'message.period.exists') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference && 'name' in result.rules[0].reference ? result.rules[0].reference.name : 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.trigger.text' || condition.field === 'message.period.exists' || condition.field === 'message.search.text') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference && 'name' in result.rules[0].reference ? result.rules[0].reference.name : 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
     </section>
   </div>;
 }

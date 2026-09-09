@@ -682,13 +682,17 @@ export type GuidedTriggerMessageTextRuleDraft = { version: 1; id: string; field:
 export type GuidedMessagePeriodRuleDraft = { version: 1; id: string; field: 'message.period.exists';
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
   operator: 'exists' | 'not_exists'; from: string; to: string };
+export type GuidedMessageSearchRuleDraft = { version: 1; id: string; field: 'message.search.text';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
+  source: { kind: 'trigger' } | { kind: 'last_received' } | { kind: 'period'; from: string; to: string };
+  operator: 'matches' | 'not_matches'; expressionMatch: 'any' | 'all'; matchMode: 'whole_phrase' | 'substring'; expressions: string[] };
 export type GuidedBusinessExistenceChildDraft =
   | { version: 1; id: string; field: 'business.stage'; operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string }
   | ({ version: 1; id: string; field: 'business.value' }
     & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' }));
 export type GuidedBusinessExistenceDraft = { version: 1; id: string; kind: 'business_exists';
   lifecycle: 'open' | 'won' | 'lost' | 'all'; match: 'all' | 'any'; children: GuidedBusinessExistenceChildDraft[] };
-export type GuidedRuleDraft = GuidedMessagePeriodRuleDraft | GuidedTriggerMessageTextRuleDraft | GuidedLastWonDateRuleDraft | GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedRuleDraft = GuidedMessageSearchRuleDraft | GuidedMessagePeriodRuleDraft | GuidedTriggerMessageTextRuleDraft | GuidedLastWonDateRuleDraft | GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | GuidedBusinessExistenceDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];
