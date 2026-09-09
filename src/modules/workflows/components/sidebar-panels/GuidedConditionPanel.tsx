@@ -27,7 +27,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const missingValue = isIncompleteGuidedDraft(condition);
-  const requiresTriggerBusiness = getGuidedConditionFields(condition).includes('business.trigger.stage');
+  const requiresTriggerBusiness = getGuidedConditionFields(condition).some(field => field.startsWith('business.trigger.'));
   const fingerprint = JSON.stringify({ actorId, organizationId, leadId, entryId, condition });
   const leads = useQuery({
     queryKey: ['guided-condition-leads', actorId, organizationId, searchTerm],
@@ -118,7 +118,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
       </>}
       <Button type="button" disabled={!leadId || (requiresTriggerBusiness && !entryId) || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference?.name ?? 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference?.name ?? 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
     </section>
   </div>;
 }

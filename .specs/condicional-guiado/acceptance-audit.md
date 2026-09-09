@@ -84,3 +84,11 @@ Stage comparison now uses `workflow_executions.pipeline_entry_id` as mandatory i
 Editor offers separate funil and filtered etapa dropdowns, current readable names, dedicated business selector for personal testing and unavailable states. Publication rejects removed/mismatched references without replacing active version. Scope copy names trigger business.
 
 Checkpoint does not satisfy full ticket. Value must preserve absence without zero. Elapsed time must consume only trusted stage clock with relevant writers audited. Those slices remain next.
+
+## Ticket 08 — exact triggering-business value checkpoint
+
+`business.trigger.value` reads the deal linked to the exact triggering entry. Real evaluation covers positive decimal values, zero, absent links and soft-deleted deals. Absence stays empty and never equals zero. Stage and value grouped rules use one atomic business reader, with current pipeline/entry context in both explanations.
+
+Editor exposes Valor under “Negócio do gatilho”, typed numeric comparisons, empty/filled operators, exact business selection for personal tests and dedicated approval copy. Publication and automatic evaluation require the separate value scope; granting stage alone cannot expose value, and revocation denies the next read.
+
+Ticket 08 remains open for elapsed-stage-time. Ticket 09 existence semantics remain separate.

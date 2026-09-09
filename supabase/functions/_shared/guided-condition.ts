@@ -37,7 +37,10 @@ export type GuidedTriggerBusinessStageRule = {
   stageId: string;
 };
 
-export type GuidedRule = GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedTriggerBusinessValueRule = { version: 1; id: string; field: 'business.trigger.value' }
+  & GuidedNumberComparison;
+
+export type GuidedRule = GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -69,6 +72,8 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if (rule.field === 'business.trigger.stage') return (rule.operator === 'equals' || rule.operator === 'not_equals')
       && typeof rule.pipelineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.pipelineId)
       && typeof rule.stageId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.stageId);
+    if (rule.field === 'business.trigger.value') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
+      || (isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value));
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -172,9 +177,10 @@ export async function evaluateGuidedCondition(
   const usesResponsibleReader = Boolean(request.authorization && responsibleFields.length);
   const usesOriginReader = Boolean(request.authorization && requestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
-  const usesOnlyBusinessStage = requestedFields.every(field => field === 'business.trigger.stage');
+  const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value');
+  const usesOnlyTriggerBusiness = requestedFields.every(field => field === 'business.trigger.stage' || field === 'business.trigger.value');
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? usesOnlyBusinessStage ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
+    ? usesOnlyTriggerBusiness ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
     : usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
       p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
@@ -220,19 +226,20 @@ export async function evaluateGuidedCondition(
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   type BusinessStageData = {
-    entry: { id: string; pipeline_id: string; stage_id: string };
-    pipelines: Array<{ id: string; name: string }>;
+    entry: { id: string; pipeline_id: string; stage_id: string; value: number | null };
+    pipeline: { id: string; name: string };
     stages: Array<{ id: string; name: string; pipeline_id: string }>;
   };
   let businessStageData: BusinessStageData | null = null;
-  if (businessStageReferences.size) {
+  if (businessFields.length) {
     if (!request.entryId) return { status: 'error' as const, code: 'context_unavailable' as const };
     const response = await caller.rpc(request.authorization?.kind === 'organization'
-      ? 'read_guided_condition_trigger_business_stage' : 'test_guided_condition_trigger_business_stage', {
+      ? 'read_guided_condition_trigger_business_data' : 'test_guided_condition_trigger_business_data', {
       ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
       p_organization_id: request.organizationId,
       p_lead_id: request.leadId,
       p_entry_id: request.entryId,
+      p_fields: businessFields,
       p_references: [...businessStageReferences.values()],
     });
     if (response.error) {
@@ -246,16 +253,15 @@ export async function evaluateGuidedCondition(
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { status: 'error' as const, code: 'source_unavailable' as const };
     const candidate = payload as BusinessStageData;
     if (!candidate.entry || typeof candidate.entry.id !== 'string' || typeof candidate.entry.pipeline_id !== 'string'
-      || typeof candidate.entry.stage_id !== 'string' || !Array.isArray(candidate.pipelines) || !Array.isArray(candidate.stages)
-      || candidate.pipelines.some(pipeline => !pipeline || typeof pipeline.id !== 'string' || typeof pipeline.name !== 'string')
+      || typeof candidate.entry.stage_id !== 'string' || (candidate.entry.value !== null && (typeof candidate.entry.value !== 'number' || !Number.isFinite(candidate.entry.value)))
+      || !candidate.pipeline || typeof candidate.pipeline.id !== 'string' || typeof candidate.pipeline.name !== 'string' || !Array.isArray(candidate.stages)
       || candidate.stages.some(stage => !stage || typeof stage.id !== 'string' || typeof stage.name !== 'string' || typeof stage.pipeline_id !== 'string')) {
       return { status: 'error' as const, code: 'source_unavailable' as const };
     }
     businessStageData = candidate;
-    const pipelineIds = new Set(candidate.pipelines.map(pipeline => pipeline.id.toLowerCase()));
     const stagePairs = new Set(candidate.stages.map(stage => `${stage.pipeline_id.toLowerCase()}:${stage.id.toLowerCase()}`));
-    if ([...businessStageReferences.values()].some(reference => !pipelineIds.has(reference.pipelineId)
-      || !stagePairs.has(`${reference.pipelineId}:${reference.stageId}`))) {
+    if (candidate.pipeline.id.toLowerCase() !== candidate.entry.pipeline_id.toLowerCase()
+      || [...businessStageReferences.values()].some(reference => !stagePairs.has(`${reference.pipelineId}:${reference.stageId}`))) {
       return { status: 'error' as const, code: 'source_unavailable' as const };
     }
   }
@@ -475,7 +481,6 @@ export async function evaluateGuidedCondition(
       return matched;
     }
     if (condition.field === 'business.trigger.stage') {
-      const pipeline = businessStageData!.pipelines.find(item => item.id.toLowerCase() === condition.pipelineId.toLowerCase())!;
       const stage = businessStageData!.stages.find(item => item.id.toLowerCase() === condition.stageId.toLowerCase())!;
       const actual = businessStageData!.entry.stage_id;
       const samePipeline = businessStageData!.entry.pipeline_id.toLowerCase() === condition.pipelineId.toLowerCase();
@@ -483,8 +488,26 @@ export async function evaluateGuidedCondition(
       const matched = condition.operator === 'equals' ? samePipeline && sameStage : !(samePipeline && sameStage);
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
         reference: { id: stage.id, name: stage.name },
-        context: { entryId: businessStageData!.entry.id, pipeline: { id: pipeline.id, name: pipeline.name } },
+        context: { entryId: businessStageData!.entry.id, pipeline: businessStageData!.pipeline },
       });
+      return matched;
+    }
+    if (condition.field === 'business.trigger.value') {
+      const actual = businessStageData!.entry.value;
+      const empty = actual === null;
+      let matched = condition.operator === 'is_empty' ? empty : condition.operator === 'is_not_empty' ? !empty : false;
+      if (!empty && condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty') {
+        switch (condition.operator) {
+          case 'equals': matched = actual === condition.value; break;
+          case 'not_equals': matched = actual !== condition.value; break;
+          case 'greater_than': matched = actual > condition.value; break;
+          case 'greater_than_or_equal': matched = actual >= condition.value; break;
+          case 'less_than': matched = actual < condition.value; break;
+          case 'less_than_or_equal': matched = actual <= condition.value; break;
+        }
+      }
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        context: { entryId: businessStageData!.entry.id, pipeline: businessStageData!.pipeline } });
       return matched;
     }
     const customField = condition.field === 'lead.custom' ? customFields.get(condition.fieldId.toLowerCase())! : undefined;

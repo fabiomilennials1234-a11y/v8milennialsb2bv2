@@ -1445,6 +1445,7 @@ async function selectInformation(page: Page, field: string) {
     'lead.utm_source': 'UTM Source', 'lead.utm_medium': 'UTM Medium', 'lead.utm_content': 'UTM Content',
     'lead.utm_term': 'UTM Term', 'lead.utm_campaign': 'UTM Campaign',
     'business.trigger.stage': 'Etapa',
+    'business.trigger.value': 'Valor',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1491,6 +1492,37 @@ test('configura etapa com funil filtrado e testa o negócio exato do gatilho', a
   });
   await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Comercial · Proposta');
+});
+
+test('configura valor numérico e mantém ausência distinta de zero no negócio do gatilho', async ({ page }) => {
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000041';
+  const stageId = 'abcd0000-0000-4000-8000-000000000042';
+  const entryId = 'abcd0000-0000-4000-8000-000000000043';
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [{ id: pipelineId, name: 'Comercial' }] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => route.fulfill({ json: [{ id: stageId, name: 'Proposta' }] }));
+  await page.route('**/rest/v1/pipeline_entries?*', route => route.fulfill({ json: [{ id: entryId, pipeline_id: pipelineId, stage_id: stageId }] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'business.trigger.value');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Negócio do gatilho · Valor');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('greater_than_or_equal');
+  await page.getByLabel('Valor da comparação', { exact: true }).fill('1000.50');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Valor é maior ou igual a 1000.5');
+  await expect(page.getByText('Valor do negócio do gatilho em execuções desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true }).selectOption(entryId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ entryId, condition: {
+      field: 'business.trigger.value', operator: 'greater_than_or_equal', value: 1000.5,
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: 1250.5, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Negócio do gatilho · Valor é maior ou igual a 1000.5');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Valor está vazio');
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

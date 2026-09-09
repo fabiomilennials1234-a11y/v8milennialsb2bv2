@@ -671,7 +671,9 @@ export type GuidedCustomSelectRuleDraft = { version: 1; id: string; field: 'lead
   & ({ operator: 'equals' | 'not_equals'; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedTriggerBusinessStageRuleDraft = { version: 1; id: string; field: 'business.trigger.stage';
   operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string };
-export type GuidedRuleDraft = GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedTriggerBusinessValueRuleDraft = { version: 1; id: string; field: 'business.trigger.value' }
+  & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedRuleDraft = GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

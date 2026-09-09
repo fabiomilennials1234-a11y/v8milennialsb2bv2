@@ -122,6 +122,9 @@ const businessAuthorizationRollback = readFileSync(`supabase/migrations/rollback
 const businessVolatilityMigration = '20271017000041_fix_trigger_business_reader_volatility.sql';
 const businessVolatilityForward = readFileSync(`supabase/migrations/${businessVolatilityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const businessVolatilityRollback = readFileSync(`supabase/migrations/rollback/${businessVolatilityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessValueMigration = '20271017000042_guided_trigger_business_value.sql';
+const businessValueForward = readFileSync(`supabase/migrations/${businessValueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessValueRollback = readFileSync(`supabase/migrations/rollback/${businessValueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -153,6 +156,17 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${businessValueRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_trigger_business_data(uuid,uuid,uuid,text[],jsonb)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_trigger_business_data(uuid,uuid,uuid,uuid,text[],jsonb)') IS NOT NULL
+    OR to_regprocedure('public.validate_guided_trigger_business_value_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'trigger-business value rollback left callable objects';
+  END IF;
+  IF public.valid_guided_data_scopes(ARRAY['business.trigger.value']) THEN
+    RAISE EXCEPTION 'trigger-business value scope survived rollback';
+  END IF;
+END $$;
 ${businessVolatilityRollback}
 ${businessAuthorizationRollback}
 ${businessPersonalRollback}
@@ -363,6 +377,7 @@ ${stageClockForward}
 ${businessPersonalForward}
 ${businessAuthorizationForward}
 ${businessVolatilityForward}
+${businessValueForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
@@ -377,6 +392,22 @@ DO $$ BEGIN
   END IF;
   IF NOT public.valid_guided_data_scopes(ARRAY['business.trigger.stage']) THEN
     RAISE EXCEPTION 'trigger-business scope not restored';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_trigger_business_data(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_business_data(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_trigger_business_data(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.read_guided_condition_trigger_business_data(uuid,uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_trigger_business_data(uuid,uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_trigger_business_data(uuid,uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.validate_guided_trigger_business_value_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.validate_guided_trigger_business_value_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.validate_guided_trigger_business_value_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'trigger-business value reapply privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['business.trigger.stage','business.trigger.value']) THEN
+    RAISE EXCEPTION 'trigger-business value scope not restored';
   END IF;
 END $$;
 DO $$ BEGIN

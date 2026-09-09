@@ -634,3 +634,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Editor groups field under “Negócio do gatilho”. Funil and etapa dropdowns filter by canonical pipeline ID, persist readable labels, expose unavailable references and require exact business choice for personal test.
 - Final checkpoint evidence: 71 real integration tests, 106 browser tests, 92 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors and 42-migration rollback/reapply. The initial full browser run exposed an unnecessary `entryId: null` on lead-only requests; the compatibility correction passed both affected journeys before the clean full rerun.
 - Ticket 08 remains open: business value and elapsed-stage-time rules still pending. Ticket 09 existence semantics remain separate.
+
+## 2026-09-09 — ticket 08 financial value vertical slice
+
+- `business.trigger.value` uses the deal linked by the exact execution `pipeline_entry_id`. Missing link, missing/soft-deleted deal and SQL null remain null; numeric zero remains filled. No fallback card or zero default exists.
+- Stage and value share one generalized business RPC and database snapshot. Personal access remains caller-RLS invoker; organization access remains service-only and checks the exact current field grant under workflow/grant locks.
+- Publication validates nested value rules and requires its separate scope. Browser UI adds numeric and empty/filled comparisons under “Negócio do gatilho”, exact business selection and readable scope/result copy.
+- Migration 42 applied and ledger-registered only on preview. Personal and publication endpoints updated there; shared worker and production remain undeployed. Ticket 08 still requires elapsed-stage-time before certification.
+- Final checkpoint evidence: 72 real integration tests, 107 browser tests, 98 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors, Deno and focused lint clean, and 43-migration rollback/reapply passed with approval history preserved.

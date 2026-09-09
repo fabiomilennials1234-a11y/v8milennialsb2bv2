@@ -352,3 +352,57 @@ it.each([
     condition: { version: 1, id: 'filled', field, operator: 'is_not_empty' },
   })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'filled', status: 'evaluated', matched, actual }] });
 });
+
+it.each([
+  { actual: 0, operator: 'equals', value: 0, matched: true },
+  { actual: 0, operator: 'is_empty', matched: false },
+  { actual: null, operator: 'is_empty', matched: true },
+  { actual: null, operator: 'equals', value: 0, matched: false },
+  { actual: 1250.5, operator: 'greater_than_or_equal', value: 1000, matched: true },
+])('compares exact trigger-business value without converting absence to zero: $operator / $actual', async ({ actual, operator, value, matched }) => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const pipelineId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_trigger_business_data')
+      ? { entry: { id: entryId, pipeline_id: pipelineId, stage_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', value: actual },
+        pipeline: { id: pipelineId, name: 'Comercial' }, stages: [] }
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'value', field: 'business.trigger.value', operator,
+      ...(operator === 'is_empty' ? {} : { value }) },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'value', status: 'evaluated', matched, actual,
+    context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] });
+});
+
+it('reads stage and value for one trigger entry through one atomic business RPC', async () => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const pipelineId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const stageId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  let businessReads = 0;
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      if (!String(input).includes('/rpc/test_guided_condition_trigger_business_data')) {
+        return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      businessReads++;
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({ p_entry_id: entryId, p_fields: ['business.trigger.stage', 'business.trigger.value'] });
+      expect(body.p_references).toEqual([{ pipelineId, stageId }]);
+      return new Response(JSON.stringify({ entry: { id: entryId, pipeline_id: pipelineId, stage_id: stageId, value: 1250.5 },
+        pipeline: { id: pipelineId, name: 'Comercial' }, stages: [{ id: stageId, name: 'Negociação', pipeline_id: pipelineId }] }),
+      { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'all-business', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'stage', field: 'business.trigger.stage', operator: 'equals', pipelineId, stageId },
+      { version: 1, id: 'value', field: 'business.trigger.value', operator: 'greater_than', value: 1000 },
+    ] },
+  })).toMatchObject({ status: 'evaluated', matched: true });
+  expect(businessReads).toBe(1);
+});

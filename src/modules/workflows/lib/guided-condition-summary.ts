@@ -14,6 +14,9 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
   if (condition.field === 'lead.tags') return `${condition.operator === 'has_tag' ? 'Tem tag' : 'Não tem tag'} “${condition.tagLabel || 'Selecione uma tag'}”`;
   if (condition.field === 'business.trigger.stage') return `Negócio do gatilho · Etapa ${condition.operator === 'equals' ? 'é' : 'não é'} “${condition.pipelineLabel && condition.stageLabel
     ? `${condition.pipelineLabel} · ${condition.stageLabel}` : 'Selecione funil e etapa'}”`;
+  if (condition.field === 'business.trigger.value') return condition.operator === 'is_empty' ? 'Negócio do gatilho · Valor está vazio'
+    : condition.operator === 'is_not_empty' ? 'Negócio do gatilho · Valor está preenchido'
+    : `Negócio do gatilho · Valor ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

@@ -9,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.tags': { label: 'Tags' }, 'lead.origin': { label: 'Origem' },
-  'business.trigger.stage': { label: 'Etapa' } };
+  'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 // This catalogue contains only capabilities supported by the guided evaluator.
 // The ordered record also makes new field types require an explicit discovery entry.
@@ -32,6 +32,7 @@ const vocabulary = {
   'lead.utm_content': ['conteudo', 'criativo'],
   'lead.utm_term': ['termo', 'palavra chave'],
   'business.trigger.stage': ['negocio', 'card', 'funil', 'etapa atual'],
+  'business.trigger.value': ['negocio', 'valor', 'receita', 'ticket', 'financeiro'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -60,7 +61,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="dialog" className="w-full justify-between font-normal">
-        <span className="truncate">{value === 'business.trigger.stage' ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
+        <span className="truncate">{value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -76,7 +77,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
           {options.isError && <div className="p-3"><p role="alert" className="text-sm text-destructive">Não foi possível carregar campos personalizados.</p>
             <Button type="button" variant="ghost" onClick={() => void options.refetch()}>Tentar carregar campos novamente</Button></div>}
           <CommandGroup heading="Lead">
-            {entries.filter(([field]) => field !== 'business.trigger.stage').map(([field, aliases]) => <CommandItem key={field} value={field}
+            {entries.filter(([field]) => !field.startsWith('business.trigger.')).map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Lead', fields[field].label, ...aliases]} onSelect={() => {
                 if (field !== value) onChange(field);
                 setOpen(false); setSearch('');
@@ -86,7 +87,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
             </CommandItem>)}
           </CommandGroup>
           <CommandGroup heading="Negócio do gatilho">
-            {entries.filter(([field]) => field === 'business.trigger.stage').map(([field, aliases]) => <CommandItem key={field} value={field}
+            {entries.filter(([field]) => field.startsWith('business.trigger.')).map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Negócio do gatilho', fields[field].label, ...aliases]} onSelect={() => {
                 if (field !== value) onChange(field);
                 setOpen(false); setSearch('');
