@@ -3,7 +3,7 @@
  *
  * Replaces Supabase Auth's resetPasswordForEmail (fragile: undelivered email,
  * broken redirect, PKCE fails cross-device, email scanners burn the one-time
- * link). We own the token, the email (Resend) and the reset page.
+ * link). We own the token, the email (Hostinger SMTP) and the reset page.
  *
  * Flow:
  *   1. Validate email format.
@@ -19,9 +19,11 @@
  * The raw token / reset link are NEVER logged.
  */
 
+import nodemailer from 'npm:nodemailer@10.0.2';
+import { buildResetEmail } from './email.ts';
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { withSecurityHeaders } from '../_shared/security-headers.ts';
 import { logRuntime } from '../_shared/logger.ts';
@@ -65,7 +67,7 @@ function clientIpFrom(req: Request): string {
  * exposed via PostgREST). Returns null when not found or banned (inactive).
  */
 async function findActiveUserByEmail(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   email: string,
 ): Promise<{ id: string; email: string } | null> {
   const target = email.trim().toLowerCase();
@@ -91,58 +93,31 @@ async function findActiveUserByEmail(
   }
 }
 
-/**
- * Send the reset email via Resend. Fire-and-forget: failures are logged but
- * never surfaced to the caller (and never block the response). The reset link
- * and raw token are NEVER logged.
- */
+/** Send through the same authenticated Hostinger mailbox as Supabase Auth. */
 async function sendResetEmail(toEmail: string, rawToken: string): Promise<void> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  if (!apiKey) {
-    // No key configured (e.g. dev without secret) — skip silently. The reset
-    // row still exists; operator provisioning is documented in the changelog.
-    console.warn('[forgot-password] RESEND_API_KEY not set — email skipped');
-    return;
-  }
-
-  const fromAddr = Deno.env.get('RESET_EMAIL_FROM') ?? 'no-reply@send.torquecrm.com.br';
-  const appUrl = Deno.env.get('APP_URL') ?? 'https://app.torquecrm.com.br';
-  const resetLink = `${appUrl}/reset-password/${rawToken}`;
-
-  const html = `
-    <div style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
-      <h2 style="color: #0f172a;">Redefinição de senha</h2>
-      <p>Recebemos um pedido para redefinir a senha da sua conta no <strong>Torque CRM</strong>.</p>
-      <p style="margin: 24px 0;">
-        <a href="${resetLink}"
-           style="display: inline-block; background: #eab308; color: #0f172a; font-weight: 600; padding: 12px 24px; border-radius: 8px; text-decoration: none;">
-          Redefinir minha senha
-        </a>
-      </p>
-      <p style="font-size: 13px; color: #475569;">Este link é válido por <strong>1 hora</strong>. Se o botão não funcionar, copie e cole este endereço no navegador:</p>
-      <p style="font-size: 13px; color: #475569; word-break: break-all;">${resetLink}</p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-      <p style="font-size: 12px; color: #94a3b8;">Se você não solicitou esta alteração, ignore este e-mail — sua senha continua a mesma.</p>
-    </div>`;
-
-  const resp = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Torque CRM <${fromAddr}>`,
-      to: toEmail,
-      subject: 'Redefinição de senha — Torque CRM',
-      html,
-    }),
+  const user = Deno.env.get('RESET_SMTP_USER');
+  const pass = Deno.env.get('RESET_SMTP_PASSWORD');
+  if (!user || !pass) throw new Error('Recovery SMTP is not configured');
+  const transport = nodemailer.createTransport({
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+    logger: false,
+    debug: false,
   });
-
-  if (!resp.ok) {
-    // Log the failure WITHOUT the token/link so we can diagnose deliverability.
-    const detail = await resp.text().catch(() => '');
-    console.error(`[forgot-password] Resend failed: ${resp.status} ${detail.slice(0, 200)}`);
+  try {
+    const message = buildResetEmail(rawToken);
+    await transport.sendMail({
+      from: { name: 'Torque CRM', address: user },
+      to: toEmail,
+      ...message,
+    });
+  } finally {
+    transport.close();
   }
 }
 
@@ -243,8 +218,11 @@ serve(
           // On Supabase Edge, EdgeRuntime.waitUntil keeps the promise alive after
           // the response returns (a plain floating promise can be killed when the
           // isolate tears down). Falls back to a floating promise in local dev.
-          const emailPromise = sendResetEmail(user.email, rawToken).catch((e) => {
-            console.error('[forgot-password] email send error:', (e as Error).message);
+          const emailPromise = sendResetEmail(user.email, rawToken).then(() => logRuntime({ module: 'auth', action: 'forgot_password_email', status: 'success', entityType: 'user', entityId: user.id })).catch((error: unknown) => {
+            const smtpError = error as { code?: string; responseCode?: number; command?: string; name?: string };
+            const diagnostic = JSON.stringify({ code: smtpError.code, responseCode: smtpError.responseCode, command: smtpError.command, name: smtpError.name });
+            console.error('[forgot-password] email delivery failed', diagnostic);
+            return logRuntime({ module: 'auth', action: 'forgot_password_email', status: 'error', entityType: 'user', entityId: user.id, errorMessage: `SMTP delivery failed: ${diagnostic}` });
           });
           const edgeRuntime = (globalThis as {
             EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
