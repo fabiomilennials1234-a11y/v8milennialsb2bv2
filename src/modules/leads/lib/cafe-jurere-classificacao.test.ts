@@ -33,6 +33,6 @@ describe("piloto de abas da Café Jurerê", () => {
       is: () => q,
     };
     applyLeadListFilters(q, { filterClassificacao: aba, usaLeiDoErp: true, usaCadastroErpCafeJurere: true });
-    expect(calls).toEqual(["lead", "cliente", "perdido"].includes(aba) ? [["classificacao_cafe_jurere", aba]] : []);
+    expect(calls).toEqual([["visivel_lista_cafe_jurere", true], ...(["lead", "cliente", "perdido"].includes(aba) ? [["classificacao_cafe_jurere", aba]] : [])]);
   });
 });

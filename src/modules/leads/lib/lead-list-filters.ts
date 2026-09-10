@@ -145,6 +145,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   // genericamente; tratamos como `any` internamente, preservando `Q` na saída.
   let q = query as any;
 
+  // Vale também em Todos, contagem e exportação; antes da paginação.
+  if (filters.usaCadastroErpCafeJurere) {
+    q = q.eq("visivel_lista_cafe_jurere", true);
+  }
+
   if (filters.filterAssignment === "unassigned") {
     for (const col of RESPONSIBLE_COLUMNS) q = q.is(col, null);
   }

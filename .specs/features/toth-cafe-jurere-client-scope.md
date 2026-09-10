@@ -24,6 +24,20 @@ a classificação legada não roda no piloto, cujas abas usam cadastro no ERP.
 - Sincronizar e verificar erros, limite de execução e contagens.
 - Nenhuma exclusão de registros históricos faz parte desta operação.
 
+## Visibilidade da lista (autorizada em 10/09/2026)
+
+Com a flag das abas da Café Jurerê ligada, lista, contagens e exportação
+aplicam `visivel_lista_cafe_jurere(leads)` antes da paginação. Leads sem
+cadastro ERP continuam visíveis. Cadastros ERP precisam de cliente Toth
+vinculado, empresa CAFE JURERE, situação 0/3 e representante mapeado para
+membro da mesma organização. A avaliação usa os dados conhecidos no CRM.
+Não altera registros, histórico, negócios, WhatsApp ou acesso à ficha.
+Desligar a flag das abas restaura a lista anterior. Outras organizações
+mantêm o comportamento anterior, inclusive se consultarem o campo calculado.
+
+Validação: 15 verificações PostgreSQL isoladas, incluindo RLS, anon sem
+EXECUTE, membro de outro tenant, status 0/3, sem mapa e preservação dos dados.
+
 Levantamento anterior em cache: 2.189 (1.703 ativos, 486 inconsistentes).
 A leitura atual do ERP pode variar; registrar o resultado real da execução.
 
