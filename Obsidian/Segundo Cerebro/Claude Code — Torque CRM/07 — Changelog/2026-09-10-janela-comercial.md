@@ -1,3 +1,11 @@
+---
+type: changelog
+title: Janela Comercial — contrato e correções
+status: active
+created: 2026-09-10
+tags: [workflows, janela-comercial]
+---
+
 # Janela Comercial — contrato e correções
 
 Implementação na branch `codex/workflow-business-window-contract`, ainda sem publicação em produção.
