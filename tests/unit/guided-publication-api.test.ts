@@ -1,7 +1,26 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { handleGuidedWorkflowPublication } from '../../supabase/functions/_shared/guided-workflow-publication';
+import { GUIDED_CONDITION_LIMITS } from '../../src/contracts/workflows/guided-limits';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+it('ends publication at the fixed server deadline', async () => {
+  vi.useFakeTimers();
+  const env: Record<string, string> = {
+    SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test',
+  };
+  vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
+  vi.stubGlobal('fetch', async () => new Promise<Response>(() => {}));
+  const publication = handleGuidedWorkflowPublication(new Request('https://edge.test/publish', {
+    method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
+  }));
+  await vi.advanceTimersByTimeAsync(GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+  const response = await publication;
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 504, body: { status: 'error', code: 'temporarily_unavailable' },
+  });
+});
 
 it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped', 'trigger_message'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };

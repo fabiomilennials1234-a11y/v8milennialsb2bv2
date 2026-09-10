@@ -1,5 +1,6 @@
 import { isGuidedCalendarDate, isGuidedDateOperator, type GuidedDateComparison } from '../../../src/contracts/workflows/guided-dates.ts';
 import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, type GuidedResponsibleField, GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
+import { GUIDED_CONDITION_LIMITS } from '../../../src/contracts/workflows/guided-limits.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GUIDED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,15 +103,19 @@ export type GuidedCondition = GuidedRule | GuidedBusinessExistence | {
 
 export function isGuidedCondition(value: unknown): value is GuidedCondition {
   const ids = new Set<string>();
+  let complexity = 0;
   function valid(value: unknown, groupDepth: number): boolean {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    complexity++;
+    if (complexity > GUIDED_CONDITION_LIMITS.maxComplexity) return false;
     const rule = value as Record<string, unknown>;
     if (rule.version !== 1 || typeof rule.id !== 'string' || !rule.id || ids.has(rule.id)) return false;
     ids.add(rule.id);
     if (rule.kind === 'business_exists') {
       if ((rule.lifecycle !== 'open' && rule.lifecycle !== 'won' && rule.lifecycle !== 'lost' && rule.lifecycle !== 'all')
         || (rule.match !== 'all' && rule.match !== 'any') || !Array.isArray(rule.children)
-        || rule.children.length === 0 || rule.children.length > 256) return false;
+        || rule.children.length === 0 || complexity + rule.children.length > GUIDED_CONDITION_LIMITS.maxComplexity) return false;
+      complexity += rule.children.length;
       return rule.children.every(child => {
         if (!child || typeof child !== 'object' || Array.isArray(child)) return false;
         const candidate = child as Record<string, unknown>;
@@ -124,7 +129,7 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       });
     }
     if (rule.kind === 'group') {
-      return groupDepth < 3 && (rule.match === 'all' || rule.match === 'any')
+      return groupDepth < GUIDED_CONDITION_LIMITS.maxGroupDepth && (rule.match === 'all' || rule.match === 'any')
         && Array.isArray(rule.children) && rule.children.length > 0
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
@@ -166,7 +171,7 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       const from = typeof rule.from === 'string' ? Date.parse(rule.from) : Number.NaN;
       const to = typeof rule.to === 'string' ? Date.parse(rule.to) : Number.NaN;
       return validConversation && (rule.operator === 'exists' || rule.operator === 'not_exists')
-        && Number.isFinite(from) && Number.isFinite(to) && from < to && to - from <= 366 * 86_400_000;
+        && Number.isFinite(from) && Number.isFinite(to) && from < to && to - from <= GUIDED_CONDITION_LIMITS.maxPeriodMs;
     }
     if (rule.field === 'message.search.text') {
       const conversation = rule.conversation as Record<string, unknown> | undefined;
@@ -179,12 +184,14 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       if (source?.kind === 'period') {
         const from = typeof source.from === 'string' ? Date.parse(source.from) : Number.NaN;
         const to = typeof source.to === 'string' ? Date.parse(source.to) : Number.NaN;
-        validSource = Number.isFinite(from) && Number.isFinite(to) && from < to && to-from<=366*86_400_000;
+        validSource = Number.isFinite(from) && Number.isFinite(to) && from < to && to-from<=GUIDED_CONDITION_LIMITS.maxPeriodMs;
       }
-      if (!Array.isArray(rule.expressions) || rule.expressions.length<1 || rule.expressions.length>20
-        || rule.expressions.some(value => typeof value!=='string' || !normalizeGuidedMessageSearch(value) || value.length>120)) return false;
+      if (!Array.isArray(rule.expressions) || rule.expressions.length<1 || rule.expressions.length>GUIDED_CONDITION_LIMITS.maxMessageExpressions
+        || rule.expressions.some(value => typeof value!=='string' || !normalizeGuidedMessageSearch(value)
+          || value.length>GUIDED_CONDITION_LIMITS.maxMessageExpressionLength)) return false;
       const normalized = rule.expressions.map(value => normalizeGuidedMessageSearch(value));
-      return validConversation && validSource && new Set(normalized).size===normalized.length && normalized.join('').length<=1000
+      return validConversation && validSource && new Set(normalized).size===normalized.length
+        && normalized.join('').length<=GUIDED_CONDITION_LIMITS.maxNormalizedExpressionLength
         && (rule.operator==='matches' || rule.operator==='not_matches') && (rule.expressionMatch==='any' || rule.expressionMatch==='all')
         && (rule.matchMode==='whole_phrase' || rule.matchMode==='substring');
     }
@@ -265,7 +272,7 @@ function classifyGuidedSourceError(error: { code?: string }, status: number): Gu
  * execution uses the service-only RPC which checks the current grant atomically
  * with the data read; it never falls back to an unrestricted service query.
  */
-export async function evaluateGuidedCondition(
+async function evaluateGuidedConditionWithinDeadline(
   caller: SupabaseClient,
   request: GuidedConditionRequest,
 ) {
@@ -330,7 +337,16 @@ export async function evaluateGuidedCondition(
     else if (current.field === 'product.relationship') productRules.push(current);
   }
   collect(request.condition);
-  if (messageSearchRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+  const sequentialReaders = messageSearchRules.filter(rule => rule.source.kind !== 'trigger').length
+    + messageWaitingRules.length + followUpRules.length + productRules.length;
+  function countPeriods(current: GuidedCondition): number {
+    if ('kind' in current && current.kind === 'business_exists') return 0;
+    if ('children' in current) return current.children.reduce((total, child) => total + countPeriods(child), 0);
+    return current.field === 'message.period.exists' ? 1 : 0;
+  }
+  if (sequentialReaders + countPeriods(request.condition) > GUIDED_CONDITION_LIMITS.maxSequentialReaders) {
+    return { status: 'error' as const, code: 'invalid_configuration' as const };
+  }
   const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.')
     && !field.startsWith('activity.') && !field.startsWith('product.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
@@ -528,7 +544,7 @@ export async function evaluateGuidedCondition(
       else if (!('kind' in current) && current.field === 'message.period.exists') periodRules.push(current);
     };
     collectPeriodRules(request.condition);
-    if (periodRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    if (periodRules.length > GUIDED_CONDITION_LIMITS.maxSequentialReaders) return { status: 'error' as const, code: 'invalid_configuration' as const };
     for (const rule of periodRules) {
       const conversation = rule.conversation.kind === 'trigger' ? request.messageContext : rule.conversation;
       if (!conversation) return { status: 'error' as const, code: 'context_unavailable' as const };
@@ -588,7 +604,7 @@ export async function evaluateGuidedCondition(
     coverage_status: 'complete' | 'in_progress' | 'gapped' };
   const messageWaitingResults = new Map<string, MessageWaitingData>();
   if (usesMessageWaiting) {
-    if (messageWaitingRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    if (messageWaitingRules.length > GUIDED_CONDITION_LIMITS.maxSequentialReaders) return { status: 'error' as const, code: 'invalid_configuration' as const };
     for (const rule of messageWaitingRules) {
       const conversation = rule.conversation.kind === 'trigger' ? request.messageContext : rule.conversation;
       if (!conversation) return { status: 'error' as const, code: 'context_unavailable' as const };
@@ -620,7 +636,7 @@ export async function evaluateGuidedCondition(
   type FollowUpData = { rule_id: string; matched: boolean; follow_up_id: string | null; title: string | null; event_date: string | null };
   const followUpResults = new Map<string, FollowUpData>();
   if (usesFollowUps) {
-    if (followUpRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    if (followUpRules.length > GUIDED_CONDITION_LIMITS.maxSequentialReaders) return { status: 'error' as const, code: 'invalid_configuration' as const };
     for (const rule of followUpRules) {
       if (rule.relation === 'trigger_business' && !request.entryId) {
         return { status: 'error' as const, code: 'context_unavailable' as const };
@@ -657,7 +673,7 @@ export async function evaluateGuidedCondition(
   type ProductData = { rule_id: string; matched: boolean; product_id: string; product_name: string };
   const productResults = new Map<string, ProductData>();
   if (usesProducts) {
-    if (productRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    if (productRules.length > GUIDED_CONDITION_LIMITS.maxSequentialReaders) return { status: 'error' as const, code: 'invalid_configuration' as const };
     for (const rule of productRules) {
       if (rule.relation === 'trigger_business_item' && !request.entryId) {
         return { status: 'error' as const, code: 'context_unavailable' as const };
@@ -1115,4 +1131,17 @@ export async function evaluateGuidedCondition(
   }
   const matched = evaluate(request.condition);
   return { status: 'evaluated' as const, matched, rules, ...(groups.length ? { groups } : {}) };
+}
+
+export async function evaluateGuidedCondition(caller: SupabaseClient, request: GuidedConditionRequest) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<{ status: 'error'; code: 'temporarily_unavailable' }>(resolve => {
+    timeout = setTimeout(() => resolve({ status: 'error', code: 'temporarily_unavailable' }),
+      GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+  });
+  try {
+    return await Promise.race([evaluateGuidedConditionWithinDeadline(caller, request), deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }

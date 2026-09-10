@@ -3,6 +3,7 @@ import { executeWorkflow } from '../../supabase/functions/_shared/workflow-execu
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { evaluateGuidedCondition } from '../../supabase/functions/_shared/guided-condition';
+import { GUIDED_CONDITION_LIMITS } from '../../src/contracts/workflows/guided-limits';
 
 // Explicit preview opt-in: never inherit another suite's production credentials.
 describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth and RLS', () => {
@@ -3355,6 +3356,145 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     } finally {
       await service.from('workflows').delete().eq('id', workflowId);
       await service.from('whatsapp_instances').delete().eq('id', box);
+    }
+  }, 60000);
+
+  it('bounds published tree complexity and the combined sequential-reader workload in PostgreSQL', async () => {
+    const workflowId = crypto.randomUUID(), boxId = crypto.randomUUID(), productId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-workload-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const graph = (condition: unknown) => ({ nodes: [
+      { id: 'trigger', type: 'trigger', data: { triggerType: 'lead_replied', config: {} } },
+      { id: 'condition', type: 'condition', data: { guidedCondition: condition } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [
+      { id: 'tc', source: 'trigger', target: 'condition' },
+      { id: 'cy', source: 'condition', target: 'yes', sourceHandle: 'yes' },
+      { id: 'cn', source: 'condition', target: 'no', sourceHandle: 'no' },
+    ] });
+    const settings = { name: 'Limites guiados' };
+    await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 },
+      { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await service.from('whatsapp_instances').insert({ id: boxId, organization_id: orgA, instance_name: 'Limites',
+      phone_number: '551130000098', provider: 'uazapi' }).throwOnError();
+    await service.from('products').insert({ id: productId, organization_id: orgA, name: 'Produto limite',
+      type: 'unitario', is_active: true }).throwOnError();
+    try {
+      const oversized = { version: 1, id: 'root', kind: 'group', match: 'all', children:
+        Array.from({ length: GUIDED_CONDITION_LIMITS.maxComplexity }, (_, index) => ({
+          version: 1, id: `name-${index}`, field: 'lead.name', operator: 'is_not_empty',
+        })),
+      };
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: graph(oversized), p_settings: settings }).throwOnError();
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'],
+        p_expected_revision: 0 }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1, p_definition: graph(oversized),
+        p_settings: settings, p_required_fields: ['lead.name'] })).error?.code).toBe('22023');
+
+      const boundary = { ...oversized, children: oversized.children.slice(1) };
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: graph(boundary), p_settings: settings, p_expected_revision: 1 }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 2, p_definition: graph(boundary),
+        p_settings: settings, p_required_fields: ['lead.name'] })).error).toBeNull();
+
+      const conversation = { kind: 'explicit', storage: 'whatsapp_messages', boxId, provider: 'uazapi' } as const;
+      const expensive = Array.from({ length: GUIDED_CONDITION_LIMITS.maxSequentialReaders + 1 }, (_, index) => {
+        const common = { version: 1 as const, id: `reader-${index}` };
+        switch (index % 5) {
+          case 0: return { ...common, field: 'message.period.exists' as const, conversation, operator: 'exists' as const,
+            from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+          case 1: return { ...common, field: 'message.search.text' as const, conversation,
+            source: { kind: 'last_received' as const }, operator: 'matches' as const, expressionMatch: 'any' as const,
+            matchMode: 'whole_phrase' as const, expressions: ['preco'] };
+          case 2: return { ...common, field: 'message.waiting.elapsed' as const, conversation, waitingFor: 'lead' as const,
+            operator: 'greater_than' as const, value: 1, unit: 'hours' as const };
+          case 3: return { ...common, field: 'activity.follow_up' as const, relation: 'lead' as const,
+            state: 'pending' as const, operator: 'exists' as const, dateOperator: 'any' as const };
+          default: return { ...common, field: 'product.relationship' as const, relation: 'lead_association' as const,
+            productId, operator: 'has_product' as const };
+        }
+      });
+      const exactWorkload = { version: 1, id: 'workload-exact', kind: 'group', match: 'all',
+        children: expensive.slice(0, GUIDED_CONDITION_LIMITS.maxSequentialReaders) };
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: graph(exactWorkload), p_settings: settings, p_expected_revision: 2 }).throwOnError();
+      const fields = ['message.period.exists','message.search.text','message.waiting.elapsed','activity.follow_up','product.lead_association'];
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: fields,
+        p_expected_revision: 1 }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 3, p_definition: graph(exactWorkload),
+        p_settings: settings, p_required_fields: fields })).error).toBeNull();
+
+      const workload = { version: 1, id: 'workload', kind: 'group', match: 'all', children: expensive };
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: graph(workload), p_settings: settings, p_expected_revision: 3 }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 4, p_definition: graph(workload),
+        p_settings: settings, p_required_fields: fields })).error?.code).toBe('22023');
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('products').delete().eq('id', productId);
+      await service.from('whatsapp_instances').delete().eq('id', boxId);
+    }
+  }, 60000);
+
+  it('measures a 1000-message history without returning it or turning missing coverage into absence', async () => {
+    const boxId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-volume-${boxId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const from = '2026-01-01T00:00:00Z', to = '2026-01-02T00:00:00Z';
+    await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 },
+      { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await service.from('whatsapp_instances').insert({ id: boxId, organization_id: orgA, instance_name: 'Volume',
+      phone_number: '551130000097', provider: 'uazapi' }).throwOnError();
+    try {
+      const messages = Array.from({ length: 1_000 }, (_, index) => ({
+        id: crypto.randomUUID(), organization_id: orgA, instance_id: boxId, message_id: `guided-volume-${boxId}-${index}`,
+        remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000', normalized_phone: '5511999990000',
+        direction: 'incoming', status: 'received', message_type: 'text', content: index === 999 ? 'agulha certificada' : `ruido ${index}`,
+        condition_text: index === 999 ? 'agulha certificada' : `ruido ${index}`, condition_text_source: 'text',
+        timestamp: new Date(Date.parse(from) + index * 60_000).toISOString(),
+      }));
+      await service.from('whatsapp_messages').insert(messages).throwOnError();
+      const base = { version: 1 as const, id: 'search', field: 'message.search.text' as const,
+        conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId, provider: 'uazapi' },
+        source: { kind: 'period' as const, from, to }, operator: 'matches' as const, expressionMatch: 'any' as const,
+        matchMode: 'whole_phrase' as const };
+      const startedMatch = performance.now();
+      const matched = await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA,
+        condition: { ...base, expressions: ['agulha certificada'] } });
+      const matchedMs = performance.now() - startedMatch;
+      const matchedBytes = JSON.stringify(matched).length;
+      expect(matched).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ reference: { messageId: messages[999].id, textSource: 'text' } }] });
+      expect(matchedBytes).toBeLessThan(2_000);
+      expect(matchedMs).toBeLessThan(GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+
+      const startedUnknown = performance.now();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA,
+        condition: { ...base, expressions: ['ausente'] } })).toEqual({ status: 'error', code: 'history_insufficient' });
+      const unknownMs = performance.now() - startedUnknown;
+      expect(unknownMs).toBeLessThan(GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages',
+        box_id: boxId, provider: 'uazapi', participant_id: '5511999990000', covered_from: from, covered_to: to,
+        state: 'complete' }).throwOnError();
+      const absent = await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA,
+        condition: { ...base, operator: 'not_matches', expressions: ['ausente'] } });
+      expect(absent).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: false }] });
+      expect(JSON.stringify(absent).length).toBeLessThan(2_000);
+      process.stdout.write(`[guided-volume] messages=1000 match_ms=${matchedMs.toFixed(1)} unknown_ms=${unknownMs.toFixed(1)} response_bytes=${matchedBytes}\n`);
+    } finally {
+      await service.from('conversation_history_coverage').delete().eq('box_id', boxId);
+      await service.from('whatsapp_messages').delete().eq('instance_id', boxId);
+      await service.from('whatsapp_instances').delete().eq('id', boxId);
     }
   }, 60000);
 

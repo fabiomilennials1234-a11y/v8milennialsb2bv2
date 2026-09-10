@@ -7,6 +7,7 @@ import { isGuidedCondition, guidedConditionFields, type GuidedCondition } from '
 import { NODE_TYPE_SET, TRIGGER_TYPE_SET, ACTION_TYPE_SET } from './workflow-schema/enums.ts';
 import { validateWorkflow } from './workflow-schema/validator.ts';
 import type { WorkflowDefinition } from './workflow-schema/definition.ts';
+import { GUIDED_CONDITION_LIMITS } from '../../../src/contracts/workflows/guided-limits.ts';
 
 type PublicationIssue = { code: string; nodeId?: string; message: string };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -60,7 +61,7 @@ function publicationIssues(value: unknown): PublicationIssue[] {
 }
 
 /** Publish persisted, validated data only. Payload never supplies graph/settings. */
-export async function handleGuidedWorkflowPublication(req: Request): Promise<Response> {
+async function handleGuidedWorkflowPublicationWithinDeadline(req: Request): Promise<Response> {
   const headers = { ...withSecurityHeaders(getCorsHeaders(req.headers.get('Origin'))), 'Content-Type': 'application/json' };
   const reply = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers });
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
@@ -121,5 +122,20 @@ export async function handleGuidedWorkflowPublication(req: Request): Promise<Res
   } catch (error) {
     if (error instanceof AuthError) return reply({ status: 'error', code: 'access_denied' }, error.status);
     return reply({ status: 'error', code: 'source_unavailable' }, 503);
+  }
+}
+
+export async function handleGuidedWorkflowPublication(req: Request): Promise<Response> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<Response>(resolve => {
+    timeout = setTimeout(() => resolve(new Response(JSON.stringify({ status: 'error', code: 'temporarily_unavailable' }), {
+      status: 504,
+      headers: { ...withSecurityHeaders(getCorsHeaders(req.headers.get('Origin'))), 'Content-Type': 'application/json' },
+    })), GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+  });
+  try {
+    return await Promise.race([handleGuidedWorkflowPublicationWithinDeadline(req), deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }

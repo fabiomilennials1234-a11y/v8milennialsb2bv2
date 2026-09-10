@@ -12,6 +12,7 @@ import { useDebounce } from '@/shared/hooks/useDebounce';
 
 import type { GuidedConditionDraft } from '@/types/workflow';
 import { getGuidedConditionFields } from '../../lib/guided-condition-summary';
+import { GUIDED_CONDITION_LIMITS } from '@/contracts/workflows/guided-limits';
 
 const database: SupabaseClient = supabase;
 type MessageRule = Extract<import('@/types/workflow').GuidedRuleDraft, { field: 'message.trigger.text' | 'message.period.exists' | 'message.search.text' | 'message.waiting.elapsed' }>;
@@ -109,12 +110,18 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
     try {
       const message = messages.data?.find(candidate => candidate.message_id === messageId);
       const { data, error } = await supabase.functions.invoke('test-guided-condition', {
+        signal: AbortSignal.timeout(GUIDED_CONDITION_LIMITS.uiTimeoutMs),
         body: { organizationId, leadId, ...(requiresTriggerBusiness ? { entryId } : {}), ...(message ? { messageContext: {
           storage: message.storage, messageId: message.message_id, boxId: message.box_id,
           provider: message.provider, participantId: message.participant_id,
         } } : {}), condition },
       });
       if (error || data?.status !== 'evaluated') {
+        const context = error && typeof error === 'object' && 'context' in error ? error.context : null;
+        if (context instanceof DOMException && context.name === 'TimeoutError') {
+          setError(`O teste excedeu ${GUIDED_CONDITION_LIMITS.uiTimeoutMs / 1000} segundos. Tente novamente.`);
+          return;
+        }
         const failure = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : data;
         setError(failure?.code === 'access_denied'
           ? 'Você não tem acesso aos dados necessários para este teste.'
@@ -130,12 +137,16 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
           ? getGuidedConditionFields(condition).includes('message.waiting.elapsed')
             ? 'Histórico insuficiente para localizar o início da espera. Sincronize a conversa antes de decidir.'
             : 'Histórico insuficiente para concluir Sim ou Não neste período. Sincronize a conversa ou ajuste o intervalo.'
+          : failure?.code === 'temporarily_unavailable'
+          ? `O teste excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`
           : 'Não foi possível avaliar esta condição. Verifique seu acesso e tente novamente.');
       } else {
         setResult({ fingerprint, matched: data.matched, actual: data.rules[0]?.actual, rules: data.rules, groups: data.groups ?? [] });
       }
-    } catch {
-      setError('Teste indisponível. Tente novamente.');
+    } catch (failure) {
+      setError(failure instanceof DOMException && failure.name === 'TimeoutError'
+        ? `O teste excedeu ${GUIDED_CONDITION_LIMITS.uiTimeoutMs / 1000} segundos. Tente novamente.`
+        : 'Teste indisponível. Tente novamente.');
     } finally {
       setPending(false);
     }

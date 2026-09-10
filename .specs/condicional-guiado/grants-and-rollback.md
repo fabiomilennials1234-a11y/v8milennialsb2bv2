@@ -50,6 +50,12 @@ A quinta permite administração guiada por master pleno ativo, com `permissions
 
 `node scripts/check-guided-grant-rollback.mjs <preview-ref>` executa os arquivos reais em transação no preview, cria aprovação sintética na revisão 7 e rascunho na revisão 11, reverte em ordem inversa e reaplica. Verifica inacessibilidade após rollback, preservação da aprovação, grants finais e definição da função restaurada. O ROLLBACK final remove fixtures e devolve o ambiente ao estado inicial do ensaio.
 
+Migration 55 adiciona somente `validate_guided_workload_version()` e seu trigger
+em `workflow_guided_versions`. O rollback remove ambos e preserva versões,
+publicações, grants e histórico. O ensaio completo agora cobre 56 migrations e
+confirma remoção/recriação do trigger, ACL fechada e preservação da aprovação
+sintética.
+
 `node scripts/test-guided-preview.mjs <preview-ref>` testa aprovação, revogação, concorrência, escopo, RLS e teste pessoal usando Auth/PostgREST reais. Credenciais ficam apenas em memória.
 
 Verificar no alvo os privilégios de `set_workflow_data_grant(uuid,text[],integer)`: anon=false, authenticated=true, service_role=false; INSERT/UPDATE direto por authenticated=false. Migração aplicada não substitui essa verificação.

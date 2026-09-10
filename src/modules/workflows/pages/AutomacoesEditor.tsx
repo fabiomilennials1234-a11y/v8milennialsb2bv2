@@ -12,6 +12,7 @@ import {
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
+import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
 import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrganization, useAuth } from "@/modules/identity";
@@ -666,6 +667,7 @@ function AutomacoesEditorContent() {
           access_denied: 'Acesso negado. Verifique sua permissão e a autorização de dados da automação.',
           reference_unavailable: 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.',
           draft_revision_conflict: 'Outra pessoa alterou o rascunho. Compare a versão atual antes de publicar.',
+          temporarily_unavailable: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`,
         };
         setPublicationIssues(error.issues.length ? error.issues : [{ code: error.code,
           message: messages[error.code] ?? 'Não foi possível publicar. Seu rascunho foi preservado.' }]);

@@ -17,8 +17,15 @@ import { GuidedProductPicker } from './GuidedProductPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { GUIDED_CONDITION_LIMITS } from '@/contracts/workflows/guided-limits';
+
+function guidedDraftComplexity(condition: GuidedConditionDraft): number {
+  if ('kind' in condition && condition.kind === 'business_exists') return 1 + condition.children.length;
+  return 'children' in condition ? 1 + condition.children.reduce((total, child) => total + guidedDraftComplexity(child), 0) : 1;
+}
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
+  if (guidedDraftComplexity(condition) > GUIDED_CONDITION_LIMITS.maxComplexity) return true;
   if ('kind' in condition && condition.kind === 'business_exists') return !condition.children.length || condition.children.some(child =>
     child.field === 'business.stage' ? !child.pipelineId || !child.stageId
       : child.operator !== 'is_empty' && child.operator !== 'is_not_empty' && (child.value === '' || !Number.isFinite(child.value)));
@@ -100,8 +107,9 @@ function defaultCustomRule(id: string, fieldId: string, fieldLabel: string, fiel
   return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
 }
 
-function GuidedBusinessExistenceBuilder({ condition, onChange, actorId, organizationId }: {
+function GuidedBusinessExistenceBuilder({ condition, onChange, actorId, organizationId, totalComplexity }: {
   condition: GuidedBusinessExistenceDraft; onChange: (condition: GuidedConditionDraft) => void; actorId: string; organizationId: string;
+  totalComplexity: number;
 }) {
   const updateChild = (id: string, replacement: GuidedBusinessExistenceChildDraft) => onChange({ ...condition,
     children: condition.children.map(child => child.id === id ? replacement : child) });
@@ -163,7 +171,7 @@ function GuidedBusinessExistenceBuilder({ condition, onChange, actorId, organiza
         </div>}
       </>}
     </div>)}
-    <Button type="button" variant="outline" disabled={condition.children.length >= 256} onClick={() => {
+    <Button type="button" variant="outline" disabled={totalComplexity >= GUIDED_CONDITION_LIMITS.maxComplexity} onClick={() => {
       const id = crypto.randomUUID();
       const child: GuidedBusinessExistenceChildDraft = condition.children.some(item => item.field === 'business.stage')
         ? { version: 1, id, field: 'business.value', operator: 'equals', value: '' }
@@ -173,12 +181,15 @@ function GuidedBusinessExistenceBuilder({ condition, onChange, actorId, organiza
   </fieldset>;
 }
 
-export function GuidedConditionBuilder({ condition, onChange, actorId, organizationId, groupDepth = 0 }: {
-  actorId: string; organizationId: string; condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
+export function GuidedConditionBuilder({ condition, onChange, actorId, organizationId, groupDepth = 0, totalComplexity }: {
+  actorId: string; organizationId: string; condition: GuidedConditionDraft; groupDepth?: number; totalComplexity?: number;
+  onChange: (condition: GuidedConditionDraft) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [fieldReset, setFieldReset] = useState(false);
   const [expressionInput, setExpressionInput] = useState('');
+  const treeComplexity = totalComplexity ?? guidedDraftComplexity(condition);
+  const atComplexityLimit = treeComplexity >= GUIDED_CONDITION_LIMITS.maxComplexity;
   const pendingFocus = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (pendingFocus.current) {
@@ -188,7 +199,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
   });
   const focusValue = (id: string) => { pendingFocus.current = `guided-value-${id}`; };
   if ('kind' in condition && condition.kind === 'business_exists') {
-    return <GuidedBusinessExistenceBuilder actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />;
+    return <GuidedBusinessExistenceBuilder actorId={actorId} organizationId={organizationId} condition={condition}
+      totalComplexity={treeComplexity} onChange={onChange} />;
   }
   if ('children' in condition) {
     return <fieldset className="space-y-4 rounded-xl border border-border p-3">
@@ -204,7 +216,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       {condition.children.length === 0 && <p className="text-sm text-destructive" role="alert">Grupo vazio. Adicione uma condição.</p>}
       {condition.children.map((child, index) => <div key={child.id} className="space-y-3 border-l-2 border-border pl-3">
         <p className="text-xs text-muted-foreground">Condição {index + 1}</p>
-        <Button type="button" variant="ghost" onClick={() => {
+        <Button type="button" variant="ghost" disabled={treeComplexity + guidedDraftComplexity(child) > GUIDED_CONDITION_LIMITS.maxComplexity} onClick={() => {
           const copy = duplicateCondition(child);
           onChange({ ...condition, children: [...condition.children.slice(0, index + 1), copy, ...condition.children.slice(index + 1)] });
           pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator !== 'is_empty' && copy.operator !== 'is_not_empty' ? 'value' : 'operator'}-${copy.id}`;
@@ -213,12 +225,14 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
           pendingFocus.current = `guided-match-${condition.id}`;
         }}>{'children' in child ? 'Excluir grupo' : 'Excluir regra'}</Button>
-        <GuidedConditionBuilder actorId={actorId} organizationId={organizationId} condition={child} groupDepth={groupDepth + 1} onChange={replacement => onChange({ ...condition,
+        <GuidedConditionBuilder actorId={actorId} organizationId={organizationId} condition={child} groupDepth={groupDepth + 1}
+          totalComplexity={treeComplexity} onChange={replacement => onChange({ ...condition,
           children: condition.children.map(item => item.id === child.id ? replacement : item) })} />
       </div>)}
-      <Button type="button" variant="outline" onClick={() => {
+      <Button type="button" variant="outline" disabled={atComplexityLimit} onClick={() => {
         const rule = newRule(); onChange({ ...condition, children: [...condition.children, rule] }); focusValue(rule.id);
       }}>Adicionar condição</Button>
+      {atComplexityLimit && <p className="text-xs text-muted-foreground">Limite de {GUIDED_CONDITION_LIMITS.maxComplexity} itens por condição.</p>}
       </div>}
     </fieldset>;
   }
@@ -665,7 +679,9 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       {missingValue && <p id={`guided-value-error-${condition.id}`} className="text-xs text-destructive">Informe um valor ou escolha “está vazio”.</p>}
       <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação.</p></div>}
     </>}
-    <Button type="button" variant="outline" disabled={groupDepth >= 3} title={groupDepth >= 3 ? "Limite de três níveis de grupos. Adicione regras ao grupo existente." : undefined} onClick={() => {
+    <Button type="button" variant="outline" disabled={groupDepth >= GUIDED_CONDITION_LIMITS.maxGroupDepth
+      || treeComplexity + 2 > GUIDED_CONDITION_LIMITS.maxComplexity}
+      title={groupDepth >= GUIDED_CONDITION_LIMITS.maxGroupDepth ? "Limite de três níveis de grupos. Adicione regras ao grupo existente." : undefined} onClick={() => {
       const rule = newRule(); onChange({ version: 1, id: crypto.randomUUID(), kind: 'group', match: 'all', children: [condition, rule] }); focusValue(rule.id);
     }}>Adicionar condição</Button>
   </div>;

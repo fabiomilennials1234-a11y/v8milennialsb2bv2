@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { WorkflowDefinition } from '@/types/workflow';
+import { GUIDED_CONDITION_LIMITS } from '@/contracts/workflows/guided-limits';
 
 export interface GuidedPublicationIssue { code: string; message: string; nodeId?: string }
 export class GuidedPublicationError extends Error {
@@ -77,21 +78,40 @@ export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string
   });
   const publish = useMutation({
     mutationFn: async (revision: number) => {
-      const response = await database.functions.invoke('publish-guided-workflow', {
-        body: { organizationId, workflowId, expectedRevision: revision },
-      });
-      if (response.error) {
-        const body = response.error.context instanceof Response
-          ? await response.error.context.json().catch(() => null) : null;
-        const issues = Array.isArray(body?.issues) ? body.issues.filter((issue: unknown): issue is GuidedPublicationIssue =>
-          !!issue && typeof issue === 'object' && 'code' in issue && typeof issue.code === 'string'
-          && 'message' in issue && typeof issue.message === 'string'
-          && (!('nodeId' in issue) || typeof issue.nodeId === 'string')) : [];
-        throw new GuidedPublicationError(typeof body?.code === 'string' ? body.code : 'source_unavailable', issues);
+      try {
+        const response = await database.functions.invoke('publish-guided-workflow', {
+          signal: AbortSignal.timeout(GUIDED_CONDITION_LIMITS.uiTimeoutMs),
+          body: { organizationId, workflowId, expectedRevision: revision },
+        });
+        if (response.error) {
+          const context = response.error && typeof response.error === 'object' && 'context' in response.error
+            ? response.error.context : null;
+          if (context instanceof DOMException && context.name === 'TimeoutError') {
+            throw new GuidedPublicationError('temporarily_unavailable', [{
+              code: 'temporarily_unavailable',
+              message: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.uiTimeoutMs / 1000} segundos. Tente novamente.`,
+            }]);
+          }
+          const body = response.error.context instanceof Response
+            ? await response.error.context.json().catch(() => null) : null;
+          const issues = Array.isArray(body?.issues) ? body.issues.filter((issue: unknown): issue is GuidedPublicationIssue =>
+            !!issue && typeof issue === 'object' && 'code' in issue && typeof issue.code === 'string'
+            && 'message' in issue && typeof issue.message === 'string'
+            && (!('nodeId' in issue) || typeof issue.nodeId === 'string')) : [];
+          throw new GuidedPublicationError(typeof body?.code === 'string' ? body.code : 'source_unavailable', issues);
+        }
+        if (response.data?.status !== 'published') throw new Error('Não foi possível publicar.');
+        queryClient.setQueryData(publicationKey, { version_id: response.data.version_id });
+        return response.data as { version_id: string; version_number: number };
+      } catch (failure) {
+        if (failure instanceof DOMException && failure.name === 'TimeoutError') {
+          throw new GuidedPublicationError('temporarily_unavailable', [{
+            code: 'temporarily_unavailable',
+            message: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.uiTimeoutMs / 1000} segundos. Tente novamente.`,
+          }]);
+        }
+        throw failure;
       }
-      if (response.data?.status !== 'published') throw new Error('Não foi possível publicar.');
-      queryClient.setQueryData(publicationKey, { version_id: response.data.version_id });
-      return response.data as { version_id: string; version_number: number };
     },
   });
   return { ...query, save, create, publish, publication, setActive };

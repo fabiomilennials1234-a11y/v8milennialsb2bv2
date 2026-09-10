@@ -161,6 +161,9 @@ const followUpRollback = readFileSync(`supabase/migrations/rollback/${followUpMi
 const productMigration = '20271017000054_guided_product_relation.sql';
 const productForward = readFileSync(`supabase/migrations/${productMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const productRollback = readFileSync(`supabase/migrations/rollback/${productMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const workloadLimitsMigration = '20271017000055_guided_workload_limits.sql';
+const workloadLimitsForward = readFileSync(`supabase/migrations/${workloadLimitsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const workloadLimitsRollback = readFileSync(`supabase/migrations/rollback/${workloadLimitsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -196,6 +199,16 @@ UPDATE public.workflow_executions SET status='running', current_node_id='conditi
   guided_condition_retry_node_id='condition-retry',
   guided_condition_retry_count=2, guided_condition_retry_error='history_sync_in_progress'
   WHERE workflow_id=(SELECT workflow_id FROM guided_rollback_fixture);
+${workloadLimitsRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.validate_guided_workload_version()') IS NOT NULL
+    OR EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'validate_guided_workload_version' AND NOT tgisinternal
+    ) THEN
+    RAISE EXCEPTION 'guided workload limits rollback incomplete';
+  END IF;
+END $$;
 ${productRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)') IS NOT NULL
@@ -546,6 +559,19 @@ ${conditionRetryForward}
 ${historySecurityForward}
 ${followUpForward}
 ${productForward}
+${workloadLimitsForward}
+DO $$ BEGIN
+  IF to_regprocedure('public.validate_guided_workload_version()') IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'validate_guided_workload_version' AND NOT tgisinternal
+    )
+    OR has_function_privilege('anon','public.validate_guided_workload_version()','EXECUTE')
+    OR has_function_privilege('authenticated','public.validate_guided_workload_version()','EXECUTE')
+    OR has_function_privilege('service_role','public.validate_guided_workload_version()','EXECUTE') THEN
+    RAISE EXCEPTION 'guided workload limits reapply invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon','public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
     OR has_function_privilege('service_role','public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)','EXECUTE')

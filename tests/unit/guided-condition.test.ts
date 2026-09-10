@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import { evaluateGuidedCondition } from '../../supabase/functions/_shared/guided-condition';
+import { GUIDED_CONDITION_LIMITS } from '../../src/contracts/workflows/guided-limits';
+
+afterEach(() => vi.useRealTimers());
 
 // Only the database transport is substituted. RLS is verified separately
 // against PostgreSQL; these tests exercise the public evaluation contract.
@@ -149,6 +152,71 @@ describe('guided condition — public evaluation', () => {
       condition: { version: 1, id: 'group', kind: 'group', match: 'all', children } }))
       .toEqual({ status: 'error', code: 'invalid_configuration' });
     expect(searchReads).toBe(0);
+  });
+
+  it('caps the combined sequential-reader budget before issuing any data read', async () => {
+    let reads = 0;
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async () => {
+        reads++;
+        return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    const boxId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const children = Array.from({ length: GUIDED_CONDITION_LIMITS.maxSequentialReaders + 1 }, (_, index) => {
+      const common = { version: 1 as const, id: `reader-${index}` };
+      switch (index % 5) {
+        case 0: return { ...common, field: 'message.period.exists' as const,
+          conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId, provider: 'uazapi' },
+          operator: 'exists' as const, from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+        case 1: return { ...common, field: 'message.search.text' as const,
+          conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId, provider: 'uazapi' },
+          source: { kind: 'last_received' as const }, operator: 'matches' as const, expressionMatch: 'any' as const,
+          matchMode: 'whole_phrase' as const, expressions: ['preco'] };
+        case 2: return { ...common, field: 'message.waiting.elapsed' as const,
+          conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId, provider: 'uazapi' },
+          waitingFor: 'lead' as const, operator: 'greater_than' as const, value: 1, unit: 'hours' as const };
+        case 3: return { ...common, field: 'activity.follow_up' as const, relation: 'lead' as const,
+          state: 'pending' as const, operator: 'exists' as const, dateOperator: 'any' as const };
+        default: return { ...common, field: 'product.relationship' as const, relation: 'lead_association' as const,
+          productId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', operator: 'has_product' as const };
+      }
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'group', kind: 'group', match: 'all', children } }))
+      .toEqual({ status: 'error', code: 'invalid_configuration' });
+    expect(reads).toBe(0);
+  });
+
+  it('caps total tree complexity before issuing any data read', async () => {
+    let reads = 0;
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async () => {
+        reads++;
+        return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    const children = Array.from({ length: GUIDED_CONDITION_LIMITS.maxComplexity }, (_, index) => ({
+      version: 1 as const, id: `name-${index}`, field: 'lead.name' as const, operator: 'is_not_empty' as const,
+    }));
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'group', kind: 'group', match: 'all', children } }))
+      .toEqual({ status: 'error', code: 'invalid_configuration' });
+    expect(reads).toBe(0);
+  });
+
+  it('returns a retryable result at the fixed server deadline', async () => {
+    vi.useFakeTimers();
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async () => new Promise<Response>(() => {}) },
+    });
+    const evaluation = evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' } });
+    await vi.advanceTimersByTimeAsync(GUIDED_CONDITION_LIMITS.serverTimeoutMs);
+    await expect(evaluation).resolves.toEqual({ status: 'error', code: 'temporarily_unavailable' });
   });
 
   it('proves period message existence from one matching persisted message without requiring complete history', async () => {

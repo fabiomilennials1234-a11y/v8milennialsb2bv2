@@ -755,3 +755,13 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Definição ativa e execução antiga permanecem legadas. Integração real manteve workflow ativo, execução `waiting`, `next_run_at` e `guided_version_id = null`, sem grant/publicação/versão. Tentativa de publicar o draft misto recusou o horário legado com `invalid_condition` sem tocar o fluxo ativo.
 - `time_window` continua pausando no executor legado. Migração não o transforma em decisão; UI exige redesenho explícito com Janela Comercial. Regex e operadores sem equivalente também permanecem bloqueados até correção.
 - Nenhuma migration, endpoint ou worker mudou. Checkpoint: 85/85 integrações reais, 124/124 jornadas Chromium e 273/273 unidades focadas verdes. TypeScript ratchet zero erros novos; ESLint/whitespace passaram, com avisos preexistentes apenas.
+
+## 2026-09-10 — ticket 21 certificação e limites
+
+- Contrato compartilhado limita árvore a 100 itens e três níveis, soma no máximo 20 leitores sequenciais, período a 366 dias, busca a 20 expressões de 120 caracteres e 1.000 caracteres normalizados. Teste pessoal lista até 50 candidatos. Avaliação/publicação encerram em 10 s; UI aborta em 12 s com estado recuperável.
+- Editor bloqueia crescimento acima do teto. Avaliador rejeita custo antes de ler dados. Migration 55 adiciona trigger na versão publicada para impedir bypass por escrita direta ou caminho alternativo de publicação.
+- Carga real com 1.000 mensagens encontrou correspondência no último registro em 355,6 ms e retornou 363 bytes. Falta de correspondência sem cobertura completa retornou `history_insufficient` em 331,1 ms; cobertura completa foi necessária para afirmar ausência.
+- E2E real no preview autenticou administrador, abriu rascunho real, validou erro no campo, usou teclado para recolher/expandir, testou o lead pela Edge Function e publicou versões 1 e 2, verificadas como linhas imutáveis no banco.
+- Escopo de atividade ficou restrito a follow-up com vínculo/estado/data explícitos. Escopo de produto ficou restrito às três relações documentadas. “Último contato”, pagamento, ERP e SKU não são declarados entregues. Tempo comercial permanece segunda entrega.
+- Evidência final: 87/87 integrações reais, 125/125 jornadas Chromium de regressão mais 2/2 casos focados de deadline, 1/1 E2E real e 163/163 unidades focadas. Deno compartilhado, TypeScript ratchet, ESLint focado e whitespace sem erro novo. Rollback/reapply das 56 migrations guiadas passou preservando aprovação sintética e ACLs.
+- Migration 55 e as Edge Functions de teste/publicação foram aplicadas somente no preview `saonafmpiaupgnosqvax`. Produção e worker não foram implantados. Liberação produtiva exige autorização específica do CTO.

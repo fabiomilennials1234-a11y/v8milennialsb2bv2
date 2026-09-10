@@ -1,8 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { GuidedConditionDraft } from '../../src/types/workflow';
+import { GUIDED_CONDITION_LIMITS } from '../../src/contracts/workflows/guided-limits';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: [] }));
+});
+
+test('impede ampliar uma árvore que atingiu o limite de complexidade', async ({ page }) => {
+  const children = Array.from({ length: GUIDED_CONDITION_LIMITS.maxComplexity - 1 }, (_, index) => ({
+    version: 1 as const, id: `rule-${index}`, field: 'lead.name' as const, operator: 'is_not_empty' as const,
+  }));
+  await openGuidedEditor(page, { version: 1, id: 'root', kind: 'group', match: 'all', children });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Adicionar condição', exact: true }).last()).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Duplicar regra', exact: true }).first()).toBeDisabled();
+  await expect(page.getByText(`Limite de ${GUIDED_CONDITION_LIMITS.maxComplexity} itens por condição.`)).toBeVisible();
 });
 
 for (const [field, otherField, label] of [
@@ -844,6 +856,18 @@ test('configura nome por seletores e explica teste sem executar ações', async 
   await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('explica deadline do servidor no teste pessoal', async ({ page }) => {
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({
+    status: 504, json: { status: 'error', code: 'temporarily_unavailable' },
+  }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('JOSE');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByText(`O teste excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`)).toBeVisible();
+});
+
 test('publica a edição atual somente depois de salvar sua revisão', async ({ page }) => {
   const operations: string[] = [];
   await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
@@ -876,6 +900,20 @@ test('publicação recusada explica erro no node e preserva edição', async ({ 
   await expect(page.getByRole('alert').filter({ hasText: 'Conecte as saídas Sim e Não uma vez cada.' })).toBeVisible({ timeout: 5000 });
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
   await expect(page.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
+});
+
+test('explica deadline do servidor na publicação e preserva o rascunho', async ({ page }) => {
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } }));
+  await page.route('**/functions/v1/publish-guided-workflow', route => route.fulfill({
+    status: 504, json: { status: 'error', code: 'temporarily_unavailable' },
+  }));
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(page.getByRole('alert').filter({
+    hasText: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`,
+  })).toBeVisible();
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Mariana');
 });
 
 for (const located of [false, true]) {
