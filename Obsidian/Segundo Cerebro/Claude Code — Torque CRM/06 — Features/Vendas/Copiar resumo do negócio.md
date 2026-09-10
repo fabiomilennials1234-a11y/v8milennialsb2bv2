@@ -1,3 +1,12 @@
+---
+type: feature
+title: Copiar resumo do negócio
+status: active
+created: 2026-09-10
+updated: 2026-09-10
+tags: [negocios, produtividade]
+---
+
 # Copiar resumo do negócio
 
 O card atual de negócio (`DealCardPanel`) oferece **Copiar resumo** na barra de ações. A ação reúne dados persistidos, gera texto simples e copia para o clipboard. Não usa IA nem envia mensagem a terceiros.
