@@ -152,6 +152,9 @@ const messageWaitingRollback = readFileSync(`supabase/migrations/rollback/${mess
 const conditionRetryMigration = '20271017000051_guided_condition_retry_state.sql';
 const conditionRetryForward = readFileSync(`supabase/migrations/${conditionRetryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const conditionRetryRollback = readFileSync(`supabase/migrations/rollback/${conditionRetryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const historySecurityMigration = '20271017000052_secure_guided_execution_history.sql';
+const historySecurityForward = readFileSync(`supabase/migrations/${historySecurityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const historySecurityRollback = readFileSync(`supabase/migrations/rollback/${historySecurityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -187,6 +190,20 @@ UPDATE public.workflow_executions SET status='running', current_node_id='conditi
   guided_condition_retry_node_id='condition-retry',
   guided_condition_retry_count=2, guided_condition_retry_error='history_sync_in_progress'
   WHERE workflow_id=(SELECT workflow_id FROM guided_rollback_fixture);
+${historySecurityRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.get_workflow_execution_history(uuid,integer)') IS NOT NULL
+    OR to_regprocedure('public.get_workflow_execution_steps(uuid)') IS NOT NULL
+    OR to_regprocedure('public.get_workflow_execution_stats(uuid)') IS NOT NULL
+    OR to_regprocedure('public.retry_workflow_execution(uuid)') IS NOT NULL
+    OR to_regprocedure('public.can_read_guided_execution_data(uuid,uuid,uuid)') IS NOT NULL
+    OR NOT has_function_privilege('authenticated', 'public.claim_workflow_executions(integer,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'execution-history rollback incomplete';
+  END IF;
+  IF pg_get_functiondef('public.pin_guided_execution_version()'::regprocedure) LIKE '%app.guided_retry_version%' THEN
+    RAISE EXCEPTION 'execution-history rollback retained retry pin override';
+  END IF;
+END $$;
 ${conditionRetryRollback}
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workflow_executions'
@@ -500,6 +517,30 @@ ${messageCoverageForward}
 ${messageSearchForward}
 ${messageWaitingForward}
 ${conditionRetryForward}
+${historySecurityForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.get_workflow_execution_history(uuid,integer)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.get_workflow_execution_history(uuid,integer)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.get_workflow_execution_history(uuid,integer)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.get_workflow_execution_steps(uuid)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.get_workflow_execution_steps(uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.get_workflow_execution_steps(uuid)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.can_read_guided_execution_data(uuid,uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.can_read_guided_execution_data(uuid,uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.can_read_guided_execution_data(uuid,uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.retry_workflow_execution(uuid)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.retry_workflow_execution(uuid)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.claim_workflow_executions(integer,integer)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.claim_workflow_executions(integer,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'execution-history privileges invalid';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='workflow_executions'
+      AND policyname='workflow_executions_select')
+    OR EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='workflow_execution_steps'
+      AND policyname='workflow_execution_steps_select') THEN
+    RAISE EXCEPTION 'raw execution-history policies survived';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='workflow_executions'
     AND column_name IN ('guided_condition_retry_node_id','guided_condition_retry_count','guided_condition_retry_error')) <> 3
@@ -836,6 +877,10 @@ DO $$ BEGIN
     OR has_function_privilege('authenticated', 'public.pin_guided_execution_version()', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.pin_guided_execution_version()', 'EXECUTE') THEN
     RAISE EXCEPTION 'pin trigger function callable directly';
+  END IF;
+  IF pg_get_functiondef('public.pin_guided_execution_version()'::regprocedure)
+    NOT LIKE '%app.guided_retry_version%' THEN
+    RAISE EXCEPTION 'retry-aware pin definition not restored';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflows w JOIN guided_rollback_fixture f ON f.workflow_id = w.id
     WHERE w.name = 'Preserved publication' AND w.trigger_type = 'lead_created' AND w.trigger_config = '{}'::jsonb) THEN

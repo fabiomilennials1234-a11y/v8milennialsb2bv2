@@ -1083,6 +1083,39 @@ export interface WorkflowExecutionStep {
   executed_at: string;
 }
 
+/** Server-filtered history. It intentionally has no execution context/input. */
+export interface WorkflowExecutionHistoryItem {
+  id: string;
+  workflow_id: string;
+  status: WorkflowExecutionStatus;
+  started_at: string;
+  completed_at: string | null;
+  retry_of: string | null;
+  guided_version_id: string | null;
+  version_number: number | null;
+  version_published_at: string | null;
+  data_visible: boolean;
+  lead_id: string | null;
+  lead_name: string | null;
+  current_node_id: string | null;
+  error_code: string | null;
+  can_retry: boolean;
+}
+
+/** Server-filtered step. Input payloads never cross the API boundary. */
+export interface WorkflowExecutionHistoryStep {
+  id: string;
+  execution_id: string;
+  node_id: string;
+  node_type: WorkflowNodeType;
+  node_label: string;
+  status: WorkflowStepStatus;
+  output_data: Record<string, unknown> | null;
+  error_code: string | null;
+  executed_at: string;
+  data_visible: true;
+}
+
 // =====================================================
 // UI HELPERS
 // =====================================================

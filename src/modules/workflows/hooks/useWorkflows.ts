@@ -8,8 +8,8 @@ import type {
   Workflow,
   WorkflowInsert,
   WorkflowUpdate,
-  WorkflowExecution,
-  WorkflowExecutionStep,
+  WorkflowExecutionHistoryItem,
+  WorkflowExecutionHistoryStep,
 } from "@/types/workflow";
 
 export function useWorkflows() {
@@ -199,15 +199,13 @@ export function useWorkflowExecutions(workflowId: string | undefined) {
     queryFn: async () => {
       if (!workflowId || !organizationId) return [];
       const { data, error } = await supabase
-        .from("workflow_executions")
-        .select("*")
-        .eq("workflow_id", workflowId)
-        .eq("organization_id", organizationId)
-        .order("started_at", { ascending: false })
-        .limit(50);
+        .rpc("get_workflow_execution_history" as never, {
+          p_workflow_id: workflowId,
+          p_limit: 50,
+        } as never);
 
       if (error) throw error;
-      return data as unknown as WorkflowExecution[];
+      return (data ?? []) as unknown as WorkflowExecutionHistoryItem[];
     },
     enabled: isReady && !!organizationId && !!workflowId,
   });
@@ -219,13 +217,12 @@ export function useWorkflowExecutionSteps(executionId: string | undefined) {
     queryFn: async () => {
       if (!executionId) return [];
       const { data, error } = await supabase
-        .from("workflow_execution_steps")
-        .select("*")
-        .eq("execution_id", executionId)
-        .order("executed_at", { ascending: true });
+        .rpc("get_workflow_execution_steps" as never, {
+          p_execution_id: executionId,
+        } as never);
 
       if (error) throw error;
-      return data as unknown as WorkflowExecutionStep[];
+      return (data ?? []) as unknown as WorkflowExecutionHistoryStep[];
     },
     enabled: !!executionId,
   });
@@ -246,37 +243,13 @@ export function useRetryWorkflowExecution() {
       // PERMISSION: Apenas admin pode repetir execuções
       await assertPermission("edit_workflow");
 
-      // Fetch original execution (cast needed: retry_of not in auto-generated types yet)
-      const { data: rawOriginal, error: fetchError } = await supabase
-        .from("workflow_executions")
-        .select("*")
-        .eq("id", executionId)
-        .eq("organization_id", organizationId)
-        .single();
-
-      if (fetchError || !rawOriginal) throw new Error("Execução não encontrada");
-      const original = rawOriginal as unknown as WorkflowExecution;
-      if (original.status !== "failed") throw new Error("Só é possível repetir execuções que falharam");
-
-      // Create new execution starting from the failed node
-      const { data: newExec, error: insertError } = await supabase
-        .from("workflow_executions")
-        .insert({
-          workflow_id: original.workflow_id,
-          organization_id: organizationId,
-          lead_id: original.lead_id,
-          status: "running",
-          current_node_id: original.current_node_id,
-          loop_counters: original.loop_counters || {},
-          context: original.context || {},
-          retry_of: original.id,
-          next_run_at: new Date().toISOString(),
-        } as any)
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      return newExec as unknown as WorkflowExecution;
+      const { data, error } = await supabase.rpc("retry_workflow_execution" as never, {
+        p_execution_id: executionId,
+      } as never);
+      if (error) throw error;
+      const retried = (data as unknown as Array<{ id: string; workflow_id: string; status: string }> | null)?.[0];
+      if (!retried) throw new Error("Execução não encontrada");
+      return retried;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["workflow-executions", data.workflow_id] });
@@ -296,28 +269,15 @@ export function useWorkflowStats(workflowId: string | undefined) {
     queryFn: async () => {
       if (!workflowId || !organizationId) return { total: 0, lastRun: null };
 
-      const { count, error: countError } = await supabase
-        .from("workflow_executions")
-        .select("*", { count: "exact", head: true })
-        .eq("workflow_id", workflowId)
-        .eq("organization_id", organizationId);
-
-      if (countError) throw countError;
-
-      const { data: lastExec, error: lastError } = await supabase
-        .from("workflow_executions")
-        .select("started_at, status")
-        .eq("workflow_id", workflowId)
-        .eq("organization_id", organizationId)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (lastError) throw lastError;
+      const { data, error } = await supabase.rpc("get_workflow_execution_stats" as never, {
+        p_workflow_id: workflowId,
+      } as never);
+      if (error) throw error;
+      const stats = (data as unknown as Array<{ total: number; last_started_at: string | null; last_status: string | null }> | null)?.[0];
 
       return {
-        total: count ?? 0,
-        lastRun: lastExec,
+        total: Number(stats?.total ?? 0),
+        lastRun: stats?.last_started_at ? { started_at: stats.last_started_at, status: stats.last_status } : null,
       };
     },
     enabled: !!workflowId && !!organizationId,

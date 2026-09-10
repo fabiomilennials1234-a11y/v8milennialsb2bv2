@@ -2546,6 +2546,177 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('redacts execution history with the reader current permissions', async () => {
+    const workflowId = crypto.randomUUID(), foreignWorkflowId = crypto.randomUUID();
+    const executionId = crypto.randomUUID(), memberId = crypto.randomUUID(), boxId = crypto.randomUUID();
+    const password = `${crypto.randomUUID()}!Aa1`;
+    const email = `guided-history-${crypto.randomUUID()}@example.test`;
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error) throw created.error;
+    const failures: unknown[] = [];
+    try {
+      await service.from('team_members').insert({ id: memberId, user_id: created.data.user.id,
+        organization_id: orgA, name: 'History reader', role: 'member', is_active: true }).throwOnError();
+      await service.from('member_feature_permissions').insert([
+        { team_member_id: memberId, organization_id: orgA, feature_key: 'workflows.view', enabled: true },
+        { team_member_id: memberId, organization_id: orgA, feature_key: 'workflows.edit', enabled: true },
+        ...['leads.view_all', 'leads.view_unassigned', 'leads.view_subordinates'].map(feature_key => ({
+          team_member_id: memberId, organization_id: orgA, feature_key, enabled: false,
+        })),
+      ]).throwOnError();
+      const member = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-history-${memberId}` },
+      });
+      const login = await member.auth.signInWithPassword({ email, password });
+      if (login.error) throw login.error;
+      const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const condition = { version: 1, id: 'history-condition', field: 'lead.name', operator: 'equals', value: 'JOSE' };
+      const definition = { nodes: [
+        { id: 'trigger', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+        { id: 'condition', type: 'condition', data: { label: 'Nome protegido', guidedCondition: condition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [
+        { id: 'tc', source: 'trigger', target: 'condition' },
+        { id: 'cy', source: 'condition', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'condition', target: 'no', sourceHandle: 'no' },
+      ] };
+      await administrator.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: { name: 'History visibility' } }).throwOnError();
+      await administrator.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['lead.name'], p_expected_revision: 0 }).throwOnError();
+      const publication = await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1, p_definition: definition,
+        p_settings: { name: 'History visibility' }, p_required_fields: ['lead.name'] });
+      expect(publication.error).toBeNull();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, status: 'failed', current_node_id: 'condition',
+        context: { restricted_name: 'José', worker_grant: ['lead.name'] }, error: 'upstream said José is blocked' }).throwOnError();
+      await service.from('workflow_execution_steps').insert({ execution_id: executionId, node_id: 'condition',
+        node_type: 'condition', node_label: 'Nome protegido', status: 'failed', input_data: { name: 'José' },
+        output_data: { matched: true, version_id: publication.data.version_id, actual: 'José', secret: 'never-return' },
+        error: 'condition failed for José' }).throwOnError();
+      await service.from('workflows').insert({ id: foreignWorkflowId, organization_id: orgB,
+        name: 'Foreign history', trigger_type: 'manual' }).throwOnError();
+
+      const rawExecution = await member.from('workflow_executions').select('context,error,current_node_id').eq('id', executionId);
+      expect(rawExecution.error).toBeNull();
+      expect(rawExecution.data).toEqual([]);
+      const rawSteps = await member.from('workflow_execution_steps').select('input_data,output_data,error').eq('execution_id', executionId);
+      expect(rawSteps.error).toBeNull();
+      expect(rawSteps.data).toEqual([]);
+      const rawVersion = await member.from('workflow_guided_versions').select('definition').eq('workflow_id', workflowId);
+      expect(rawVersion.error).toBeNull();
+      expect(rawVersion.data).toEqual([]);
+      const claim = await member.rpc('claim_workflow_executions', { batch_size: 1, per_org_cap: 1 });
+      expect(claim.error?.code).toBe('42501');
+
+      const args = { p_workflow_id: workflowId, p_limit: 50 };
+      const hidden = await member.rpc('get_workflow_execution_history', args);
+      expect(hidden.error).toBeNull();
+      expect(hidden.data).toEqual([expect.objectContaining({ id: executionId, version_number: 1,
+        data_visible: false, lead_id: null, lead_name: null, current_node_id: null,
+        error_code: 'protected_error', can_retry: false })]);
+      const hiddenSteps = await member.rpc('get_workflow_execution_steps', { p_execution_id: executionId });
+      expect(hiddenSteps.error).toBeNull();
+      expect(hiddenSteps.data).toEqual([]);
+      const hiddenStats = await member.rpc('get_workflow_execution_stats', { p_workflow_id: workflowId });
+      expect(hiddenStats.error).toBeNull();
+      expect(hiddenStats.data).toEqual([{ total: 1, last_started_at: expect.any(String), last_status: 'failed' }]);
+      expect((await member.rpc('retry_workflow_execution', { p_execution_id: executionId })).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-history-anon-${memberId}` },
+      });
+      expect((await anonymous.rpc('get_workflow_execution_history', args)).error?.code).toBe('42501');
+      expect((await member.rpc('get_workflow_execution_history', {
+        p_workflow_id: foreignWorkflowId, p_limit: 50,
+      })).error?.code).toBe('42501');
+
+      await service.from('leads').update({ pre_sale_responsible_id: memberId }).eq('id', leadA).throwOnError();
+      const visible = await member.rpc('get_workflow_execution_history', args);
+      expect(visible.error).toBeNull();
+      expect(visible.data).toEqual([expect.objectContaining({ id: executionId, version_number: 1,
+        data_visible: true, lead_id: leadA, lead_name: 'José', current_node_id: 'condition',
+        error_code: 'execution_failed', can_retry: true })]);
+      const visibleSteps = await member.rpc('get_workflow_execution_steps', { p_execution_id: executionId });
+      expect(visibleSteps.error).toBeNull();
+      expect(visibleSteps.data).toEqual([expect.objectContaining({ node_id: 'condition', data_visible: true,
+        output_data: { matched: true, version_id: publication.data.version_id }, error_code: 'execution_failed' })]);
+      expect(JSON.stringify(visibleSteps.data)).not.toContain('José');
+      expect(JSON.stringify(visibleSteps.data)).not.toContain('never-return');
+      await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 },
+        { onConflict: 'organization_id,resource_key' }).throwOnError();
+      await service.from('whatsapp_instances').insert({ id: boxId, organization_id: orgA, instance_name: 'Protected history',
+        phone_number: '551130000098', provider: 'uazapi' }).throwOnError();
+      const messageCondition = { version: 1, id: 'message-history', field: 'message.trigger.text', conversation: {
+        kind: 'explicit', storage: 'whatsapp_messages', boxId, provider: 'uazapi',
+      }, operator: 'contains', value: 'segredo' };
+      const messageDefinition = { nodes: [
+        { id: 'trigger-message', type: 'trigger', data: { triggerType: 'lead_replied', config: {} } },
+        { id: 'condition-message', type: 'condition', data: { guidedCondition: messageCondition } },
+        { id: 'message-yes', type: 'end', data: {} }, { id: 'message-no', type: 'end', data: {} },
+      ], edges: [
+        { id: 'tm', source: 'trigger-message', target: 'condition-message' },
+        { id: 'my', source: 'condition-message', target: 'message-yes', sourceHandle: 'yes' },
+        { id: 'mn', source: 'condition-message', target: 'message-no', sourceHandle: 'no' },
+      ] };
+      await administrator.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['lead.name', 'message.trigger.text'], p_expected_revision: 1 }).throwOnError();
+      await administrator.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: messageDefinition, p_settings: { name: 'Message history' }, p_expected_revision: 1 }).throwOnError();
+      const messagePublication = await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 2, p_definition: messageDefinition,
+        p_settings: { name: 'Message history' }, p_required_fields: ['message.trigger.text'] });
+      expect(messagePublication.error).toBeNull();
+      const retried = await member.rpc('retry_workflow_execution', { p_execution_id: executionId });
+      expect(retried.error).toBeNull();
+      expect(retried.data).toEqual([expect.objectContaining({ workflow_id: workflowId, status: 'running' })]);
+      expect(Object.keys(retried.data![0]).sort()).toEqual(['id', 'status', 'workflow_id']);
+      const retryPin = await service.from('workflow_executions').select('guided_version_id,context').eq('id', retried.data![0].id).single();
+      expect(retryPin.error).toBeNull();
+      expect(retryPin.data).toEqual({ guided_version_id: publication.data.version_id,
+        context: { restricted_name: 'José', worker_grant: ['lead.name'] } });
+      await service.from('workflow_executions').delete().eq('id', retried.data![0].id).throwOnError();
+      const messageExecutionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: messageExecutionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, status: 'completed', current_node_id: 'message-yes' }).throwOnError();
+      await service.from('member_feature_permissions').upsert({ team_member_id: memberId, organization_id: orgA,
+        feature_key: 'whatsapp.view', enabled: false }, { onConflict: 'team_member_id,feature_key' }).throwOnError();
+      const withoutMessageAccess = await member.rpc('get_workflow_execution_history', args);
+      expect(withoutMessageAccess.data?.find(row => row.id === messageExecutionId)).toMatchObject({
+        version_number: 2, data_visible: false, lead_id: null, current_node_id: null,
+      });
+      expect(withoutMessageAccess.data?.find(row => row.id === executionId)).toMatchObject({
+        version_number: 1, data_visible: true, lead_id: leadA,
+      });
+      await service.from('member_feature_permissions').update({ enabled: true }).eq('team_member_id', memberId)
+        .eq('feature_key', 'whatsapp.view').throwOnError();
+      const withMessageAccess = await member.rpc('get_workflow_execution_history', args);
+      expect(withMessageAccess.data?.find(row => row.id === messageExecutionId)).toMatchObject({
+        version_number: 2, data_visible: true, lead_id: leadA, current_node_id: 'message-yes',
+      });
+      await service.from('workflow_executions').delete().eq('id', messageExecutionId).throwOnError();
+
+      await service.from('leads').update({ pre_sale_responsible_id: adminMemberId }).eq('id', leadA).throwOnError();
+      const revoked = await member.rpc('get_workflow_execution_history', args);
+      expect(revoked.data).toEqual([expect.objectContaining({ id: executionId, data_visible: false,
+        lead_id: null, current_node_id: null, error_code: 'protected_error' })]);
+      expect((await service.from('workflow_executions').select('id').eq('id', executionId)).data).toHaveLength(1);
+    } catch (error) { failures.push(error); }
+    const restored = await service.from('leads').update({ pre_sale_responsible_id: adminMemberId }).eq('id', leadA);
+    if (restored.error) failures.push(restored.error);
+    const removed = await service.from('workflows').delete().in('id', [workflowId, foreignWorkflowId]);
+    if (removed.error) failures.push(removed.error);
+    const removedBox = await service.from('whatsapp_instances').delete().eq('id', boxId);
+    if (removedBox.error) failures.push(removedBox.error);
+    const removedMember = await service.from('team_members').delete().eq('id', memberId);
+    if (removedMember.error) failures.push(removedMember.error);
+    const deleted = await service.auth.admin.deleteUser(created.data.user.id);
+    if (deleted.error) failures.push(deleted.error);
+    if (failures.length) throw new AggregateError(failures, 'Execution history permission test failed');
+  }, 60000);
+
   it('honors explicit responsible-only access within the same organization', async () => {
     const workflowId = crypto.randomUUID(), customFieldId = crypto.randomUUID();
     const password = `${crypto.randomUUID()}!Aa1`;

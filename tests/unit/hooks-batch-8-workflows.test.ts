@@ -160,12 +160,20 @@ describe("useToggleWorkflow", () => {
 });
 
 describe("useWorkflowExecutions", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock());
+    mockRpc.mockResolvedValue({ data: [], error: null });
+  });
 
-  it("fetches executions for a workflow", async () => {
+  it("fetches the server-redacted execution projection", async () => {
     const { result } = renderHook(() => useWorkflowExecutions("wf1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("workflow_executions");
+    expect(mockRpc).toHaveBeenCalledWith("get_workflow_execution_history", {
+      p_limit: 50,
+      p_workflow_id: "wf1",
+    });
+    expect(mockFrom).not.toHaveBeenCalledWith("workflow_executions");
   });
 
   it("returns empty when workflowId is undefined", async () => {
@@ -175,33 +183,57 @@ describe("useWorkflowExecutions", () => {
 });
 
 describe("useWorkflowExecutionSteps", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock());
+    mockRpc.mockResolvedValue({ data: [], error: null });
+  });
 
-  it("fetches execution steps", async () => {
+  it("fetches the server-redacted step projection", async () => {
     const { result } = renderHook(() => useWorkflowExecutionSteps("exec1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("workflow_execution_steps");
+    expect(mockRpc).toHaveBeenCalledWith("get_workflow_execution_steps", {
+      p_execution_id: "exec1",
+    });
+    expect(mockFrom).not.toHaveBeenCalledWith("workflow_execution_steps");
   });
 });
 
 describe("useRetryWorkflowExecution", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock());
+    mockRpc.mockResolvedValue({ data: [{ id: "retry-1", workflow_id: "wf1", status: "running" }], error: null });
+  });
 
-  it("retries a failed execution", async () => {
+  it("retries without returning the original protected context to the browser", async () => {
     const { result } = renderHook(() => useRetryWorkflowExecution(), { wrapper: createWrapper() });
     await act(async () => {
       try { await result.current.mutateAsync("exec1"); } catch {}
     });
-    expect(mockFrom).toHaveBeenCalledWith("workflow_executions");
+    expect(mockRpc).toHaveBeenCalledWith("retry_workflow_execution", {
+      p_execution_id: "exec1",
+    });
+    expect(mockFrom).not.toHaveBeenCalledWith("workflow_executions");
   });
 });
 
 describe("useWorkflowStats", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock()); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock());
+    mockRpc.mockResolvedValue({ data: [{ total: 5, last_started_at: "2025-01-01", last_status: "completed" }], error: null });
+  });
 
-  it("fetches stats for a workflow", async () => {
+  it("fetches safe aggregate stats for a workflow", async () => {
     const { result } = renderHook(() => useWorkflowStats("wf1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("workflow_executions");
+    expect(mockRpc).toHaveBeenCalledWith("get_workflow_execution_stats", {
+      p_workflow_id: "wf1",
+    });
+    expect(result.current.data).toEqual({
+      total: 5,
+      lastRun: { started_at: "2025-01-01", status: "completed" },
+    });
   });
 });
