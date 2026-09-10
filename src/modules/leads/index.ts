@@ -303,3 +303,4 @@ export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
 // CompareceuModal: apresentacional (só identity + onConfirm), movido de
 // pipelines para leads na inversão F7. pipelines consome via este barrel.
 export { CompareceuModal } from "./components/leads/funnel-contexts/modals/CompareceuModal";
+export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";

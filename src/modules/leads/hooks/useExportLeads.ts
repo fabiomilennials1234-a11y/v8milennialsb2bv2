@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { applyLeadListFilters, type LeadListFilterValues } from "../lib/lead-list-filters";
+import { loadVentimaisExport } from "../lib/load-ventimais-export";
+import { buildVentimaisWorkbook } from "../lib/ventimais-export";
 import {
   buildExportHeaders,
   buildFunnelCells,
@@ -71,6 +73,8 @@ export type ExportListFilters = LeadListFilterValues;
 
 export interface ExportLeadsOptions {
   format: ExportFormat;
+  /** Contexto do kanban inteiro; consumido apenas pelo rollout Ventimais. */
+  pipelineId?: string;
   /** Limite de leads (os mais recentes). Se não informado, exporta até 10.000. */
   limit?: number;
   /** Quando presente, restringe a exportação aos leads da etapa indicada. */
@@ -89,7 +93,7 @@ export interface ExportLeadsOptions {
 }
 
 export interface UseExportLeadsResult {
-  exportLeads: (options: ExportLeadsOptions) => Promise<{ count: number }>;
+  exportLeads: (options: ExportLeadsOptions) => Promise<{ count: number; unit?: "negócios" }>;
   isExporting: boolean;
 }
 
@@ -118,7 +122,7 @@ export function useExportLeads(): UseExportLeadsResult {
   const { organizationId } = useOrganization();
   const exportPermission = useCanDo("export_leads");
 
-  const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number }> => {
+  const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number; unit?: "negócios" }> => {
     if (!organizationId) {
       throw new Error("Organização não encontrada");
     }
@@ -130,6 +134,24 @@ export function useExportLeads(): UseExportLeadsResult {
     }
     setIsExporting(true);
     try {
+      const detailed = await loadVentimaisExport(organizationId, options);
+      if (detailed) {
+        if (!detailed.entries.length) return { count: 0, unit: "negócios" };
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        buildVentimaisWorkbook(workbook, detailed);
+        const buffer = await workbook.xlsx.writeBuffer();
+        const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+        try {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `negocios_${slugify(detailed.pipeline.name ?? "kanban")}${options.stageTitle ? `_${slugify(options.stageTitle)}` : ""}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+          a.click();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        return { count: detailed.entries.length, unit: "negócios" };
+      }
       const limit = Math.min(options.limit ?? 10_000, 50_000);
 
       // 0) Funis reais da org — servem tanto à resolução do stageFilter quanto
