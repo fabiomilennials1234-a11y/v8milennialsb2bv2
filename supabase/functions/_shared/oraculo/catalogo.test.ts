@@ -20,6 +20,7 @@ Deno.test("catálogo — todo nome anunciado ao modelo tem executor, e vice-vers
 Deno.test("catálogo — leitura e proposta estão no ar", () => {
   const nomes = TOOL_SCHEMAS.map((s) => s.function.name).sort();
   assertEquals(nomes, [
+    "benchmark",
     "conversa_detalhe",
     "conversas",
     "funil",

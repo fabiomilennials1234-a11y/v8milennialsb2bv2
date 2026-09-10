@@ -19,6 +19,7 @@ import { conversasTool } from "./tools/conversas.ts";
 import { conversaDetalheTool } from "./tools/conversa-detalhe.ts";
 import { proporAcaoTool } from "./tools/propor-acao.ts";
 import { gargaloTool } from "./tools/gargalo.ts";
+import { benchmarkTool } from "./tools/benchmark.ts";
 
 export interface ToolSchema {
   type: string;
@@ -40,6 +41,15 @@ const LIMITE = {
 };
 
 export const TOOL_SCHEMAS: ToolSchema[] = [
+  {
+    type: "function",
+    function: {
+      name: "benchmark",
+      description:
+        "Compara a organização com o próprio passado e, quando há pelo menos cinco pares elegíveis, com mediana e faixa anônimas entre as operações ativas da base Torque. Lê snapshot semanal já materializado. Nunca chame isso de mercado, nunca estime valor ausente e explique `não tenho base suficiente para comparar` quando `external_benchmark.available` for falso. Exige escopo da organização inteira.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
   {
     type: "function",
     function: {
@@ -204,6 +214,7 @@ export function criarFerramentas(db: ToolDb): FerramentaDoLaco[] {
     conversaDetalheTool,
     proporAcaoTool,
     gargaloTool,
+    benchmarkTool,
   ].map(
     (t) => ({
       name: t.name,
