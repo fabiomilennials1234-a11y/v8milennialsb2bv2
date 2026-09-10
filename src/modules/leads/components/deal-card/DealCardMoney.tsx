@@ -165,7 +165,7 @@ function LinhaDeItem({
 
   if (modo === "editando") {
     return (
-      <div className={cn(GRADE, "rounded-lg bg-muted/30 px-1.5 py-1.5")}>
+      <div data-summary-pending={true} className={cn(GRADE, "rounded-lg bg-muted/30 px-1.5 py-1.5")}>
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-[13px]" title={item.nome}>
             {item.nome}
@@ -236,7 +236,7 @@ function LinhaDeItem({
 
   if (modo === "confirmando") {
     return (
-      <div className={cn(GRADE, "rounded-lg bg-destructive/10 px-1.5 py-2")}>
+      <div data-summary-pending={true} className={cn(GRADE, "rounded-lg bg-destructive/10 px-1.5 py-2")}>
         <span className="col-span-3 min-w-0 truncate text-[12.5px] text-foreground/90">
           Remover "{item.nome}" deste negócio?
         </span>

@@ -1,3 +1,4 @@
+import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -516,6 +517,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     ) : data ? (
       <DealCard
         negocio={data}
+        acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
         etiquetas={
           !comLead && leadId ? (
             <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
