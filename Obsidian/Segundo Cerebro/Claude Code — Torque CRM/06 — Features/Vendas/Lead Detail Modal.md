@@ -226,3 +226,33 @@ Tabela `lead_comments`:
 - Rich text/markdown
 - Anexos
 - Histórico de edições por comentário
+
+
+## Documentos nos comentários do negócio — 2026-09-10
+
+No card atual (`DealCardPanel` / `DealCardComments`), **Anexar documentos** permite
+até 5 arquivos de 20 MB por comentário. PDF, Word, Excel, PowerPoint, TXT, CSV,
+PNG, JPEG e WebP. Texto opcional; sem texto, registra “Documento anexado”.
+Seleção pode ser removida antes de publicar. Rascunho sobrevive à troca de abas
+e a falhas; trocar de negócio reinicia a seleção para evitar vínculo incorreto.
+
+`lead_comments.attachments` guarda nome, tamanho, MIME e caminho privado. Bucket
+`deal-comment-documents`; caminho org/entry/autor/comentário/UUID.ext sem nome
+original. Upload anterior à publicação; falha remove uploads parciais. Fechar
+navegador durante upload pode deixar órfão privado; não há coleta periódica.
+
+Download autenticado em `comment-attachments/storage.ts`, sem URL pública ou
+assinada persistida. RLS verifica comentário visível e não apagado. Documento
+publicado não pode ser substituído ou reatribuído. Soft-delete revoga leitura;
+bytes ficam retidos com o comentário. Exclusão referencial de negócio/autor
+preserva comentário e anexos, permitindo os `ON DELETE SET NULL` existentes.
+
+Migration `20271019000009_deal_comment_documents.sql`. Contrato RLS e rollback
+validado em PostgreSQL 16 descartável com `bash scripts/test-comment-documents.sh`.
+Fixture reduzida reproduz políticas de comentário e FKs relevantes; não substitui
+suíte completa contra Supabase. UI/Storage têm testes Vitest positivos e negativos.
+
+Aplicada em produção em 2026-09-10 via `apply_migration`, versão remota
+`20260910191336` (prefixo do repositório `20271019000009`). Baseline e pós-apply:
+3.451 comentários preservados, nenhum anexo preexistente, bucket privado com
+20 MB, três policies e trigger ativos. Não reaplicar por diferença de versão.
