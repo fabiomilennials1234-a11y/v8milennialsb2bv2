@@ -294,12 +294,12 @@ export function DealCard({
   /** Move o negócio entre etapas. NÃO decide desfecho — ver `onDefinirDesfecho`. */
   onMoverEtapa?: (chave: string) => void;
   /**
-   * Marca o negócio como ganho ou perdido, na etapa em que ele estiver
+   * Marca o negócio como ganho/perdido ou reabre, na etapa em que ele estiver
    * (ADR-0023 Emenda 1). Quem escreve é o `DealCardPanel`: este arquivo está no
    * grafo de `/preview.html` e não pode alcançar o banco (inv:H5-17).
    */
-  onDefinirDesfecho?: (desfecho: "won" | "lost") => void;
-  /** Desfecho em voo — trava os dois botões para não emitir venda duplicada. */
+  onDefinirDesfecho?: (desfecho: "open" | "won" | "lost") => void;
+  /** Desfecho em voo — trava as ações de fechamento e reabertura. */
   decidindo?: boolean;
   /** Abre OUTRO negócio do mesmo lead, na aba "Negócios". */
   onOpenDeal?: (entryId: string) => void;
@@ -447,7 +447,16 @@ export function DealCard({
             )}
             {negocio.estado === "perdido" && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/35 bg-destructive/[0.08] px-2 py-0.5 text-[12px] font-semibold text-destructive">
-                <X className="size-3" />
+                <button
+                  type="button"
+                  aria-label="Remover de perdido"
+                  title="Remover de perdido"
+                  disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
+                  onClick={() => onDefinirDesfecho?.("open")}
+                  className="grid size-5 place-items-center rounded hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
                 Perdido
               </span>
             )}
