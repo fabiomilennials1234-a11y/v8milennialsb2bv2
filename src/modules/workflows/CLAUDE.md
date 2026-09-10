@@ -59,6 +59,8 @@ O avaliador consome somente `condition_text` ou uma transcrição já persistida
 
 `message.waiting.elapsed` mede relógio corrido desde a primeira mensagem da sequência atual ainda sem resposta. `waitingFor=lead` começa em mensagem recebida; `waitingFor=company` começa em mensagem enviada. Complementos do mesmo lado preservam a âncora; mensagem válida do lado oposto encerra a sequência. Recebidas contam com `status=received`; enviadas contam somente em `sent`, `delivered` ou `read`. `pending`, `failed`, receipts, reações e eventos de sistema não contam. Mídia conta sem depender de texto. Sem sequência ativa, o valor é ausente, nunca zero. Cobertura não completa bloqueia a decisão.
 
+Falha temporária de condição publicada retoma o mesmo node com dados atuais. Somente `temporarily_unavailable` e `history_sync_in_progress` recebem retries em 30s, 90s e 270s. A execução permanece `running`, usa `next_run_at` e guarda estado em `guided_condition_retry_*`; nenhuma saída é escolhida durante a espera. Sucesso limpa o estado antes do ramo. Falha permanente termina imediatamente; esgotamento grava `guided_condition_retry_exhausted:<code>`. Retry de condição não incrementa loop nem reexecuta nodes anteriores.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)

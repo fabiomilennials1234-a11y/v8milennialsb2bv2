@@ -14,6 +14,35 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('classifies transient database failures separately from permanent source errors', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async () => new Response(JSON.stringify({
+        code: '57014', message: 'statement timeout', details: null, hint: null,
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' },
+    })).toEqual({ status: 'error', code: 'temporarily_unavailable' });
+  });
+
+  it('keeps transient PostgreSQL codes recoverable across specialized readers', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => {
+        expect(new URL(String(input)).pathname).toBe('/rest/v1/rpc/test_guided_condition_message_period');
+        return new Response(JSON.stringify({ code: '40001', message: 'serialization failure', details: null, hint: null }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'period', field: 'message.period.exists', conversation: { kind: 'explicit', storage: 'whatsapp_messages',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, operator: 'exists',
+      from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z',
+    } })).toEqual({ status: 'error', code: 'temporarily_unavailable' });
+  });
+
   it('compares wall-clock time from the first still-unanswered message', async () => {
     const caller = createClient('https://db.example.test', 'test-anon-key', {
       auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {

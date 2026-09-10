@@ -2734,6 +2734,97 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('retries a temporary condition with current data and never repeats an earlier action', async () => {
+    const box = crypto.randomUUID(), workflowId = crypto.randomUUID(), executionId = crypto.randomUUID();
+    const messageId = crypto.randomUUID(), title = `Retry once ${executionId}`;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1 as const, id: 'period', field: 'message.period.exists' as const, conversation: {
+      kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId: box, provider: 'uazapi',
+    }, operator: 'exists' as const, from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'action', type: 'action', data: { actionType: 'create_followup', followupTitle: title } },
+      { id: 'condition', type: 'condition', data: { guidedCondition: condition } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [
+      { id: 'ta', source: 't', target: 'action' }, { id: 'ac', source: 'action', target: 'condition' },
+      { id: 'cy', source: 'condition', target: 'yes', sourceHandle: 'yes' },
+      { id: 'cn', source: 'condition', target: 'no', sourceHandle: 'no' },
+    ] };
+    await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 },
+      { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await service.from('whatsapp_instances').insert({ id: box, organization_id: orgA, instance_name: 'Retry condition',
+      phone_number: '551130000096', provider: 'uazapi' }).throwOnError();
+    try {
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages',
+        box_id: box, provider: 'uazapi', participant_id: '5511999990000', covered_from: condition.from,
+        covered_to: condition.to, state: 'in_progress', gap_reason: 'worker_running' }).throwOnError();
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_organization_id: orgA,
+        p_definition: definition, p_settings: { name: title } }).throwOnError();
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['message.period.exists'],
+        p_expected_revision: 0 }).throwOnError();
+      const publication = await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1, p_definition: definition,
+        p_settings: { name: title }, p_required_fields: ['message.period.exists'] });
+      expect(publication.error).toBeNull();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      const params = { supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: publication.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} };
+      expect(await executeWorkflow(params)).toMatchObject({ success: true, status: 'paused' });
+      const paused = await service.from('workflow_executions').select(
+        'status,current_node_id,next_run_at,loop_counters,context,guided_condition_retry_node_id,guided_condition_retry_count,guided_condition_retry_error',
+      ).eq('id', executionId).single();
+      expect(paused.error).toBeNull();
+      expect(paused.data).toMatchObject({ status: 'running', current_node_id: 'condition',
+        guided_condition_retry_node_id: 'condition', guided_condition_retry_count: 1,
+        guided_condition_retry_error: 'history_sync_in_progress' });
+      expect(Date.parse(paused.data!.next_run_at)).toBeGreaterThan(Date.now());
+      expect((await service.from('workflow_executions').update({ guided_condition_retry_count: 4 })
+        .eq('id', executionId)).error?.code).toBe('23514');
+      const firstSteps = await service.from('workflow_execution_steps').select('node_id,status,error,output_data')
+        .eq('execution_id', executionId).order('executed_at').order('id');
+      expect(firstSteps.error).toBeNull();
+      expect(firstSteps.data?.map(step => step.node_id)).toEqual(['t', 'action', 'condition']);
+      expect(firstSteps.data?.[2]).toMatchObject({ status: 'failed', error: 'history_sync_in_progress',
+        output_data: { retry_scheduled: true, retry_attempt: 1, max_retries: 3 } });
+
+      await service.from('whatsapp_messages').insert({ id: messageId, organization_id: orgA, instance_id: box,
+        message_id: `guided-retry-${messageId}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000',
+        normalized_phone: '5511999990000', direction: 'incoming', status: 'received', message_type: 'text',
+        content: 'chegou durante a sincronização', timestamp: '2026-09-04T12:00:00Z' }).throwOnError();
+      await service.from('conversation_history_coverage').update({ state: 'complete', gap_reason: null })
+        .eq('organization_id', orgA).eq('box_id', box).eq('participant_id', '5511999990000').throwOnError();
+      await service.from('workflow_executions').update({ next_run_at: new Date(Date.now() - 60_000).toISOString() })
+        .eq('id', executionId).throwOnError();
+      const claimed = await service.rpc('claim_workflow_executions', { batch_size: 1, per_org_cap: 1000 });
+      expect(claimed.error).toBeNull();
+      const retryExecution = (claimed.data as Array<Record<string, unknown>>).find(row => row.id === executionId);
+      expect(retryExecution).toMatchObject({ status: 'processing', current_node_id: 'condition',
+        guided_condition_retry_count: 1, guided_condition_retry_error: 'history_sync_in_progress' });
+      expect(await executeWorkflow({ ...params, currentNodeId: retryExecution!.current_node_id as string,
+        loopCounters: retryExecution!.loop_counters as Record<string, number>,
+        context: retryExecution!.context as Record<string, unknown> })).toMatchObject({ success: true, status: 'completed' });
+
+      const tasks = await service.from('follow_ups').select('id').eq('organization_id', orgA).eq('lead_id', leadA).eq('title', title);
+      expect(tasks.error).toBeNull();
+      expect(tasks.data).toHaveLength(1);
+      const completed = await service.from('workflow_executions').select(
+        'status,error,guided_condition_retry_node_id,guided_condition_retry_count,guided_condition_retry_error',
+      ).eq('id', executionId).single();
+      expect(completed.data).toEqual({ status: 'completed', error: null, guided_condition_retry_node_id: null,
+        guided_condition_retry_count: 0, guided_condition_retry_error: null });
+      const finalSteps = await service.from('workflow_execution_steps').select('node_id,status').eq('execution_id', executionId)
+        .order('executed_at').order('id');
+      expect(finalSteps.data?.map(step => step.node_id)).toEqual(['t', 'action', 'condition', 'condition', 'yes']);
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('whatsapp_instances').delete().eq('id', box);
+    }
+  }, 60000);
+
   it('anchors unanswered time on the first sent message and lets the opposite side end the sequence', async () => {
     const box = crypto.randomUUID(), workflowId = crypto.randomUUID();
     const ids = Array.from({ length: 7 }, () => crypto.randomUUID());

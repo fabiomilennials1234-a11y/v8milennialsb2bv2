@@ -701,3 +701,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Sem sequência ativa retorna espera não iniciada, com valor e âncora nulos. Cobertura incompleta bloqueia decisão. Resultado expõe instante/direção/identidade técnica da âncora, nunca conteúdo.
 - Editor usa seletores para conversa, lado, operador e unidade. Grant organizacional exato: `message.waiting.elapsed`.
 - Migration 50 aditiva e rollback incluídos. Preview somente; produção e worker permanecem intocados.
+
+## 2026-09-10 — retry temporário da condição
+
+- Condições guiadas retomam somente `temporarily_unavailable` e `history_sync_in_progress`. Falhas permanentes continuam terminais.
+- Política fechada: três retries em 30s, 90s e 270s. Usa `running + next_run_at`, já consumido por `claim_workflow_executions`; não cria fila ou status paralelo.
+- Estado fica em três colunas protegidas por constraint na execução. Resume processa o mesmo node sem incrementar loop e sem repetir nodes anteriores. Sucesso limpa retry antes de selecionar Sim/Não; esgotamento persiste `guided_condition_retry_exhausted:<code>`.
+- Teste real cria um follow-up antes da condição, recebe `history_sync_in_progress`, altera cobertura e mensagem, reclama a execução pela RPC real e conclui no ramo Sim com um único follow-up.
+- Migration 51 aditiva e rollback ensaiado. Preview somente; `process-workflow-executions`, `reprocess-job`, worker e produção não foram implantados.

@@ -132,6 +132,22 @@ const STALE_RESUME_MAX_MS = 24 * 60 * 60_000;
 const JITTER_SPREAD_MS = 30 * 60_000;
 
 /**
+ * A falha inicial pode agendar no máximo três novas avaliações. Os mesmos
+ * 30s × 3 usados por action nodes mantêm a execução no contrato atual do
+ * worker: status running + next_run_at, reclamada pela RPC existente.
+ */
+export const GUIDED_CONDITION_RETRY_DELAYS_MS = [30_000, 90_000, 270_000] as const;
+const GUIDED_CONDITION_RETRYABLE_ERRORS = new Set([
+  "temporarily_unavailable",
+  "history_sync_in_progress",
+]);
+
+export function guidedConditionRetryDelayMs(error: string, retriesScheduled: number): number | null {
+  if (!GUIDED_CONDITION_RETRYABLE_ERRORS.has(error)) return null;
+  return GUIDED_CONDITION_RETRY_DELAYS_MS[retriesScheduled] ?? null;
+}
+
+/**
  * Hash determinístico (FNV-1a 32-bit) do executionId.
  *
  * Determinístico é o requisito, não a distribuição: a MESMA execução, se for
@@ -168,12 +184,19 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
   let definition = currentDefinition;
   let loopLimit = currentLoopLimit;
+  let guidedConditionRetryNodeId: string | null = null;
+  let guidedConditionRetryCount = 0;
   if (params.guidedVersionId) {
-    const execution = await supabase.from('workflow_executions').select('guided_version_id')
+    const execution = await supabase.from('workflow_executions')
+      .select('guided_version_id, guided_condition_retry_node_id, guided_condition_retry_count')
       .eq('id', executionId).eq('workflow_id', workflowId).eq('organization_id', organizationId).maybeSingle();
     if (execution.error || execution.data?.guided_version_id !== params.guidedVersionId) {
       return { success: false, status: 'failed', error: 'execution_version_unavailable', stepsExecuted: 0 };
     }
+    guidedConditionRetryNodeId = typeof execution.data.guided_condition_retry_node_id === 'string'
+      ? execution.data.guided_condition_retry_node_id : null;
+    guidedConditionRetryCount = Number.isInteger(execution.data.guided_condition_retry_count)
+      ? Math.max(0, Number(execution.data.guided_condition_retry_count)) : 0;
     const version = await supabase.from('workflow_guided_versions').select('definition, settings')
       .eq('id', params.guidedVersionId).eq('workflow_id', workflowId).eq('organization_id', organizationId).maybeSingle();
     if (version.error || !version.data || !Array.isArray(version.data.definition?.nodes) || !Array.isArray(version.data.definition?.edges)) {
@@ -261,8 +284,11 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       (node.type === "condition" && (node.data.conditionMode as string) === "time_window") ||
       node.type === "wait_business_window"
     ) && params.currentNodeId === nodeId;
+    const isGuidedConditionRetryResume = node.type === "condition" && Boolean(params.guidedVersionId)
+      && params.currentNodeId === nodeId && guidedConditionRetryNodeId === nodeId
+      && guidedConditionRetryCount > 0;
 
-    if (!isTimeWindowResume) {
+    if (!isTimeWindowResume && !isGuidedConditionRetryResume) {
       loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
       if (loopCounters[nodeId] > loopLimit) {
         await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
@@ -420,9 +446,68 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
               authorization: { kind: 'organization', workflowId },
             });
             if (evaluated.status === 'error') {
-              await recordStep(supabase, executionId, node, 'failed', undefined, undefined, evaluated.code);
-              await updateExecution(supabase, executionId, 'failed', nodeId, loopCounters, evaluated.code);
-              return { success: false, status: 'failed', error: evaluated.code, stepsExecuted };
+              const retriesScheduled = guidedConditionRetryNodeId === nodeId ? guidedConditionRetryCount : 0;
+              const retryDelayMs = guidedConditionRetryDelayMs(evaluated.code, retriesScheduled);
+              if (retryDelayMs !== null) {
+                const nextRunAt = new Date(Date.now() + retryDelayMs).toISOString();
+                const nextRetryCount = guidedConditionRetryCount + 1;
+                const scheduled = await supabase.from('workflow_executions').update({
+                  status: 'running', current_node_id: nodeId, next_run_at: nextRunAt,
+                  loop_counters: loopCounters, context: { ...context }, error: null,
+                  guided_condition_retry_node_id: nodeId,
+                  guided_condition_retry_count: nextRetryCount,
+                  guided_condition_retry_error: evaluated.code,
+                }).eq('id', executionId);
+                if (scheduled.error) {
+                  const persistError = 'guided_condition_retry_state_persist_failed';
+                  await recordStep(supabase, executionId, node, 'failed', undefined, undefined, persistError);
+                  await updateExecution(supabase, executionId, 'failed', nodeId, loopCounters, persistError);
+                  return { success: false, status: 'failed', error: persistError, stepsExecuted };
+                }
+                guidedConditionRetryNodeId = nodeId;
+                guidedConditionRetryCount = nextRetryCount;
+                await recordStep(supabase, executionId, node, 'failed', undefined, {
+                  retry_scheduled: true, retry_attempt: nextRetryCount,
+                  max_retries: GUIDED_CONDITION_RETRY_DELAYS_MS.length,
+                  next_run_at: nextRunAt,
+                }, evaluated.code);
+                return { success: true, status: 'paused', stepsExecuted };
+              }
+
+              const retryable = GUIDED_CONDITION_RETRYABLE_ERRORS.has(evaluated.code);
+              const terminalError = retryable
+                ? `guided_condition_retry_exhausted:${evaluated.code}` : evaluated.code;
+              await recordStep(supabase, executionId, node, 'failed', undefined,
+                retryable ? { retry_exhausted: true, retries: retriesScheduled } : undefined,
+                terminalError);
+              await updateExecution(supabase, executionId, 'failed', nodeId, loopCounters, terminalError,
+                retryable ? {
+                  guided_condition_retry_node_id: nodeId,
+                  guided_condition_retry_count: retriesScheduled,
+                  guided_condition_retry_error: evaluated.code,
+                } : {
+                  guided_condition_retry_node_id: null,
+                  guided_condition_retry_count: 0,
+                  guided_condition_retry_error: null,
+                });
+              return { success: false, status: 'failed', error: terminalError, stepsExecuted };
+            }
+            if (guidedConditionRetryNodeId === nodeId) {
+              const reset = await supabase.from('workflow_executions').update({
+                guided_condition_retry_node_id: null,
+                guided_condition_retry_count: 0,
+                guided_condition_retry_error: null,
+                next_run_at: null,
+                error: null,
+              }).eq('id', executionId);
+              if (reset.error) {
+                const persistError = 'guided_condition_retry_state_persist_failed';
+                await recordStep(supabase, executionId, node, 'failed', undefined, undefined, persistError);
+                await updateExecution(supabase, executionId, 'failed', nodeId, loopCounters, persistError);
+                return { success: false, status: 'failed', error: persistError, stepsExecuted };
+              }
+              guidedConditionRetryNodeId = null;
+              guidedConditionRetryCount = 0;
             }
             const handle = evaluated.matched ? 'yes' : 'no';
             await recordStep(supabase, executionId, node, 'success', undefined,

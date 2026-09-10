@@ -230,6 +230,18 @@ function decimalIdentity(value: string): string {
   return `${negative ? '-' : ''}${significant}e${Number(exponent) - fraction.length + digits.length - significant.length}`;
 }
 
+type GuidedSourceErrorCode = 'context_unavailable' | 'reference_unavailable' | 'access_denied'
+  | 'temporarily_unavailable' | 'source_unavailable';
+
+function classifyGuidedSourceError(error: { code?: string }, status: number): GuidedSourceErrorCode {
+  if (error.code === 'PT404') return 'context_unavailable';
+  if (error.code === 'PT422') return 'reference_unavailable';
+  if (status === 401 || status === 403 || error.code === '42501') return 'access_denied';
+  if (status === 0 || status === 429 || status >= 500
+    || ['57014', '40001', '40P01', '53300', '57P01'].includes(error.code ?? '')) return 'temporarily_unavailable';
+  return 'source_unavailable';
+}
+
 /** Evaluate with a caller-scoped client. Never pass a service-role client for
  * a personal test: PostgreSQL enforces that caller's current record access.
  * Organization is resolved by the authenticated server boundary. Organizational
@@ -345,17 +357,7 @@ export async function evaluateGuidedCondition(
       .is('deleted_at', null)
       .maybeSingle();
   if (error) {
-    if (error.code === 'PT404') return { status: 'error' as const, code: 'context_unavailable' as const };
-    if (error.code === 'PT422') return { status: 'error' as const, code: 'reference_unavailable' as const };
-    if (status === 401 || status === 403 || error.code === '42501') {
-      return { status: 'error' as const, code: 'access_denied' as const };
-    }
-    const temporary = status === 0 || status === 429 || status >= 500
-      || ['57014', '40001', '40P01', '53300', '57P01'].includes(error.code);
-    return {
-      status: 'error' as const,
-      code: temporary ? 'temporarily_unavailable' as const : 'source_unavailable' as const,
-    };
+    return { status: 'error' as const, code: classifyGuidedSourceError(error, status) };
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   type BusinessStageData = {
@@ -376,11 +378,7 @@ export async function evaluateGuidedCondition(
       p_references: [...businessStageReferences.values()],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const payload = response.data as unknown;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { status: 'error' as const, code: 'source_unavailable' as const };
@@ -415,11 +413,7 @@ export async function evaluateGuidedCondition(
       p_stage_references: [...businessExistenceStageReferences.values()],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     if (!Array.isArray(response.data) || response.data.some(candidate => !candidate || typeof candidate.id !== 'string'
       || (candidate.pipeline_id !== null && typeof candidate.pipeline_id !== 'string')
@@ -442,10 +436,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId,
     });
     if (response.error) {
-      const code = response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     if (!Array.isArray(response.data) || response.data.length > 1) return { status: 'error' as const, code: 'source_unavailable' as const };
     if (response.data.length) {
@@ -487,11 +478,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_locator: locator,
     });
     if (response.error) {
-      const code = response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const candidate = response.data as TriggerMessage | null;
     if (!candidate) return { status: 'error' as const, code: 'context_unavailable' as const };
@@ -528,10 +515,7 @@ export async function evaluateGuidedCondition(
         p_conversation: conversation, p_from: rule.from, p_to: rule.to,
       });
       if (response.error) {
-        const code = response.error.code === 'PT404' ? 'context_unavailable' as const
-          : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-          : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-        return { status: 'error' as const, code };
+        return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
       }
       const candidate = response.data as MessagePeriodData | null;
       if (!candidate || !['complete', 'in_progress', 'gapped'].includes(candidate.coverage_status)
@@ -560,10 +544,7 @@ export async function evaluateGuidedCondition(
         p_source: rule.source, p_expressions: rule.expressions, p_match_mode: rule.matchMode, p_expression_match: rule.expressionMatch,
       });
       if (response.error) {
-        const code = response.error.code==='PT404' ? 'context_unavailable' as const
-          : response.error.code==='42501' || response.status===401 || response.status===403 ? 'access_denied' as const
-          : response.status>=500 || response.status===0 || response.status===429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-        return { status: 'error' as const, code };
+        return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
       }
       const candidate=response.data as MessageSearchData|null;
       if (!candidate || !['complete','in_progress','gapped'].includes(candidate.coverage_status)
@@ -594,10 +575,7 @@ export async function evaluateGuidedCondition(
         p_waiting_for: rule.waitingFor,
       });
       if (response.error) {
-        const code = response.error.code === 'PT404' ? 'context_unavailable' as const
-          : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-          : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-        return { status: 'error' as const, code };
+        return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
       }
       const candidate = response.data as MessageWaitingData | null;
       if (!candidate || typeof candidate.waiting !== 'boolean' || !['complete', 'in_progress', 'gapped'].includes(candidate.coverage_status)
@@ -623,11 +601,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_field_ids: [...customIds],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const rows: unknown = response.data;
     if (!Array.isArray(rows)) return { status: 'error' as const, code: 'source_unavailable' as const };
@@ -687,11 +661,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_tag_ids: [...tagIds],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const rows: unknown = response.data;
     if (!Array.isArray(rows)) return { status: 'error' as const, code: 'source_unavailable' as const };
@@ -714,11 +684,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_origin_ids: [...originIds],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const rows = response.data;
     if (!Array.isArray(rows) || rows.length !== 1 || !rows[0]
@@ -744,11 +710,7 @@ export async function evaluateGuidedCondition(
       p_fields: responsibleFields, p_member_ids: [...memberIds],
     });
     if (response.error) {
-      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
-        : response.error.code === 'PT404' ? 'context_unavailable' as const
-        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
-        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
-      return { status: 'error' as const, code };
+      return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
     }
     const rows = response.data;
     if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || !Array.isArray(rows[0].members)

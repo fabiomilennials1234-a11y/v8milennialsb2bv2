@@ -149,6 +149,9 @@ const messageSearchRollback = readFileSync(`supabase/migrations/rollback/${messa
 const messageWaitingMigration = '20271017000050_guided_message_waiting_elapsed.sql';
 const messageWaitingForward = readFileSync(`supabase/migrations/${messageWaitingMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const messageWaitingRollback = readFileSync(`supabase/migrations/rollback/${messageWaitingMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const conditionRetryMigration = '20271017000051_guided_condition_retry_state.sql';
+const conditionRetryForward = readFileSync(`supabase/migrations/${conditionRetryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const conditionRetryRollback = readFileSync(`supabase/migrations/rollback/${conditionRetryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -180,6 +183,20 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+UPDATE public.workflow_executions SET status='running', current_node_id='condition-retry',
+  guided_condition_retry_node_id='condition-retry',
+  guided_condition_retry_count=2, guided_condition_retry_error='history_sync_in_progress'
+  WHERE workflow_id=(SELECT workflow_id FROM guided_rollback_fixture);
+${conditionRetryRollback}
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workflow_executions'
+    AND column_name IN ('guided_condition_retry_node_id','guided_condition_retry_count','guided_condition_retry_error')) THEN
+    RAISE EXCEPTION 'guided-condition retry rollback left state columns';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)) THEN
+    RAISE EXCEPTION 'guided-condition retry rollback removed execution';
+  END IF;
+END $$;
 ${messageWaitingRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_message_waiting(uuid,uuid,jsonb,text)') IS NOT NULL
@@ -482,6 +499,18 @@ ${messageCandidatesForward}
 ${messageCoverageForward}
 ${messageSearchForward}
 ${messageWaitingForward}
+${conditionRetryForward}
+DO $$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='workflow_executions'
+    AND column_name IN ('guided_condition_retry_node_id','guided_condition_retry_count','guided_condition_retry_error')) <> 3
+    OR NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='workflow_executions_guided_condition_retry_state_check'
+      AND conrelid='public.workflow_executions'::regclass)
+    OR NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)
+      WHERE e.guided_condition_retry_node_id IS NULL AND e.guided_condition_retry_count=0
+        AND e.guided_condition_retry_error IS NULL) THEN
+    RAISE EXCEPTION 'guided-condition retry state not restored safely';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_message_waiting(uuid,uuid,jsonb,text)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_message_waiting(uuid,uuid,jsonb,text)', 'EXECUTE')

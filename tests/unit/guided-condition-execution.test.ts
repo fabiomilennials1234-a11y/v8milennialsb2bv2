@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import '../helpers/deno-mock';
 import { createClient } from '@supabase/supabase-js';
-import { executeWorkflow } from '../../supabase/functions/_shared/workflow-executor';
+import { executeWorkflow, guidedConditionRetryDelayMs } from '../../supabase/functions/_shared/workflow-executor';
 
 describe('guided workflow execution', () => {
   it('rejects an unpublished guided draft before reaching an action or selecting a branch', async () => {
@@ -32,6 +32,106 @@ describe('guided workflow execution', () => {
     });
     expect(result).toEqual({ success: false, status: 'failed', error: 'guided_publication_required', stepsExecuted: 0 });
   });
+});
+
+it('limits retryable condition errors to the documented increasing intervals', () => {
+  expect([0, 1, 2, 3].map(attempt => guidedConditionRetryDelayMs('temporarily_unavailable', attempt)))
+    .toEqual([30_000, 90_000, 270_000, null]);
+  expect([0, 1, 2, 3].map(attempt => guidedConditionRetryDelayMs('history_sync_in_progress', attempt)))
+    .toEqual([30_000, 90_000, 270_000, null]);
+  for (const terminal of ['reference_unavailable', 'invalid_configuration', 'access_denied', 'history_insufficient',
+    'context_unavailable', 'source_unavailable', 'message_text_unavailable']) {
+    expect(guidedConditionRetryDelayMs(terminal, 0)).toBeNull();
+  }
+});
+
+it('schedules a bounded retry on a temporary guided-condition failure without choosing a branch', async () => {
+  const updates: Record<string, unknown>[] = [];
+  const steps: Array<Record<string, unknown>> = [];
+  const database = createClient('https://db.example.test', 'test-service-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/rest/v1/workflow_execution_steps' && init?.method === 'POST') {
+        steps.push(JSON.parse(String(init.body)));
+        return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+      }
+      if (path === '/rest/v1/workflow_executions' && init?.method === 'PATCH') {
+        updates.push(JSON.parse(String(init.body)));
+        return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+      }
+      if (path === '/rest/v1/workflow_executions') return new Response(JSON.stringify({
+        guided_version_id: 'version-1', guided_condition_retry_node_id: null,
+        guided_condition_retry_count: 0, guided_condition_retry_error: null,
+      }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/workflow_guided_versions') return new Response(JSON.stringify({ settings: {}, definition: {
+        nodes: [{ id: 't', type: 'trigger', data: {} }, { id: 'c', type: 'condition', data: {
+          guidedCondition: { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' },
+        } }, { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} }],
+        edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+          { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }],
+      } }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/rpc/read_guided_condition_lead') return new Response(JSON.stringify({
+        code: '57014', message: 'statement timeout', details: null, hint: null,
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  const before = Date.now();
+  const result = await executeWorkflow({ supabase: database, executionId: 'execution-1', workflowId: 'workflow-1',
+    organizationId: 'org-1', leadId: 'lead-1', guidedVersionId: 'version-1', loopLimit: 20, context: {},
+    definition: { nodes: [], edges: [] },
+  });
+  expect(result).toMatchObject({ success: true, status: 'paused', stepsExecuted: 1 });
+  expect(steps.map(step => step.node_id)).toEqual(['t', 'c']);
+  expect(steps[1]).toMatchObject({ status: 'failed', error: 'temporarily_unavailable', output_data: {
+    retry_scheduled: true, retry_attempt: 1, max_retries: 3,
+  } });
+  expect(steps.some(step => step.node_id === 'yes' || step.node_id === 'no')).toBe(false);
+  const scheduled = updates.find(update => update.guided_condition_retry_count === 1);
+  expect(scheduled).toMatchObject({ status: 'running', current_node_id: 'c', guided_condition_retry_node_id: 'c',
+    guided_condition_retry_count: 1, guided_condition_retry_error: 'temporarily_unavailable', error: null,
+  });
+  expect(Date.parse(String(scheduled?.next_run_at)) - before).toBeGreaterThanOrEqual(30_000);
+  expect(Date.parse(String(scheduled?.next_run_at)) - Date.now()).toBeLessThanOrEqual(30_000);
+});
+
+it('fails visibly after exhausting guided-condition retries', async () => {
+  const updates: Record<string, unknown>[] = [];
+  const database = createClient('https://db.example.test', 'test-service-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/rest/v1/workflow_executions' && init?.method === 'PATCH') {
+        updates.push(JSON.parse(String(init.body)));
+        return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+      }
+      if (path === '/rest/v1/workflow_executions') return new Response(JSON.stringify({
+        guided_version_id: 'version-1', guided_condition_retry_node_id: 'c',
+        guided_condition_retry_count: 3, guided_condition_retry_error: 'history_sync_in_progress',
+      }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/workflow_guided_versions') return new Response(JSON.stringify({ settings: {}, definition: {
+        nodes: [{ id: 't', type: 'trigger', data: {} }, { id: 'c', type: 'condition', data: {
+          guidedCondition: { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' },
+        } }, { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} }],
+        edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+          { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }],
+      } }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/rpc/read_guided_condition_lead') return new Response(JSON.stringify({
+        code: '57014', message: 'statement timeout', details: null, hint: null,
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  const result = await executeWorkflow({ supabase: database, executionId: 'execution-1', workflowId: 'workflow-1',
+    organizationId: 'org-1', leadId: 'lead-1', guidedVersionId: 'version-1', loopLimit: 1, context: {}, currentNodeId: 'c',
+    loopCounters: { c: 1 }, definition: { nodes: [], edges: [] },
+  });
+  expect(result).toEqual({ success: false, status: 'failed',
+    error: 'guided_condition_retry_exhausted:temporarily_unavailable', stepsExecuted: 1 });
+  expect(updates).toContainEqual(expect.objectContaining({ status: 'failed', current_node_id: 'c',
+    error: 'guided_condition_retry_exhausted:temporarily_unavailable', guided_condition_retry_count: 3,
+  }));
 });
 
 it('uses the execution snapshot when current workflow rules no longer contain its wait', async () => {
