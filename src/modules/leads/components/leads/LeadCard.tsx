@@ -26,6 +26,7 @@ import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCompact } from "./card/LeadCardCompact";
+import { DealLostMenuItem } from "./card/DealLostMenuItem";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
@@ -593,9 +594,13 @@ export const LeadCard = memo(function LeadCard({
           troquei por um fallback com selo porque a ficha também não teria o
           que mostrar — seria mandar o usuário a lugar nenhum. */}
       {pipeOps && <AddToFunilMenuItem pipeOps={pipeOps} onSelect={() => setAddFunilOpen(true)} />}
-      <DropdownMenuItem onClick={abrirFicha}>
-        <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
-      </DropdownMenuItem>
+      {lead.leadId && lead.pipelineId ? (
+        <DealLostMenuItem entryId={lead.id} />
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
+        </DropdownMenuItem>
+      )}
       {onRemove ? (
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
