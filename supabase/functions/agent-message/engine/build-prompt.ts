@@ -642,9 +642,12 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
       }
     } else {
       // Compatibilidade para callers antigos que ainda não enviam funnel_positions.
-      if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
-      if (leadData.confirmacao_status) sections.push(`- Etapa no funil Confirmação: ${leadData.confirmacao_status}`);
-      if (leadData.propostas_status) sections.push(`- Etapa no funil Propostas: ${leadData.propostas_status}`);
+      // Callers legados não informam a identidade canônica do funil. Nestes
+      // casos descrevemos o papel do dado sem inventar um nome que a org pode
+      // ter alterado.
+      if (leadData.whatsapp_status) sections.push(`- Etapa de entrada: ${leadData.whatsapp_status}`);
+      if (leadData.confirmacao_status) sections.push(`- Etapa de reunião: ${leadData.confirmacao_status}`);
+      if (leadData.propostas_status) sections.push(`- Etapa comercial: ${leadData.propostas_status}`);
     }
     if (leadData.confirmacao_status) {
       let confirmacaoInfo = "- Dados da reunião";

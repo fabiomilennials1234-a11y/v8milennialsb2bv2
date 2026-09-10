@@ -42,8 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDebounce } from "@/shared/hooks/useDebounce";
-import { usePipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
-import { nomeDoFunil } from "@/contracts/pipe";
+import { usePipelines } from "@/modules/pipelines";
 import { useLeadsPorFunil, useLeadById } from "@/modules/leads";
 import type { EntradaDoFunil, LeadDoFunil } from "@/modules/leads";
 
@@ -189,24 +188,7 @@ export function LeadPorFunilPicker({
     isLoading: carregandoFunis,
     isError: erroFunis,
   } = usePipelines();
-  const { data: displayConfig } = usePipelineDisplayConfig();
-
-  /**
-   * O NOME que a organização usa, que não é `pipelines.name`.
-   *
-   * A regra saiu daqui para `@/contracts/pipe` (`nomeDoFunil`) quando o
-   * cadastro de lead precisou dela e não podia importar `pipelines` —
-   * SCRUM-608. Era o único lugar do sistema que fazia o cruzamento certo, e
-   * copiar seria garantir divergência na primeira correção.
-   *
-   * O que continua sendo desta tela: só a ligação com a query.
-   */
-  const nomearFunil = useMemo(
-    () =>
-      (funil: { name: string; slug?: string; type?: string }) =>
-        nomeDoFunil(displayConfig, funil),
-    [displayConfig],
-  );
+  const nomearFunil = (funil: { name: string }) => funil.name;
 
   /**
    * `usePipelines` NÃO filtra `is_active` — funil arquivado continua vindo. E

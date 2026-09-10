@@ -1,34 +1,7 @@
 /**
- * O NOME de um funil, decidido num lugar só.
- *
- * ── POR QUE ESTE ARQUIVO EXISTE ───────────────────────────────────────────
- * O produto tem TRÊS fontes de nome de funil, e elas discordam:
- *
- *   1. `pipelines.name` — para funil de SISTEMA é o seed congelado de
- *      `create_default_pipelines()`: "Qualificação" / "Confirmação" /
- *      "Propostas". Ninguém vê esses nomes na navegação;
- *   2. `pipeline_display_config.display_name` — a CANÔNICA. Padrões de
- *      fábrica: "Oportunidades" / "Agendamentos" / "Orçamentos" / "Carteira".
- *      É o que a org renomeia e o que o hub de funis mostra;
- *   3. string cravada no JSX — que é como o cadastro de lead acabou
- *      oferecendo "Qualificação" para uma org cujo funil se chama
- *      "Oportunidades" (SCRUM-608).
- *
- * O cruzamento correto já existia, escrito UMA vez, dentro do
- * `LeadPorFunilPicker` da Agenda. Ficar lá significava que a segunda tela a
- * precisar dele copiaria — e cópia diverge na primeira correção. Extraído para
- * cá, sem React: são decisões sobre dados, e decisão sobre dados se testa
- * direto, sem montar árvore.
- *
- * Funil CUSTOM não entra nesta conversa: ali `pipelines.name` já é o nome que
- * o usuário deu, e é o que todas as telas mostram.
- *
- * ── POR QUE EM `contracts` E NÃO EM `pipelines` ───────────────────────────
- * Quem mais precisa disto é o cadastro de lead, que vive em `leads` — e
- * `leads` não pode importar `@/modules/pipelines` nem por deep-import (o
- * barrel arrasta o `PipeOpsProvider`; a regra de boundaries existe por isso).
- * `contracts` é a única camada que os dois enxergam. Continua folha do grafo:
- * só importa o próprio tipo vizinho.
+ * Compatibilidade dos antigos aliases de destino. O nome exibido de qualquer
+ * funil vem de `pipelines.name`; este arquivo mantém apenas traduções exigidas
+ * por payloads antigos enquanto eles migram para UUID.
  */
 
 import type { SystemPipeDisplay } from "./pipe-entities";
@@ -111,19 +84,19 @@ export interface DestinoDeSistema {
 }
 
 /**
- * O nome que a org usa para um funil qualquer.
+ * O nome que a organização escolheu para um funil.
  *
- * @param funil linha de `pipelines` (`type`/`slug`/`name`).
- * @returns `display_name` quando é funil de sistema com linha de display;
- *          senão `pipelines.name`, que é o certo para custom.
+ * Desde o ADR-0034, `pipelines` é o registro único e `pipelines.name` é o
+ * nome canônico de qualquer funil. `pipeline_display_config` sobrevive apenas
+ * como compatibilidade dos antigos seeds e não participa mais da exibição.
+ * O primeiro argumento permanece para não quebrar consumidores durante a
+ * retirada dessa compatibilidade.
  */
 export function nomeDoFunil(
-  configs: readonly SystemPipeDisplay[] | undefined,
+  _configs: readonly SystemPipeDisplay[] | undefined,
   funil: { name: string; slug?: string | null; type?: string | null },
 ): string {
-  if (funil.type !== "system" || !funil.slug) return funil.name;
-  const achado = (configs ?? []).find((c) => c.pipe_type === funil.slug);
-  return achado?.display_name ?? NOME_DE_FABRICA[funil.slug] ?? funil.name;
+  return funil.name;
 }
 
 /**
