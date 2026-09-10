@@ -30,6 +30,15 @@ vi.mock("../../hooks/useOraculoTurno", () => ({
   }),
 }));
 
+vi.mock("../../hooks/useOraculoFeedback", () => ({
+  useOraculoFeedback: () => ({
+    state: { conversation: null, responses: {} },
+    busyTarget: null,
+    submitResponse: vi.fn(),
+    submitConversation: vi.fn(),
+  }),
+}));
+
 beforeEach(() => {
   perguntar.mockClear();
   estado.mensagens = [];

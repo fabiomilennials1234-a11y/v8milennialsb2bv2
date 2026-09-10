@@ -47,7 +47,7 @@ function deps(
       loadConversation: () => Promise.resolve({ id: "c-1", summary: null, history: [] }),
       loadProfileContext: () => Promise.resolve(null),
       loadInterviewState: () => Promise.resolve({ askedKeys: [], questionCount: 0 }),
-      saveTurn: () => Promise.resolve(),
+      saveTurn: () => Promise.resolve("40000000-0000-4000-8000-000000000001"),
     },
     ...over,
   };

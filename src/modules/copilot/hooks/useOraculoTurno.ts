@@ -9,6 +9,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { recordOraculoSignal } from "./useOraculoFeedback";
 
 export interface OraculoResultadoAcao {
   status: "sucesso" | "aviso";
@@ -60,6 +61,7 @@ export interface OraculoMensagem {
 
 interface RespostaTurno {
   conversa_id: string;
+  turno_id: string;
   resposta: string;
   procedencia: string[];
   teto_de_ferramentas_atingido?: boolean;
@@ -115,7 +117,7 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
       setMensagens((anteriores) => [
         ...anteriores,
         {
-          id: crypto.randomUUID(),
+          id: data.turno_id,
           role: "assistant",
           content: data.resposta,
           procedencia: data.procedencia,
@@ -254,8 +256,16 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
 
   const executarProposta = useCallback((proposalId: string) => {
     if (actionMutation.isPending) return;
+    if (organizationId) {
+      void recordOraculoSignal({
+        organizationId,
+        event: "proposal_clicked",
+        conversationId: conversaId,
+        proposalId,
+      }).catch(() => undefined);
+    }
     actionMutation.mutate(proposalId);
-  }, [actionMutation]);
+  }, [actionMutation, conversaId, organizationId]);
 
   const responderPerguntaPerfil = useCallback((questionId: string, answer: string) => {
     if (!profileMutation.isPending) profileMutation.mutate({ questionId, answer, skip: false });

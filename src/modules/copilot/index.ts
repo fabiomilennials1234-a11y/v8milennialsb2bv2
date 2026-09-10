@@ -172,6 +172,8 @@ export { CopilotPlayground } from "./components/playground/CopilotPlayground";
 export { useOraculoTurno, type OraculoMensagem } from "./hooks/useOraculoTurno";
 export { OraculoPerfilSettings } from "./components/oraculo/OraculoPerfilSettings";
 export { useOraculoPerfil, type OraculoPerfilRow } from "./hooks/useOraculoPerfil";
+export { recordOraculoSignal, useOraculoFeedback } from "./hooks/useOraculoFeedback";
+export type { OraculoFeedbackReason, OraculoFeedbackValue } from "./hooks/useOraculoFeedback";
 // A conversa em coluna estreita. O painel da lateral a monta por caminho
 // fundo, com `lazy`, para não puxar este barril inteiro no pedaço da lateral.
 export { OraculoConversa } from "./components/oraculo/OraculoConversa";

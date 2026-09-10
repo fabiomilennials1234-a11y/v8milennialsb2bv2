@@ -15,7 +15,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
+import { useOraculoFeedback } from "../../hooks/useOraculoFeedback";
 import { useOraculoTurno } from "../../hooks/useOraculoTurno";
+import { OraculoFeedbackControl } from "./OraculoFeedbackControl";
 import { OraculoPropostaCard } from "./OraculoPropostaCard";
 import { OraculoPerfilPerguntaCard } from "./OraculoPerfilPerguntaCard";
 
@@ -28,6 +30,7 @@ export function OraculoConversa() {
   const [rascunho, setRascunho] = useState("");
   const { organizationId } = useOrganization();
   const oraculo = useOraculoTurno(organizationId);
+  const feedback = useOraculoFeedback(organizationId, oraculo.conversaId);
 
   const enviar = () => {
     const texto = rascunho.trim();
@@ -98,6 +101,14 @@ export function OraculoConversa() {
                     busy={oraculo.salvandoPerguntaPerfilId === question.id}
                   />
                 ))}
+                {m.role === "assistant" && (
+                  <OraculoFeedbackControl
+                    label="esta resposta"
+                    value={feedback.state.responses[m.id]}
+                    busy={feedback.busyTarget === m.id}
+                    onSubmit={(value) => feedback.submitResponse(m.id, value)}
+                  />
+                )}
               </div>
             </div>
           ))}
@@ -118,6 +129,17 @@ export function OraculoConversa() {
       </ScrollArea>
 
       <div className="border-t border-border p-3">
+        {oraculo.conversaId && (
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-[11px] text-muted-foreground">Esta conversa ajudou?</span>
+            <OraculoFeedbackControl
+              label="esta conversa"
+              value={feedback.state.conversation}
+              busy={feedback.busyTarget === oraculo.conversaId}
+              onSubmit={feedback.submitConversation}
+            />
+          </div>
+        )}
         {oraculo.restantesHoje !== null && (
           <p className="mb-2 text-[11px] tabular-nums text-muted-foreground">
             {oraculo.restantesHoje} perguntas hoje

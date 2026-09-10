@@ -17,9 +17,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useOraculoTurno } from "../hooks/useOraculoTurno";
+import { useOraculoFeedback } from "../hooks/useOraculoFeedback";
 import { useOraculoConversas, useOraculoTurnos } from "../hooks/useOraculoConversas";
 import { OraculoPropostaCard } from "../components/oraculo/OraculoPropostaCard";
 import { OraculoPerfilPerguntaCard } from "../components/oraculo/OraculoPerfilPerguntaCard";
+import { OraculoFeedbackControl } from "../components/oraculo/OraculoFeedbackControl";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -37,6 +39,7 @@ export default function Oraculo() {
 function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; organizationId: string }) {
   const [rascunho, setRascunho] = useState("");
   const oraculo = useOraculoTurno(organizationId);
+  const feedback = useOraculoFeedback(organizationId, oraculo.conversaId);
   const { data: conversas } = useOraculoConversas(userId, organizationId);
   const historico = useOraculoTurnos(oraculo.conversaId, userId, organizationId);
 
@@ -101,6 +104,14 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
               {oraculo.restantesHoje} perguntas hoje
             </span>
           )}
+          {oraculo.conversaId && (
+            <OraculoFeedbackControl
+              label="esta conversa"
+              value={feedback.state.conversation}
+              busy={feedback.busyTarget === oraculo.conversaId}
+              onSubmit={feedback.submitConversation}
+            />
+          )}
         </header>
 
         <ScrollArea className="flex-1 px-6">
@@ -162,6 +173,14 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
                       busy={oraculo.salvandoPerguntaPerfilId === question.id}
                     />
                   ))}
+                  {m.role === "assistant" && (
+                    <OraculoFeedbackControl
+                      label="esta resposta"
+                      value={feedback.state.responses[m.id]}
+                      busy={feedback.busyTarget === m.id}
+                      onSubmit={(value) => feedback.submitResponse(m.id, value)}
+                    />
+                  )}
                 </div>
               </div>
             ))}

@@ -146,12 +146,12 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
       pergunta: string;
       resultado: TurnResult;
       summary?: string | null;
-    }): Promise<void> {
+    }): Promise<string> {
       // Evidência crua pode conter linhas de CRM. Só perguntas derivadas e
       // agregados necessários atravessam a fronteira de persistência.
       const persistableResult = { ...args.resultado };
       delete (persistableResult as Partial<TurnResult>).toolEvidence;
-      const { error } = await db.rpc("oraculo_save_turn", {
+      const { data, error } = await db.rpc("oraculo_save_turn", {
         p_conversation_id: args.conversation.id,
         p_organization_id: args.actor.organizationId,
         p_user_id: args.actor.userId,
@@ -159,9 +159,12 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
         p_question: args.pergunta,
         p_result: persistableResult,
         p_summary: args.summary ?? args.conversation.summary,
+        p_tool_trace: args.resultado.toolEvidence,
       });
       if (error?.code === "40001" || error?.code === "PT409") throw new TurnConflictError();
       if (error) throw new Error("Não foi possível salvar o turno do Oráculo.");
+      if (typeof data !== "string") throw new Error("O turno do Oráculo não retornou identidade.");
+      return data;
     },
   };
 }

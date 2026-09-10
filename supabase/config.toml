@@ -115,6 +115,14 @@ verify_jwt = false
 [functions.oraculo-profile]
 verify_jwt = false
 
+# oraculo-feedback: JWT + plano dentro; leitura global exige Master pleno.
+[functions.oraculo-feedback]
+verify_jwt = false
+
+# oraculo-feedback-worker: outbox imediato + resumo semanal via x-cron-secret.
+[functions.oraculo-feedback-worker]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 

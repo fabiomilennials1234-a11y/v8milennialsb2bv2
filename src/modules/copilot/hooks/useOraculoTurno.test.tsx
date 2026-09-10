@@ -11,7 +11,7 @@ let actionRequests: Record<string, unknown>[];
 let profileRequests: Record<string, unknown>[];
 let reply: () => Response | Promise<Response>;
 let actionReply: () => Response | Promise<Response>;
-const success = () => Response.json({ conversa_id: 'c-1', resposta: 'Você fechou 3 vendas.',
+const success = () => Response.json({ conversa_id: 'c-1', turno_id: '50000000-0000-4000-8000-000000000001', resposta: 'Você fechou 3 vendas.',
   procedencia: ['metricas'], restantes_hoje: 24, propostas: [{
     kind: 'oraculo_action_proposal', id: '30000000-0000-4000-8000-000000000001',
     acao: 'adicionar_tag', criterio: { tipo: 'leads_parados', dias: 14 },
@@ -39,6 +39,7 @@ beforeEach(() => {
       profileRequests.push(await request.json());
       return Response.json({ status: 'answered' });
     }
+    if (request.url.endsWith('/functions/v1/oraculo-feedback')) return new Response(null, { status: 204 });
     if (!request.url.endsWith('/functions/v1/oraculo-turno')) throw new Error('Unexpected external request');
     requests.push(await request.json());
     return reply();

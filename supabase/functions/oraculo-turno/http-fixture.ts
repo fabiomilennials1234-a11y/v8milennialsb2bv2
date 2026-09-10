@@ -24,6 +24,7 @@ export class ExternalServices {
   };
   modelRequests: Row[] = [];
   savedTurnResults: Row[] = [];
+  savedToolTraces: Row[][] = [];
   features = { oraculo: true };
   failWrite: string | null = null;
   failRead: string | null = null;
@@ -65,6 +66,7 @@ export class ExternalServices {
     if (url.pathname === "/rest/v1/rpc/oraculo_save_turn") {
       const body = await req.json();
       this.savedTurnResults.push(body.p_result);
+      this.savedToolTraces.push(body.p_tool_trace);
       const conversation = this.tables.oraculo_conversations.find((row) =>
         row.id === body.p_conversation_id && row.organization_id === body.p_organization_id && row.user_id === body.p_user_id);
       if (!conversation) return Response.json({ code: "42501", message: "Conversa indisponível" }, { status: 403 });
@@ -74,12 +76,13 @@ export class ExternalServices {
       if (this.failWrite) return Response.json({ code: "08006", message: "storage unavailable" }, { status: 503 });
       const now = Math.max(Date.now(), Date.parse(String(conversation.last_message_at ?? 0)) + 2 || 0);
       const base = { conversation_id: conversation.id, organization_id: conversation.organization_id, user_id: conversation.user_id };
+      const assistantTurnId = crypto.randomUUID();
       this.tables.oraculo_turns.push(
         { ...base, id: crypto.randomUUID(), role: "user", content: body.p_question, created_at: new Date(now).toISOString() },
-        { ...base, id: crypto.randomUUID(), role: "assistant", content: body.p_result.text, latency_ms: body.p_result.telemetry.latencyMs, created_at: new Date(now + 1).toISOString() },
+        { ...base, id: assistantTurnId, role: "assistant", content: body.p_result.text, latency_ms: body.p_result.telemetry.latencyMs, created_at: new Date(now + 1).toISOString() },
       );
       Object.assign(conversation, { summary: body.p_summary, last_message_at: new Date(now + 1).toISOString() });
-      return new Response(null, { status: 204 });
+      return Response.json(assistantTurnId);
     }
     const table = url.pathname.replace("/rest/v1/", "");
     const rows = this.tables[table];

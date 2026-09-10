@@ -38,7 +38,7 @@ export interface TurnStore {
     pergunta: string;
     resultado: TurnResult;
     summary?: string | null;
-  }): Promise<void>;
+  }): Promise<string>;
 }
 
 export interface TurnDeps {
@@ -130,10 +130,17 @@ export async function handleTurn(
   resultado.telemetry.inputTokens += summaryTokens.input;
   resultado.telemetry.outputTokens += summaryTokens.output;
 
-  await deps.store.saveTurn({ conversation, actor, pergunta, resultado, summary });
+  const assistantTurnId = await deps.store.saveTurn({
+    conversation,
+    actor,
+    pergunta,
+    resultado,
+    summary,
+  });
 
   return json(200, {
     conversa_id: conversation.id,
+    turno_id: assistantTurnId,
     resposta: resultado.text,
     // A resposta diz de onde veio. Sem isso, "o Oráculo disse" não é auditável.
     procedencia: resultado.toolsUsed,

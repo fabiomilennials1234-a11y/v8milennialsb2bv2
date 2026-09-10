@@ -1,9 +1,11 @@
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { useNextBestActions, useDismissAction } from "@/modules/engagement";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { recordOraculoSignal } from "@/modules/copilot";
+import { useOrganization } from "@/modules/identity";
 
 const PRIORITY_STYLE = (priority: number) => {
   if (priority >= 8) return { tag: "P0", cls: "text-destructive bg-destructive/10" };
@@ -25,6 +27,18 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
   const dismiss = useDismissAction();
   const navigate = useNavigate();
   const orgFeatures = useOrgFeaturesOptional();
+  const { organizationId } = useOrganization();
+  const openingRecorded = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || !organizationId || openingRecorded.current) return;
+    if (orgFeatures && !orgFeatures.hasFeature("oraculo")) return;
+    openingRecorded.current = true;
+    void recordOraculoSignal({
+      organizationId,
+      event: "briefing_opened",
+    }).catch(() => undefined);
+  }, [isLoading, orgFeatures, organizationId]);
 
   // Plan gate — Oráculo é exclusivo do plano Torque Copilot.
   if (orgFeatures && !orgFeatures.hasFeature("oraculo")) return null;
