@@ -12,6 +12,8 @@ import { useLeadCustomFields, useLeadCustomFieldValues } from "../../hooks/useLe
 import { mergeDataMetrics } from "../../lib/data-metrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
+import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
+import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
 import type {
   LeadCardData,
   LeadCardDeal,
@@ -179,6 +181,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
   const { organizationId, teamMemberId, role } = useOrganization();
+  const cadastroErp = useCafeJurereCadastro(leadId, isOpen && !!lead && !!texto(lead as Linha, "erp_code") && (lead as Linha).cafe_jurere_erp_elegivel === true);
 
   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
@@ -420,11 +423,17 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
 
       negocios,
       nota: texto(l, "notes") ?? "",
-      campos,
+      campos: cadastroErp.data ? aplicarCadastroCafeJurere(campos, cadastroErp.data) : cadastroErp.isFetching || cadastroErp.isError ? [
+        ...campos,
+        { titulo: "Cadastro no ERP", campos: [{ chave: "erp_carregamento", rotulo: "Sincronização", valor: cadastroErp.isError ? "Não foi possível carregar os dados. Reabra o cartão para tentar novamente." : "Carregando dados do ERP…", somenteLeitura: true, origemErp: true }] },
+      ] : campos,
       historico,
     };
   }, [
     usaLeiDoErp,
+    cadastroErp.data,
+    cadastroErp.isFetching,
+    cadastroErp.isError,
     lead,
     dealsMap,
     produtosPorNegocio,
