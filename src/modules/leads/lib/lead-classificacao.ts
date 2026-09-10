@@ -22,6 +22,9 @@
  * As duas discordam quando ambas existiriam, e está medido: na Café Jurerê,
  * dos 5.442 leads com `classificacao='cliente'`, **exatamente 1** tem venda.
  * Por isso não convivem na mesma tela — quem escolhe é `useOrgUsaLeiDoErp`.
+ * Exceção opt-in da página Café Jurerê (2026-09-10): cadastro ERP é Cliente,
+ * perda sem ganho e sem cadastro é Perdido, demais Lead. A flag local da
+ * organização prevalece sobre as duas leis sem mudar o vocabulário gravável.
  */
 
 export const LEAD_CLASSIFICACOES = ["lead", "cliente", "indefinido"] as const;
@@ -61,12 +64,12 @@ export const LEAD_CLASSIFICACAO_CONFIG: Record<
 export const CLASSIFICACAO_TODAS = "all";
 
 /** O seletor da Relação não altera o vocabulário gravável da Lei do ERP. */
-export function leadClassificacaoOptions(usaLeiDoErp: boolean) {
+export function leadClassificacaoOptions(usaLeiDoErp: boolean, usaCadastroErpCafeJurere = false) {
   return [
     { value: CLASSIFICACAO_TODAS, label: "Todos" },
     { value: "lead", label: "Lead" },
     { value: "cliente", label: "Cliente" },
-    usaLeiDoErp
+    usaLeiDoErp && !usaCadastroErpCafeJurere
       ? { value: "indefinido", label: "Indefinido" }
       : { value: "perdido", label: "Perdido" },
   ];

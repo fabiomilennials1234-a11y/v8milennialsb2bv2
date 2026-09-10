@@ -105,6 +105,8 @@ import {
   type LeadClassificacao,
 } from "../lib/lead-classificacao";
 import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
+import { useClassificacaoCafeJurere } from "../hooks/useClassificacaoCafeJurere";
+import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
 import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
@@ -233,7 +235,9 @@ function LeadsInner() {
   const filterResponsible = filterState.filterResponsible ?? "all";
   // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
   // `??` o Select vira não-controlado no meio do uso.
-  const filterClassificacao = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
+  const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
   const setFilterClassificacao = (v: string) =>
     setFilterState((f) => ({ ...f, filterClassificacao: v }));
   // De onde vem a verdade sobre "é cliente?" nesta org: cadastro no ERP, para
@@ -336,9 +340,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -461,7 +465,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -476,7 +480,7 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible,
+    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
@@ -745,6 +749,8 @@ function LeadsInner() {
             lista eu estou" (direita). */}
         {/* A DIVISÃO LEAD × CLIENTE — este seletor, e só ele.
 
+            Piloto Café Jurerê: cadastro ERP = Cliente; sem cadastro, perda
+            sem ganho = Perdido (mesmo com aberto); demais = Lead.
             A fonte da verdade muda por organização; o controle, não:
               • org COM integração de ERP → a gaveta `leads.classificacao`,
                 onde `indefinido` faz sentido;
@@ -759,7 +765,7 @@ function LeadsInner() {
           className="sm:ml-auto"
           value={filterClassificacao}
           onValueChange={setFilterClassificacao}
-          options={leadClassificacaoOptions(usaLeiDoErp)}
+          options={leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere)}
         />
         <SavedViewsDropdown
           entityType="leads"
@@ -887,6 +893,7 @@ function LeadsInner() {
                     metrics={dataMetrics[lead.id]}
                     deals={leadDeals?.[lead.id]}
                     standing={standings[lead.id]}
+                    relacaoPorCadastroErp={usaCadastroErpCafeJurere}
                     ciclo={reorderCycles?.[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
@@ -913,7 +920,7 @@ function LeadsInner() {
                               Mover aqui marca `classificacao_manual`, e a lei do
                               ERP deixa de tocar neste lead: é o que impede a
                               escolha de sumir na sincronização das 06:00. */}
-                          {usaLeiDoErp && <DropdownMenuSub>
+                          {usaLeiDoErp && !usaCadastroErpCafeJurere && <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                               <Tag className="w-4 h-4 mr-2" />
                               Classificação
@@ -998,7 +1005,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
