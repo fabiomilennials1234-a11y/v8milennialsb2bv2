@@ -5,7 +5,7 @@
 Ao exportar Excel de qualquer kanban selecionado da Ventimais, incluir informações,
 observações, campos personalizados do lead e comentários. Funciona no kanban inteiro
 e na exportação de uma etapa ou seleção em lote. A seleção atual do kanban é por
-lead: todos os cards selecionados daquele lead no mesmo funil são exportados.
+lead: todos os cards dos leads selecionados nesse funil são exportados.
 Exclusivo da organização Ventimais, UUID
 `56b88e32-be6a-436e-b4e6-6e1293d21659`, com `organizations.feature_flags.kanban_export_details = true`.
 O UUID foi confirmado por consulta de leitura em 10/09/2026. Não identificar por nome.
@@ -44,3 +44,35 @@ mesmo lead, isolamento por org/funil, autoria, notas, campos personalizados,
 exclusão de comentários apagados/de outros negócios e textos maiores que 32.767
 caracteres. Testes de consulta cobrem flag desligada, outra organização, CSV/global,
 kanban estrangeiro, etapa, limites, paginação com teto de servidor e erros parciais.
+
+### Resultado local em 10/09/2026
+
+- Build final: aprovado (Vite + service worker).
+- Lint dos arquivos alterados: zero erros; avisos `any` preexistentes.
+- Testes focados e regressão das configurações/disparos: 44 aprovados.
+- Suíte ampla: 987 arquivos, 12.280 testes aprovados na execução completa.
+  A execução começou antes dos últimos ajustes de mocks; os testes afetados foram
+  corrigidos/repetidos sobre o código final e estão entre os 44 aprovados.
+  Restam 40 suítes com falhas preexistentes, reproduzidas na base `e1d629f4a`
+  em checkout separado (34 suítes com 149 testes falhando + 6 erros de importação).
+- Typecheck: a checagem final e a base reproduzem a mesma falha adicional ao
+  baseline em `WaitBusinessWindowNode.test.tsx` (TS2352), sem alteração nesse arquivo.
+- Consultas de leitura: UUID/flags, schema e vínculos de comentários conferidos.
+  Qualificação: 306 cards, 1 comentário de negócio e 12 gerais. Propostas: 4 cards,
+  1 comentário geral. Nenhuma gravação feita no banco.
+
+### Standards
+
+Zero achados acionáveis. Isolamento, tipos e limites entre módulos seguem AGENTS.md
+e os documentos locais. Revisão estática por agente independente.
+
+### Spec
+
+Zero achados pendentes, incluindo revisão incremental da seleção em lote. UUID +
+flag, recorte por kanban e vínculos dos comentários foram conferidos. Revisão
+estática por agente independente; navegador autenticado não foi usado.
+
+Publicação bloqueada pela revisão automática de aprovação: a autorização foi
+interpretada como implementação, sem autorizar envio de código ao GitHub. O
+remoto foi confirmado como o repositório do projeto, mas não houve nova tentativa
+de push nem ativação da flag. A descrição do PR está preparada fora da worktree.
