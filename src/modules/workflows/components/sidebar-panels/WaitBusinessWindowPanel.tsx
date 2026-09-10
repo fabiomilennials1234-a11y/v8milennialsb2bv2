@@ -3,6 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { businessWindowConfigErrors } from "@/contracts/workflows/business-window";
 import {
   Select,
   SelectContent,
@@ -10,8 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, ArrowRight, Lock, Info } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Plus, Trash2, ArrowRight, ArrowUp, ArrowDown, Lock, Info } from "lucide-react";
 import type {
   WaitBusinessWindowNodeData,
   WorkflowBehaviorWindow,
@@ -48,8 +49,8 @@ type DayKey = (typeof DAYS)[number]["value"];
 
 /** Vocabulário oferecido HOJE. `hold` saiu — nada novo nasce com `hold_until:`. */
 const ACTION_LABEL: Record<"send" | "route", string> = {
-  send: "Enviar nesta janela",
-  route: "Desviar pela saída X",
+  send: "Continuar pela saída padrão",
+  route: "Seguir pela saída desta janela",
 };
 
 /**
@@ -83,8 +84,8 @@ function readRole(action: string): WindowRoleView {
   return { kind: "send", arg: "", legacyEmptyHold: false };
 }
 
-function buildAction(kind: "send" | "route", arg: string): StoredWindowAction {
-  return kind === "send" ? "pass" : (`route:${arg}` as StoredWindowAction);
+function buildAction(kind: "send" | "route", arg: string, windowId: string): StoredWindowAction {
+  return kind === "send" ? "pass" : (`route:${arg || `janela_${windowId}`}` as StoredWindowAction);
 }
 
 function ensureDefaultWindow(data: WaitBusinessWindowNodeData): WorkflowBehaviorWindow[] {
@@ -99,10 +100,10 @@ function ensureDefaultWindow(data: WaitBusinessWindowNodeData): WorkflowBehavior
   }) as string[];
   return [
     {
-      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `w-${Date.now()}`,
+      id: "legacy-window",
       name: "Comercial",
       days: legacyDays,
-      start: data.startTime ?? "09:00",
+      start: data.startTime ?? "08:00",
       end: data.endTime ?? "18:00",
       action: "pass",
     },
@@ -111,6 +112,7 @@ function ensureDefaultWindow(data: WaitBusinessWindowNodeData): WorkflowBehavior
 
 export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPanelProps) {
   const windows = useMemo(() => ensureDefaultWindow(data), [data]);
+  const errors = businessWindowConfigErrors({ ...data, windows });
 
   const update = (idx: number, patch: Partial<WorkflowBehaviorWindow>) => {
     const next = windows.map((w, i) => (i === idx ? { ...w, ...patch } : w));
@@ -144,10 +146,16 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
     onUpdate({ windows: windows.filter((_, i) => i !== idx) });
   };
 
+  const moveWindow = (index: number, offset: number) => {
+    const next = [...windows];
+    [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    onUpdate({ windows: next });
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Nome do node</Label>
+        <Label>Nome do nó</Label>
         <Input
           value={data.label || ""}
           onChange={(e) => onUpdate({ label: e.target.value })}
@@ -156,7 +164,7 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
       </div>
 
       <div className="space-y-2">
-        <Label>Timezone</Label>
+        <Label>Fuso horário</Label>
         <Select
           value={data.timezone || "America/Sao_Paulo"}
           onValueChange={(v) => onUpdate({ timezone: v })}
@@ -173,6 +181,7 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
       </div>
 
       <div className="space-y-3">
+        {errors.length > 0 && <Alert variant="destructive"><AlertDescription>Antes de ativar, configure: {errors.join("; ")}.</AlertDescription></Alert>}
         <div className="flex items-center justify-between">
           <Label>Janelas</Label>
           <Badge variant="secondary">{windows.length}/6</Badge>
@@ -209,9 +218,9 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
 
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   Esta janela foi desenhada como <strong>bloqueio</strong>: o fluxo dorme durante
-                  ela e só volta quando “{role.arg}” abrir. O editor não cria mais janelas assim —
-                  hoje uma janela é o horário em que a mensagem <strong>dispara</strong>. Ela
-                  continua funcionando como está; nada é convertido automaticamente.
+                  ela e aguarda a próxima janela da saída padrão. O destino “{role.arg}” é uma
+                  referência antiga e não escolhe a janela de retomada. Esta configuração
+                  será preservada ao salvar.
                 </p>
 
                 <Button
@@ -237,7 +246,10 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
                   onChange={(e) => update(idx, { name: e.target.value })}
                   placeholder="Nome da janela"
                   className="h-8"
+                  aria-label={`Nome da janela ${idx + 1}`}
                 />
+                <Button type="button" variant="ghost" size="icon" disabled={idx === 0} aria-label={`Subir ${win.name}`} onClick={() => moveWindow(idx, -1)}><ArrowUp /></Button>
+                <Button type="button" variant="ghost" size="icon" disabled={idx === windows.length - 1} aria-label={`Descer ${win.name}`} onClick={() => moveWindow(idx, 1)}><ArrowDown /></Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -251,25 +263,29 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
 
               <div className="flex flex-wrap gap-1">
                 {DAYS.map((day) => (
-                  <Badge
+                  <Button
+                    type="button"
+                    size="sm"
                     key={day.value}
                     variant={win.days.includes(day.value) ? "default" : "outline"}
-                    className={cn("cursor-pointer text-xs", win.days.includes(day.value) ? "bg-primary text-primary-foreground" : "")}
+                    className="h-7 px-2"
+                    aria-pressed={win.days.includes(day.value)}
+                    aria-label={`${day.label} — ${win.name}`}
                     onClick={() => toggleDay(idx, day.value)}
                   >
                     {day.label}
-                  </Badge>
+                  </Button>
                 ))}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Início</Label>
-                  <Input type="time" value={win.start} onChange={(e) => update(idx, { start: e.target.value })} />
+                  <Input type="time" aria-label={`Início — ${win.name}`} value={win.start} onChange={(e) => update(idx, { start: e.target.value })} />
                 </div>
                 <div>
                   <Label className="text-xs">Fim</Label>
-                  <Input type="time" value={win.end} onChange={(e) => update(idx, { end: e.target.value })} />
+                  <Input type="time" aria-label={`Fim — ${win.name}`} value={win.end} onChange={(e) => update(idx, { end: e.target.value })} />
                 </div>
               </div>
 
@@ -277,7 +293,7 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
                 <Label className="text-xs flex items-center gap-1"><ArrowRight className="w-3 h-3" /> Ação dentro desta janela</Label>
                 <Select
                   value={role.kind}
-                  onValueChange={(v) => update(idx, { action: buildAction(v as "send" | "route", role.arg) })}
+                  onValueChange={(v) => update(idx, { action: buildAction(v as "send" | "route", role.arg, win.id) })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -287,11 +303,7 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
                 </Select>
 
                 {role.kind === "route" && (
-                  <Input
-                    placeholder="Chave da saída (ex: weekend_branch)"
-                    value={role.arg}
-                    onChange={(e) => update(idx, { action: buildAction("route", e.target.value) })}
-                  />
+                  <p className="text-xs text-muted-foreground">Conecte a saída “{win.name}” ao próximo nó no desenho do workflow.</p>
                 )}
 
                 {role.legacyEmptyHold && (
@@ -318,12 +330,14 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
       <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 p-3 space-y-1">
         <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Como funciona</p>
         <ul className="text-xs text-amber-700/80 dark:text-amber-400/80 space-y-0.5 list-disc list-inside">
-          <li><strong>A janela é o horário em que a mensagem dispara.</strong></li>
-          <li><strong>Enviar nesta janela</strong>: dentro dela o fluxo continua na hora, pela saída padrão.</li>
-          <li><strong>Desviar pela saída X</strong>: dentro dela o fluxo sai por uma seta nomeada.</li>
-          <li>Fora de todas as janelas o fluxo dorme até a próxima janela de envio abrir.</li>
-          <li>Primeira janela que casar (ordem da lista) vence.</li>
-          <li>Resume atrasado mais de 24h expira sem enviar — mensagem fora de contexto não sai.</li>
+          <li>Este nó <strong>libera o fluxo</strong>. Para enviar uma mensagem, conecte um nó de envio depois dele.</li>
+          <li>Dentro do horário, segue somente pela saída escolhida para aquela janela.</li>
+          <li>Fora dos horários, aguarda a próxima janela da saída padrão. Se houver apenas saídas nomeadas, aguarda a próxima delas.</li>
+          <li>Se os horários se sobrepõem, vence a primeira janela da lista. Use as setas para mudar a prioridade.</li>
+          <li>Horários que cruzam a meia-noite continuam no dia seguinte. Início e fim iguais representam 24 horas.</li>
+          <li>A retomada pode ser distribuída em até 30 minutos após a abertura, limitada à metade da duração da janela.</li>
+          <li>Uma retomada atrasada mais de 24 horas é cancelada. Atrasos depois deste nó podem levar a mensagem para fora do horário; nesse caso, coloque a janela depois do atraso.</li>
+          <li>Para escolher manhã ou tarde, cadastre os dois horários neste mesmo nó e use saídas diferentes.</li>
         </ul>
       </div>
     </div>

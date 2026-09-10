@@ -801,7 +801,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
                   evaluatedAt: wbwNow.toISOString(),
                 },
               );
-              nextNodes.push(...getNextNodes(nodeId, edgeMap));
+              // A saída padrão não executa as rotas das outras janelas.
+              nextNodes.push(...(edgeMap.get(nodeId) ?? [])
+                .filter((edge) => !edge.sourceHandle || edge.sourceHandle === "default")
+                .map((edge) => edge.target));
               break;
             }
 
