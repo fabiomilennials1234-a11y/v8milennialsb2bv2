@@ -50,6 +50,7 @@ owner: claude-agent
 
 - [[Agenda Interna|Agenda Interna]]
 - [[Carteira Pedidos|Carteira — aba Pedidos (listar e editar)]]
+- [[Copiar resumo do negócio|Copiar resumo do negócio]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
 - [[Filtros do Kanban|Filtros do Kanban]]
 - [[Lead Card|Lead Card (Kanban) — Trello-style]]
