@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import {
+  resolvePipeline,
   upsertPipeEntryDetailed,
   updatePipeEntryById,
 } from "../pipeline-adapter.ts";
@@ -123,15 +124,6 @@ export interface MoveCardOptions {
   userId?: string;
 }
 
-const PIPE_LABELS: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
-  upsell_base: "Carteira Base",
-  upsell_gestao: "Carteira Gestão",
-  campanha: "Campanhas",
-};
-
 export async function executeAdvanceStage(
   supabase: SupabaseClient,
   params: Record<string, unknown>,
@@ -234,10 +226,18 @@ export async function executeAdvanceStage(
       return { success: false, error: `Funil não suportado: ${target_pipe}` };
   }
 
+  let targetPipelineName: string = target_pipe;
+  try {
+    targetPipelineName = (await resolvePipeline(supabase, tenantId, target_pipe)).name;
+  } catch {
+    // Compatibilidade para destinos que ainda não são funis (`campanha` e os
+    // resíduos de Carteira): o identificador é mais honesto que um nome fixo.
+  }
+
   return {
     success: true,
-    message: `Lead movido para ${finalStage} no funil ${PIPE_LABELS[target_pipe] || target_pipe}`,
-    data: { target_stage: finalStage, target_pipe },
+    message: `Lead movido para ${finalStage} no funil ${targetPipelineName}`,
+    data: { target_stage: finalStage, target_pipe, target_pipeline_name: targetPipelineName },
   };
 }
 

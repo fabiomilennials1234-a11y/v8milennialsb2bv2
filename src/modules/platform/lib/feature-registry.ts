@@ -51,7 +51,7 @@ export const LIMITS: LimitMeta[] = [
   { key: "max_funnels", label: "Funis (legacy)", description: "Deprecated — use max_custom_funnels", unit: "funis" },
   { key: "max_documents_per_agent", label: "Docs por Agente", description: "Documentos na base de conhecimento por agente", unit: "documentos" },
   { key: "max_active_campaigns", label: "Campanhas Ativas (legacy)", description: "Deprecated — use max_temporary_funnels", unit: "campanhas" },
-  { key: "max_custom_funnels", label: "Funis Custom", description: "Número máximo de funis customizados permanentes", unit: "funis" },
+  { key: "max_custom_funnels", label: "Funis", description: "Número máximo de funis permanentes", unit: "funis" },
   { key: "max_temporary_funnels", label: "Funis Temporários", description: "Número máximo de funis temporários ativos simultâneos", unit: "funis" },
 ];
 

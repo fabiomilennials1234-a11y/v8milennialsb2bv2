@@ -68,6 +68,7 @@ interface FunilAnalyticsProps {
 }
 
 export function FunilAnalytics({
+  pipeline,
   stages,
   stageData,
   allItems,
@@ -96,6 +97,7 @@ export function FunilAnalytics({
   if (metrics.kind === "propostas") {
     return (
       <PropostasBlock
+        pipeline={pipeline}
         stages={stages}
         stageData={stageData}
         allItems={allItems}
@@ -186,13 +188,14 @@ function ConfirmacaoBlock({
 // ── Propostas: stat-cards + drilldown + abas (porte por stage_role) ─────────
 
 function PropostasBlock({
+  pipeline,
   stages,
   stageData,
   allItems,
   metrics,
   periodRange,
   responsibleMembers,
-}: Omit<FunilAnalyticsProps, "pipeline">) {
+}: FunilAnalyticsProps) {
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
   const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const { openLead } = useLeadSheet();
@@ -414,7 +417,7 @@ function PropostasBlock({
         <TabsList className="bg-muted/50">
           <TabsTrigger value="propostas" className="gap-1.5">
             <TrendingUp className="w-4 h-4" />
-            Propostas
+            {pipeline.name}
           </TabsTrigger>
           <TabsTrigger value="produtos" className="gap-1.5">
             <Package className="w-4 h-4" />

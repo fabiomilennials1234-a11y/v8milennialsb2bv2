@@ -14,15 +14,6 @@ interface HistoryMapping {
   source: "agent" | "automation" | "system";
 }
 
-const PIPE_LABELS: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
-  upsell_base: "Carteira Base",
-  upsell_gestao: "Carteira Gestão",
-  campanha: "Campanhas",
-};
-
 const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
   schedule_meeting: {
     action: "meeting_scheduled",
@@ -66,7 +57,7 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
   advance_stage: {
     action: "stage_changed",
     descriptionFn: (p) => {
-      const pipe = PIPE_LABELS[(p.target_pipe as string) || "whatsapp"] || p.target_pipe;
+      const pipe = p.target_pipeline_name || p.target_pipe || "funil selecionado";
       return `Movido para ${p.target_stage} em ${pipe} pelo Copilot`;
     },
     source: "agent",
@@ -81,7 +72,8 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
   },
   advance_confirmation_stage: {
     action: "stage_changed",
-    descriptionFn: (p) => `Movido para ${p.target_stage} no funil Confirmação pelo Copilot`,
+    descriptionFn: (p) =>
+      `Movido para ${p.target_stage} no funil ${p.target_pipeline_name || p.target_pipe || "selecionado"} pelo Copilot`,
     source: "agent",
   },
   create_custom_field: {

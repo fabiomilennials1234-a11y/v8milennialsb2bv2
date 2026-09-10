@@ -31,26 +31,24 @@ const cfg = (
 });
 
 describe("nomeDoFunil", () => {
-  it("usa o display_name da org, não o pipelines.name congelado do seed", () => {
+  it("usa pipelines.name como nome canônico mesmo para seed antigo", () => {
     const configs = [cfg("whatsapp", "Oportunidades")];
-    // É exatamente este par que o cadastro de lead exibia errado: o banco diz
-    // "Qualificação", a org chama de "Oportunidades".
     expect(
-      nomeDoFunil(configs, { name: "Qualificação", slug: "whatsapp", type: "system" }),
-    ).toBe("Oportunidades");
-  });
-
-  it("respeita o nome que a org escolheu, e não o padrão de fábrica", () => {
-    const configs = [cfg("whatsapp", "Entrada de Obra")];
-    expect(
-      nomeDoFunil(configs, { name: "Qualificação", slug: "whatsapp", type: "system" }),
+      nomeDoFunil(configs, { name: "Entrada de Obra", slug: "whatsapp", type: "system" }),
     ).toBe("Entrada de Obra");
   });
 
-  it("cai no nome de fábrica quando a org não tem linha de display", () => {
+  it("não deixa o registro legado de display sobrescrever o nome escolhido", () => {
+    const configs = [cfg("whatsapp", "Oportunidades")];
     expect(
-      nomeDoFunil([], { name: "Qualificação", slug: "whatsapp", type: "system" }),
-    ).toBe("Oportunidades");
+      nomeDoFunil(configs, { name: "Entrada de Obra", slug: "whatsapp", type: "system" }),
+    ).toBe("Entrada de Obra");
+  });
+
+  it("não inventa nome de fábrica quando não há configuração legada", () => {
+    expect(
+      nomeDoFunil([], { name: "Meu funil", slug: "whatsapp", type: "system" }),
+    ).toBe("Meu funil");
   });
 
   it("devolve pipelines.name para funil custom — ali o nome já é o do usuário", () => {
@@ -63,7 +61,7 @@ describe("nomeDoFunil", () => {
   it("não quebra com configs indefinido (primeiros renders, antes da query)", () => {
     expect(
       nomeDoFunil(undefined, { name: "Qualificação", slug: "whatsapp", type: "system" }),
-    ).toBe("Oportunidades");
+    ).toBe("Qualificação");
   });
 });
 

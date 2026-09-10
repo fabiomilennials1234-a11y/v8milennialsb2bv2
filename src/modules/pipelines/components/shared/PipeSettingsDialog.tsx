@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { type StageFamily, type PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
-import { usePipelineDisplayConfig } from "../../hooks/config/usePipelineDisplayConfig";
 import { type FunnelDestination } from "@/modules/leads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
 import { CustomFieldsManager } from "@/modules/leads";
@@ -28,13 +27,10 @@ import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
 import { FunnelIdentitySection } from "./FunnelIdentitySection";
 import type { ReactNode } from "react";
-import { NOME_DE_FABRICA } from "@/contracts/pipe";
 
 // StageFamily, não PipelineType: este diálogo também veste a Carteira (via
 // slots) — as famílias upsell_* são resíduo D9, não funil (SCRUM-618).
-// SCRUM-641: só a Carteira tem rótulo cravado aqui; funil de sistema é
-// batizado pelo display_config (com NOME_DE_FABRICA de reserva), nunca pelo
-// seed "Qualificação"/"Confirmação"/"Propostas".
+// Só a Carteira tem rótulo cravado aqui porque não é um funil canônico.
 const CARTEIRA_LABELS: Partial<Record<StageFamily, string>> = {
   upsell_base: "Carteira Base",
   upsell_gestao: "Carteira Gestão",
@@ -92,20 +88,14 @@ export function PipeSettingsDialog({
 
   // Linha canônica do funil em `pipelines` (626): afina o editor de etapas por
   // id e alimenta a aba Geral (identidade + Zona de Perigo). slug é único por
-  // org; type=system desambigua funil custom homônimo.
+  // org. O tipo antigo não participa da identidade.
   const { data: pipelines = [] } = usePipelines();
   const pipelineRow = isSystemPipe
-    ? pipelines.find((p) => p.slug === pipeType && p.type === "system")
+    ? pipelines.find((p) => p.slug === pipeType)
     : undefined;
 
-  // Título com o nome que a ORG vê ("Oportunidades" ou o rename dela), não o
-  // rótulo interno. display_name vence onde existir (precedência D4/636).
-  const { data: displayConfigs = [] } = usePipelineDisplayConfig();
-  const displayName = isSystemPipe
-    ? displayConfigs.find((c) => c.pipe_type === pipeType)?.display_name
-    : undefined;
   const titulo = isSystemPipe
-    ? displayName || NOME_DE_FABRICA[pipeType] || pipeType
+    ? pipelineRow?.name ?? "Funil removido"
     : CARTEIRA_LABELS[pipeType] ?? pipeType;
 
   // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas +
@@ -202,7 +192,7 @@ export function PipeSettingsDialog({
                       icon: pipelineRow.icon,
                       color: pipelineRow.color,
                     }}
-                    displayName={displayName}
+                    displayName={pipelineRow.name}
                     onDeleted={() => onOpenChange(false)}
                   />
                 ) : (

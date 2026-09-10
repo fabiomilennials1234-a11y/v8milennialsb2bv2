@@ -43,7 +43,7 @@ export function StepPrimeiroLead({ onNext }: Props) {
         <div>
           <h3 className="text-xl font-bold tracking-tight">Primeiro lead criado!</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            <strong>{name}</strong> está no funil de qualificação.
+            <strong>{name}</strong> foi adicionado à sua lista de leads.
           </p>
         </div>
         <button

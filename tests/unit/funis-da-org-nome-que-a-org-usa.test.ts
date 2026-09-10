@@ -19,15 +19,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 let pipelines: unknown[] = [];
-let displayConfigs: unknown[] = [];
 let pipelinesLoading = false;
-let configLoading = false;
 
 vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
   usePipelines: () => ({ data: pipelines, isLoading: pipelinesLoading }),
-}));
-vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({
-  usePipelineDisplayConfig: () => ({ data: displayConfigs, isLoading: configLoading }),
 }));
 
 import {
@@ -46,41 +41,27 @@ const funil = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const cfg = (over: Record<string, unknown> = {}) => ({
-  pipe_type: "whatsapp",
-  display_name: "Oportunidades",
-  is_visible: true,
-  position: 1,
-  ...over,
-});
-
 beforeEach(() => {
   pipelines = [];
-  displayConfigs = [];
   pipelinesLoading = false;
-  configLoading = false;
 });
 
 describe("useFunisDaOrg", () => {
-  it("usa o display_name da org, não o seed congelado", () => {
-    pipelines = [funil()];
-    displayConfigs = [cfg()];
+  it("usa pipelines.name como nome canônico", () => {
+    pipelines = [funil({ name: "Oportunidades" })];
     const { result } = renderHook(() => useFunisDaOrg());
     expect(result.current.data[0].label).toBe("Oportunidades");
-    // O valor cru continua acessível para quem precisa de chave, log, migration.
-    expect(result.current.data[0].name).toBe("Qualificação");
+    expect(result.current.data[0].name).toBe("Oportunidades");
   });
 
-  it("respeita o rename da org — não o padrão de fábrica", () => {
-    pipelines = [funil()];
-    displayConfigs = [cfg({ display_name: "Entrada de Obra" })];
+  it("respeita o rename salvo no registro único", () => {
+    pipelines = [funil({ name: "Entrada de Obra" })];
     const { result } = renderHook(() => useFunisDaOrg());
     expect(result.current.data[0].label).toBe("Entrada de Obra");
   });
 
   it("funil custom mantém o próprio nome — ali o nome já é o do usuário", () => {
     pipelines = [funil({ id: "p2", name: "Condomínio", slug: "condominio", type: "custom" })];
-    displayConfigs = [];
     const { result } = renderHook(() => useFunisDaOrg());
     expect(result.current.data[0].label).toBe("Condomínio");
   });
@@ -88,25 +69,21 @@ describe("useFunisDaOrg", () => {
   it("só devolve o que a org TEM — catálogo não entra por conta própria", () => {
     // A fonte é `pipelines` (recortada por RLS). Uma org com um funil só não
     // pode ver os outros dois do trio aparecerem como opção.
-    pipelines = [funil()];
-    displayConfigs = [cfg(), cfg({ pipe_type: "propostas", display_name: "Orçamentos" })];
+    pipelines = [funil({ name: "Oportunidades" })];
     const { result } = renderHook(() => useFunisDaOrg());
     expect(result.current.data).toHaveLength(1);
     expect(result.current.data.map((f) => f.label)).toEqual(["Oportunidades"]);
   });
 
-  it("sem linha de display, cai no nome de fábrica do tipo", () => {
+  it("não depende de linha no registro legado de display", () => {
     pipelines = [funil()];
-    displayConfigs = [];
     const { result } = renderHook(() => useFunisDaOrg());
-    expect(result.current.data[0].label).toBe("Oportunidades");
+    expect(result.current.data[0].label).toBe("Qualificação");
   });
 
-  it("carrega enquanto o display config não chegou — senão o rótulo trocaria na tela", () => {
-    // Sem esperar o config, a tela pintaria "Qualificação" e trocaria para
-    // "Oportunidades" no frame seguinte.
+  it("carrega apenas enquanto o registro de pipelines não chegou", () => {
     pipelines = [funil()];
-    configLoading = true;
+    pipelinesLoading = true;
     const { result } = renderHook(() => useFunisDaOrg());
     expect(result.current.isLoading).toBe(true);
   });
@@ -115,10 +92,9 @@ describe("useFunisDaOrg", () => {
 describe("useFunisAtivosDaOrg", () => {
   it("tira o funil desativado — `usePipelines` NÃO filtra is_active", () => {
     pipelines = [
-      funil(),
+      funil({ name: "Oportunidades" }),
       funil({ id: "p3", name: "Antigo", slug: "antigo", type: "custom", is_active: false }),
     ];
-    displayConfigs = [cfg()];
     const { result } = renderHook(() => useFunisAtivosDaOrg());
     expect(result.current.data.map((f) => f.label)).toEqual(["Oportunidades"]);
   });

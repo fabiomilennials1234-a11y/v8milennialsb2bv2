@@ -56,10 +56,8 @@ let mockDispatchRules: Array<{
   pipeline_stage_id: string | null;
   trigger_type: string;
 }> = [];
-// SCRUM-641: o editor resolve o nome do funil-alvo pelo display config da
-// org; sem AuthProvider no teste, o hook real explode — dublê inerte.
-vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({
-  usePipelineDisplayConfig: () => ({ data: [] }),
+vi.mock("@/modules/pipelines/hooks/model/useFunisDaOrg", () => ({
+  useFunisDaOrg: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock("@/modules/pipelines/hooks/config/usePipeDispatchRules", () => ({

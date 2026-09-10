@@ -332,7 +332,7 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
                   <SelectContent>
                     {funnels.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name}
+                        {p.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

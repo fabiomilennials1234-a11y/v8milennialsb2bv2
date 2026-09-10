@@ -20,7 +20,7 @@ import { FunnelIdentityDialog } from "./FunnelIdentityDialog";
  */
 
 interface FunnelSwitcherProps {
-  /** Chave do funil aberto: `sys:whatsapp`, `custom:<id>`… */
+  /** Chave do funil aberto: `pipeline:<id>`. */
   currentKey: string;
   /** Nome exibido enquanto a lista carrega (o da página). */
   fallbackLabel: string;
