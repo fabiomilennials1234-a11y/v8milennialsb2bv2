@@ -172,6 +172,31 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
     expect(onDefinirDesfecho).not.toHaveBeenCalled();
   });
 
+  it("o x do selo Perdido reabre o negócio sem mover a etapa", () => {
+    const onDefinirDesfecho = vi.fn();
+    const onMoverEtapa = vi.fn();
+    const { rerender } = render(
+      <DealCard negocio={negocio({ estado: "perdido" })}
+        onDefinirDesfecho={onDefinirDesfecho} onMoverEtapa={onMoverEtapa} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remover de perdido" }));
+    expect(onDefinirDesfecho).toHaveBeenCalledExactlyOnceWith("open");
+    expect(onMoverEtapa).not.toHaveBeenCalled();
+    rerender(<DealCard negocio={negocio({ estado: "aberto" })} />);
+    expect(screen.queryByRole("button", { name: "Remover de perdido" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
+  });
+
+  it("desabilita o x do selo enquanto salva", () => {
+    const onDefinirDesfecho = vi.fn();
+    render(<DealCard negocio={negocio({ estado: "perdido" })}
+      onDefinirDesfecho={onDefinirDesfecho} decidindo />);
+    const remover = screen.getByRole("button", { name: "Remover de perdido" });
+    expect(remover).toBeDisabled();
+    fireEvent.click(remover);
+    expect(onDefinirDesfecho).not.toHaveBeenCalled();
+  });
+
   it("negócio já fechado não oferece ação de desfecho", () => {
     render(
       <DealCard
