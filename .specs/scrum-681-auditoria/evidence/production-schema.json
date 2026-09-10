@@ -1,0 +1,1673 @@
+{
+  "captured_at": "2026-09-10T14:50:40.585Z",
+  "project_id": "jsjsmuncfkbsbzqzqhfq",
+  "source_commit": "215ff0bb9b0d8ad3b5189d10dd551778026753bb",
+  "queries": {
+    "columns": "SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('leads','contacts','companies','deals','deal_contacts','pipeline_entries') ORDER BY table_name,ordinal_position;",
+    "constraints": "SELECT c.conrelid::regclass::text AS table_name,c.conname,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c WHERE c.conrelid IN ('public.leads'::regclass,'public.contacts'::regclass,'public.companies'::regclass,'public.deals'::regclass,'public.deal_contacts'::regclass,'public.pipeline_entries'::regclass) ORDER BY 1,2;",
+    "policies": "SELECT tablename,policyname,roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename IN ('contacts','companies','deals','deal_contacts','pipeline_entries') ORDER BY tablename,policyname;",
+    "indexes": "SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND tablename IN ('contacts','companies','deals','deal_contacts','pipeline_entries') ORDER BY tablename,indexname;",
+    "counts": "SELECT 'companies' AS relation,count(*) AS rows FROM public.companies UNION ALL SELECT 'contacts',count(*) FROM public.contacts UNION ALL SELECT 'deal_contacts',count(*) FROM public.deal_contacts;",
+    "migrations": "SELECT version,name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 12;",
+    "triggers": "SELECT c.relname AS table_name,t.tgname,pg_get_triggerdef(t.oid) AS definition FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgrelid IN ('public.contacts'::regclass,'public.companies'::regclass,'public.deal_contacts'::regclass) ORDER BY 1,2;",
+    "functions": "SELECT n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) AS arguments,p.prosecdef AS security_definer,pg_get_functiondef(p.oid) AS definition FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('abrir_negocio','migrate_leads_to_contacts_companies');"
+  },
+  "results": {
+    "columns": [
+      {
+        "table_name": "companies",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "organization_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "domain",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "industry",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "size_range",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "revenue_range",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "website",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "phone",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "email",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "address",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "city",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "state",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "country",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "parent_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "health_score",
+        "data_type": "integer",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "companies",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "organization_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "email",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "phone",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "normalized_phone",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "job_title",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "linkedin_url",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "avatar_url",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "source",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "source_lead_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "is_primary",
+        "data_type": "boolean",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "tags",
+        "data_type": "jsonb",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "deleted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "deleted_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "contacts",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "deal_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "contact_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "role",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "is_primary",
+        "data_type": "boolean",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deal_contacts",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "organization_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "title",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "value",
+        "data_type": "numeric",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "owner_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "source_lead_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "probability",
+        "data_type": "integer",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "expected_close_date",
+        "data_type": "date",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "won",
+        "data_type": "boolean",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "loss_reason",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "loss_reason_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "deleted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "deleted_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "source",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "last_activity_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "outcome",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "outcome_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "deals",
+        "column_name": "outcome_source",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "company",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "email",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "phone",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "utm_campaign",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "utm_source",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "utm_medium",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "utm_content",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "utm_term",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "rating",
+        "data_type": "integer",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "faturamento",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "urgency",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "segment",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "sdr_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "closer_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "compromisso_date",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "organization_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "pipe_whatsapp",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "normalized_phone",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "ai_disabled",
+        "data_type": "boolean",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "ai_disabled_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "ai_disabled_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "metrics_period_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "origin",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "is_shadow",
+        "data_type": "boolean",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "qualification_score",
+        "data_type": "integer",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "responsible_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "meta_campaign_id",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "meta_adset_id",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "meta_ad_id",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "pre_sale_responsible_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "sale_responsible_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "contact_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "company_entity_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "import_batch_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "responsible_user_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "phone_digits",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "deleted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "deleted_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "avatar_url",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "pre_qualification_tier",
+        "data_type": "USER-DEFINED",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "qualification_tier",
+        "data_type": "USER-DEFINED",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "uf",
+        "data_type": "character",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "uf_source",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "meta_lead_id",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "excluded_from_metrics",
+        "data_type": "boolean",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "interest",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "origin_detail",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "claimed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "claimed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "erp_code",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "classificacao",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "classificacao_manual",
+        "data_type": "boolean",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "primeira_venda_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "primeiro_pedido_erp_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "relacao_negocios",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "leads",
+        "column_name": "cafe_jurere_erp_elegivel",
+        "data_type": "boolean",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "organization_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "pipeline_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "lead_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "deal_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "stage_key",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "assigned_to",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "entered_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "stage_changed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "column_name": "stage_id",
+        "data_type": "uuid",
+        "is_nullable": "YES"
+      }
+    ],
+    "constraints": [
+      {
+        "table_name": "companies",
+        "conname": "companies_created_by_fkey",
+        "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "companies",
+        "conname": "companies_health_score_check",
+        "definition": "CHECK (((health_score >= 0) AND (health_score <= 100)))"
+      },
+      {
+        "table_name": "companies",
+        "conname": "companies_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "companies",
+        "conname": "companies_parent_id_fkey",
+        "definition": "FOREIGN KEY (parent_id) REFERENCES companies(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "companies",
+        "conname": "companies_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_company_id_fkey",
+        "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_created_by_fkey",
+        "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_deleted_by_fkey",
+        "definition": "FOREIGN KEY (deleted_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "contacts",
+        "conname": "contacts_source_lead_id_fkey",
+        "definition": "FOREIGN KEY (source_lead_id) REFERENCES leads(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "deal_contacts",
+        "conname": "deal_contacts_contact_id_fkey",
+        "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "deal_contacts",
+        "conname": "deal_contacts_deal_id_contact_id_key",
+        "definition": "UNIQUE (deal_id, contact_id)"
+      },
+      {
+        "table_name": "deal_contacts",
+        "conname": "deal_contacts_deal_id_fkey",
+        "definition": "FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "deal_contacts",
+        "conname": "deal_contacts_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_company_id_fkey",
+        "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_created_by_fkey",
+        "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_deleted_by_fkey",
+        "definition": "FOREIGN KEY (deleted_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_outcome_check",
+        "definition": "CHECK ((outcome = ANY (ARRAY['open'::text, 'won'::text, 'lost'::text])))"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_outcome_source_check",
+        "definition": "CHECK (((outcome_source IS NULL) OR (outcome_source = ANY (ARRAY['stage'::text, 'workflow'::text, 'ui'::text, 'backfill'::text, 'api'::text]))))"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_owner_id_fkey",
+        "definition": "FOREIGN KEY (owner_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_probability_check",
+        "definition": "CHECK (((probability >= 0) AND (probability <= 100)))"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_source_check",
+        "definition": "CHECK (((source IS NULL) OR (source = ANY (ARRAY['human'::text, 'workflow'::text, 'api'::text, 'import'::text, 'backfill'::text, 'backfill_funil_custom'::text, 'entrada_materializada'::text]))))"
+      },
+      {
+        "table_name": "deals",
+        "conname": "deals_source_lead_id_fkey",
+        "definition": "FOREIGN KEY (source_lead_id) REFERENCES leads(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_ai_disabled_by_fkey",
+        "definition": "FOREIGN KEY (ai_disabled_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_claim_pair_check",
+        "definition": "CHECK (((claimed_by IS NULL) OR (claimed_at IS NOT NULL)))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_claimed_by_fkey",
+        "definition": "FOREIGN KEY (claimed_by) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_classificacao_check",
+        "definition": "CHECK ((classificacao = ANY (ARRAY['lead'::text, 'cliente'::text, 'indefinido'::text])))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_closer_id_fkey",
+        "definition": "FOREIGN KEY (closer_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_company_entity_id_fkey",
+        "definition": "FOREIGN KEY (company_entity_id) REFERENCES companies(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_contact_id_fkey",
+        "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_deleted_by_fkey",
+        "definition": "FOREIGN KEY (deleted_by) REFERENCES auth.users(id)"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_import_batch_id_fkey",
+        "definition": "FOREIGN KEY (import_batch_id) REFERENCES import_batches(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_pre_sale_responsible_id_fkey",
+        "definition": "FOREIGN KEY (pre_sale_responsible_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_qualification_score_check",
+        "definition": "CHECK (((qualification_score >= 0) AND (qualification_score <= 100)))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_rating_check",
+        "definition": "CHECK (((rating >= 0) AND (rating <= 10)))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_relacao_negocios_check",
+        "definition": "CHECK ((relacao_negocios = ANY (ARRAY['lead'::text, 'cliente'::text, 'perdido'::text])))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_responsible_id_fkey",
+        "definition": "FOREIGN KEY (responsible_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_responsible_user_id_fkey",
+        "definition": "FOREIGN KEY (responsible_user_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_sale_responsible_id_fkey",
+        "definition": "FOREIGN KEY (sale_responsible_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_sdr_id_fkey",
+        "definition": "FOREIGN KEY (sdr_id) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_uf_check",
+        "definition": "CHECK (((uf IS NULL) OR (uf = ANY (ARRAY['AC'::bpchar, 'AL'::bpchar, 'AP'::bpchar, 'AM'::bpchar, 'BA'::bpchar, 'CE'::bpchar, 'DF'::bpchar, 'ES'::bpchar, 'GO'::bpchar, 'MA'::bpchar, 'MT'::bpchar, 'MS'::bpchar, 'MG'::bpchar, 'PA'::bpchar, 'PB'::bpchar, 'PR'::bpchar, 'PE'::bpchar, 'PI'::bpchar, 'RJ'::bpchar, 'RN'::bpchar, 'RS'::bpchar, 'RO'::bpchar, 'RR'::bpchar, 'SC'::bpchar, 'SE'::bpchar, 'SP'::bpchar, 'TO'::bpchar]))))"
+      },
+      {
+        "table_name": "leads",
+        "conname": "leads_uf_source_check",
+        "definition": "CHECK (((uf_source IS NULL) OR (uf_source = ANY (ARRAY['manual'::text, 'webhook'::text, 'ddd'::text, 'ai'::text, 'erp'::text]))))"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_assigned_to_fkey",
+        "definition": "FOREIGN KEY (assigned_to) REFERENCES team_members(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_deal_id_fkey",
+        "definition": "FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_lead_id_fkey",
+        "definition": "FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_pipeline_id_fkey",
+        "definition": "FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table_name": "pipeline_entries",
+        "conname": "pipeline_entries_stage_id_fkey",
+        "definition": "FOREIGN KEY (stage_id) REFERENCES pipeline_stages(id) ON DELETE SET NULL"
+      }
+    ],
+    "policies": [
+      {
+        "tablename": "companies",
+        "policyname": "companies_delete",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))",
+        "with_check": null
+      },
+      {
+        "tablename": "companies",
+        "policyname": "companies_insert",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))"
+      },
+      {
+        "tablename": "companies",
+        "policyname": "companies_select",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))",
+        "with_check": null
+      },
+      {
+        "tablename": "companies",
+        "policyname": "companies_update",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))",
+        "with_check": null
+      },
+      {
+        "tablename": "companies",
+        "policyname": "master_select_all_companies",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "( SELECT is_master_user() AS is_master_user)",
+        "with_check": null
+      },
+      {
+        "tablename": "contacts",
+        "policyname": "contacts_delete",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))",
+        "with_check": null
+      },
+      {
+        "tablename": "contacts",
+        "policyname": "contacts_insert",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))"
+      },
+      {
+        "tablename": "contacts",
+        "policyname": "contacts_select",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id)) AND (deleted_at IS NULL))",
+        "with_check": null
+      },
+      {
+        "tablename": "contacts",
+        "policyname": "contacts_update",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id))",
+        "with_check": null
+      },
+      {
+        "tablename": "contacts",
+        "policyname": "master_select_all_contacts",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "( SELECT is_master_user() AS is_master_user)",
+        "with_check": null
+      },
+      {
+        "tablename": "deal_contacts",
+        "policyname": "deal_contacts_delete",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(EXISTS ( SELECT 1\n   FROM deals d\n  WHERE ((d.id = deal_contacts.deal_id) AND (d.organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id)))))",
+        "with_check": null
+      },
+      {
+        "tablename": "deal_contacts",
+        "policyname": "deal_contacts_insert",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(EXISTS ( SELECT 1\n   FROM deals d\n  WHERE ((d.id = deal_contacts.deal_id) AND (d.organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id)))))"
+      },
+      {
+        "tablename": "deal_contacts",
+        "policyname": "deal_contacts_select",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(EXISTS ( SELECT 1\n   FROM deals d\n  WHERE ((d.id = deal_contacts.deal_id) AND (d.organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id)))))",
+        "with_check": null
+      },
+      {
+        "tablename": "deal_contacts",
+        "policyname": "deal_contacts_update",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(EXISTS ( SELECT 1\n   FROM deals d\n  WHERE ((d.id = deal_contacts.deal_id) AND (d.organization_id = ( SELECT get_user_organization_id() AS get_user_organization_id)))))",
+        "with_check": null
+      },
+      {
+        "tablename": "deal_contacts",
+        "policyname": "master_select_all_deal_contacts",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "( SELECT is_master_user() AS is_master_user)",
+        "with_check": null
+      },
+      {
+        "tablename": "deals",
+        "policyname": "deals_delete",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "((deleted_at IS NULL) AND ((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user)))",
+        "with_check": null
+      },
+      {
+        "tablename": "deals",
+        "policyname": "deals_insert",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user))"
+      },
+      {
+        "tablename": "deals",
+        "policyname": "deals_select",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((deleted_at IS NULL) AND ((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user)))",
+        "with_check": null
+      },
+      {
+        "tablename": "deals",
+        "policyname": "deals_update",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "((deleted_at IS NULL) AND ((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user)))",
+        "with_check": "((deleted_at IS NULL) AND ((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user)))"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "policyname": "master_select_all_pipeline_entries",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "( SELECT is_master_user() AS is_master_user)",
+        "with_check": null
+      },
+      {
+        "tablename": "pipeline_entries",
+        "policyname": "pipeline_entries_delete",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user))",
+        "with_check": null
+      },
+      {
+        "tablename": "pipeline_entries",
+        "policyname": "pipeline_entries_insert",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user))"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "policyname": "pipeline_entries_select",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids))",
+        "with_check": null
+      },
+      {
+        "tablename": "pipeline_entries",
+        "policyname": "pipeline_entries_update",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "((organization_id IN ( SELECT get_my_organization_ids() AS get_my_organization_ids)) OR ( SELECT is_master_user() AS is_master_user))",
+        "with_check": null
+      }
+    ],
+    "indexes": [
+      {
+        "tablename": "companies",
+        "indexname": "companies_pkey",
+        "indexdef": "CREATE UNIQUE INDEX companies_pkey ON public.companies USING btree (id)"
+      },
+      {
+        "tablename": "companies",
+        "indexname": "idx_companies_domain",
+        "indexdef": "CREATE INDEX idx_companies_domain ON public.companies USING btree (domain) WHERE (domain IS NOT NULL)"
+      },
+      {
+        "tablename": "companies",
+        "indexname": "idx_companies_name_trgm",
+        "indexdef": "CREATE INDEX idx_companies_name_trgm ON public.companies USING gin (name gin_trgm_ops)"
+      },
+      {
+        "tablename": "companies",
+        "indexname": "idx_companies_org",
+        "indexdef": "CREATE INDEX idx_companies_org ON public.companies USING btree (organization_id)"
+      },
+      {
+        "tablename": "companies",
+        "indexname": "idx_companies_org_lower_name",
+        "indexdef": "CREATE UNIQUE INDEX idx_companies_org_lower_name ON public.companies USING btree (organization_id, lower(TRIM(BOTH FROM name)))"
+      },
+      {
+        "tablename": "companies",
+        "indexname": "idx_companies_parent",
+        "indexdef": "CREATE INDEX idx_companies_parent ON public.companies USING btree (parent_id) WHERE (parent_id IS NOT NULL)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "contacts_pkey",
+        "indexdef": "CREATE UNIQUE INDEX contacts_pkey ON public.contacts USING btree (id)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_company",
+        "indexdef": "CREATE INDEX idx_contacts_company ON public.contacts USING btree (company_id) WHERE (company_id IS NOT NULL)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_email",
+        "indexdef": "CREATE INDEX idx_contacts_email ON public.contacts USING btree (email) WHERE (email IS NOT NULL)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_normalized_phone",
+        "indexdef": "CREATE INDEX idx_contacts_normalized_phone ON public.contacts USING btree (normalized_phone) WHERE (normalized_phone IS NOT NULL)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_org",
+        "indexdef": "CREATE INDEX idx_contacts_org ON public.contacts USING btree (organization_id)"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_org_phone_unique",
+        "indexdef": "CREATE UNIQUE INDEX idx_contacts_org_phone_unique ON public.contacts USING btree (organization_id, normalized_phone) WHERE ((normalized_phone IS NOT NULL) AND (deleted_at IS NULL))"
+      },
+      {
+        "tablename": "contacts",
+        "indexname": "idx_contacts_source_lead",
+        "indexdef": "CREATE INDEX idx_contacts_source_lead ON public.contacts USING btree (source_lead_id) WHERE (source_lead_id IS NOT NULL)"
+      },
+      {
+        "tablename": "deal_contacts",
+        "indexname": "deal_contacts_deal_id_contact_id_key",
+        "indexdef": "CREATE UNIQUE INDEX deal_contacts_deal_id_contact_id_key ON public.deal_contacts USING btree (deal_id, contact_id)"
+      },
+      {
+        "tablename": "deal_contacts",
+        "indexname": "deal_contacts_pkey",
+        "indexdef": "CREATE UNIQUE INDEX deal_contacts_pkey ON public.deal_contacts USING btree (id)"
+      },
+      {
+        "tablename": "deal_contacts",
+        "indexname": "idx_deal_contacts_contact",
+        "indexdef": "CREATE INDEX idx_deal_contacts_contact ON public.deal_contacts USING btree (contact_id)"
+      },
+      {
+        "tablename": "deal_contacts",
+        "indexname": "idx_deal_contacts_deal",
+        "indexdef": "CREATE INDEX idx_deal_contacts_deal ON public.deal_contacts USING btree (deal_id)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "deals_historical_sales_by_lead",
+        "indexdef": "CREATE INDEX deals_historical_sales_by_lead ON public.deals USING btree (organization_id, source_lead_id) WHERE (((metadata ->> 'historical_sale'::text) = 'true'::text) AND (deleted_at IS NULL) AND (won = true))"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "deals_pkey",
+        "indexdef": "CREATE UNIQUE INDEX deals_pkey ON public.deals USING btree (id)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_company",
+        "indexdef": "CREATE INDEX idx_deals_company ON public.deals USING btree (company_id) WHERE (company_id IS NOT NULL)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_expected_close",
+        "indexdef": "CREATE INDEX idx_deals_expected_close ON public.deals USING btree (expected_close_date) WHERE (expected_close_date IS NOT NULL)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_org",
+        "indexdef": "CREATE INDEX idx_deals_org ON public.deals USING btree (organization_id)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_org_created_at",
+        "indexdef": "CREATE INDEX idx_deals_org_created_at ON public.deals USING btree (organization_id, created_at DESC, id DESC)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_org_last_activity",
+        "indexdef": "CREATE INDEX idx_deals_org_last_activity ON public.deals USING btree (organization_id, last_activity_at DESC, id DESC)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_outcome_org",
+        "indexdef": "CREATE INDEX idx_deals_outcome_org ON public.deals USING btree (organization_id, outcome) WHERE (deleted_at IS NULL)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_owner",
+        "indexdef": "CREATE INDEX idx_deals_owner ON public.deals USING btree (owner_id) WHERE (owner_id IS NOT NULL)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_source_lead",
+        "indexdef": "CREATE INDEX idx_deals_source_lead ON public.deals USING btree (source_lead_id) WHERE (source_lead_id IS NOT NULL)"
+      },
+      {
+        "tablename": "deals",
+        "indexname": "idx_deals_won",
+        "indexdef": "CREATE INDEX idx_deals_won ON public.deals USING btree (won) WHERE (won IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pe_pipeline_stage_created",
+        "indexdef": "CREATE INDEX idx_pe_pipeline_stage_created ON public.pipeline_entries USING btree (pipeline_id, stage_key, created_at DESC) WHERE (lead_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pe_pipeline_stage_lead",
+        "indexdef": "CREATE INDEX idx_pe_pipeline_stage_lead ON public.pipeline_entries USING btree (pipeline_id, stage_key) WHERE (lead_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_assigned",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_assigned ON public.pipeline_entries USING btree (assigned_to) WHERE (assigned_to IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_deal",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_deal ON public.pipeline_entries USING btree (deal_id) WHERE (deal_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_lead",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_lead ON public.pipeline_entries USING btree (lead_id) WHERE (lead_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_open_snapshot",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_open_snapshot ON public.pipeline_entries USING btree (organization_id, pipeline_id, stage_key) WHERE (closed_at IS NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_org",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_org ON public.pipeline_entries USING btree (organization_id)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_pipeline",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_pipeline ON public.pipeline_entries USING btree (pipeline_id)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_stage",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_stage ON public.pipeline_entries USING btree (stage_key)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "idx_pipeline_entries_stage_id",
+        "indexdef": "CREATE INDEX idx_pipeline_entries_stage_id ON public.pipeline_entries USING btree (stage_id) WHERE (stage_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "pipeline_entries_pkey",
+        "indexdef": "CREATE UNIQUE INDEX pipeline_entries_pkey ON public.pipeline_entries USING btree (id)"
+      },
+      {
+        "tablename": "pipeline_entries",
+        "indexname": "uq_pipeline_entries_deal_id",
+        "indexdef": "CREATE UNIQUE INDEX uq_pipeline_entries_deal_id ON public.pipeline_entries USING btree (deal_id) WHERE (deal_id IS NOT NULL)"
+      }
+    ],
+    "counts": [
+      {
+        "relation": "companies",
+        "rows": 0
+      },
+      {
+        "relation": "contacts",
+        "rows": 0
+      },
+      {
+        "relation": "deal_contacts",
+        "rows": 0
+      }
+    ],
+    "migrations": [
+      {
+        "version": "20271019000006",
+        "name": "cafe_jurere_visibility_cache"
+      },
+      {
+        "version": "20271019000005",
+        "name": "leads_cafe_jurere_visibilidade"
+      },
+      {
+        "version": "20271019000004",
+        "name": "leads_cafe_jurere_cadastro_erp"
+      },
+      {
+        "version": "20271019000002",
+        "name": "api_catalogo_nomes_visibilidade"
+      },
+      {
+        "version": "20271019000001",
+        "name": "chat_unread_reply"
+      },
+      {
+        "version": "20271019000000",
+        "name": "whatsapp_saved_contact_name"
+      },
+      {
+        "version": "20271018120000",
+        "name": "export_lead_data_resolve_schema"
+      },
+      {
+        "version": "20271018000002",
+        "name": "registrar_vendas_historicas"
+      },
+      {
+        "version": "20271018000001",
+        "name": "lead_relacao_authenticated_performance"
+      },
+      {
+        "version": "20271018000000",
+        "name": "lead_relacao_ganho_perdido"
+      },
+      {
+        "version": "20271017113742",
+        "name": "dashboards_viram_templates"
+      },
+      {
+        "version": "20271017000000",
+        "name": "meeting_date_unique_pipeline_entry"
+      }
+    ],
+    "triggers": [
+      {
+        "table_name": "companies",
+        "tgname": "update_companies_updated_at",
+        "definition": "CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON public.companies FOR EACH ROW EXECUTE FUNCTION update_updated_at()"
+      },
+      {
+        "table_name": "contacts",
+        "tgname": "update_contacts_updated_at",
+        "definition": "CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON public.contacts FOR EACH ROW EXECUTE FUNCTION update_updated_at()"
+      }
+    ],
+    "functions": [
+      {
+        "nspname": "public",
+        "proname": "abrir_negocio",
+        "arguments": "p_lead_id uuid, p_pipe text, p_stage text, p_owner_id uuid, p_value numeric, p_meeting_date timestamp with time zone, p_notes text, p_title text, p_source text",
+        "security_definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.abrir_negocio(p_lead_id uuid, p_pipe text, p_stage text, p_owner_id uuid DEFAULT NULL::uuid, p_value numeric DEFAULT NULL::numeric, p_meeting_date timestamp with time zone DEFAULT NULL::timestamp with time zone, p_notes text DEFAULT NULL::text, p_title text DEFAULT NULL::text, p_source text DEFAULT NULL::text)\n RETURNS uuid\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_uuid_re constant text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';\n  v_org        uuid;\n  v_tz         text;\n  v_deal_id    uuid;\n  v_entry_id   uuid := gen_random_uuid();\n  v_title      text;\n  v_pip        public.pipelines%ROWTYPE;\n  v_stage_txt  text := NULLIF(btrim(COALESCE(p_stage, '')), '');\n  v_stage_id   uuid;\n  v_notes      text := NULLIF(btrim(COALESCE(p_notes, '')), '');\nBEGIN\n  -- A org vem do LEAD, nunca de parâmetro. Com RLS de invoker, um lead de outra\n  -- organização simplesmente não é visível e a função aborta aqui — o chamador\n  -- não consegue escolher em qual org escreve.\n  SELECT l.organization_id INTO v_org\n    FROM public.leads l\n   WHERE l.id = p_lead_id AND l.deleted_at IS NULL;\n\n  IF v_org IS NULL THEN\n    RAISE EXCEPTION 'Lead % não encontrado (ou está na lixeira).', p_lead_id\n      USING ERRCODE = 'no_data_found';\n  END IF;\n\n  -- O CHECK da coluna também recusa, mas a mensagem dele fala de constraint.\n  -- Esta diz o que fazer, e é a que o integrador lê.\n  IF p_source IS NOT NULL\n     AND p_source NOT IN ('human','workflow','api','import','backfill') THEN\n    RAISE EXCEPTION 'Procedência inválida: %. Válidas: human, workflow, api, import, backfill.', p_source\n      USING ERRCODE = 'invalid_parameter_value';\n  END IF;\n\n  -- Qualquer funil, por id/slug/alias — erra alto antes de escrever qualquer\n  -- coisa. 'upsell' segue sem porta aqui: não existe linha em `pipelines` com\n  -- esse slug (carteira entra por regra própria, ADR-0023 decisão 8), então o\n  -- resolvedor recusa com \"não existe\" — mesmo destino do ELSE antigo.\n  v_pip := public.fn_resolver_funil(v_org, p_pipe);\n\n  SELECT o.timezone INTO v_tz FROM public.organizations o WHERE o.id = v_org;\n\n  -- Dono de outra org é recusado aqui, e não só pela trava do M6: a mensagem\n  -- daqui diz o que aconteceu, a do gatilho diz que uma constraint falhou.\n  IF p_owner_id IS NOT NULL\n     AND NOT EXISTS (SELECT 1 FROM public.team_members m\n                      WHERE m.id = p_owner_id AND m.organization_id = v_org) THEN\n    RAISE EXCEPTION 'Responsável % não pertence à organização deste lead.', p_owner_id\n      USING ERRCODE = 'check_violation';\n  END IF;\n\n  v_title := COALESCE(\n    NULLIF(btrim(COALESCE(p_title, '')), ''),\n    public.fn_negocio_titulo_padrao(now(), v_tz)\n  );\n\n  INSERT INTO public.deals (organization_id, title, source_lead_id, owner_id, value, notes, created_by, source)\n  VALUES (v_org, v_title, p_lead_id, p_owner_id, p_value, v_notes, auth.uid(), p_source)\n  RETURNING id INTO v_deal_id;\n\n  IF v_pip.type = 'custom' THEN\n    -- Etapa por stage_key OU uuid. O catálogo (`api_list_pipelines`) publica os\n    -- dois; antes só o uuid era aceito e stage_key quebrava com \"invalid input\n    -- syntax for type uuid\" — erro de encanamento no lugar de erro de domínio.\n    IF v_stage_txt IS NULL THEN\n      RAISE EXCEPTION 'Etapa é obrigatória para abrir Negócio em funil personalizado.'\n        USING ERRCODE = 'invalid_parameter_value';\n    ELSIF v_stage_txt ~ v_uuid_re THEN\n      v_stage_id := v_stage_txt::uuid;  -- pertencimento ao funil é validado pela função compartilhada\n    ELSE\n      SELECT ps.id INTO v_stage_id\n        FROM public.pipeline_stages ps\n       WHERE ps.organization_id = v_org\n         AND ps.pipeline_id = v_pip.id\n         AND ps.stage_key = v_stage_txt;\n      IF v_stage_id IS NULL THEN\n        RAISE EXCEPTION 'Etapa \"%\" não existe no funil %.', v_stage_txt, v_pip.id\n          USING ERRCODE = 'invalid_parameter_value';\n      END IF;\n    END IF;\n\n    -- Caminho único pós-674: a função compartilhada escreve em pipeline_entries,\n    -- valida funil/etapa/tenancy e já liga o card ao negócio.\n    PERFORM public.fn_entrada_custom_criar(\n      p_organization_id => v_org,\n      p_pipeline_id     => v_pip.id,\n      p_lead_id         => p_lead_id,\n      p_stage_id        => v_stage_id,\n      p_assigned_to     => p_owner_id,\n      p_deal_id         => v_deal_id,\n      p_notes           => v_notes,\n      p_id              => v_entry_id);\n\n  ELSIF v_pip.slug = 'whatsapp' THEN\n    PERFORM public.fn_entrada_sistema_criar(\n      p_organization_id => v_org,\n      p_slug            => 'whatsapp',\n      p_lead_id         => p_lead_id,\n      p_stage_key       => COALESCE(v_stage_txt, 'novo_lead'),\n      p_assigned_to     => p_owner_id,\n      p_metadata        => jsonb_build_object(\n        'responsible_id', p_owner_id,\n        'sdr_id',         p_owner_id,\n        'scheduled_date', NULL::timestamptz),\n      p_notes           => v_notes,\n      p_id              => v_entry_id);\n\n  ELSIF v_pip.slug = 'confirmacao' THEN\n    PERFORM public.fn_entrada_sistema_criar(\n      p_organization_id => v_org,\n      p_slug            => 'confirmacao',\n      p_lead_id         => p_lead_id,\n      p_stage_key       => COALESCE(v_stage_txt, 'marcada'),\n      p_assigned_to     => p_owner_id,\n      p_metadata        => jsonb_build_object(\n        'meeting_date',      p_meeting_date,\n        'is_confirmed',      false,\n        'closer_id',         NULL::uuid,\n        'responsible_id',    p_owner_id,\n        'sdr_id',            p_owner_id,\n        'meet_link',         NULL::text,\n        'metrics_period_at', NULL::timestamptz),\n      p_notes           => v_notes,\n      p_id              => v_entry_id);\n\n  ELSIF v_pip.slug = 'propostas' THEN\n    PERFORM public.fn_entrada_sistema_criar(\n      p_organization_id => v_org,\n      p_slug            => 'propostas',\n      p_lead_id         => p_lead_id,\n      p_stage_key       => COALESCE(v_stage_txt, 'enviada'),\n      p_assigned_to     => p_owner_id,\n      p_metadata        => jsonb_build_object(\n        'sale_value',        p_value,\n        'closer_id',         p_owner_id,\n        'responsible_id',    p_owner_id,\n        'product_id',        NULL::uuid,\n        'product_type',      NULL::text,\n        'calor',             NULL::integer,\n        'loss_reason',       NULL::text,\n        'loss_reason_id',    NULL::uuid,\n        'commitment_date',   NULL::date,\n        'contract_duration', NULL::integer,\n        'metrics_period_at', NULL::timestamptz),\n      p_notes           => v_notes,\n      p_id              => v_entry_id);\n\n  ELSE\n    -- Funil de sistema com slug sem porta própria (não existe em prod hoje —\n    -- medido 2026-09-02: só whatsapp/confirmacao/propostas). Erra alto em vez\n    -- de inventar um caminho.\n    RAISE EXCEPTION 'Funil % não abre negócio por esta porta.', v_pip.slug\n      USING ERRCODE = 'invalid_parameter_value';\n  END IF;\n\n  -- Liga a posição à identidade. A função de sistema não recebe `deal_id`;\n  -- a função custom já criou o card ligado.\n  IF v_pip.type <> 'custom' THEN\n    UPDATE public.pipeline_entries SET deal_id = v_deal_id WHERE id = v_entry_id;\n\n    IF NOT FOUND THEN\n      RAISE EXCEPTION 'Card criado mas não encontrado para ligar ao negócio (entry %). Transação desfeita para não deixar negócio sem posição.', v_entry_id\n        USING ERRCODE = 'internal_error';\n    END IF;\n  END IF;\n\n  RETURN v_deal_id;\nEND;\n$function$\n"
+      },
+      {
+        "nspname": "public",
+        "proname": "migrate_leads_to_contacts_companies",
+        "arguments": "p_batch_size integer",
+        "security_definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION public.migrate_leads_to_contacts_companies(p_batch_size integer DEFAULT 500)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_org_id UUID;\n  v_lead RECORD;\n  v_company_id UUID;\n  v_contact_id UUID;\n  v_migrated INT := 0;\n  v_company_count INT := 0;\n  v_contact_count INT := 0;\nBEGIN\n  -- Resolve caller org\n  v_org_id := public.get_user_organization_id();\n  IF v_org_id IS NULL THEN\n    RAISE EXCEPTION 'No organization found for current user';\n  END IF;\n\n  FOR v_lead IN\n    SELECT id, name, email, phone, normalized_phone, company\n    FROM public.leads\n    WHERE organization_id = v_org_id\n      AND contact_id IS NULL\n      AND deleted_at IS NULL\n    ORDER BY created_at\n    LIMIT p_batch_size\n  LOOP\n    v_company_id := NULL;\n\n    -- Upsert company if lead has company text\n    IF v_lead.company IS NOT NULL AND TRIM(v_lead.company) <> '' THEN\n      -- Try to find existing company first (functional index match)\n      SELECT id INTO v_company_id\n      FROM public.companies\n      WHERE organization_id = v_org_id\n        AND LOWER(TRIM(name)) = LOWER(TRIM(v_lead.company));\n\n      IF v_company_id IS NULL THEN\n        INSERT INTO public.companies (organization_id, name)\n          VALUES (v_org_id, TRIM(v_lead.company))\n          RETURNING id INTO v_company_id;\n        v_company_count := v_company_count + 1;\n      END IF;\n    END IF;\n\n    -- Insert contact\n    INSERT INTO public.contacts (\n      organization_id, company_id, name, email, phone,\n      normalized_phone, source, source_lead_id\n    ) VALUES (\n      v_org_id, v_company_id, v_lead.name, v_lead.email, v_lead.phone,\n      v_lead.normalized_phone, 'migration', v_lead.id\n    )\n    RETURNING id INTO v_contact_id;\n\n    v_contact_count := v_contact_count + 1;\n\n    -- Link back to lead\n    UPDATE public.leads\n    SET contact_id = v_contact_id,\n        company_entity_id = v_company_id\n    WHERE id = v_lead.id;\n\n    v_migrated := v_migrated + 1;\n  END LOOP;\n\n  RETURN jsonb_build_object(\n    'migrated_count', v_migrated,\n    'company_count', v_company_count,\n    'contact_count', v_contact_count\n  );\nEND;\n$function$\n"
+      }
+    ]
+  }
+}
