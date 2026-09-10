@@ -17,8 +17,11 @@
  *      diálogo direto em "Importar" em dois call sites.
  */
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+
+const rollout = vi.hoisted(() => ({ enabled: false }));
+beforeEach(() => { rollout.enabled = false; });
 
 // ── Vizinhos pesados: só o diálogo está sob teste ───────────────────────────
 vi.mock("@/modules/pipelines/components/shared/ManagePipelineStagesModal", () => ({
@@ -39,7 +42,8 @@ vi.mock("@/modules/pipelines/components/custom/ImportCustomPipelineContent", () 
 vi.mock("@/modules/leads", () => ({
   CustomFieldsManager: () => null,
   ImportLeadsFunnelContent: () => <div data-testid="import-leads" />,
-  ExportLeadsContent: () => null,
+  ExportLeadsContent: ({ pipelineId }: { pipelineId?: string }) => <div data-testid="export-pipeline">{pipelineId}</div>,
+  useVentimaisExportDetails: () => ({ enabled: rollout.enabled, isLoading: false }),
 }));
 vi.mock("@/modules/pipelines/hooks/config/useStageDispatchToggle", () => ({
   useStageDispatchEnabled: () => ({ data: { enabled: false }, isLoading: false }),
@@ -80,6 +84,10 @@ const pipelineCustom = {
 } as never;
 
 describe("Aba Geral primeiro — funil de fábrica", () => {
+  it("a exportação recebe o kanban selecionado", () => {
+    render(<PipeSettingsDialog open onOpenChange={() => {}} pipeType="whatsapp" stages={[]} defaultTab="exportar" />);
+    expect(screen.getByTestId("export-pipeline").textContent).toBe("p-sys");
+  });
   it("encabeça as sete abas e é onde o diálogo abre", () => {
     render(
       <PipeSettingsDialog open onOpenChange={() => {}} pipeType="whatsapp" stages={[]} />,
@@ -133,6 +141,13 @@ describe("Carteira (upsell) — sem Geral, e sem regressão", () => {
 });
 
 describe("Aba Geral primeiro — funil personalizado", () => {
+  it("adiciona exportação somente com o rollout habilitado e passa o kanban", () => {
+    rollout.enabled = true;
+    render(<CustomPipeSettingsDialog open onOpenChange={() => {}} pipeline={pipelineCustom} stages={[]} />);
+    expect(abas()).toEqual(["Geral", "Etapas", "Disparos", "Importar", "Exportar"]);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Exportar" }), { button: 0, ctrlKey: false });
+    expect(screen.getByTestId("export-pipeline").textContent).toBe("c1");
+  });
   it("encabeça as quatro abas e é onde o diálogo abre", () => {
     render(
       <CustomPipeSettingsDialog
