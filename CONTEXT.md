@@ -2,6 +2,32 @@
 
 Canonical terms used across the system. No implementation details here — this is a glossary.
 
+## Target vocabulary — contacts and companies (SCRUM-682)
+
+Agreed vocabulary for the new commercial model; the legacy definitions below still describe the existing product during transition.
+
+- **Contato (Contact)**: A person known to the Organization, independent of whether they have a company or a Negócio. The same person can have professional links with multiple companies.
+- **Telefone compartilhado (Shared phone number)**: A communication number used by multiple distinct contacts. A matching number alone neither establishes that two contacts are the same person nor authorizes merging them.
+- **Identificação pendente (Pending identification)**: A received conversation whose available context does not identify which contact is speaking through a shared number. It remains available for identification without assigning it arbitrarily to a contact or copying it to every matching person's history.
+- **Contato arquivado (Archived contact)**: A contact deactivated within the Organization while retaining identity, affiliations and history, with reactivation available; active participation in open Negócios must be resolved before archiving. It is unavailable for new Negócios and ineligible for new automatic sends; its associated companies remain unaffected.
+- **Empresa (Company)**: A business known to the Organization, which can exist before any associated contacts.
+- **Participante de negócio empresarial (Company deal participant)**: A contact whose active participation requires an active affiliation to the buying company. When the affiliation ends, previous participation remains in history with review pending, but cannot remain active without an active affiliation; a personal Negócio still does not require a company.
+- **Empresa arquivada (Archived company)**: A company retained with its history and affiliations but unavailable for new Negócios until reactivated. Archiving requires no open Negócios linked to it and does not archive its contacts.
+- **Correção de empresa (Buying company correction)**: An explicit, justified and historically recorded correction of the buying company on a closed Negócio. It does not automatically reopen the negotiation.
+- **Vínculo profissional (Professional affiliation)**: The association between a Contato and an Empresa. A contact's affiliations are independent of one another.
+- **Vínculo profissional encerrado (Ended affiliation)**: A past association between a contact and a company, retained as history after the person leaves. Ending it neither deletes the contact nor transfers past Negócios to another company.
+- **Participação pendente de revisão (Participation pending review)**: A contact's participation in an open Negócio flagged for its owner's review after the associated professional affiliation ends. The flag does not automatically remove or replace the participant.
+- **Pausa de envio por revisão (Review-related sending pause)**: An explicit, visible hold on automatic messages to a participant within the affected Negócios while their participation awaits review. It does not block the contact's other relationships or pause the entire Negócio.
+- **Cargo (Job title)**: The optional professional title of a contact within a specific company affiliation. The same contact can have different titles at different companies; changing one does not change the others.
+- **Papel no negócio (Deal participation role)**: An optional commercial role of a contact in a specific Negócio, such as decision-maker or influencer, independent of the professional job title. A single participation can have multiple roles, and those roles can differ across Negócios.
+- **Responsável pelo contato (Contact owner)**: The team member responsible for the relationship with a contact, independently of who handles each Negócio.
+- **Sem responsável (Unassigned)**: A contact, company or Negócio with no owner assigned yet; this is a valid state. It does not by itself grant access or assign ownership to the record's creator.
+- **Responsável pelo negócio (Deal owner)**: The team member responsible for a specific negotiation. Reassigning a Negócio does not automatically reassign its contacts or their other Negócios.
+- **Responsável pela empresa (Company owner)**: The optional team member responsible for the relationship with a company, independently of its contacts' and Negócios' owners. Reassigning the company does not automatically reassign those contacts or Negócios.
+- **Contato substituto (Replacement contact)**: A contact associated with the company who can receive an automation's continuation when substitution is configured. Prior participation in the Negócio is not required.
+- **Prioridade de substituição (Replacement priority)**: The configurable order among a company's contacts used to select the next eligible replacement. It is distinct from a contact's role in a Negócio or their professional job title.
+- **Abordagem de substituição (Replacement introduction)**: The automation's dedicated introduction and context for a replacement contact. It does not restart the entire automation or deliver the previous contact's follow-up unchanged.
+
 ## Core Entities
 
 - **Relação (Relationship)**: Whether a Lead has ever bought — `Lead` (never) or `Cliente` (at least one won Negócio in its history). Monotonic: a Cliente never reverts to Lead, even after a later loss. Distinct from **Situação**, which is about now.
