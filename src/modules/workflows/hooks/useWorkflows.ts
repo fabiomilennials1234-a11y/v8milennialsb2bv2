@@ -161,7 +161,8 @@ export function useToggleWorkflow() {
           id: string;
           data?: Record<string, unknown>;
         }[];
-        const issues = findNodeConfigIssues(nodes);
+        const edges = (wf?.definition as { edges?: { source: string; target: string; sourceHandle?: string | null }[] } | null)?.edges ?? [];
+        const issues = findNodeConfigIssues(nodes, edges);
 
         if (issues.length > 0) {
           const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");

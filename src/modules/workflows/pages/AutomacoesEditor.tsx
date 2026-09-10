@@ -514,7 +514,7 @@ export default function AutomacoesEditor() {
     // mas impede ATIVAR. Medido em produção: ~6.400 execuções morreram em 90 dias
     // porque o editor deixava ligar workflow com campo obrigatório vazio, e o
     // cliente não via erro nenhum — a automação simplesmente não acontecia.
-    const issues = findNodeConfigIssues(nodes);
+    const issues = findNodeConfigIssues(nodes, edges);
     const issueByNode = new Map(issues.map((i) => [i.nodeId, `Falta: ${i.missing}`]));
 
     // Marca o culpado no canvas. Recusar sem apontar qual nó, entre vinte, seria

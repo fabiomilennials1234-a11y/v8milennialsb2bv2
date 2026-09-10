@@ -995,6 +995,42 @@ const runWbw = (sb: any, definition: unknown, over: Record<string, unknown> = {}
     ...over,
   });
 
+describe("wait_business_window — isolamento da saída padrão", () => {
+  it.each([true, false])("fora das janelas preserva prioridade padrão (com padrão: %s)", async (withDefault) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FRI_20H);
+    const { sb } = baseMock();
+    const updates = trackExecutionUpdates(sb);
+    const windows = [
+      { id: "route", name: "Sábado", days: ["sat"], start: "09:00", end: "12:00", action: "route:sabado" },
+      ...(withDefault ? [{ id: "default", name: "Segunda", days: ["mon"], start: "08:00", end: "18:00", action: "pass" }] : []),
+    ];
+    const result = await runWbw(sb, wbwDefinition(windows));
+    expect(result.status).toBe("paused");
+    expect(mockAction).not.toHaveBeenCalled();
+    const scheduled = updates.find(u => u.next_run_at)?.next_run_at;
+    const opening = BRT(withDefault ? "2026-08-24T08:00:00" : "2026-08-22T09:00:00");
+    const offset = new Date(scheduled as string).getTime() - opening.getTime();
+    expect(offset).toBeGreaterThanOrEqual(0);
+    expect(offset).toBeLessThan(30 * 60_000);
+  });
+
+  it("pass não executa as saídas nomeadas de outras janelas", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(WED_10H);
+    const { sb } = baseMock();
+    const definition = wbwDefinition([
+      { id: "morning", name: "Manhã", days: ["wed"], start: "08:00", end: "12:00", action: "pass" },
+      { id: "afternoon", name: "Tarde", days: ["wed"], start: "13:00", end: "18:00", action: "route:tarde" },
+    ]);
+    definition.nodes.push({ id: "a2", type: "action", data: { actionType: "remove_tag" } });
+    definition.edges.push({ id: "named", source: "bw1", target: "a2", sourceHandle: "tarde" } as never);
+    await runWbw(sb, definition);
+    expect(mockAction).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+});
+
 describe("computeNextSendWindowStart", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });

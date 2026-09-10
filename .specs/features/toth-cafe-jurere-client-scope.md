@@ -38,6 +38,24 @@ mantêm o comportamento anterior, inclusive se consultarem o campo calculado.
 Validação: 15 verificações PostgreSQL isoladas, incluindo RLS, anon sem
 EXECUTE, membro de outro tenant, status 0/3, sem mapa e preservação dos dados.
 
+### Correção do timeout de listagem
+
+O campo calculado original consultava três tabelas sob RLS por linha.
+O teste administrativo (0,37 s) não representava o usuário: a contagem
+autenticada ultrapassou 8 s e a tela permaneceu tentando carregar.
+`20271019000006` passa a derivar `leads.cafe_jurere_erp_elegivel` na escrita.
+Triggers internos mantêm a projeção quando cliente, mapa ou organização do
+membro muda; tentativas de escrever diretamente o booleano são recalculadas.
+Nenhuma policy de acesso foi ampliada. Leitura usa apenas a linha de lead e
+o planejador expande a expressão, sem consultas correlacionadas por cadastro.
+
+Backfill separado do schema, somente para a Café Jurerê. Validado em produção
+com JWT de usuário e role authenticated: 2.284 visíveis em 42,6 ms; primeira
+página com 50 leads e classificação carregou dentro do limite de 5 s.
+Grants internos revogados de anon/authenticated e conferidos no alvo.
+Regressão inclui plano sem chamada por linha e manutenção automática da
+projeção após mudanças de mapa e situação.
+
 Levantamento anterior em cache: 2.189 (1.703 ativos, 486 inconsistentes).
 A leitura atual do ERP pode variar; registrar o resultado real da execução.
 

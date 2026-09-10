@@ -21,6 +21,7 @@
  */
 
 import { ehModoTemplateMeta } from "./modo-de-mensagem";
+import { businessWindowConfigErrors, businessWindowConnectionIssues } from "./business-window";
 
 export type NodeConfig = Record<string, unknown>;
 
@@ -179,11 +180,14 @@ interface WorkflowNodeLike {
  * tem regra aqui passa. Gate que bloqueia o que não entende trava o produto a cada
  * feature nova — e o time aprende a contorná-lo.
  */
-export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue[] {
+export function findNodeConfigIssues(nodes: WorkflowNodeLike[], edges?: { source: string; target: string; sourceHandle?: string | null }[]): NodeConfigIssue[] {
   const issues: NodeConfigIssue[] = [];
 
   for (const node of nodes ?? []) {
     const config = node.data ?? {};
+    if (node.type === "wait_business_window" || config.type === "wait_business_window") {
+      issues.push(...businessWindowConfigErrors(config).map(missing => ({ nodeId: node.id, nodeLabel: String(config.label || "Janela Comercial"), actionType: "wait_business_window", missing })));
+    }
     const actionType = config.actionType as string | undefined;
     if (!actionType) continue;
 
@@ -203,6 +207,7 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
     }
   }
 
+  if (edges) issues.push(...businessWindowConnectionIssues(nodes, edges));
   return issues;
 }
 
