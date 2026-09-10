@@ -55,6 +55,14 @@ function getUnresolvedFields(data: Record<string, unknown>): string[] {
   return unresolved;
 }
 
+function getLegacyConditionReview(data: ConditionNodeData): { details: string; source: Record<string, unknown> } | null {
+  const review = data.legacyConditionReview;
+  if (!review || typeof review !== "object" || Array.isArray(review)) return null;
+  const value = review as Record<string, unknown>;
+  if (typeof value.details !== "string" || !value.source || typeof value.source !== "object" || Array.isArray(value.source)) return null;
+  return { details: value.details, source: value.source as Record<string, unknown> };
+}
+
 interface WorkflowSidebarProps {
   actorId?: string;
   workflowId?: string;
@@ -102,12 +110,20 @@ export function WorkflowSidebar({
         return <ActionPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "condition":
         if ((nodeData as ConditionNodeData).guidedCondition) {
-          return <><GuidedConditionPanel
+          const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);
+          const source = legacyReview?.source;
+          return <>{legacyReview && <div role="note" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm">
+            <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div><p className="font-medium">Correção pendente da regra antiga</p>
+                <p className="mt-1 text-muted-foreground">Antes: {String(source?.field ?? "sem campo")} · {String(source?.operator ?? "sem operador")}{source?.value ? ` · ${String(source.value)}` : ""}</p>
+                <p className="mt-1 text-muted-foreground">{legacyReview.details}</p>
+              </div></div>
+          </div>}<GuidedConditionPanel
             key={`${actorId}:${organizationId}:${selectedNode.id}`}
             actorId={actorId ?? ''}
             organizationId={organizationId ?? ''}
             condition={(nodeData as ConditionNodeData).guidedCondition!}
-            onChange={guidedCondition => handleUpdate({ guidedCondition })}
+            onChange={guidedCondition => handleUpdate({ guidedCondition, legacyConditionReview: undefined })}
           />{workflowId && organizationId && <WorkflowDataGrantPanel
             key={`${actorId}:${organizationId}:${workflowId}`}
             actorId={actorId ?? ''}

@@ -470,6 +470,70 @@ test('mantém importação legada inativa fora do publicador guiado', async ({ p
   expect(inserted).toMatchObject({ name: 'Legada (importado)', is_active: false });
 });
 
+test('revisa legado antes de criar rascunho sem alterar fluxo ativo nem horário pausante', async ({ page }) => {
+  await mockWorkflowListIdentity(page);
+  const tagId = 'abcd0000-0000-4000-8000-000000000099';
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id') ? { id: tagId, name: 'VIP atual' } : [{ id: tagId, name: 'VIP atual' }],
+  }));
+  let saved: Record<string, unknown> | undefined;
+  const workflowWrites: string[] = [];
+  const legacyDefinition = { nodes: [
+    { id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+    { id: 'condition-name', type: 'condition', position: { x: 400, y: 200 }, data: { type: 'condition', label: 'Nome antigo', field: 'name', operator: 'contains', value: 'ÁGUA', conditionMode: 'field' } },
+    { id: 'condition-tag', type: 'condition', position: { x: 400, y: 350 }, data: { type: 'condition', label: 'Tag antiga', field: 'tags', operator: 'has_tag', value: 'VIP', conditionMode: 'field' } },
+    { id: 'condition-hours', type: 'condition', position: { x: 400, y: 500 }, data: { type: 'condition', label: 'Horário antigo', field: '', operator: 'equals', value: '', conditionMode: 'time_window', timeWindow: {
+      days: ['seg'], startTime: '08:00', endTime: '18:00', timezone: 'America/Sao_Paulo',
+    } } },
+  ], edges: [] };
+  await page.route('**/rest/v1/workflows?*', route => {
+    if (route.request().method() !== 'GET') workflowWrites.push(route.request().method());
+    return route.fulfill({ json: { id: 'workflow-1', organization_id: 'org-1', name: 'Legada ativa', description: null,
+      is_active: true, trigger_type: 'lead_created', trigger_config: {}, loop_limit: 10, definition: legacyDefinition,
+      created_by: 'user-1', created_at: '2026-09-10T00:00:00Z', updated_at: '2026-09-10T00:00:00Z' } });
+  });
+  await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: saved ? {
+    definition: (saved.p_definition as Record<string, unknown>), settings: saved.p_settings, revision: 1,
+  } : null }));
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 1 } });
+  });
+  await page.route('**/rest/v1/workflow_guided_publications?*', route => route.fulfill({ json: null }));
+
+  await page.goto('/tests/browser/fixtures/guided-editor.html');
+  await expect(page.getByText('3 condicionais legados')).toBeVisible();
+  expect(saved).toBeUndefined();
+  expect(workflowWrites).toEqual([]);
+  await page.getByRole('button', { name: 'Revisar migração' }).click();
+  await expect(page.getByRole('heading', { name: 'Revisar condicionais legados' })).toBeVisible();
+  await expect(page.getByText('nome não prova identidade', { exact: false })).toBeVisible();
+  await expect(page.getByText('continua pausando a execução', { exact: false })).toBeVisible();
+  expect(saved).toBeUndefined();
+
+  await page.getByRole('button', { name: 'Criar rascunho para revisão' }).click();
+  await expect.poll(() => saved).toBeTruthy();
+  expect(saved).toMatchObject({ p_workflow_id: 'workflow-1', p_expected_revision: 0,
+    p_settings: { name: 'Legada ativa' } });
+  const draft = saved!.p_definition as { nodes: Array<{ id: string; data: Record<string, unknown> }> };
+  expect(draft.nodes.find(node => node.id === 'condition-name')?.data.guidedCondition).toMatchObject({
+    field: 'lead.name', operator: 'contains', value: 'ÁGUA',
+  });
+  expect(draft.nodes.find(node => node.id === 'condition-tag')?.data.guidedCondition).toMatchObject({
+    field: 'lead.tags', tagId: '', tagLabel: 'VIP',
+  });
+  expect(draft.nodes.find(node => node.id === 'condition-hours')?.data).toMatchObject({
+    conditionMode: 'time_window', timeWindow: { startTime: '08:00', endTime: '18:00' },
+  });
+  expect(draft.nodes.find(node => node.id === 'condition-hours')?.data.guidedCondition).toBeUndefined();
+  expect(workflowWrites).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Publicar' })).toBeVisible();
+  await page.locator('.react-flow__node-condition').filter({ hasText: 'Tag antiga' }).click();
+  await expect(page.getByRole('note')).toContainText('Antes: tags · has_tag · VIP');
+  await page.getByRole('combobox', { name: 'Tag', exact: true }).selectOption(tagId);
+  await expect(page.getByRole('note')).toHaveCount(0);
+});
+
 test('nova automação guiada cria rascunho separado sem enviar definição ao cadastro ativo', async ({ page }) => {
   let created: Record<string, unknown> | undefined;
   const directWrites: string[] = [];

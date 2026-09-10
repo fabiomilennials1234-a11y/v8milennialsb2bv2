@@ -747,3 +747,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Nenhum schema de banco mudou; migration e rollback novos não se aplicam. Preview e produção permaneceram sem deploy.
 - Importações legadas continuam no cadastro inativo original; somente árvores guiadas usam o publicador com draft separado. O relatório explicita os dois modos para manter persistência e mensagem da UI coerentes.
 - Checkpoint: 84/84 integrações reais, 123/123 jornadas Chromium e 270/270 unidades focadas verdes. TypeScript não introduziu erros; ESLint e whitespace passaram, com avisos `no-explicit-any` não bloqueantes nos arquivos tocados.
+
+## 2026-09-10 — ticket 20 migração explícita do legado
+
+- `legacy-condition-review.ts` inventaria cada condição sem mutação: texto, vazio/zero, tag, custom por nome, etapa antiga, aliases, regex e horário pausante. Propostas só carregam identidades quando a equivalência é comprovada; referências por nome nascem vazias.
+- Modal compara configuração anterior, proposta e diferença semântica. Abrir editor/modal não escreve. `Criar rascunho para revisão` usa a RPC existente com revisão esperada zero; conflito recarrega o draft vencedor.
+- Definição ativa e execução antiga permanecem legadas. Integração real manteve workflow ativo, execução `waiting`, `next_run_at` e `guided_version_id = null`, sem grant/publicação/versão. Tentativa de publicar o draft misto recusou o horário legado com `invalid_condition` sem tocar o fluxo ativo.
+- `time_window` continua pausando no executor legado. Migração não o transforma em decisão; UI exige redesenho explícito com Janela Comercial. Regex e operadores sem equivalente também permanecem bloqueados até correção.
+- Nenhuma migration, endpoint ou worker mudou. Checkpoint: 85/85 integrações reais, 124/124 jornadas Chromium e 273/273 unidades focadas verdes. TypeScript ratchet zero erros novos; ESLint/whitespace passaram, com avisos preexistentes apenas.

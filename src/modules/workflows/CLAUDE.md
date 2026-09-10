@@ -94,6 +94,7 @@ Inclui:
 - **Workflow CRUD + execuções**: `useWorkflows`, `useWorkflow`, `useCreateWorkflow`, `useUpdateWorkflow`, `useDeleteWorkflow`, `useToggleWorkflow`, `useWorkflowExecutions`, `useWorkflowExecutionSteps`, `useRetryWorkflowExecution`, `useWorkflowStats`
 - **Analytics**: `useWorkflowNodeStats`
 - **Portability**: `useExportWorkflow`, `useImportWorkflow`. Árvores guiadas usam o draft atual. Export/import limpa toda referência de tenant, remapeia IDs internos recursivamente e importa como shell inativo + draft sem grants; o destino exige remapeamento explícito antes de publicar.
+- **Revisão legada**: `legacy-condition-review.ts` inventaria diferenças sem escrever ao abrir. Ação explícita cria o primeiro draft na mesma automação; definição ativa, execuções sem versão e `time_window` pausante permanecem legados até publicação/reconstrução deliberada.
 - **Templates**: `useWorkflowTemplates`, `useCloneWorkflowTemplate`
 - **Stage <-> Workflow bindings** (consumido por `pipelines` e `campaigns`): `useStageWorkflows`, `useStageWorkflowCounts`, `useCustomPipeStageWorkflows`, `useCustomPipeWorkflowCounts`, `useCampaignStageWorkflows`, `useCampaignWorkflowCounts`
 - **Automation Health** (dashboard master): `useAutomationHealth`, `useDeadLetterJobs`, `useFailedWorkflows`, `useStuckActions`, `useCircuitBrokenWebhooks`, `useSystemAlerts`, `useResolveAlert`, `useReprocessJob`, `useOrgsCopilotEngine`, `useToggleCopilotEngine`, `useAuditLog`

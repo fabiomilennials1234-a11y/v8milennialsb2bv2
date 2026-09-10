@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useNodesState, useEdgesState } from "@xyflow/react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -20,6 +20,7 @@ import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
 import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
 import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
+import { LegacyConditionReviewDialog } from "@/modules/workflows/components/LegacyConditionReviewDialog";
 import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,6 +33,7 @@ import {
 } from "@/modules/workflows/hooks/useWorkflows";
 import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
 import { useGuidedWorkflowDraft, GuidedPublicationError, type GuidedPublicationIssue } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
+import { buildLegacyConditionReviewDraft, inspectLegacyConditions } from "@/modules/workflows/lib/legacy-condition-review";
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -75,6 +77,9 @@ const EMPTY_ENROLLMENT = {
   conditions: [] as Array<{ field: string; operator: string; value: string }>,
 };
 
+const GUIDED_CONDITIONS_ENABLED = import.meta.env.DEV
+  && import.meta.env.VITE_GUIDED_CONDITIONS === "true";
+
 function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
   switch (type) {
     case "trigger":
@@ -86,7 +91,7 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
         type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field",
         // New creation only. Saved legacy nodes retain their original contract.
         // Production exposure waits for the complete publication/grant journey.
-        ...(import.meta.env.DEV && import.meta.env.VITE_GUIDED_CONDITIONS === "true" ? {
+        ...(GUIDED_CONDITIONS_ENABLED ? {
           guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
         } : {}),
       } as ConditionNodeData;
@@ -210,11 +215,13 @@ function AutomacoesEditorContent() {
   const [draftRevision, setDraftRevision] = useState(0);
   const [newGuidedId] = useState(() => crypto.randomUUID());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [legacyReviewOpen, setLegacyReviewOpen] = useState(false);
   const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
   const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
+  const legacyReview = useMemo(() => inspectLegacyConditions({ nodes, edges }), [nodes, edges]);
 
   // Node unificado gateado por org (ADR-0012). Fail-closed: só converte os nós
   // legados quando a flag está ON para a org corrente.
@@ -374,7 +381,11 @@ function AutomacoesEditorContent() {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId
-            ? { ...n, data: { ...n.data, ...dataUpdates } as any }
+            ? { ...n, data: (() => {
+              const merged = { ...n.data, ...dataUpdates } as Record<string, unknown>;
+              for (const [key, value] of Object.entries(dataUpdates)) if (value === undefined) delete merged[key];
+              return merged as typeof n.data;
+            })() }
             : n
         )
       );
@@ -663,6 +674,34 @@ function AutomacoesEditorContent() {
     }
   }, [handleSave, guidedDraft.publish]);
 
+  const handleCreateLegacyReviewDraft = useCallback(async () => {
+    if (!GUIDED_CONDITIONS_ENABLED || isNew || !id || guidedDraft.data || legacyReview.items.length === 0) return;
+    const converted = buildLegacyConditionReviewDraft({ nodes, edges });
+    const settings = {
+      name,
+      enrollment_criteria: enrollment,
+      re_enrollment_enabled: reenrollment.enabled,
+      re_enrollment_cooldown_days: reenrollment.cooldown_days,
+      re_enrollment_max_times: reenrollment.max_times,
+    };
+    try {
+      const saved = await guidedDraft.save.mutateAsync({ definition: converted.definition, revision: 0, settings });
+      setNodes(converted.definition.nodes);
+      setEdges(converted.definition.edges);
+      setDraftRevision(saved.revision);
+      await guidedDraft.refetch();
+      setLegacyReviewOpen(false);
+      toast.success("Rascunho de revisão criado. A automação ativa permanece igual.");
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code === "PT409") await guidedDraft.refetch();
+      toast.error(code === "PT409"
+        ? "Outra pessoa já iniciou esta revisão. Recarregue o rascunho atual."
+        : "Não foi possível criar o rascunho de revisão.");
+    }
+  }, [isNew, id, guidedDraft, legacyReview.items.length,
+    nodes, edges, name, enrollment, reenrollment, setNodes, setEdges]);
+
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
     : null;
@@ -720,6 +759,19 @@ function AutomacoesEditorContent() {
         // runtime isolado de verdade.
         hiddenNodeTypes={["code_javascript"]}
       />
+
+      {GUIDED_CONDITIONS_ENABLED && !guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
+            <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
+      </div>}
+      {GUIDED_CONDITIONS_ENABLED && guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
+          <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
+      </div>}
 
       {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
         <p>Não foi possível consultar a versão publicada.</p>
@@ -793,6 +845,14 @@ function AutomacoesEditorContent() {
           </Tabs>
         </SheetContent>
       </Sheet>
+
+      {GUIDED_CONDITIONS_ENABLED && <LegacyConditionReviewDialog
+        open={legacyReviewOpen}
+        onOpenChange={setLegacyReviewOpen}
+        review={legacyReview}
+        onCreateDraft={() => void handleCreateLegacyReviewDraft()}
+        isCreating={guidedDraft.save.isPending}
+      />}
     </div>
   );
 }

@@ -125,6 +125,65 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('creates legacy review draft without rewriting active definition or inventing an execution version', async () => {
+    const workflowId = crypto.randomUUID();
+    const executionId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-legacy-review-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const legacyDefinition = { nodes: [
+      { id: 'trigger', type: 'trigger', data: { type: 'trigger', triggerType: 'lead_created', config: {} } },
+      { id: 'legacy-name', type: 'condition', data: { type: 'condition', label: 'Nome antigo',
+        field: 'name', operator: 'contains', value: 'ÁGUA', conditionMode: 'field' } },
+      { id: 'legacy-hours', type: 'condition', data: { type: 'condition', label: 'Horário antigo',
+        field: '', operator: 'equals', value: '', conditionMode: 'time_window',
+        timeWindow: { days: ['seg'], startTime: '08:00', endTime: '18:00', timezone: 'America/Sao_Paulo' } } },
+    ], edges: [] };
+    const reviewDefinition = { nodes: legacyDefinition.nodes.map(node => node.id === 'legacy-name'
+      ? { ...node, data: { ...node.data, guidedCondition: { version: 1, id: crypto.randomUUID(),
+        field: 'lead.name', operator: 'contains', value: 'ÁGUA' } } } : node), edges: [] };
+    try {
+      await service.from('workflows').insert({ id: workflowId, organization_id: orgA, created_by: userId,
+        name: 'Legada ativa', is_active: true, trigger_type: 'lead_created', trigger_config: {},
+        definition: legacyDefinition }).throwOnError();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+
+      const created = await caller.rpc('save_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_definition: reviewDefinition, p_expected_revision: 0,
+        p_settings: { name: 'Legada ativa', enrollment_criteria: { enabled: false, match_all: true, conditions: [] },
+          re_enrollment_enabled: false, re_enrollment_cooldown_days: 30, re_enrollment_max_times: 1 },
+      });
+      expect(created.error).toBeNull();
+      expect(created.data).toMatchObject({ workflow_id: workflowId, revision: 1 });
+      const active = await caller.from('workflows').select('is_active, definition').eq('id', workflowId).single();
+      expect(active.error).toBeNull();
+      expect(active.data).toEqual({ is_active: true, definition: legacyDefinition });
+      const execution = await service.from('workflow_executions').select('guided_version_id,status,next_run_at')
+        .eq('id', executionId).single();
+      expect(execution.error).toBeNull();
+      expect(execution.data).toMatchObject({ guided_version_id: null, status: 'waiting', next_run_at: '2099-01-01T00:00:00+00:00' });
+      expect((await service.from('workflow_guided_versions').select('id').eq('workflow_id', workflowId)).data).toEqual([]);
+      expect((await service.from('workflow_guided_publications').select('workflow_id').eq('workflow_id', workflowId)).data).toEqual([]);
+      expect((await service.from('workflow_data_grants').select('workflow_id').eq('workflow_id', workflowId)).data).toEqual([]);
+      const rejected = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 1 }), signal: AbortSignal.timeout(15000),
+      });
+      expect(rejected.status).toBe(422);
+      expect(await rejected.json()).toMatchObject({ status: 'error', code: 'invalid_configuration', issues:
+        expect.arrayContaining([expect.objectContaining({ code: 'invalid_condition', nodeId: 'legacy-hours' })]),
+      });
+      expect((await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId,
+        p_active: true, p_expected_version_id: null })).error?.code).toBe('42501');
+      expect((await caller.from('workflows').select('is_active,definition').eq('id', workflowId).single()).data)
+        .toEqual({ is_active: true, definition: legacyDefinition });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+    }
+  }, 60000);
+
   it('evaluates a custom text field by UUID and current definition', async () => {
     const fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
