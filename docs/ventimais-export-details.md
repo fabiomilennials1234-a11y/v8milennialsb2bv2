@@ -4,7 +4,9 @@
 
 Ao exportar Excel de qualquer kanban selecionado da Ventimais, incluir informações,
 observações, campos personalizados do lead e comentários. Funciona no kanban inteiro
-e na exportação de uma etapa. Exclusivo da organização Ventimais, UUID
+e na exportação de uma etapa ou seleção em lote. A seleção atual do kanban é por
+lead: todos os cards selecionados daquele lead no mesmo funil são exportados.
+Exclusivo da organização Ventimais, UUID
 `56b88e32-be6a-436e-b4e6-6e1293d21659`, com `organizations.feature_flags.kanban_export_details = true`.
 O UUID foi confirmado por consulta de leitura em 10/09/2026. Não identificar por nome.
 
