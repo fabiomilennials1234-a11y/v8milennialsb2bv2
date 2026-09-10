@@ -46,6 +46,9 @@ export function GuidedConditionResult({ condition, rules, groups }: {
                 ? entry.context.pipeline.name : current.pipelineLabel } : current;
     const lastWonDetail = current.field === 'business.last_won_date' && entry?.status === 'evaluated'
       ? ` · ${namedReference?.name ?? 'Nenhuma venda ganha'} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Vazio'}` : '';
+    const followUpDetail = current.field === 'activity.follow_up' && entry?.status === 'evaluated'
+      ? namedReference ? ` · ${namedReference.name} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Data indisponível'}`
+        : ' · Nenhum follow-up correspondente' : '';
     const messageReference = (current.field === 'message.trigger.text' || current.field === 'message.search.text') && entry?.status === 'evaluated' && entry.reference && 'messageId' in entry.reference && 'textSource' in entry.reference
       ? ` · Fonte: ${entry.reference.textSource === 'caption' ? 'legenda' : entry.reference.textSource === 'transcription' ? 'transcrição persistida' : entry.reference.textSource === 'interactive' ? 'resposta interativa' : entry.reference.textSource === 'synthetic' ? 'conteúdo estruturado' : 'texto'} · ${entry.reference.textProvider ?? entry.reference.provider}${entry.reference.textCreatedAt ? ` · ${new Date(entry.reference.textCreatedAt).toLocaleString('pt-BR')}` : ''}` : '';
     const waitingReference = current.field === 'message.waiting.elapsed' && entry?.status === 'evaluated'
@@ -53,7 +56,7 @@ export function GuidedConditionResult({ condition, rules, groups }: {
         ? ` · Âncora: primeira mensagem sem resposta em ${new Date(entry.reference.messageAt ?? '').toLocaleString('pt-BR')}`
         : ' · Espera ainda não iniciada'
       : '';
-    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{messageReference}{waitingReference}</p>;
+    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{followUpDetail}{messageReference}{waitingReference}</p>;
   }
   return render(condition, '');
 }

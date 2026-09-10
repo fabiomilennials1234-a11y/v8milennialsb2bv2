@@ -155,6 +155,9 @@ const conditionRetryRollback = readFileSync(`supabase/migrations/rollback/${cond
 const historySecurityMigration = '20271017000052_secure_guided_execution_history.sql';
 const historySecurityForward = readFileSync(`supabase/migrations/${historySecurityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const historySecurityRollback = readFileSync(`supabase/migrations/rollback/${historySecurityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const followUpMigration = '20271017000053_guided_follow_up_condition.sql';
+const followUpForward = readFileSync(`supabase/migrations/${followUpMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const followUpRollback = readFileSync(`supabase/migrations/rollback/${followUpMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -190,6 +193,15 @@ UPDATE public.workflow_executions SET status='running', current_node_id='conditi
   guided_condition_retry_node_id='condition-retry',
   guided_condition_retry_count=2, guided_condition_retry_error='history_sync_in_progress'
   WHERE workflow_id=(SELECT workflow_id FROM guided_rollback_fixture);
+${followUpRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_follow_up(uuid,uuid,uuid,uuid,text,text,text,text,date)') IS NOT NULL
+    OR public.valid_guided_data_scopes(ARRAY['activity.follow_up'])
+    OR pg_get_functiondef('public.can_read_guided_execution_data(uuid,uuid,uuid)'::regprocedure) LIKE '%followups.view%' THEN
+    RAISE EXCEPTION 'follow-up rollback incomplete';
+  END IF;
+END $$;
 ${historySecurityRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.get_workflow_execution_history(uuid,integer)') IS NOT NULL
@@ -518,6 +530,22 @@ ${messageSearchForward}
 ${messageWaitingForward}
 ${conditionRetryForward}
 ${historySecurityForward}
+${followUpForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon','public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('service_role','public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('anon','public.guided_follow_up_result(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('authenticated','public.guided_follow_up_result(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('service_role','public.guided_follow_up_result(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('anon','public.read_guided_condition_follow_up(uuid,uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR has_function_privilege('authenticated','public.read_guided_condition_follow_up(uuid,uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR NOT has_function_privilege('service_role','public.read_guided_condition_follow_up(uuid,uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
+    OR NOT public.valid_guided_data_scopes(ARRAY['activity.follow_up'])
+    OR pg_get_functiondef('public.can_read_guided_execution_data(uuid,uuid,uuid)'::regprocedure) NOT LIKE '%followups.view%' THEN
+    RAISE EXCEPTION 'follow-up reapply privileges invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.get_workflow_execution_history(uuid,integer)', 'EXECUTE')
     OR NOT has_function_privilege('authenticated', 'public.get_workflow_execution_history(uuid,integer)', 'EXECUTE')

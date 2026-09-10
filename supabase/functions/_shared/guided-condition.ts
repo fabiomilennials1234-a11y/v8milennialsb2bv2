@@ -75,8 +75,11 @@ export type GuidedMessageSearchRule = { version: 1; id: string; field: 'message.
 export type GuidedMessageWaitingRule = { version: 1; id: string; field: 'message.waiting.elapsed';
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
   waitingFor: 'lead' | 'company'; operator: GuidedNumberComparison['operator']; value: number; unit: GuidedElapsedUnit };
+export type GuidedFollowUpRule = { version: 1; id: string; field: 'activity.follow_up';
+  relation: 'lead' | 'trigger_business'; state: 'pending' | 'completed'; operator: 'exists' | 'not_exists';
+  dateOperator: 'any' | GuidedDateComparison['operator']; date?: string };
 
-export type GuidedRule = GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedFollowUpRule | GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -133,6 +136,11 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
     if (rule.field === 'business.last_won_date') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || (isGuidedDateOperator(rule.operator) && isGuidedCalendarDate(rule.value));
+    if (rule.field === 'activity.follow_up') return (rule.relation === 'lead' || rule.relation === 'trigger_business')
+      && (rule.state === 'pending' || rule.state === 'completed')
+      && (rule.operator === 'exists' || rule.operator === 'not_exists')
+      && (rule.dateOperator === 'any' ? rule.date === undefined
+        : isGuidedDateOperator(rule.dateOperator) && isGuidedCalendarDate(rule.date));
     if (rule.field === 'message.trigger.text') {
       const conversation = rule.conversation as Record<string, unknown> | undefined;
       const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
@@ -275,6 +283,7 @@ export async function evaluateGuidedCondition(
   const businessExistenceQueries: GuidedBusinessExistence[] = [];
   const messageSearchRules: GuidedMessageSearchRule[] = [];
   const messageWaitingRules: GuidedMessageWaitingRule[] = [];
+  const followUpRules: GuidedFollowUpRule[] = [];
   function collect(current: GuidedCondition): void {
     if ('kind' in current && current.kind === 'business_exists') {
       businessExistenceQueries.push(current);
@@ -307,10 +316,11 @@ export async function evaluateGuidedCondition(
     );
     else if (current.field === 'message.search.text') messageSearchRules.push(current);
     else if (current.field === 'message.waiting.elapsed') messageWaitingRules.push(current);
+    else if (current.field === 'activity.follow_up') followUpRules.push(current);
   }
   collect(request.condition);
   if (messageSearchRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
-  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.'));
+  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.') && !field.startsWith('activity.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
   const fields = leadRequestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
@@ -323,6 +333,7 @@ export async function evaluateGuidedCondition(
   const usesMessagePeriod = requestedFields.includes('message.period.exists');
   const usesMessageSearch = messageSearchRules.some(rule => rule.source.kind!=='trigger');
   const usesMessageWaiting = requestedFields.includes('message.waiting.elapsed');
+  const usesFollowUps = requestedFields.includes('activity.follow_up');
   const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -591,6 +602,43 @@ export async function evaluateGuidedCondition(
       if (candidate.coverage_status !== 'complete') return { status: 'error' as const,
         code: candidate.coverage_status === 'in_progress' ? 'history_sync_in_progress' as const : 'history_insufficient' as const };
       messageWaitingResults.set(rule.id, candidate);
+    }
+  }
+  type FollowUpData = { rule_id: string; matched: boolean; follow_up_id: string | null; title: string | null; event_date: string | null };
+  const followUpResults = new Map<string, FollowUpData>();
+  if (usesFollowUps) {
+    if (followUpRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    for (const rule of followUpRules) {
+      if (rule.relation === 'trigger_business' && !request.entryId) {
+        return { status: 'error' as const, code: 'context_unavailable' as const };
+      }
+      const response = await caller.rpc(request.authorization?.kind === 'organization'
+        ? 'read_guided_condition_follow_up' : 'test_guided_condition_follow_up', {
+        ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+        p_organization_id: request.organizationId,
+        p_lead_id: request.leadId,
+        p_entry_id: request.entryId ?? null,
+        p_rule_id: rule.id,
+        p_relation: rule.relation,
+        p_state: rule.state,
+        p_date_operator: rule.dateOperator,
+        p_date: rule.dateOperator === 'any' ? null : rule.date,
+      });
+      if (response.error) {
+        return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
+      }
+      const rows = response.data as FollowUpData[] | null;
+      const candidate = rows?.[0];
+      if (!Array.isArray(rows) || rows.length !== 1 || !candidate || candidate.rule_id !== rule.id
+        || typeof candidate.matched !== 'boolean'
+        || (candidate.follow_up_id !== null && (typeof candidate.follow_up_id !== 'string' || !GUIDED_UUID.test(candidate.follow_up_id)))
+        || (candidate.title !== null && typeof candidate.title !== 'string')
+        || (candidate.event_date !== null && !isGuidedCalendarDate(candidate.event_date))
+        || (candidate.matched && (!candidate.follow_up_id || !candidate.title || !candidate.event_date))
+        || (!candidate.matched && (candidate.follow_up_id !== null || candidate.title !== null || candidate.event_date !== null))) {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      followUpResults.set(rule.id, candidate);
     }
   }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
@@ -889,6 +937,15 @@ export async function evaluateGuidedCondition(
       }
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
         ...(lastWon ? { reference: { id: lastWon.deal_id, name: lastWon.title } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'activity.follow_up') {
+      const candidate = followUpResults.get(condition.id)!;
+      const exists = candidate.matched;
+      const matched = condition.operator === 'exists' ? exists : !exists;
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: candidate.event_date,
+        ...(exists ? { reference: { id: candidate.follow_up_id!, name: candidate.title! } } : {}),
+        ...(condition.relation === 'trigger_business' ? { context: { entryId: request.entryId! } } : {}) });
       return matched;
     }
     if (condition.field === 'message.search.text') {

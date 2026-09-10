@@ -718,3 +718,13 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Integração real reproduziu o vazamento de nome/contexto/erro antes da migração. Depois, provou membro com `workflows.edit` e lead oculto, liberação por responsabilidade atual, revogação retroativa sem apagar execução, `whatsapp.view` revogado/restaurado, outra organização, anônimo, acesso direto às três tabelas, estatística segura e retry autorizado/negado com pin histórico.
 - Migration 52 aplicada e registrada somente no preview `saonafmpiaupgnosqvax`. Rollback/reapply das 53 migrations guiadas passou preservando histórico e restaurando ACLs. Produção, worker e edge functions permanecem intocados.
 - Checkpoint: 81/81 integrações reais, 117/117 jornadas Chromium, 15/15 testes de hook/UI e 40/40 unidades focadas verdes. Guard de master-ghost não introduziu função nova; o baseline global permanece desatualizado com violações alheias.
+
+## 2026-09-10 — ticket 17 follow-up com vínculo e datas explícitos
+
+- `activity.follow_up` consulta a fonte operacional `follow_ups`. Relação `lead` inclui somente tarefas sem negócio; relação `trigger_business` exige e consulta exatamente o `pipeline_entry_id` do gatilho. Registros de outros negócios nunca entram no conjunto candidato.
+- Pendente significa `completed_at IS NULL AND archived_at IS NULL`, com comparação pelo prazo `due_date`. Concluído significa `completed_at IS NOT NULL`, com comparação por `completed_at`. `created_at` não participa e nunca é apresentado como contato.
+- Editor oferece seletores de vínculo, estado, existência e comparação de data. Resultado devolve somente título, identificador e dia local da organização. Publicação exige o escopo separado `activity.follow_up`.
+- Teste pessoal exige visibilidade atual do lead e `followups.view`. Execução automática exige grant atual do workflow. Histórico guiado revalida `followups.view`; revogação oculta o dado já executado. Helper SQL interno não possui `EXECUTE` para papéis de API.
+- “Último contato” permanece fora do catálogo. A decisão necessária, fontes rejeitadas e seis pontos que o CTO precisa fechar estão registrados em `ticket-17-ultimo-contato-decisao.md`.
+- Migration 53 aditiva e rollback incluídos. Preview somente; worker e produção permanecem intocados.
+- Checkpoint: 82/82 integrações reais, 118/118 jornadas Chromium e 151/151 unidades focadas verdes. TypeScript não introduziu erros; Deno, ESLint e whitespace limpos. Único aviso local: Fast Refresh preexistente. Rollback/reapply das 54 migrations guiadas preservou histórico e restaurou ACLs exatas.

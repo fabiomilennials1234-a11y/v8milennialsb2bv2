@@ -37,6 +37,13 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
     ? 'Última venda ganha · Data está vazia' : condition.operator === 'is_not_empty'
       ? 'Última venda ganha · Data está preenchida'
       : `Última venda ganha · Data ${GUIDED_DATE_OPERATORS[condition.operator]} ${isGuidedCalendarDate(condition.value) ? condition.value.split('-').reverse().join('/') : '…'}`;
+  if (condition.field === 'activity.follow_up') {
+    const relation = condition.relation === 'lead' ? 'Lead, sem negócio' : 'Negócio do gatilho';
+    const state = condition.state === 'pending' ? 'Pendente e ativo' : 'Concluído';
+    const date = condition.dateOperator === 'any' ? 'qualquer data'
+      : `${condition.state === 'pending' ? 'Prazo' : 'Conclusão'} ${GUIDED_DATE_OPERATORS[condition.dateOperator]} ${isGuidedCalendarDate(condition.date) ? condition.date.split('-').reverse().join('/') : '…'}`;
+    return `${relation} · ${condition.operator === 'exists' ? 'Existe' : 'Não existe'} follow-up · ${state} · ${date}`;
+  }
   if (condition.field === 'message.trigger.text') {
     const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
       : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;

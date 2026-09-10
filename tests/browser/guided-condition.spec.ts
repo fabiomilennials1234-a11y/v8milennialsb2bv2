@@ -1453,6 +1453,7 @@ async function selectInformation(page: Page, field: string) {
     'message.period.exists': 'Mensagem recebida no período',
     'message.search.text': 'Conteúdo de mensagens',
     'message.waiting.elapsed': 'Tempo aguardando resposta',
+    'activity.follow_up': 'Existe follow-up',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1867,6 +1868,45 @@ test('configura a última venda que permanece ganha por data e mostra o negócio
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
   await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
   await expect(page.locator('.react-flow__node-condition')).toContainText('Última venda ganha · Data está vazia');
+});
+
+test('configura follow-up do negócio com estado e data semanticamente explícitos', async ({ page }) => {
+  const followUpId = 'abcd0000-0000-4000-8000-000000000072';
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000073';
+  const stageId = 'abcd0000-0000-4000-8000-000000000074';
+  const entryId = 'abcd0000-0000-4000-8000-000000000075';
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [{ id: pipelineId, name: 'Comercial' }] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => route.fulfill({ json: [{ id: stageId, name: 'Proposta' }] }));
+  await page.route('**/rest/v1/pipeline_entries?*', route => route.fulfill({ json: [{ id: entryId, pipeline_id: pipelineId, stage_id: stageId }] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'activity.follow_up');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Atividades · Existe follow-up');
+  await page.getByLabel('Vínculo', { exact: true }).selectOption('trigger_business');
+  await page.getByLabel('Estado', { exact: true }).selectOption('completed');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('not_exists');
+  await page.getByLabel('Data de conclusão', { exact: true }).selectOption('on_or_before');
+  await page.getByLabel('Data', { exact: true }).fill('2026-09-10');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Não existe follow-up · Concluído · Conclusão é até 10/09/2026');
+  await expect(page.getByText('Follow-ups vinculados ao lead ou negócio de todos os leads desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true }).selectOption(entryId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ entryId, condition: {
+      field: 'activity.follow_up', relation: 'trigger_business', state: 'completed', operator: 'not_exists',
+      dateOperator: 'on_or_before', date: '2026-09-10',
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false,
+      actual: '2026-09-09', reference: { id: followUpId, name: 'Retornar proposta' }, context: { entryId } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Retornar proposta');
+  await expect(page.getByRole('status')).toContainText('09/09/2026');
+  await page.getByLabel('Vínculo', { exact: true }).selectOption('lead');
+  await expect(page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true })).toHaveCount(0);
+  await page.getByLabel('Estado', { exact: true }).selectOption('pending');
+  await expect(page.getByLabel('Prazo', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pendente usa o prazo. Concluído usa o instante real de conclusão. Criação não conta como contato.')).toBeVisible();
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

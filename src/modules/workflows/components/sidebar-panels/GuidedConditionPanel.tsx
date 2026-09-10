@@ -22,6 +22,12 @@ function firstMessageRule(condition: GuidedConditionDraft): MessageRule | null {
   if ('children' in condition) return condition.children.map(firstMessageRule).find(Boolean) ?? null;
   return !('kind' in condition) && (condition.field === 'message.trigger.text' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed') ? condition : null;
 }
+function needsTriggerBusiness(condition: GuidedConditionDraft): boolean {
+  if ('kind' in condition && condition.kind === 'business_exists') return false;
+  if ('children' in condition) return condition.children.some(needsTriggerBusiness);
+  return condition.field.startsWith('business.trigger.')
+    || (condition.field === 'activity.follow_up' && condition.relation === 'trigger_business');
+}
 
 export function GuidedConditionPanel({ actorId, organizationId, condition, onChange }: {
   actorId: string;
@@ -38,7 +44,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const missingValue = isIncompleteGuidedDraft(condition);
-  const requiresTriggerBusiness = getGuidedConditionFields(condition).some(field => field.startsWith('business.trigger.'));
+  const requiresTriggerBusiness = needsTriggerBusiness(condition);
   const messageRule = firstMessageRule(condition);
   const requiresMessageCandidate = messageRule?.field === 'message.trigger.text' || messageRule?.conversation.kind === 'trigger';
   const messageConversationReady = !messageRule || messageRule.conversation.kind === 'trigger'
@@ -171,7 +177,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
       </>}
       <Button type="button" disabled={!leadId || (requiresTriggerBusiness && !entryId) || Boolean(requiresMessageCandidate && !messageId) || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.trigger.text' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference && 'name' in result.rules[0].reference ? result.rules[0].reference.name : 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.trigger.text' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'activity.follow_up') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference && 'name' in result.rules[0].reference ? result.rules[0].reference.name : 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
     </section>
   </div>;
 }

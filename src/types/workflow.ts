@@ -689,13 +689,16 @@ export type GuidedMessageSearchRuleDraft = { version: 1; id: string; field: 'mes
 export type GuidedMessageWaitingRuleDraft = { version: 1; id: string; field: 'message.waiting.elapsed';
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
   waitingFor: 'lead' | 'company'; operator: GuidedNumberOperator; value: number | ''; unit: 'minutes' | 'hours' | 'days' };
+export type GuidedFollowUpRuleDraft = { version: 1; id: string; field: 'activity.follow_up';
+  relation: 'lead' | 'trigger_business'; state: 'pending' | 'completed'; operator: 'exists' | 'not_exists';
+  dateOperator: 'any' | Exclude<GuidedDateComparison['operator'], 'is_empty' | 'is_not_empty'>; date?: string };
 export type GuidedBusinessExistenceChildDraft =
   | { version: 1; id: string; field: 'business.stage'; operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string }
   | ({ version: 1; id: string; field: 'business.value' }
     & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' }));
 export type GuidedBusinessExistenceDraft = { version: 1; id: string; kind: 'business_exists';
   lifecycle: 'open' | 'won' | 'lost' | 'all'; match: 'all' | 'any'; children: GuidedBusinessExistenceChildDraft[] };
-export type GuidedRuleDraft = GuidedMessageWaitingRuleDraft | GuidedMessageSearchRuleDraft | GuidedMessagePeriodRuleDraft | GuidedTriggerMessageTextRuleDraft | GuidedLastWonDateRuleDraft | GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedRuleDraft = GuidedFollowUpRuleDraft | GuidedMessageWaitingRuleDraft | GuidedMessageSearchRuleDraft | GuidedMessagePeriodRuleDraft | GuidedTriggerMessageTextRuleDraft | GuidedLastWonDateRuleDraft | GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | GuidedBusinessExistenceDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

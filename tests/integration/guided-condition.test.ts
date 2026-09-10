@@ -799,6 +799,161 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('evaluates follow-ups by canonical lead or exact-business ownership and meaningful dates', async () => {
+    const pipelineId = crypto.randomUUID(), stageId = crypto.randomUUID();
+    const entryA = crypto.randomUUID(), entryB = crypto.randomUUID();
+    const generalPending = crypto.randomUUID(), businessPending = crypto.randomUUID(), otherBusinessPending = crypto.randomUUID();
+    const businessCompleted = crypto.randomUUID(), archivedPending = crypto.randomUUID(), futureCompleted = crypto.randomUUID();
+    const workflowId = crypto.randomUUID();
+    const permissionMemberId = crypto.randomUUID();
+    let permissionUserId: string | undefined;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `follow-up-${pipelineId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('pipelines').insert({ id: pipelineId, organization_id: orgA, name: 'Follow-ups',
+      slug: `follow-ups-${pipelineId}`, type: 'custom' }).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert({ id: stageId, organization_id: orgA, pipeline_id: pipelineId,
+        stage_key: 'open', name: 'Em andamento', position: 0 }).throwOnError();
+      await service.from('pipeline_entries').insert([
+        { id: entryA, organization_id: orgA, lead_id: leadA, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'open' },
+        { id: entryB, organization_id: orgA, lead_id: leadA, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'open' },
+      ]).throwOnError();
+      await service.from('follow_ups').insert([
+        { id: generalPending, organization_id: orgA, lead_id: leadA, title: 'Tarefa geral', due_date: '2026-09-10T15:00:00Z' },
+        { id: businessPending, organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryA,
+          title: 'Retornar proposta A', due_date: '2026-09-11T15:00:00Z' },
+        { id: otherBusinessPending, organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryB,
+          title: 'Retornar proposta B', due_date: '2026-09-12T15:00:00Z' },
+        { id: businessCompleted, organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryA,
+          title: 'Apresentação concluída', due_date: '2026-09-08T15:00:00Z', completed_at: '2026-09-09T15:00:00Z' },
+        { id: archivedPending, organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryA,
+          title: 'Arquivada', due_date: '2026-09-07T15:00:00Z', archived_at: '2026-09-08T15:00:00Z' },
+      ]).throwOnError();
+      const evaluate = (condition: unknown, entryId?: string) => evaluateGuidedCondition(caller, {
+        organizationId: orgA, leadId: leadA, entryId, condition,
+      });
+      const leadRule = { version: 1, id: 'follow-up', field: 'activity.follow_up', relation: 'lead', state: 'pending',
+        operator: 'exists', dateOperator: 'equals', date: '2026-09-10' };
+      expect(await evaluate(leadRule)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-09-10', reference: { id: generalPending, name: 'Tarefa geral' } }] });
+      const publicResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition: leadRule }), signal: AbortSignal.timeout(15000),
+      });
+      expect(publicResponse.status).toBe(200);
+      expect(await publicResponse.json()).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-09-10', reference: { id: generalPending, name: 'Tarefa geral' } }] });
+      const inconsistentDateRule = { ...leadRule, dateOperator: 'any', date: '2026-09-10' };
+      expect(await evaluate(inconsistentDateRule)).toEqual({ status: 'error', code: 'invalid_configuration' });
+      const invalidPublicResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition: inconsistentDateRule }), signal: AbortSignal.timeout(15000),
+      });
+      expect(invalidPublicResponse.status).toBe(422);
+      expect(await invalidPublicResponse.json()).toEqual({ status: 'error', code: 'invalid_configuration' });
+      expect(await evaluate({ ...leadRule, date: '2026-09-11' })).toMatchObject({ status: 'evaluated', matched: false,
+        rules: [{ actual: null }] });
+      const businessRule = { ...leadRule, relation: 'trigger_business', state: 'completed',
+        dateOperator: 'on_or_after', date: '2026-09-09' };
+      expect(await evaluate(businessRule, entryA)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-09-09', reference: { id: businessCompleted, name: 'Apresentação concluída' }, context: { entryId: entryA } }] });
+      expect(await evaluate({ ...businessRule, state: 'pending', dateOperator: 'equals', date: '2026-09-12' }, entryA))
+        .toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...businessRule, state: 'pending', dateOperator: 'equals', date: '2026-09-11' }, entryA))
+        .toMatchObject({ status: 'evaluated', matched: true, rules: [{ reference: { id: businessPending } }] });
+      expect(await evaluate({ ...businessRule, state: 'pending', dateOperator: 'before', date: '2026-09-10' }, entryA))
+        .toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...businessRule, operator: 'not_exists', state: 'pending', dateOperator: 'equals', date: '2026-09-12' }, entryA))
+        .toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(businessRule)).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluate(businessRule, crypto.randomUUID())).toEqual({ status: 'error', code: 'context_unavailable' });
+
+      const direct = { p_organization_id: orgA, p_lead_id: leadA, p_entry_id: entryA, p_rule_id: 'follow-up',
+        p_relation: 'trigger_business', p_state: 'pending', p_date_operator: 'any', p_date: null };
+      expect((await service.rpc('test_guided_condition_follow_up', direct)).error?.code).toBe('42501');
+      expect((await service.rpc('guided_follow_up_result', direct)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `follow-up-anon-${pipelineId}` },
+      });
+      expect((await anonymous.rpc('test_guided_condition_follow_up', direct)).error?.code).toBe('42501');
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadB, entryId: entryA, condition: businessRule }))
+        .toEqual({ status: 'error', code: 'context_unavailable' });
+
+      const permissionPassword = `${crypto.randomUUID()}!Aa1`;
+      const permissionUser = await service.auth.admin.createUser({
+        email: `guided-follow-up-${crypto.randomUUID()}@example.test`, password: permissionPassword, email_confirm: true,
+      });
+      if (permissionUser.error) throw permissionUser.error;
+      permissionUserId = permissionUser.data.user.id;
+      await service.from('team_members').insert({ id: permissionMemberId, user_id: permissionUserId,
+        organization_id: orgA, name: 'Follow-up permission reader', role: 'member', is_active: true }).throwOnError();
+      await service.from('member_feature_permissions').insert([
+        { team_member_id: permissionMemberId, organization_id: orgA, feature_key: 'followups.view', enabled: false },
+        ...['leads.view_all', 'leads.view_unassigned', 'leads.view_subordinates'].map(feature_key => ({
+          team_member_id: permissionMemberId, organization_id: orgA, feature_key, enabled: false,
+        })),
+      ]).throwOnError();
+      await service.from('leads').update({ pre_sale_responsible_id: permissionMemberId }).eq('id', leadA).throwOnError();
+      const permissionCaller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `follow-up-permission-${permissionMemberId}` },
+      });
+      const permissionLogin = await permissionCaller.auth.signInWithPassword({
+        email: permissionUser.data.user.email!, password: permissionPassword,
+      });
+      if (permissionLogin.error) throw permissionLogin.error;
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA, condition: leadRule }))
+        .toEqual({ status: 'error', code: 'access_denied' });
+      await service.from('member_feature_permissions').update({ enabled: true }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'followups.view').throwOnError();
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA, condition: leadRule }))
+        .toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('leads').update({ pre_sale_responsible_id: adminMemberId }).eq('id', leadA).throwOnError();
+
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'stage_changed', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: businessRule } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [] };
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: { name: 'Follow-up exato' } }).throwOnError();
+      const automatic = { organizationId: orgA, leadId: leadA, entryId: entryA, condition: businessRule,
+        authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['activity.follow_up'], p_expected_revision: 0 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toMatchObject({ status: 'evaluated', matched: true });
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 1, p_definition: definition, p_settings: { name: 'Follow-up exato' }, p_required_fields: ['activity.follow_up'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_required_fields: [] })).error?.code).toBe('42501');
+      const malformed = structuredClone(definition);
+      (malformed.nodes[1].data.guidedCondition as { date: string }).date = '2026-02-30';
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
+        p_definition: malformed, p_settings: { name: 'Follow-up exato' } }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication,
+        p_expected_revision: 2, p_definition: malformed })).error?.code).toBe('22023');
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2,
+        p_definition: definition, p_settings: { name: 'Follow-up exato' } }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 3 })).error).toBeNull();
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+
+      await service.from('follow_ups').insert({ id: futureCompleted, organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryA,
+        title: 'Conclusão impossível', due_date: '2026-09-10T15:00:00Z', completed_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await evaluate(businessRule, entryA)).toEqual({ status: 'error', code: 'source_unavailable' });
+    } finally {
+      await service.from('leads').update({ pre_sale_responsible_id: adminMemberId }).eq('id', leadA);
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('follow_ups').delete().in('id', [generalPending,businessPending,otherBusinessPending,businessCompleted,archivedPending,futureCompleted]);
+      await service.from('pipeline_entries').delete().in('id', [entryA,entryB]);
+      await service.from('pipeline_stages').delete().eq('id', stageId);
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA);
+      await service.from('pipelines').delete().eq('id', pipelineId);
+      await service.from('team_members').delete().eq('id', permissionMemberId);
+      if (permissionUserId) await service.auth.admin.deleteUser(permissionUserId);
+    }
+  }, 60000);
+
   it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

@@ -44,6 +44,8 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
       || condition.expressions.reduce((total, expression) => total + normalizeExpressionKey(expression).length, 0) > 1000
     : condition.field === 'message.waiting.elapsed' ? (condition.conversation.kind === 'explicit' && (!condition.conversation.boxId || !condition.conversation.provider))
       || condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
+    : condition.field === 'activity.follow_up' ? condition.dateOperator === 'any'
+      ? condition.date !== undefined : !isGuidedCalendarDate(condition.date)
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -77,6 +79,8 @@ function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.
     operator: 'matches', expressionMatch: 'any', matchMode: 'whole_phrase', expressions: [] };
   if (field === 'message.waiting.elapsed') return { version: 1, id, field, conversation: { kind: 'trigger' }, waitingFor: 'company',
     operator: 'greater_than_or_equal', value: '', unit: 'hours' };
+  if (field === 'activity.follow_up') return { version: 1, id, field, relation: 'lead', state: 'pending',
+    operator: 'exists', dateOperator: 'any' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -315,6 +319,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         else if (field === 'message.waiting.elapsed') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, waitingFor: 'company',
             operator: 'greater_than_or_equal', value: '', unit: 'hours' });
+        else if (field === 'activity.follow_up') onChange(condition.field === field ? condition
+          : { version: 1, id: condition.id, field, relation: 'lead', state: 'pending', operator: 'exists', dateOperator: 'any' });
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -326,12 +332,44 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'activity.follow_up' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'message.waiting.elapsed' ? <>
+    {condition.field === 'activity.follow_up' ? <>
+      <Label htmlFor={`guided-follow-up-relation-${condition.id}`}>Vínculo</Label>
+      <select id={`guided-follow-up-relation-${condition.id}`} className={selectClass} value={condition.relation}
+        onChange={event => onChange({ ...condition, relation: event.target.value === 'trigger_business' ? 'trigger_business' : 'lead' })}>
+        <option value="lead">Do lead, sem negócio</option><option value="trigger_business">Do negócio do gatilho</option>
+      </select>
+      <p className="text-xs text-muted-foreground">Follow-ups de outros negócios nunca entram. O vínculo “lead” considera somente tarefas sem negócio.</p>
+      <Label htmlFor={`guided-follow-up-state-${condition.id}`}>Estado</Label>
+      <select id={`guided-follow-up-state-${condition.id}`} className={selectClass} value={condition.state}
+        onChange={event => onChange({ ...condition, state: event.target.value === 'completed' ? 'completed' : 'pending' })}>
+        <option value="pending">Pendente e ativo</option><option value="completed">Concluído</option>
+      </select>
+      <Label htmlFor={`guided-follow-up-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-follow-up-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => onChange({ ...condition, operator: event.target.value === 'not_exists' ? 'not_exists' : 'exists' })}>
+        <option value="exists">existe follow-up</option><option value="not_exists">não existe follow-up</option>
+      </select>
+      <Label htmlFor={`guided-follow-up-date-operator-${condition.id}`}>{condition.state === 'pending' ? 'Prazo' : 'Data de conclusão'}</Label>
+      <select id={`guided-follow-up-date-operator-${condition.id}`} className={selectClass} value={condition.dateOperator}
+        onChange={event => onChange({ ...condition, dateOperator: event.target.value === 'any' ? 'any'
+          : isGuidedDateOperator(event.target.value) ? event.target.value : 'any',
+          ...(event.target.value === 'any' ? { date: undefined } : { date: condition.date ?? '' }) })}>
+        <option value="any">qualquer data</option>
+        {Object.entries(GUIDED_DATE_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      {condition.dateOperator !== 'any' && <div className="space-y-2">
+        <Label htmlFor={`guided-value-${condition.id}`}>Data</Label>
+        <Input id={`guided-value-${condition.id}`} type="date" min="0001-01-01" max="9999-12-31" value={condition.date ?? ''}
+          aria-invalid={missingValue} onChange={event => onChange({ ...condition, date: event.target.value })} />
+        {missingValue && <p className="text-xs text-destructive">Escolha uma data válida.</p>}
+      </div>}
+      <p className="text-xs text-muted-foreground">Pendente usa o prazo. Concluído usa o instante real de conclusão. Criação não conta como contato.</p>
+    </> : condition.field === 'message.waiting.elapsed' ? <>
       <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
       <Label htmlFor={`guided-waiting-side-${condition.id}`}>Quem está aguardando</Label>
       <select id={`guided-waiting-side-${condition.id}`} className={selectClass} value={condition.waitingFor}

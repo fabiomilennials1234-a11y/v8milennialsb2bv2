@@ -791,3 +791,50 @@ it.each([null, -1])('rejects an unreliable exact-entry stage clock represented a
     condition: { version: 1, id: 'elapsed', field: 'business.trigger.stage_elapsed', operator: 'greater_than', value: 1, unit: 'hours' },
   })).toEqual({ status: 'error', code: 'source_unavailable' });
 });
+
+it.each([
+  ['lead', 'pending', 'on_or_before', '2026-09-10', true],
+  ['trigger_business', 'completed', 'after', '2026-09-09', true],
+] as const)('evaluates a %s follow-up with explicit %s date semantics', async (relation, state, dateOperator, date, matched) => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const followUpId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_follow_up')
+      ? [{ rule_id: 'follow-up', matched: true, follow_up_id: followUpId, title: 'Retornar proposta', event_date: date }]
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'follow-up', field: 'activity.follow_up', relation, state,
+      operator: 'exists', dateOperator, date },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'follow-up', status: 'evaluated', matched,
+    actual: date, reference: { id: followUpId, name: 'Retornar proposta' },
+    ...(relation === 'trigger_business' ? { context: { entryId } } : {}) }] });
+});
+
+it('keeps a missing follow-up distinct from source failure', async () => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(String(input).includes('/rpc/test_guided_condition_follow_up')
+      ? JSON.stringify([{ rule_id: 'follow-up', matched: false, follow_up_id: null, title: null, event_date: null }])
+      : JSON.stringify({ id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'follow-up', field: 'activity.follow_up', relation: 'lead', state: 'pending',
+      operator: 'not_exists', dateOperator: 'any' },
+  })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'follow-up', status: 'evaluated', matched: true, actual: null }] });
+});
+
+it.each([
+  { dateOperator: 'any', date: '2026-09-10' },
+  { dateOperator: 'equals' },
+] as const)('rejects inconsistent follow-up date shape: $dateOperator / $date', async invalidDate => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => { throw new Error('invalid condition must not read data'); } },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'follow-up', field: 'activity.follow_up', relation: 'lead', state: 'pending',
+      operator: 'exists', ...invalidDate },
+  })).toEqual({ status: 'error', code: 'invalid_configuration' });
+});
