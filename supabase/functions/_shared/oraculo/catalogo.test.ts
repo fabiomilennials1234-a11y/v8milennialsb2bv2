@@ -23,6 +23,7 @@ Deno.test("catálogo — leitura e proposta estão no ar", () => {
     "conversa_detalhe",
     "conversas",
     "funil",
+    "gargalo",
     "leads",
     "metricas",
     "perdas",

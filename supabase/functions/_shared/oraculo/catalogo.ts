@@ -18,6 +18,7 @@ import { leadsTool } from "./tools/leads.ts";
 import { conversasTool } from "./tools/conversas.ts";
 import { conversaDetalheTool } from "./tools/conversa-detalhe.ts";
 import { proporAcaoTool } from "./tools/propor-acao.ts";
+import { gargaloTool } from "./tools/gargalo.ts";
 
 export interface ToolSchema {
   type: string;
@@ -39,6 +40,15 @@ const LIMITE = {
 };
 
 export const TOOL_SCHEMAS: ToolSchema[] = [
+  {
+    type: "function",
+    function: {
+      name: "gargalo",
+      description:
+        "Diagnóstico determinístico do maior vazamento estimado de receita entre etapa, origem e produto, comparando quatro semanas fechadas à linha de base anterior de oito semanas. O resultado pode ser `none` ou `insufficient_evidence`; nesses casos, não invente um gargalo. Explique `evidence.reason`, `evidence.missing_dimensions` e `evidence.available_from` quando existirem.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
   {
     type: "function",
     function: {
@@ -193,6 +203,7 @@ export function criarFerramentas(db: ToolDb): FerramentaDoLaco[] {
     conversasTool,
     conversaDetalheTool,
     proporAcaoTool,
+    gargaloTool,
   ].map(
     (t) => ({
       name: t.name,
