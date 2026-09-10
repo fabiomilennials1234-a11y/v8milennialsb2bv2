@@ -66,6 +66,35 @@ try {
   await db.query("SELECT set_config('test.org',$1,false)", [foreignOrg]);
   await db.exec('SET ROLE authenticated');
   eq((await db.query('SELECT id,classificacao_cafe_jurere(leads) AS aba FROM leads')).rows, [{ id: id(14), aba: null }], 'troca de tenant preserva isolamento');
+  await db.exec(`RESET ROLE;
+    CREATE TABLE upsell_clients (organization_id uuid, lead_id uuid, external_source text,
+      erp_company text, erp_status text, erp_owner_external_id text);
+    CREATE TABLE erp_owner_map (organization_id uuid, provider text, erp_owner_external_id text, team_member_id uuid);
+    CREATE TABLE team_members (id uuid, organization_id uuid);
+    GRANT SELECT ON upsell_clients, erp_owner_map, team_members TO authenticated, service_role;`);
+  for (const table of ['upsell_clients','erp_owner_map','team_members']) {
+    await db.exec(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY tenant ON ${table} FOR SELECT TO authenticated
+      USING (organization_id = current_setting('test.org')::uuid);`);
+  }
+  await db.query('INSERT INTO team_members VALUES ($1,$2),($3,$4)', [id(300),org,id(301),foreignOrg]);
+  await db.query("INSERT INTO erp_owner_map VALUES ($1,'toth','rep',$2)", [org,id(300)]);
+  for (const [n,status,rep] of [[1,'0','rep'],[2,'1','rep'],[3,'3','missing']]) {
+    await db.query("INSERT INTO upsell_clients VALUES ($1,$2,'toth','CAFE JURERE',$3,$4)", [org,id(n),status,rep]);
+  }
+  await db.exec(await readFile(new URL('../supabase/migrations/20271019000005_leads_cafe_jurere_visibilidade.sql', import.meta.url), 'utf8'));
+  eq((await db.query("SELECT has_function_privilege('anon','visivel_lista_cafe_jurere(leads)','EXECUTE') AS allowed")).rows[0].allowed,false,'visibilidade bloqueia anon');
+  await db.query("SELECT set_config('test.org',$1,false)", [org]);
+  await db.exec('SET ROLE authenticated');
+  eq((await db.query('SELECT id FROM leads WHERE visivel_lista_cafe_jurere(leads) ORDER BY id')).rows.map(r=>r.id),
+    [1,4,5,6,7,8,9,10,11,12,13].map(id),'mantém CRM e ativo mapeado; oculta inativo e sem mapa');
+  await db.exec('RESET ROLE');
+  await db.query("UPDATE upsell_clients SET erp_status='3' WHERE lead_id=$1",[id(1)]);
+  eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,true,'inconsistente mapeado visível');
+  await db.query('UPDATE erp_owner_map SET team_member_id=$1',[id(301)]);
+  eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,false,'membro de outro tenant rejeitado mesmo com bypass RLS');
+  eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(14)])).rows[0].v,true,'outra organização intacta');
+  eq((await db.query('SELECT count(*)::int AS n FROM leads')).rows[0].n,14,'nenhum registro excluído');
   console.log(`PASS: ${checks} verificações SQL, 14 cenários de lead; nenhuma conexão externa.`);
 } finally {
   await db.close();
