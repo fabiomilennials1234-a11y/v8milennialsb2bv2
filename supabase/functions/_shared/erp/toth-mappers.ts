@@ -17,6 +17,7 @@
  *     A mesma API usa os dois formatos.
  */
 
+import { buildTothCadastro } from "./toth-cadastro.ts";
 import {
   CanonicalClient,
   CanonicalOrder,
@@ -522,8 +523,10 @@ const METADATA_FIELDS = [
 function buildMetadata(
   row: Record<string, unknown>,
   atendimento: Record<string, unknown> | null,
+  includeCadastro = false,
 ): Record<string, unknown> | null {
   const meta: Record<string, unknown> = {};
+  if (includeCadastro) meta.cadastro = buildTothCadastro(row);
   for (const field of METADATA_FIELDS) {
     const value = pickField(row, [field]);
     if (value === undefined || value === null) continue;
@@ -561,7 +564,7 @@ export class TothMappingError extends Error {
 export function mapTothClienteToCanonical(
   row: Record<string, unknown>,
   /** Empresa do grupo em foco — decide de qual atendimento sai o representante. */
-  opts: { empresa?: string | null } = {},
+  opts: { empresa?: string | null; includeCadastro?: boolean } = {},
 ): CanonicalClient {
   const externalId = asString(pickField(row, ID_FIELDS));
   if (!externalId) {
@@ -600,7 +603,7 @@ export function mapTothClienteToCanonical(
     lastOrderAt: parseTothDate(pickField(row, LAST_ORDER_FIELDS)),
     city: asString(pickField(row, ["cidade"])),
     uf: sanitizeUf(pickField(row, ["UF", "uf", "estado"])),
-    metadata: buildMetadata(row, atendimento),
+    metadata: buildMetadata(row, atendimento, opts.includeCadastro),
   };
 }
 

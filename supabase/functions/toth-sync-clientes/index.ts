@@ -41,6 +41,7 @@ import {
   tothClienteMatchesEmpresa,
 } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
+import { planCadastroVisivel, type CadastroTarget } from "../_shared/erp/cafe-jurere-cadastro.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
@@ -190,6 +191,50 @@ Deno.serve(
     }
 
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
+    const requestBody = await req.clone().json().catch(() => ({}));
+    // Enriquecimento cadastral solicitado: nenhum INSERT, dono, situação,
+    // classificação ou dado digitado no lead é alterado por este caminho.
+    if (requestBody.cadastro_visivel_only === true) {
+      if (organizationId !== CAFE_JURERE_ORG_ID) return json({ error: "Disponível somente na Café Jurerê" }, cors, 403);
+      const { data: org, error: flagError } = await admin.from("organizations").select("feature_flags").eq("id", organizationId).single();
+      if (flagError) throw flagError;
+      if (!cafeJurereScopeEnabled(organizationId, org.feature_flags)) return json({ error: "Recorte da Café Jurerê desabilitado" }, cors, 409);
+      const targets: CadastroTarget[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await admin.from("upsell_clients")
+          .select("id,external_id,erp_metadata,leads!inner(id)")
+          .eq("organization_id", organizationId).eq("external_source", TOTH_PROVIDER_ID)
+          .eq("leads.organization_id", organizationId).eq("leads.cafe_jurere_erp_elegivel", true)
+          .is("leads.deleted_at", null).not("leads.erp_code", "is", null)
+          .order("id").range(offset, offset + 499);
+        if (error) throw error;
+        targets.push(...(data ?? []) as unknown as CadastroTarget[]);
+        if (!data || data.length < 500) break;
+      }
+      const rows = extractRows(await client.get("clientes", {}));
+      const plan = planCadastroVisivel(targets, rows);
+      const originals = new Map(targets.map(target => [target.id, target.erp_metadata]));
+      let updated = 0;
+      if (requestBody.dry_run !== true) {
+        for (let offset = 0; offset < plan.updates.length; offset += 8) {
+          const results = await Promise.allSettled(plan.updates.slice(offset, offset + 8).map(async patch => {
+            let update = admin.from("upsell_clients")
+              .update({ erp_metadata: patch.erp_metadata }).eq("id", patch.id)
+              .eq("organization_id", organizationId).eq("external_source", TOTH_PROVIDER_ID);
+            const original = originals.get(patch.id);
+            update = original == null ? update.is("erp_metadata", null) : update.eq("erp_metadata", JSON.stringify(original));
+            const { data, error } = await update.select("id");
+            if (error || data?.length !== 1) throw new Error("Falha ao atualizar cadastro ERP; execute novamente para retomar.");
+            updated++;
+          }));
+          const failure = results.find(result => result.status === "rejected");
+          if (failure?.status === "rejected") throw failure.reason;
+        }
+      }
+      const result = { dry_run: requestBody.dry_run === true, visible: targets.length, received: rows.length, planned: plan.updates.length, updated, unchanged: plan.unchanged, missing: plan.missing };
+      await logRuntime({ organizationId, module: "general", action: "toth_cadastro_visivel", status: "success", payloadSnapshot: result });
+      return json(result, cors);
+    }
     // Carteira pré-carregada: o store direto faria duas consultas por cliente do
     // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
     // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
@@ -412,7 +457,7 @@ Deno.serve(
 
           let canonical;
           try {
-            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro });
+            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro, includeCadastro: cafeJurereScope });
           } catch (err) {
             stats.failed++;
             if (err instanceof TothMappingError && mappingErrors.length < 3) {
