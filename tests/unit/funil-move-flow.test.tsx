@@ -387,10 +387,11 @@ describe("agendar reunião MOVE o negócio (ADR-0023 d4)", () => {
     montar(pipelineDe("system", "whatsapp"), stagesCustomTarget, [entryBase]);
     fireEvent.click(screen.getByRole("button", { name: "mover-agendado" }));
 
-    await waitFor(() => expect(moverAsync).toHaveBeenCalled());
+    await waitFor(() => expect(upsertLeadIntoCustomPipe).toHaveBeenCalledWith(expect.objectContaining({
+      sourceEntryId: "e-1", sourceStageKey: "agendado", targetPipelineId: "custom-1", targetStageId: "custom-stage-1",
+    })));
+    expect(moverAsync).not.toHaveBeenCalled();
     expect(screen.queryByTestId("modal-reuniao")).not.toBeInTheDocument();
-    // Auto-transição pro funil de destino roda no pós-move.
-    await waitFor(() => expect(upsertLeadIntoCustomPipe).toHaveBeenCalled());
   });
 });
 
