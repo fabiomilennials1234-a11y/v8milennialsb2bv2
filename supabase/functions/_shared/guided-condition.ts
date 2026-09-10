@@ -72,8 +72,11 @@ export type GuidedMessageSearchRule = { version: 1; id: string; field: 'message.
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
   source: { kind: 'trigger' } | { kind: 'last_received' } | { kind: 'period'; from: string; to: string };
   operator: 'matches' | 'not_matches'; expressionMatch: 'any' | 'all'; matchMode: 'whole_phrase' | 'substring'; expressions: string[] };
+export type GuidedMessageWaitingRule = { version: 1; id: string; field: 'message.waiting.elapsed';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
+  waitingFor: 'lead' | 'company'; operator: GuidedNumberComparison['operator']; value: number; unit: GuidedElapsedUnit };
 
-export type GuidedRule = GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -170,6 +173,17 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && (rule.operator==='matches' || rule.operator==='not_matches') && (rule.expressionMatch==='any' || rule.expressionMatch==='all')
         && (rule.matchMode==='whole_phrase' || rule.matchMode==='substring');
     }
+    if (rule.field === 'message.waiting.elapsed') {
+      const conversation = rule.conversation as Record<string, unknown> | undefined;
+      const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
+        && (conversation.storage === 'whatsapp_messages' || conversation.storage === 'channel_messages')
+        && typeof conversation.boxId === 'string' && GUIDED_UUID.test(conversation.boxId)
+        && typeof conversation.provider === 'string' && conversation.provider.trim().length > 0);
+      return validConversation && (rule.waitingFor === 'lead' || rule.waitingFor === 'company')
+        && isGuidedNumberOperator(rule.operator)
+        && typeof rule.value === 'number' && Number.isFinite(rule.value) && rule.value >= 0
+        && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
+    }
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -248,6 +262,7 @@ export async function evaluateGuidedCondition(
   const businessExistenceStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
   const businessExistenceQueries: GuidedBusinessExistence[] = [];
   const messageSearchRules: GuidedMessageSearchRule[] = [];
+  const messageWaitingRules: GuidedMessageWaitingRule[] = [];
   function collect(current: GuidedCondition): void {
     if ('kind' in current && current.kind === 'business_exists') {
       businessExistenceQueries.push(current);
@@ -279,6 +294,7 @@ export async function evaluateGuidedCondition(
       { pipelineId: current.pipelineId.toLowerCase(), stageId: current.stageId.toLowerCase() },
     );
     else if (current.field === 'message.search.text') messageSearchRules.push(current);
+    else if (current.field === 'message.waiting.elapsed') messageWaitingRules.push(current);
   }
   collect(request.condition);
   if (messageSearchRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
@@ -294,6 +310,7 @@ export async function evaluateGuidedCondition(
   const usesTriggerMessage = requestedFields.includes('message.trigger.text') || messageSearchRules.some(rule => rule.source.kind==='trigger');
   const usesMessagePeriod = requestedFields.includes('message.period.exists');
   const usesMessageSearch = messageSearchRules.some(rule => rule.source.kind!=='trigger');
+  const usesMessageWaiting = requestedFields.includes('message.waiting.elapsed');
   const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -561,6 +578,43 @@ export async function evaluateGuidedCondition(
       messageSearchResults.set(rule.id,candidate);
     }
   }
+  type MessageWaitingData = { waiting: boolean; elapsed_seconds: number | null; anchor_message_id: string | null;
+    anchor_at: string | null; direction: 'incoming' | 'outgoing' | null; provider: string; box_id: string; participant_id: string;
+    coverage_status: 'complete' | 'in_progress' | 'gapped' };
+  const messageWaitingResults = new Map<string, MessageWaitingData>();
+  if (usesMessageWaiting) {
+    if (messageWaitingRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    for (const rule of messageWaitingRules) {
+      const conversation = rule.conversation.kind === 'trigger' ? request.messageContext : rule.conversation;
+      if (!conversation) return { status: 'error' as const, code: 'context_unavailable' as const };
+      const response = await caller.rpc(request.authorization?.kind === 'organization'
+        ? 'read_guided_condition_message_waiting' : 'test_guided_condition_message_waiting', {
+        ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+        p_organization_id: request.organizationId, p_lead_id: request.leadId, p_conversation: conversation,
+        p_waiting_for: rule.waitingFor,
+      });
+      if (response.error) {
+        const code = response.error.code === 'PT404' ? 'context_unavailable' as const
+          : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+          : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+        return { status: 'error' as const, code };
+      }
+      const candidate = response.data as MessageWaitingData | null;
+      if (!candidate || typeof candidate.waiting !== 'boolean' || !['complete', 'in_progress', 'gapped'].includes(candidate.coverage_status)
+        || typeof candidate.provider !== 'string' || typeof candidate.box_id !== 'string' || typeof candidate.participant_id !== 'string'
+        || (candidate.elapsed_seconds !== null && (typeof candidate.elapsed_seconds !== 'number' || !Number.isFinite(candidate.elapsed_seconds) || candidate.elapsed_seconds < 0))
+        || (candidate.anchor_message_id !== null && (typeof candidate.anchor_message_id !== 'string' || !GUIDED_UUID.test(candidate.anchor_message_id)))
+        || (candidate.anchor_at !== null && (typeof candidate.anchor_at !== 'string' || !Number.isFinite(Date.parse(candidate.anchor_at))))
+        || (candidate.direction !== null && candidate.direction !== 'incoming' && candidate.direction !== 'outgoing')
+        || (candidate.waiting && (!candidate.anchor_message_id || !candidate.anchor_at || candidate.elapsed_seconds === null || !candidate.direction))
+        || (!candidate.waiting && (candidate.anchor_message_id !== null || candidate.anchor_at !== null || candidate.elapsed_seconds !== null || candidate.direction !== null))) {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      if (candidate.coverage_status !== 'complete') return { status: 'error' as const,
+        code: candidate.coverage_status === 'in_progress' ? 'history_sync_in_progress' as const : 'history_insufficient' as const };
+      messageWaitingResults.set(rule.id, candidate);
+    }
+  }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
@@ -724,7 +778,8 @@ export async function evaluateGuidedCondition(
   })) return { status: 'error' as const, code: 'source_unavailable' as const };
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } | {
     messageId: string; textSource: string | null; textProvider: string | null; textCreatedAt: string | null;
-    provider: string; boxId: string; participantId: string } | { messageId: string; messageAt: string | null };
+    provider: string; boxId: string; participantId: string } | { messageId: string; messageAt: string | null;
+      direction?: 'incoming' | 'outgoing'; provider?: string; boxId?: string; participantId?: string };
     context?: { entryId: string; pipeline?: { id: string; name: string } } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
@@ -888,6 +943,24 @@ export async function evaluateGuidedCondition(
         ...(found ? { reference:{ messageId:candidate.matched_message_id!, textSource:candidate.text_source,
           textProvider:candidate.text_provider,textCreatedAt:candidate.matched_at,provider:candidate.provider ?? '',
           boxId:candidate.box_id ?? '',participantId:candidate.participant_id ?? '' } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'message.waiting.elapsed') {
+      const candidate = messageWaitingResults.get(condition.id)!;
+      const unitSeconds = condition.unit === 'minutes' ? 60 : condition.unit === 'hours' ? 3_600 : 86_400;
+      const actual = candidate.waiting ? candidate.elapsed_seconds! / unitSeconds : null;
+      let matched = false;
+      if (actual !== null) {
+        if (condition.operator === 'equals') matched = actual === condition.value;
+        else if (condition.operator === 'not_equals') matched = actual !== condition.value;
+        else if (condition.operator === 'greater_than') matched = actual > condition.value;
+        else if (condition.operator === 'greater_than_or_equal') matched = actual >= condition.value;
+        else if (condition.operator === 'less_than') matched = actual < condition.value;
+        else if (condition.operator === 'less_than_or_equal') matched = actual <= condition.value;
+      }
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        ...(candidate.waiting ? { reference: { messageId: candidate.anchor_message_id!, messageAt: candidate.anchor_at!,
+          direction: candidate.direction!, provider: candidate.provider, boxId: candidate.box_id, participantId: candidate.participant_id } } : {}) });
       return matched;
     }
     if (condition.field === 'message.trigger.text') {

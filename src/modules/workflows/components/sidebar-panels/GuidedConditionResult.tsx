@@ -3,7 +3,8 @@ import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 
 export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; actual?: unknown; reference?: { id: string; name: string } | {
   messageId: string; textSource: string | null; textProvider: string | null; textCreatedAt: string | null;
-  provider: string; boxId: string; participantId: string } | { messageId: string; messageAt: string | null };
+  provider: string; boxId: string; participantId: string } | {
+  messageId: string; messageAt: string | null; direction?: 'incoming' | 'outgoing'; provider?: string; boxId?: string; participantId?: string };
   context?: { entryId?: string; pipeline?: { id: string; name: string } } };
 
 export function GuidedConditionResult({ condition, rules, groups }: {
@@ -47,7 +48,12 @@ export function GuidedConditionResult({ condition, rules, groups }: {
       ? ` · ${namedReference?.name ?? 'Nenhuma venda ganha'} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Vazio'}` : '';
     const messageReference = (current.field === 'message.trigger.text' || current.field === 'message.search.text') && entry?.status === 'evaluated' && entry.reference && 'messageId' in entry.reference && 'textSource' in entry.reference
       ? ` · Fonte: ${entry.reference.textSource === 'caption' ? 'legenda' : entry.reference.textSource === 'transcription' ? 'transcrição persistida' : entry.reference.textSource === 'interactive' ? 'resposta interativa' : entry.reference.textSource === 'synthetic' ? 'conteúdo estruturado' : 'texto'} · ${entry.reference.textProvider ?? entry.reference.provider}${entry.reference.textCreatedAt ? ` · ${new Date(entry.reference.textCreatedAt).toLocaleString('pt-BR')}` : ''}` : '';
-    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{messageReference}</p>;
+    const waitingReference = current.field === 'message.waiting.elapsed' && entry?.status === 'evaluated'
+      ? entry.reference && 'messageId' in entry.reference && 'messageAt' in entry.reference
+        ? ` · Âncora: primeira mensagem sem resposta em ${new Date(entry.reference.messageAt ?? '').toLocaleString('pt-BR')}`
+        : ' · Espera ainda não iniciada'
+      : '';
+    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{messageReference}{waitingReference}</p>;
   }
   return render(condition, '');
 }

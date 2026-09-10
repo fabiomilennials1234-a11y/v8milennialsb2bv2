@@ -693,3 +693,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Text provenance comes from existing `condition_text` or persisted transcription. Evaluation returns source/provider/time and never starts transcription. Media without persisted text remains an explicit error.
 - Dedicated personal and organization RPCs enforce caller RLS or exact `message.search.text` grant. Publication validates shape, limits, normalized uniqueness, time bounds and required scope. Migration 49 and endpoints remain preview-only; worker and production remain untouched.
 - Final checkpoint: 78/78 real integrations, 115/115 Chromium regression journeys plus the focused ticket publication journey, and 99/99 evaluator unit tests passed. TypeScript ratchet, Deno, whitespace and focused ESLint passed; only the pre-existing Fast Refresh warning remains. The 50-migration rollback/reapply rehearsal preserved approval history and restored function ACLs. Migration 49 is ledger-registered on preview.
+
+## 2026-09-10 — tempo aguardando resposta
+
+- `message.waiting.elapsed` mede tempo corrido desde a primeira mensagem da sequência atual sem resposta. Complementos do mesmo lado preservam a âncora; mensagem elegível do outro lado encerra a sequência.
+- Entrada elegível usa `received`; saída usa `sent`, `delivered` ou `read`. `pending`, `failed`, recibos, reações e eventos de sistema ficam fora. Manual, Copilot, workflow e mídia sem texto contam após envio.
+- Sem sequência ativa retorna espera não iniciada, com valor e âncora nulos. Cobertura incompleta bloqueia decisão. Resultado expõe instante/direção/identidade técnica da âncora, nunca conteúdo.
+- Editor usa seletores para conversa, lado, operador e unidade. Grant organizacional exato: `message.waiting.elapsed`.
+- Migration 50 aditiva e rollback incluídos. Preview somente; produção e worker permanecem intocados.

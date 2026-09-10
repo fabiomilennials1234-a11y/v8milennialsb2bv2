@@ -1452,11 +1452,58 @@ async function selectInformation(page: Page, field: string) {
     'message.trigger.text': 'Texto da mensagem do gatilho',
     'message.period.exists': 'Mensagem recebida no período',
     'message.search.text': 'Conteúdo de mensagens',
+    'message.waiting.elapsed': 'Tempo aguardando resposta',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('option', { name: labels[field], exact: true }).click();
 }
+
+test('configura tempo aguardando resposta com seletores e mostra a âncora sem conteúdo', async ({ page }) => {
+  const boxId = 'abcd0000-0000-4000-8000-000000000094';
+  const operations: string[] = [];
+  await page.route('**/rest/v1/whatsapp_instances?*', route => route.fulfill({ json: [{ id: boxId, instance_name: 'Comercial', provider: 'uazapi' }] }));
+  await page.route('**/rest/v1/messaging_channels?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    operations.push('save');
+    expect(route.request().postDataJSON().p_definition.nodes[1].data.guidedCondition).toMatchObject({
+      field: 'message.waiting.elapsed', waitingFor: 'lead', value: 90, unit: 'minutes',
+    });
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await page.route('**/functions/v1/publish-guided-workflow', route => {
+    operations.push('publish');
+    return route.fulfill({ json: { status: 'published', version_id: 'version-waiting', version_number: 2 } });
+  });
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'message.waiting.elapsed');
+  const configuration = page.getByRole('complementary', { name: 'Configurar Condição' });
+  await configuration.getByLabel('Conversa', { exact: true }).selectOption('explicit');
+  await configuration.getByLabel('Caixa de entrada').selectOption(`whatsapp_messages:${boxId}:uazapi`);
+  await configuration.getByLabel('Quem está aguardando').selectOption('lead');
+  await configuration.getByLabel('Comparação', { exact: true }).selectOption('greater_than_or_equal');
+  await configuration.getByLabel('Tempo').fill('90');
+  await configuration.getByLabel('Unidade').selectOption('minutes');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Lead aguardando resposta · desde a primeira mensagem sem resposta · é maior ou igual a 90 minutos');
+  let evaluations = 0;
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ condition: { field: 'message.waiting.elapsed', waitingFor: 'lead',
+      operator: 'greater_than_or_equal', value: 90, unit: 'minutes', conversation: { kind: 'explicit', boxId, provider: 'uazapi' } } });
+    if (evaluations++ > 0) return route.fulfill({ status: 422, json: { status: 'error', code: 'history_insufficient' } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 120,
+      reference: { messageId: 'abcd0000-0000-4000-8000-000000000093', messageAt: '2026-09-10T10:00:00Z', direction: 'incoming', provider: 'uazapi', boxId, participantId: '5511999990000' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Âncora: primeira mensagem sem resposta');
+  await expect(page.getByRole('status')).not.toContainText('conteúdo irrelevante');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Teste da condição' }).getByRole('alert')).toContainText('Histórico insuficiente para localizar o início da espera');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(page.getByText('Versão 2 publicada.')).toBeVisible();
+  expect(operations).toEqual(['save', 'publish']);
+});
 
 test('monta busca de mensagens com seletores, chips e proveniência', async ({ page }) => {
   const boxId = 'abcd0000-0000-4000-8000-000000000097';

@@ -14,6 +14,54 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('compares wall-clock time from the first still-unanswered message', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
+        const path = new URL(String(input)).pathname;
+        if (path === '/rest/v1/leads') return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+        expect(path).toBe('/rest/v1/rpc/test_guided_condition_message_waiting');
+        return new Response(JSON.stringify({ waiting: true, elapsed_seconds: 7_200, anchor_message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          anchor_at: '2026-09-10T10:00:00Z', direction: 'incoming', provider: 'uazapi', box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          participant_id: '5511999990000', coverage_status: 'complete' }), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'waiting', field: 'message.waiting.elapsed', conversation: { kind: 'explicit', storage: 'whatsapp_messages',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, waitingFor: 'lead',
+      operator: 'greater_than_or_equal', value: 2, unit: 'hours',
+    } })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'waiting', status: 'evaluated', matched: true, actual: 2,
+      reference: { messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', messageAt: '2026-09-10T10:00:00Z', direction: 'incoming',
+        provider: 'uazapi', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participantId: '5511999990000' } }] });
+  });
+
+  it('treats a conversation with no active wait as not started instead of zero minutes', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', { auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => new Response(JSON.stringify(new URL(String(input)).pathname === '/rest/v1/leads'
+        ? { id: 'lead-1', organization_id: 'org-1', name: null }
+        : { waiting: false, elapsed_seconds: null, anchor_message_id: null, anchor_at: null, direction: null,
+          provider: 'uazapi', box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participant_id: '5511999990000', coverage_status: 'complete' }),
+      { headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'waiting', field: 'message.waiting.elapsed', conversation: { kind: 'explicit', storage: 'whatsapp_messages',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, waitingFor: 'company', operator: 'equals', value: 0, unit: 'minutes',
+    } })).toEqual({ status: 'evaluated', matched: false, rules: [{ id: 'waiting', status: 'evaluated', matched: false, actual: null }] });
+  });
+
+  it('blocks a waiting-time decision when missing history can hide the sequence anchor', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', { auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => new Response(JSON.stringify(new URL(String(input)).pathname === '/rest/v1/leads'
+        ? { id: 'lead-1', organization_id: 'org-1', name: null }
+        : { waiting: true, elapsed_seconds: 3_600, anchor_message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          anchor_at: '2026-09-10T10:00:00Z', direction: 'outgoing', provider: 'uazapi', box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          participant_id: '5511999990000', coverage_status: 'gapped' }), { headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'waiting', field: 'message.waiting.elapsed', conversation: { kind: 'explicit', storage: 'whatsapp_messages',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, waitingFor: 'company', operator: 'greater_than', value: 30, unit: 'minutes',
+    } })).toEqual({ status: 'error', code: 'history_insufficient' });
+  });
+
   it.each([
     ['whole_phrase', ['preço'], 'apreço', false],
     ['substring', ['preço'], 'apreço', true],

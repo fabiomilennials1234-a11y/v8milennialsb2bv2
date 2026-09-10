@@ -2734,6 +2734,72 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('anchors unanswered time on the first sent message and lets the opposite side end the sequence', async () => {
+    const box = crypto.randomUUID(), workflowId = crypto.randomUUID();
+    const ids = Array.from({ length: 7 }, () => crypto.randomUUID());
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 }, { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await service.from('whatsapp_instances').insert({ id: box, organization_id: orgA, instance_name: 'Tempo de resposta', phone_number: '551130000097', provider: 'uazapi' }).throwOnError();
+    await service.from('workflows').insert({ id: workflowId, organization_id: orgA, name: 'Waiting elapsed grant', trigger_type: 'lead_replied' }).throwOnError();
+    const now = Date.now();
+    const row = (id: string, minutesAgo: number, direction: 'incoming' | 'outgoing', status: string, message_type: string, sent_source: string) => ({
+      id, organization_id: orgA, instance_id: box, message_id: `guided-waiting-${id}`, remote_jid: '5511999990000@s.whatsapp.net',
+      phone_number: '5511999990000', normalized_phone: '5511999990000', direction, status, message_type, sent_source,
+      content: message_type === 'text' ? 'conteúdo irrelevante' : null, timestamp: new Date(now - minutesAgo * 60_000).toISOString(),
+    });
+    const conversation = { kind: 'explicit' as const, storage: 'whatsapp_messages' as const, boxId: box, provider: 'uazapi' };
+    try {
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages', box_id: box,
+        provider: 'uazapi', participant_id: '5511999990000', covered_from: new Date(now - 86_400_000).toISOString(),
+        covered_to: new Date(now + 60_000).toISOString(), state: 'complete' }).throwOnError();
+      await service.from('whatsapp_messages').insert([
+        row(ids[0], 240, 'outgoing', 'sent', 'text', 'manual'), row(ids[1], 180, 'outgoing', 'delivered', 'image', 'copilot'),
+        row(ids[2], 120, 'outgoing', 'read', 'audio', 'workflow'), row(ids[3], 60, 'outgoing', 'pending', 'text', 'workflow'),
+        row(ids[4], 30, 'outgoing', 'failed', 'text', 'manual'),
+      ]).throwOnError();
+      const companyWaiting = { version: 1 as const, id: 'waiting', field: 'message.waiting.elapsed' as const, conversation,
+        waitingFor: 'company' as const, operator: 'greater_than_or_equal' as const, value: 3, unit: 'hours' as const };
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: companyWaiting })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [{ reference: { messageId: ids[0], direction: 'outgoing' } }],
+      });
+      await service.from('whatsapp_messages').insert([
+        row(ids[5], 20, 'incoming', 'received', 'audio', 'manual'), row(ids[6], 10, 'incoming', 'received', 'text', 'manual'),
+      ]).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: companyWaiting }))
+        .toMatchObject({ status: 'evaluated', matched: false, rules: [{ actual: null }] });
+      const leadWaiting = { ...companyWaiting, waitingFor: 'lead' as const, value: 15, unit: 'minutes' as const };
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: leadWaiting })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [{ reference: { messageId: ids[5], direction: 'incoming' } }],
+      });
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, condition: leadWaiting,
+        authorization: { kind: 'organization', workflowId } })).toEqual({ status: 'error', code: 'access_denied' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['message.waiting.elapsed'], p_expected_revision: 0 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, condition: leadWaiting,
+        authorization: { kind: 'organization', workflowId } })).toMatchObject({ status: 'evaluated', matched: true });
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_replied', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: leadWaiting } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_definition: definition,
+        p_settings: { name: 'Waiting elapsed grant' }, p_expected_revision: 0 })).error).toBeNull();
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
+        p_definition: definition, p_settings: { name: 'Waiting elapsed grant' }, p_required_fields: ['message.waiting.elapsed'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', publication)).error).toBeNull();
+      const malformed = structuredClone(definition);
+      (malformed.nodes[1].data.guidedCondition as { waitingFor: string }).waitingFor = 'anyone';
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_definition: malformed,
+        p_settings: { name: 'Waiting elapsed grant' }, p_expected_revision: 1 })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 2, p_definition: malformed })).error?.code).toBe('22023');
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('whatsapp_instances').delete().eq('id', box);
+    }
+  }, 60000);
+
   it('searches normalized expressions in one persisted message with exact coverage and grants', async () => {
     const box = crypto.randomUUID(), workflowId = crypto.randomUUID();
     const [priceOnly, quoteOnly, combined, appreciation] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];

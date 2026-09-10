@@ -60,6 +60,14 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
     const expressions = condition.expressions.length ? condition.expressions.map(value => `“${value}”`).join(condition.expressionMatch === 'all' ? ' E ' : ' OU ') : '…';
     return `${conversation} · ${source} · ${condition.operator === 'matches' ? 'Contém' : 'Não contém'} ${expressions} · ${condition.matchMode === 'whole_phrase' ? 'expressão inteira' : 'trecho'}`;
   }
+  if (condition.field === 'message.waiting.elapsed') {
+    const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
+      : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;
+    const side = condition.waitingFor === 'company' ? 'Empresa aguardando resposta do lead' : 'Lead aguardando resposta';
+    const unit = condition.unit === 'minutes' ? condition.value === 1 ? 'minuto' : 'minutos'
+      : condition.unit === 'hours' ? condition.value === 1 ? 'hora' : 'horas' : condition.value === 1 ? 'dia' : 'dias';
+    return `${conversation} · ${side} · desde a primeira mensagem sem resposta · ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value} ${unit}`;
+  }
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

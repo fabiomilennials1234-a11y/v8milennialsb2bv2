@@ -57,6 +57,8 @@ O avaliador consome somente `condition_text` ou uma transcrição já persistida
 
 `message.search.text` reutiliza essas fontes persistidas para mensagem do gatilho, última recebida ou período `[from,to)`. Caixa/provider/participante continuam fixos. `all` exige todas as expressões na mesma linha; resultado negativo em histórico exige cobertura completa. Máximo: 20 regras de busca por avaliação, 20 expressões por regra, 120 caracteres cada e 1.000 caracteres normalizados totais. Nenhuma avaliação gera transcrição.
 
+`message.waiting.elapsed` mede relógio corrido desde a primeira mensagem da sequência atual ainda sem resposta. `waitingFor=lead` começa em mensagem recebida; `waitingFor=company` começa em mensagem enviada. Complementos do mesmo lado preservam a âncora; mensagem válida do lado oposto encerra a sequência. Recebidas contam com `status=received`; enviadas contam somente em `sent`, `delivered` ou `read`. `pending`, `failed`, receipts, reações e eventos de sistema não contam. Mídia conta sem depender de texto. Sem sequência ativa, o valor é ausente, nunca zero. Cobertura não completa bloqueia a decisão.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)

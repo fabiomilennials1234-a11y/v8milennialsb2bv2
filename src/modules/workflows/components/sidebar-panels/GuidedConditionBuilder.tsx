@@ -42,6 +42,8 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
       || condition.expressions.some(expression => !normalizeExpressionKey(expression) || expression.length > 120)
       || new Set(condition.expressions.map(normalizeExpressionKey)).size !== condition.expressions.length
       || condition.expressions.reduce((total, expression) => total + normalizeExpressionKey(expression).length, 0) > 1000
+    : condition.field === 'message.waiting.elapsed' ? (condition.conversation.kind === 'explicit' && (!condition.conversation.boxId || !condition.conversation.provider))
+      || condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -73,6 +75,8 @@ function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.
   if (field === 'message.period.exists') return { version: 1, id, field, conversation: { kind: 'trigger' }, operator: 'exists', from: '', to: '' };
   if (field === 'message.search.text') return { version: 1, id, field, conversation: { kind: 'trigger' }, source: { kind: 'trigger' },
     operator: 'matches', expressionMatch: 'any', matchMode: 'whole_phrase', expressions: [] };
+  if (field === 'message.waiting.elapsed') return { version: 1, id, field, conversation: { kind: 'trigger' }, waitingFor: 'company',
+    operator: 'greater_than_or_equal', value: '', unit: 'hours' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -308,6 +312,9 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         else if (field === 'message.search.text') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, source: { kind: 'trigger' }, operator: 'matches',
             expressionMatch: 'any', matchMode: 'whole_phrase', expressions: [] });
+        else if (field === 'message.waiting.elapsed') onChange(condition.field === field ? condition
+          : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, waitingFor: 'company',
+            operator: 'greater_than_or_equal', value: '', unit: 'hours' });
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -319,12 +326,36 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'message.search.text' ? <>
+    {condition.field === 'message.waiting.elapsed' ? <>
+      <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+      <Label htmlFor={`guided-waiting-side-${condition.id}`}>Quem está aguardando</Label>
+      <select id={`guided-waiting-side-${condition.id}`} className={selectClass} value={condition.waitingFor}
+        onChange={event => onChange({ ...condition, waitingFor: event.target.value === 'lead' ? 'lead' : 'company' })}>
+        <option value="company">Empresa aguardando resposta do lead</option><option value="lead">Lead aguardando resposta</option>
+      </select>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => isGuidedNumberOperator(event.target.value) && onChange({ ...condition, operator: event.target.value })}>
+        {Object.entries(GUIDED_NUMBER_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Tempo</Label><Input id={`guided-value-${condition.id}`}
+          type="number" min="0" step="any" value={condition.value} aria-invalid={missingValue}
+          onChange={event => onChange({ ...condition, value: event.target.value === '' ? '' : event.target.valueAsNumber })} /></div>
+        <div className="space-y-2"><Label htmlFor={`guided-unit-${condition.id}`}>Unidade</Label><select id={`guided-unit-${condition.id}`}
+          className={selectClass} value={condition.unit} onChange={event => onChange({ ...condition,
+            unit: event.target.value === 'minutes' ? 'minutes' : event.target.value === 'days' ? 'days' : 'hours' })}>
+          <option value="minutes">minutos</option><option value="hours">horas</option><option value="days">dias</option>
+        </select></div>
+      </div>
+      <p className="text-xs text-muted-foreground">Conta desde a primeira mensagem ainda sem resposta. Complementos do mesmo lado não reiniciam o relógio.</p>
+      {missingValue && <p className="text-xs text-destructive">Informe um tempo maior ou igual a zero.</p>}
+    </> : condition.field === 'message.search.text' ? <>
       <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange}
         triggerOnly={condition.source.kind === 'trigger'} />
       <Label htmlFor={`guided-message-source-${condition.id}`}>Origem da mensagem</Label>
@@ -341,9 +372,11 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       {condition.source.kind === 'period' && <>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2"><Label htmlFor={`guided-search-from-${condition.id}`}>De</Label><Input id={`guided-search-from-${condition.id}`} type="datetime-local"
-            value={localDateTimeValue(condition.source.from)} onChange={event => onChange({ ...condition, source: { ...condition.source, from: event.target.value ? new Date(event.target.value).toISOString() : '' } })} /></div>
+            value={localDateTimeValue(condition.source.from)} onChange={event => onChange({ ...condition, source: { kind: 'period',
+              from: event.target.value ? new Date(event.target.value).toISOString() : '', to: condition.source.kind === 'period' ? condition.source.to : '' } })} /></div>
           <div className="space-y-2"><Label htmlFor={`guided-search-to-${condition.id}`}>Até</Label><Input id={`guided-search-to-${condition.id}`} type="datetime-local"
-            value={localDateTimeValue(condition.source.to)} onChange={event => onChange({ ...condition, source: { ...condition.source, to: event.target.value ? new Date(event.target.value).toISOString() : '' } })} /></div>
+            value={localDateTimeValue(condition.source.to)} onChange={event => onChange({ ...condition, source: { kind: 'period',
+              from: condition.source.kind === 'period' ? condition.source.from : '', to: event.target.value ? new Date(event.target.value).toISOString() : '' } })} /></div>
         </div>
         <p className="text-xs text-muted-foreground">Inclui o início e exclui o instante final. Uma resposta negativa exige histórico completo.</p>
       </>}
