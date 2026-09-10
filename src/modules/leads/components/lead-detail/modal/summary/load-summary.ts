@@ -5,7 +5,7 @@ import {
   LEAD_TRACKING_FIELDS,
 } from "../body/info-field-config";
 import { QUALIFICATION_TIER_CONFIG } from "../qualification-config";
-import { ORIGIN_COLORS } from "../../../leads/LeadCard";
+import { ORIGIN_COLORS } from "../../../../lib/origin-config";
 import {
   formatSummary,
   summaryDate,

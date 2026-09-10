@@ -54,9 +54,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     },
   },
 }));
-vi.mock("../../../leads/LeadCard", () => ({
-  ORIGIN_COLORS: { site: { label: "Site" } },
-}));
+
 import { loadLeadSummary } from "./load-summary";
 
 beforeEach(() => {
