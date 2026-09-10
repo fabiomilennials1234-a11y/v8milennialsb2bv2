@@ -35,6 +35,8 @@ export interface LeadListFilterValues {
    * da Relação deriva de dado que toda org tem.
    */
   usaLeiDoErp?: boolean;
+  /** Piloto exclusivo da Café Jurerê: cadastro ERP > perda sem ganho > lead. */
+  usaCadastroErpCafeJurere?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -217,7 +219,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   //   • org SEM integração → relacao_negocios: ganho > só perdas > lead.
   // Campo calculado evita filtrar só os 50 leads carregados no browser.
   if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
-    if (filters.usaLeiDoErp) {
+    if (filters.usaCadastroErpCafeJurere) {
+      if (["lead", "cliente", "perdido"].includes(filters.filterClassificacao)) {
+        q = q.eq("classificacao_cafe_jurere", filters.filterClassificacao);
+      }
+    } else if (filters.usaLeiDoErp) {
       q = q.eq("classificacao", filters.filterClassificacao);
     } else if (["lead", "cliente", "perdido"].includes(filters.filterClassificacao)) {
       // Campo calculado no banco: ganho prevalece; só perdas e nenhum aberto
