@@ -43,22 +43,9 @@ FOR EACH ROW
 WHEN (OLD.name IS DISTINCT FROM NEW.name)
 EXECUTE FUNCTION public.sync_pipeline_name_to_legacy_display();
 
--- Transfer history keeps snapshots by design. Correct snapshots produced by
--- the former split-name model once; later renames continue preserving the name
--- that was current when each new event happened.
-UPDATE public.pipeline_stage_events AS event
-   SET from_pipeline_name = pipeline.name
-  FROM public.pipelines AS pipeline
- WHERE event.from_pipeline_id = pipeline.id
-   AND event.organization_id = pipeline.organization_id
-   AND event.from_pipeline_name IS DISTINCT FROM pipeline.name;
-
-UPDATE public.pipeline_stage_events AS event
-   SET to_pipeline_name = pipeline.name
-  FROM public.pipelines AS pipeline
- WHERE event.pipeline_id = pipeline.id
-   AND event.organization_id = pipeline.organization_id
-   AND event.to_pipeline_name IS DISTINCT FROM pipeline.name;
+-- Transfer history is append-only by ADR-0017. Existing snapshots preserve the
+-- name that was current when the event happened; future events already receive
+-- the canonical pipeline name from their writers.
 
 -- The old client-side move log embedded the three technical seeds in prose.
 -- Replace only that exact sentence fragment and only through the matching
