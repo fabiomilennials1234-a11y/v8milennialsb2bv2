@@ -72,7 +72,5 @@ Zero achados pendentes, incluindo revisão incremental da seleção em lote. UUI
 flag, recorte por kanban e vínculos dos comentários foram conferidos. Revisão
 estática por agente independente; navegador autenticado não foi usado.
 
-Publicação bloqueada pela revisão automática de aprovação: a autorização foi
-interpretada como implementação, sem autorizar envio de código ao GitHub. O
-remoto foi confirmado como o repositório do projeto, mas não houve nova tentativa
-de push nem ativação da flag. A descrição do PR está preparada fora da worktree.
+O envio da branch e a abertura da PR para `main` foram autorizados. Merge,
+publicação e ativação da flag em produção permanecem pendentes de autorização.
