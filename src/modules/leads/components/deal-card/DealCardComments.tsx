@@ -1,5 +1,21 @@
+import {
+  COMMENT_FILE_ACCEPT,
+  validateCommentFiles,
+  commentFileSize,
+  type CommentAttachment,
+} from "../../lib/comment-attachments/files";
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, MessageSquare, Pencil, Send, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Paperclip,
+  Download,
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DealCardComentario } from "./types";
 
@@ -99,11 +115,15 @@ function Comentario({
   comentario,
   onEditar,
   onApagar,
+  onBaixarAnexo,
 }: {
   comentario: DealCardComentario;
+  onBaixarAnexo?: (file: CommentAttachment) => Promise<void>;
   onEditar?: (id: string, texto: string) => void | Promise<void>;
   onApagar?: (id: string) => void | Promise<void>;
 }) {
+  const [baixando, setBaixando] = useState<string | null>(null);
+  const [erroAnexo, setErroAnexo] = useState("");
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState(comentario.corpo);
   const [confirmandoApagar, setConfirmandoApagar] = useState(false);
@@ -150,14 +170,28 @@ function Comentario({
   const podeApagar = comentario.podeApagar && !!onApagar;
 
   return (
-    <li data-summary-pending={ocupado || (editando && rascunho !== comentario.corpo)} className="group flex gap-2.5" data-comentario-id={comentario.id}>
+    <li
+      data-summary-pending={
+        ocupado || (editando && rascunho !== comentario.corpo)
+      }
+      className="group flex gap-2.5"
+      data-comentario-id={comentario.id}
+    >
       <span
         className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full"
-        style={comentario.autorAvatar ? undefined : { background: corDoNome(comentario.autor) }}
+        style={
+          comentario.autorAvatar
+            ? undefined
+            : { background: corDoNome(comentario.autor) }
+        }
         aria-hidden="true"
       >
         {comentario.autorAvatar ? (
-          <img src={comentario.autorAvatar} alt="" className="size-full object-cover" />
+          <img
+            src={comentario.autorAvatar}
+            alt=""
+            className="size-full object-cover"
+          />
         ) : (
           <span className="text-[10px] font-semibold text-white">
             {iniciais(comentario.autor)}
@@ -167,14 +201,18 @@ function Comentario({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-[12.5px] font-medium text-foreground">{comentario.autor}</span>
+          <span className="text-[12.5px] font-medium text-foreground">
+            {comentario.autor}
+          </span>
           {/* Data e hora absolutas, não "há 3 dias": o painel é lido para
               decidir o que fazer hoje, e "há 3 dias" obriga a fazer a conta. */}
           <span className="text-[11.5px] tabular-nums text-muted-foreground/75">
             {quando(comentario.criadoEm)}
           </span>
           {comentario.editadoEm && (
-            <span className="text-[11px] text-muted-foreground/60">editado</span>
+            <span className="text-[11px] text-muted-foreground/60">
+              editado
+            </span>
           )}
           {comentario.deOutroNegocio && (
             <span
@@ -188,7 +226,11 @@ function Comentario({
           {(podeEditar || podeApagar) && !editando && !confirmandoApagar && (
             <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
               {podeEditar && (
-                <BotaoIcone icone={Pencil} rotulo="Editar comentário" onClick={() => setEditando(true)} />
+                <BotaoIcone
+                  icone={Pencil}
+                  rotulo="Editar comentário"
+                  onClick={() => setEditando(true)}
+                />
               )}
               {podeApagar && (
                 <BotaoIcone
@@ -230,7 +272,11 @@ function Comentario({
                 disabled={ocupado}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-success/40 px-2.5 py-1 text-[12px] font-medium text-success transition-colors hover:bg-success/10 disabled:pointer-events-none disabled:opacity-45"
               >
-                {ocupado ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                {ocupado ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Check className="size-3" />
+                )}
                 Salvar
               </button>
               <button
@@ -252,16 +298,71 @@ function Comentario({
           </p>
         )}
 
+        {!!comentario.anexos?.length && (
+          <ul
+            className="mt-2 flex flex-col gap-1.5"
+            aria-label="Documentos do comentário"
+          >
+            {comentario.anexos.map((anexo) => (
+              <li key={anexo.path}>
+                <button
+                  type="button"
+                  disabled={!onBaixarAnexo || baixando !== null}
+                  className="flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-left text-[12px] hover:border-primary/45 disabled:opacity-50"
+                  aria-label={`Baixar ${anexo.name}`}
+                  onClick={async () => {
+                    setBaixando(anexo.path);
+                    setErroAnexo("");
+                    try {
+                      await onBaixarAnexo?.(anexo);
+                    } catch {
+                      setErroAnexo(
+                        "Não foi possível baixar o documento. Tente novamente.",
+                      );
+                    } finally {
+                      setBaixando(null);
+                    }
+                  }}
+                >
+                  <Paperclip className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate" title={anexo.name}>
+                    {anexo.name}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {commentFileSize(anexo.size)}
+                  </span>
+                  {baixando === anexo.path ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Download className="size-3.5" />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {erroAnexo && (
+          <p role="alert" className="text-xs text-destructive">
+            {erroAnexo}
+          </p>
+        )}
+
         {confirmandoApagar && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-            <span className="text-muted-foreground">Apagar este comentário?</span>
+            <span className="text-muted-foreground">
+              Apagar este comentário?
+            </span>
             <button
               type="button"
               onClick={() => void apagar()}
               disabled={ocupado}
               className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-2.5 py-1 font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-45"
             >
-              {ocupado ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+              {ocupado ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Trash2 className="size-3" />
+              )}
               Apagar
             </button>
             <button
@@ -284,30 +385,46 @@ export function DealCardComments({
   onEditar,
   onApagar,
   enviando,
+  onBaixarAnexo,
 }: {
   comentarios: DealCardComentario[];
+  onBaixarAnexo?: (file: CommentAttachment) => Promise<void>;
   /**
    * Ausente quando não há onde gravar — o negócio sem lead. Mesma regra do
    * "+ Adicionar produto" no bloco de dinheiro: caixa de escrever cujo envio
    * falharia é pior que caixa nenhuma.
    */
-  onComentar?: (texto: string) => void | Promise<void>;
+  onComentar?: (texto: string, files?: File[]) => void | Promise<void>;
   onEditar?: (id: string, texto: string) => void | Promise<void>;
   onApagar?: (id: string) => void | Promise<void>;
   enviando?: boolean;
 }) {
   const [texto, setTexto] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [erro, setErro] = useState("");
+  const [publicando, setPublicando] = useState(false);
+  const lock = useRef(false);
+  const seletor = useRef<HTMLInputElement>(null);
+  const ocupado = !!enviando || publicando;
   const campo = useRef<HTMLTextAreaElement>(null);
 
   const enviar = async () => {
     const limpo = texto.trim();
-    if (!limpo || enviando) return;
+    if ((!limpo && !files.length) || ocupado || lock.current) return;
+    lock.current = true;
+    setPublicando(true);
     // Só esvazia depois do sucesso — ver a regra 1 no topo do arquivo.
     try {
-      await onComentar?.(limpo);
+      if (files.length) await onComentar?.(limpo, files);
+      else await onComentar?.(limpo);
     } catch {
       return;
+    } finally {
+      lock.current = false;
+      setPublicando(false);
     }
+    setFiles([]);
+    setErro("");
     setTexto("");
     campo.current?.focus();
   };
@@ -326,8 +443,13 @@ export function DealCardComments({
       </div>
 
       {onComentar && (
-        <div className="flex flex-col gap-2">
+        <div
+          className="flex flex-col gap-2"
+          data-summary-pending={!!texto.trim() || files.length > 0 || ocupado}
+        >
           <textarea
+            disabled={ocupado}
+            maxLength={4000}
             ref={campo}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
@@ -342,14 +464,77 @@ export function DealCardComments({
               }
             }}
           />
-          <div className="flex items-center justify-between gap-3">
+          <input
+            ref={seletor}
+            type="file"
+            multiple
+            accept={COMMENT_FILE_ACCEPT}
+            className="sr-only"
+            aria-label="Selecionar documentos"
+            disabled={ocupado}
+            onChange={(e) => {
+              const selected = [...files, ...Array.from(e.target.files ?? [])];
+              try {
+                validateCommentFiles(selected);
+                setFiles(selected);
+                setErro("");
+              } catch (error) {
+                setErro((error as Error).message);
+              }
+              e.target.value = "";
+            }}
+          />
+          {!!files.length && (
+            <ul
+              className="flex flex-col gap-1"
+              aria-label="Documentos selecionados"
+            >
+              {files.map((file, index) => (
+                <li
+                  key={`${file.name}-${index}`}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <Paperclip className="size-3 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  <span className="text-muted-foreground">
+                    {commentFileSize(file.size)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={ocupado}
+                    aria-label={`Remover ${file.name}`}
+                    onClick={() =>
+                      setFiles(files.filter((_, i) => i !== index))
+                    }
+                  >
+                    <X className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {erro && (
+            <p role="alert" className="text-xs text-destructive">
+              {erro}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => seletor.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-primary disabled:opacity-50"
+              title="Até 5 documentos, 20 MB cada"
+            >
+              <Paperclip className="size-3.5" /> Anexar documentos
+            </button>
             <span className="text-[10.5px] text-muted-foreground/55">
               Ctrl + Enter para publicar
             </span>
             <button
               type="button"
               onClick={() => void enviar()}
-              disabled={!texto.trim() || !!enviando}
+              disabled={(!texto.trim() && !files.length) || ocupado}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5",
                 "text-[12.5px] font-medium transition-colors",
@@ -358,7 +543,11 @@ export function DealCardComments({
                 "disabled:pointer-events-none disabled:opacity-45",
               )}
             >
-              {enviando ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+              {ocupado ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Send className="size-3.5" />
+              )}
               Comentar
             </button>
           </div>
@@ -367,13 +556,22 @@ export function DealCardComments({
 
       {comentarios.length === 0 ? (
         <p className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border py-7 text-center text-[12.5px] text-muted-foreground">
-          <MessageSquare className="size-4 text-muted-foreground/40" aria-hidden="true" />
+          <MessageSquare
+            className="size-4 text-muted-foreground/40"
+            aria-hidden="true"
+          />
           Nenhum comentário ainda.
         </p>
       ) : (
         <ol className="flex flex-col gap-3.5">
           {comentarios.map((c) => (
-            <Comentario key={c.id} comentario={c} onEditar={onEditar} onApagar={onApagar} />
+            <Comentario
+              key={c.id}
+              comentario={c}
+              onEditar={onEditar}
+              onApagar={onApagar}
+              onBaixarAnexo={onBaixarAnexo}
+            />
           ))}
         </ol>
       )}

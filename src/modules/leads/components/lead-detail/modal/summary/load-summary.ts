@@ -74,9 +74,7 @@ export async function loadLeadSummary(
     summaryPages((a, b) =>
       supabase
         .from("lead_comments")
-        .select(
-          "id, body, created_at, author_team_member_id, pipeline_entry_id",
-        )
+        .select("*")
         .eq("lead_id", leadId)
         .eq("organization_id", organizationId)
         .is("deleted_at", null)
@@ -246,7 +244,7 @@ export async function loadLeadSummary(
       title: "COMENTÁRIOS",
       lines: comments.map(
         (c) =>
-          `${summaryDate(c.created_at)} — ${member(c.author_team_member_id)}${entryId && c.pipeline_entry_id && c.pipeline_entry_id !== entryId ? " (Comentário de outro negócio)" : ""}:\n${c.body}`,
+          `${summaryDate(c.created_at)} — ${member(c.author_team_member_id)}${entryId && c.pipeline_entry_id && c.pipeline_entry_id !== entryId ? " (Comentário de outro negócio)" : ""}:\n${c.body}${(c as typeof c & { attachments?: { name: string }[] }).attachments?.map((a) => `\nAnexo: ${a.name}`).join("") ?? ""}`,
       ),
     },
     {

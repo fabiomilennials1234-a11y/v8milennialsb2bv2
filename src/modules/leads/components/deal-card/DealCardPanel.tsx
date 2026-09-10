@@ -1,3 +1,4 @@
+import { downloadCommentFile } from "../../lib/comment-attachments/storage";
 import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -408,6 +409,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         return {
           id: c.id,
           corpo: c.body,
+          anexos: c.attachments ?? [],
           autor: c.author?.name ?? "Usuário",
           autorAvatar: c.author?.avatar_url ?? null,
           criadoEm: c.created_at,
@@ -420,13 +422,14 @@ export const DealCardPanel = memo(function DealCardPanel() {
   }, [comentariosBrutos, entryId, tituloPorNegocio, membroId, souAdmin]);
 
   const comentar = useCallback(
-    async (texto: string) => {
+    async (texto: string, files?: File[]) => {
       if (!leadId || !organizacaoId) return;
       try {
         await criarComentario.mutateAsync({
           leadId,
           organizationId: organizacaoId,
           body: texto,
+          files,
           // É isto que responde "em qual negócio isto foi dito".
           pipelineEntryId: entryId,
         });
@@ -544,6 +547,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}
+        onBaixarAnexo={downloadCommentFile}
         onEditarComentario={podeComentar ? editarComentario : undefined}
         onApagarComentario={podeComentar ? apagarComentario : undefined}
         comentando={criarComentario.isPending}
