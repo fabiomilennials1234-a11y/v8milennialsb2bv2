@@ -8,7 +8,7 @@ CREATE TABLE pipeline_stages(id uuid primary key,organization_id uuid,pipeline_i
 CREATE TABLE team_members(user_id uuid, organization_id uuid, name text);
 CREATE TABLE deals(id uuid primary key,outcome text,outcome_source text,outcome_at timestamptz);
 CREATE TABLE pipeline_entries(id uuid primary key,organization_id uuid,lead_id uuid,pipeline_id uuid,stage_key text,assigned_to uuid,deal_id uuid,stage_changed_at timestamptz default now());
-CREATE TABLE pipeline_stage_events(id uuid primary key default gen_random_uuid(),organization_id uuid,lead_id uuid,pipeline_id uuid,entry_id uuid,from_stage_key text,to_stage_key text,occurred_at timestamptz,actor uuid,source text);
+CREATE TABLE pipeline_stage_events(id uuid primary key default gen_random_uuid(),organization_id uuid,lead_id uuid,pipeline_id uuid,entry_id uuid,from_stage_key text,to_stage_key text,occurred_at timestamptz,actor uuid,source text CHECK (source IN ('trigger','backfill')));
 CREATE FUNCTION metric_stage_role(uuid,uuid,text) RETURNS stage_role LANGUAGE sql AS $$ SELECT stage_role FROM pipeline_stages WHERE organization_id=$1 AND pipeline_id=$2 AND stage_key=$3 $$;
 CREATE FUNCTION update_stage_changed_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.stage_changed_at:=clock_timestamp(); RETURN NEW; END $$;
 CREATE TABLE legacy_sales(outcome text);

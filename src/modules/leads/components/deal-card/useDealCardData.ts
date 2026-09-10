@@ -299,7 +299,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       quando: String(m.occurred_at ?? ""),
       autor: typeof m.actor_name === "string" && m.actor_name !== "" ? m.actor_name : null,
       origem:
-        m.source === "automation" ? "automacao" : m.source === "manual" ? "manual" : "sistema",
+        m.source === "automation" ? "automacao" : m.actor ? "manual" : "sistema",
     }));
 
     const amostra = (extras.data?.amostra ?? [])

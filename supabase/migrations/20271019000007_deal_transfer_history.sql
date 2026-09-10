@@ -28,7 +28,7 @@ BEGIN
      from_stage_name, to_stage_name, actor_name)
   VALUES
     (NEW.organization_id, NEW.lead_id, NEW.pipeline_id, NEW.id, v_from_key, NEW.stage_key,
-     clock_timestamp(), v_actor, CASE WHEN v_actor IS NULL THEN 'trigger' ELSE 'manual' END,
+     clock_timestamp(), v_actor, 'trigger',
      v_from_pipe,
      (SELECT name FROM public.pipelines WHERE id = v_from_pipe AND organization_id = NEW.organization_id),
      (SELECT name FROM public.pipelines WHERE id = NEW.pipeline_id AND organization_id = NEW.organization_id),
