@@ -6,6 +6,7 @@ on:
       - 'scripts/test-cafe-jurere-leads-tabs.mjs'
       - 'supabase/migrations/*leads_cafe_jurere_cadastro_erp.sql'
       - 'supabase/migrations/*leads_cafe_jurere_visibilidade.sql'
+      - 'supabase/migrations/*cafe_jurere_visibility_cache.sql'
 permissions:
   contents: read
 jobs:

@@ -83,6 +83,11 @@ try {
     await db.query("INSERT INTO upsell_clients VALUES ($1,$2,'toth','CAFE JURERE',$3,$4)", [org,id(n),status,rep]);
   }
   await db.exec(await readFile(new URL('../supabase/migrations/20271019000005_leads_cafe_jurere_visibilidade.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20271019000006_cafe_jurere_visibility_cache.sql', import.meta.url), 'utf8'));
+  await db.exec('UPDATE leads SET cafe_jurere_erp_elegivel=cafe_jurere_erp_elegivel');
+  eq((await db.query("SELECT proconfig FROM pg_proc WHERE proname='visivel_lista_cafe_jurere'")).rows[0].proconfig,null,'campo calculado permite inline, sem configuração por linha');
+  const plan = await db.query('EXPLAIN (FORMAT JSON) SELECT id FROM leads WHERE visivel_lista_cafe_jurere(leads)');
+  eq(JSON.stringify(plan.rows).includes('visivel_lista_cafe_jurere'),false,'plano não executa função nem consultas correlacionadas por lead');
   eq((await db.query("SELECT has_function_privilege('anon','visivel_lista_cafe_jurere(leads)','EXECUTE') AS allowed")).rows[0].allowed,false,'visibilidade bloqueia anon');
   await db.query("SELECT set_config('test.org',$1,false)", [org]);
   await db.exec('SET ROLE authenticated');
@@ -95,6 +100,12 @@ try {
   eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,false,'membro de outro tenant rejeitado mesmo com bypass RLS');
   eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(14)])).rows[0].v,true,'outra organização intacta');
   eq((await db.query('SELECT count(*)::int AS n FROM leads')).rows[0].n,14,'nenhum registro excluído');
+  await db.query('UPDATE leads SET cafe_jurere_erp_elegivel=true WHERE id=$1',[id(1)]);
+  eq((await db.query('SELECT cafe_jurere_erp_elegivel AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,false,'cache não aceita elegibilidade forjada');
+  await db.query('UPDATE erp_owner_map SET team_member_id=$1',[id(300)]);
+  eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,true,'mapa restaura elegibilidade automaticamente');
+  await db.query("UPDATE upsell_clients SET erp_status='2' WHERE lead_id=$1",[id(1)]);
+  eq((await db.query('SELECT visivel_lista_cafe_jurere(leads) AS v FROM leads WHERE id=$1',[id(1)])).rows[0].v,false,'bloqueio no ERP atualiza projeção');
   console.log(`PASS: ${checks} verificações SQL, 14 cenários de lead; nenhuma conexão externa.`);
 } finally {
   await db.close();
