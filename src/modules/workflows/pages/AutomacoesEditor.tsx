@@ -707,7 +707,13 @@ function AutomacoesEditorContent() {
         onAddNode={handleAddNode}
         isNew={isNew}
         workflowId={id}
-        onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
+        onExport={!isNew && workflow ? () => {
+          const trigger = nodes.find(node => node.type === "trigger")?.data as TriggerNodeData | undefined;
+          void handleExport({ ...workflow, name,
+            trigger_type: trigger?.triggerType ?? workflow.trigger_type,
+            trigger_config: trigger?.config ?? workflow.trigger_config,
+          }, { nodes, edges });
+        } : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
         // O executor deliberadamente não roda JavaScript sem sandbox. A flag
         // antiga podia expor um node que sempre era ignorado; oculto até haver

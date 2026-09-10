@@ -737,3 +737,13 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Teste pessoal exige `products.view`, visibilidade atual do lead e, para item do negócio, `pipeline.view`. Execução automática e publicação usam grants separados por relação. Histórico revalida as permissões atuais.
 - Migration 54 aditiva, rollback e inventário de decisões incluídos. Preview somente; worker e produção permanecem intocados.
 - Checkpoint: 83/83 integrações reais, 120/120 jornadas Chromium e 156/156 unidades focadas verdes. TypeScript não introduziu erros; Deno e ESLint passaram, com somente o aviso Fast Refresh preexistente. Rollback/reapply das 55 migrations guiadas preservou histórico e ACLs.
+
+## 2026-09-10 — ticket 19 portabilidade de árvores
+
+- Cópia, colagem, duplicação e importação geram IDs novos para cada node, edge, grupo e regra, inclusive recursivamente. Operadores, E/OU, datas, ciclos, expressões, layout e conexões permanecem.
+- Exportação move identidades da organização para o manifesto de dependências. Importação sanitiza novamente o arquivo e limpa tag, origem, responsável, campo/opção personalizada, funil/etapa, caixa/canal e produto em qualquer profundidade.
+- A lista exporta o draft atual, não o shell vazio. O editor exporta a árvore visível. Importação cria novo workflow shell inativo e draft revisão 1 usando a RPC atômica existente.
+- Novo workflow UUID garante zero publicação e zero grant herdados. Pendências aparecem no relatório, permanecem vazias no editor e impedem publicação até remapeamento explícito.
+- Nenhum schema de banco mudou; migration e rollback novos não se aplicam. Preview e produção permaneceram sem deploy.
+- Importações legadas continuam no cadastro inativo original; somente árvores guiadas usam o publicador com draft separado. O relatório explicita os dois modos para manter persistência e mensagem da UI coerentes.
+- Checkpoint: 84/84 integrações reais, 123/123 jornadas Chromium e 270/270 unidades focadas verdes. TypeScript não introduziu erros; ESLint e whitespace passaram, com avisos `no-explicit-any` não bloqueantes nos arquivos tocados.

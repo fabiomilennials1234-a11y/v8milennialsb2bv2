@@ -76,6 +76,55 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('persists an imported condition tree only as an inactive draft without source grants', async () => {
+    const workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-import-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [
+      { id: crypto.randomUUID(), type: 'trigger', data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} }, position: { x: 0, y: 0 } },
+      { id: crypto.randomUUID(), type: 'condition', data: { type: 'condition', label: 'Tag importada', guidedCondition: {
+        version: 1, id: crypto.randomUUID(), kind: 'group', match: 'all', children: [
+          { version: 1, id: crypto.randomUUID(), field: 'lead.tags', operator: 'has_tag', tagId: '' },
+        ],
+      } }, position: { x: 0, y: 150 } },
+    ], edges: [] };
+    try {
+      const created = await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition,
+        p_settings: { name: 'Importação pendente', enrollment_criteria: { enabled: false, match_all: true, conditions: [] },
+          re_enrollment_enabled: false, re_enrollment_cooldown_days: 30, re_enrollment_max_times: 1 },
+      });
+      expect(created.error).toBeNull();
+      expect(created.data).toMatchObject({ workflow_id: workflowId, revision: 1 });
+      const shell = await caller.from('workflows').select('is_active, definition').eq('id', workflowId).single();
+      expect(shell.error).toBeNull();
+      expect(shell.data).toEqual({ is_active: false, definition: { nodes: [], edges: [] } });
+      const draft = await caller.from('workflow_guided_drafts').select('definition, revision').eq('workflow_id', workflowId).single();
+      expect(draft.error).toBeNull();
+      expect(draft.data).toMatchObject({ revision: 1, definition });
+      expect((await service.from('workflow_data_grants').select('workflow_id').eq('workflow_id', workflowId)).data).toEqual([]);
+      expect((await service.from('workflow_guided_publications').select('workflow_id').eq('workflow_id', workflowId)).data).toEqual([]);
+      expect((await caller.rpc('set_guided_workflow_active', {
+        p_workflow_id: workflowId, p_active: true, p_expected_version_id: null,
+      })).error?.code).toBe('42501');
+      expect((await caller.from('workflows').select('is_active').eq('id', workflowId).single()).data?.is_active).toBe(false);
+      const publication = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 1 }), signal: AbortSignal.timeout(15000),
+      });
+      expect(publication.status).toBe(422);
+      const publicationBody = await publication.json();
+      expect(publicationBody).toMatchObject({ status: 'error', code: 'invalid_configuration' });
+      expect(publicationBody.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'invalid_condition', message: 'Complete a condição antes de publicar.' }),
+      ]));
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId);
+    }
+  }, 60000);
+
   it('evaluates a custom text field by UUID and current definition', async () => {
     const fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

@@ -350,6 +350,126 @@ async function openGuidedEditor(page: Page, draftValue?: string | GuidedConditio
   await page.goto(`/tests/browser/fixtures/guided-editor.html${isNew ? '?new=1' : ''}`);
 }
 
+async function mockWorkflowListIdentity(page: Page) {
+  await page.addInitScript(() => {
+    const user = { id: 'user-1', aud: 'authenticated', role: 'authenticated', email: 'editor@example.test' };
+    const expires = Math.floor(Date.now() / 1000) + 3600;
+    const token = `${btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))}.${btoa(JSON.stringify({ sub: user.id, exp: expires }))}.test`;
+    localStorage.setItem('sb-guided-condition-test-auth-token', JSON.stringify({
+      access_token: token, refresh_token: 'test-refresh', token_type: 'bearer', expires_at: expires, expires_in: 3600, user,
+    }));
+  });
+  await page.route('**/rest/v1/master_users?*', route => route.fulfill({ json: null }));
+  await page.route('**/rest/v1/gestores?*', route => route.fulfill({ json: null }));
+  await page.route('**/functions/v1/attach-to-org-by-pending-invite', route => route.fulfill({ json: { attached: false } }));
+  await page.route('**/rest/v1/team_members?*', route => route.fulfill({ json: { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin', is_active: true } }));
+  await page.route('**/rest/v1/organizations?*', route => route.fulfill({ json: { id: 'org-1', name: 'Destino', org_type: 'crm', timezone: 'America/Sao_Paulo', feature_flags: {} } }));
+  await page.route('**/functions/v1/get-member-permissions', route => route.fulfill({ json: { features: {
+    'workflows.create': true, 'workflows.edit': true, 'workflows.delete': true,
+  } } }));
+  await page.route('**/rest/v1/workflow_templates?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/rpc/is_user_admin', route => route.fulfill({ json: true }));
+}
+
+test('importa árvore guiada como rascunho sem reutilizar referência nem aprovação da origem', async ({ page }) => {
+  const sourceTag = 'abcd0000-0000-4000-8000-000000000090';
+  let imported: any;
+  await mockWorkflowListIdentity(page);
+  await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/rpc/create_guided_workflow_draft_with_settings', route => {
+    imported = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: imported.p_workflow_id, revision: 1 } });
+  });
+  await page.goto('/tests/browser/fixtures/guided-editor.html?list=1');
+  await page.getByRole('button', { name: 'Importar', exact: true }).click();
+  const file = { schemaVersion: '1.0', exportedAt: '2026-09-10T00:00:00Z', sourceDescription: 'Origem', workflow: {
+    name: 'Segmentação', description: null, trigger_type: 'lead_created', trigger_config: {}, loop_limit: 10,
+    definition: { nodes: [
+      { id: 'trigger-source', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+      { id: 'condition-source', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Segmentação',
+        guidedCondition: { version: 1, id: 'group-source', kind: 'group', match: 'all', children: [
+          { version: 1, id: 'rule-source', field: 'lead.tags', operator: 'has_tag', tagId: sourceTag, tagLabel: 'VIP' },
+        ] } } },
+    ], edges: [] },
+  }, externalReferences: [] };
+  await page.locator('input[type=file]').setInputFiles({ name: 'segmentacao.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(file)) });
+  await page.getByRole('dialog').getByRole('button', { name: 'Importar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Rascunho importado' })).toBeVisible();
+  await expect(page.getByText('Mapeie todas as dependências antes de publicar.')).toBeVisible();
+  expect(imported.p_organization_id).toBe('org-1');
+  expect(imported.p_settings).toMatchObject({ name: 'Segmentação (importado)' });
+  expect(JSON.stringify(imported)).not.toContain(sourceTag);
+  const importedCondition = imported.p_definition.nodes.find((node: any) => node.type === 'condition').data.guidedCondition;
+  expect(importedCondition.id).not.toBe('group-source');
+  expect(importedCondition.children[0]).toMatchObject({ field: 'lead.tags', tagId: '' });
+  expect(importedCondition.children[0].id).not.toBe('rule-source');
+});
+
+test('exporta a árvore completa do rascunho guiado em vez do shell vazio', async ({ page }) => {
+  const tagId = 'abcd0000-0000-4000-8000-000000000091';
+  await mockWorkflowListIdentity(page);
+  await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: [{
+    id: 'workflow-1', organization_id: 'org-1', name: 'Shell', description: null, is_active: false,
+    trigger_type: 'manual', trigger_config: {}, loop_limit: 10, created_by: 'user-1',
+    created_at: '2026-09-10T00:00:00Z', updated_at: '2026-09-10T00:00:00Z', definition: { nodes: [], edges: [] },
+  }] }));
+  await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: {
+    settings: { name: 'Árvore atual' }, definition: { nodes: [
+      { id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+      { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'VIP',
+        guidedCondition: { version: 1, id: 'rule-1', field: 'lead.tags', operator: 'has_tag', tagId, tagLabel: 'VIP' } } },
+    ], edges: [] },
+  } }));
+  await page.goto('/tests/browser/fixtures/guided-editor.html?list=1');
+  await page.getByText('Shell', { exact: true }).hover();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTitle('Exportar workflow').click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const exported = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(exported.workflow.name).toBe('Árvore atual');
+  expect(exported.workflow.definition.nodes).toHaveLength(2);
+  expect(exported.workflow.definition.nodes[1].data.guidedCondition).toMatchObject({ field: 'lead.tags', tagId: '' });
+  expect(exported.externalReferences).toEqual(expect.arrayContaining([
+    expect.objectContaining({ nodeId: 'condition-1', type: 'tag', originalValue: tagId, hint: 'VIP' }),
+  ]));
+});
+
+test('mantém importação legada inativa fora do publicador guiado', async ({ page }) => {
+  let inserted: any;
+  let guidedCreates = 0;
+  await mockWorkflowListIdentity(page);
+  await page.route('**/rest/v1/workflows?*', route => {
+    if (route.request().method() === 'POST') {
+      inserted = route.request().postDataJSON();
+      return route.fulfill({ json: { ...inserted, id: 'legacy-imported', organization_id: 'org-1', created_by: 'user-1' } });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.route('**/rest/v1/rpc/create_guided_workflow_draft_with_settings', route => {
+    guidedCreates += 1;
+    return route.fulfill({ status: 500, json: { message: 'unexpected guided import' } });
+  });
+  const file = { schemaVersion: '1.0', exportedAt: '2026-09-10T00:00:00Z', sourceDescription: 'Origem', workflow: {
+    name: 'Legada', description: null, trigger_type: 'lead_created', trigger_config: {}, loop_limit: 10,
+    definition: { nodes: [
+      { id: 'trigger-source', type: 'trigger', position: { x: 0, y: 0 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+      { id: 'end-source', type: 'end', position: { x: 0, y: 150 }, data: { type: 'end', label: 'Fim' } },
+    ], edges: [{ id: 'edge-source', source: 'trigger-source', target: 'end-source' }] },
+  }, externalReferences: [] };
+  await page.goto('/tests/browser/fixtures/guided-editor.html?list=1');
+  await page.getByRole('button', { name: 'Importar', exact: true }).click();
+  await page.locator('input[type=file]').setInputFiles({ name: 'legada.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(file)) });
+  await page.getByRole('dialog').getByRole('button', { name: 'Importar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflow importado' })).toBeVisible();
+  expect(guidedCreates).toBe(0);
+  expect(inserted).toMatchObject({ name: 'Legada (importado)', is_active: false });
+});
+
 test('nova automação guiada cria rascunho separado sem enviar definição ao cadastro ativo', async ({ page }) => {
   let created: Record<string, unknown> | undefined;
   const directWrites: string[] = [];
