@@ -1,3 +1,4 @@
+import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
 import {
@@ -278,6 +279,7 @@ export function DealCard({
   movendo,
   comentarios = [],
   onComentar,
+  onBaixarAnexo,
   onEditarComentario,
   onApagarComentario,
   comentando,
@@ -323,7 +325,8 @@ export function DealCard({
    * releitura de etapas, mediana e produtos.
    */
   comentarios?: DealCardComentario[];
-  onComentar?: (texto: string) => void | Promise<void>;
+  onComentar?: (texto: string, files?: File[]) => void | Promise<void>;
+  onBaixarAnexo?: (file: CommentAttachment) => Promise<void>;
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
@@ -778,28 +781,21 @@ export function DealCard({
               )}
             </div>
 
-            {/* Comentários — bloco FIXO no pé da aba, não uma quarta sub-aba.
-                A escolha é do dono do produto (24/08) e tem precedente medido:
-                `leads.notes` está preenchido em 74,9% dos leads e `lead_comments`
-                em 4,4%, e a diferença mais provável entre os dois nunca foi
-                preferência por texto solto — é que a nota estava na cara e o
-                comentário atrás de uma aba. Repetir a aba aqui seria repetir o
-                experimento sabendo o resultado.
 
-                Ele fica DEPOIS do dinheiro de propósito: quem abre o negócio
-                abre para decidir, e o que decide (tempo, valor, etapa, produto)
-                tem de vir antes da conversa sobre a decisão. */}
-            <div className="border-t border-border pt-5">
-              <DealCardComments
-                comentarios={comentarios}
-                onComentar={onComentar}
-                onEditar={onEditarComentario}
-                onApagar={onApagarComentario}
-                enviando={comentando}
-              />
-            </div>
           </div>
         )}
+        {/* Keep drafts and in-flight uploads mounted while switching tabs. */}
+        <div hidden={aba !== "negocio"} className="mt-5 border-t border-border pt-5">
+          <DealCardComments
+            key={negocio.id}
+            comentarios={comentarios}
+            onComentar={onComentar}
+            onBaixarAnexo={onBaixarAnexo}
+            onEditar={onEditarComentario}
+            onApagar={onApagarComentario}
+            enviando={comentando}
+          />
+        </div>
       </div>
     </div>
   );

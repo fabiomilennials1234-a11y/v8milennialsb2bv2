@@ -396,3 +396,17 @@ describe("DealCard — anotação", () => {
     expect(abrirAnotacao()).toHaveValue("Nota do e2");
   });
 });
+
+
+it("preserva documentos ao trocar abas e não transfere rascunho para outro negócio", () => {
+  const { rerender } = render(<DealCard negocio={negocio()} onComentar={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Selecionar documentos"), { target: { files: [new File(["pdf"], "proposta.pdf")] } });
+  fireEvent.change(screen.getByLabelText("Escrever comentário"), { target: { value: "Proposta para revisão" } });
+  fireEvent.click(screen.getByRole("button", { name: /Atividades/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Informações do Negócio" }));
+  expect(screen.getByText("proposta.pdf")).toBeVisible();
+  expect(screen.getByLabelText("Escrever comentário")).toHaveValue("Proposta para revisão");
+  rerender(<DealCard negocio={negocio({ id: "outro" })} onComentar={vi.fn()} />);
+  expect(screen.queryByText("proposta.pdf")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Escrever comentário")).toHaveValue("");
+});

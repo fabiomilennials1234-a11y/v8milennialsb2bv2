@@ -15,7 +15,7 @@ O card atual de negócio (`DealCardPanel`) oferece **Copiar resumo** na barra de
 
 Identificação e campos preenchidos, tags, responsáveis por pré-venda e venda, pré-qualificação e qualificação, pipelines e estágios, campos personalizados, orçamentos e produtos, reuniões, comentários, checklists, origem/rastreamento e histórico. Responsáveis e classificações ausentes aparecem como “Não definido”. Valores zero e booleanos negativos são preservados. Campos vazios são omitidos.
 
-Comentários mantêm autor, data/hora e texto integral. Comentários apagados são excluídos. Eventos de criação/exclusão de comentários não duplicam o bloco de comentários. Coleções são paginadas em lotes de 500, sem limite total artificial.
+Comentários mantêm autor, data/hora, texto integral e nomes dos documentos anexados. Links privados não entram no resumo. Comentários apagados são excluídos. Eventos de criação/exclusão de comentários não duplicam o bloco de comentários. Coleções são paginadas em lotes de 500, sem limite total artificial.
 
 ## Consistência e acesso
 

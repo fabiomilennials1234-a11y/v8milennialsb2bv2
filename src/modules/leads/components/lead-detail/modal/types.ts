@@ -1,3 +1,4 @@
+import type { CommentAttachment } from "../../../lib/comment-attachments/files";
 /**
  * Tipos locais do modal redesenhado de lead.
  *
@@ -7,11 +8,7 @@
  */
 
 export type QualificationTier =
-  | "diamante"
-  | "ouro"
-  | "prata"
-  | "bronze"
-  | "desqualificado";
+  "diamante" | "ouro" | "prata" | "bronze" | "desqualificado";
 
 export const QUALIFICATION_TIERS: QualificationTier[] = [
   "diamante",
@@ -22,6 +19,7 @@ export const QUALIFICATION_TIERS: QualificationTier[] = [
 ];
 
 export interface LeadComment {
+  attachments?: CommentAttachment[];
   id: string;
   organization_id: string;
   lead_id: string;
