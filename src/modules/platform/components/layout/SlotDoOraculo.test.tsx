@@ -54,4 +54,11 @@ describe("SlotDoOraculo", () => {
     renderSlot({ degrau: "icone", gargalo: null });
     expect(screen.queryByTestId("marcador-do-oraculo")).not.toBeInTheDocument();
   });
+
+  it("briefing visto mantém conteúdo e remove marcador de novidade", () => {
+    renderSlot({ gargalo: GARGALO_CURTO, novo: false });
+
+    expect(screen.getByText(GARGALO_CURTO)).toBeInTheDocument();
+    expect(screen.queryByTestId("marcador-do-oraculo")).not.toBeInTheDocument();
+  });
 });

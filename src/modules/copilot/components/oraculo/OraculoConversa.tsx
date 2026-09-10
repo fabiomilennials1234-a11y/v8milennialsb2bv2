@@ -14,8 +14,9 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useOrganization } from "@/modules/identity";
+import { useIdentity, useOrganization } from "@/modules/identity";
 import { useOraculoFeedback } from "../../hooks/useOraculoFeedback";
+import { useOraculoTurnos } from "../../hooks/useOraculoConversas";
 import { useOraculoTurno } from "../../hooks/useOraculoTurno";
 import { OraculoFeedbackControl } from "./OraculoFeedbackControl";
 import { OraculoPropostaCard } from "./OraculoPropostaCard";
@@ -26,16 +27,24 @@ const SUGESTOES = [
   "Qual etapa do funil trava mais?",
 ];
 
-export function OraculoConversa() {
+export function OraculoConversa({ conversaInicial }: { conversaInicial?: string | null }) {
   const [rascunho, setRascunho] = useState("");
   const { organizationId } = useOrganization();
-  const oraculo = useOraculoTurno(organizationId);
+  const { userId } = useIdentity();
+  const oraculo = useOraculoTurno(organizationId, conversaInicial ?? undefined);
+  const historico = useOraculoTurnos(
+    oraculo.conversaId,
+    userId ?? undefined,
+    organizationId ?? undefined,
+  );
   const feedback = useOraculoFeedback(organizationId, oraculo.conversaId);
+  const mensagens = oraculo.mensagens.length > 0 ? oraculo.mensagens : (historico.data ?? []);
+  const aguardandoHistorico = !!oraculo.conversaId && !historico.isSuccess;
 
   const enviar = () => {
     const texto = rascunho.trim();
     if (!texto) return;
-    oraculo.perguntar(texto);
+    oraculo.perguntar(texto, historico.data ?? []);
     setRascunho("");
   };
 
@@ -43,7 +52,7 @@ export function OraculoConversa() {
     <div className="flex min-h-0 flex-1 flex-col">
       <ScrollArea className="min-h-0 flex-1 px-4">
         <div className="space-y-4 py-4">
-          {oraculo.mensagens.length === 0 && (
+          {mensagens.length === 0 && !aguardandoHistorico && (
             <div className="space-y-3 pt-6 text-center">
               <Sparkles className="mx-auto h-6 w-6 text-muted-foreground" />
               <p className="text-[13px] text-muted-foreground">
@@ -65,7 +74,7 @@ export function OraculoConversa() {
             </div>
           )}
 
-          {oraculo.mensagens.map((m) => (
+          {mensagens.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "user" && "justify-end")}>
               <div
                 className={cn(
@@ -150,6 +159,7 @@ export function OraculoConversa() {
             aria-label="Sua pergunta ao Oráculo"
             value={rascunho}
             onChange={(e) => setRascunho(e.target.value)}
+            disabled={aguardandoHistorico}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -160,7 +170,7 @@ export function OraculoConversa() {
             rows={1}
             className="max-h-32 min-h-[40px] resize-none text-[13px]"
           />
-          <Button size="sm" onClick={enviar} disabled={!rascunho.trim() || oraculo.pensando}>
+          <Button size="sm" onClick={enviar} disabled={!rascunho.trim() || oraculo.pensando || aguardandoHistorico}>
             Perguntar
           </Button>
         </div>

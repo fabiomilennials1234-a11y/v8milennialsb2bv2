@@ -10,6 +10,7 @@
  *   2. Quando ele não sabe. Silêncio vira desconfiança; "não tenho base" não.
  */
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Loader2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { useAuth, useOrganization } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
@@ -37,8 +38,13 @@ export default function Oraculo() {
 }
 
 function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; organizationId: string }) {
+  const [searchParams] = useSearchParams();
+  const conversaParam = searchParams.get("conversa") ?? "";
+  const conversaInicial = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversaParam)
+    ? conversaParam
+    : undefined;
   const [rascunho, setRascunho] = useState("");
-  const oraculo = useOraculoTurno(organizationId);
+  const oraculo = useOraculoTurno(organizationId, conversaInicial);
   const feedback = useOraculoFeedback(organizationId, oraculo.conversaId);
   const { data: conversas } = useOraculoConversas(userId, organizationId);
   const historico = useOraculoTurnos(oraculo.conversaId, userId, organizationId);

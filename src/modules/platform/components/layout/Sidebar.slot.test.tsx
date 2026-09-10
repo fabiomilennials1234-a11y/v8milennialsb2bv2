@@ -35,6 +35,16 @@ vi.mock("@/shared/components/UpgradeModal", () => ({
   UpgradeModal: () => <div data-testid="upgrade-modal" />,
 }));
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
+const briefingRef: { current: null | { id: string; headline: string } } = { current: null };
+const openBriefing = vi.fn(async () => ({ conversa_id: "conversa-briefing" }));
+vi.mock("@/modules/copilot", () => ({
+  useAdminBriefing: () => ({
+    briefing: briefingRef.current,
+    isLoading: false,
+    isOpening: false,
+    open: openBriefing,
+  }),
+}));
 // A conversa é dublada: o que importa aqui é o painel MONTÁ-LA. O conteúdo
 // dela tem teste próprio em `OraculoConversa.test.tsx`, e o de verdade puxaria
 // sessão e rede.
@@ -117,6 +127,8 @@ afterAll(() => {
 
 beforeEach(() => {
   window.localStorage.clear();
+  briefingRef.current = null;
+  openBriefing.mockClear();
 });
 
 function renderSidebar() {
@@ -140,6 +152,33 @@ describe("Sidebar — slot do Oráculo", () => {
     renderSidebar();
 
     expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "linha");
+  });
+
+  it("com briefing e altura ampla, mostra card e abre a conversa contextual", async () => {
+    const user = userEvent.setup();
+    briefingRef.current = { id: "briefing-1", headline: "Receita vazando em Propostas" };
+    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
+
+    renderSidebar();
+    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "card");
+    expect(screen.getByText("Receita vazando em Propostas")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
+
+    expect(openBriefing).toHaveBeenCalledWith("briefing-1");
+    expect(await screen.findByTestId("painel-do-oraculo")).toBeInTheDocument();
+  });
+
+  it("falha ao abrir briefing mantém painel fechado sem rejeição solta", async () => {
+    const user = userEvent.setup();
+    briefingRef.current = { id: "briefing-1", headline: "Receita vazando em Propostas" };
+    openBriefing.mockRejectedValueOnce(new Error("indisponivel"));
+    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
+
+    renderSidebar();
+    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
+
+    expect(openBriefing).toHaveBeenCalledWith("briefing-1");
+    expect(screen.queryByTestId("painel-do-oraculo")).not.toBeInTheDocument();
   });
 
   it("a 560px com menu comprido, degrada para o ícone", () => {

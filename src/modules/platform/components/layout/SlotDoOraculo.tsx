@@ -23,10 +23,12 @@ export interface SlotDoOraculoProps {
   degrau: Exclude<DegrauDoSlot, "ausente">;
   /** O gargalo do dia. `null` enquanto não houver briefing. */
   gargalo: string | null;
+  /** Marca somente briefing ainda não visto. */
+  novo?: boolean;
   onAbrir: () => void;
 }
 
-export function SlotDoOraculo({ degrau, gargalo, onAbrir }: SlotDoOraculoProps) {
+export function SlotDoOraculo({ degrau, gargalo, novo = !!gargalo, onAbrir }: SlotDoOraculoProps) {
   const ehIcone = degrau === "icone";
 
   const alvo = (
@@ -56,7 +58,7 @@ export function SlotDoOraculo({ degrau, gargalo, onAbrir }: SlotDoOraculoProps) 
           <Sparkles className="h-4 w-4 text-primary" />
           {/* Marcador: há algo novo esperando. No ícone é o único sinal que
               sobra, então ele não pode depender do texto. */}
-          {gargalo && (
+          {novo && (
             <span
               data-testid="marcador-do-oraculo"
               className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary ring-2 ring-sidebar"

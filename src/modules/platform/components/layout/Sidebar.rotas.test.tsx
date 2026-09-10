@@ -41,6 +41,15 @@ vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
   useNavigationModel: () => modelRef.current,
 }));
 
+vi.mock("@/modules/copilot", () => ({
+  useAdminBriefing: () => ({
+    briefing: null,
+    isLoading: false,
+    open: vi.fn(),
+    isOpening: false,
+  }),
+}));
+
 const node = (label: string, path: string, icon = Gauge, children?: NavNode[]): NavNode => ({
   label,
   icon,

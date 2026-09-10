@@ -123,6 +123,10 @@ verify_jwt = false
 [functions.oraculo-feedback-worker]
 verify_jwt = false
 
+# oraculo-briefing: JWT + plano dentro; somente admin abre briefing da própria org.
+[functions.oraculo-briefing]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 

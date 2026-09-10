@@ -170,6 +170,7 @@ export { CopilotPlayground } from "./components/playground/CopilotPlayground";
 // via React.lazy, como as demais.
 // ────────────────────────────────────────────────────────────────────────
 export { useOraculoTurno, type OraculoMensagem } from "./hooks/useOraculoTurno";
+export { useAdminBriefing, type AdminBriefing } from "./hooks/useAdminBriefing";
 export { OraculoPerfilSettings } from "./components/oraculo/OraculoPerfilSettings";
 export { useOraculoPerfil, type OraculoPerfilRow } from "./hooks/useOraculoPerfil";
 export { recordOraculoSignal, useOraculoFeedback } from "./hooks/useOraculoFeedback";

@@ -20,6 +20,11 @@ const estado = {
 
 vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-a" }),
+  useIdentity: () => ({ userId: "user-a" }),
+}));
+
+vi.mock("../../hooks/useOraculoConversas", () => ({
+  useOraculoTurnos: () => ({ data: undefined, isSuccess: false }),
 }));
 
 vi.mock("../../hooks/useOraculoTurno", () => ({
@@ -58,7 +63,7 @@ describe("OraculoConversa", () => {
     );
     await user.click(screen.getByRole("button", { name: "Perguntar" }));
 
-    expect(perguntar).toHaveBeenCalledWith("onde estou perdendo dinheiro");
+    expect(perguntar).toHaveBeenCalledWith("onde estou perdendo dinheiro", []);
   });
 
   it("mostra a procedência da resposta, e não a inventa quando não veio", () => {

@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { usePrefetchPipes } from "@/modules/pipelines";
+import { useAdminBriefing } from "@/modules/copilot";
 import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { useSidebarCollapsed } from "@/modules/platform/hooks/useSidebarCollapsed";
@@ -75,6 +76,8 @@ export function Sidebar() {
   // Fica `true` no primeiro clique e nunca volta — ver o bloco de montagem.
   const [agendaJaAberta, setAgendaJaAberta] = useState(false);
   const [oraculoAberto, setOraculoAberto] = useState(false);
+  const [oraculoConversaInicial, setOraculoConversaInicial] = useState<string | null>(null);
+  const briefing = useAdminBriefing();
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
@@ -119,8 +122,7 @@ export function Sidebar() {
     rodapeRef,
     navRef,
     colapsada: collapsed,
-    // Recorte (a): sem produtor de briefing, o slot degrada em vez de sumir.
-    temBriefing: false,
+    temBriefing: briefing.briefing !== null,
   });
 
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
@@ -220,9 +222,20 @@ export function Sidebar() {
         {degrauDoOraculo !== "ausente" && (
           <SlotDoOraculo
             degrau={degrauDoOraculo}
-            // Sem produtor de briefing ainda: o slot é a porta, não o resumo.
-            gargalo={null}
-            onAbrir={() => setOraculoAberto(true)}
+            gargalo={briefing.briefing?.headline ?? null}
+            novo={briefing.briefing?.status === "new"}
+            onAbrir={() => {
+              const atual = briefing.briefing;
+              if (!atual) {
+                setOraculoConversaInicial(null);
+                setOraculoAberto(true);
+                return;
+              }
+              void briefing.open(atual.id).then((opened) => {
+                setOraculoConversaInicial(opened.conversa_id);
+                setOraculoAberto(true);
+              }).catch(() => undefined);
+            }}
           />
         )}
 
@@ -337,6 +350,7 @@ export function Sidebar() {
         open={oraculoAberto}
         onClose={() => setOraculoAberto(false)}
         sidebarWidth={width}
+        conversaInicial={oraculoConversaInicial}
       />
 
       {upgradeFeature && (
@@ -396,4 +410,3 @@ function PitstopTrigger({
     </Tooltip>
   );
 }
-

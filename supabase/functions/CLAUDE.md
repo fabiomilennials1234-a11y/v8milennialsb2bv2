@@ -117,6 +117,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `oraculo-profile` | entrevista / configurações | JWT + plano; tabelas server-only |
 | `oraculo-feedback` | avaliação / console Master | JWT + plano / Master |
 | `oraculo-feedback-worker` | alertas + resumo semanal | x-cron-secret |
+| `oraculo-briefing` | briefing diário do admin | JWT + plano + admin server-side |
 | `outbound-trigger` | pg_net | x-cron-secret |
 | `process-agent-document` | upload | JWT |
 | `process-ai-actions` | pg_cron | x-cron-secret |

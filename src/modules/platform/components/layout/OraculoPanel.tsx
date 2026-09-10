@@ -30,9 +30,10 @@ export interface OraculoPanelProps {
   onClose: () => void;
   /** Largura atual da lateral, em px. A camada não a cobre. */
   sidebarWidth: number;
+  conversaInicial?: string | null;
 }
 
-export function OraculoPanel({ open, onClose, sidebarWidth }: OraculoPanelProps) {
+export function OraculoPanel({ open, onClose, sidebarWidth, conversaInicial }: OraculoPanelProps) {
   // Esc fecha: o painel é uma camada, e camada que só fecha no clique prende
   // quem navega por teclado.
   useEffect(() => {
@@ -73,7 +74,7 @@ export function OraculoPanel({ open, onClose, sidebarWidth }: OraculoPanelProps)
           <Sparkles className="h-4 w-4 text-primary" />
           <h2 className="flex-1 text-[13px] font-semibold tracking-tight">Oráculo</h2>
           <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-[12px]">
-            <Link to="/oraculo" onClick={onClose}>
+            <Link to={conversaInicial ? `/oraculo?conversa=${conversaInicial}` : "/oraculo"} onClick={onClose}>
               Tela cheia
             </Link>
           </Button>
@@ -95,7 +96,7 @@ export function OraculoPanel({ open, onClose, sidebarWidth }: OraculoPanelProps)
             </div>
           }
         >
-          <OraculoConversa />
+          <OraculoConversa key={conversaInicial ?? "nova"} conversaInicial={conversaInicial} />
         </Suspense>
       </aside>
     </>
