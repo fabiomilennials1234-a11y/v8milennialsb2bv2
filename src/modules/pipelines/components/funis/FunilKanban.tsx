@@ -11,6 +11,7 @@ import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import type { CustomPipelineStage } from "@/contracts/pipe";
+import { projectSaleValue } from "./funil-card-value";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -24,6 +25,8 @@ export interface FunilEntry {
   created_at: string;
   /** Funil mergeado (ADR-0004): dados de reunião achatados do metadata. */
   meeting_date?: string | null;
+  /** Valor achatado de `metadata.sale_value` pelo leitor canônico do funil. */
+  sale_value?: number | string | null;
   is_confirmed?: boolean;
   metadata?: Record<string, unknown> | null;
   lead?: {
@@ -190,6 +193,7 @@ export function FunilKanban({
       origin: lead?.origin ?? undefined,
       urgency: lead?.urgency || null,
       faturamento: lead?.faturamento ?? null,
+      value: projectSaleValue(entry),
       responsible: responsibleName,
       preSaleResponsible: responsibleName
         ? { name: responsibleName, avatar_url: lead?.responsible?.avatar_url ?? null }
