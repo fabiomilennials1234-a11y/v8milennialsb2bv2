@@ -28,6 +28,7 @@ CREATE TABLE public.oraculo_feedback (
   comment text CHECK (comment IS NULL OR char_length(comment) BETWEEN 1 AND 2000),
   trace_snapshot jsonb NOT NULL CHECK (jsonb_typeof(trace_snapshot) = 'array'),
   created_at timestamptz NOT NULL DEFAULT now(),
+  rated_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((rating = 'negative' AND reason IS NOT NULL) OR (rating = 'positive' AND reason IS NULL)),
   CHECK ((target_type = 'response' AND assistant_turn_id IS NOT NULL)
@@ -199,6 +200,7 @@ BEGIN
       reason = p_reason,
       comment = nullif(btrim(coalesce(p_comment, '')), ''),
       trace_snapshot = v_trace,
+      rated_at = now(),
       updated_at = now()
     WHERE id = v_feedback_id;
   END IF;
@@ -428,7 +430,7 @@ BEGIN
     'invented', count(*) FILTER (WHERE reason = 'invented')
   ) INTO v_summary
   FROM public.oraculo_feedback
-  WHERE updated_at >= v_from AND updated_at < v_until;
+  WHERE rated_at >= v_from AND rated_at < v_until;
 
   INSERT INTO public.oraculo_feedback_digest_deliveries (period_start, period_end, summary)
   VALUES (v_start, v_end, v_summary)

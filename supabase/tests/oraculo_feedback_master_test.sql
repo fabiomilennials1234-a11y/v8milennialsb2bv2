@@ -5,6 +5,7 @@ SELECT no_plan();
 
 SELECT has_table('public', 'oraculo_tool_traces', '(STRUCT) rastro restrito existe');
 SELECT has_table('public', 'oraculo_feedback', '(STRUCT) avaliações existem');
+SELECT has_column('public', 'oraculo_feedback', 'rated_at', '(TEMPO) avaliação tem data de evento explícita');
 SELECT has_table('public', 'oraculo_feedback_alerts', '(STRUCT) outbox de invenção existe');
 SELECT has_table('public', 'oraculo_feedback_digest_deliveries', '(STRUCT) entrega semanal é idempotente');
 SELECT has_table('public', 'oraculo_product_signals', '(STRUCT) sinais implícitos existem');
