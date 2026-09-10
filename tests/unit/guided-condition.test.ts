@@ -838,3 +838,57 @@ it.each([
       operator: 'exists', ...invalidDate },
   })).toEqual({ status: 'error', code: 'invalid_configuration' });
 });
+
+it.each([
+  ['trigger_business_item', true, 'has_product', true],
+  ['lead_association', false, 'not_has_product', true],
+  ['won_deal_history', true, 'has_product', true],
+] as const)('evaluates product relation %s without merging domain meanings', async (relation, sourceMatched, operator, matched) => {
+  const entryId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const productId = 'abababab-abab-abab-abab-abababababab';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_product_relation')
+      ? [{ rule_id: 'product', matched: sourceMatched, product_id: productId, product_name: 'Motor X' }]
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', entryId,
+    condition: { version: 1, id: 'product', field: 'product.relationship', relation, productId,
+      productLabel: 'Motor antigo', operator },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'product', status: 'evaluated', matched,
+    actual: sourceMatched, reference: { id: productId, name: 'Motor X' },
+    ...(relation === 'trigger_business_item' ? { context: { entryId } } : {}) }] });
+});
+
+it('distinguishes an unrelated product from a removed product reference', async () => {
+  const productId = 'abababab-abab-abab-abab-abababababab';
+  let removed = false;
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => String(input).includes('/rpc/test_guided_condition_product_relation')
+      ? new Response(removed ? JSON.stringify({ code: 'PT422', message: 'reference_unavailable' })
+        : JSON.stringify([{ rule_id: 'product', matched: false, product_id: productId, product_name: 'Motor X' }]),
+      { status: removed ? 400 : 200, headers: { 'Content-Type': 'application/json' } })
+      : new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  const request = { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'product', field: 'product.relationship', relation: 'lead_association', productId,
+    operator: 'has_product',
+  } } as const;
+  expect(await evaluateGuidedCondition(database, request)).toEqual({ status: 'evaluated', matched: false,
+    rules: [{ id: 'product', status: 'evaluated', matched: false, actual: false,
+      reference: { id: productId, name: 'Motor X' } }] });
+  removed = true;
+  expect(await evaluateGuidedCondition(database, request)).toEqual({ status: 'error', code: 'reference_unavailable' });
+});
+
+it('rejects a payment product relation whose domain meaning is undefined', async () => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => { throw new Error('invalid condition must not read data'); } },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'product', field: 'product.relationship', relation: 'payment_history',
+    productId: 'abababab-abab-abab-abab-abababababab', operator: 'has_product',
+  } })).toEqual({ status: 'error', code: 'invalid_configuration' });
+});

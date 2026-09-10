@@ -954,6 +954,196 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('keeps product items, manual lead associations and won-deal history as separate relations', async () => {
+    const pipelineId = crypto.randomUUID(), stageId = crypto.randomUUID();
+    const dealA = crypto.randomUUID(), dealB = crypto.randomUUID(), entryA = crypto.randomUUID(), entryB = crypto.randomUUID();
+    const productA = crypto.randomUUID(), productB = crypto.randomUUID(), removedProduct = crypto.randomUUID(), foreignProduct = crypto.randomUUID();
+    const workflowId = crypto.randomUUID(), permissionMemberId = crypto.randomUUID();
+    let permissionUserId: string | undefined;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `product-relation-${pipelineId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const rule = (relation: 'trigger_business_item' | 'lead_association' | 'won_deal_history', productId: string,
+      operator: 'has_product' | 'not_has_product' = 'has_product') => ({
+      version: 1 as const, id: `${relation}-${productId}`, field: 'product.relationship' as const,
+      relation, productId, operator,
+    });
+    await service.from('pipelines').insert({ id: pipelineId, organization_id: orgA, name: 'Produtos guiados',
+      slug: `guided-products-${pipelineId}`, type: 'custom' }).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert({ id: stageId, organization_id: orgA, pipeline_id: pipelineId,
+        stage_key: 'open', name: 'Em negociação', position: 0 }).throwOnError();
+      await service.from('products').insert([
+        { id: productA, organization_id: orgA, name: 'Motor A', type: 'unitario', is_active: true },
+        { id: productB, organization_id: orgA, name: 'Motor B', type: 'unitario', is_active: true },
+        { id: removedProduct, organization_id: orgA, name: 'Produto removido', type: 'unitario', is_active: true },
+        { id: foreignProduct, organization_id: orgB, name: 'Produto estrangeiro', type: 'unitario', is_active: true },
+      ]).throwOnError();
+      await service.from('products').delete().eq('id', removedProduct).throwOnError();
+      await service.from('deals').insert([
+        { id: dealA, organization_id: orgA, source_lead_id: leadA, title: 'Negócio A', source: 'api', won: false },
+        { id: dealB, organization_id: orgA, source_lead_id: leadA, title: 'Negócio B', source: 'api', won: false },
+      ]).throwOnError();
+      await service.from('pipeline_entries').insert([
+        { id: entryA, organization_id: orgA, lead_id: leadA, deal_id: dealA, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'open' },
+        { id: entryB, organization_id: orgA, lead_id: leadA, deal_id: dealB, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'open' },
+      ]).throwOnError();
+      await service.from('deal_items').insert([
+        { organization_id: orgA, deal_id: dealA, product_id: productA, product_name: 'Motor A', quantity: 1, unit_price: 100 },
+        { organization_id: orgA, deal_id: dealB, product_id: productB, product_name: 'Motor B', quantity: 1, unit_price: 200 },
+      ]).throwOnError();
+      await service.from('lead_products').insert({ organization_id: orgA, lead_id: leadA, product_id: productA,
+        source: 'manual', status: 'active', purchase_count: 0 }).throwOnError();
+      await service.from('deals').update({ won: true, closed_at: '2026-09-10T15:00:00Z' }).eq('id', dealB).throwOnError();
+
+      const evaluate = (condition: unknown, entryId?: string) => evaluateGuidedCondition(caller, {
+        organizationId: orgA, leadId: leadA, entryId, condition,
+      });
+      expect(await evaluate(rule('trigger_business_item', productA), entryA)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: true, reference: { id: productA, name: 'Motor A' }, context: { entryId: entryA } }] });
+      expect(await evaluate(rule('trigger_business_item', productB), entryA)).toMatchObject({ status: 'evaluated', matched: false,
+        rules: [{ actual: false, reference: { id: productB, name: 'Motor B' }, context: { entryId: entryA } }] });
+      expect(await evaluate(rule('trigger_business_item', productB), entryB)).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(rule('lead_association', productA))).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(rule('lead_association', productB))).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate(rule('won_deal_history', productB))).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(rule('won_deal_history', productA))).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate(rule('lead_association', productB, 'not_has_product'))).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(rule('trigger_business_item', productA))).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluate(rule('lead_association', removedProduct))).toEqual({ status: 'error', code: 'reference_unavailable' });
+      expect(await evaluate(rule('lead_association', foreignProduct))).toEqual({ status: 'error', code: 'reference_unavailable' });
+      await service.from('products').update({ is_active: false }).eq('id', productA).throwOnError();
+      expect(await evaluate(rule('lead_association', productA))).toEqual({ status: 'error', code: 'reference_unavailable' });
+      await service.from('products').update({ is_active: true }).eq('id', productA).throwOnError();
+
+      const direct = { p_organization_id: orgA, p_lead_id: leadA, p_entry_id: entryA, p_rule_id: 'product',
+        p_relation: 'trigger_business_item', p_product_id: productA };
+      expect((await service.rpc('test_guided_condition_product_relation', direct)).error?.code).toBe('42501');
+      expect((await service.rpc('guided_product_relation_result', direct)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `product-relation-anon-${pipelineId}` },
+      });
+      expect((await anonymous.rpc('test_guided_condition_product_relation', direct)).error?.code).toBe('42501');
+
+      const permissionPassword = `${crypto.randomUUID()}!Aa1`;
+      const permissionUser = await service.auth.admin.createUser({
+        email: `guided-product-${crypto.randomUUID()}@example.test`, password: permissionPassword, email_confirm: true,
+      });
+      if (permissionUser.error) throw permissionUser.error;
+      permissionUserId = permissionUser.data.user.id;
+      await service.from('team_members').insert({ id: permissionMemberId, user_id: permissionUserId,
+        organization_id: orgA, name: 'Product permission reader', role: 'member', is_active: true }).throwOnError();
+      await service.from('member_feature_permissions').insert([
+        { team_member_id: permissionMemberId, organization_id: orgA, feature_key: 'workflows.view', enabled: true },
+        { team_member_id: permissionMemberId, organization_id: orgA, feature_key: 'products.view', enabled: false },
+        { team_member_id: permissionMemberId, organization_id: orgA, feature_key: 'pipeline.view', enabled: true },
+        ...['leads.view_all', 'leads.view_unassigned', 'leads.view_subordinates'].map(feature_key => ({
+          team_member_id: permissionMemberId, organization_id: orgA, feature_key, enabled: false,
+        })),
+      ]).throwOnError();
+      await service.from('leads').update({ pre_sale_responsible_id: permissionMemberId }).eq('id', leadA).throwOnError();
+      const permissionCaller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `product-permission-${permissionMemberId}` },
+      });
+      const permissionLogin = await permissionCaller.auth.signInWithPassword({
+        email: permissionUser.data.user.email!, password: permissionPassword,
+      });
+      if (permissionLogin.error) throw permissionLogin.error;
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA,
+        condition: rule('lead_association', productA) })).toEqual({ status: 'error', code: 'access_denied' });
+      await service.from('member_feature_permissions').update({ enabled: true }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'products.view').throwOnError();
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA,
+        condition: rule('lead_association', productA) })).toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('member_feature_permissions').update({ enabled: false }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'pipeline.view').throwOnError();
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA, entryId: entryA,
+        condition: rule('trigger_business_item', productA) })).toEqual({ status: 'error', code: 'access_denied' });
+      expect(await evaluateGuidedCondition(permissionCaller, { organizationId: orgA, leadId: leadA,
+        condition: rule('lead_association', productA) })).toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('member_feature_permissions').update({ enabled: true }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'pipeline.view').throwOnError();
+
+      const conditions = [rule('trigger_business_item', productA), rule('lead_association', productA), rule('won_deal_history', productB)];
+      const group = { version: 1 as const, id: 'products', kind: 'group' as const, match: 'all' as const, children: conditions };
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'stage_changed', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: group } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [] };
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: { name: 'Relações de produto' } }).throwOnError();
+      const scopes = ['product.trigger_business_item', 'product.lead_association', 'product.won_deal_history'];
+      const automatic = { organizationId: orgA, leadId: leadA, entryId: entryA, condition: group,
+        authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: scopes, p_expected_revision: 0 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toMatchObject({ status: 'evaluated', matched: true });
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 1, p_definition: definition, p_settings: { name: 'Relações de produto' }, p_required_fields: scopes };
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication,
+        p_required_fields: scopes.slice(1) })).error?.code).toBe('42501');
+      const undefinedRelation = structuredClone(definition);
+      (undefinedRelation.nodes[1].data.guidedCondition as { children: Array<{ relation: string }> })
+        .children[0].relation = 'payment_history';
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
+        p_definition: undefinedRelation, p_settings: { name: 'Relações de produto' } }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 2,
+        p_definition: undefinedRelation })).error?.code).toBe('22023');
+      const removedDefinition = structuredClone(definition);
+      (removedDefinition.nodes[1].data.guidedCondition as typeof group).children[0].productId = removedProduct;
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2,
+        p_definition: removedDefinition, p_settings: { name: 'Relações de produto' } }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 3,
+        p_definition: removedDefinition })).error?.code).toBe('PT422');
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 3,
+        p_definition: definition, p_settings: { name: 'Relações de produto' } }).throwOnError();
+      const finalized = await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 4 });
+      expect(finalized.error).toBeNull();
+      const executionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, status: 'completed', current_node_id: 'yes' }).throwOnError();
+      await service.from('member_feature_permissions').update({ enabled: false }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'pipeline.view').throwOnError();
+      expect((await permissionCaller.rpc('get_workflow_execution_history', { p_workflow_id: workflowId, p_limit: 10 }))
+        .data?.find(row => row.id === executionId)).toMatchObject({ data_visible: false, lead_id: null });
+      await service.from('member_feature_permissions').update({ enabled: true }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'pipeline.view').throwOnError();
+      expect((await permissionCaller.rpc('get_workflow_execution_history', { p_workflow_id: workflowId, p_limit: 10 }))
+        .data?.find(row => row.id === executionId)).toMatchObject({ data_visible: true, lead_id: leadA });
+      await service.from('member_feature_permissions').update({ enabled: false }).eq('team_member_id', permissionMemberId)
+        .eq('feature_key', 'products.view').throwOnError();
+      expect((await permissionCaller.rpc('get_workflow_execution_history', { p_workflow_id: workflowId, p_limit: 10 }))
+        .data?.find(row => row.id === executionId)).toMatchObject({ data_visible: false, lead_id: null });
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: scopes.slice(1), p_expected_revision: 1 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, entryId: entryA,
+          condition: rule('trigger_business_item', productA) }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: true, reference: { id: productA, name: 'Motor A' } }] });
+    } finally {
+      await service.from('leads').update({ pre_sale_responsible_id: adminMemberId }).eq('id', leadA);
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('lead_products').delete().eq('lead_id', leadA).in('product_id', [productA,productB]);
+      await service.from('deal_items').delete().in('deal_id', [dealA,dealB]);
+      await service.from('pipeline_entries').delete().in('id', [entryA,entryB]);
+      await service.from('deals').delete().in('id', [dealA,dealB]);
+      await service.from('pipeline_stages').delete().eq('id', stageId);
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA);
+      await service.from('pipelines').delete().eq('id', pipelineId);
+      await service.from('products').delete().in('id', [productA,productB,removedProduct,foreignProduct]);
+      await service.from('team_members').delete().eq('id', permissionMemberId);
+      if (permissionUserId) await service.auth.admin.deleteUser(permissionUserId);
+    }
+  }, 60000);
+
   it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

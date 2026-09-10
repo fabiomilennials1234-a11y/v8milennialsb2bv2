@@ -1454,6 +1454,7 @@ async function selectInformation(page: Page, field: string) {
     'message.search.text': 'Conteúdo de mensagens',
     'message.waiting.elapsed': 'Tempo aguardando resposta',
     'activity.follow_up': 'Existe follow-up',
+    'product.relationship': 'Relação com produto',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1907,6 +1908,73 @@ test('configura follow-up do negócio com estado e data semanticamente explícit
   await page.getByLabel('Estado', { exact: true }).selectOption('pending');
   await expect(page.getByLabel('Prazo', { exact: true })).toBeVisible();
   await expect(page.getByText('Pendente usa o prazo. Concluído usa o instante real de conclusão. Criação não conta como contato.')).toBeVisible();
+});
+
+test('seleciona produto por relação sem confundir item, associação e negócio ganho', async ({ page }) => {
+  const productId = 'abcd0000-0000-4000-8000-000000000076';
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000077';
+  const stageId = 'abcd0000-0000-4000-8000-000000000078';
+  const entryId = 'abcd0000-0000-4000-8000-000000000079';
+  await page.route('**/rest/v1/products?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id')
+      ? { id: productId, name: 'Motor A', is_active: true, type: 'unitario' }
+      : [{ id: productId, name: 'Motor A', is_active: true, type: 'unitario' }],
+  }));
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [{ id: pipelineId, name: 'Comercial' }] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => route.fulfill({ json: [{ id: stageId, name: 'Proposta' }] }));
+  await page.route('**/rest/v1/pipeline_entries?*', route => route.fulfill({ json: [{ id: entryId, pipeline_id: pipelineId, stage_id: stageId }] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'product.relationship');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Produtos · Relação com produto');
+  await page.getByRole('combobox', { name: 'Produto', exact: true }).selectOption(productId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Item do negócio do gatilho · Tem Motor A');
+  await expect(page.getByText('Itens do negócio do gatilho de todos os leads desta organização')).toBeVisible();
+  await expect(page.getByText('Itens avulsos não usam cadastro e não são comparados por nome.')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true }).selectOption(entryId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ entryId, condition: {
+      field: 'product.relationship', relation: 'trigger_business_item', productId, operator: 'has_product',
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated',
+      matched: true, actual: true, reference: { id: productId, name: 'Motor A atual' }, context: { entryId } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Motor A atual');
+  await expect(page.getByRole('status')).toContainText('Relação encontrada');
+
+  await page.getByLabel('Relação consultada', { exact: true }).selectOption('lead_association');
+  await expect(page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true })).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Associação manual ativa do lead · Tem Motor A');
+  await expect(page.getByText('Associações manuais ativas do lead de todos os leads desta organização')).toBeVisible();
+  await page.getByLabel('Relação consultada', { exact: true }).selectOption('won_deal_history');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('not_has_product');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Registro de negócio ganho · Não tem Motor A');
+  await expect(page.getByText('Produtos registrados por negócio ganho de todos os leads desta organização')).toBeVisible();
+  await expect(page.getByText('Cada opção consulta uma relação diferente. Negócio ganho registra venda comercial; não confirma pagamento.')).toBeVisible();
+});
+
+test('produto removido exige nova identidade mesmo quando outro cadastro tem o mesmo nome', async ({ page }) => {
+  const removedId = 'abcd0000-0000-4000-8000-000000000080';
+  const replacementId = 'abcd0000-0000-4000-8000-000000000081';
+  await page.route('**/rest/v1/products?*', route => {
+    const id = new URL(route.request().url()).searchParams.get('id');
+    return route.fulfill({ json: id
+      ? id.includes(replacementId) ? { id: replacementId, name: 'Motor A', is_active: true, type: 'unitario' } : null
+      : [{ id: replacementId, name: 'Motor A', is_active: true, type: 'unitario' }],
+    });
+  });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'product.relationship',
+    relation: 'lead_association', productId: removedId, productLabel: 'Motor A', operator: 'has_product' });
+  await page.getByText('Associação manual ativa do lead · Tem Motor A', { exact: true }).click();
+  await expect(page.getByText('Produto removido, inativo ou sem acesso. Selecione outro produto.')).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Produto indisponível', exact: true })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: 'Produto', exact: true })).toHaveValue(removedId);
+  await page.getByRole('combobox', { name: 'Produto', exact: true }).selectOption(replacementId);
+  await expect(page.getByRole('combobox', { name: 'Produto', exact: true })).toHaveValue(replacementId);
+  await expect(page.getByText('Produto removido, inativo ou sem acesso. Selecione outro produto.')).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Associação manual ativa do lead · Tem Motor A');
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

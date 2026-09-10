@@ -158,6 +158,9 @@ const historySecurityRollback = readFileSync(`supabase/migrations/rollback/${his
 const followUpMigration = '20271017000053_guided_follow_up_condition.sql';
 const followUpForward = readFileSync(`supabase/migrations/${followUpMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const followUpRollback = readFileSync(`supabase/migrations/rollback/${followUpMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const productMigration = '20271017000054_guided_product_relation.sql';
+const productForward = readFileSync(`supabase/migrations/${productMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const productRollback = readFileSync(`supabase/migrations/rollback/${productMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -193,6 +196,17 @@ UPDATE public.workflow_executions SET status='running', current_node_id='conditi
   guided_condition_retry_node_id='condition-retry',
   guided_condition_retry_count=2, guided_condition_retry_error='history_sync_in_progress'
   WHERE workflow_id=(SELECT workflow_id FROM guided_rollback_fixture);
+${productRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_product_relation(uuid,uuid,uuid,uuid,text,text,uuid)') IS NOT NULL
+    OR public.valid_guided_data_scopes(ARRAY['product.trigger_business_item'])
+    OR public.valid_guided_data_scopes(ARRAY['product.lead_association'])
+    OR public.valid_guided_data_scopes(ARRAY['product.won_deal_history'])
+    OR pg_get_functiondef('public.can_read_guided_execution_data(uuid,uuid,uuid)'::regprocedure) LIKE '%products.view%' THEN
+    RAISE EXCEPTION 'product-relation rollback incomplete';
+  END IF;
+END $$;
 ${followUpRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)') IS NOT NULL
@@ -531,6 +545,23 @@ ${messageWaitingForward}
 ${conditionRetryForward}
 ${historySecurityForward}
 ${followUpForward}
+${productForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon','public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('service_role','public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.test_guided_condition_product_relation(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('anon','public.read_guided_condition_product_relation(uuid,uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('authenticated','public.read_guided_condition_product_relation(uuid,uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR NOT has_function_privilege('service_role','public.read_guided_condition_product_relation(uuid,uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('anon','public.guided_product_relation_result(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('authenticated','public.guided_product_relation_result(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR has_function_privilege('service_role','public.guided_product_relation_result(uuid,uuid,uuid,text,text,uuid)','EXECUTE')
+    OR NOT public.valid_guided_data_scopes(ARRAY['product.trigger_business_item','product.lead_association','product.won_deal_history'])
+    OR pg_get_functiondef('public.can_read_guided_execution_data(uuid,uuid,uuid)'::regprocedure) NOT LIKE '%products.view%'
+    OR pg_get_functiondef('public.can_read_guided_execution_data(uuid,uuid,uuid)'::regprocedure) NOT LIKE '%product.trigger_business_item%' THEN
+    RAISE EXCEPTION 'product-relation reapply privileges invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon','public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')
     OR has_function_privilege('service_role','public.test_guided_condition_follow_up(uuid,uuid,uuid,text,text,text,text,date)','EXECUTE')

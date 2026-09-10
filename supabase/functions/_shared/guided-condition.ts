@@ -78,8 +78,11 @@ export type GuidedMessageWaitingRule = { version: 1; id: string; field: 'message
 export type GuidedFollowUpRule = { version: 1; id: string; field: 'activity.follow_up';
   relation: 'lead' | 'trigger_business'; state: 'pending' | 'completed'; operator: 'exists' | 'not_exists';
   dateOperator: 'any' | GuidedDateComparison['operator']; date?: string };
+export type GuidedProductRule = { version: 1; id: string; field: 'product.relationship';
+  relation: 'trigger_business_item' | 'lead_association' | 'won_deal_history';
+  productId: string; operator: 'has_product' | 'not_has_product' };
 
-export type GuidedRule = GuidedFollowUpRule | GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedProductRule | GuidedFollowUpRule | GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -141,6 +144,10 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       && (rule.operator === 'exists' || rule.operator === 'not_exists')
       && (rule.dateOperator === 'any' ? rule.date === undefined
         : isGuidedDateOperator(rule.dateOperator) && isGuidedCalendarDate(rule.date));
+    if (rule.field === 'product.relationship') return (rule.relation === 'trigger_business_item'
+      || rule.relation === 'lead_association' || rule.relation === 'won_deal_history')
+      && (rule.operator === 'has_product' || rule.operator === 'not_has_product')
+      && typeof rule.productId === 'string' && GUIDED_UUID.test(rule.productId);
     if (rule.field === 'message.trigger.text') {
       const conversation = rule.conversation as Record<string, unknown> | undefined;
       const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
@@ -222,7 +229,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
 
 export function guidedConditionFields(condition: GuidedCondition): string[] {
   if ('kind' in condition && condition.kind === 'business_exists') return ['business.exists.lifecycle', ...new Set(condition.children.map(child => child.field === 'business.stage' ? 'business.exists.stage' : 'business.exists.value'))];
-  return 'children' in condition ? [...new Set(condition.children.flatMap(guidedConditionFields))] : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}` : condition.field];
+  return 'children' in condition ? [...new Set(condition.children.flatMap(guidedConditionFields))]
+    : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}`
+      : condition.field === 'product.relationship' ? `product.${condition.relation}` : condition.field];
 }
 
 // Canonical decimal spelling permits harmless trailing zeroes/scientific
@@ -284,6 +293,7 @@ export async function evaluateGuidedCondition(
   const messageSearchRules: GuidedMessageSearchRule[] = [];
   const messageWaitingRules: GuidedMessageWaitingRule[] = [];
   const followUpRules: GuidedFollowUpRule[] = [];
+  const productRules: GuidedProductRule[] = [];
   function collect(current: GuidedCondition): void {
     if ('kind' in current && current.kind === 'business_exists') {
       businessExistenceQueries.push(current);
@@ -317,10 +327,12 @@ export async function evaluateGuidedCondition(
     else if (current.field === 'message.search.text') messageSearchRules.push(current);
     else if (current.field === 'message.waiting.elapsed') messageWaitingRules.push(current);
     else if (current.field === 'activity.follow_up') followUpRules.push(current);
+    else if (current.field === 'product.relationship') productRules.push(current);
   }
   collect(request.condition);
   if (messageSearchRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
-  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.') && !field.startsWith('activity.'));
+  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.')
+    && !field.startsWith('activity.') && !field.startsWith('product.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
   const fields = leadRequestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
@@ -334,6 +346,7 @@ export async function evaluateGuidedCondition(
   const usesMessageSearch = messageSearchRules.some(rule => rule.source.kind!=='trigger');
   const usesMessageWaiting = requestedFields.includes('message.waiting.elapsed');
   const usesFollowUps = requestedFields.includes('activity.follow_up');
+  const usesProducts = requestedFields.some(field => field.startsWith('product.'));
   const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -641,6 +654,38 @@ export async function evaluateGuidedCondition(
       followUpResults.set(rule.id, candidate);
     }
   }
+  type ProductData = { rule_id: string; matched: boolean; product_id: string; product_name: string };
+  const productResults = new Map<string, ProductData>();
+  if (usesProducts) {
+    if (productRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    for (const rule of productRules) {
+      if (rule.relation === 'trigger_business_item' && !request.entryId) {
+        return { status: 'error' as const, code: 'context_unavailable' as const };
+      }
+      const response = await caller.rpc(request.authorization?.kind === 'organization'
+        ? 'read_guided_condition_product_relation' : 'test_guided_condition_product_relation', {
+        ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+        p_organization_id: request.organizationId,
+        p_lead_id: request.leadId,
+        p_entry_id: request.entryId ?? null,
+        p_rule_id: rule.id,
+        p_relation: rule.relation,
+        p_product_id: rule.productId,
+      });
+      if (response.error) {
+        return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
+      }
+      const rows = response.data as ProductData[] | null;
+      const candidate = rows?.[0];
+      if (!Array.isArray(rows) || rows.length !== 1 || !candidate || candidate.rule_id !== rule.id
+        || typeof candidate.matched !== 'boolean' || typeof candidate.product_id !== 'string'
+        || candidate.product_id.toLowerCase() !== rule.productId.toLowerCase()
+        || typeof candidate.product_name !== 'string' || !candidate.product_name.trim()) {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      productResults.set(rule.id, candidate);
+    }
+  }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
@@ -946,6 +991,14 @@ export async function evaluateGuidedCondition(
       rules.push({ id: condition.id, status: 'evaluated', matched, actual: candidate.event_date,
         ...(exists ? { reference: { id: candidate.follow_up_id!, name: candidate.title! } } : {}),
         ...(condition.relation === 'trigger_business' ? { context: { entryId: request.entryId! } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'product.relationship') {
+      const candidate = productResults.get(condition.id)!;
+      const matched = condition.operator === 'has_product' ? candidate.matched : !candidate.matched;
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: candidate.matched,
+        reference: { id: candidate.product_id, name: candidate.product_name },
+        ...(condition.relation === 'trigger_business_item' ? { context: { entryId: request.entryId! } } : {}) });
       return matched;
     }
     if (condition.field === 'message.search.text') {

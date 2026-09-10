@@ -728,3 +728,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - “Último contato” permanece fora do catálogo. A decisão necessária, fontes rejeitadas e seis pontos que o CTO precisa fechar estão registrados em `ticket-17-ultimo-contato-decisao.md`.
 - Migration 53 aditiva e rollback incluídos. Preview somente; worker e produção permanecem intocados.
 - Checkpoint: 82/82 integrações reais, 118/118 jornadas Chromium e 151/151 unidades focadas verdes. TypeScript não introduziu erros; Deno, ESLint e whitespace limpos. Único aviso local: Fast Refresh preexistente. Rollback/reapply das 54 migrations guiadas preservou histórico e restaurou ACLs exatas.
+
+## 2026-09-10 — ticket 18 relações de produto
+
+- `product.relationship` expõe três fontes canônicas independentes: item do negócio exato do gatilho, associação manual ativa do lead e agregado registrado por negócio ganho. O último registra resultado comercial e não comprova pagamento.
+- UUID do produto define identidade. Nome serve somente para leitura. Item avulso sem `product_id`, outro negócio e outro cadastro homônimo nunca satisfazem a condição.
+- Produto ativo sem a relação retorna ausência. Produto removido, inativo, estrangeiro ou inacessível retorna `reference_unavailable` e exige nova seleção.
+- Teste pessoal exige `products.view`, visibilidade atual do lead e, para item do negócio, `pipeline.view`. Execução automática e publicação usam grants separados por relação. Histórico revalida as permissões atuais.
+- Migration 54 aditiva, rollback e inventário de decisões incluídos. Preview somente; worker e produção permanecem intocados.
+- Checkpoint: 83/83 integrações reais, 120/120 jornadas Chromium e 156/156 unidades focadas verdes. TypeScript não introduziu erros; Deno e ESLint passaram, com somente o aviso Fast Refresh preexistente. Rollback/reapply das 55 migrations guiadas preservou histórico e ACLs.

@@ -16,7 +16,8 @@ const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.ta
   'message.period.exists': { label: 'Mensagem recebida no período' },
   'message.search.text': { label: 'Conteúdo de mensagens' },
   'message.waiting.elapsed': { label: 'Tempo aguardando resposta' },
-  'activity.follow_up': { label: 'Existe follow-up' } };
+  'activity.follow_up': { label: 'Existe follow-up' },
+  'product.relationship': { label: 'Relação com produto' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 export type GuidedFieldSelection = Field | 'business.exists';
 // This catalogue contains only capabilities supported by the guided evaluator.
@@ -48,6 +49,7 @@ const vocabulary = {
   'message.search.text': ['mensagem', 'conversa', 'palavra', 'expressao', 'texto', 'ultima recebida'],
   'message.waiting.elapsed': ['mensagem', 'conversa', 'tempo', 'aguardando', 'resposta'],
   'activity.follow_up': ['atividade', 'tarefa', 'pendente', 'concluida', 'prazo', 'agenda'],
+  'product.relationship': ['produto', 'item', 'negocio', 'associado', 'historico', 'ganho'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -76,7 +78,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="dialog" className="w-full justify-between font-normal">
-        <span className="truncate">{value === 'business.exists' || value === 'business.last_won_date' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : value.startsWith('message.') ? 'Conversa' : value.startsWith('activity.') ? 'Atividades' : 'Lead'} · {name}</span>
+        <span className="truncate">{value === 'business.exists' || value === 'business.last_won_date' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : value.startsWith('message.') ? 'Conversa' : value.startsWith('activity.') ? 'Atividades' : value.startsWith('product.') ? 'Produtos' : 'Lead'} · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -136,6 +138,13 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
           <CommandGroup heading="Atividades">
             {entries.filter(([field]) => field.startsWith('activity.')).map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Atividades', fields[field].label, ...aliases]} onSelect={() => { if (field !== value) onChange(field); setOpen(false); setSearch(''); }}>
+              <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
+              <span>{fields[field].label}</span>
+            </CommandItem>)}
+          </CommandGroup>
+          <CommandGroup heading="Produtos">
+            {entries.filter(([field]) => field.startsWith('product.')).map(([field, aliases]) => <CommandItem key={field} value={field}
+              keywords={['Produtos', fields[field].label, ...aliases]} onSelect={() => { if (field !== value) onChange(field); setOpen(false); setSearch(''); }}>
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
               <span>{fields[field].label}</span>
             </CommandItem>)}

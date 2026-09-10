@@ -43,12 +43,18 @@ export function GuidedConditionResult({ condition, rules, groups }: {
             && namedReference.id.toLowerCase() === current.stageId.toLowerCase()
             ? { ...current, stageLabel: namedReference.name,
               pipelineLabel: entry.context?.pipeline?.id.toLowerCase() === current.pipelineId.toLowerCase()
-                ? entry.context.pipeline.name : current.pipelineLabel } : current;
+                ? entry.context.pipeline.name : current.pipelineLabel }
+            : current.field === 'product.relationship' && entry?.status === 'evaluated'
+              && typeof namedReference?.id === 'string' && typeof namedReference.name === 'string'
+              && namedReference.id.toLowerCase() === current.productId.toLowerCase()
+              ? { ...current, productLabel: namedReference.name } : current;
     const lastWonDetail = current.field === 'business.last_won_date' && entry?.status === 'evaluated'
       ? ` · ${namedReference?.name ?? 'Nenhuma venda ganha'} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Vazio'}` : '';
     const followUpDetail = current.field === 'activity.follow_up' && entry?.status === 'evaluated'
       ? namedReference ? ` · ${namedReference.name} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Data indisponível'}`
         : ' · Nenhum follow-up correspondente' : '';
+    const productDetail = current.field === 'product.relationship' && entry?.status === 'evaluated'
+      ? entry.actual === true ? ' · Relação encontrada' : ' · Relação não encontrada' : '';
     const messageReference = (current.field === 'message.trigger.text' || current.field === 'message.search.text') && entry?.status === 'evaluated' && entry.reference && 'messageId' in entry.reference && 'textSource' in entry.reference
       ? ` · Fonte: ${entry.reference.textSource === 'caption' ? 'legenda' : entry.reference.textSource === 'transcription' ? 'transcrição persistida' : entry.reference.textSource === 'interactive' ? 'resposta interativa' : entry.reference.textSource === 'synthetic' ? 'conteúdo estruturado' : 'texto'} · ${entry.reference.textProvider ?? entry.reference.provider}${entry.reference.textCreatedAt ? ` · ${new Date(entry.reference.textCreatedAt).toLocaleString('pt-BR')}` : ''}` : '';
     const waitingReference = current.field === 'message.waiting.elapsed' && entry?.status === 'evaluated'
@@ -56,7 +62,7 @@ export function GuidedConditionResult({ condition, rules, groups }: {
         ? ` · Âncora: primeira mensagem sem resposta em ${new Date(entry.reference.messageAt ?? '').toLocaleString('pt-BR')}`
         : ' · Espera ainda não iniciada'
       : '';
-    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{followUpDetail}{messageReference}{waitingReference}</p>;
+    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}{followUpDetail}{productDetail}{messageReference}{waitingReference}</p>;
   }
   return render(condition, '');
 }

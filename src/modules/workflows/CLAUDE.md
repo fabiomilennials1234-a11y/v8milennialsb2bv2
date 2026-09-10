@@ -61,6 +61,16 @@ O avaliador consome somente `condition_text` ou uma transcrição já persistida
 
 Falha temporária de condição publicada retoma o mesmo node com dados atuais. Somente `temporarily_unavailable` e `history_sync_in_progress` recebem retries em 30s, 90s e 270s. A execução permanece `running`, usa `next_run_at` e guarda estado em `guided_condition_retry_*`; nenhuma saída é escolhida durante a espera. Sucesso limpa o estado antes do ramo. Falha permanente termina imediatamente; esgotamento grava `guided_condition_retry_exhausted:<code>`. Retry de condição não incrementa loop nem reexecuta nodes anteriores.
 
+### Condição por produto
+
+`product.relationship` mantém três relações distintas. `trigger_business_item` lê
+`deal_items.product_id` pelo `deal_id` da entrada exata do gatilho.
+`lead_association` lê somente `lead_products` manual e ativo.
+`won_deal_history` lê o agregado criado por negócio ganho; não representa pagamento.
+Toda regra persiste UUID de produto ativo da organização. Nome é dica visual e item
+avulso nunca casa por texto. Grants separados: `product.trigger_business_item`,
+`product.lead_association` e `product.won_deal_history`.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)

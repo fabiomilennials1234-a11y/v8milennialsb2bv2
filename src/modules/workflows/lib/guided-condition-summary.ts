@@ -44,6 +44,11 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
       : `${condition.state === 'pending' ? 'Prazo' : 'Conclusão'} ${GUIDED_DATE_OPERATORS[condition.dateOperator]} ${isGuidedCalendarDate(condition.date) ? condition.date.split('-').reverse().join('/') : '…'}`;
     return `${relation} · ${condition.operator === 'exists' ? 'Existe' : 'Não existe'} follow-up · ${state} · ${date}`;
   }
+  if (condition.field === 'product.relationship') {
+    const relation = condition.relation === 'trigger_business_item' ? 'Item do negócio do gatilho'
+      : condition.relation === 'lead_association' ? 'Associação manual ativa do lead' : 'Registro de negócio ganho';
+    return `${relation} · ${condition.operator === 'has_product' ? 'Tem' : 'Não tem'} ${condition.productLabel || 'produto não selecionado'}`;
+  }
   if (condition.field === 'message.trigger.text') {
     const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
       : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;
@@ -101,5 +106,7 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
 export function getGuidedConditionFields(condition: GuidedConditionDraft): string[] {
   if ('kind' in condition && condition.kind === 'business_exists') return ['business.exists.lifecycle',
     ...new Set(condition.children.map(child => child.field === 'business.stage' ? 'business.exists.stage' : 'business.exists.value'))];
-  return 'children' in condition ? [...new Set(condition.children.flatMap(getGuidedConditionFields))] : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}` : condition.field];
+  return 'children' in condition ? [...new Set(condition.children.flatMap(getGuidedConditionFields))]
+    : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}`
+      : condition.field === 'product.relationship' ? `product.${condition.relation}` : condition.field];
 }

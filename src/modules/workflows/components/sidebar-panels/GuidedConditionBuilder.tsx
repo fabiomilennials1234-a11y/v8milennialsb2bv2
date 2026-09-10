@@ -13,6 +13,7 @@ import { GuidedOriginPicker } from './GuidedOriginPicker';
 import { GuidedTagPicker } from './GuidedTagPicker';
 import { GuidedBusinessStagePicker } from './GuidedBusinessStagePicker';
 import { GuidedConversationPicker } from './GuidedConversationPicker';
+import { GuidedProductPicker } from './GuidedProductPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
       || condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
     : condition.field === 'activity.follow_up' ? condition.dateOperator === 'any'
       ? condition.date !== undefined : !isGuidedCalendarDate(condition.date)
+    : condition.field === 'product.relationship' ? !condition.productId
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -81,6 +83,8 @@ function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.
     operator: 'greater_than_or_equal', value: '', unit: 'hours' };
   if (field === 'activity.follow_up') return { version: 1, id, field, relation: 'lead', state: 'pending',
     operator: 'exists', dateOperator: 'any' };
+  if (field === 'product.relationship') return { version: 1, id, field, relation: 'trigger_business_item',
+    productId: '', operator: 'has_product' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -321,6 +325,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
             operator: 'greater_than_or_equal', value: '', unit: 'hours' });
         else if (field === 'activity.follow_up') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, relation: 'lead', state: 'pending', operator: 'exists', dateOperator: 'any' });
+        else if (field === 'product.relationship') onChange(condition.field === field ? condition
+          : { version: 1, id: condition.id, field, relation: 'trigger_business_item', productId: '', operator: 'has_product' });
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -332,12 +338,29 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'activity.follow_up' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'message.search.text' || condition.field === 'message.waiting.elapsed' || condition.field === 'activity.follow_up' || condition.field === 'product.relationship' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'activity.follow_up' ? <>
+    {condition.field === 'product.relationship' ? <>
+      <Label htmlFor={`guided-product-relation-${condition.id}`}>Relação consultada</Label>
+      <select id={`guided-product-relation-${condition.id}`} className={selectClass} value={condition.relation}
+        onChange={event => onChange({ ...condition, relation: event.target.value === 'lead_association' ? 'lead_association'
+          : event.target.value === 'won_deal_history' ? 'won_deal_history' : 'trigger_business_item' })}>
+        <option value="trigger_business_item">Item do negócio do gatilho</option>
+        <option value="lead_association">Associação manual ativa do lead</option>
+        <option value="won_deal_history">Registro de negócio ganho</option>
+      </select>
+      <p className="text-xs text-muted-foreground">Cada opção consulta uma relação diferente. Negócio ganho registra venda comercial; não confirma pagamento.</p>
+      <Label htmlFor={`guided-product-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-product-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => onChange({ ...condition, operator: event.target.value === 'not_has_product' ? 'not_has_product' : 'has_product' })}>
+        <option value="has_product">tem o produto</option><option value="not_has_product">não tem o produto</option>
+      </select>
+      <GuidedProductPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+      <p className="text-xs text-muted-foreground">Itens avulsos não usam cadastro e não são comparados por nome.</p>
+    </> : condition.field === 'activity.follow_up' ? <>
       <Label htmlFor={`guided-follow-up-relation-${condition.id}`}>Vínculo</Label>
       <select id={`guided-follow-up-relation-${condition.id}`} className={selectClass} value={condition.relation}
         onChange={event => onChange({ ...condition, relation: event.target.value === 'trigger_business' ? 'trigger_business' : 'lead' })}>
