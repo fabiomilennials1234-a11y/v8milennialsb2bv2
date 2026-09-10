@@ -27,6 +27,11 @@ a classificação legada não roda no piloto, cujas abas usam cadastro no ERP.
 Levantamento anterior em cache: 2.189 (1.703 ativos, 486 inconsistentes).
 A leitura atual do ERP pode variar; registrar o resultado real da execução.
 
+Prévia em produção: 12.746 recebidos, 2.232 elegíveis (1.697 ativos e 535
+inconsistentes); 2.189 existentes e 43 novos. Sem erros de mapeamento.
+O Toth limitou a consulta com marcas mesmo sem janela; `diasCompras=0` e
+`marcas=` retornaram a base completa. O piloto fixa esses parâmetros.
+
 ## Validação
 
 121 testes focados passaram (recorte, representantes, mapeamento, empresa e

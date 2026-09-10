@@ -288,6 +288,12 @@ Deno.serve(
         if (typeof v === "string" || typeof v === "number") filtros[k] = String(v);
       }
     }
+    if (cafeJurereScope) {
+      // Cadastro, não compra: medido em 10/09/2026. Marcas sozinhas limitam
+      // a resposta; diasCompras=0 e marcas vazias devolvem a base completa.
+      filtros.diasCompras = "0";
+      filtros.marcas = "";
+    }
     const maxClients =
       typeof body.max_clients === "number" && body.max_clients > 0
         ? Math.floor(body.max_clients)
@@ -314,7 +320,7 @@ Deno.serve(
         : conn.clientes_incluir_sem_empresa === true;
 
     /** Só quem tem data de último pedido faturado. Ver o uso, no laço. */
-    const somenteComCompra =
+    const somenteComCompra = cafeJurereScope ? false :
       typeof body.somente_com_compra === "boolean"
         ? body.somente_com_compra
         : conn.clientes_somente_com_compra === true;
