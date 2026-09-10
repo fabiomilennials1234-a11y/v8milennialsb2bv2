@@ -288,6 +288,7 @@ export function DealCard({
   excluindo,
   etiquetas,
   acaoLigar,
+  acaoCopiar,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -387,6 +388,7 @@ export function DealCard({
    * Não reestampa a pessoa — é um ato sobre ela, não uma identidade.
    */
   acaoLigar?: ReactNode;
+  acaoCopiar?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -428,7 +430,7 @@ export function DealCard({
   const { total } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* ── Cabeçalho ─────────────────────────────────────────────────────
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
@@ -490,10 +492,11 @@ export function DealCard({
             top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
             do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
             comum de faxina de funil. */}
-        {(aberto || onExcluir || acaoLigar) && (
+        {(aberto || onExcluir || acaoLigar || acaoCopiar) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
             {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
                 negócio aberto, e o único que não o encerra. */}
+            {acaoCopiar}
             {acaoLigar}
             {aberto && (
               <AcaoPrimaria

@@ -150,7 +150,7 @@ function Comentario({
   const podeApagar = comentario.podeApagar && !!onApagar;
 
   return (
-    <li className="group flex gap-2.5" data-comentario-id={comentario.id}>
+    <li data-summary-pending={ocupado || (editando && rascunho !== comentario.corpo)} className="group flex gap-2.5" data-comentario-id={comentario.id}>
       <span
         className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full"
         style={comentario.autorAvatar ? undefined : { background: corDoNome(comentario.autor) }}
