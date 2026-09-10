@@ -55,6 +55,8 @@ export interface DealCardStage {
 
 export interface DealCardMove {
   id: string;
+  funilDe?: string | null;
+  funilPara?: string | null;
   de: string | null;
   para: string;
   /**
