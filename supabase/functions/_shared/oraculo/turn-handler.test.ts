@@ -5,14 +5,24 @@ import type { OracleTool } from "./loop.ts";
 const cors = { "access-control-allow-origin": "*" };
 
 const ana = {
-  userId: "u-ana", teamMemberId: "tm-ana", organizationId: "org-1",
-  role: "member", isMaster: false, isAdmin: false,
+  userId: "u-ana",
+  teamMemberId: "tm-ana",
+  organizationId: "org-1",
+  role: "member",
+  isMaster: false,
+  isAdmin: false,
 };
 
-function deps(over: Partial<TurnDeps> = {}, spy: { escopos: unknown[] } = { escopos: [] }): TurnDeps {
+function deps(
+  over: Partial<TurnDeps> = {},
+  spy: { escopos: unknown[] } = { escopos: [] },
+): TurnDeps {
   const metricas: OracleTool = {
     name: "metricas",
-    execute: (_a, scope) => { spy.escopos.push(scope); return Promise.resolve({ vendas: 1 }); },
+    execute: (_a, scope) => {
+      spy.escopos.push(scope);
+      return Promise.resolve({ vendas: 1 });
+    },
   };
   return {
     auth: () => Promise.resolve(ana),
@@ -21,7 +31,12 @@ function deps(over: Partial<TurnDeps> = {}, spy: { escopos: unknown[] } = { esco
       complete: (req) =>
         Promise.resolve(
           req.toolResults.length === 0
-            ? { model: "m", inputTokens: 10, outputTokens: 2, toolCalls: [{ name: "metricas", arguments: {} }] }
+            ? {
+              model: "m",
+              inputTokens: 10,
+              outputTokens: 2,
+              toolCalls: [{ name: "metricas", arguments: {} }],
+            }
             : { model: "m", inputTokens: 10, outputTokens: 2, text: "Você fechou 1 venda." },
         ),
     },
@@ -30,6 +45,8 @@ function deps(over: Partial<TurnDeps> = {}, spy: { escopos: unknown[] } = { esco
       turnsToday: () => Promise.resolve(0),
       orgLimit: () => Promise.resolve(null),
       loadConversation: () => Promise.resolve({ id: "c-1", summary: null, history: [] }),
+      loadProfileContext: () => Promise.resolve(null),
+      loadInterviewState: () => Promise.resolve({ askedKeys: [], questionCount: 0 }),
       saveTurn: () => Promise.resolve(),
     },
     ...over,
@@ -42,20 +59,33 @@ function post(body: unknown) {
 
 Deno.test("handleTurn — o member pergunta sobre a organização e a ferramenta recebe o Escopo dele, não o pedido", async () => {
   const spy = { escopos: [] as unknown[] };
-  const res = await handleTurn(post({ pergunta: "qual o ranking da equipe?", organization_id: "org-do-vizinho" }), deps({}, spy), cors);
+  const res = await handleTurn(
+    post({ pergunta: "qual o ranking da equipe?", organization_id: "org-do-vizinho" }),
+    deps({}, spy),
+    cors,
+  );
   const body = await res.json();
 
   assertEquals(res.status, 200);
   assertEquals(body.resposta, "Você fechou 1 venda.");
   assertEquals(body.procedencia, ["metricas"]);
-  assertEquals(spy.escopos[0], { kind: "assigned", organizationId: "org-1", teamMemberId: "tm-ana" });
+  assertEquals(spy.escopos[0], {
+    kind: "assigned",
+    organizationId: "org-1",
+    teamMemberId: "tm-ana",
+  });
 });
 
 Deno.test("handleTurn — no teto diário recusa antes de gastar chamada ao modelo", async () => {
   let chamouModelo = false;
   const d = deps({
     store: { ...deps().store, turnsToday: () => Promise.resolve(25) },
-    llm: { complete: () => { chamouModelo = true; return Promise.resolve({ model: "m", inputTokens: 0, outputTokens: 0, text: "" }); } },
+    llm: {
+      complete: () => {
+        chamouModelo = true;
+        return Promise.resolve({ model: "m", inputTokens: 0, outputTokens: 0, text: "" });
+      },
+    },
   });
 
   const res = await handleTurn(post({ pergunta: "e aí?" }), d, cors);
@@ -91,4 +121,53 @@ Deno.test("handleTurn — a pergunta de acompanhamento chega ao modelo com o his
   await handleTurn(post({ pergunta: "e por quê?", conversa_id: "c-1" }), d, cors);
 
   assertEquals(vistas[0], ["onde estou perdendo?", "Na etapa de proposta.", "e por quê?"]);
+});
+
+Deno.test("handleTurn — perfil declarado compõe análises seguintes sem ser obrigatório", async () => {
+  const profileContexts: Array<string | null | undefined> = [];
+  const d = deps({
+    llm: {
+      complete: (req) => {
+        profileContexts.push(req.profileContext);
+        return Promise.resolve({ model: "m", inputTokens: 1, outputTokens: 1, text: "ok" });
+      },
+    },
+    store: {
+      ...deps().store,
+      loadProfileContext: () =>
+        Promise.resolve(
+          "Vendas fora do CRM: membro disse 2; admin disse 1. Divergência registrada.",
+        ),
+    },
+  });
+
+  const response = await handleTurn(post({ pergunta: "como está minha operação?" }), d, cors);
+
+  assertEquals(response.status, 200);
+  assertEquals(profileContexts, [
+    "Vendas fora do CRM: membro disse 2; admin disse 1. Divergência registrada.",
+  ]);
+});
+
+Deno.test("handleTurn — indisponibilidade do perfil opcional não bloqueia a análise", async () => {
+  const d = deps({
+    llm: {
+      complete: () =>
+        Promise.resolve({
+          model: "m",
+          inputTokens: 1,
+          outputTokens: 1,
+          text: "Análise segue sem perfil.",
+        }),
+    },
+    store: {
+      ...deps().store,
+      loadProfileContext: () => Promise.reject(new Error("profile unavailable")),
+      loadInterviewState: () => Promise.reject(new Error("interview unavailable")),
+    },
+  });
+
+  const response = await handleTurn(post({ pergunta: "como está a operação?" }), d, cors);
+  assertEquals(response.status, 200);
+  assertEquals((await response.json()).resposta, "Análise segue sem perfil.");
 });

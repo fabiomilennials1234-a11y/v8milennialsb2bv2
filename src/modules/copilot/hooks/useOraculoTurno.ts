@@ -31,6 +31,22 @@ export interface OraculoProposta {
   erro?: string;
 }
 
+export type OraculoPerfilChave =
+  | "sales_outside_crm"
+  | "meeting_definition"
+  | "seasonality"
+  | "perceived_bottleneck"
+  | "personal_practice";
+
+export interface OraculoPerguntaPerfil {
+  id: string;
+  question_key: OraculoPerfilChave;
+  prompt: string;
+  measured_context: Record<string, unknown>;
+  status: "pending" | "answered" | "skipped";
+  error?: string;
+}
+
 export interface OraculoMensagem {
   id: string;
   role: "user" | "assistant";
@@ -38,6 +54,7 @@ export interface OraculoMensagem {
   /** Ferramentas que o servidor consultou para redigir esta resposta. */
   procedencia?: string[];
   propostas?: OraculoProposta[];
+  perguntasPerfil?: OraculoPerguntaPerfil[];
   criadaEm: Date;
 }
 
@@ -48,6 +65,7 @@ interface RespostaTurno {
   teto_de_ferramentas_atingido?: boolean;
   restantes_hoje: number;
   propostas?: OraculoProposta[];
+  perguntas_perfil?: Array<Omit<OraculoPerguntaPerfil, "status">>;
 }
 
 /**
@@ -102,6 +120,10 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
           content: data.resposta,
           procedencia: data.procedencia,
           propostas: data.propostas,
+          perguntasPerfil: data.perguntas_perfil?.map((question) => ({
+            ...question,
+            status: "pending",
+          })),
           criadaEm: new Date(),
         },
       ]);
@@ -162,6 +184,44 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
     },
   });
 
+  const profileMutation = useMutation({
+    mutationFn: async (input: { questionId: string; answer?: string; skip: boolean }) => {
+      if (!organizationId) throw new Error("organizacao_ausente");
+      const { data, error } = await supabase.functions.invoke("oraculo-profile", {
+        body: {
+          acao: input.skip ? "ignorar" : "responder",
+          pergunta_id: input.questionId,
+          resposta: input.answer,
+          organization_id: organizationId,
+        },
+      });
+      if (error) throw error;
+      return { input, data };
+    },
+    onSuccess: ({ input }) => {
+      setMensagens((current) => current.map((message) => ({
+        ...message,
+        perguntasPerfil: message.perguntasPerfil?.map((question) =>
+          question.id === input.questionId
+            ? { ...question, status: input.skip ? "skipped" : "answered", error: undefined }
+            : question
+        ),
+      })));
+      void queryClient.invalidateQueries({ queryKey: ["oraculo-profile"] });
+      void queryClient.invalidateQueries({ queryKey: ["oraculo_turns"] });
+    },
+    onError: (_error, input) => {
+      setMensagens((current) => current.map((message) => ({
+        ...message,
+        perguntasPerfil: message.perguntasPerfil?.map((question) =>
+          question.id === input.questionId
+            ? { ...question, error: "Não consegui salvar. Tente novamente." }
+            : question
+        ),
+      })));
+    },
+  });
+
   const perguntar = useCallback(
     (pergunta: string, historico: OraculoMensagem[] | null = []) => {
       const texto = pergunta.trim();
@@ -197,6 +257,14 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
     actionMutation.mutate(proposalId);
   }, [actionMutation]);
 
+  const responderPerguntaPerfil = useCallback((questionId: string, answer: string) => {
+    if (!profileMutation.isPending) profileMutation.mutate({ questionId, answer, skip: false });
+  }, [profileMutation]);
+
+  const ignorarPerguntaPerfil = useCallback((questionId: string) => {
+    if (!profileMutation.isPending) profileMutation.mutate({ questionId, skip: true });
+  }, [profileMutation]);
+
   return {
     mensagens,
     conversaId,
@@ -206,6 +274,11 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
     executandoPropostaId: actionMutation.isPending ? actionMutation.variables : null,
     perguntar,
     executarProposta,
+    responderPerguntaPerfil,
+    ignorarPerguntaPerfil,
+    salvandoPerguntaPerfilId: profileMutation.isPending
+      ? profileMutation.variables?.questionId ?? null
+      : null,
     abrirConversa,
   };
 }

@@ -105,6 +105,7 @@ Deno.test("HTTP — seis ferramentas válidas são consultadas e a sétima não 
     assertEquals(body.procedencia, ["metricas", "metricas", "metricas", "metricas", "metricas", "metricas"]);
     assertEquals(body.teto_de_ferramentas_atingido, true);
     assertEquals(body.resposta, "Consultas concluídas dentro do limite.");
+    assertEquals("toolEvidence" in services.savedTurnResults[0], false);
   });
 });
 

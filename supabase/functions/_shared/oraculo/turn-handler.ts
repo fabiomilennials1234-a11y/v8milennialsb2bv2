@@ -11,6 +11,7 @@ import { type OracleActor, type OraclePermissions, resolveScope } from "./scope.
 import { buildTurnContext, type Turn } from "./memory.ts";
 import { checkQuota } from "./quota.ts";
 import { type Llm, type OracleTool, runTurn, type TurnResult } from "./loop.ts";
+import { buildProfileQuestions } from "./profile-questions.ts";
 
 /** Últimos turnos que vão na íntegra ao modelo. */
 export const KEEP_LAST_TURNS = 8;
@@ -26,6 +27,11 @@ export interface TurnStore {
   turnsToday(userId: string): Promise<number>;
   orgLimit(organizationId: string): Promise<number | null>;
   loadConversation(actor: OracleActor, conversationId: string | null): Promise<ConversationState>;
+  loadProfileContext(actor: OracleActor): Promise<string | null>;
+  loadInterviewState(actor: OracleActor, conversationId: string): Promise<{
+    askedKeys: string[];
+    questionCount: number;
+  }>;
   saveTurn(args: {
     conversation: ConversationState;
     actor: OracleActor;
@@ -72,6 +78,17 @@ export async function handleTurn(
 
   const conversationId = typeof body.conversa_id === "string" ? body.conversa_id : null;
   const conversation = await deps.store.loadConversation(actor, conversationId);
+  const [profileLoad, interviewLoad] = await Promise.allSettled([
+    deps.store.loadProfileContext(actor),
+    deps.store.loadInterviewState(actor, conversation.id),
+  ]);
+  const profileContext = profileLoad.status === "fulfilled" ? profileLoad.value : null;
+  const interview = interviewLoad.status === "fulfilled"
+    ? interviewLoad.value
+    : { askedKeys: [], questionCount: 3 };
+  if (profileLoad.status === "rejected" || interviewLoad.status === "rejected") {
+    console.warn("[oraculo] perfil opcional indisponível; análise principal preservada");
+  }
 
   const contexto = buildTurnContext({
     history: [...conversation.history, { role: "user", content: pergunta }],
@@ -102,6 +119,12 @@ export async function handleTurn(
     scope,
     messages: contexto.messages,
     summary,
+    profileContext,
+  });
+  resultado.profileQuestions = buildProfileQuestions({
+    evidence: resultado.toolEvidence,
+    askedKeys: interview.askedKeys,
+    room: 3 - interview.questionCount,
   });
   resultado.telemetry.latencyMs = Date.now() - inferenceStartedAt;
   resultado.telemetry.inputTokens += summaryTokens.input;
@@ -117,5 +140,6 @@ export async function handleTurn(
     teto_de_ferramentas_atingido: resultado.hitToolCeiling,
     restantes_hoje: quota.remaining - 1,
     propostas: resultado.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
+    perguntas_perfil: resultado.profileQuestions,
   });
 }

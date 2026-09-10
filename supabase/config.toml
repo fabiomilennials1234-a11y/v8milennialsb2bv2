@@ -111,6 +111,10 @@ verify_jwt = false
 [functions.oraculo-action]
 verify_jwt = false
 
+# oraculo-profile: valida JWT e plano dentro; tabelas são server-only.
+[functions.oraculo-profile]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 

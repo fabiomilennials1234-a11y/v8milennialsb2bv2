@@ -8,6 +8,7 @@ import { useOraculoTurno } from './useOraculoTurno';
 const ORG = '20000000-0000-4000-8000-000000000001';
 let requests: Record<string, unknown>[];
 let actionRequests: Record<string, unknown>[];
+let profileRequests: Record<string, unknown>[];
 let reply: () => Response | Promise<Response>;
 let actionReply: () => Response | Promise<Response>;
 const success = () => Response.json({ conversa_id: 'c-1', resposta: 'Você fechou 3 vendas.',
@@ -15,19 +16,28 @@ const success = () => Response.json({ conversa_id: 'c-1', resposta: 'Você fecho
     kind: 'oraculo_action_proposal', id: '30000000-0000-4000-8000-000000000001',
     acao: 'adicionar_tag', criterio: { tipo: 'leads_parados', dias: 14 },
     parametros: { tag_id: 'tag-1' }, previsao: 5, status: 'pending',
+  }], perguntas_perfil: [{
+    id: '40000000-0000-4000-8000-000000000001',
+    question_key: 'sales_outside_crm',
+    prompt: 'Medi 3 vendas. Existe venda fora?',
+    measured_context: { source: 'metricas', vendas: 3 },
   }] });
 const wrap = () => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 };
 beforeEach(() => {
-  requests = []; actionRequests = []; reply = success;
+  requests = []; actionRequests = []; profileRequests = []; reply = success;
   actionReply = () => Response.json({ status: 'sucesso', previstos: 5, qualificaveis_no_clique: 3, alterados: 3, ja_tratados: 2 });
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     if (request.url.endsWith('/functions/v1/oraculo-action')) {
       actionRequests.push(await request.json());
       return actionReply();
+    }
+    if (request.url.endsWith('/functions/v1/oraculo-profile')) {
+      profileRequests.push(await request.json());
+      return Response.json({ status: 'answered' });
     }
     if (!request.url.endsWith('/functions/v1/oraculo-turno')) throw new Error('Unexpected external request');
     requests.push(await request.json());
@@ -71,6 +81,25 @@ describe('Oráculo — contrato HTTP do navegador', () => {
     act(() => result.current.executarProposta('30000000-0000-4000-8000-000000000001'));
     await waitFor(() => expect(result.current.mensagens[1].propostas?.[0].erro).toContain('Tente de novo'));
     expect(result.current.mensagens[1].propostas?.[0].erro).not.toContain('permissão');
+  });
+
+  it('responde pergunta de perfil em fronteira separada e mantém a conversa opcional', async () => {
+    const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+    act(() => result.current.perguntar('Quantas vendas?'));
+    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
+
+    act(() => result.current.responderPerguntaPerfil(
+      '40000000-0000-4000-8000-000000000001',
+      'Há duas vendas fora do CRM.',
+    ));
+    await waitFor(() => expect(result.current.mensagens[1].perguntasPerfil?.[0].status).toBe('answered'));
+
+    expect(profileRequests).toEqual([{
+      acao: 'responder',
+      pergunta_id: '40000000-0000-4000-8000-000000000001',
+      resposta: 'Há duas vendas fora do CRM.',
+      organization_id: ORG,
+    }]);
   });
 });
 

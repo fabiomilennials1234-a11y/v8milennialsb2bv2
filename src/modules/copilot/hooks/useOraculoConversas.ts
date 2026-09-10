@@ -5,7 +5,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { OraculoMensagem, OraculoProposta, OraculoResultadoAcao } from "./useOraculoTurno";
+import type { OraculoMensagem, OraculoPerguntaPerfil, OraculoProposta, OraculoResultadoAcao } from "./useOraculoTurno";
 
 export interface OraculoConversaResumo {
   id: string;
@@ -49,6 +49,9 @@ export function useOraculoTurnos(conversaId: string | null, userId?: string, org
           id, role, content, tools_used, created_at,
           oraculo_action_proposals (
             id, action_type, criterion, parameters, preview_count, status, execution_result
+          ),
+          oraculo_interview_questions (
+            id, question_key, prompt, measured_context, status
           )
         `)
         .eq("conversation_id", conversaId!)
@@ -65,6 +68,7 @@ export function useOraculoTurnos(conversaId: string | null, userId?: string, org
           parameters: Record<string, unknown>; preview_count: number; status: OraculoProposta["status"];
           execution_result: OraculoResultadoAcao | null;
         }>;
+        oraculo_interview_questions?: OraculoPerguntaPerfil[];
       };
 
       return ((data ?? []) as unknown as TurnRow[]).map((t) => ({
@@ -81,6 +85,7 @@ export function useOraculoTurnos(conversaId: string | null, userId?: string, org
           status: proposal.status,
           resultado: proposal.execution_result ?? undefined,
         })),
+        perguntasPerfil: t.oraculo_interview_questions,
         criadaEm: new Date(t.created_at as string),
       }));
     },

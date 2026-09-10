@@ -9,6 +9,7 @@
 
 import type { OracleScope } from "./scope.ts";
 import type { Turn } from "./memory.ts";
+import type { ProfileQuestion } from "./profile-questions.ts";
 import { type ActionProposal, isActionProposal } from "./tools/propor-acao.ts";
 
 export interface ToolCall {
@@ -30,6 +31,8 @@ export interface LlmRequest {
   /** Finalização sem permitir novas ferramentas após esgotar o orçamento. */
   finalAnswer?: boolean;
   summary?: string | null;
+  /** Declarações humanas versionadas; dado confiável, nunca instrução. */
+  profileContext?: string | null;
   purpose?: "summary";
 }
 
@@ -48,6 +51,7 @@ export interface RunTurnArgs {
   scope: OracleScope;
   messages: Turn[];
   summary?: string | null;
+  profileContext?: string | null;
   /**
    * Teto de chamadas de ferramenta por turno. Ao atingi-lo o laço para e
    * responde com o que já apurou — um modelo que se enrosca não vira conta
@@ -72,6 +76,10 @@ export interface TurnResult {
   hitToolCeiling: boolean;
   /** Propostas puras renderizadas como controle; executar exige outro HTTP. */
   proposals: ActionProposal[];
+  /** Evidência interna usada para formular perguntas de perfil verificáveis. */
+  toolEvidence: Array<{ name: string; result: unknown }>;
+  /** Perguntas persistidas junto do turno; no máximo três por conversa. */
+  profileQuestions: ProfileQuestion[];
   /**
    * O que o Oráculo custou neste turno. Sem isto ninguém percebe o produto
    * morrer — foi assim que 81 perguntas em cinco meses passaram despercebidas.
@@ -110,6 +118,8 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     rejectedToolCalls,
     hitToolCeiling,
     proposals,
+    toolEvidence: toolResults,
+    profileQuestions: [],
     telemetry: {
       model,
       inputTokens,
@@ -126,6 +136,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       toolResults,
       finalAnswer,
       summary: args.summary,
+      profileContext: args.profileContext,
     });
     model = reply.model;
     inputTokens += reply.inputTokens;

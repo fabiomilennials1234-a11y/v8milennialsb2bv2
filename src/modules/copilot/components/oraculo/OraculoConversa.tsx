@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { useOraculoTurno } from "../../hooks/useOraculoTurno";
 import { OraculoPropostaCard } from "./OraculoPropostaCard";
+import { OraculoPerfilPerguntaCard } from "./OraculoPerfilPerguntaCard";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -86,6 +87,15 @@ export function OraculoConversa() {
                     onConfirmar={oraculo.executarProposta}
                     ocupada={oraculo.executandoPropostaId === proposta.id}
                     desabilitada={oraculo.executandoPropostaId !== null}
+                  />
+                ))}
+                {m.perguntasPerfil?.map((question) => (
+                  <OraculoPerfilPerguntaCard
+                    key={question.id}
+                    question={question}
+                    onAnswer={oraculo.responderPerguntaPerfil}
+                    onSkip={oraculo.ignorarPerguntaPerfil}
+                    busy={oraculo.salvandoPerguntaPerfilId === question.id}
                   />
                 ))}
               </div>

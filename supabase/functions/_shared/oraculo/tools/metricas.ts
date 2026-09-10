@@ -28,6 +28,7 @@ export interface ToolDeps {
 }
 
 export const METRICAS_RPC = "oraculo_metricas";
+export const MEETING_PROFILE_METRICS_RPC = "oraculo_meeting_profile_metrics";
 
 export const metricasTool = {
   name: "metricas",
@@ -37,14 +38,20 @@ export const metricasTool = {
     scope: OracleScope,
     deps: ToolDeps,
   ): Promise<unknown> {
-    const { data, error } = await deps.db.rpc(METRICAS_RPC, {
+    const params = {
       p_organization_id: scope.organizationId,
       p_team_member_id: scope.kind === "assigned" ? scope.teamMemberId : null,
       p_periodo_dias: readPeriodo(args),
-    });
+    };
+    const { data, error } = await deps.db.rpc(METRICAS_RPC, params);
 
     if (error) return { error: "consulta_falhou" };
-    return data;
+    // Reuniões enriquecem o perfil, mas não derrubam a métrica principal se a
+    // fonte canônica estiver temporariamente indisponível.
+    const meetings = await deps.db.rpc(MEETING_PROFILE_METRICS_RPC, params);
+    return isObject(data) && !meetings.error && isObject(meetings.data)
+      ? { ...data, ...meetings.data }
+      : data;
   },
 };
 
@@ -56,4 +63,8 @@ function readPeriodo(args: Record<string, unknown>): number {
   const raw = Number(args.periodo_dias);
   if (!Number.isFinite(raw) || raw <= 0) return PERIODO_PADRAO_DIAS;
   return Math.min(Math.floor(raw), PERIODO_MAX_DIAS);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

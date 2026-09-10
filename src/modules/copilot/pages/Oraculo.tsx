@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useOraculoTurno } from "../hooks/useOraculoTurno";
 import { useOraculoConversas, useOraculoTurnos } from "../hooks/useOraculoConversas";
 import { OraculoPropostaCard } from "../components/oraculo/OraculoPropostaCard";
+import { OraculoPerfilPerguntaCard } from "../components/oraculo/OraculoPerfilPerguntaCard";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -150,6 +151,15 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
                       onConfirmar={oraculo.executarProposta}
                       ocupada={oraculo.executandoPropostaId === proposta.id}
                       desabilitada={oraculo.executandoPropostaId !== null}
+                    />
+                  ))}
+                  {m.perguntasPerfil?.map((question) => (
+                    <OraculoPerfilPerguntaCard
+                      key={question.id}
+                      question={question}
+                      onAnswer={oraculo.responderPerguntaPerfil}
+                      onSkip={oraculo.ignorarPerguntaPerfil}
+                      busy={oraculo.salvandoPerguntaPerfilId === question.id}
                     />
                   ))}
                 </div>

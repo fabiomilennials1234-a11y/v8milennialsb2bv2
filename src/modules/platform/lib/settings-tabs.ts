@@ -23,6 +23,7 @@
 import {
   Award,
   Bell,
+  BrainCircuit,
   ClipboardList,
   Code,
   FlaskConical,
@@ -72,6 +73,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { value: "api-keys", slug: "api-keys", label: "API Keys", icon: Key },
   { value: "sandbox", slug: "sandbox", label: "Sandbox", icon: FlaskConical },
   { value: "checklists", slug: "checklists", label: "Checklists", icon: ClipboardList },
+  { value: "oraculo-profile", slug: "perfil-operacao", label: "Perfil da operação", icon: BrainCircuit },
   { value: "general", slug: "geral", label: "Geral", icon: Settings },
   { value: "marcos", slug: "marcos", label: "Marcos", icon: Award, outboundOnly: true },
   { value: "ajuda", slug: "ajuda", label: "Central de Ajuda", icon: HelpCircle, adminOnly: true },

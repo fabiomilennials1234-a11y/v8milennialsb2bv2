@@ -67,7 +67,12 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
           if (historyError) throw new Error("Não foi possível carregar os turnos do Oráculo.");
 
           const history = ((turnos ?? []) as Turn[]).slice().reverse();
-          return { id: conversa.id, summary: conversa.summary, history, lastMessageAt: conversa.last_message_at };
+          return {
+            id: conversa.id,
+            summary: conversa.summary,
+            history,
+            lastMessageAt: conversa.last_message_at,
+          };
         }
       }
 
@@ -84,10 +89,55 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
       // Sem conversa não há onde pendurar o turno. Falhar aqui, com o motivo,
       // é melhor que seguir e estourar um TypeError na hora de gravar.
       if (error || !nova) {
-        throw new Error(`oraculo: conversa não pôde ser criada — ${error?.message ?? "sem retorno"}`);
+        throw new Error(
+          `oraculo: conversa não pôde ser criada — ${error?.message ?? "sem retorno"}`,
+        );
       }
 
       return { id: nova.id, summary: null, history: [], lastMessageAt: null };
+    },
+
+    async loadProfileContext(actor: OracleActor): Promise<string | null> {
+      const { data, error } = await db.rpc("oraculo_get_profile_context", {
+        p_organization_id: actor.organizationId,
+        p_team_member_id: actor.isAdmin ? null : actor.teamMemberId,
+      });
+      if (error) throw new Error("Não foi possível carregar o perfil da operação.");
+      return typeof data === "string" && data.trim() ? data.trim() : null;
+    },
+
+    async loadInterviewState(actor: OracleActor, conversationId: string) {
+      const recentSince = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+      const [questions, answered] = await Promise.all([
+        db
+          .from("oraculo_interview_questions")
+          .select("question_key, conversation_id")
+          .eq("organization_id", actor.organizationId)
+          .eq("subject_team_member_id", actor.teamMemberId)
+          .gte("created_at", recentSince),
+        db
+          .from("oraculo_operation_profile_entries")
+          .select("question_key")
+          .eq("organization_id", actor.organizationId)
+          .eq("subject_team_member_id", actor.teamMemberId)
+          .eq("author_role", "member"),
+      ]);
+      if (questions.error || answered.error) {
+        throw new Error("Não foi possível carregar a entrevista da operação.");
+      }
+      const rows = (questions.data ?? []) as Array<
+        { question_key: string; conversation_id: string }
+      >;
+      const answeredRows = (answered.data ?? []) as Array<{ question_key: string }>;
+      return {
+        askedKeys: [
+          ...new Set([
+            ...rows.map((row) => row.question_key),
+            ...answeredRows.map((row) => row.question_key),
+          ]),
+        ],
+        questionCount: rows.filter((row) => row.conversation_id === conversationId).length,
+      };
     },
 
     async saveTurn(args: {
@@ -97,13 +147,17 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
       resultado: TurnResult;
       summary?: string | null;
     }): Promise<void> {
+      // Evidência crua pode conter linhas de CRM. Só perguntas derivadas e
+      // agregados necessários atravessam a fronteira de persistência.
+      const persistableResult = { ...args.resultado };
+      delete (persistableResult as Partial<TurnResult>).toolEvidence;
       const { error } = await db.rpc("oraculo_save_turn", {
         p_conversation_id: args.conversation.id,
         p_organization_id: args.actor.organizationId,
         p_user_id: args.actor.userId,
         p_expected_last_message_at: args.conversation.lastMessageAt ?? null,
         p_question: args.pergunta,
-        p_result: args.resultado,
+        p_result: persistableResult,
         p_summary: args.summary ?? args.conversation.summary,
       });
       if (error?.code === "40001" || error?.code === "PT409") throw new TurnConflictError();

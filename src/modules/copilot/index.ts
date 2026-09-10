@@ -170,6 +170,8 @@ export { CopilotPlayground } from "./components/playground/CopilotPlayground";
 // via React.lazy, como as demais.
 // ────────────────────────────────────────────────────────────────────────
 export { useOraculoTurno, type OraculoMensagem } from "./hooks/useOraculoTurno";
+export { OraculoPerfilSettings } from "./components/oraculo/OraculoPerfilSettings";
+export { useOraculoPerfil, type OraculoPerfilRow } from "./hooks/useOraculoPerfil";
 // A conversa em coluna estreita. O painel da lateral a monta por caminho
 // fundo, com `lazy`, para não puxar este barril inteiro no pedaço da lateral.
 export { OraculoConversa } from "./components/oraculo/OraculoConversa";

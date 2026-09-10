@@ -1,6 +1,6 @@
 # `supabase/functions/` — Edge Functions
 
-96 funções edge Deno servindo o Torque CRM. Slice 15 da modularização: **doc-only** — agrupa funções por bounded context (BC) sem rename físico.
+99 funções edge Deno servindo o Torque CRM. Slice 15 da modularização: **doc-only** — agrupa funções por bounded context (BC) sem rename físico.
 
 ## Por que doc-only
 
@@ -21,7 +21,7 @@ Rename full = janela de deploy coordenado + reregistro multi-provider + risco pr
 
 Rename físico = projeto separado (ver "Rename futuro" abaixo).
 
-## Mapa por BC (96 funções)
+## Mapa por BC (99 funções)
 
 ### identity (11) — auth, org, team, permissions, master
 
@@ -98,7 +98,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 
 🔴 **Áreas frágeis** comm: `whatsapp-webhook`, `whatsapp-api-proxy`, `agent-message` (copilot BC mas hop por comm).
 
-### copilot (20) — agents IA, RAG, geração de contexto
+### copilot (23) — agents IA, RAG, geração de contexto
 
 | Função | Trigger | Auth |
 |--------|---------|------|
@@ -112,6 +112,9 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `generate-faq-embeddings` | UI / pg_cron | x-cron-secret / JWT |
 | `generate-faqs` | UI | JWT |
 | `oraculo-comercial` | UI | apikey + internal |
+| `oraculo-turno` | UI Oráculo | JWT + plano + escopo server-side |
+| `oraculo-action` | confirmação humana | JWT + permissão revalidada |
+| `oraculo-profile` | entrevista / configurações | JWT + plano; tabelas server-only |
 | `outbound-trigger` | pg_net | x-cron-secret |
 | `process-agent-document` | upload | JWT |
 | `process-ai-actions` | pg_cron | x-cron-secret |

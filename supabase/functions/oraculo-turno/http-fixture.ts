@@ -19,8 +19,11 @@ export class ExternalServices {
     oraculo_turns: [{ id: crypto.randomUUID(), conversation_id: CONVERSA_A,
       user_id: ANA, organization_id: ORG_A, role: "user", content: SEGREDO,
       created_at: "2026-01-01T00:00:00.000Z" }],
+    oraculo_interview_questions: [],
+    oraculo_operation_profile_entries: [],
   };
   modelRequests: Row[] = [];
+  savedTurnResults: Row[] = [];
   features = { oraculo: true };
   failWrite: string | null = null;
   failRead: string | null = null;
@@ -51,6 +54,8 @@ export class ExternalServices {
       return Response.json({ plan_name: "test", features: this.features });
     }
     if (url.pathname === "/rest/v1/rpc/oraculo_metricas") return Response.json({ vendas: 1 });
+    if (url.pathname === "/rest/v1/rpc/oraculo_meeting_profile_metrics") return Response.json({ reunioes_marcadas: 0, reunioes_realizadas: 0 });
+    if (url.pathname === "/rest/v1/rpc/oraculo_get_profile_context") return Response.json(null);
     if (url.pathname === "/rest/v1/rpc/oraculo_conversa_detalhe") {
       const body = await req.json();
       return Response.json(body.p_team_member_id === OWNER_TM
@@ -59,6 +64,7 @@ export class ExternalServices {
     }
     if (url.pathname === "/rest/v1/rpc/oraculo_save_turn") {
       const body = await req.json();
+      this.savedTurnResults.push(body.p_result);
       const conversation = this.tables.oraculo_conversations.find((row) =>
         row.id === body.p_conversation_id && row.organization_id === body.p_organization_id && row.user_id === body.p_user_id);
       if (!conversation) return Response.json({ code: "42501", message: "Conversa indisponível" }, { status: 403 });
