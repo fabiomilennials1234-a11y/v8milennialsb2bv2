@@ -208,6 +208,10 @@ import { findLeadByPhoneOrEmail } from "../_shared/lead-service.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
 import { baixarMidiaPeloFornecedor } from "../_shared/notificame-media-download.ts";
+import {
+  type ClienteDoFechamento,
+  fecharLinhaDoDisparo,
+} from "../_shared/quick-blast/fechar-entrega.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1136,7 +1140,16 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     // seguintes o usam como chave. Sem isso a recusa da Meta cai em
     // `status_no_match` e o defeito volta a ser invisível — foi o que aconteceu
     // com a primeira versão deste bloco.
-    const colunas = "id, status, raw_payload, provider_message_id";
+    // ⚠️ `external_id` NÃO é usado para achar a linha (ele é o filtro da 1ª
+    // chave), mas SIM para sair dela: é por esse valor que a linha do
+    // destinatário do Disparo é encontrada (#1724 — o worker o grava em
+    // `blast_plan_recipients.provider_message_id`, `blast-official-runner.ts:288`).
+    // Tirá-lo daqui não quebra nada visível: a entrega simplesmente nunca fecha,
+    // em silêncio — e por ser silêncio, nenhum teste de COMPORTAMENTO o pega: o
+    // dublê de PostgREST descarta a lista de campos e devolve a linha inteira.
+    // Quem reprova é a guarda ESTÁTICA em
+    // `tests/unit/notificame-webhook-status-blast.test.ts`, que lê este texto.
+    const colunas = "id, status, raw_payload, provider_message_id, external_id";
     const porExternalId = await admin
       .from("channel_messages")
       .select(colunas)
@@ -1149,6 +1162,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       status: string | null;
       raw_payload: unknown;
       provider_message_id: string | null;
+      external_id: string | null;
     };
     let linha = (porExternalId.data as Linha[] | null)?.[0] ?? null;
 
@@ -1233,10 +1247,41 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       return await parkResponse(stored, "status_no_match");
     }
 
+    // ─── O CICLO DE ENTREGA DO DISPARO (#1724) ────────────────────────────
+    //
+    // A Meta cobra NA ENTREGA (ADR-0029). Daqui em diante o callback fecha
+    // também a linha do destinatário do Disparo, quando esta mensagem for de um.
+    //
+    // O casamento sai de `external_id`, não do id estável: são espaços de
+    // identificador DIFERENTES (747/747 medidos em prod, zero coincidências), e
+    // é a linha resolvida acima que faz a ponte entre os dois.
+    //
+    // `"sem_linha"` é o desfecho COMUM — quase todo callback de status é de
+    // conversa normal. Nunca lança: o fornecedor precisa do 200 de qualquer
+    // jeito, e uma entrega perdida é infinitamente mais barata que uma
+    // assinatura de webhook suspensa por erro repetido.
+    //
+    // O cast é necessário e não é preguiça: `fecharLinhaDoDisparo` DESCREVE o
+    // cliente (dois encadeamentos, nada mais) em vez de aceitar `any`, e o
+    // `admin` real satisfaz essa forma — mas provar isso faz o compilador
+    // instanciar os genéricos do postgrest-js até estourar (`TS2589 Type
+    // instantiation is excessively deep`). A alternativa seria tipar o parâmetro
+    // como `any`, que jogaria fora o estreitamento dentro do módulo inteiro para
+    // poupar uma linha aqui.
+    const blast = linha.external_id
+      ? await fecharLinhaDoDisparo(admin as unknown as ClienteDoFechamento, {
+        externalId: linha.external_id,
+        organizationId,
+        status: st.status,
+        agora: () => new Date(),
+      })
+      : "sem_linha";
+
     return json(200, {
       status: "updated",
       message_status: st.status,
       advanced: progride,
+      blast,
     });
   }
 

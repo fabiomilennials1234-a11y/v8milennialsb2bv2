@@ -21,6 +21,8 @@ import {
   Check,
   Clock3,
   ListChecks,
+  MailCheck,
+  HelpCircle,
   MoveRight,
   UserPlus,
   Loader2,
@@ -42,7 +44,13 @@ import { useBlastPlanRecipients } from "@/modules/campaigns/hooks/useBlastPlanRe
 import {
   skipReasonLabel,
   failureReasonLabel,
+  unconfirmedLabel,
 } from "@/modules/campaigns/lib/blast-recipient-view";
+import {
+  formatarCusto,
+  processados,
+  saiuDaFila,
+} from "@/modules/campaigns/lib/blast-delivery-summary";
 
 interface StepMonitorProps {
   draft: DisparoDraft;
@@ -56,7 +64,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
 
   const { data: plans } = useBlastPlans();
   const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
-  const { data: progress } = useBlastPlanProgress(planId);
+  const { data: progress } = useBlastPlanProgress(plan);
 
   // ⚠️ A verdade do Disparo é POR PESSOA, e vem da FILA — não de um contador
   // agregado nem do job do fornecedor (ADR-0028 §4, critério 7).
@@ -81,13 +89,23 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
   );
 
   const total = progress?.total ?? plan?.total_recipients ?? draft.audienceCount;
-  const sent = progress?.sent ?? 0;
   const skipped = progress?.skipped ?? 0;
-  // sent → failed reclassificado pelo sync (ADR-0016/#948) segue processado:
-  // o monitor não pode "andar pra trás" quando uma entrega falha.
+  // sent → failed reclassificado pelo sync (ADR-0016/#948) ou recusado pelo canal
+  // (#1724) segue processado: o monitor não pode "andar pra trás".
   const failed = progress?.failed ?? 0;
-  const processed = sent + skipped + failed;
+  const delivered = progress?.delivered ?? 0;
+  const unconfirmed = progress?.unconfirmed ?? 0;
+  // As duas derivações são compartilhadas com o BlastPlanCard — ver
+  // `blast-delivery-summary.ts`. `saiuDaFila` NÃO soma `failed`.
+  const saiu = progress ? saiuDaFila(progress) : 0;
+  const processed = progress ? processados(progress) : 0;
   const pending = progress?.pending ?? Math.max(0, total - processed);
+  /**
+   * Só o Canal Oficial é cobrado por mensagem (ADR-0029). Num Disparo por Chip o
+   * bloco de custo não aparece — mostrar "— / —" ali afirmaria que existe uma
+   * conta que ninguém vai receber.
+   */
+  const temCusto = !!plan?.template;
   const snap = monitorSnapshot(localPlan, processed);
   const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
 
@@ -159,7 +177,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              <span className="font-medium tabular-nums text-foreground">{sent.toLocaleString("pt-BR")}</span> enviados
+              <span className="font-medium tabular-nums text-foreground">{saiu.toLocaleString("pt-BR")}</span> enviados
             </span>
             <span>
               <span className="font-medium tabular-nums text-foreground">{pending.toLocaleString("pt-BR")}</span> na fila
@@ -215,13 +233,68 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
       <div className="rounded-2xl border border-border/70 bg-card p-5">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Relatório</p>
         <ul className="mt-3 space-y-2.5 text-sm">
-          <ReportRow icon={Check} tone="ok" label="Enviados" value={sent} />
+          <ReportRow icon={Check} tone="ok" label="Enviados" value={saiu} />
+          {/* A Meta cobra NA ENTREGA (ADR-0029): "enviado" é aceito pela fila,
+              "entregue" é o que vira fatura. Só aparece no Canal Oficial, que é
+              o único regime com callback de entrega (#1724; o Chip é #1731). */}
+          {delivered > 0 && (
+            <ReportRow icon={MailCheck} tone="ok" label="Entregues" value={delivered} />
+          )}
+          {unconfirmed > 0 && (
+            <ReportRow
+              icon={HelpCircle}
+              tone="muted"
+              label="Não confirmadas"
+              value={unconfirmed}
+              hint="prazo de entrega vencido sem resposta do canal"
+            />
+          )}
+          {failed > 0 && (
+            <ReportRow icon={Ban} tone="muted" label="Falha na entrega" value={failed} />
+          )}
           <ReportRow icon={Clock3} tone="muted" label="Na fila" value={pending} />
           <ReportRow icon={ListChecks} tone="muted" label="Ignorados" value={skipped} hint="sem WhatsApp / recência / duplicados" />
           <li className="border-t border-border/60 pt-2.5">
             <ReportRow icon={UserPlus} tone="accent" label="Total no público" value={total} />
           </li>
         </ul>
+
+        {/* ── O DINHEIRO ───────────────────────────────────────────────────
+            Os DOIS números, lado a lado e nunca fundidos: previsto é o que saiu,
+            realizado é o que foi ENTREGUE — e é o entregue que a Meta cobra
+            (ADR-0029). A diferença entre eles é exatamente o que não chegou.
+
+            ⚠️ Travessão quando o preço não está carimbado, NUNCA "R$ 0,00".
+            Zero afirma "custou nada"; travessão diz "não sei", que é a verdade
+            enquanto a tabela de preços versionada (#1725) não existir. Decisão do
+            CTO, registrada — mantenha mesmo que alguém ache feio. */}
+        {temCusto && (
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/60 pt-3.5">
+            <div>
+              <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                Custo previsto
+              </p>
+              <p className="mt-0.5 font-semibold tabular-nums text-foreground">
+                {formatarCusto(progress?.custoPrevisto ?? null)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                Custo realizado
+              </p>
+              <p className="mt-0.5 font-semibold tabular-nums text-emerald-500">
+                {formatarCusto(progress?.custoRealizado ?? null)}
+              </p>
+            </div>
+            {progress?.truncado && (
+              <p className="col-span-2 text-[10.5px] text-orange-400">
+                Audiência maior que o limite de leitura da tela — as contagens são
+                parciais e o custo não é somado. Um total pela metade não parece
+                pela metade.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Pessoa a pessoa — a resposta para "quem recebeu?" */}
@@ -309,6 +382,10 @@ function estadoDoDestinatario(r: {
   switch (r.status) {
     case "sent":
       return "Enviado";
+    case "delivered":
+      return "Entregue";
+    case "unconfirmed":
+      return unconfirmedLabel();
     case "failed":
       return failureReasonLabel(r.reason);
     case "skipped":

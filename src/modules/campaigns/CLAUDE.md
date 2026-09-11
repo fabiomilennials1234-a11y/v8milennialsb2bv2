@@ -58,7 +58,9 @@ src/modules/campaigns/
 │   ├── DisparosPanel.tsx          # /disparos — porta canônica (empty guiado + histórico) #904
 │   └── NovoDisparo.tsx            # /disparos/novo — wrapper do Wizard Linear #904
 ├── lib/
-│   └── blast-planning.ts          # Twin frontend do core puro Deno (planBlast/nextValidSendTime) #904
+│   ├── blast-planning.ts          # Twin frontend do core puro Deno (planBlast/nextValidSendTime) #904
+│   ├── blast-recipient-view.ts    # Rótulos por estado do destinatário (skip/falha/não confirmada)
+│   └── blast-delivery-summary.ts  # Resumo do Disparo: 6 estados + custo previsto/realizado #1724
 ├── index.ts                       # API pública
 └── CLAUDE.md                      # este arquivo
 ```

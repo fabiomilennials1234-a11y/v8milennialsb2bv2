@@ -38,18 +38,43 @@ import {
   failureReasonLabel,
   recipientMatchesQuery,
   skipReasonLabel,
+  unconfirmedLabel,
 } from "@/modules/campaigns/lib/blast-recipient-view";
 
 const PAGE_SIZE = 50;
 
+/**
+ * A ordem conta a HISTÓRIA de um destinatário, da esquerda para a direita:
+ * saiu → chegou → não chegou → nunca se soube → não saiu → ainda não saiu.
+ *
+ * `delivered` entra depois de `sent` porque é para lá que a linha migra quando o
+ * callback do canal confirma (#1724); `unconfirmed` fica encostado em `failed`
+ * porque os dois respondem "não recebeu", com a diferença de que um sabe por quê.
+ */
 const TABS: { key: BlastRecipientStatus; label: string }[] = [
   { key: "sent", label: "Enviados" },
+  { key: "delivered", label: "Entregues" },
   // "Falha na entrega" logo após Enviados: é de lá que o lead migra quando o
-  // sync reclassifica (ADR-0016). Renderizada só com count > 0.
+  // sync reclassifica (ADR-0016) ou quando o canal recusa (#1724).
   { key: "failed", label: "Falha na entrega" },
+  { key: "unconfirmed", label: "Não confirmadas" },
   { key: "skipped", label: "Pulados" },
   { key: "pending", label: "Aguardando" },
 ];
+
+/**
+ * Abas que somem quando vazias.
+ *
+ * Um zero permanente INSINUA rastreamento que não existe — planos pré-ADR-0016
+ * não têm `failed`, e planos do Chip nunca terão `delivered` nem `unconfirmed`,
+ * porque o ciclo de entrega é do Canal Oficial (#1724; o Chip é #1731). Nenhum
+ * dos três regride, então a aba nunca some debaixo do usuário: só pode aparecer.
+ */
+const TABS_QUE_SOMEM_VAZIAS = new Set<BlastRecipientStatus>([
+  "failed",
+  "delivered",
+  "unconfirmed",
+]);
 
 function firstLine(message: string): string {
   const line = message.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
@@ -69,6 +94,7 @@ function initialsOf(name: string): string {
 function recipientDetail(r: BlastPlanRecipient, plan: BlastPlan): string {
   if (r.status === "skipped") return skipReasonLabel(r.reason);
   if (r.status === "failed") return failureReasonLabel(r.reason);
+  if (r.status === "unconfirmed") return unconfirmedLabel();
   if (r.status === "pending") {
     return awaitingLotLabel({
       lotIndex: r.lot_index,
@@ -102,18 +128,25 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
   }, [plan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
-    const c: Record<BlastRecipientStatus, number> = { sent: 0, failed: 0, skipped: 0, pending: 0 };
+    // Literal EXAUSTIVO de propósito: `Record<BlastRecipientStatus, number>` é o
+    // que faz o compilador reprovar quem ampliar a união e esquecer da tela — e
+    // um status sem balde aqui viraria `undefined + 1 = NaN`, que a tela mostra
+    // sem reclamar.
+    const c: Record<BlastRecipientStatus, number> = {
+      sent: 0,
+      delivered: 0,
+      failed: 0,
+      unconfirmed: 0,
+      skipped: 0,
+      pending: 0,
+    };
     for (const r of recipients ?? []) c[r.status] += 1;
     return c;
   }, [recipients]);
 
-  // Plano sem nenhum failed (antigo sem provenance, ou simplesmente saudável)
-  // não mostra o grupo Falha — um zero permanente insinuaria tracking que não
-  // existe pra planos pré-ADR-0016. `failed` nunca regride, então a tab nunca
-  // some debaixo do usuário (só pode aparecer, via refetch do sync).
   const visibleTabs = useMemo(
-    () => TABS.filter((t) => t.key !== "failed" || counts.failed > 0),
-    [counts.failed],
+    () => TABS.filter((t) => !TABS_QUE_SOMEM_VAZIAS.has(t.key) || counts[t.key] > 0),
+    [counts],
   );
 
   const filtered = useMemo(
@@ -230,11 +263,13 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                   <span
                     className={cn(
                       "flex-none text-right text-[11.5px] font-medium",
-                      r.status === "skipped"
+                      r.status === "skipped" || r.status === "unconfirmed"
                         ? "text-orange-400"
                         : r.status === "failed"
                           ? "text-destructive"
-                          : "text-muted-foreground",
+                          : r.status === "delivered"
+                            ? "text-emerald-400"
+                            : "text-muted-foreground",
                       !deleted && "group-hover:hidden",
                     )}
                   >
