@@ -173,3 +173,9 @@ Histórico upstream: amostra de 12 mensagens antigas controladas, todas encontra
 Lifecycle: usuário autorizou instância alternativa. Desconexão e geração de QR concluíram antes da mensagem seguinte, que adiou esta etapa. Reconexão não confirmada; nenhuma exclusão realizada. Usuário foi informado imediatamente. Por nova orientação, lifecycle fica por último usando TorqueSDR; nenhuma chamada adicional de conexão foi feita. Nenhum deploy/schema em produção. A alteração operacional da conexão autorizada não deve ser confundida com produção intacta.
 
 Validação final da rodada 9: build e ratchets TypeScript/lint sem novos problemas; Deno de todo _shared aprovado; guarda de versões de migrations sem colisões. Baselines preservados.
+
+## Rodada 10 — inventário integral e consultas pendentes (2026-09-11)
+
+Relatório consolidado vigente: `docs/integrations/uazapi-capabilities.md`. Substitui os totais iniciais por referência literal e as pendências históricas superadas nas rodadas seguintes. OpenAPI oficial consultado novamente: versão 2.1.1, 139 operações; 33 com integração no backend (escopo parcial), 1 somente em ferramenta QA (SSE), 105 não integradas. Cobertura por endpoint não certifica todas as opções nem interface completa. Matriz filtrável em `COBERTURA-UAZAPI.csv`; inventário atual em `capabilities-current.json`; o JSON inicial permanece histórico.
+
+Consultas reais somente leitura: blocklist HTTP200; catálogo regional HTTP200 (2.577 cidades); status TorqueSDR connected. Nenhuma conexão alterada nesta rodada. Vault lint e índices passaram. CI do commit de código 6602b48fc tem somente Supabase Preview skipped; CI completo atual não comprovado. Leo continua sem reconexão confirmada conforme registro da rodada anterior. Lifecycle adiado para última etapa na TorqueSDR.

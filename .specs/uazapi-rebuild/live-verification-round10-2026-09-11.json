@@ -1,0 +1,43 @@
+{
+  "date": "2026-09-11",
+  "readOnly": true,
+  "checks": [
+    {
+      "operation": "GET /chat/blocklist",
+      "http": 200,
+      "shape": "object",
+      "keys": [
+        "blockList"
+      ]
+    },
+    {
+      "operation": "GET /proxy-managed/cities",
+      "http": 200,
+      "shape": "object",
+      "keys": [
+        "cities",
+        "country"
+      ],
+      "count": 2577
+    },
+    {
+      "operation": "GET /instance/status",
+      "http": 200,
+      "shape": "object",
+      "keys": [
+        "instance",
+        "status"
+      ],
+      "state": "connected"
+    }
+  ],
+  "validation": {
+    "openapiContractTests": 28,
+    "passed": true,
+    "vaultLint": "passed",
+    "vaultIndexes": "passed",
+    "inventoryUniqueOperations": 139,
+    "runtimeReferenceScan": "No additional literal runtime routes found among 105 classified as not integrated",
+    "ciAtCodeCommit": "Supabase Preview skipped only; full CI not evidenced"
+  }
+}
