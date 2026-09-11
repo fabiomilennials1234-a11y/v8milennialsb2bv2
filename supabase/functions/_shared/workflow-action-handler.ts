@@ -67,6 +67,8 @@ interface ActionContext {
    *  (marca a origem do negócio e alimenta o guard de chain_depth do trigger deal_created).
    *  É a chave que `toActionInput` já lia como `_executionId` e que ninguém preenchia. */
   executionId?: string;
+  nodeId?: string;
+  retryAttempt?: number;
 }
 
 // ─── Variable substitution ──────────────────────────────────────────────────
@@ -406,7 +408,9 @@ function toActionInput(ctx: ActionContext): ActionInput {
     conversationId: null as string | null,
     params: {
       ...ctx.nodeData,
-      _executionId: (ctx as unknown as { executionId?: string }).executionId,
+      _executionId: ctx.executionId,
+      _nodeId: ctx.nodeId,
+      _retryAttempt: ctx.retryAttempt,
     },
     executionContext: ctx.executionContext,
   };

@@ -95,6 +95,16 @@ describe("sendWhatsApp action handler", () => {
     vi.clearAllMocks();
   });
 
+  it("uses a separate replay key for a safe retry without removing initial dedup", async () => {
+    const { input } = makeInput({ params: { messageTemplate: "Retry", whatsappInstanceId: "inst-1", _executionId: "exec", _nodeId: "text", _retryAttempt: 1 } });
+    await sendWhatsApp(input);
+    expect(reserveSendOrSkip).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: "workflow:exec:text:retry:1" }));
+  });
+  it("keeps content dedup for the initial attempt", async () => {
+    const { input } = makeInput();
+    await sendWhatsApp(input);
+    expect(reserveSendOrSkip).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: undefined }));
+  });
   it("returns error when leadId is null", async () => {
     const { input } = makeInput({ leadId: null });
     const result = await sendWhatsApp(input);

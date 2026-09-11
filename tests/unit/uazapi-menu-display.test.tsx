@@ -11,6 +11,11 @@ describe("provider list card", () => {
     expect(screen.getByText("Conferir integração")).toBeTruthy();
     expect(screen.queryByText("internal-route")).toBeNull();
   });
+  it("reads the same list from a realtime row before refetch", () => {
+    const menu = readUazapiMenu({ raw_payload: { content: { sections: [{ rows: [{ title: "Validar", rowID: "private" }] }], buttonText: "Abrir" } } });
+    expect(menu?.button).toBe("Abrir");
+    expect(menu?.sections[0].rows).toEqual([{ title: "Validar", description: "" }]);
+  });
   it("ignores malformed or non-menu content", () => {
     expect(readUazapiMenu({ uazapi_menu_sections: [{ rows: [null, { title: 42 }] }] })).toBeNull();
     expect(readUazapiMenu({})).toBeNull();

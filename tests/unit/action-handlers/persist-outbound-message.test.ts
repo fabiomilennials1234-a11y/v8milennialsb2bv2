@@ -105,6 +105,13 @@ describe("persistOutboundMessage", () => {
     expect(rows[0].message_id).toBe("BATATA:3EB0C1D2E3");
   });
 
+  it("persists outbound menu display without updating receipt fields", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+    const displayPayload = { source: "torque_outbound_display", content: { sections: [{ rows: [{ title: "Validar" }] }] } };
+    await persistOutboundMessage(sb, { ...BASE, provider: "uazapi", messageType: "list", displayPayload });
+    expect(getInserted("whatsapp_messages")[0].raw_payload).toEqual(displayPayload);
+  });
   it("cai para id sintético quando o provider não devolve id — invisível é pior que duplicado", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("whatsapp_messages", []);

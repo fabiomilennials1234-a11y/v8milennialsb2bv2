@@ -98,8 +98,15 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   // Content-hash dedup backstop (fail-open): blocks an identical workflow text to
   // the same number inside the 300s window even if a duplicate execution slipped
   // past the trigger-level dedup (retry, resumed wait node, un-keyed insert path).
+  // Initial content reservation remains intact across workflows. A retry only
+  // follows a provably unsent failure and gets its own replay-safe attempt key.
+  const retryAttempt = params._retryAttempt;
+  const retryKey = typeof params._executionId === "string" && typeof params._nodeId === "string"
+    && Number.isInteger(retryAttempt) && Number(retryAttempt) > 0 && Number(retryAttempt) <= 3
+    ? `workflow:${params._executionId}:${params._nodeId}:retry:${retryAttempt}` : undefined;
   const { duplicate } = await reserveSendOrSkip({
     supabase, orgId: organizationId, phone, content: message, source: "workflow",
+    idempotencyKey: retryKey,
   });
   if (duplicate) return { success: true, message: "WhatsApp text skipped (duplicate within window)" };
 

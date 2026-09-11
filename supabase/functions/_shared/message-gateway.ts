@@ -1,3 +1,4 @@
+import { outboundMenuDisplay } from "./outbound-menu-display.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
  * message-gateway — Unified WhatsApp message sending gateway.
@@ -237,6 +238,7 @@ async function persistMessage(
     lead_id?: string;
     media_url?: string;
     provider_status?: "queued" | "sent" | "failed";
+    display_payload?: Record<string, unknown>;
   },
 ): Promise<"ok" | string> {
   try {
@@ -250,6 +252,7 @@ async function persistMessage(
         direction: "outgoing",
         message_type: params.message_type === "text" ? "conversation" : params.message_type,
         content: params.content,
+        ...(params.display_payload ? { raw_payload: params.display_payload } : {}),
         media_url: params.media_url ?? null,
         status: params.provider_status === "queued" ? "pending" : params.provider_status ?? "sent",
         timestamp: new Date().toISOString(),
@@ -497,6 +500,7 @@ export async function sendMessage(
     lead_id: req.lead_id,
     media_url: req.media_url,
     provider_status: sendResult.status,
+    display_payload: outboundMenuDisplay(req.menu_options, req.content),
   });
   steps.persist = persistResult;
 
@@ -515,8 +519,8 @@ export async function sendMessage(
       module: "outbound",
       action: "send",
       status: "error",
-      entityType: "whatsapp_messages",
-      entityId: messageId,
+      entityType: "whatsapp_instances",
+      entityId: instanceId,
       errorMessage: `MESSAGE_SENT_BUT_PERSIST_FAILED: ${persistResult}`,
       reasoning: "MESSAGE_SENT_BUT_PERSIST_FAILED",
       triggeredBy: req.triggered_by,
@@ -598,8 +602,8 @@ async function logSend(
     module: "outbound",
     action: "send",
     status: result.success ? "success" : "error",
-    entityType: "whatsapp_messages",
-    entityId: result.message_id,
+    entityType: req.lead_id ? "leads" : "whatsapp_instances",
+    entityId: req.lead_id ?? req.instance_id,
     errorMessage: result.error,
     triggeredBy: req.triggered_by,
     durationMs: result.duration_ms,

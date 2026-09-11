@@ -1,3 +1,4 @@
+import { outboundMenuDisplay } from "../outbound-menu-display.ts";
 /**
  * send_whatsapp_template / send_whatsapp_menu / send_whatsapp_pix_button action handlers.
  * Extracted from workflow-action-handler.ts. Rich/interactive WhatsApp messages.
@@ -13,6 +14,7 @@ import {
   buildTrackId,
   recipientGate,
   persistOutboundMessage,
+  isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
 import { enviarTemplateAprovado } from "./enviar-template.ts";
 
@@ -171,7 +173,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
       { trackSource: "workflow-action-menu", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
+    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}`, retryable: isRetryableSendFailure(sendResult.error) };
 
     await persistOutboundMessage(supabase, {
       organizationId,
@@ -184,10 +186,11 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
       content: text,
       leadId,
       fallbackIdPrefix: "wf_menu",
+      displayPayload: outboundMenuDisplay({ type: menuType, choices, footer, listButtonLabel }, text),
     });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway menu send failed:", gwResult.error);
-    return { success: false, error: `Menu send failed: ${gwResult.error}` };
+    return { success: false, error: `Menu send failed: ${gwResult.error}`, retryable: isRetryableSendFailure(gwResult.error) };
   }
 
   return { success: true, message: `WhatsApp ${menuType} menu sent` };
@@ -267,7 +270,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
       { trackSource: "workflow-action-pix", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
+    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}`, retryable: isRetryableSendFailure(sendResult.error) };
 
     await persistOutboundMessage(supabase, {
       organizationId,
@@ -283,7 +286,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway PIX button send failed:", gwResult.error);
-    return { success: false, error: `PIX button failed: ${gwResult.error}` };
+    return { success: false, error: `PIX button failed: ${gwResult.error}`, retryable: isRetryableSendFailure(gwResult.error) };
   }
 
   return { success: true, message: "PIX button sent" };

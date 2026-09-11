@@ -23,6 +23,7 @@ import {
   buildTrackId,
   recipientGate,
   persistOutboundMessage,
+  isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
 
 export async function sendCampaignMessage(input: ActionInput): Promise<ActionResult> {
@@ -98,7 +99,7 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
         });
 
     if (!sendResult.success) {
-      return { success: false, error: `Campaign message send failed: ${sendResult.error}` };
+      return { success: false, error: `Campaign message send failed: ${sendResult.error}`, retryable: isRetryableSendFailure(sendResult.error) };
     }
 
     const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
@@ -111,7 +112,7 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
     });
   } else if (!gwResult.success) {
     console.error("[send-campaign-message] Gateway campaign message send failed:", gwResult.error);
-    return { success: false, error: `Campaign message send failed: ${gwResult.error}` };
+    return { success: false, error: `Campaign message send failed: ${gwResult.error}`, retryable: isRetryableSendFailure(gwResult.error) };
   }
 
   return { success: true, message: "Campaign message sent" };

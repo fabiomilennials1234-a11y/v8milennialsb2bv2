@@ -297,6 +297,7 @@ export type OutboundMessage = {
   /** O id devolvido pelo provider no `/send`. Ver `persistOutboundMessage`. */
   providerMessageId?: string | null;
   providerStatus?: "queued" | "sent" | "failed";
+  displayPayload?: Record<string, unknown>;
   /** Telefone do destinatário; normalizado aqui antes de virar `remote_jid`. */
   phone: string;
   /** Como o chat vai renderizar: `image`, `video`, `conversation`, `poll`, … */
@@ -397,6 +398,7 @@ export async function persistOutboundMessage(
   // o que o eco já tiver gravado ali, em vez de sobrescrever com null.
   if (msg.mediaUrl !== undefined && msg.mediaUrl !== null) row.media_url = msg.mediaUrl;
   if (msg.leadId) row.lead_id = msg.leadId;
+  if (msg.displayPayload) row.raw_payload = msg.displayPayload;
 
   try {
     const { error } = await supabase

@@ -1,4 +1,5 @@
 export interface UazapiMenuFields {
+  raw_payload?: unknown;
   uazapi_menu_sections?: unknown;
   uazapi_menu_title?: unknown;
   uazapi_menu_description?: unknown;
@@ -10,8 +11,11 @@ const text = (v: unknown): string => typeof v === "string" ? v.trim() : "";
 
 /** Read only the menu projection, never provider credentials or the full payload. */
 export function readUazapiMenu(fields: UazapiMenuFields) {
-  if (!Array.isArray(fields.uazapi_menu_sections)) return null;
-  const sections = fields.uazapi_menu_sections.map(section => {
+  // Realtime rows have raw_payload; SELECT uses narrow JSON projections.
+  const content = object(object(fields.raw_payload).content);
+  const rawSections = fields.uazapi_menu_sections ?? content.sections;
+  if (!Array.isArray(rawSections)) return null;
+  const sections = rawSections.map(section => {
     const s = object(section);
     return {
       title: text(s.title),
@@ -22,5 +26,5 @@ export function readUazapiMenu(fields: UazapiMenuFields) {
     };
   }).filter(section => section.rows.length);
   if (!sections.length) return null;
-  return { sections, title: text(fields.uazapi_menu_title), description: text(fields.uazapi_menu_description), button: text(fields.uazapi_menu_button) || "Ver opções", footer: text(fields.uazapi_menu_footer) };
+  return { sections, title: text(fields.uazapi_menu_title ?? content.title), description: text(fields.uazapi_menu_description ?? content.description), button: text(fields.uazapi_menu_button ?? content.buttonText) || "Ver opções", footer: text(fields.uazapi_menu_footer ?? content.footerText) };
 }

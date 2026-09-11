@@ -370,6 +370,8 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             nodeData: node.data,
             executionContext: context,
             executionId,
+            nodeId,
+            retryAttempt: currentRetry,
           });
 
           await recordStep(supabase, executionId, node, result.success ? "success" : "failed",
