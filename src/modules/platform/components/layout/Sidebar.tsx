@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { usePrefetchPipes } from "@/modules/pipelines";
-import { useAdminBriefing } from "@/modules/copilot";
+import { useOraculoBriefing } from "@/modules/copilot";
 import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { useSidebarCollapsed } from "@/modules/platform/hooks/useSidebarCollapsed";
@@ -77,7 +77,7 @@ export function Sidebar() {
   const [agendaJaAberta, setAgendaJaAberta] = useState(false);
   const [oraculoAberto, setOraculoAberto] = useState(false);
   const [oraculoConversaInicial, setOraculoConversaInicial] = useState<string | null>(null);
-  const briefing = useAdminBriefing();
+  const briefing = useOraculoBriefing();
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link

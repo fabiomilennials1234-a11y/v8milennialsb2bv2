@@ -42,7 +42,7 @@ vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
 }));
 
 vi.mock("@/modules/copilot", () => ({
-  useAdminBriefing: () => ({
+  useOraculoBriefing: () => ({
     briefing: null,
     isLoading: false,
     open: vi.fn(),

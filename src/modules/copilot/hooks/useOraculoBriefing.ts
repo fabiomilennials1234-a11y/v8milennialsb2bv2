@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/modules/identity";
 import { recordOraculoSignal } from "./useOraculoFeedback";
 
-export interface AdminBriefing {
+export interface OraculoBriefing {
   id: string;
   headline: string;
   status: "new" | "seen" | "acted";
@@ -14,18 +14,18 @@ export interface AdminBriefing {
   conversation_id: string | null;
 }
 
-interface CurrentResponse { briefing: AdminBriefing | null }
+interface CurrentResponse { briefing: OraculoBriefing | null }
 interface OpenResponse { briefing_id: string; conversa_id: string; propostas: number }
 
-export function useAdminBriefing() {
+export function useOraculoBriefing() {
   const identity = useIdentity();
   const queryClient = useQueryClient();
-  const queryKey = ["oraculo-admin-briefing", identity.organizationId, identity.userId];
+  const queryKey = ["oraculo-briefing", identity.organizationId, identity.userId];
   const current = useQuery({
     queryKey,
-    enabled: identity.isReady && identity.isAdmin && !!identity.organizationId,
+    enabled: identity.isReady && !!identity.userId && !!identity.organizationId,
     staleTime: 60_000,
-    queryFn: async (): Promise<AdminBriefing | null> => {
+    queryFn: async (): Promise<OraculoBriefing | null> => {
       const { data, error } = await supabase.functions.invoke<CurrentResponse>("oraculo-briefing", {
         body: { acao: "atual", organization_id: identity.organizationId },
       });
@@ -43,7 +43,7 @@ export function useAdminBriefing() {
       return data;
     },
     onSuccess: (result) => {
-      queryClient.setQueryData<AdminBriefing | null>(queryKey, (briefing) => briefing
+      queryClient.setQueryData<OraculoBriefing | null>(queryKey, (briefing) => briefing
         ? { ...briefing, status: "seen", conversation_id: result.conversa_id }
         : briefing);
       if (identity.organizationId) {

@@ -4,8 +4,8 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { AuthError, authErrorResponse, requireAuth } from "../_shared/user-auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
-import { handleAdminBriefing } from "../_shared/oraculo/briefing-handler.ts";
-import { createAdminBriefingStore } from "../_shared/oraculo/briefing-store.ts";
+import { handleBriefing } from "../_shared/oraculo/briefing-handler.ts";
+import { createBriefingStore } from "../_shared/oraculo/briefing-store.ts";
 
 Deno.serve(withErrorBoundary("oraculo-briefing", async (req) => {
   const cors = withSecurityHeaders(getCorsHeaders(req.headers.get("origin") ?? undefined));
@@ -14,9 +14,9 @@ Deno.serve(withErrorBoundary("oraculo-briefing", async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
-  const store = createAdminBriefingStore(db);
+  const store = createBriefingStore(db);
   try {
-    return await handleAdminBriefing(req, {
+    return await handleBriefing(req, {
       auth: async (request, body) => {
         const ctx = await requireAuth(request, { body, requireOrganization: true });
         await assertPlanFeature(db, ctx.organizationId, "oraculo");

@@ -38,7 +38,7 @@ vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
 const briefingRef: { current: null | { id: string; headline: string } } = { current: null };
 const openBriefing = vi.fn(async () => ({ conversa_id: "conversa-briefing" }));
 vi.mock("@/modules/copilot", () => ({
-  useAdminBriefing: () => ({
+  useOraculoBriefing: () => ({
     briefing: briefingRef.current,
     isLoading: false,
     isOpening: false,
