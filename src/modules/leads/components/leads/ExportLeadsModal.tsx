@@ -7,6 +7,7 @@ import { useExportLeads, type ExportListFilters } from "../../hooks/useExportLea
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText, Filter } from "lucide-react";
 import { useCanDo } from "@/modules/identity";
+import { useVentimaisExportDetails } from "../../hooks/useVentimaisExportDetails";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
   { value: 500, label: "Os 500 mais recentes" },
@@ -20,6 +21,7 @@ type ExportFormat = "csv" | "xlsx";
 
 interface ExportLeadsContentProps {
   onDone?: () => void;
+  pipelineId?: string;
   /** Filtros ativos da lista de leads — quando presentes, a exportação os aplica. */
   listFilters?: ExportListFilters;
 }
@@ -38,12 +40,14 @@ function hasActiveListFilters(f?: ExportListFilters): boolean {
   );
 }
 
-export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentProps) {
+export function ExportLeadsContent({ onDone, listFilters, pipelineId }: ExportLeadsContentProps) {
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [limit, setLimit] = useState<number>(5000);
   const { exportLeads, isExporting } = useExportLeads();
   const { allowed: canExport } = useCanDo("export_leads");
   const filtersActive = hasActiveListFilters(listFilters);
+  const details = useVentimaisExportDetails();
+  const detailed = !!pipelineId && format === "xlsx" && details.enabled;
 
   const handleExport = async () => {
     if (!canExport) {
@@ -51,12 +55,13 @@ export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentPr
       return;
     }
     try {
-      const { count } = await exportLeads({
+      const { count, unit } = await exportLeads({
         format,
+        pipelineId,
         limit: limit === 50000 ? 50_000 : limit,
         listFilters,
       });
-      toast.success(`${count} leads exportados com sucesso.`);
+      toast.success(`${count} ${unit ?? "leads"} exportados com sucesso.`);
       onDone?.();
     } catch (e) {
       console.error("Export error:", e);
@@ -113,14 +118,16 @@ export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentPr
         </div>
       )}
       <p className="text-xs text-muted-foreground">
+        {detailed ? "O Excel inclui os negócios deste kanban, suas informações, observações, campos personalizados e comentários com autor e data. O histórico completo fica na aba Comentários." : <>
         O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
         etapa e datas de cada funil da organização, valores, responsáveis e notas.
+        </>}
       </p>
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="outline" onClick={() => onDone?.()} disabled={isExporting}>
           Cancelar
         </Button>
-        <Button onClick={handleExport} disabled={isExporting || !canExport}>
+        <Button onClick={handleExport} disabled={isExporting || !canExport || (!!pipelineId && details.isLoading)}>
           {isExporting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

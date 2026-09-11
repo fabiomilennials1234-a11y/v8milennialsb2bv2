@@ -242,7 +242,7 @@ export function PipeSettingsDialog({
                 </TabsContent>
 
                 <TabsContent value="exportar" className="mt-0">
-                  <ExportLeadsContent />
+                  <ExportLeadsContent pipelineId={pipelineRow?.id} />
                 </TabsContent>
 
                 <TabsContent value="disparos" className="mt-0">

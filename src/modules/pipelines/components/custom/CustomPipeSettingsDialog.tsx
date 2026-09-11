@@ -27,6 +27,7 @@ import { ManagePipelineStagesContent } from "../shared/ManagePipelineStagesModal
 import { FunnelIdentitySection } from "../shared/FunnelIdentitySection";
 import { PipeDispatchRulesSection } from "../shared/PipeDispatchRulesSection";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
+import { ExportLeadsContent, useVentimaisExportDetails } from "@/modules/leads";
 
 // ────────────────────────────────────────────────────────────
 // Dispatch Tab — Mensagens automáticas por etapa (SCRUM-629, D11)
@@ -121,6 +122,7 @@ export function CustomPipeSettingsDialog({
   pipeline,
   stages,
 }: CustomPipeSettingsDialogProps) {
+  const { enabled: exportDetails } = useVentimaisExportDetails();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[700px]">
@@ -135,7 +137,7 @@ export function CustomPipeSettingsDialog({
             mecânica: era a última das quatro, e renomear ou excluir o funil
             exigia atravessar Etapas, Disparos e Importar. */}
         <Tabs defaultValue="geral">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${exportDetails ? "grid-cols-5" : "grid-cols-4"}`}>
             <TabsTrigger value="geral" className="gap-1.5 text-xs">
               <Palette className="w-3.5 h-3.5" />
               Geral
@@ -152,6 +154,7 @@ export function CustomPipeSettingsDialog({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               Importar
             </TabsTrigger>
+            {exportDetails && <TabsTrigger value="exportar" className="gap-1.5 text-xs"><FileSpreadsheet className="w-3.5 h-3.5" />Exportar</TabsTrigger>}
           </TabsList>
 
           <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
@@ -185,6 +188,7 @@ export function CustomPipeSettingsDialog({
                 stages={stages}
               />
             </TabsContent>
+            {exportDetails && <TabsContent value="exportar" className="mt-0"><ExportLeadsContent pipelineId={pipeline.id} /></TabsContent>}
           </div>
         </Tabs>
       </DialogContent>
