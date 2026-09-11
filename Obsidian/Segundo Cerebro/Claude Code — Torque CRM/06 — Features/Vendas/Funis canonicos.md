@@ -1,3 +1,12 @@
+---
+type: feature
+title: "Funis canônicos"
+status: active
+created: 2026-09-11
+updated: 2026-09-11
+tags: [pipelines, navigation, scrum-614]
+---
+
 # Funis canônicos
 
 ## O que é
