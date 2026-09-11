@@ -77,7 +77,7 @@ import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
 
 /** Colunas devolvidas pra o chat. Mantém em sync hook + prefetch. */
 export const WHATSAPP_MESSAGE_COLUMNS =
-  "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context, reactions, edited, pinned_at, deleted_at";
+  "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context, reactions, edited, pinned_at, deleted_at, uazapi_menu_sections:raw_payload->content->sections, uazapi_menu_title:raw_payload->content->title, uazapi_menu_description:raw_payload->content->description, uazapi_menu_button:raw_payload->content->buttonText, uazapi_menu_footer:raw_payload->content->footerText";
 
 /**
  * Tamanho da janela da thread, ancorada na mensagem mais recente.

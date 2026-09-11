@@ -18,6 +18,7 @@ export type SyncScope = "default" | "full" | "chat" | "incremental";
 
 type JobFilter = {
   instanceId?: string;
+  chatJid?: string;
   status?: HistorySyncJob["status"];
 };
 
@@ -50,7 +51,7 @@ export function useHistorySyncJobs(filter: JobFilter = {}) {
   }, [orgId, qc]);
 
   return useQuery({
-    queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null],
+    queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null, filter.chatJid ?? null],
     queryFn: async (): Promise<HistorySyncJob[]> => {
       if (!orgId) return [];
       let query = supabase
@@ -61,11 +62,13 @@ export function useHistorySyncJobs(filter: JobFilter = {}) {
         .limit(50);
       if (filter.instanceId) query = query.eq("instance_id", filter.instanceId);
       if (filter.status) query = query.eq("status", filter.status);
+      if (filter.chatJid) query = query.eq("chat_jid", filter.chatJid);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as HistorySyncJob[];
     },
     enabled: !!orgId,
+    refetchInterval: query => query.state.data?.some(job => job.status === "queued" || job.status === "running") ? 5000 : false,
   });
 }
 

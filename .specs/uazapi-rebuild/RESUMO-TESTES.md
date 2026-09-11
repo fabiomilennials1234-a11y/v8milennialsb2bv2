@@ -44,10 +44,10 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 
 ## Pendências reais
 
-- Worker de fila/cron, publicação pelo editor e variantes avançadas do grafo (espera de resposta, reentrada e retries em ambiente real).
-- Card completo das opções do menu enviado; recuperação de histórico com progresso/retomada na interface.
+- Agendamento cron, publicação versionada no editor guiado e variantes avançadas (espera de resposta, reentrada e retries em ambiente real).
+- Card imediato de node sem metadata do provider; retomada de histórico sem reiniciar job.
 - Provar recuperação de mensagem ausente e término do sync assíncrono, além do acknowledgement.
-- Reprodução/transcrição ponta a ponta de áudio e vídeo; PIX real.
+- Reprodução/transcrição ponta a ponta de áudio e vídeo; visualização específica de PIX no CRM.
 - Reconectar/desconectar/excluir somente em instância dedicada; não exercitado na TorqueSDR ativa.
 - Homologar todos os consumidores que embutem o adapter antes do rollout.
 - Bootstrap automático do Supabase ainda sinaliza MIGRATIONS_FAILED: schema foi restaurado manualmente. Não promover banco como se todas as migrations tivessem sido reproduzidas.
@@ -62,3 +62,17 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 - `../../docs/integrations/uazapi-capabilities.md`: inventário e recursos prioritários.
 
 Transporte QA dos eventos reais: SSE filtrado por destinatário autorizado e replay no webhook QA. Isso não configura nem homologa a entrega HTTP direta do webhook remoto para QA. Payloads brutos, telefones e tokens não acompanham estas evidências no Git.
+
+## Rodada 5 — fila, histórico, menus e PIX
+
+Editor legado: fluxo salvo e ativado pela interface; trigger autenticado enfileirou execução. Worker QA, invocado com autenticação cron, concluiu trigger → texto → lista → end: quatro etapas, zero falhas. Fluxo desativado após teste; cron não habilitado. Publicação versionada no editor guiado não exercitada.
+
+Corrigida fronteira fire_trigger: organização derivada de membro ativo e lead conferido no mesmo tenant. Testes unitários positivos/negativos e tentativa real de outra organização (403), própria organização (200).
+
+Importação do histórico disponível da segunda conversa autorizada concluída: 205 mensagens. Interface mostra diálogo, status e contagem; consulta por instância/conversa, Realtime e polling enquanto ativo. Total desconhecido não gera porcentagem estimada. Não equivale a recuperar mensagem ausente via sync assíncrono do WhatsApp; retry ainda reinicia job.
+
+Lista com metadata persistida mostra seções, títulos e descrições no chat; sem IDs de roteamento. Verificado no Chromium com seleção recebida. Card imediato para mensagem de node sem metadata ainda pendente.
+
+Botão PIX real autorizado aceito e depois localizado como Read. Nenhum pagamento executado. Chave, nome e payload privado fora do Git. Reprodução áudio/vídeo continua pendente: tentativa desta rodada não encontrou elementos de mídia montados, portanto não comprova playback.
+
+691 testes em 58 arquivos passaram (10 novos testes em três arquivos); Deno check do helper, build, TypeScript e lint ratchets passaram sem problemas introduzidos. Evidência: `live-verification-round5-2026-09-11.json`. Produção não alterada.

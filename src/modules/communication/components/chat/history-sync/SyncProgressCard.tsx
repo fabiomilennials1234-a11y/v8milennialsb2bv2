@@ -57,17 +57,8 @@ export function SyncProgressCard({ job }: Props) {
   const hasRealProgress = job.total_chats != null && job.total_chats > 0;
   const chatsCompleted = job.chats_completed ?? 0;
   const progressPct = hasRealProgress
-    ? Math.min(100, Math.round((chatsCompleted / job.total_chats!) * 100))
-    : Math.min(
-        100,
-        Math.round(
-          (job.total_fetched /
-            (job.scope === "full"
-              ? Math.max(job.total_fetched * 2, 1000)
-              : job.max_messages_per_chat * job.max_chats)) *
-            100
-        )
-      );
+    ? Math.min(100, Math.round(((chatsCompleted + (job.chats_skipped ?? 0)) / job.total_chats!) * 100))
+    : null;
 
   const chatErrors = (job.chat_errors && typeof job.chat_errors === "object" && !Array.isArray(job.chat_errors))
     ? (job.chat_errors as Record<string, string>)
@@ -116,7 +107,7 @@ export function SyncProgressCard({ job }: Props) {
                 </Badge>
               )}
               <Badge variant={job.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
-                {job.status}
+                {({ queued: "Na fila", running: "Importando", completed: "Concluído", failed: "Falhou", paused: "Pausado", cancelled: "Cancelado" } as Record<string, string>)[job.status] ?? job.status}
               </Badge>
             </div>
 
@@ -143,8 +134,9 @@ export function SyncProgressCard({ job }: Props) {
             )}
 
             {/* Progress bar */}
-            {isActive && (
-              <Progress value={progressPct} className="mt-2 h-1.5" />
+            {isActive && (progressPct === null
+              ? <p role="status" className="mt-2 text-xs text-muted-foreground">Aguardando total de mensagens disponíveis.</p>
+              : <Progress aria-label="Conversas processadas" aria-valuenow={progressPct} value={progressPct} className="mt-2 h-1.5" />
             )}
 
             {/* Error message */}

@@ -32,6 +32,8 @@ import {
   TIPOS_NORMALIZADOS,
 } from "@/modules/communication/lib/inbound-metadata";
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
+import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
+import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
 import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
@@ -176,6 +178,7 @@ export function MessageBubble({
   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
+  const uazapiMenu = readUazapiMenu(message as UazapiMenuFields);
   const isInteractiveResponse = isInteractiveResponseType(messageType);
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
   const isTemplate = messageType === "template";
@@ -405,6 +408,8 @@ export function MessageBubble({
 
             {usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
+            ) : uazapiMenu ? (
+              <UazapiMenuBubble menu={uazapiMenu} fallbackText={message.content} />
             ) : isInteractiveResponse ? (
               <InteractiveResponseBubble content={message.content} messageType={messageType!} isOutgoing={isOutgoing} />
             ) : (

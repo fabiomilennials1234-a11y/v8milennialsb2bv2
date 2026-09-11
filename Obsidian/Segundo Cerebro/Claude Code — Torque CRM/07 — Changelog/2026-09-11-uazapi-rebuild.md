@@ -76,3 +76,17 @@ Causa da figurinha no QA: bucket media ausente. Configuração reproduzida a par
 Exact retornou HTTP 200/success no segundo chat para messageid e id composto. O 404 anterior permanece evidência daquele caso, não indisponibilidade geral. Acknowledgement não prova recuperar conteúdo ausente nem concluir history assíncrono.
 
 645 testes passaram em 50 arquivos. Deno check passou no helper de mídia e motor; sem mudança frontend nesta rodada. Resumo consolidado em `.specs/uazapi-rebuild/RESUMO-TESTES.md`, evidências em `live-verification-round4-2026-09-11.json`.
+
+## Rodada 5 — fila, histórico, menus e PIX
+
+Editor legado: fluxo salvo e ativado pela interface; trigger autenticado enfileirou execução. Worker QA, invocado com autenticação cron, concluiu trigger → texto → lista → end: quatro etapas, zero falhas. Fluxo desativado após teste; cron não habilitado. Publicação versionada no editor guiado não exercitada.
+
+Corrigida fronteira fire_trigger: organização derivada de membro ativo e lead conferido no mesmo tenant. Testes unitários positivos/negativos e tentativa real de outra organização (403), própria organização (200).
+
+Importação do histórico disponível da segunda conversa autorizada concluída: 205 mensagens. Interface mostra diálogo, status e contagem; consulta por instância/conversa, Realtime e polling enquanto ativo. Total desconhecido não gera porcentagem estimada. Não equivale a recuperar mensagem ausente via sync assíncrono do WhatsApp; retry ainda reinicia job.
+
+Lista com metadata persistida mostra seções, títulos e descrições no chat; sem IDs de roteamento. Verificado no Chromium com seleção recebida. Card imediato para mensagem de node sem metadata ainda pendente.
+
+Botão PIX real autorizado aceito e depois localizado como Read. Nenhum pagamento executado. Chave, nome e payload privado fora do Git. Reprodução áudio/vídeo continua pendente: tentativa desta rodada não encontrou elementos de mídia montados, portanto não comprova playback.
+
+691 testes em 58 arquivos passaram (10 novos testes em três arquivos); Deno check do helper, build, TypeScript e lint ratchets passaram sem problemas introduzidos. Evidência: `live-verification-round5-2026-09-11.json`. Produção não alterada.

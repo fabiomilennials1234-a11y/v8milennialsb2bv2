@@ -22,6 +22,7 @@ import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { getOrgDefaultPipelineRef } from "../_shared/pipeline-destination.ts";
+import { resolveWorkflowTriggerScope } from "../_shared/workflow-trigger-scope.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import {
@@ -50,13 +51,14 @@ Deno.serve(
     const authHeader = req.headers.get("authorization");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    let authenticatedUserId: string | null = null;
     let authMode: "cron" | "jwt" | null = null;
     if (requireCronAuth(req).authorized) {
       authMode = "cron";
     } else if (authHeader?.startsWith("Bearer ")) {
       try {
         const { data: { user } } = await supabase.auth.getUser(authHeader.slice(7));
-        if (user) authMode = "jwt";
+        if (user) { authMode = "jwt"; authenticatedUserId = user.id; }
       } catch { /* invalid token */ }
     }
 
@@ -94,9 +96,13 @@ Deno.serve(
 
       // ── Mode: fire_trigger ──
       if (mode === "fire_trigger" && triggerParams) {
+        const organizationId = await resolveWorkflowTriggerScope(supabase,
+          authMode === "jwt" ? authenticatedUserId : null,
+          triggerParams.organization_id, triggerParams.lead_id);
+        if (!organizationId) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers });
         const count = await fireTrigger({
           supabase,
-          organizationId: triggerParams.organization_id as string,
+          organizationId,
           triggerType: triggerParams.trigger_type as string,
           leadId: triggerParams.lead_id as string,
           context: (triggerParams.context as Record<string, unknown>) || {},
