@@ -1,6 +1,7 @@
 import { GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
 import { GuidedConditionResult, type GuidedResultEntry } from './GuidedConditionResult';
-import { GuidedConditionBuilder, isIncompleteGuidedDraft } from './GuidedConditionBuilder';
+import { GuidedConditionBuilder } from './GuidedConditionBuilder';
+import { isIncompleteGuidedDraft } from '../../lib/guided-condition-draft';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FunctionsHttpError, type SupabaseClient } from '@supabase/supabase-js';

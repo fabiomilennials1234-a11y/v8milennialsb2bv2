@@ -2,6 +2,13 @@ import { test, expect, type Page } from '@playwright/test';
 import type { GuidedConditionDraft } from '../../src/types/workflow';
 import { GUIDED_CONDITION_LIMITS } from '../../src/contracts/workflows/guided-limits';
 
+type GuidedDraftCreatePayload = {
+  p_workflow_id: string;
+  p_organization_id: string;
+  p_settings: { name: string };
+  p_definition: { nodes: Array<{ type?: string; data: { guidedCondition?: GuidedConditionDraft } }> };
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: [] }));
 });
@@ -385,11 +392,11 @@ async function mockWorkflowListIdentity(page: Page) {
 
 test('importa árvore guiada como rascunho sem reutilizar referência nem aprovação da origem', async ({ page }) => {
   const sourceTag = 'abcd0000-0000-4000-8000-000000000090';
-  let imported: any;
+  let imported!: GuidedDraftCreatePayload;
   await mockWorkflowListIdentity(page);
   await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: [] }));
   await page.route('**/rest/v1/rpc/create_guided_workflow_draft_with_settings', route => {
-    imported = route.request().postDataJSON();
+    imported = route.request().postDataJSON() as GuidedDraftCreatePayload;
     return route.fulfill({ json: { workflow_id: imported.p_workflow_id, revision: 1 } });
   });
   await page.goto('/tests/browser/fixtures/guided-editor.html?list=1');
@@ -412,7 +419,7 @@ test('importa árvore guiada como rascunho sem reutilizar referência nem aprova
   expect(imported.p_organization_id).toBe('org-1');
   expect(imported.p_settings).toMatchObject({ name: 'Segmentação (importado)' });
   expect(JSON.stringify(imported)).not.toContain(sourceTag);
-  const importedCondition = imported.p_definition.nodes.find((node: any) => node.type === 'condition').data.guidedCondition;
+  const importedCondition = imported.p_definition.nodes.find(node => node.type === 'condition')!.data.guidedCondition!;
   expect(importedCondition.id).not.toBe('group-source');
   expect(importedCondition.children[0]).toMatchObject({ field: 'lead.tags', tagId: '' });
   expect(importedCondition.children[0].id).not.toBe('rule-source');
@@ -451,12 +458,12 @@ test('exporta a árvore completa do rascunho guiado em vez do shell vazio', asyn
 });
 
 test('mantém importação legada inativa fora do publicador guiado', async ({ page }) => {
-  let inserted: any;
+  let inserted: Record<string, unknown> = {};
   let guidedCreates = 0;
   await mockWorkflowListIdentity(page);
   await page.route('**/rest/v1/workflows?*', route => {
     if (route.request().method() === 'POST') {
-      inserted = route.request().postDataJSON();
+      inserted = route.request().postDataJSON() as Record<string, unknown>;
       return route.fulfill({ json: { ...inserted, id: 'legacy-imported', organization_id: 'org-1', created_by: 'user-1' } });
     }
     return route.fulfill({ json: [] });

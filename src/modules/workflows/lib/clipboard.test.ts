@@ -225,7 +225,8 @@ describe("cloneSelection", () => {
       () => `condition-child-${++conditionId}`);
     const source = (original.data as ConditionNodeData).guidedCondition!;
     const copy = (cloned.nodes[0].data as ConditionNodeData).guidedCondition!;
-    const collect = (item: any): string[] => [item.id, ...(Array.isArray(item.children) ? item.children.flatMap(collect) : [])];
+    type ConditionTree = { id: string; children?: ConditionTree[] };
+    const collect = (item: ConditionTree): string[] => [item.id, ...(item.children?.flatMap(collect) ?? [])];
     expect(collect(copy)).toEqual(["condition-child-1", "condition-child-2", "condition-child-3", "condition-child-4"]);
     expect(collect(copy)).not.toEqual(expect.arrayContaining(collect(source)));
     expect(copy).toMatchObject({ kind: "group", match: "all", children: [

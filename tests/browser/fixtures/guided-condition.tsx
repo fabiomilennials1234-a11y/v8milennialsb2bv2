@@ -5,7 +5,7 @@ import { WorkflowSidebar } from '../../../src/modules/workflows/components/Workf
 import type { WorkflowNode } from '../../../src/types/workflow';
 import '../../../src/index.css';
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-function Harness() {
+export function Harness() {
   const [actorId, setActorId] = useState('user-1');
   const [node, setNode] = useState<WorkflowNode>({
     id: 'condition-1', type: 'condition', position: { x: 0, y: 0 },
