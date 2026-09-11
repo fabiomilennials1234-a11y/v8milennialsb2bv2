@@ -9,6 +9,7 @@
  * createInstance also persists the per-instance token via set_uazapi_credentials RPC.
  */
 
+import { normalizeUazapiMessageResult } from "../uazapi-message-result.ts";
 import { UazapiClient } from "../uazapi-client.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
 import { deriveDeviceName } from "../whatsapp-device-name.ts";
@@ -58,9 +59,10 @@ function normaliseStatus(raw: {
     state = statusObj.connected ? "connected" : "disconnected";
   } else if (s === "connected") state = "connected";
   else if (s === "connecting") state = "connecting";
+  else if (s === "hibernated") state = "hibernated";
   else if (s === "disconnected" || s === "closed") state = "disconnected";
 
-  const isConnected = statusObj?.connected ?? raw.connected ?? state === "connected";
+  const isConnected = state === "hibernated" ? false : statusObj?.connected ?? raw.connected ?? state === "connected";
 
   return {
     connected: isConnected,
@@ -78,7 +80,7 @@ function normaliseStatus(raw: {
 export interface UazapiProviderConfig {
   baseUrl: string;
   token: string;
-  adminToken: string;
+  adminToken?: string;
   instanceId: string;
   organizationId: string;
   supabaseAdmin: SupabaseClient;
@@ -182,7 +184,7 @@ export class UazapiProvider implements WhatsAppProvider {
     const inst = raw.instance ?? raw;
     return normaliseStatus({
       status: inst.status,
-      connected: inst.connected ?? raw.connected,
+      connected: inst.connected ?? raw.status?.connected ?? raw.connected,
       qrcode: inst.qrcode,
       paircode: inst.paircode,
       owner: extractOwnerNumber(raw),
@@ -268,11 +270,25 @@ export class UazapiProvider implements WhatsAppProvider {
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
+  }
+
+  async sendLocation(opts: { number: string; latitude: number; longitude: number; name?: string; address?: string }): Promise<SendResult> {
+    return normalizeUazapiMessageResult(await this.client.sendLocation(opts));
+  }
+
+  async sendContact(opts: { number: string; contacts: Array<{ nome: string; telefones: Array<{ numero: string; waId?: string }>; emails?: string[] }> }): Promise<SendResult> {
+    if (opts.contacts.length !== 1 || (opts.contacts[0].emails?.length ?? 0) > 1) throw new Error("Uazapi accepts one contact and one email per message");
+    const contact = opts.contacts[0];
+    return normalizeUazapiMessageResult(await this.client.sendContact({ number: opts.number, fullName: contact.nome,
+      phoneNumber: contact.telefones.map(p => p.numero).join(","), email: contact.emails?.[0] }));
+  }
+
+  async blockUser(number: string): Promise<void> { await this.client.blockContact(number, true); }
+  async unblockUser(number: string): Promise<void> { await this.client.blockContact(number, false); }
+  async listBlocked(): Promise<unknown> { return this.client.listBlocked(); }
+  async requestHistory(opts: { number: string; mode?: "history" | "exact"; messageid?: string; count?: number }): Promise<{ success: boolean; mode?: string }> {
+    return this.client.requestHistory(opts);
   }
 
   async sendMedia(opts: SendMediaOptions): Promise<SendResult> {
@@ -287,11 +303,7 @@ export class UazapiProvider implements WhatsAppProvider {
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   /**
@@ -386,11 +398,7 @@ export class UazapiProvider implements WhatsAppProvider {
       selectableCount: opts.selectableCount,
       listButton: opts.listButtonLabel,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   async sendPixButton(opts: SendPixButtonOptions): Promise<SendResult> {
@@ -402,11 +410,7 @@ export class UazapiProvider implements WhatsAppProvider {
       amount: opts.amount,
       text: opts.text,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   async react(

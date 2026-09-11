@@ -33,6 +33,29 @@ beforeEach(() => { UazapiClient._resetCircuitState(); vi.stubGlobal("fetch", vi.
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("UAZAPI 2.1.1 request contracts", () => {
+  it("uses documented contact, location, block and recovery payloads", async () => {
+    vi.mocked(fetch).mockImplementation(async url => response(String(url).includes('history-sync') ? { success: true, mode: 'history' } : message));
+    const client = new UazapiClient(config);
+    await client.sendContact({ number: '5511999999999', fullName: 'QA', phoneNumber: '5511999999999' });
+    await client.sendLocation({ number: '5511999999999', latitude: -27, longitude: -48, name: 'QA' });
+    await client.blockContact('5511999999999', true);
+    await client.blockContact('5511999999999', false);
+    await client.listBlocked();
+    await client.requestHistory({ number: '5511999999999@s.whatsapp.net', mode: 'history', count: 20 });
+    assertRequestContract();
+  });
+  it("rejects invalid recovery and coordinates before reaching the provider", async () => {
+    const client = new UazapiClient(config);
+    await expect(client.requestHistory({ number: 'chat', mode: 'exact' })).rejects.toThrow('message ID');
+    await expect(client.requestHistory({ number: 'chat', count: 101 })).rejects.toThrow('between');
+    await expect(client.sendLocation({ number: 'chat', latitude: 91, longitude: 0 })).rejects.toThrow('coordinates');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("does not replay an ambiguous recovery request", async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('fetch failed'));
+    await expect(new UazapiClient(config).requestHistory({ number: 'chat@s.whatsapp.net' })).rejects.toBeDefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("excludes group JIDs even when the provider labels them individual", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ chats: [
       { wa_chatid: "individual@s.whatsapp.net", wa_isGroup: false },

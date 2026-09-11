@@ -924,7 +924,7 @@ Deno.serve(
         if (digits.length < 10) {
           await logRuntime({
             organizationId: callerOrgId,
-            module: "whatsapp-api-proxy",
+            module: "whatsapp",
             action: "invalid_number_blocked",
             status: "error",
             payloadSnapshot: { action, number: rawNumber },
@@ -1381,7 +1381,7 @@ Deno.serve(
             address?: string;
           };
           // `0` é coordenada — a checagem é de finitude, não de verdade.
-          if (!number || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          if (!number || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude as number) > 90 || Math.abs(longitude as number) > 180) {
             return jsonResponse(400, { error: "Missing number/latitude/longitude" }, corsHeaders);
           }
           result = await provider.sendLocation({
@@ -1410,8 +1410,17 @@ Deno.serve(
               emails?: string[];
             }>;
           };
-          if (!number || !contacts?.length) {
+          if (!number || !Array.isArray(contacts) || !contacts.length) {
             return jsonResponse(400, { error: "Missing number/contacts" }, corsHeaders);
+          }
+          if (contacts.some(c => !c || typeof c.nome !== "string" || !c.nome.trim() ||
+            !Array.isArray(c.telefones) || !c.telefones.length ||
+            c.telefones.some(t => !t || typeof t.numero !== "string" || !t.numero.trim()) ||
+            (c.emails !== undefined && (!Array.isArray(c.emails) || c.emails.some(email => typeof email !== "string"))))) {
+            return jsonResponse(400, { error: "Invalid contact name, phone or email" }, corsHeaders);
+          }
+          if (provider.provider === "uazapi" && (contacts.length !== 1 || (contacts[0].emails?.length ?? 0) > 1)) {
+            return jsonResponse(400, { error: "Envie um contato e no máximo um email por mensagem" }, corsHeaders);
           }
           result = await provider.sendContact({
             number,
@@ -1470,6 +1479,20 @@ Deno.serve(
           break;
         }
 
+        case "requestHistory": {
+          if (!provider.requestHistory) return jsonResponse(422, { error: "Provider does not support history recovery" }, corsHeaders);
+          const { number, mode = "history", messageid, count } = payload;
+          if (typeof number !== "string" || !/^\d+@(s\.whatsapp\.net|g\.us|lid)$/.test(number)
+            || (mode !== "history" && mode !== "exact")
+            || (messageid !== undefined && (typeof messageid !== "string" || !messageid.trim()))
+            || (mode === "exact" && !messageid)
+            || (count !== undefined && (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 100))) {
+            return jsonResponse(400, { error: "Invalid history recovery request" }, corsHeaders);
+          }
+          result = await provider.requestHistory({ number, mode, messageid, count });
+          break;
+        }
+
         case "historySync": {
           if (!provider.historySync) throw new Error("Provider does not support historySync");
           const { chat_jid, limit, cursor } = payload as {
@@ -1505,7 +1528,7 @@ Deno.serve(
             remote_jid: `${payload.number}@s.whatsapp.net`, phone_number: String(payload.number),
             direction: "outgoing", message_type: action === "sendText" ? "text" : action === "sendAudio" ? "audio" : String(payload.type),
             content: action === "sendText" ? String(payload.text) : (payload.caption ?? null),
-            media_url: payload.file ?? null, status: "sent", timestamp: new Date().toISOString(),
+            media_url: payload.file ?? null, status: "status" in result && result.status === "queued" ? "pending" : "status" in result && result.status === "failed" ? "failed" : "sent", timestamp: new Date().toISOString(),
             reply_context: quoted,
           };
           const inserted = await supabaseAdmin.from("whatsapp_messages").upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });

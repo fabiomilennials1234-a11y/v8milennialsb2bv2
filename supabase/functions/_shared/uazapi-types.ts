@@ -173,8 +173,10 @@ export type UazapiInstanceResponse = {
 export type UazapiMessageResponse = {
   /** Uazapi-assigned message ID */
   id: string;
-  status: "sent" | "queued" | "failed";
-  timestamp: number;
+  status: string;
+  timestamp?: number;
+  messageTimestamp?: number;
+  messageid?: string;
   track_id?: string;
 };
 

@@ -38,6 +38,11 @@ const TARGETED_ACTIONS = new Set([
   "setPresence",
   "downloadMedia",
   "historySync",
+  "requestHistory",
+  "sendLocation",
+  "sendContact",
+  "blockUser",
+  "unblockUser",
 ]);
 
 export interface ChatTarget {

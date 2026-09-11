@@ -1,80 +1,66 @@
 # Reconstrução UAZAPI — estado verificável
 
-Data: 2026-09-11.
+Atualizado em 2026-09-11. PR draft: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/pull/2099.
 
-## Base e ambientes
+## Ambientes e autorização
 
-- Pedido CTO: reconstruir conforme documentação, em branches GitHub/Supabase baseadas em main/produção; validar com instância da organização TorqueCRM.
-- Git: `codex/uazapi-rebuild`, criada de `origin/main` em `23cbd6796004113c24684dd394a7e2b2db5114c6`.
-- Supabase pai: `jsjsmuncfkbsbzqzqhfq` (produção). Nenhuma escrita em produção autorizada por esta implementação.
-- Supabase branch criada: `uazapi-rebuild`, ref `qtkohfnephshaxgtzksz`, ID `bcec3def-0873-4144-98ac-6fdc7856440a`. Custo US$ 0,01344/hora confirmado; CTO autorizou explicitamente manter durante reconstrução. Persistent=true. Não excluir ao fim da rodada; encerrar cobrança quando reconstrução terminar.
-- Já existe branch `condicional-guiado`, pertencente a outro trabalho; não reutilizar, resetar ou excluir.
-- Organização de validação: TorqueCRM, `b2ad1ffb-e136-4356-846b-9f210f902573`.
-- Instância identificada por SELECT: TorqueSDR, `3ea9d185-62bb-4efd-a9b4-b557938ba9e6`, provider UAZAPI, conectada.
-- Credencial da instância recuperável via consulta restrita no backend; não registrada em artefatos. Servidor informado pelo CTO: https://milennialstech.uazapi.com. Identidade remota confirmada por /instance/status; estado connected. Webhook remoto não alterado. Nenhuma mensagem enviada.
-- Destinatário controlado e condição de uso da instância aguardam informação do CTO.
+- Git `codex/uazapi-rebuild`, base `23cbd6796004113c24684dd394a7e2b2db5114c6` da main.
+- Supabase QA `uazapi-rebuild`, ref `qtkohfnephshaxgtzksz`, pai produção `jsjsmuncfkbsbzqzqhfq`.
+- CTO confirmou custo US$ 0,01344/h e permanência durante reconstrução. Persistent=true. Exceção explícita ao cleanup por rodada; encerrar cobrança ao finalizar reconstrução.
+- TorqueCRM QA e TorqueSDR mantêm identidade da organização/instância autorizadas. Credencial de instância somente no backend; token administrativo não foi necessário nem persistido.
+- Destinatário controlado fornecido pelo CTO com autorização para texto/mídia/ações. Identificadores pessoais omitidos dos artefatos.
+- Nenhuma alteração de código/schema em produção; webhook remoto da TorqueSDR não foi alterado. Envios de teste saíram da instância real, conforme autorizado.
 
 ## Retificação da auditoria inicial
 
-A auditoria anterior inspecionou workspace em `ef3554799`, não a main atual. Seus totais e lista de bugs **não descrevem a main**. Nesta base já existem correções de PIX, markread, sender, disconnect/delete, validação de números, leitura de webhook e proxy regional. Preservá-las; não reconstruir usando o relatório antigo como verdade de produção.
+Auditoria inicial usou checkout antigo, não a main atual. PIX, markread, sender, disconnect/delete e proxy regional já tinham correções. Foram preservadas. Inventário antigo não representa produção.
 
-## Implementado nesta etapa
+## Implementação
 
-- Fixture com campos/requisitos das 139 operações, extraída do OpenAPI 2.1.1; URL/data/hash registrados.
-- Criação usa `/instance/create`, apenas metadados documentados; nome do aparelho encaminhado em `/instance/connect`.
-- Provider exige identidade/token na resposta antes de gravar credenciais.
-- Mídia traduz caption/filename internos para text/docName; download solicita base64 explicitamente e normaliza base64Data.
-- Reação usa text; menu preserva footerText, listButton e selectableCount.
-- Histórico usa chatid e filtros diretos; rejeita importação sem chat.
-- Diagnóstico de quota normaliza formato aninhado e mantém desconhecido como null. UI distingue restrição de novas conversas.
-- Circuito de falhas isolado por servidor, credencial e grupo; criação/webhook não repetidos após falha ambígua.
-- Testes de contrato independentes dos tipos internos, isolamento positivo/negativo e preservação dos testes existentes de sender/PIX/leitura.
+- Criação e conexão separadas, campos documentados, validação de identidade/token antes de persistir credenciais.
+- Texto/mídia/menu/PIX compartilham normalização: Pending → queued, messageTimestamp em ms → segundos, identidade/timestamp inválidos falham explicitamente. Aceitação não significa entrega.
+- Mídia usa text/docName, download base64Data; menus preservam footerText/listButton/selectableCount. Reação usa text; pin usa pin=true; edição/exclusão usam id documentado.
+- Localização, contato, bloqueio/listagem e solicitação de recuperação de histórico implementados no provider. Contatos múltiplos/email múltiplo rejeitados explicitamente na UAZAPI, sem truncamento silencioso.
+- Histórico pagina hasMore/nextOffset; chats percorrem totalRecords e excluem JIDs de grupo inconsistentes. Falta de progresso falha explicitamente.
+- Hibernação preservada como estado do fornecedor; persistência usa disconnected, sem apagar credenciais. Estados desconhecidos ignorados na atualização da conexão.
+- Sender traduz sending → running e completed → completed; estado desconhecido não vira falha terminal silenciosa.
+- Monitor usa filtros documentados e conta janela completa localmente. Paginação truncada ou inconsistente retorna desconhecido, impedindo rebind por falsa divergência.
+- Webhook aceita chat como objeto, mantém JID de grupo e extrai referência da reação em content.key.ID. Reação atualiza mensagem original, sem disparar nova automação; replay idempotente e compare-and-swap evitam duplicação/perda concorrente.
+- Consulta canônica do chat carrega reactions/edited/pinned_at/deleted_at; reação real apareceu após reload. Composer e fallback persistem queued como pending, sem antecipar receipt.
+- Ações novas passam pela autorização de conversa; credencial admin deixa de ser exigida para operações com token de instância existente.
+- Inventário completo das 139 operações em `docs/integrations/uazapi-capabilities.md`. Há 32 referências literais no backend e 23 operações sondadas. Isso NÃO equivale a 139 recursos de produto implementados.
 
-## Ainda necessário para concluir pedido
+## Banco isolado
 
-1. Sincronizar schema completo da branch com produção atual. Branch foi criada do projeto pai, porém replay automático falhou. Baseline real do repo restaurado (256 tabelas); ainda NÃO é snapshot completo da produção atual.
-2. Expandir homologação para app/Edge Functions e permissões por usuário. Seed mínimo pronto: uma organização, uma instância e uma credencial; zero mensagens importadas e zero crons ativos.
-3. Expandir contrato medido do servidor: seis endpoints de leitura já responderam HTTP 200; operações de escrita seguem sem homologação.
-4. Implementar e homologar demais lacunas confirmadas: estados hibernated, recuperação de histórico, filtros de monitor e normalização de respostas.
-5. Validar interface, permissões por organização, envio/recebimento, mídia, reações/leitura, menus, PIX, sender e reconexão em ambiente isolado.
-6. Testes que enviam exigem destinatário controlado; testes de logout/exclusão não devem usar sessão ativa sem janela acordada.
-7. Registrar prova real e critérios de aceite; PR continua draft até concluir. Nenhum merge/deploy em produção nesta etapa.
+Snapshot somente de schema atual de public/private/backup, obtido por login temporário read-only. Nenhuma tabela de clientes copiada. 334 tabelas públicas, 979 políticas e 1.053 funções públicas, mesmos totais da origem. Metadados de 4.218 colunas coincidem em nome/tipo/nullability/default; lacunas físicas de ordinal de colunas removidas foram excluídas da comparação.
 
-Inventário de 139 operações é referência documental; **não significa 139 funcionalidades implementadas**. Expansão de produto além dos fluxos existentes precisa de fatias próprias, sem proxy genérico que exponha operações administrativas.
+Oito funções continham hostname fixo de produção: substituído pelo hostname QA. Zero referências restantes a esse hostname nas funções inspecionadas; zero crons ativos. Seed mínimo: plano, org QA, instância/credencial, segunda org para teste negativo e usuários Auth sintéticos. Credenciais não acessíveis por anon/authenticated; RPC de credencial também nega authenticated.
 
-## Validação local registrada
+Replay automático continua sinalizado MIGRATIONS_FAILED pelo problema preexistente de bootstrap. Restauração manual não equivale a replay completo das migrations e não autoriza merge de banco para produção. Seis blocos DEFAULT ACL de donos da plataforma foram omitidos por permissão; grants explícitos dos objetos existentes foram restaurados. Não replicar grants globais permissivos em novos objetos.
 
-- Baseline antes das mudanças: 108 passaram, 1 teste antigo de historySync falhou por mock/rota desatualizados. Esse teste foi corrigido para /message/find.
-- Suite direcionada: 164 testes passaram em 10 arquivos; mais 2 casos de conexão/credenciais passaram na rodada final do contrato (14 casos no arquivo).
-- Build de produção local: passou. Sem deploy.
-- Lint ratchet: passou, zero problemas introduzidos.
-- Tipos: ratchet passou, zero erros introduzidos. Suite global: baseline salvo reportou 152 candidatos. Comparação com main limpa confirmou zero falhas introduzidas: main 12.862 testes / 296 falhas; branch 12.874 testes / 295 falhas. Falhas de coleta: 7 em ambos. Evidência em `test-comparison.json`. Baseline não foi ampliado.
-- Testes frontend de whatsappApi têm duas falhas de localStorage indisponível no harness; arquivo de teste não alterado.
-- `scripts/uazapi-readonly-probe.mjs`: preparado e verificado com transporte simulado (operações de leitura, omissão de conteúdo e rejeição de identidade incorreta); executado com sucesso contra TorqueSDR. Exige identidade remota esperada antes de consultar limites/webhooks/pastas/chats/mensagens; saída exclui credenciais, números, URLs de webhook e QR.
+## Homologação real
 
-## Revisão de segurança do diff
+Evidência sem tokens/conteúdo pessoal: `live-verification-2026-09-11.json` e fixtures estruturais em `tests/fixtures/uazapi/`.
 
-Sem novos endpoints, grants, tabelas ou bypass de autorização. Tokens permanecem no servidor. Testes provam que falha de uma credencial/servidor não bloqueia outra e que criação ambígua não duplica instância. Proteções de não repetir envios já presentes na main foram mantidas. Nenhuma alteração remota na TorqueSDR.
+- Texto, imagem, documento e menu aceitos; imagem/documento/menu confirmados Delivered. Downloads de imagem/documento decodificados.
+- Áudio, voz PTT, vídeo e figurinha aceitos como queued; consulta posterior confirmou Sent, sem erro.
+- Localização e contato aceitos. Localização (0,0) retornou 400 apesar do contrato; coordenadas públicas válidas passaram.
+- Edição, reação, pin, unpin, markread e exclusão de mensagem própria de teste aceitos. Markread de mensagem própria não prova receipt visual de uma mensagem recebida.
+- Sender: criação, listagem, pausa, retomada (running) e exclusão verificados. Nenhuma pasta agendada de teste deixada ativa.
+- Recuperação history reconhecida pelo fornecedor e pelo proxy. Modo exact retornou 404 para mensagem escolhida; não afirmar suporte homologado nem conclusão assíncrona da recuperação.
+- Deploy QA de whatsapp-api-proxy, whatsapp-webhook, whatsapp-health-monitor e get-member-permissions.
+- JWT real: ausência de sessão 401; outra org 403; admin QA 200. Envio pelo proxy 200/queued. Recuperação inválida 400; recuperação cross-org 403; contato múltiplo e coordenadas inválidas 400.
+- SSE capturou envelope real de reação do teste; replay no webhook QA: texto e reação repetidos persistiram uma mensagem e uma reação, DLQ vazia. Segredo incorreto 404. Isso não é reconfiguração nem prova de entrega de webhook remoto diretamente em QA.
+- App local em http://127.0.0.1:8099/chat-whatsapp aponta somente para QA, login sintético, caixa TorqueSDR, mensagem e reação de teste renderizaram. Verificação de navegação não equivale a homologação integral de todos os fluxos de interface.
 
-## Validação real — TorqueSDR
+## Verificações de código
 
-- Seis endpoints responderam HTTP 200: status, limites, webhook, pastas sender, chats e mensagens. Estruturas sem valores sensíveis em `tests/fixtures/uazapi/torquesdr-live-shapes-2026-09-11.json`.
-- Webhook habilitado com messages, messages_update e connection; nenhuma configuração alterada.
-- /chat/find usa pagination.totalRecords. Consulta individual devolveu 455 registros; quatro trazem wa_isGroup=false apesar do JID @g.us. Grupo=true devolveu 388 registros, todos com flag e JID de grupo.
-- Adapter agora percorre todas as páginas e filtra após normalizar JID. Evita retorno incompleto silencioso e loop de página repetida. Limite defensivo de 1.000 páginas falha explicitamente.
-- /message/find respeitou chatid; hasMore/nextOffset produziram segunda página distinta. Adapter passou a respeitar cursor/última página do fornecedor, preservando fallback para respostas legadas sem metadados.
-- Nenhum envio, mudança de webhook, reconexão, migração ou deploy em produção. Credencial administrativa fornecida pelo CTO não foi necessária nem persistida.
+224 testes direcionados passaram em 15 arquivos. Deno check passou nos três handlers alterados; corrigidas assinaturas de client genérico que produziam never no webhook. Build passou. Lint ratchet e TypeScript frontend ratchet: zero problemas introduzidos. Suite global comparada anteriormente com main limpa: zero falhas novas; detalhes em `test-comparison.json`. Baselines não ampliados.
 
-- Rodada final: 59 testes direcionados passaram; lint ratchet sem problemas introduzidos. Adapter real devolveu 451 chats individuais únicos após excluir os quatro JIDs de grupo inconsistentes.
+## Limites para promover o PR
 
-## Branch Supabase provisionada — 2026-09-11
-
-- URL: https://supabase.com/dashboard/project/qtkohfnephshaxgtzksz
-- Organização QA mantém UUID da TorqueCRM; apenas name/slug/plano de teste semeados. Não é cópia completa dos dados da organização.
-- TorqueSDR vinculada pelo mesmo UUID interno e identidade remota. Token guardado somente em whatsapp_instance_secrets, recuperado diretamente do backend de produção com filtro de organização/instância. Webhook secret QA independente; webhook ativo do fornecedor não foi alterado.
-- Variável UAZAPI_BASE_URL definida na branch. Token administrativo não necessário para esta verificação nem persistido.
-- RPC get_uazapi_credentials testada pela REST API da branch: anon HTTP 401; service_role HTTP 200. ACL nega tabela e RPC para anon/authenticated. Credencial lida da branch validou identidade remota e 451 chats individuais únicos no adapter.
-- Replay automático continua sinalizado MIGRATIONS_FAILED; projeto ACTIVE_HEALTHY. Não mascarar esse status como migrações completas: baseline foi restaurado manualmente e pós-baseline ainda pendente.
-- Comparação limitada de seis tabelas encontrou 23 colunas de produção ausentes no baseline. Outras diferenças de funções, políticas e tabelas ainda precisam auditoria. Não usar este banco para afirmar paridade integral de produção nem realizar merge de migrations para prod.
-- Evidência: `branch-verification.json`. Sem deploy de Edge Functions nesta rodada; leitura realizada por adapter local com credencial recuperada da branch.
-- Retenção persistente autorizada pelo CTO na resposta “Manter durante a reconstrução”; exceção explícita ao cleanup por rodada do runbook. Custo segue ativo.
+- PIX: contrato testado; sem envio real de cobrança. Lifecycle disconnect/delete não foi exercitado na TorqueSDR ativa.
+- Recuperação exact (404) precisa esclarecimento do fornecedor; history é assíncrono, ainda sem controle dedicado na interface ou ingestão específica de eventos history.
+- Certificar recebimento remoto/receipts, reconexão e consumidores indiretos do adapter em ambiente dedicado antes do rollout. Os quatro deploys QA não atualizam automaticamente outras Edge Functions que embutem o adapter.
+- As demais capacidades do inventário (grupos, etiquetas, perfil, catálogos, chatbot/integrações administrativas etc.) são lacunas de produto separadas, não escondidas atrás de um proxy genérico.
+- PR permanece draft; nenhum merge/deploy em produção autorizado por esta etapa.

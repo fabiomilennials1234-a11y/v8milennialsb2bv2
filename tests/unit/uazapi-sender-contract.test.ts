@@ -141,6 +141,8 @@ describe("senderGet — resolves via /sender/listfolders + maps metrics & status
     ["scheduled", "queued"],
     ["queued", "queued"],
     ["running", "running"],
+    ["sending", "running"],
+    ["completed", "completed"],
     ["failed", "failed"],
   ] as const)(
     "maps Uazapi status %s → canonical app enum %s",

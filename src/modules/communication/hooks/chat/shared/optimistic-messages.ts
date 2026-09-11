@@ -119,6 +119,7 @@ export function promoteOptimisticMessage(
   existing: WhatsAppMessage[] | undefined,
   optimisticId: string,
   realMessageId: string,
+  status: string = "sent",
 ): WhatsAppMessage[] {
   if (!existing) return [];
 
@@ -128,7 +129,7 @@ export function promoteOptimisticMessage(
   }
 
   return existing.map((m) =>
-    m.id === optimisticId ? { ...m, message_id: realMessageId, status: "sent", retry_attempt: undefined } : m,
+    m.id === optimisticId ? { ...m, message_id: realMessageId, status, retry_attempt: undefined } : m,
   );
 }
 

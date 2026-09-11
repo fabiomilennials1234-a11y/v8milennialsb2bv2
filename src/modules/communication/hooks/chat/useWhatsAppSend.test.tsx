@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
+const upsert = vi.fn((..._args: unknown[]) => Promise.resolve({ error: null }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     functions: { invoke: (...args: unknown[]) => invoke(...args) },
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { metadata: {} } }) }) }),
-      upsert: () => Promise.resolve({ error: null }),
+      upsert: (...args: unknown[]) => upsert(...args),
     }),
   },
 }));
@@ -21,7 +22,7 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "./useWhatsAppSend";
 import type { FailedMessage } from "./types";
 
-beforeEach(() => invoke.mockReset());
+beforeEach(() => { invoke.mockReset(); upsert.mockClear(); });
 afterEach(() => vi.useRealTimers());
 
 it("sends to the original Business landline without inserting a ninth digit", async () => {
@@ -109,5 +110,22 @@ it("keeps failures with identical text but different quote targets separate", as
   }
   const failures = client.getQueryData<FailedMessage[]>(["whatsapp_failed_messages", "org", base.phoneNumber, base.instanceId]);
   expect(failures?.map(f => f.replyContext?.messageId)).toEqual(["quote-one", "quote-two"]);
+  unmount(); client.clear();
+});
+
+
+it.each(["text", "image"])("keeps accepted %s pending in the database and the visible bubble", async kind => {
+  invoke.mockResolvedValue({ data: { result: { message_id: "queued-id", status: "queued" } }, error: null });
+  const client = new QueryClient();
+  const { result, unmount } = renderHook(() => ({ text: useSendWhatsAppMessage(), media: useSendWhatsAppMedia() }), {
+    wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  const base = { phoneNumber: "555134073827", instanceId: "instance", instanceName: "sales" };
+  await act(async () => {
+    if (kind === "text") await result.current.text.mutateAsync({ ...base, message: "test" });
+    else await result.current.media.mutateAsync({ ...base, mediaType: "image", media: "https://test.invalid/image.png" });
+  });
+  expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ message_id: "queued-id", status: "pending" }), expect.anything());
+  expect(client.getQueryData<WhatsAppMessage[]>(["whatsapp_messages", "org", base.phoneNumber, base.instanceId])?.[0]).toMatchObject({ message_id: "queued-id", status: "pending" });
   unmount(); client.clear();
 });

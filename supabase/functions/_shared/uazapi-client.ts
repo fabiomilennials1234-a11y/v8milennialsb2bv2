@@ -61,11 +61,13 @@ import { buildPixButtonBody } from "./uazapi-pix.ts";
 export function mapUazapiSenderStatus(raw: string | undefined): UazapiSenderStatus {
   switch ((raw ?? "").toLowerCase()) {
     case "done":
+    case "completed":
       return "completed";
     case "scheduled":
     case "queued":
       return "queued";
     case "running":
+    case "sending":
       return "running";
     case "paused":
       return "paused";
@@ -78,7 +80,7 @@ export function mapUazapiSenderStatus(raw: string | undefined): UazapiSenderStat
       // pollers stop and a user stop is never mislabelled as a failure.
       return "cancelled";
     default:
-      return "failed";
+      throw { status: 502, provider_code: "unknown_sender_status", message: "Uazapi returned an unknown sender status" } satisfies UazapiError;
   }
 }
 
@@ -343,6 +345,37 @@ export class UazapiClient {
     return this.request<UazapiMessageResponse>("POST", "/send/text", input);
   }
 
+  async sendLocation(input: { number: string; latitude: number; longitude: number; name?: string; address?: string }): Promise<UazapiMessageResponse> {
+    if (!Number.isFinite(input.latitude) || Math.abs(input.latitude) > 90 || !Number.isFinite(input.longitude) || Math.abs(input.longitude) > 180) {
+      throw new Error("Invalid location coordinates");
+    }
+    return this.request("POST", "/send/location", input);
+  }
+
+  async sendContact(input: { number: string; fullName: string; phoneNumber: string; email?: string }): Promise<UazapiMessageResponse> {
+    if (!input.fullName?.trim() || !input.phoneNumber?.trim()) throw new Error("Contact name and phone are required");
+    return this.request("POST", "/send/contact", input);
+  }
+
+  async blockContact(number: string, block: boolean): Promise<void> {
+    if (!number?.trim()) throw new Error("A contact number is required");
+    await this.request("POST", "/chat/block", { number, block });
+  }
+
+  async listBlocked(): Promise<unknown> {
+    return this.request("GET", "/chat/blocklist");
+  }
+
+  /** Requests recovery; messages arrive asynchronously and are read with historySync. */
+  async requestHistory(input: { number: string; mode?: "history" | "exact"; messageid?: string; count?: number }): Promise<{ success: boolean; mode?: string }> {
+    if (!input.number?.trim() || (input.mode && !["history", "exact"].includes(input.mode))) throw new Error("Invalid history request");
+    if (input.mode === "exact" && !input.messageid?.trim()) throw new Error("Exact recovery requires a message ID");
+    if (input.count !== undefined && (!Number.isInteger(input.count) || input.count < 1 || input.count > 100)) throw new Error("History count must be between 1 and 100");
+    const result = await this.request<{ success?: boolean; mode?: string }>("POST", "/message/history-sync", input);
+    if (result?.success !== true) throw { status: 502, provider_code: "history_request_rejected", message: "Uazapi did not acknowledge history recovery" };
+    return { success: true, mode: result.mode };
+  }
+
   async sendMedia(
     input: UazapiSendMediaInput
   ): Promise<UazapiMessageResponse> {
@@ -520,27 +553,25 @@ export class UazapiClient {
 
   async edit(
     messageId: string,
-    number: string,
+    _number: string,
     newText: string
   ): Promise<void> {
     await this.request<unknown>("POST", "/message/edit", {
       id: messageId,
-      number,
       text: newText,
     });
   }
 
-  async pin(messageId: string, number: string): Promise<void> {
+  async pin(messageId: string, _number: string): Promise<void> {
     await this.request<unknown>("POST", "/message/pin", {
       id: messageId,
-      number,
+      pin: true,
     });
   }
 
-  async deleteForAll(messageId: string, number: string): Promise<void> {
+  async deleteForAll(messageId: string, _number: string): Promise<void> {
     await this.request<unknown>("POST", "/message/delete", {
       id: messageId,
-      number,
     });
   }
 
@@ -972,7 +1003,7 @@ export class UazapiClient {
     if (method === "GET") return true;
     // Creation can succeed remotely before the response is lost. Never create
     // another instance/webhook on an ambiguous transport failure.
-    if (path === "/instance/create" || path === "/webhook") return false;
+    if (path === "/instance/create" || path === "/webhook" || path === "/message/history-sync") return false;
     const isDelivery = DELIVERY_PATH_PREFIXES.some((p) => path.startsWith(p));
     if (!isDelivery) return true;
     return REPLAY_SAFE_DELIVERY_PATHS.includes(path);

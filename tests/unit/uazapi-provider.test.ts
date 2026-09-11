@@ -493,7 +493,8 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
     expect(url).toBe("https://uazapi.test/message/pin");
     const body = JSON.parse(init?.body as string);
     expect(body.id).toBe("msg-id-3");
-    expect(body.number).toBe("5511999999999");
+    expect(body.pin).toBe(true);
+    expect(body).not.toHaveProperty("number");
   });
 
   it("deleteForAll() calls /message/delete with correct body", async () => {
