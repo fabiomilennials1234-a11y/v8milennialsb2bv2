@@ -78,9 +78,6 @@ const EMPTY_ENROLLMENT = {
   conditions: [] as Array<{ field: string; operator: string; value: string }>,
 };
 
-const GUIDED_CONDITIONS_ENABLED = import.meta.env.DEV
-  && import.meta.env.VITE_GUIDED_CONDITIONS === "true";
-
 function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
   switch (type) {
     case "trigger":
@@ -90,11 +87,9 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "condition":
       return {
         type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field",
-        // New creation only. Saved legacy nodes retain their original contract.
-        // Production exposure waits for the complete publication/grant journey.
-        ...(GUIDED_CONDITIONS_ENABLED ? {
-          guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
-        } : {}),
+        // New nodes use the guided contract. Saved legacy nodes keep their
+        // original contract until the user creates an explicit review draft.
+        guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
       } as ConditionNodeData;
     case "delay":
       return { type: "delay", label: "Delay", amount: 1, unit: "hours" } as DelayNodeData;
@@ -677,7 +672,7 @@ function AutomacoesEditorContent() {
   }, [handleSave, guidedDraft.publish]);
 
   const handleCreateLegacyReviewDraft = useCallback(async () => {
-    if (!GUIDED_CONDITIONS_ENABLED || isNew || !id || guidedDraft.data || legacyReview.items.length === 0) return;
+    if (isNew || !id || guidedDraft.data || legacyReview.items.length === 0) return;
     const converted = buildLegacyConditionReviewDraft({ nodes, edges });
     const settings = {
       name,
@@ -762,14 +757,14 @@ function AutomacoesEditorContent() {
         hiddenNodeTypes={["code_javascript"]}
       />
 
-      {GUIDED_CONDITIONS_ENABLED && !guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
         <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
           <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
             <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
       </div>}
-      {GUIDED_CONDITIONS_ENABLED && guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
         <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
           <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
@@ -848,13 +843,13 @@ function AutomacoesEditorContent() {
         </SheetContent>
       </Sheet>
 
-      {GUIDED_CONDITIONS_ENABLED && <LegacyConditionReviewDialog
+      <LegacyConditionReviewDialog
         open={legacyReviewOpen}
         onOpenChange={setLegacyReviewOpen}
         review={legacyReview}
         onCreateDraft={() => void handleCreateLegacyReviewDraft()}
         isCreating={guidedDraft.save.isPending}
-      />}
+      />
     </div>
   );
 }

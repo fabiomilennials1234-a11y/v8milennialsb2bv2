@@ -765,3 +765,9 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Escopo de atividade ficou restrito a follow-up com vínculo/estado/data explícitos. Escopo de produto ficou restrito às três relações documentadas. “Último contato”, pagamento, ERP e SKU não são declarados entregues. Tempo comercial permanece segunda entrega.
 - Evidência final: 87/87 integrações reais, 125/125 jornadas Chromium de regressão mais 2/2 casos focados de deadline, 1/1 E2E real e 163/163 unidades focadas. Deno compartilhado, TypeScript ratchet, ESLint focado e whitespace sem erro novo. Rollback/reapply das 56 migrations guiadas passou preservando aprovação sintética e ACLs.
 - Migration 55 e as Edge Functions de teste/publicação foram aplicadas somente no preview `saonafmpiaupgnosqvax`. Produção e worker não foram implantados. Liberação produtiva exige autorização específica do CTO.
+
+## 2026-09-11 — liberação produtiva
+
+- PR #2091 foi mergeada na `main`; as 56 migrations guiadas foram aplicadas e registradas em produção, com RLS, objetos e grants críticos verificados.
+- Os nove bundles Edge afetados foram implantados e confirmados como ativos. Chamadas anônimas aos endpoints de teste e publicação retornaram `401 access_denied`.
+- A trava de desenvolvimento do editor foi removida após a autorização produtiva. Toda condição nova nasce no contrato guiado; automações existentes continuam no contrato legado até `Revisar migração` criar um rascunho explícito.

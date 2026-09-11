@@ -738,7 +738,7 @@ test('conflito de rascunho preserva edição local e não tenta sobrescrever rev
   expect(revisions).toEqual([3]);
 });
 
-test('cria condição pelo editor com seletores no ambiente de desenvolvimento', async ({ page }) => {
+test('cria condição nova pelo editor com seletores guiados', async ({ page }) => {
   await openGuidedEditor(page);
   await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Adicionar Nó' }).click();
