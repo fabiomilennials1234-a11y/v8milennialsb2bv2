@@ -367,7 +367,9 @@ export class UazapiProvider implements WhatsAppProvider {
     // state must map to "paused", not "available".
     const presence =
       state === "composing" ? "composing" : "paused";
-    await this.client.setPresence({ number, presence });
+    // Without a delay, the provider renews presence for up to five minutes.
+    // Ten seconds bounds stale typing after a crashed/disconnected browser.
+    await this.client.setPresence({ number, presence, delay: 10_000 });
   }
 
   transcribeAudio(messageId: string): Promise<string> { return this.client.transcribeAudio(messageId); }

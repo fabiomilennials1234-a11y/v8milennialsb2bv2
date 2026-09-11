@@ -620,7 +620,7 @@ export class UazapiClient {
     const result = await this.request<{ transcription?: unknown }>("POST", "/message/download",
       { id: messageId, transcribe: true, return_link: false, return_base64: false }, { timeoutMs: MEDIA_TIMEOUT_MS, noRetry: true });
     if (typeof result?.transcription !== "string" || !result.transcription.trim() || result.transcription.length > 100_000) {
-      throw new Error("Transcrição indisponível para este áudio");
+      throw { status: 502, provider_code: "transcription_missing", message: "UAZAPI returned no transcription" } satisfies UazapiError;
     }
     return result.transcription.trim();
   }

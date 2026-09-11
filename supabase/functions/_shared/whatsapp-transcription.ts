@@ -35,8 +35,11 @@ export async function transcribeChatAudio(user: SupabaseClient, admin: SupabaseC
       .eq('transcription_requested_at', now).is('deleted_at', null).select('id').maybeSingle();
     if (saveError || !saved) throw new Error('Persistence failed');
     return { text, provider: provider.provider, createdAt, cached: false };
-  } catch {
-    throw new TranscriptionError(502, 'Não foi possível transcrever este áudio. Tente novamente.');
+  } catch (error) {
+    const missing = error && typeof error === 'object' && 'provider_code' in error && error.provider_code === 'transcription_missing';
+    throw new TranscriptionError(502, missing
+      ? 'A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.'
+      : 'Não foi possível transcrever este áudio. Tente novamente.');
   } finally {
     await admin.from('whatsapp_messages').update({ transcription_requested_at: null })
       .eq('id', rowId).eq('organization_id', organizationId).eq('instance_id', instanceId).eq('transcription_requested_at', now);

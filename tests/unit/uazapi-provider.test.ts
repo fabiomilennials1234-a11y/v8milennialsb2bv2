@@ -627,3 +627,19 @@ describe("UazapiProvider.readWebhook — webhook read-back", () => {
     expect(wh.url).toBeNull();
   });
 });
+
+describe('bounded chat presence', () => {
+  it.each([['composing', 'composing'], ['available', 'paused']] as const)('maps %s with short expiration', async (state, expected) => {
+    vi.mocked(fetch).mockResolvedValue(jsonRes(200, { success: true }));
+    await makeProvider().setPresence('5511999998888', state);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toMatchObject({ number: '5511999998888', presence: expected, delay: 10000 });
+  });
+});
+
+describe('transcription response contract', () => {
+  it('rejects cached media without transcription and never retries a paid operation', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonRes(200, { cached: true, fileURL: 'https://example.invalid/audio.mp3', mimetype: 'audio/mpeg' }));
+    await expect(makeProvider().transcribeAudio('real-id')).rejects.toMatchObject({ status: 502, provider_code: 'transcription_missing' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

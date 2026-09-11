@@ -148,3 +148,21 @@ Persistência usa ID/status/timestamp aceitos e INSERT-ignore. Localização apa
 QA Chromium: duas mensagens reais pelo compositor, queued → pending na gravação; campos inválidos impediram chamadas; lead presente nos dois requests. Após reload: cartões visíveis, coordenadas do link conferidas, clipboard confere telefone. Consulta UAZAPI `/message/find` confirmou Delivered, tipos ContactMessage/LocationMessage. Sem reconexão/desconexão; sem promoção de código/schema a produção.
 
 67 testes em cinco arquivos passaram; build, TypeScript e lint ratchets passaram, zero problemas introduzidos. Evidência consolidada em `.specs/uazapi-rebuild/live-verification-round12-2026-09-11.json`. Inventário/CSV atualizados sem alterar totais de endpoints: os dois já tinham backend, agora têm compositor validado. Variações recebidas por webhook e contatos com múltiplos telefones continuam pendentes.
+
+## Rodada 13 — bloqueio e presença (2026-09-11)
+
+Bloqueio controlado pelo proxy QA: inicialmente ausente da blocklist, bloqueio HTTP200, presente na lista, desbloqueio HTTP200 e estado inicial confirmado restaurado. Tentativa de outra organização recusada403. Nenhuma chamada de lifecycle. Interface específica de bloqueio na TorqueSDR continua pendente.
+
+Presença: mapping available→paused já existia; adicionado delay=10000 na UAZAPI para evitar o default documentado de até cinco minutos. Compositor renova a cada oito segundos enquanto há digitação, para após três segundos sem digitar, ao apagar texto, blur, troca de conversa ou perda de permissão. Requisições serializadas e estado pendente condensado: não acumula uma fila por tecla nem deixa composing antigo ultrapassar a parada. Falha de presença não impede enviar mensagem. Proxy recusa estados fora de composing/available.
+
+QA navegador: composing → composing → available, três respostas200, sem enviar mensagem. Estado inválido400 e outra organização403. Limite temporal validado em contrato/testes; indicador no telefone do destinatário não foi observado. 71 testes/4arquivos, build, TypeScript/lint ratchets e Deno no proxy/provider passaram. Proxy implantado somente no QA; outras funções que embutem o adapter dependem do rollout coordenado.
+
+Áudio recebido real foi solicitado ao usuário, ainda indisponível durante esta rodada. Captura SSE temporária recebeu recibos; não substitui teste de entrega direta de webhook. Transcrição de áudio recebido continua pendente. Evidência: `.specs/uazapi-rebuild/live-verification-round13-2026-09-11.json`.
+
+### Complemento R13 — áudio recebido do novo número autorizado
+
+Usuário autorizou novo número controlado e enviou áudio por ele. Identificador fica somente no scratch privado; esse passa a ser o destinatário ativo das próximas validações. Captura anterior filtrava outro número; recuperado um áudio real recente com `/message/find`, envelopado e reprocessado no webhook QA. Não afirmar entrega direta do webhook. Mensagem persistiu incoming/audio com mídia; reprodução no navegador exercitada. Markread no áudio recebido: conta autorizada200, outra organização403. Disparo automático do Copilot QA gerou log de falha; esse consumidor não está homologado por esta rodada.
+
+Transcrição real retornou502 no CRM. Diagnóstico isolado: ID coincide com `id` do fornecedor; download sem transcrição HTTP200/audio-mpeg; pedido documentado `{id, transcribe:true, return_link:false, return_base64:false}` retorna HTTP200 e somente `{cached:true, fileURL, mimetype}`. Ausência de `transcription` reproduzida, não é erro de identidade nem de reprodução. Causa interna do fornecedor não determinada. Transcrições de saída passaram na rodada9; isso não prova funcionamento para todo áudio recebido.
+
+Cliente agora classifica `transcription_missing`; proxy e UI mostram “A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.” Não salva string vazia, não fabrica transcrição, não faz retry automático de operação potencialmente paga, não troca provedor silenciosamente. Testes incluem resposta cached sem texto, lease/liberação, erro seguro e apresentação na UI. Testes finais:82 em6arquivos. Resolver comportamento do fornecedor e obter uma transcrição recebida positiva continuam pendentes.

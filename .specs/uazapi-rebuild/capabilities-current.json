@@ -296,9 +296,9 @@
       "category": "Enviar Mensagem",
       "summary": "Enviar atualização de presença",
       "implementation": "Backend integrado (escopo parcial)",
-      "sessionChange": "Método existente no client.",
-      "validation": "Sem homologação real conclusiva registrada.",
-      "pending": "Validar estados e expiração; integração visual de presença.",
+      "sessionChange": "Mapping composing/paused preservado; delay10s e renovação8s no compositor; parada3s/blur/troca/perda de permissão; serialização e validação de estado.",
+      "validation": "R13: três chamadas de presença no navegador HTTP200; estado inválido400; outra org403; testes de timers/concorrência/permissões.",
+      "pending": "Observar indicador e expiração no telefone remoto; presença recebida e recording não homologados.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -413,8 +413,8 @@
       "summary": "Baixar arquivo de uma mensagem",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "base64Data + persistência de mídia; transcrição autenticada com cache/lease.",
-      "validation": "Downloads reais; transcrição HTTP200 persistida após reload; outsider403; concorrência200/409.",
-      "pending": "Áudio recebido real; falha entre cobrança do fornecedor e persistência não é exactly-once.",
+      "validation": "Downloads reais; transcrição HTTP200 persistida após reload; outsider403; concorrência200/409. R13: áudio recebido real reproduzido; transcribe=true devolveu HTTP200/cached com URL e MIME, sem texto; falha502 explícita no CRM, sem persistir transcrição vazia.",
+      "pending": "Resolver ausência de transcrição em resposta cached da UAZAPI para áudio recebido; nova homologação positiva após resolução. Não trocar provedor silenciosamente.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/whatsapp-media.ts",
@@ -453,8 +453,8 @@
       "summary": "Marcar mensagens como lidas",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Contrato existente preservado e testado.",
-      "validation": "Ação sobre mensagem própria aceita; receipts de conversa real observados separadamente.",
-      "pending": "Confirmar markread de entrada real no telefone remoto.",
+      "validation": "Ação sobre mensagem própria aceita; receipts de conversa real observados separadamente. R13: chamada sobre áudio recebido real HTTP200, outra organização403.",
+      "pending": "Conferência visual dos recibos no aparelho remoto; API de entrada real já exercitada.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -1180,8 +1180,8 @@
       "summary": "Bloqueia ou desbloqueia contato do WhatsApp",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Adicionado provider/proxy.",
-      "validation": "Sem bloqueio real de contato.",
-      "pending": "Ação UI + bloquear/desbloquear número controlado.",
+      "validation": "R13: block200 → presença na blocklist → unblock200 → ausência confirmada; estado inicial restaurado. Outra org403.",
+      "pending": "Interface de bloqueio/desbloqueio no chat TorqueSDR.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -1193,8 +1193,8 @@
       "summary": "Lista contatos bloqueados",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Adicionado provider/proxy.",
-      "validation": "HTTP200 nesta rodada, consulta somente leitura; ver evidência R10.",
-      "pending": "Lista não prova funcionamento da mutação de bloqueio.",
+      "validation": "R13: consulta antes/depois do bloqueio/desbloqueio real confirma transições.",
+      "pending": "Lista e gestão de bloqueados na interface.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -1612,5 +1612,5 @@
       "codeReferences": []
     }
   ],
-  "coverageUpdatedThrough": "R12: compositor de localização/contato; R11: compositor lista/PIX. codeCommit identifica a auditoria inicial."
+  "coverageUpdatedThrough": "R13: bloqueio/desbloqueio API e presença. R12: compositor localização/contato. R11: compositor lista/PIX. codeCommit identifica a auditoria inicial."
 }

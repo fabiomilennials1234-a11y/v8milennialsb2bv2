@@ -28,3 +28,10 @@ describe('on-demand transcription', () => {
  it('rejects a concurrent claim',async()=>{const f=fixture({busy:true});await expect(f.run()).rejects.toMatchObject({status:409});expect(f.transcribeAudio).not.toHaveBeenCalled();});
  it('sanitizes provider errors and releases the lease',async()=>{const f=fixture({failure:true});await expect(f.run()).rejects.toMatchObject({status:502});expect(f.admin.from).toHaveBeenCalledTimes(2);});
 });
+
+it('explains missing provider transcription without saving text or leaking response details', async () => {
+ const f=fixture();f.transcribeAudio.mockRejectedValue({ provider_code: 'transcription_missing', message: 'private upstream detail' });
+ await expect(f.run()).rejects.toMatchObject({ status: 502, message: 'A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.' });
+ expect(f.saved.update).not.toHaveBeenCalledWith(expect.objectContaining({ transcription_text: expect.anything() }));
+ expect(f.admin.from).toHaveBeenCalledTimes(2);
+});

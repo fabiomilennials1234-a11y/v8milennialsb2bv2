@@ -1,0 +1,85 @@
+{
+  "date": "2026-09-11",
+  "scope": "QA proxy and frontend, controlled real instance",
+  "block": {
+    "initiallyBlocked": false,
+    "foreignOrg": 403,
+    "blockHttp": 200,
+    "presentAfterBlock": true,
+    "unblockHttp": 200,
+    "absentAfterRestore": true
+  },
+  "presenceUI": {
+    "responses": [
+      200,
+      200,
+      200
+    ],
+    "states": [
+      "composing",
+      "composing",
+      "available"
+    ],
+    "requestCount": 3,
+    "messagesSent": 0
+  },
+  "presenceGuards": {
+    "invalidState": 400,
+    "foreignOrg": 403
+  },
+  "validation": {
+    "testsPassed": 82,
+    "files": 6,
+    "build": "passed",
+    "typescriptIntroduced": 0,
+    "lintIntroduced": 0,
+    "denoCheck": "proxy and provider passed",
+    "qaDeploy": [
+      "whatsapp-api-proxy"
+    ]
+  },
+  "limits": [
+    "No recipient-side visual observation of typing/expiry; contract delay=10000 and HTTP acceptance verified.",
+    "Block/unblock API validated; dedicated TorqueSDR blocking UI not implemented.",
+    "No lifecycle operations or production deployment.",
+    "Incoming audio playback and markRead passed; positive transcription blocked by provider cached response missing text.",
+    "QA Copilot automatic dispatch logged failure; no Copilot success claimed.",
+    "Latest controlled recipient changed by user; private identifier omitted."
+  ],
+  "incomingAudio": {
+    "incoming": true,
+    "historyEnvelopeReplay": true,
+    "directProviderWebhook": false,
+    "playback": {
+      "duration": 3.0935,
+      "playing": true,
+      "progress": 0.560438
+    },
+    "http": 502,
+    "providerReturnedNoTranscript": true,
+    "errorDisplayed": true,
+    "noTranscriptAfterReload": true,
+    "mediaAfterReload": true
+  },
+  "markRead": {
+    "foreignOrg": 403,
+    "ownOrg": 200,
+    "incomingAudio": true
+  },
+  "providerTranscriptionDiagnostic": {
+    "http": 200,
+    "cached": true,
+    "keys": [
+      "cached",
+      "fileURL",
+      "mimetype"
+    ],
+    "transcriptionPresent": false,
+    "request": {
+      "transcribe": true,
+      "return_link": false,
+      "return_base64": false
+    },
+    "identityMatchedProviderId": true
+  }
+}

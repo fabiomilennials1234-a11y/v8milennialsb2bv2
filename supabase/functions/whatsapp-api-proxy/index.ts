@@ -1467,8 +1467,8 @@ Deno.serve(
             number?: string;
             state?: "composing" | "available";
           };
-          if (!number || !state) {
-            return jsonResponse(400, { error: "Missing number/state" }, corsHeaders);
+          if (!number || (state !== "composing" && state !== "available")) {
+            return jsonResponse(400, { error: "Invalid number/state" }, corsHeaders);
           }
           await provider.setPresence(number, state);
           result = { ok: true };

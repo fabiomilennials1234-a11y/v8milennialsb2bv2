@@ -30,7 +30,7 @@ import { useAuth } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
-import { setPresence } from "@/modules/communication/lib/whatsappApi";
+import { useTypingPresence } from "@/modules/communication/hooks/chat/useTypingPresence";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
@@ -390,30 +390,7 @@ export function ChatComposer({
     if (file) handleFileSelect(file);
   }, [handleFileSelect]);
 
-  // Presence: "composing" on type, "available" after 3s idle or blur
-  const presenceTimer = useRef<ReturnType<typeof setTimeout>>();
-  const presenceSent = useRef<"composing" | "available">("available");
-
-  const sendPresence = useCallback((state: "composing" | "available") => {
-    if (presenceSent.current === state) return;
-    presenceSent.current = state;
-    setPresence(instanceId, phoneNumber, state).catch(() => {});
-  }, [instanceId, phoneNumber]);
-
-  const handlePresenceTyping = useCallback(() => {
-    sendPresence("composing");
-    clearTimeout(presenceTimer.current);
-    presenceTimer.current = setTimeout(() => sendPresence("available"), 3000);
-  }, [sendPresence]);
-
-  useEffect(() => {
-    return () => {
-      clearTimeout(presenceTimer.current);
-      if (presenceSent.current === "composing") {
-        setPresence(instanceId, phoneNumber, "available").catch(() => {});
-      }
-    };
-  }, [instanceId, phoneNumber]);
+  const presence = useTypingPresence(instanceId, phoneNumber, canReply);
 
   // Preload lamejs pra conversão MP3 (evita enviar WebM que Safari não toca)
   useEffect(() => { preloadLamejs(); }, []);
@@ -632,9 +609,10 @@ export function ChatComposer({
                 const val = e.target.value;
                 setMessage(val);
                 setShowSlashPopover(val.startsWith("/") && val.length > 0);
-                if (val.trim()) handlePresenceTyping();
+                if (val.trim()) presence.typing();
+                else presence.stop();
               }}
-              onBlur={() => sendPresence("available")}
+              onBlur={presence.stop}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
