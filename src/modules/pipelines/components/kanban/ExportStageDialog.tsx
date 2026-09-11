@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useExportLeads } from "@/modules/leads";
+import { useExportLeads, useVentimaisExportDetails } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
@@ -43,6 +43,8 @@ export function ExportStageDialog({
   const [format, setFormat] = useState<ExportFormat>("csv");
   const { exportLeads, isExporting } = useExportLeads();
   const { allowed: canExport } = useCanDo("export_leads");
+  const details = useVentimaisExportDetails();
+  const detailed = details.enabled && format === "xlsx";
 
   // Reset format ao abrir/fechar para evitar estado vazado entre etapas.
   useEffect(() => {
@@ -50,7 +52,7 @@ export function ExportStageDialog({
   }, [open]);
 
   const isEmpty = leadCount === 0;
-  const disabled = isExporting || !canExport || isEmpty;
+  const disabled = isExporting || !canExport || isEmpty || details.isLoading;
 
   const handleExport = async () => {
     if (!canExport) {
@@ -59,15 +61,15 @@ export function ExportStageDialog({
     }
     if (isEmpty) return;
     try {
-      const { count } = await exportLeads({
+      const { count, unit } = await exportLeads({
         format,
         stageFilter: { pipelineId, stageId },
         stageTitle,
       });
       if (count === 0) {
-        toast.message("Nenhum lead nesta etapa para exportar.");
+        toast.message(unit ? "Nenhum negócio nesta etapa para exportar." : "Nenhum lead nesta etapa para exportar.");
       } else {
-        toast.success(`${count} lead${count === 1 ? "" : "s"} exportado${count === 1 ? "" : "s"} com sucesso.`);
+        toast.success(`${count} ${unit ? (count === 1 ? "negócio" : "negócios") : (count === 1 ? "lead" : "leads")} exportado${count === 1 ? "" : "s"} com sucesso.`);
       }
       onOpenChange(false);
     } catch (e) {
@@ -81,10 +83,10 @@ export function ExportStageDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileDown className="w-5 h-5 text-primary" />
-            Exportar leads da etapa
+            {detailed ? "Exportar negócios da etapa" : "Exportar leads da etapa"}
           </DialogTitle>
           <DialogDescription>
-            {isEmpty
+            {detailed ? "O Excel inclui os negócios desta etapa, informações e comentários com autor e data. O histórico completo fica na aba Comentários." : isEmpty
               ? `Nenhum lead em "${stageTitle}".`
               : `${leadCount} lead${leadCount === 1 ? "" : "s"} em "${stageTitle}".`}
           </DialogDescription>

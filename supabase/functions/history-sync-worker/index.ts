@@ -32,6 +32,7 @@ import {
   parseGuardConfig,
   reachedChatCap,
   reachedGlobalCap,
+  classifyConversationCoverage,
 } from "./guards.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -139,6 +140,7 @@ type HistorySyncJob = {
   chats_completed: number | null;
   chats_skipped: number | null;
   chat_errors: Record<string, string> | null;
+  created_at: string;
 };
 
 type MultiChatCursor = {
@@ -210,7 +212,7 @@ async function upsertMessages(
   messages: unknown[],
   maxDays: number,
   latestSyncedTs?: number | null,
-): Promise<{ fetched: number; hitExisting: boolean }> {
+): Promise<{ fetched: number; hitExisting: boolean; dataLoss: boolean }> {
   let fetched = 0;
   let firstError: string | null = null;
   let hitExisting = false;
@@ -319,7 +321,26 @@ async function upsertMessages(
       },
     });
   }
-  return { fetched, hitExisting };
+  return { fetched, hitExisting, dataLoss: Boolean(firstError || skippedLid || skippedNoJid || skippedNonIndividual) };
+}
+
+async function recordConversationCoverage(supabase: Db, job: HistorySyncJob, chatJid: string, providerName: string,
+  state: 'complete' | 'in_progress' | 'gapped', reason?: string) {
+  const upper = new Date(job.created_at);
+  const lower = job.max_days > 0 ? new Date(upper.getTime() - job.max_days * 86_400_000) : new Date(0);
+  const participant = chatJid.split('@')[0]?.replace(/\D/g, '');
+  if (!participant || !(lower < upper)) return;
+  let finalState = state;
+  let finalReason = reason;
+  if (state === 'complete') {
+    const { data: priorGap } = await supabase.from('conversation_history_coverage').select('id').eq('source_job_id', job.id).eq('state', 'gapped').limit(1).maybeSingle();
+    if (priorGap) { finalState = 'gapped'; finalReason = 'earlier_gap_in_same_job'; }
+  }
+  await supabase.from('conversation_history_coverage').insert({
+    organization_id: job.organization_id, storage: 'whatsapp_messages', box_id: job.instance_id,
+    provider: providerName, participant_id: participant, covered_from: lower.toISOString(), covered_to: upper.toISOString(),
+    state: finalState, gap_reason: finalState === 'complete' ? null : finalReason ?? 'synchronization_incomplete', source_job_id: job.id,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -486,6 +507,8 @@ async function processSingleChat(
   // Escopo `chat` percorre uma conversa só, então o total do job É o total do
   // chat — aqui as duas contagens coincidem legitimamente.
   let fetchedThisChat = 0;
+  const providerName = typeof provider?.provider === 'string' && provider.provider.trim() ? provider.provider : 'uazapi';
+  await recordConversationCoverage(supabase, job, chatJid, providerName, 'in_progress');
 
   while (Date.now() - startTime < TIME_BUDGET_MS) {
     const blocked = await batchAllowed(supabase, job, cfg, pressurePct);
@@ -505,11 +528,13 @@ async function processSingleChat(
         cursor: currentCursor ?? undefined,
       });
     } catch (e) {
+      await recordConversationCoverage(supabase, job, chatJid, providerName, 'gapped', 'provider_error');
       await failJob(supabase, job.id, `historySync call: ${(e as Error).message}`);
       return { fetched: totalThisTick, done: true, error: "historySync fetch failed" };
     }
 
-    const { fetched } = await upsertMessages(supabase, job, chunkResult.messages ?? [], maxDays);
+    const { fetched, dataLoss } = await upsertMessages(supabase, job, chunkResult.messages ?? [], maxDays);
+    if (dataLoss) await recordConversationCoverage(supabase, job, chatJid, providerName, 'gapped', 'message_persistence_gap');
     totalFetched += fetched;
     totalThisTick += fetched;
     fetchedThisChat += fetched;
@@ -526,7 +551,12 @@ async function processSingleChat(
       completed_at: done ? new Date().toISOString() : null,
     });
 
-    if (done) return { fetched: totalThisTick, done: true };
+    if (done) {
+      const coverage = classifyConversationCoverage({ naturalEnd: !nextCursor, dataLoss, capped: Boolean(nextCursor) });
+      await recordConversationCoverage(supabase, job, chatJid, providerName, coverage,
+        coverage === 'complete' ? undefined : dataLoss ? 'message_persistence_gap' : 'message_cap_reached');
+      return { fetched: totalThisTick, done: true };
+    }
     currentCursor = nextCursor;
   }
 
@@ -618,6 +648,7 @@ async function processMultiChat(
   // offset no provedor, não a contagem — e é a contagem que o teto por conversa
   // precisa enxergar.
   const fetchedPerChat: Record<string, number> = {};
+  const providerName = typeof provider?.provider === 'string' && provider.provider.trim() ? provider.provider : 'uazapi';
 
   while (Date.now() - startTime < TIME_BUDGET_MS) {
     // Este é o laço que causou o incidente de 2026-08-06: buscava lote após lote
@@ -654,6 +685,7 @@ async function processMultiChat(
         if (latestTs) {
           const ageMs = Date.now() - latestTs * 1000;
           if (ageMs < SKIP_RECENT_THRESHOLD_MS) {
+            await recordConversationCoverage(supabase, job, item.jid, providerName, 'gapped', 'recent_chat_skipped_without_coverage');
             // Chat has recent messages — skip
             delete mc.perChat[item.jid];
             chatsSkipped += 1;
@@ -668,6 +700,7 @@ async function processMultiChat(
         if (latestTs) {
           const ageMs = Date.now() - latestTs * 1000;
           if (ageMs < SKIP_RECENT_THRESHOLD_MS) {
+            await recordConversationCoverage(supabase, job, item.jid, providerName, 'gapped', 'incremental_chat_skipped_without_coverage');
             delete mc.perChat[item.jid];
             chatsSkipped += 1;
             chatsCompleted += 1;
@@ -691,6 +724,7 @@ async function processMultiChat(
     const results = await Promise.allSettled(
       activeBatch.map(item => fetchChatChunk(provider, item.jid, item.cursor))
     );
+    await Promise.all(activeBatch.map(item => recordConversationCoverage(supabase, job, item.jid, providerName, 'in_progress')));
 
     // Process results
     for (let i = 0; i < activeBatch.length; i++) {
@@ -702,6 +736,7 @@ async function processMultiChat(
           ? String(result.reason)
           : result.value.error!;
         chatErrors[item.jid] = errMsg.slice(0, 200);
+        await recordConversationCoverage(supabase, job, item.jid, providerName, 'gapped', 'provider_error');
         delete mc.perChat[item.jid];
         chatsSkipped += 1;
         chatsCompleted += 1;
@@ -709,10 +744,11 @@ async function processMultiChat(
       }
 
       const chunk = result.value;
-      const { fetched, hitExisting } = await upsertMessages(
+      const { fetched, hitExisting, dataLoss } = await upsertMessages(
         supabase, job, chunk.messages, maxDays,
         isIncremental ? item.latestSyncedTs : undefined,
       );
+      if (dataLoss) await recordConversationCoverage(supabase, job, item.jid, providerName, 'gapped', 'message_persistence_gap');
       totalFetched += fetched;
       totalThisTick += fetched;
       fetchedPerChat[item.jid] = (fetchedPerChat[item.jid] ?? 0) + fetched;
@@ -725,6 +761,10 @@ async function processMultiChat(
         || hitExisting
         || reachedChatCap(job.scope, fetchedPerChat[item.jid], job.max_messages_per_chat);
       if (chatDone) {
+        const coverage = classifyConversationCoverage({ naturalEnd: !chunk.nextCursor, dataLoss, hitExisting,
+          capped: Boolean(chunk.nextCursor) && !hitExisting });
+        await recordConversationCoverage(supabase, job, item.jid, providerName, coverage,
+          coverage === 'complete' ? undefined : dataLoss ? 'message_persistence_gap' : hitExisting ? 'incremental_boundary_unproven' : 'message_cap_reached');
         delete mc.perChat[item.jid];
         chatsCompleted += 1;
       } else {

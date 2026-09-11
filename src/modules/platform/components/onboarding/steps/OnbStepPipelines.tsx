@@ -64,9 +64,6 @@ export function OnbStepPipelines() {
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               <span className="text-sm font-medium">{p.name}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
-                {p.type === "custom_pipeline" ? "Custom" : "Padrão"}
-              </span>
             </div>
             {p.stages && (
               <div className="flex flex-wrap gap-1.5">
@@ -85,7 +82,7 @@ export function OnbStepPipelines() {
         ))}
         {pipelines.length === 0 && (
           <div className="p-4 rounded-xl border border-border/60 bg-muted/20 text-center">
-            <p className="text-sm text-muted-foreground">Funis padrão aplicados.</p>
+            <p className="text-sm text-muted-foreground">Funis configurados.</p>
           </div>
         )}
       </div>

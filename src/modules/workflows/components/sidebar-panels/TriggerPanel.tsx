@@ -218,7 +218,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
       {/* ── proposal_accepted / proposal_lost ── */}
       {(data.triggerType === "proposal_accepted" || data.triggerType === "proposal_lost") && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Dispara quando uma proposta muda para "{data.triggerType === "proposal_accepted" ? "vendido" : "perdido"}" no funil de Propostas.
+          Dispara quando uma proposta é marcada como "{data.triggerType === "proposal_accepted" ? "vendida" : "perdida"}".
         </div>
       )}
 
@@ -664,9 +664,8 @@ function LeadRepliedConfig({
     });
   };
 
-  // Lista única: os funis eram separados em "Funis Padrão" e "Funis Custom"
-  // por `p.type`. Quem marca um filtro de gatilho escolhe UM funil pelo nome —
-  // a espécie dele nunca entrou nessa decisão.
+  // Lista única: quem marca um filtro escolhe o funil pelo nome, sem categoria
+  // derivada do antigo `p.type`.
   const renderPipelines = (items: typeof visiblePipelines) => (
     <div className="space-y-1">
       {items.map((p) => (

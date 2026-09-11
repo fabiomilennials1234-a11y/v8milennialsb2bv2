@@ -166,7 +166,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
       ) : (
         <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
       )}
-      <BulkExportDialog open={exportOpen} onOpenChange={setExportOpen} leadIds={ids} />
+      <BulkExportDialog open={exportOpen} onOpenChange={setExportOpen} leadIds={ids} pipelineId={escopoFunil?.pipelineId} />
       {/* In-bar QuickBlast only when the host did NOT take over "Disparar". */}
       {!onDisparar && (
         <QuickBlastDialog open={blastOpen} onOpenChange={setBlastOpen} leadIds={ids} onDone={onClear} />
@@ -485,24 +485,25 @@ function BulkExportDialog({
   open,
   onOpenChange,
   leadIds,
+  pipelineId,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   leadIds: string[];
+  pipelineId?: string;
 }) {
-  // Exporta a SELEÇÃO manual (SCRUM-633) — recorte por lead_ids explícitos,
-  // agnóstico de funil por construção. Mesmo schema de arquivo da exportação
-  // global (lead + 3 pipes); cabeçalho dinâmico por funil fica pra W6.
+  // Preserva o contexto do kanban para o rollout de detalhes da Ventimais.
+  // Na lista de leads (sem pipelineId), segue a exportação global da seleção.
   const [format, setFormat] = useState<"csv" | "xlsx">("csv");
   const { exportLeads, isExporting } = useExportLeads();
 
   const handleExport = async () => {
     try {
-      const { count } = await exportLeads({ format, leadIds });
+      const { count, unit } = await exportLeads({ format, leadIds, ...(pipelineId ? { pipelineId } : {}) });
       if (count === 0) {
-        toast.message("Nenhum lead exportado.");
+        toast.message(unit ? "Nenhum negócio exportado." : "Nenhum lead exportado.");
       } else {
-        toast.success(`${count} lead${count === 1 ? "" : "s"} exportado${count === 1 ? "" : "s"}`);
+        toast.success(`${count} ${unit ? (count === 1 ? "negócio" : "negócios") : (count === 1 ? "lead" : "leads")} exportado${count === 1 ? "" : "s"}`);
       }
       onOpenChange(false);
     } catch (e) {

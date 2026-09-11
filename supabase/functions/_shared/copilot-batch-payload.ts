@@ -18,6 +18,7 @@ export interface EntradaDoPayload {
   content: string;
   /** `null` quando a linha da fila não resolveu a Instance. */
   instanceId: string | null;
+  messageContext?: { storage: "whatsapp_messages"; messageId: string; boxId: string; provider: string; participantId: string } | null;
 }
 
 export interface PayloadDoAgente {
@@ -27,6 +28,7 @@ export interface PayloadDoAgente {
   organization_id: string;
   incoming_message_type: "text";
   instance_id: string | null;
+  message_context?: EntradaDoPayload["messageContext"];
 }
 
 export function montarPayloadDoAgente(entrada: EntradaDoPayload): PayloadDoAgente {
@@ -41,5 +43,6 @@ export function montarPayloadDoAgente(entrada: EntradaDoPayload): PayloadDoAgent
     // o comportamento certo — melhor não disparar do que disparar achando que
     // veio do número escolhido.
     instance_id: entrada.instanceId,
+    ...(entrada.messageContext ? { message_context: entrada.messageContext } : {}),
   };
 }

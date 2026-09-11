@@ -1,8 +1,12 @@
+import type { ExportLeadsOptions } from '../lib/export-types';
+export type { ExportLeadsOptions, ExportStageFilter, ExportListFilters } from '../lib/export-types';
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
-import { applyLeadListFilters, type LeadListFilterValues } from "../lib/lead-list-filters";
+import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { loadVentimaisExport } from "../lib/load-ventimais-export";
+import { buildVentimaisWorkbook } from "../lib/ventimais-export";
 import {
   buildExportHeaders,
   buildFunnelCells,
@@ -47,49 +51,8 @@ export const EXPORT_LEAD_HEADERS = [
   "Data compromisso (lead)",
 ] as const;
 
-type ExportFormat = "csv" | "xlsx";
-
-/**
- * Filtro por etapa do Kanban: limita a exportação aos leads que estejam na
- * etapa indicada do funil especificado.
- *
- * SCRUM-635/637: o MOTOR é único — (pipeline_id, etapa) resolve direto em
- * `pipeline_entries` (fonte única pós-W3). Os braços legados por slug
- * ("whatsapp"/"confirmacao"/"propostas") e "custom" morreram no flip da 637
- * junto com as páginas que os alimentavam — este é o único formato.
- */
-export interface ExportStageFilter {
-  /** `pipelines.id` — endereça QUALQUER funil (sistema ou custom). */
-  pipelineId: string;
-  /** uuid de `pipeline_stages` (canônico) ou stage_key. */
-  stageId: string;
-}
-
-/** Filtros ativos da lista de leads (busca, origem, qualificação, UF).
- * Mesma semântica de `applyLeadListFilters` — reaproveita a fonte única. */
-export type ExportListFilters = LeadListFilterValues;
-
-export interface ExportLeadsOptions {
-  format: ExportFormat;
-  /** Limite de leads (os mais recentes). Se não informado, exporta até 10.000. */
-  limit?: number;
-  /** Quando presente, restringe a exportação aos leads da etapa indicada. */
-  stageFilter?: ExportStageFilter;
-  /** Título legível da etapa — usado apenas para compor o nome do arquivo. */
-  stageTitle?: string;
-  /** Filtros ativos da lista — aplicados à exportação para espelhar o que o
-   * usuário vê na tela (busca, origem, qualificação, UF). */
-  listFilters?: ExportListFilters;
-  /**
-   * Restringe a exportação a um conjunto EXPLÍCITO de leads — a seleção
-   * manual do bulk (SCRUM-633). Compõe por interseção com stageFilter e
-   * listFilters quando presentes. Lista vazia exporta nada.
-   */
-  leadIds?: string[];
-}
-
 export interface UseExportLeadsResult {
-  exportLeads: (options: ExportLeadsOptions) => Promise<{ count: number }>;
+  exportLeads: (options: ExportLeadsOptions) => Promise<{ count: number; unit?: "negócios" }>;
   isExporting: boolean;
 }
 
@@ -118,7 +81,7 @@ export function useExportLeads(): UseExportLeadsResult {
   const { organizationId } = useOrganization();
   const exportPermission = useCanDo("export_leads");
 
-  const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number }> => {
+  const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number; unit?: "negócios" }> => {
     if (!organizationId) {
       throw new Error("Organização não encontrada");
     }
@@ -130,6 +93,24 @@ export function useExportLeads(): UseExportLeadsResult {
     }
     setIsExporting(true);
     try {
+      const detailed = await loadVentimaisExport(organizationId, options);
+      if (detailed) {
+        if (!detailed.entries.length) return { count: 0, unit: "negócios" };
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        buildVentimaisWorkbook(workbook, detailed);
+        const buffer = await workbook.xlsx.writeBuffer();
+        const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+        try {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `negocios_${slugify(detailed.pipeline.name ?? "kanban")}${options.stageTitle ? `_${slugify(options.stageTitle)}` : ""}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+          a.click();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        return { count: detailed.entries.length, unit: "negócios" };
+      }
       const limit = Math.min(options.limit ?? 10_000, 50_000);
 
       // 0) Funis reais da org — servem tanto à resolução do stageFilter quanto

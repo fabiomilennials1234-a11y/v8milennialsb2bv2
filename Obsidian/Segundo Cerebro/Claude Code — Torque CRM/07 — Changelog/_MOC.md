@@ -144,3 +144,6 @@ owner: claude-agent
 - [[2026-09-08-meeting-date-projection|Data da reunião no negócio sem deal_id]]
 - [[2026-09-08-oraculo-fundacao-tdd|Oráculo — fundação e contrato frontend]] 🔵 wip
 - [[2026-09-08-registrar-vendas-historicas|Registrar vendas históricas no lead]]
+- [[2026-09-10-janela-comercial|Janela Comercial — contrato e correções]]
+- [[2026-09-10-transferencia-real-negocio|Transferência real após etapa de ganho]] 🟡 draft
+- [[2026-09-10|Documentos nos comentários do negócio]]

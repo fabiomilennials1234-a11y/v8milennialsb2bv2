@@ -430,7 +430,7 @@ export function EventDetailPopover({
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <GitBranch className="w-3.5 h-3.5 shrink-0" />
-            Abrir em Confirmacao
+            Abrir no funil
           </a>
         )}
 

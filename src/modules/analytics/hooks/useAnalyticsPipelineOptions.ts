@@ -12,9 +12,8 @@ import { useOrganizationSettings } from "@/modules/identity";
  * Defaults (documentados na spec F3):
  * - `orgDefault`: o funil padrão da org (SCRUM-624, organizations.default_pipeline_id);
  *   se a org não tem padrão (ou ele está inativo), o primeiro funil da lista.
- * - `closingDefault`: default dos gráficos de venda (velocity / ciclo de
- *   vendas) — preserva o comportamento legado que abria em "Propostas":
- *   o funil de slug 'propostas' enquanto existir; senão, `orgDefault`.
+ * - `closingDefault`: segue o funil padrão escolhido pela organização. O slug
+ *   técnico de um seed antigo não define mais comportamento de produto.
  */
 export interface AnalyticsPipelineOption {
   id: string;
@@ -23,7 +22,7 @@ export interface AnalyticsPipelineOption {
 }
 
 export function useAnalyticsPipelineOptions() {
-  // Nome que a ORG usa — `pipelines.name` é o seed congelado no sistema.
+  // Nome canônico escolhido pela organização.
   const { data: pipelines, isLoading } = useFunisDaOrg();
   const { settings } = useOrganizationSettings();
   const defaultPipelineId = settings.default_pipeline_id;
@@ -39,7 +38,7 @@ export function useAnalyticsPipelineOptions() {
       defaultPipelineId && active.some((p) => p.id === defaultPipelineId)
         ? defaultPipelineId
         : options[0]?.id ?? null;
-    const closingDefault = active.find((p) => p.slug === "propostas")?.id ?? orgDefault;
+    const closingDefault = orgDefault;
     return { options, orgDefault, closingDefault, isLoading };
   }, [pipelines, defaultPipelineId, isLoading]);
 }

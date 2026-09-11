@@ -12,6 +12,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
 // ── Mocks dos vizinhos pesados do dialog ────────────────────────────────────
+vi.mock("@/modules/leads", () => ({
+  ExportLeadsContent: () => null,
+  useVentimaisExportDetails: () => ({ enabled: false, isLoading: false }),
+}));
 vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
   useCreateCustomPipelineStage: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateCustomPipelineStage: () => ({ mutateAsync: vi.fn(), isPending: false }),

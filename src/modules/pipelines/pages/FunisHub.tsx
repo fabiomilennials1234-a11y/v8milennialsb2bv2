@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { usePermanentCustomFunnels, useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
-import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { useOrganization } from "@/modules/identity";
-import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,7 +16,6 @@ import {
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
 import { FunnelActionsMenu } from "@/modules/pipelines/components/funis/FunnelActionsMenu";
 import { usePipelines, type Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
-import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { funilIcon } from "../lib/funil-icons";
 // Mesmo path map compat do seletor da faixa (morre no flip do redirect).
 import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
@@ -29,7 +26,7 @@ import type { LucideIcon } from "lucide-react";
  *
  * Cor/ícone vêm de `pipelines` (registro único, SCRUM-637): funil de sistema
  * persiste personalização como qualquer outro, e o hub reflete. Nome de
- * sistema continua vindo do display_config (rename legado prevalece).
+ * exibido vem de `pipelines.name`, a fonte canônica escolhida pelo usuário.
  */
 interface FunilCard {
   key: string;
@@ -52,15 +49,12 @@ interface FunilCard {
 export default function FunisHub() {
   const navigate = useNavigate();
   const { organizationId } = useOrganization();
-  const { hasFeature } = useOrgFeatures();
-  const { data: displayConfigs = [], isLoading: configLoading } = usePipelineDisplayConfig();
-  const { data: permanentFunnels = [], isLoading: permanentLoading } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [], isLoading: temporaryLoading } = useTemporaryFunnels();
-  const { data: pipelines = [] } = usePipelines();
+  const { data: pipelines = [], isLoading: pipelinesLoading } = usePipelines();
 
   // Registro único → cor/ícone reais de qualquer funil.
-  const pipeBySlug = new Map(pipelines.map((p) => [p.slug, p] as const));
   const pipeById = new Map(pipelines.map((p) => [p.id, p] as const));
+  const temporaryById = new Map(temporaryFunnels.map((p) => [p.id, p] as const));
   const [createOpen, setCreateOpen] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
 
@@ -68,65 +62,39 @@ export default function FunisHub() {
     trackModuleVisit("funis", organizationId);
   }, []);
 
-  const isLoading = configLoading || permanentLoading || temporaryLoading;
-
-  // Funis de sistema navegáveis — regra ÚNICA em contracts. O hub era o único
-  // dos três consumidores que não filtrava a Carteira, e por isso listava um
-  // card "Carteira" apontando para `/funil/upsell`, rota sem funil por trás.
-  const visibleStructural = funisDeSistemaNavegaveis(displayConfigs, {
-    mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
-  });
+  const isLoading = pipelinesLoading || temporaryLoading;
 
   // Encerrado não é categoria, é ESTADO — por isso segue recolhido no fim.
-  const activeTemporary = temporaryFunnels.filter((f) => f.status !== "ended");
   const endedTemporary = temporaryFunnels.filter((f) => f.status === "ended");
 
-  const allFunnels: FunilCard[] = [
-    ...visibleStructural.map((c) => {
-      const row = pipeBySlug.get(c.pipe_type);
-      return {
-        key: `sys:${c.pipe_type}`,
-        name: c.display_name,
-        path: `/funil/${c.pipe_type}`,
-        color: row?.color ?? FUNNEL_FALLBACK_COLOR,
-        icon: funilIcon(row?.icon),
-        pipeline: row,
-      };
-    }),
-    ...permanentFunnels.map((pipe) => ({
-      key: pipe.id,
-      name: pipe.name,
-      path: `/funil/${pipe.slug}`,
-      color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
-      icon: funilIcon(pipeById.get(pipe.id)?.icon),
-      pipeline: pipeById.get(pipe.id),
-    })),
-    ...activeTemporary.map((pipe) => {
-      const daysLeft = pipe.ends_at
+  const allFunnels: FunilCard[] = pipelines
+    .filter((pipeline) => pipeline.is_active && !endedTemporary.some((p) => p.id === pipeline.id))
+    .map((pipeline) => {
+      const pipe = temporaryById.get(pipeline.id);
+      const daysLeft = pipe?.ends_at
         ? Math.max(
             0,
-            Math.ceil((new Date(pipe.ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+            Math.ceil((new Date(pipe.ends_at!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
           )
         : null;
       // Só o que é fato do funil. "Ativo" não entra: é o estado de todos os
       // outros da lista também, e dizê-lo só aqui recriaria a distinção.
       const partes = [
         daysLeft !== null ? `${daysLeft}d restantes` : null,
-        pipe.team_goal != null ? `Meta: ${pipe.team_goal}` : null,
-        pipe.status === "paused" ? "Pausado" : null,
-        pipe.status === "draft" ? "Rascunho" : null,
+        pipe?.team_goal != null ? `Meta: ${pipe.team_goal}` : null,
+        pipe?.status === "paused" ? "Pausado" : null,
+        pipe?.status === "draft" ? "Rascunho" : null,
       ].filter(Boolean);
       return {
-        key: pipe.id,
-        name: pipe.name,
-        path: `/funil/${pipe.slug}`,
-        color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
-        icon: funilIcon(pipeById.get(pipe.id)?.icon),
+        key: pipeline.id,
+        name: pipeline.name,
+        path: `/funil/${pipeline.slug}`,
+        color: pipeline.color ?? FUNNEL_FALLBACK_COLOR,
+        icon: funilIcon(pipeline.icon),
         meta: partes.length > 0 ? partes.join(" · ") : undefined,
-        pipeline: pipeById.get(pipe.id),
+        pipeline,
       };
-    }),
-  ];
+    });
 
   if (isLoading) {
     return (
@@ -152,12 +120,8 @@ export default function FunisHub() {
         </Button>
       </div>
 
-      {/* ── Os funis ─────────────────────────────────────────
-          Uma lista só. Havia três seções tituladas — "Funis Estruturais",
-          "Funis Customizados", "Funis com Prazo — Ativos" — cada uma com
-          ícone, cor, grid e legenda próprios. Não são espécies diferentes:
-          são todos funis. O que sobra abaixo do nome é FATO do funil (prazo,
-          meta, pausado), nunca a categoria a que ele pertencia. */}
+      {/* Uma lista só. A linha abaixo do nome mostra apenas fatos do funil,
+          como prazo, meta e estado. */}
       {allFunnels.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {allFunnels.map((funil) => (
@@ -215,7 +179,10 @@ export default function FunisHub() {
           </button>
           {showEnded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 opacity-60">
-              {endedTemporary.map((pipe) => (
+              {endedTemporary.map((pipe) => {
+                const canonical = pipeById.get(pipe.id);
+                const displayName = canonical?.name ?? pipe.name;
+                return (
                 /* Encerrado é estado, não espécie: o funil segue sendo funil e
                    ganha o mesmo menu — é justamente aqui que "excluir" costuma
                    ser o que a pessoa quer. */
@@ -224,25 +191,26 @@ export default function FunisHub() {
                   className="group flex items-start rounded-xl border border-border/50 bg-card"
                 >
                   <button
-                    onClick={() => navigate(`/funil/${pipe.slug}`)}
+                    onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
                     className="flex-1 min-w-0 p-4 text-left"
                   >
                     <div className="flex items-center gap-2">
                       <Kanban className="w-4 h-4 text-muted-foreground" />
-                      <p className="text-sm font-medium truncate">{pipe.name}</p>
+                      <p className="text-sm font-medium truncate">{displayName}</p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
                   </button>
-                  {pipeById.get(pipe.id) && (
+                  {canonical && (
                     <div className="pr-3 pt-4 pl-1">
                       <FunnelActionsMenu
-                        pipeline={pipeById.get(pipe.id)!}
-                        displayName={pipe.name}
+                        pipeline={canonical}
+                        displayName={displayName}
                       />
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

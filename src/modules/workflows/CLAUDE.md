@@ -49,6 +49,28 @@ Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `ac
 
 Track: `workflow_executions` + `workflow_execution_steps`.
 
+### Condição por mensagem do gatilho
+
+`message.trigger.text` avalia uma linha persistida identificada, nunca o texto livre de `workflow_executions.context`. A regra escolhe a conversa do gatilho ou fixa `storage + boxId + provider`; o participante sempre é o lead da execução. Runtime exige o localizador `context.message_context` com o UUID da linha, caixa, provider e participante. Outra caixa, provider ou chip não substitui a identidade.
+
+O avaliador consome somente `condition_text` ou uma transcrição já persistida com provider e instante. Mídia sem fonte textual é erro `message_text_unavailable`; registro removido é `context_unavailable`. O texto legado em `context.message` permanece porque o gatilho antigo `contains_text` ainda depende dele.
+
+`message.search.text` reutiliza essas fontes persistidas para mensagem do gatilho, última recebida ou período `[from,to)`. Caixa/provider/participante continuam fixos. `all` exige todas as expressões na mesma linha; resultado negativo em histórico exige cobertura completa. Máximo: 20 regras de busca por avaliação, 20 expressões por regra, 120 caracteres cada e 1.000 caracteres normalizados totais. Nenhuma avaliação gera transcrição.
+
+`message.waiting.elapsed` mede relógio corrido desde a primeira mensagem da sequência atual ainda sem resposta. `waitingFor=lead` começa em mensagem recebida; `waitingFor=company` começa em mensagem enviada. Complementos do mesmo lado preservam a âncora; mensagem válida do lado oposto encerra a sequência. Recebidas contam com `status=received`; enviadas contam somente em `sent`, `delivered` ou `read`. `pending`, `failed`, receipts, reações e eventos de sistema não contam. Mídia conta sem depender de texto. Sem sequência ativa, o valor é ausente, nunca zero. Cobertura não completa bloqueia a decisão.
+
+Falha temporária de condição publicada retoma o mesmo node com dados atuais. Somente `temporarily_unavailable` e `history_sync_in_progress` recebem retries em 30s, 90s e 270s. A execução permanece `running`, usa `next_run_at` e guarda estado em `guided_condition_retry_*`; nenhuma saída é escolhida durante a espera. Sucesso limpa o estado antes do ramo. Falha permanente termina imediatamente; esgotamento grava `guided_condition_retry_exhausted:<code>`. Retry de condição não incrementa loop nem reexecuta nodes anteriores.
+
+### Condição por produto
+
+`product.relationship` mantém três relações distintas. `trigger_business_item` lê
+`deal_items.product_id` pelo `deal_id` da entrada exata do gatilho.
+`lead_association` lê somente `lead_products` manual e ativo.
+`won_deal_history` lê o agregado criado por negócio ganho; não representa pagamento.
+Toda regra persiste UUID de produto ativo da organização. Nome é dica visual e item
+avulso nunca casa por texto. Grants separados: `product.trigger_business_item`,
+`product.lead_association` e `product.won_deal_history`.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)
@@ -71,7 +93,8 @@ Inclui:
 
 - **Workflow CRUD + execuções**: `useWorkflows`, `useWorkflow`, `useCreateWorkflow`, `useUpdateWorkflow`, `useDeleteWorkflow`, `useToggleWorkflow`, `useWorkflowExecutions`, `useWorkflowExecutionSteps`, `useRetryWorkflowExecution`, `useWorkflowStats`
 - **Analytics**: `useWorkflowNodeStats`
-- **Portability**: `useExportWorkflow`, `useImportWorkflow`
+- **Portability**: `useExportWorkflow`, `useImportWorkflow`. Árvores guiadas usam o draft atual. Export/import limpa toda referência de tenant, remapeia IDs internos recursivamente e importa como shell inativo + draft sem grants; o destino exige remapeamento explícito antes de publicar.
+- **Revisão legada**: `legacy-condition-review.ts` inventaria diferenças sem escrever ao abrir. Ação explícita cria o primeiro draft na mesma automação; definição ativa, execuções sem versão e `time_window` pausante permanecem legados até publicação/reconstrução deliberada.
 - **Templates**: `useWorkflowTemplates`, `useCloneWorkflowTemplate`
 - **Stage <-> Workflow bindings** (consumido por `pipelines` e `campaigns`): `useStageWorkflows`, `useStageWorkflowCounts`, `useCustomPipeStageWorkflows`, `useCustomPipeWorkflowCounts`, `useCampaignStageWorkflows`, `useCampaignWorkflowCounts`
 - **Automation Health** (dashboard master): `useAutomationHealth`, `useDeadLetterJobs`, `useFailedWorkflows`, `useStuckActions`, `useCircuitBrokenWebhooks`, `useSystemAlerts`, `useResolveAlert`, `useReprocessJob`, `useOrgsCopilotEngine`, `useToggleCopilotEngine`, `useAuditLog`

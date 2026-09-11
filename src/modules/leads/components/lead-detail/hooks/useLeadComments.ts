@@ -1,3 +1,8 @@
+import {
+  uploadCommentFiles,
+  removeUnpublishedCommentFiles,
+} from "../../../lib/comment-attachments/storage";
+import type { CommentAttachment } from "../../../lib/comment-attachments/files";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { LeadComment, LeadCommentWithAuthor } from "../modal/types";
@@ -10,7 +15,9 @@ import type { LeadComment, LeadCommentWithAuthor } from "../modal/types";
 type AnySupabase = ReturnType<typeof supabase.from>;
 
 function fromLeadComments(): AnySupabase {
-  return (supabase.from as unknown as (t: string) => AnySupabase)("lead_comments");
+  return (supabase.from as unknown as (t: string) => AnySupabase)(
+    "lead_comments",
+  );
 }
 
 export function useLeadComments(leadId: string | null | undefined) {
@@ -26,21 +33,26 @@ export function useLeadComments(leadId: string | null | undefined) {
       const rows = (data ?? []) as LeadComment[];
 
       const memberIds = Array.from(
-        new Set(rows.map((r) => r.author_team_member_id).filter(Boolean))
+        new Set(rows.map((r) => r.author_team_member_id).filter(Boolean)),
       ) as string[];
 
-      let members: Array<{ id: string; name: string; avatar_url: string | null }> = [];
+      let members: Array<{
+        id: string;
+        name: string;
+        avatar_url: string | null;
+      }> = [];
       if (memberIds.length > 0) {
-        const { data: mData } = await (supabase
-          .from("team_members")
-          .select("id, name, avatar_url") as any)
-          .in("id", memberIds);
+        const { data: mData } = await (
+          supabase.from("team_members").select("id, name, avatar_url") as any
+        ).in("id", memberIds);
         members = (mData ?? []) as typeof members;
       }
       const byId = new Map(members.map((m) => [m.id, m]));
       return rows.map((r) => ({
         ...r,
-        author: r.author_team_member_id ? byId.get(r.author_team_member_id) ?? null : null,
+        author: r.author_team_member_id
+          ? (byId.get(r.author_team_member_id) ?? null)
+          : null,
       }));
     },
     enabled: !!leadId,
@@ -67,10 +79,13 @@ export function useCreateLeadComment() {
       organizationId: string;
       body: string;
       mentions?: string[];
+      files?: File[];
       /** `pipeline_entries.id` do negócio aberto. Ausente = comentário do lead. */
       pipelineEntryId?: string | null;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Sem usuário autenticado");
 
       const { data: member } = await supabase
@@ -80,13 +95,30 @@ export function useCreateLeadComment() {
         .eq("organization_id", input.organizationId)
         .maybeSingle();
 
+      const files = input.files ?? [];
+      if (files.length && !input.pipelineEntryId)
+        throw new Error("Anexos exigem um negócio vinculado.");
+      const commentId = crypto.randomUUID();
+      let attachments: CommentAttachment[] = [];
+      if (files.length)
+        attachments = await uploadCommentFiles(files, {
+          organizationId: input.organizationId,
+          entryId: input.pipelineEntryId!,
+          userId: user.id,
+          commentId,
+        });
+
       const semVinculo = {
+        id: commentId,
+        ...(attachments.length ? { attachments } : {}),
         lead_id: input.leadId,
         organization_id: input.organizationId,
         author_user_id: user.id,
         author_team_member_id: member?.id ?? null,
-        body: input.body.trim(),
-        mentions: input.mentions && input.mentions.length > 0 ? input.mentions : [],
+        body:
+          input.body.trim() || (attachments.length ? "Documento anexado" : ""),
+        mentions:
+          input.mentions && input.mentions.length > 0 ? input.mentions : [],
       };
       const comVinculo = input.pipelineEntryId
         ? { ...semVinculo, pipeline_entry_id: input.pipelineEntryId }
@@ -95,15 +127,25 @@ export function useCreateLeadComment() {
       const gravar = (linha: Record<string, unknown>) =>
         (fromLeadComments() as any).insert(linha).select("*").single();
 
-      let { data, error } = await gravar(comVinculo);
+      try {
+        let { data, error } = await gravar(comVinculo);
 
-      // Degrada para comentário do lead em vez de perder o texto da pessoa.
-      if (error && comVinculo !== semVinculo && COLUNA_AINDA_NAO_EXISTE.has(String(error.code))) {
-        ({ data, error } = await gravar(semVinculo));
+        // Degrada para comentário do lead em vez de perder o texto da pessoa.
+        if (
+          !attachments.length &&
+          error &&
+          comVinculo !== semVinculo &&
+          COLUNA_AINDA_NAO_EXISTE.has(String(error.code))
+        ) {
+          ({ data, error } = await gravar(semVinculo));
+        }
+
+        if (error) throw error;
+        return data as LeadComment;
+      } catch (error) {
+        await removeUnpublishedCommentFiles(attachments);
+        throw error;
       }
-
-      if (error) throw error;
-      return data as LeadComment;
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["lead-comments", vars.leadId] });
@@ -118,9 +160,14 @@ export function useDeleteLeadComment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { commentId: string; leadId: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       const { error } = await (fromLeadComments() as any)
-        .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null })
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: user?.id ?? null,
+        })
         .eq("id", input.commentId);
       if (error) throw error;
     },
@@ -136,9 +183,16 @@ export function useDeleteLeadComment() {
 export function useUpdateLeadComment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { commentId: string; leadId: string; body: string }) => {
+    mutationFn: async (input: {
+      commentId: string;
+      leadId: string;
+      body: string;
+    }) => {
       const { error } = await (fromLeadComments() as any)
-        .update({ body: input.body.trim(), updated_at: new Date().toISOString() })
+        .update({
+          body: input.body.trim(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", input.commentId);
       if (error) throw error;
     },

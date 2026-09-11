@@ -21,9 +21,7 @@ export interface FunnelIdentitySectionProps {
     color: string;
   };
   /**
-   * Nome que o usuário VÊ hoje (funil de sistema: `display_name` do registro,
-   * que vence onde existir — ver precedência em `usePipelineIdentity`).
-   * Ausente, cai em `pipeline.name`.
+   * Nome que o usuário vê. Ausente, usa o canônico `pipeline.name`.
    */
   displayName?: string;
   /** Fecha o diálogo hospedeiro após a exclusão do funil. */
@@ -44,8 +42,7 @@ export interface FunnelIdentitySectionProps {
  *
  * Antes só o funil custom tinha esta seção (GeneralTab do
  * CustomPipeSettingsDialog); os semeados eram imutáveis. Uma seção, as duas
- * espécies: escreve em `pipelines.name/icon/color` e, no sistema, sincroniza
- * `display_name` do registro (navegação/hub leem de lá).
+ * espécies: escreve em `pipelines.name/icon/color`.
  *
  * Carrega também a Zona de Perigo (exclusão do funil via
  * `DeletePipelineDialog`, o diálogo definitivo da D3), atrás do MESMO portão

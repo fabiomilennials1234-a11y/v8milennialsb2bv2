@@ -593,3 +593,13 @@ verify_jwt = false
 # ficar paga e inacessível em silêncio. Aqui a falha é vermelha e visível.
 [functions.billing-provision-worker]
 verify_jwt = false
+
+# Personal test: requireAuth validates the user's JWT; all lead reads use that
+# same JWT so current RLS applies. No internal-key or service-role evaluation.
+[functions.test-guided-condition]
+verify_jwt = false
+
+# Publication authenticates the caller explicitly and validates the persisted
+# draft before a service-only finalizer rechecks current authority and grants.
+[functions.publish-guided-workflow]
+verify_jwt = false

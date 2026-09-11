@@ -136,6 +136,35 @@ export function useActiveProducts() {
   });
 }
 
+/** Bounded searchable catalogue for workflow selectors. Selected identity is
+ * read independently so a short search page never pretends a product vanished. */
+export function useGuidedProductOptions(actorId: string, organizationId: string, search: string, selectedId: string) {
+  const enabled = Boolean(actorId && organizationId);
+  const options = useQuery({
+    queryKey: ["products", "guided-options", organizationId, actorId, search], enabled,
+    queryFn: async ({ signal }) => {
+      let query = supabase.from("products").select("id, name, is_active, type")
+        .eq("organization_id", organizationId).eq("is_active", true)
+        .order("name").order("id").limit(25).abortSignal(signal);
+      if (search) query = query.ilike("name", `%${search.replace(/[\\%_]/g, "\\$&")}%`);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+  });
+  const selected = useQuery({
+    queryKey: ["products", "guided-selected", organizationId, actorId, selectedId],
+    enabled: enabled && Boolean(selectedId),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await supabase.from("products").select("id, name, is_active, type")
+        .eq("organization_id", organizationId).eq("id", selectedId).abortSignal(signal).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  return { options, selected };
+}
+
 export function useCreateProduct() {
   const queryClient = useQueryClient();
 

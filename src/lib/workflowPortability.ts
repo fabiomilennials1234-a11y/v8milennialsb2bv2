@@ -1,6 +1,6 @@
 // src/lib/workflowPortability.ts
 
-import type { Workflow, WorkflowNode, WorkflowEdge } from "@/types/workflow";
+import type { GuidedConditionDraft, Workflow, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import type {
   ExportedWorkflowFile,
   ExternalReference,
@@ -60,6 +60,8 @@ const TRIGGER_CONFIG_ORG_FIELDS: Record<string, OrgFieldSpec> = {
   // Sem neutralizar, o arquivo exportado carregaria ids de outra org: o filtro
   // nunca casaria e o workflow ficaria em no-op silencioso.
   pipeline_ids: { type: "custom_pipeline" },
+  stages: { type: "pipeline_stage" },
+  stage_ids: { type: "pipeline_stage" },
   campaign_id: { type: "campaign" },
   tag_id: { type: "tag", hintField: "tag_name" },
 };
@@ -115,15 +117,97 @@ function getOrgFieldsForNode(nodeType: string): Record<string, OrgFieldSpec> {
   }
 }
 
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function addExternalReference(refs: ExternalReference[], nodeId: string, field: string,
+  type: ExternalReferenceType, value: unknown, hint = ""): void {
+  if (value == null || value === "" || (Array.isArray(value) && value.length === 0)) return;
+  refs.push({ nodeId, field, type,
+    originalValue: Array.isArray(value) ? JSON.stringify(value) : String(value), hint });
+}
+
+/** Removes every tenant-owned identity from a guided tree. Display hints move
+ * to the manifest so an imported draft cannot silently reuse a source UUID. */
+function scrubGuidedConditionReferences(nodeId: string, value: unknown, refs: ExternalReference[],
+  path = "guidedCondition", regenerateIds = false): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const condition = cloneJson(value) as Record<string, unknown>;
+  if (regenerateIds && typeof condition.id === "string") condition.id = generateId();
+  if (Array.isArray(condition.children)) {
+    condition.children = condition.children.map((child, index) =>
+      scrubGuidedConditionReferences(nodeId, child, refs, `${path}.children[${index}]`, regenerateIds));
+  }
+  const clear = (field: string, type: ExternalReferenceType, hintField?: string) => {
+    addExternalReference(refs, nodeId, `${path}.${field}`, type, condition[field],
+      hintField && typeof condition[hintField] === "string" ? String(condition[hintField]) : "");
+    if (condition[field] != null) condition[field] = "";
+    if (hintField) delete condition[hintField];
+  };
+  switch (condition.field) {
+    case "lead.tags": clear("tagId", "tag", "tagLabel"); break;
+    case "lead.origin": clear("originId", "origin", "originLabel"); break;
+    case "lead.pre_sale_responsible_id":
+    case "lead.sale_responsible_id": clear("memberId", "team_member", "memberLabel"); break;
+    case "lead.custom":
+      if (condition.fieldType === "select" && condition.operator !== "is_empty" && condition.operator !== "is_not_empty") {
+        addExternalReference(refs, nodeId, `${path}.value`, "custom_option", condition.value,
+          typeof condition.fieldLabel === "string" ? condition.fieldLabel : "");
+        condition.value = "";
+      }
+      clear("fieldId", "custom_field", "fieldLabel");
+      break;
+    case "business.trigger.stage":
+    case "business.stage":
+      clear("pipelineId", "custom_pipeline", "pipelineLabel");
+      clear("stageId", "pipeline_stage", "stageLabel");
+      break;
+    case "product.relationship": clear("productId", "product", "productLabel"); break;
+    case "message.trigger.text":
+    case "message.period.exists":
+    case "message.search.text":
+    case "message.waiting.elapsed": {
+      const conversation = condition.conversation;
+      if (conversation && typeof conversation === "object" && !Array.isArray(conversation)
+        && (conversation as Record<string, unknown>).kind === "explicit") {
+        const explicit = conversation as Record<string, unknown>;
+        addExternalReference(refs, nodeId, `${path}.conversation.boxId`,
+          explicit.storage === "channel_messages" ? "message_channel" : "whatsapp_instance",
+          explicit.boxId, typeof explicit.boxLabel === "string" ? explicit.boxLabel : "");
+        explicit.boxId = "";
+        explicit.provider = "";
+        delete explicit.boxLabel;
+      }
+      break;
+    }
+  }
+  return condition;
+}
+
+function uniqueReferences(refs: ExternalReference[]): ExternalReference[] {
+  const seen = new Set<string>();
+  return refs.filter(ref => {
+    const key = `${ref.nodeId}\u0000${ref.field}\u0000${ref.type}\u0000${ref.originalValue}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWorkflowFile {
   const allRefs: ExternalReference[] = [];
 
   // 1. Clean nodes
   const cleanedNodes: WorkflowNode[] = workflow.definition.nodes.map((node) => {
-    const nodeData = node.data as Record<string, unknown>;
+    const nodeData = cloneJson(node.data) as Record<string, unknown>;
     const registry = getOrgFieldsForNode(String(nodeData.type));
     const { cleaned, refs } = extractRefsFromData(node.id, nodeData, registry);
     allRefs.push(...refs);
+
+    if (String(nodeData.type) === "condition" && "guidedCondition" in cleaned) {
+      cleaned.guidedCondition = scrubGuidedConditionReferences(node.id, cleaned.guidedCondition, allRefs);
+    }
 
     // Clean assign_responsible memberIds array (org-specific team member IDs)
     if (String(nodeData.type) === "assign_responsible" && Array.isArray(cleaned.memberIds) && (cleaned.memberIds as unknown[]).length > 0) {
@@ -140,13 +224,11 @@ export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWo
     // Also clean trigger node's embedded config (mirrors trigger_config at top level)
     if (String(nodeData.type) === "trigger" && typeof cleaned.config === "object" && cleaned.config !== null) {
       const embeddedConfig = { ...(cleaned.config as Record<string, unknown>) };
-      const { cleaned: cleanedEmbedded, refs: embeddedRefs } = extractRefsFromData(
+      const { cleaned: cleanedEmbedded } = extractRefsFromData(
         node.id,
         embeddedConfig,
         TRIGGER_CONFIG_ORG_FIELDS,
       );
-      // Avoid duplicate refs (trigger_config refs already captured in step 2)
-      // but still nullify the embedded values
       cleaned.config = cleanedEmbedded;
     }
 
@@ -202,7 +284,7 @@ export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWo
         edges: workflow.definition.edges,
       },
     },
-    externalReferences: allRefs,
+    externalReferences: uniqueReferences(allRefs),
   };
 }
 
@@ -280,13 +362,28 @@ export function prepareImport(file: ExportedWorkflowFile): {
   // 1. Build ID remap table: old node ID → new node ID
   const idMap = new Map<string, string>();
   for (const node of wf.definition.nodes) {
+    if (idMap.has(node.id)) throw new Error(`Arquivo inválido: ID de node duplicado "${node.id}".`);
     idMap.set(node.id, generateId());
   }
+
+  const discoveredRefs: ExternalReference[] = [];
 
   // 2. Remap nodes
   const remappedNodes: WorkflowNode[] = wf.definition.nodes.map((node) => {
     const newId = idMap.get(node.id)!;
-    const data = { ...node.data } as Record<string, unknown>;
+    const sourceData = cloneJson(node.data) as Record<string, unknown>;
+    const extracted = extractRefsFromData(node.id, sourceData, getOrgFieldsForNode(String(sourceData.type)));
+    const data = extracted.cleaned;
+    discoveredRefs.push(...extracted.refs);
+    if (String(sourceData.type) === "condition" && "guidedCondition" in data) {
+      data.guidedCondition = scrubGuidedConditionReferences(node.id, data.guidedCondition, discoveredRefs,
+        "guidedCondition", true) as GuidedConditionDraft;
+    }
+    if (String(sourceData.type) === "trigger" && data.config && typeof data.config === "object" && !Array.isArray(data.config)) {
+      const embedded = extractRefsFromData(node.id, data.config as Record<string, unknown>, TRIGGER_CONFIG_ORG_FIELDS);
+      data.config = embedded.cleaned;
+      discoveredRefs.push(...embedded.refs);
+    }
 
     // Remap goto targetNodeId
     if (data.type === "goto" && typeof data.targetNodeId === "string" && data.targetNodeId) {
@@ -326,7 +423,10 @@ export function prepareImport(file: ExportedWorkflowFile): {
     .filter((e): e is WorkflowEdge => e !== null);
 
   // 4. Report unresolved external references
-  const refs = file.externalReferences || [];
+  const cleanedTrigger = extractRefsFromData("__trigger__", cloneJson(wf.trigger_config) as Record<string, unknown>,
+    TRIGGER_CONFIG_ORG_FIELDS);
+  discoveredRefs.push(...cleanedTrigger.refs);
+  const refs = uniqueReferences([...(file.externalReferences || []), ...discoveredRefs]);
   for (const ref of refs) {
     const hintLabel = ref.hint ? ` ("${ref.hint}")` : "";
     reportItems.push({
@@ -360,7 +460,7 @@ export function prepareImport(file: ExportedWorkflowFile): {
     description: wf.description,
     is_active: false,
     trigger_type: wf.trigger_type,
-    trigger_config: wf.trigger_config,
+    trigger_config: cleanedTrigger.cleaned as WorkflowInsert["trigger_config"],
     loop_limit: wf.loop_limit ?? 10,
     definition: {
       nodes: remappedNodes,
@@ -368,7 +468,13 @@ export function prepareImport(file: ExportedWorkflowFile): {
     },
   };
 
+  const mode = remappedNodes.some((node) => node.type === "condition"
+    && Object.prototype.hasOwnProperty.call(node.data, "guidedCondition"))
+    ? "guided_draft"
+    : "legacy_inactive";
+
   const report: ImportReport = {
+    mode,
     workflowId: "",
     workflowName: workflowInsert.name,
     items: reportItems,

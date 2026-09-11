@@ -203,3 +203,13 @@ Somente negócios perdidos, sem nenhum aberto ou ganho: Perdido. Demais: Lead.
 Pedido de ERP isolado não classifica na Lei da Relação. A Lei do ERP mantém
 classificacao e Indefinido. Filtro/contagem/exportação usam relacao_negocios(leads)
 no banco; migration deve preceder o frontend. Ver .specs/fixes/lei-relacao-ganho-perdido.md.
+
+### Piloto de abas Café Jurerê — 2026-09-10
+
+Somente `/leads`, com flag `leads_cafe_jurere_cadastro_erp` e ID da Café Jurerê:
+cadastro ERP (`erp_code` preenchido) = Cliente; sem cadastro, alguma perda e
+nenhum ganho = Perdido, mesmo com negócio aberto; demais = Lead. Filtra no
+banco por `classificacao_cafe_jurere`, incluindo contagem/exportação. Não altera
+importação, classificação persistida ou as regras das outras organizações.
+Migration antes da ativação da flag; roteiro em
+`.specs/features/leads-cafe-jurere-cadastro-erp.md`.

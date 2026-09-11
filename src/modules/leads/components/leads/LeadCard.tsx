@@ -1,3 +1,5 @@
+import { ORIGIN_COLORS } from "../../lib/origin-config";
+export { ORIGIN_COLORS } from "../../lib/origin-config";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
@@ -26,6 +28,7 @@ import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCompact } from "./card/LeadCardCompact";
+import { DealLostMenuItem } from "./card/DealLostMenuItem";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
@@ -56,28 +59,6 @@ const corDaInicial = (nome?: string | null): string => {
   if (!nome) return "hsl(0 0% 45%)";
   const h = Array.from(nome).reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return `hsl(${h % 360} 55% 55%)`;
-};
-
-const origem = (h: number, s: number, label: string) => ({
-  bg: `hsl(${h} ${s}% 50% / 0.14)`,
-  text: `hsl(${h} ${s}% var(--origin-ink-l))`,
-  label,
-});
-
-export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  whatsapp:        origem(162, 60, "WhatsApp"),
-  meta_ads:        origem(246, 48, "Meta Ads"),
-  instagram:       origem(333, 62, "Instagram"),
-  tiktok:          { bg: "hsl(var(--muted))", text: "hsl(var(--muted-foreground))", label: "Tiktok" },
-  google_ads:      origem(0, 55, "Google Ads"),
-  site:            origem(209, 62, "Site"),
-  landing_page:    origem(201, 70, "Landing Page"),
-  remarketing:     origem(31, 75, "Remarketing"),
-  indicacao:       origem(89, 58, "Indicação"),
-  evento:          origem(263, 62, "Evento"),
-  prospeccao_ativa:origem(20, 72, "Prospecção Ativa"),
-  cal:             origem(263, 70, "Cal.com"),
-  outro:           origem(45, 6, "Outros"),
 };
 
 const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
@@ -593,9 +574,13 @@ export const LeadCard = memo(function LeadCard({
           troquei por um fallback com selo porque a ficha também não teria o
           que mostrar — seria mandar o usuário a lugar nenhum. */}
       {pipeOps && <AddToFunilMenuItem pipeOps={pipeOps} onSelect={() => setAddFunilOpen(true)} />}
-      <DropdownMenuItem onClick={abrirFicha}>
-        <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
-      </DropdownMenuItem>
+      {lead.leadId && lead.pipelineId ? (
+        <DealLostMenuItem entryId={lead.id} />
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
+        </DropdownMenuItem>
+      )}
       {onRemove ? (
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"

@@ -33,6 +33,9 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
   } = params;
 
   const tools: any[] = [];
+  const confirmationPipelineName =
+    pipelineStages.find((stage) => stage.pipeline_slug === "confirmacao")?.pipeline_name ??
+    "funil de reuniões";
 
   // search_knowledge — disponível quando o agente tem documentos na KB
   try {
@@ -231,7 +234,7 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
     tools.push({
       name: "confirm_meeting",
       description:
-        "Confirma a presença do lead na reunião. Marca como pré-confirmado ou confirmado no pipe de Confirmação. Use quando o lead disser que vai comparecer.",
+        `Confirma a presença do lead na reunião no funil "${confirmationPipelineName}". Marca como pré-confirmado ou confirmado. Use quando o lead disser que vai comparecer.`,
       input_schema: {
         type: "object",
         properties: {
@@ -248,7 +251,7 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
     tools.push({
       name: "advance_confirmation_stage",
       description:
-        "Move o lead para outra etapa do funil de confirmação. Etapas: reuniao_marcada, confirmar_d5, confirmar_d3, confirmar_d1, confirmacao_no_dia, remarcar, compareceu, perdido. Use para avançar ou reagendar no pipe de confirmação.",
+        `Move o lead para outra etapa do funil "${confirmationPipelineName}". Etapas: reuniao_marcada, confirmar_d5, confirmar_d3, confirmar_d1, confirmacao_no_dia, remarcar, compareceu, perdido. Use para avançar ou reagendar a reunião.`,
       input_schema: {
         type: "object",
         properties: {
@@ -264,7 +267,7 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
               "compareceu",
               "perdido",
             ],
-            description: "Etapa de destino no pipe de confirmação",
+            description: `Etapa de destino no funil "${confirmationPipelineName}"`,
           },
         },
         required: ["target_stage"],

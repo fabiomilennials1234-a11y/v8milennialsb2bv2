@@ -1,3 +1,4 @@
+import { useGuidedLeadValues } from './useGuidedLeadValues';
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
@@ -79,4 +80,9 @@ export function useOrgUtmValues(field: string | undefined | null): UseOrgUtmValu
     values: query.data ?? [],
     isLoading: enabled && query.isLoading,
   };
+}
+
+/** Preserve the UTM-only boundary while sharing scoped suggestion reads. */
+export function useGuidedUtmValues(actorId: string, organizationId: string, field: string, search: string) {
+  return useGuidedLeadValues(actorId, organizationId, UTM_VALUE_FIELDS.has(field) ? field : '', search);
 }

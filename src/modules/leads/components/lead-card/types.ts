@@ -121,6 +121,8 @@ export interface LeadCardField {
    * texto e perdê-lo.
    */
   somenteLeitura?: boolean;
+  /** Fonte externa autoritativa; alterações são feitas no ERP. */
+  origemErp?: boolean;
 }
 
 export interface LeadCardFieldGroup {

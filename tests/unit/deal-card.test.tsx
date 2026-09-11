@@ -172,6 +172,31 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
     expect(onDefinirDesfecho).not.toHaveBeenCalled();
   });
 
+  it("o x do selo Perdido reabre o negócio sem mover a etapa", () => {
+    const onDefinirDesfecho = vi.fn();
+    const onMoverEtapa = vi.fn();
+    const { rerender } = render(
+      <DealCard negocio={negocio({ estado: "perdido" })}
+        onDefinirDesfecho={onDefinirDesfecho} onMoverEtapa={onMoverEtapa} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remover de perdido" }));
+    expect(onDefinirDesfecho).toHaveBeenCalledExactlyOnceWith("open");
+    expect(onMoverEtapa).not.toHaveBeenCalled();
+    rerender(<DealCard negocio={negocio({ estado: "aberto" })} />);
+    expect(screen.queryByRole("button", { name: "Remover de perdido" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
+  });
+
+  it("desabilita o x do selo enquanto salva", () => {
+    const onDefinirDesfecho = vi.fn();
+    render(<DealCard negocio={negocio({ estado: "perdido" })}
+      onDefinirDesfecho={onDefinirDesfecho} decidindo />);
+    const remover = screen.getByRole("button", { name: "Remover de perdido" });
+    expect(remover).toBeDisabled();
+    fireEvent.click(remover);
+    expect(onDefinirDesfecho).not.toHaveBeenCalled();
+  });
+
   it("negócio já fechado não oferece ação de desfecho", () => {
     render(
       <DealCard
@@ -370,4 +395,18 @@ describe("DealCard — anotação", () => {
     // Trocar de negócio volta para "Produtos e Valores" — de propósito.
     expect(abrirAnotacao()).toHaveValue("Nota do e2");
   });
+});
+
+
+it("preserva documentos ao trocar abas e não transfere rascunho para outro negócio", () => {
+  const { rerender } = render(<DealCard negocio={negocio()} onComentar={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Selecionar documentos"), { target: { files: [new File(["pdf"], "proposta.pdf")] } });
+  fireEvent.change(screen.getByLabelText("Escrever comentário"), { target: { value: "Proposta para revisão" } });
+  fireEvent.click(screen.getByRole("button", { name: /Atividades/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Informações do Negócio" }));
+  expect(screen.getByText("proposta.pdf")).toBeVisible();
+  expect(screen.getByLabelText("Escrever comentário")).toHaveValue("Proposta para revisão");
+  rerender(<DealCard negocio={negocio({ id: "outro" })} onComentar={vi.fn()} />);
+  expect(screen.queryByText("proposta.pdf")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Escrever comentário")).toHaveValue("");
 });

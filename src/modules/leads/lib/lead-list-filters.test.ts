@@ -36,6 +36,13 @@ function fakeQuery(): QueryDuble {
 
 const MEMBER = "6030520a-2ca7-477d-be89-55758e2cd808";
 
+it("recorta Todos da Café Jurerê e preserva as demais organizações", () => {
+  expect(applyLeadListFilters(fakeQuery(), { usaCadastroErpCafeJurere: true, filterClassificacao: "all" }).calls)
+    .toEqual(["eq:visivel_lista_cafe_jurere:true"]);
+  expect(applyLeadListFilters(fakeQuery(), { usaCadastroErpCafeJurere: false, filterClassificacao: "all" }).calls)
+    .toEqual([]);
+});
+
 describe("applyLeadListFilters — dono da conta", () => {
   it("sem filtro quando ausente ou 'all'", () => {
     expect(applyLeadListFilters(fakeQuery(), {}).calls).toEqual([]);

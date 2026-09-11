@@ -43,6 +43,18 @@ function cloneData<T>(data: T): T {
   return JSON.parse(JSON.stringify(data)) as T;
 }
 
+function remapGuidedConditionIds(value: unknown, generateId: () => string): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const condition = value as Record<string, unknown>;
+  return {
+    ...condition,
+    ...(typeof condition.id === "string" ? { id: generateId() } : {}),
+    ...(Array.isArray(condition.children)
+      ? { children: condition.children.map(child => remapGuidedConditionIds(child, generateId)) }
+      : {}),
+  };
+}
+
 /**
  * Clones a selection into a fresh, independent subgraph.
  *
@@ -60,7 +72,8 @@ function cloneData<T>(data: T): T {
 export function cloneSelection(
   selection: WorkflowSelection,
   genNodeId: (type: string) => string,
-  offset: { x: number; y: number } = PASTE_OFFSET
+  offset: { x: number; y: number } = PASTE_OFFSET,
+  genConditionId: () => string = () => crypto.randomUUID(),
 ): WorkflowSelection {
   const copyable = selection.nodes.filter(isCopyable);
 
@@ -73,6 +86,10 @@ export function cloneSelection(
   const clonedNodes: WorkflowNode[] = copyable.map((node) => {
     const newId = idMap.get(node.id)!;
     const data = cloneData(node.data);
+
+    if (data.type === "condition" && "guidedCondition" in data) {
+      data.guidedCondition = remapGuidedConditionIds(data.guidedCondition, genConditionId) as typeof data.guidedCondition;
+    }
 
     // Remap internal goto targets; leave external targets as-is.
     if (data.type === "goto") {

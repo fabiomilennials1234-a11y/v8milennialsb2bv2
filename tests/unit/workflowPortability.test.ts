@@ -199,12 +199,13 @@ describe("exportWorkflow", () => {
   it("records all org-specific refs in externalReferences", () => {
     const wf = createMockWorkflow();
     const result = exportWorkflow(wf);
-    expect(result.externalReferences.length).toBe(4);
+    expect(result.externalReferences.length).toBe(5);
     const types = result.externalReferences.map((r) => r.type);
     expect(types).toContain("whatsapp_instance");
     expect(types).toContain("team_member");
     expect(types).toContain("copilot_agent");
     expect(types).toContain("custom_pipeline");
+    expect(types).toContain("pipeline_stage");
   });
 
   it("includes hints for named references", () => {
@@ -331,8 +332,9 @@ describe("prepareImport", () => {
 
   it("creates workflow with is_active: false", () => {
     const file = createValidExportFile();
-    const { workflowInsert } = prepareImport(file);
+    const { workflowInsert, report } = prepareImport(file);
     expect(workflowInsert.is_active).toBe(false);
+    expect(report.mode).toBe("legacy_inactive");
   });
 
   it("appends '(importado)' to name", () => {
@@ -435,5 +437,117 @@ describe("round-trip: export → import", () => {
     expect(json).not.toContain("agent-uuid-abc");
     expect(json).not.toContain("pipeline-org-uuid");
     expect(json).not.toContain("org-123");
+  });
+
+  it("exports every nested guided reference as pending and remaps all condition ids", () => {
+    const sourceIds = {
+      tag: "11111111-1111-4111-8111-111111111111",
+      origin: "22222222-2222-4222-8222-222222222222",
+      member: "33333333-3333-4333-8333-333333333333",
+      custom: "44444444-4444-4444-8444-444444444444",
+      pipeline: "55555555-5555-4555-8555-555555555555",
+      stage: "66666666-6666-4666-8666-666666666666",
+      box: "77777777-7777-4777-8777-777777777777",
+      product: "88888888-8888-4888-8888-888888888888",
+    };
+    const condition = { version: 1, id: "root-source", kind: "group", match: "all", children: [
+      { version: 1, id: "tag-source", field: "lead.tags", operator: "has_tag", tagId: sourceIds.tag, tagLabel: "VIP" },
+      { version: 1, id: "origin-source", field: "lead.origin", operator: "equals", originId: sourceIds.origin, originLabel: "Feira" },
+      { version: 1, id: "member-source", field: "lead.sale_responsible_id", operator: "equals", memberId: sourceIds.member, memberLabel: "Ana" },
+      { version: 1, id: "custom-source", field: "lead.custom", fieldId: sourceIds.custom, fieldType: "select", fieldLabel: "Região", operator: "equals", value: "Sul" },
+      { version: 1, id: "stage-source", field: "business.trigger.stage", operator: "equals", pipelineId: sourceIds.pipeline, stageId: sourceIds.stage, pipelineLabel: "Comercial", stageLabel: "Proposta" },
+      { version: 1, id: "exists-source", kind: "business_exists", lifecycle: "open", match: "all", children: [
+        { version: 1, id: "exists-stage-source", field: "business.stage", operator: "equals", pipelineId: sourceIds.pipeline, stageId: sourceIds.stage, pipelineLabel: "Comercial", stageLabel: "Proposta" },
+      ] },
+      { version: 1, id: "message-source", field: "message.search.text", conversation: { kind: "explicit", storage: "whatsapp_messages", boxId: sourceIds.box, provider: "uazapi", boxLabel: "Comercial" }, source: { kind: "last_received" }, operator: "matches", expressionMatch: "any", matchMode: "whole_phrase", expressions: ["preço"] },
+      { version: 1, id: "product-source", field: "product.relationship", relation: "lead_association", productId: sourceIds.product, productLabel: "Motor", operator: "has_product" },
+    ] };
+    const original = createMockWorkflow({ definition: { nodes: [
+      createMockWorkflow().definition.nodes[0],
+      { id: "condition-source", type: "condition", position: { x: 400, y: 200 },
+        data: { type: "condition", label: "Segmentação", field: "", operator: "equals", value: "", guidedCondition: condition } as any },
+    ], edges: [] } });
+    const exported = exportWorkflow(original, "Org A");
+    const exportedDefinition = JSON.stringify(exported.workflow.definition);
+    for (const id of Object.values(sourceIds)) expect(exportedDefinition).not.toContain(id);
+    expect(new Set(exported.externalReferences.map(ref => ref.type))).toEqual(new Set([
+      "tag", "origin", "team_member", "custom_field", "custom_option", "custom_pipeline",
+      "pipeline_stage", "whatsapp_instance", "product",
+    ]));
+
+    const { workflowInsert, report } = prepareImport(exported);
+    expect(report.mode).toBe("guided_draft");
+    const importedDefinition = JSON.stringify(workflowInsert.definition);
+    for (const id of Object.values(sourceIds)) expect(importedDefinition).not.toContain(id);
+    const imported = (workflowInsert.definition.nodes.find(node => node.type === "condition")!.data as any).guidedCondition;
+    const collect = (item: any): string[] => [item.id, ...(Array.isArray(item.children) ? item.children.flatMap(collect) : [])];
+    const importedIds = collect(imported);
+    expect(new Set(importedIds).size).toBe(importedIds.length);
+    expect(importedIds).not.toEqual(expect.arrayContaining(collect(condition)));
+    expect(imported.children[0]).toMatchObject({ field: "lead.tags", tagId: "" });
+    expect(imported.children[3]).toMatchObject({ field: "lead.custom", fieldId: "", value: "" });
+    expect(imported.children[4]).toMatchObject({ pipelineId: "", stageId: "" });
+    expect(imported.children[6].conversation).toMatchObject({ kind: "explicit", boxId: "", provider: "" });
+    expect(imported.children[7]).toMatchObject({ productId: "" });
+    expect(report.unresolvedCount).toBe(exported.externalReferences.length);
+  });
+
+  it("sanitizes source references even when a crafted import bypasses export", () => {
+    const file = createValidExportFile();
+    const sourceTag = "99999999-9999-4999-8999-999999999999";
+    file.externalReferences = [];
+    file.workflow.definition.nodes.push({ id: "crafted-condition", type: "condition", position: { x: 0, y: 0 },
+      data: { type: "condition", label: "Tag", guidedCondition: { version: 1, id: "crafted-rule",
+        field: "lead.tags", operator: "has_tag", tagId: sourceTag, tagLabel: "Origem" } } as any });
+    const { workflowInsert, report } = prepareImport(file);
+    expect(JSON.stringify(workflowInsert)).not.toContain(sourceTag);
+    expect(report.unresolvedCount).toBeGreaterThan(0);
+    expect(report.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "pending", message: expect.stringContaining("tag") }),
+    ]));
+  });
+
+  it.each([
+    ["message.trigger.text", { operator: "contains", value: "preço" }],
+    ["message.period.exists", { operator: "exists", from: "2026-09-01", to: "2026-09-02" }],
+    ["message.search.text", { source: { kind: "last_received" }, operator: "matches",
+      expressionMatch: "any", matchMode: "whole_phrase", expressions: ["preço"] }],
+    ["message.waiting.elapsed", { waitingFor: "lead", operator: "greater_than", value: 2, unit: "hours" }],
+  ])("requires explicit inbox remapping for %s", (field, rest) => {
+    const boxId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const original = createMockWorkflow({ definition: { nodes: [
+      createMockWorkflow().definition.nodes[0],
+      { id: "condition-message", type: "condition", position: { x: 0, y: 0 }, data: { type: "condition", label: "Mensagem",
+        guidedCondition: { version: 1, id: "message-rule", field, conversation: {
+          kind: "explicit", storage: "whatsapp_messages", boxId, provider: "uazapi", boxLabel: "Comercial",
+        }, ...rest } } as any },
+    ], edges: [] } });
+    const exported = exportWorkflow(original);
+    const rule = (exported.workflow.definition.nodes[1].data as any).guidedCondition;
+    expect(rule.conversation).toEqual({ kind: "explicit", storage: "whatsapp_messages", boxId: "", provider: "" });
+    expect(exported.externalReferences).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "whatsapp_instance", originalValue: boxId, hint: "Comercial" }),
+    ]));
+  });
+
+  it("preserves reference-free nested meaning in a same-organization round-trip", () => {
+    const condition = { version: 1, id: "group", kind: "group", match: "any", children: [
+      { version: 1, id: "name", field: "lead.name", operator: "contains", value: "indústria" },
+      { version: 1, id: "follow-up", field: "activity.follow_up", relation: "lead", state: "pending",
+        operator: "not_exists", dateOperator: "on_or_before", date: "2026-09-30" },
+    ] };
+    const original = createMockWorkflow({ definition: { nodes: [
+      createMockWorkflow().definition.nodes[0],
+      { id: "condition", type: "condition", position: { x: 10, y: 20 },
+        data: { type: "condition", label: "Qualificação", guidedCondition: condition } as any },
+    ], edges: [] } });
+    const { workflowInsert, report } = prepareImport(exportWorkflow(original));
+    const imported = (workflowInsert.definition.nodes.find(node => node.type === "condition")!.data as any).guidedCondition;
+    expect(imported).toMatchObject({ kind: "group", match: "any", children: [
+      { field: "lead.name", operator: "contains", value: "indústria" },
+      { field: "activity.follow_up", relation: "lead", state: "pending", operator: "not_exists",
+        dateOperator: "on_or_before", date: "2026-09-30" },
+    ] });
+    expect(report.unresolvedCount).toBe(2); // trigger pipeline and stage from the base fixture
   });
 });

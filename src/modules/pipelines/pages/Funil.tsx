@@ -611,7 +611,7 @@ function FunilPageInner() {
   return (
     <div className="space-y-4">
       <FunnelControlBar
-        funnelKey={ehCustom ? `custom:${pipeline.id}` : `sys:${pipeline.slug}`}
+        funnelKey={`pipeline:${pipeline.id}`}
         funnelLabel={pipeline.name}
         funnelColor={pipeline.color}
         search={controller.search}

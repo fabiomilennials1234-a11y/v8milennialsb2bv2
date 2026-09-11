@@ -7,6 +7,7 @@ import type {
   GotoNodeData,
   SplitAbNodeData,
   TriggerNodeData,
+  ConditionNodeData,
 } from "@/types/workflow";
 
 // ---- factories -------------------------------------------------------------
@@ -74,6 +75,22 @@ function triggerNode(selected: boolean): WorkflowNode {
       config: {},
       label: "Trigger",
     } as TriggerNodeData,
+  };
+}
+
+function guidedConditionNode(id: string, selected: boolean): WorkflowNode {
+  return {
+    id, type: "condition", position: { x: 100, y: 100 }, selected,
+    data: { type: "condition", label: "Condição", field: "", operator: "equals", value: "",
+      guidedCondition: { version: 1, id: "group-source", kind: "group", match: "all", children: [
+        { version: 1, id: "rule-tag-source", field: "lead.tags", operator: "has_tag",
+          tagId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", tagLabel: "Cliente" },
+        { version: 1, id: "group-nested-source", kind: "group", match: "any", children: [
+          { version: 1, id: "rule-product-source", field: "product.relationship", relation: "lead_association",
+            productId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", productLabel: "Motor", operator: "has_product" },
+        ] },
+      ] },
+    } as ConditionNodeData,
   };
 }
 
@@ -199,5 +216,23 @@ describe("cloneSelection", () => {
     const cloned = cloneSelection(sel, makeGen());
     const ids = cloned.edges.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("mints collision-free ids for every group and rule in a duplicated condition tree", () => {
+    const original = guidedConditionNode("condition-source", true);
+    let conditionId = 0;
+    const cloned = cloneSelection({ nodes: [original], edges: [] }, makeGen(), PASTE_OFFSET,
+      () => `condition-child-${++conditionId}`);
+    const source = (original.data as ConditionNodeData).guidedCondition!;
+    const copy = (cloned.nodes[0].data as ConditionNodeData).guidedCondition!;
+    type ConditionTree = { id: string; children?: ConditionTree[] };
+    const collect = (item: ConditionTree): string[] => [item.id, ...(item.children?.flatMap(collect) ?? [])];
+    expect(collect(copy)).toEqual(["condition-child-1", "condition-child-2", "condition-child-3", "condition-child-4"]);
+    expect(collect(copy)).not.toEqual(expect.arrayContaining(collect(source)));
+    expect(copy).toMatchObject({ kind: "group", match: "all", children: [
+      { field: "lead.tags", operator: "has_tag", tagLabel: "Cliente" },
+      { kind: "group", match: "any", children: [{ field: "product.relationship", relation: "lead_association",
+        productLabel: "Motor", operator: "has_product" }] },
+    ] });
   });
 });

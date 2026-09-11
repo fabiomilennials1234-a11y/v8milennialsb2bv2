@@ -41,6 +41,7 @@ import {
   tothClienteMatchesEmpresa,
 } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
+import { planCadastroVisivel, type CadastroTarget } from "../_shared/erp/cafe-jurere-cadastro.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
@@ -48,6 +49,7 @@ import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import { loadOwnerMap } from "../_shared/erp/sync/owner-map.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
+import { CAFE_JURERE_ORG_ID, cafeJurereScopeEnabled, cafeJurereClientExclusion } from "../_shared/erp/cafe-jurere-client-scope.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import {
   previewAction,
@@ -189,6 +191,50 @@ Deno.serve(
     }
 
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
+    const requestBody = await req.clone().json().catch(() => ({}));
+    // Enriquecimento cadastral solicitado: nenhum INSERT, dono, situação,
+    // classificação ou dado digitado no lead é alterado por este caminho.
+    if (requestBody.cadastro_visivel_only === true) {
+      if (organizationId !== CAFE_JURERE_ORG_ID) return json({ error: "Disponível somente na Café Jurerê" }, cors, 403);
+      const { data: org, error: flagError } = await admin.from("organizations").select("feature_flags").eq("id", organizationId).single();
+      if (flagError) throw flagError;
+      if (!cafeJurereScopeEnabled(organizationId, org.feature_flags)) return json({ error: "Recorte da Café Jurerê desabilitado" }, cors, 409);
+      const targets: CadastroTarget[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await admin.from("upsell_clients")
+          .select("id,external_id,erp_metadata,leads!inner(id)")
+          .eq("organization_id", organizationId).eq("external_source", TOTH_PROVIDER_ID)
+          .eq("leads.organization_id", organizationId).eq("leads.cafe_jurere_erp_elegivel", true)
+          .is("leads.deleted_at", null).not("leads.erp_code", "is", null)
+          .order("id").range(offset, offset + 499);
+        if (error) throw error;
+        targets.push(...(data ?? []) as unknown as CadastroTarget[]);
+        if (!data || data.length < 500) break;
+      }
+      const rows = extractRows(await client.get("clientes", {}));
+      const plan = planCadastroVisivel(targets, rows);
+      const originals = new Map(targets.map(target => [target.id, target.erp_metadata]));
+      let updated = 0;
+      if (requestBody.dry_run !== true) {
+        for (let offset = 0; offset < plan.updates.length; offset += 8) {
+          const results = await Promise.allSettled(plan.updates.slice(offset, offset + 8).map(async patch => {
+            let update = admin.from("upsell_clients")
+              .update({ erp_metadata: patch.erp_metadata }).eq("id", patch.id)
+              .eq("organization_id", organizationId).eq("external_source", TOTH_PROVIDER_ID);
+            const original = originals.get(patch.id);
+            update = original == null ? update.is("erp_metadata", null) : update.eq("erp_metadata", JSON.stringify(original));
+            const { data, error } = await update.select("id");
+            if (error || data?.length !== 1) throw new Error("Falha ao atualizar cadastro ERP; execute novamente para retomar.");
+            updated++;
+          }));
+          const failure = results.find(result => result.status === "rejected");
+          if (failure?.status === "rejected") throw failure.reason;
+        }
+      }
+      const result = { dry_run: requestBody.dry_run === true, visible: targets.length, received: rows.length, planned: plan.updates.length, updated, unchanged: plan.unchanged, missing: plan.missing };
+      await logRuntime({ organizationId, module: "general", action: "toth_cadastro_visivel", status: "success", payloadSnapshot: result });
+      return json(result, cors);
+    }
     // Carteira pré-carregada: o store direto faria duas consultas por cliente do
     // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
     // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
@@ -214,6 +260,23 @@ Deno.serve(
      * deixou de enxergar a própria carteira.
      */
     const ownerMap = await loadOwnerMap(admin, organizationId, TOTH_PROVIDER_ID);
+    let cafeJurereScope = false;
+    const registeredMembers = new Set<string>();
+    if (organizationId === CAFE_JURERE_ORG_ID) {
+      const { data: org, error: orgError } = await admin.from("organizations")
+        .select("feature_flags").eq("id", organizationId).single();
+      if (orgError) throw new Error(`Falha ao consultar recorte ERP: ${orgError.message}`);
+      cafeJurereScope = cafeJurereScopeEnabled(organizationId, org.feature_flags);
+      if (cafeJurereScope) {
+        const ids = [...new Set([...ownerMap.values()].filter((id): id is string => !!id))];
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const { data: members, error } = await admin.from("team_members")
+            .select("id").eq("organization_id", organizationId).in("id", ids.slice(offset, offset + 100));
+          if (error) throw new Error(`Falha ao validar representantes: ${error.message}`);
+          for (const member of members ?? []) registeredMembers.add(member.id);
+        }
+      }
+    }
 
     // Enriquecimento vai para uma fila e é escrito em paralelo no fim.
     //
@@ -270,6 +333,12 @@ Deno.serve(
         if (typeof v === "string" || typeof v === "number") filtros[k] = String(v);
       }
     }
+    if (cafeJurereScope) {
+      // Cadastro, não compra: medido em 10/09/2026. Marcas sozinhas limitam
+      // a resposta; diasCompras=0 e marcas vazias devolvem a base completa.
+      filtros.diasCompras = "0";
+      filtros.marcas = "";
+    }
     const maxClients =
       typeof body.max_clients === "number" && body.max_clients > 0
         ? Math.floor(body.max_clients)
@@ -286,17 +355,17 @@ Deno.serve(
      * Vem da CONEXÃO para valer igual no botão e no cron. O corpo só sobrescreve
      * para diagnóstico.
      */
-    const empresaFiltro =
+    const empresaFiltro = cafeJurereScope ? "CAFE JURERE" :
       typeof body.empresa === "string" && body.empresa.trim()
         ? body.empresa.trim()
         : ((conn.clientes_empresa as string | null) ?? null);
-    const incluirSemEmpresa =
+    const incluirSemEmpresa = cafeJurereScope ? false :
       typeof body.incluir_sem_empresa === "boolean"
         ? body.incluir_sem_empresa
         : conn.clientes_incluir_sem_empresa === true;
 
     /** Só quem tem data de último pedido faturado. Ver o uso, no laço. */
-    const somenteComCompra =
+    const somenteComCompra = cafeJurereScope ? false :
       typeof body.somente_com_compra === "boolean"
         ? body.somente_com_compra
         : conn.clientes_somente_com_compra === true;
@@ -308,6 +377,7 @@ Deno.serve(
 
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
+    const recorte = { ativo: cafeJurereScope, situacao: 0, representante: 0, elegiveis: 0, por_situacao: {} as Record<string, number> };
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
     const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
     /**
@@ -387,13 +457,23 @@ Deno.serve(
 
           let canonical;
           try {
-            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro });
+            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro, includeCadastro: cafeJurereScope });
           } catch (err) {
             stats.failed++;
             if (err instanceof TothMappingError && mappingErrors.length < 3) {
               mappingErrors.push(err.message);
             }
             continue;
+          }
+
+          // Mesmo recorte no ensaio, botão e cron, antes de qualquer escrita.
+          if (cafeJurereScope) {
+            const exclusion = cafeJurereClientExclusion(canonical, ownerMap, registeredMembers);
+            if (exclusion) {
+              recorte[exclusion]++;
+              filteredInThisPage++;
+              continue;
+            }
           }
 
           /**
@@ -415,6 +495,9 @@ Deno.serve(
           if (seenIds.has(canonical.externalId)) continue;
           seenIds.add(canonical.externalId);
           newInThisPage++;
+          recorte.elegiveis++;
+          const status = canonical.erpStatus ?? "sem_situacao";
+          recorte.por_situacao[status] = (recorte.por_situacao[status] ?? 0) + 1;
 
           if (dryRun) {
             // Só LEITURA: as duas buscas do store são SELECT. A decisão espelha
@@ -566,12 +649,14 @@ Deno.serve(
           stop_reason: stopReason,
           empresa: empresaFiltro,
           fora_do_filtro: foraDoFiltro.total,
+          recorte,
         },
       });
 
       return json(
         {
           dry_run: true,
+          recorte,
           escreveu: false,
           modo: syncMode,
           janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
@@ -653,7 +738,31 @@ Deno.serve(
      * nada. A função em si já é idempotente e só escreve o que difere.
      */
     let leadsComDonoNovo = 0;
-    if (ownerMap.size > 0) {
+    if (cafeJurereScope) {
+      // A RPC legada varre a carteira inteira. Aqui só propaga os elegíveis
+      // desta execução, sem tocar os antigos que ficaram fora do recorte.
+      const ids = [...seenIds];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const { data: clients, error } = await admin.from("upsell_clients")
+          .select("lead_id, responsible_id").eq("organization_id", organizationId)
+          .eq("external_source", TOTH_PROVIDER_ID).in("external_id", ids.slice(offset, offset + 100));
+        if (error) throw new Error(`Falha ao carregar responsáveis do recorte: ${error.message}`);
+        const groups = new Map<string, string[]>();
+        for (const c of clients ?? []) {
+          if (!c.lead_id || !c.responsible_id || !registeredMembers.has(c.responsible_id)) continue;
+          const leads = groups.get(c.responsible_id) ?? [];
+          leads.push(c.lead_id);
+          groups.set(c.responsible_id, leads);
+        }
+        for (const [memberId, leadIds] of groups) {
+          const { data: updated, error: updateError } = await admin.from("leads")
+            .update({ responsible_id: memberId }).eq("organization_id", organizationId)
+            .in("id", leadIds).or(`responsible_id.is.null,responsible_id.neq.${memberId}`).select("id");
+          if (updateError) throw new Error(`Falha ao propagar responsáveis do recorte: ${updateError.message}`);
+          leadsComDonoNovo += updated?.length ?? 0;
+        }
+      }
+    } else if (ownerMap.size > 0) {
       const { data: propagados, error: propErr } = await admin.rpc(
         "propagate_erp_owner_to_leads",
         { p_organization_id: organizationId },
@@ -686,7 +795,9 @@ Deno.serve(
     // Até 12 lotes de 2.000 = 24 mil leads por execução, folgado para a maior
     // org conhecida (12.686). O teto existe para que um bug de convergência
     // vire execução longa, e não laço infinito.
-    for (let i = 0; i < 12; i++) {
+    // No piloto, as abas usam cadastro ERP; não reclassificar os antigos
+    // excluídos com a regra legada de situação.
+    for (let i = 0; !cafeJurereScope && i < 12; i++) {
       const { data: classData, error: classErr } = await admin.rpc(
         "apply_erp_lead_classification",
         { p_organization_id: organizationId, p_limit: 2000 },
@@ -730,6 +841,7 @@ Deno.serve(
       status: "success",
       payloadSnapshot: {
         ...stats,
+        recorte,
         stop_reason: stopReason,
         mapping_errors: mappingErrors.length,
         empresa: empresaFiltro,
@@ -746,6 +858,7 @@ Deno.serve(
     return json(
       {
         success: true,
+        recorte,
         stop_reason: stopReason,
         stats,
         // Zero nos três com a lei ligada é sinal de que `clientes_situacoes`
