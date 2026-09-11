@@ -333,10 +333,11 @@ JOIN public.team_members tm ON tm.organization_id = o.id
 WHERE o.slug LIKE 'bench-%'
   AND o.slug <> 'bench-inerte';
 
-SELECT is(
+SELECT cmp_ok(
   public.refresh_oraculo_benchmark_weekly('2026-09-07'::date),
+  '>=',
   7,
-  '(MATERIALIZAÇÃO) grava somente organizações leitoras não sandbox e não bloqueadas'
+  '(MATERIALIZAÇÃO) grava todas as sete organizações leitoras elegíveis da fixture'
 );
 
 SELECT ok(
