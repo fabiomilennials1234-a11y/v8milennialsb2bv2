@@ -246,16 +246,14 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
   });
 
   // ────────────────────────────────────────────────────────────────────────
-  // PRD #211 / #212 regression guard:
-  // After snapshot_responsible_from_lead landed, get_ranking_data MUST NOT
-  // fall back to legacy metadata.sdr_id either. Case 2 in this suite has
-  // metadata.sdr_id = SDR_A but pre_sale_responsible_id = NULL. Under the
-  // new RPC, case 2 stops being credited.
+  // Current event contract: the pipeline producer accepts legacy metadata.sdr_id
+  // once, snapshots it into meeting_events.pre_sale_responsible_id, and the
+  // ranking reads only that canonical event field.
   //
   // We use a dedicated, isolated entry that mimics scenario 10 of the
   // snapshot lifecycle suite — legacy-only metadata, no dual key.
   // ────────────────────────────────────────────────────────────────────────
-  it('does NOT fall back to legacy metadata.sdr_id (#212 regression guard)', async () => {
+  it('snapshots legacy metadata.sdr_id into the canonical meeting event', async () => {
     // Locate pipeline once more inside this block — beforeAll already verified
     // its existence, so this is just a re-fetch.
     const { data: pipeline } = await supabase
@@ -321,8 +319,7 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
         meetings: number;
       }>;
       const sdrRow = meetingsRanking.find((r) => r.id === sdrA);
-      // No credit must reach sdrA from this legacy-only row.
-      expect(sdrRow?.meetings ?? 0).toBe(0);
+      expect(sdrRow?.meetings ?? 0).toBe(1);
     } finally {
       await supabase.from('pipeline_entries').delete().eq('id', isolatedEntryId);
       await supabase.from('leads').delete().eq('id', isolatedLeadId);

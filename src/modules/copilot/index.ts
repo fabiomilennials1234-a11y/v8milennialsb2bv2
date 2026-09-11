@@ -125,13 +125,8 @@ export {
 
 export { useQuickPromptAnalysis } from "./hooks/useQuickPromptAnalysis";
 
-// Subscription + Oraculo + tool logs
+// Subscription + tool logs
 export { useCopilotSubscription } from "./hooks/useCopilotSubscription";
-
-export {
-  useOraculoChat,
-  type ChatMessage as OraculoChatMessage,
-} from "./hooks/useOraculoChat";
 
 export {
   useToolCallLogs,
@@ -170,6 +165,14 @@ export { CopilotPlayground } from "./components/playground/CopilotPlayground";
 // via React.lazy, como as demais.
 // ────────────────────────────────────────────────────────────────────────
 export { useOraculoTurno, type OraculoMensagem } from "./hooks/useOraculoTurno";
+export { useOraculoBriefing, type OraculoBriefing } from "./hooks/useOraculoBriefing";
+export { OraculoPerfilSettings } from "./components/oraculo/OraculoPerfilSettings";
+export { useOraculoPerfil, type OraculoPerfilRow } from "./hooks/useOraculoPerfil";
+export { recordOraculoSignal, useOraculoFeedback } from "./hooks/useOraculoFeedback";
+export type { OraculoFeedbackReason, OraculoFeedbackValue } from "./hooks/useOraculoFeedback";
+// A conversa em coluna estreita. O painel da lateral a monta por caminho
+// fundo, com `lazy`, para não puxar este barril inteiro no pedaço da lateral.
+export { OraculoConversa } from "./components/oraculo/OraculoConversa";
 export {
   useOraculoConversas,
   useOraculoTurnos,

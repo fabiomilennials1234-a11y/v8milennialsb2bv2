@@ -110,29 +110,28 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
     ]);
 
     // ── Custom funnels ───────────────────────────────────────────────────
-    await supabase.from('custom_pipelines').upsert(
+    const { error: customPipelinesError } = await supabase.from('pipelines').insert(
       [
-        { id: CUSTOM_PIPELINE_A_ID, organization_id: TEST_ORG_ID, name: 'Custom A', slug: 'custom-723-a' },
-        { id: CUSTOM_PIPELINE_B_ID, organization_id: TEST_ORG_B_ID, name: 'Custom B', slug: 'custom-723-b' },
+        { id: CUSTOM_PIPELINE_A_ID, organization_id: TEST_ORG_ID, name: 'Custom A', slug: 'custom-723-a', type: 'custom', is_active: true },
+        { id: CUSTOM_PIPELINE_B_ID, organization_id: TEST_ORG_B_ID, name: 'Custom B', slug: 'custom-723-b', type: 'custom', is_active: true },
       ],
-      { onConflict: 'id' },
     );
-    await supabase.from('custom_pipeline_stages').upsert(
+    expect(customPipelinesError).toBeNull();
+
+    const { error: customStagesError } = await supabase.from('pipeline_stages').insert(
       [
-        { id: CUSTOM_STAGE_A_ID, organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, stage_key: 'inicio', name: 'Inicio' },
-        { id: CUSTOM_STAGE_B_ID, organization_id: TEST_ORG_B_ID, pipeline_id: CUSTOM_PIPELINE_B_ID, stage_key: 'inicio', name: 'Inicio' },
+        { id: CUSTOM_STAGE_A_ID, organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, stage_key: 'inicio', name: 'Inicio', position: 0, is_active: true },
+        { id: CUSTOM_STAGE_B_ID, organization_id: TEST_ORG_B_ID, pipeline_id: CUSTOM_PIPELINE_B_ID, stage_key: 'inicio', name: 'Inicio', position: 0, is_active: true },
       ],
-      { onConflict: 'id' },
     );
-    await supabase
-      .from('custom_pipe_entries')
-      .delete()
-      .in('pipeline_id', [CUSTOM_PIPELINE_A_ID, CUSTOM_PIPELINE_B_ID]);
-    await supabase.from('custom_pipe_entries').insert([
-      { organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, lead_id: TEST_LEAD_ALPHA_ID, stage_id: CUSTOM_STAGE_A_ID },
-      { organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, lead_id: TEST_LEAD_BETA_ID, stage_id: CUSTOM_STAGE_A_ID },
-      { organization_id: TEST_ORG_B_ID, pipeline_id: CUSTOM_PIPELINE_B_ID, lead_id: TEST_LEAD_ORGB_1_ID, stage_id: CUSTOM_STAGE_B_ID },
+    expect(customStagesError).toBeNull();
+
+    const { error: customEntriesError } = await supabase.from('pipeline_entries').insert([
+      { organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, lead_id: TEST_LEAD_ALPHA_ID, stage_id: CUSTOM_STAGE_A_ID, stage_key: 'inicio' },
+      { organization_id: TEST_ORG_ID, pipeline_id: CUSTOM_PIPELINE_A_ID, lead_id: TEST_LEAD_BETA_ID, stage_id: CUSTOM_STAGE_A_ID, stage_key: 'inicio' },
+      { organization_id: TEST_ORG_B_ID, pipeline_id: CUSTOM_PIPELINE_B_ID, lead_id: TEST_LEAD_ORGB_1_ID, stage_id: CUSTOM_STAGE_B_ID, stage_key: 'inicio' },
     ]);
+    expect(customEntriesError).toBeNull();
 
     // ── Carteira ─────────────────────────────────────────────────────────
     // Alpha: segment ouro. Beta: segment prata. OrgB-1: segment ouro (org B).
@@ -152,18 +151,21 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       .from('upsell_clients')
       .delete()
       .in('id', [UPSELL_A_ALPHA_ID, UPSELL_A_BETA_ID, UPSELL_B_ID]);
-    await supabase
-      .from('custom_pipe_entries')
+    const { error: entriesError } = await supabase
+      .from('pipeline_entries')
       .delete()
       .in('pipeline_id', [CUSTOM_PIPELINE_A_ID, CUSTOM_PIPELINE_B_ID]);
-    await supabase
-      .from('custom_pipeline_stages')
+    expect(entriesError).toBeNull();
+    const { error: stagesError } = await supabase
+      .from('pipeline_stages')
       .delete()
       .in('id', [CUSTOM_STAGE_A_ID, CUSTOM_STAGE_B_ID]);
-    await supabase
-      .from('custom_pipelines')
+    expect(stagesError).toBeNull();
+    const { error: pipelinesError } = await supabase
+      .from('pipelines')
       .delete()
       .in('id', [CUSTOM_PIPELINE_A_ID, CUSTOM_PIPELINE_B_ID]);
+    expect(pipelinesError).toBeNull();
     await restoreSeedWhatsappEntries();
     // O funil de sistema NÃO é apagado: ele é do seed, e outras suítes contam
     // com ele (`pipe_whatsapp` é view sobre ele).

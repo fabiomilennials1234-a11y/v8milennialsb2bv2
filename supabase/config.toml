@@ -106,6 +106,27 @@ verify_jwt = false
 [functions.oraculo-turno]
 verify_jwt = false
 
+# oraculo-action: valida JWT e plano dentro da função; escrita usa o JWT do
+# clique e a RPC reaplica permissão e critério no mesmo statement.
+[functions.oraculo-action]
+verify_jwt = false
+
+# oraculo-profile: valida JWT e plano dentro; tabelas são server-only.
+[functions.oraculo-profile]
+verify_jwt = false
+
+# oraculo-feedback: JWT + plano dentro; leitura global exige Master pleno.
+[functions.oraculo-feedback]
+verify_jwt = false
+
+# oraculo-feedback-worker: outbox imediato + resumo semanal via x-cron-secret.
+[functions.oraculo-feedback-worker]
+verify_jwt = false
+
+# oraculo-briefing: JWT + plano dentro; somente admin abre briefing da própria org.
+[functions.oraculo-briefing]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 
@@ -114,6 +135,9 @@ verify_jwt = false
 
 # summarize-conversation: JWT validado internamente
 [functions.summarize-conversation]
+verify_jwt = false
+
+[functions.summarize-conversations-batch]
 verify_jwt = false
 
 # recover-stuck-conversations: admin/interno, auth via service_role no corpo

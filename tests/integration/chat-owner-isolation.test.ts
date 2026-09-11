@@ -637,6 +637,8 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       //   Delta  — lead com dono (ambos)          → continua visível
       //   Gamma  — lead SEM responsável           → restrita
       //   órfã   — telefone sem lead nenhum       → restrita
+      // O seed também contém dois Leads do Estúdio de Métricas sem dono e sem
+      // conversa. Eles entram só em leads_sem_responsavel.
       const { data, error } = await admin.rpc('preview_chat_restriction', {
         p_org_id: TEST_ORG_ID,
       });
@@ -645,7 +647,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       expect(data).toMatchObject({
         conversas_total: 5,
         conversas_restritas: 2,
-        leads_sem_responsavel: 1, // só o Gamma
+        leads_sem_responsavel: 3, // Gamma + dois Leads do Estúdio de Métricas
       });
     });
 

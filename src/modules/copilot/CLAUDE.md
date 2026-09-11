@@ -38,11 +38,11 @@ Inclui:
 - **Rules / Metrics**: `useAgentFollowupRules` + CRUD, `useAgentKanbanRules`, `useUpsertKanbanRules`, `useAgentMetrics`, `useAgentPendingTasks`
 - **Pause + Toggle suite**: `useCopilotPause`, `useCopilotToggle`, `useCopilotToggleStatus`, `useCopilotToggleMutation`, `useCopilotToggleAudit`, `useCopilotToggleDrift`, `useCopilotToggleRealtime`, `copilotToggleQueryKey`
 - **Prompt + Analysis + Reasoning**: `useCopilotPromptBuilder`, `generatePrompt`, `saveCopilotSystemPrompt`, `regenerateAndSavePrompt`, `computePromptHash`, `useCopilotReasoning`, `usePromptAnalysisHistory`, `useRunPromptAnalysis`, `useAcceptSuggestion`, `useDismissSuggestion`, `useQuickPromptAnalysis`
-- **Subscription / Oraculo / Tool logs**: `useCopilotSubscription`, `useOraculoChat`, `useToolCallLogs`
+- **Subscription / Tool logs**: `useCopilotSubscription`, `useToolCallLogs`
 
 ### Components
 
-`<AgentFollowupRulesTab>`, `<AgentKanbanRulesTab>`, `<AgentMetricsTab>`, `<AgentTasksTab>`, `<PromptPreviewSheet>`, `<BehaviorWindowsEditor>` (+ `createDefaultBehaviorWindow`), `<CopilotPlayground>`, `<OraculoComercial>` (`components/oraculo/` — slice 16 longtail)
+`<AgentFollowupRulesTab>`, `<AgentKanbanRulesTab>`, `<AgentMetricsTab>`, `<AgentTasksTab>`, `<PromptPreviewSheet>`, `<BehaviorWindowsEditor>` (+ `createDefaultBehaviorWindow`), `<CopilotPlayground>`
 
 ### Pages
 
@@ -52,7 +52,7 @@ NÃO re-exportadas — App.tsx faz deep-import via React.lazy:
 
 ### Types
 
-Re-exportados via index.ts: `UpdatePipelinePayload`, `AgentDocument`, `KanbanRuleForm`, `AgentMetrics`, `AgentMetricsTrend`, `AgentMetricsWithTrends`, `CopilotPauseState`, `CopilotToggleStatus`, `CopilotToggleAuditEntry`, `CopilotToggleAuditFilters`, `CopilotDriftRow`, `DocumentSummary`, `CopilotReasoningRow`, `CopilotReasoningFilters`, `PromptSuggestion`, `PromptAnalysis`, `OraculoChatMessage`, `ToolCallLog`, `BehaviorEnforcement`, `BehaviorDayKey`, `BehaviorWindow`
+Re-exportados via index.ts: `UpdatePipelinePayload`, `AgentDocument`, `KanbanRuleForm`, `AgentMetrics`, `AgentMetricsTrend`, `AgentMetricsWithTrends`, `CopilotPauseState`, `CopilotToggleStatus`, `CopilotToggleAuditEntry`, `CopilotToggleAuditFilters`, `CopilotDriftRow`, `DocumentSummary`, `CopilotReasoningRow`, `CopilotReasoningFilters`, `PromptSuggestion`, `PromptAnalysis`, `ToolCallLog`, `BehaviorEnforcement`, `BehaviorDayKey`, `BehaviorWindow`
 
 ### Eventos (post slice 19)
 
@@ -76,7 +76,7 @@ Frontend (✅ migrado pra cá):
 - ~~`src/components/copilot/`~~ → `./components/`
 - ~~`src/hooks/useCopilot*.ts`~~ (10 hooks) → `./hooks/`
 - ~~`src/hooks/useAgent*.ts`~~ (4 hooks) → `./hooks/`
-- ~~`src/hooks/{useOraculoChat, usePromptAnalysis, useQuickPromptAnalysis, useToolCallLogs}.ts`~~ (3 hooks) → `./hooks/`
+- ~~`src/hooks/{usePromptAnalysis, useQuickPromptAnalysis, useToolCallLogs}.ts`~~ → `./hooks/`
 - ~~`src/pages/Copilot.tsx`, `CopilotMetrics.tsx`~~ → `./pages/`
 
 Backend (próximas slices):
@@ -89,7 +89,7 @@ Backend (próximas slices):
 - `supabase/functions/generate-custom-instructions/`
 - `supabase/functions/generate-faqs/`
 - `supabase/functions/generate-faq-embeddings/`
-- `supabase/functions/oraculo-comercial/`
+- `supabase/functions/oraculo-comercial/` (análise da TV; chat vive em `oraculo-turno`)
 - `supabase/functions/process-agent-document/`
 - `supabase/functions/process-copilot-followups/`
 - `supabase/functions/reembed-all/`

@@ -11,7 +11,10 @@
  */
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID } from './setup';
+import { supabase } from './setup';
+import { createWorkflowOrg, deleteWorkflowOrg } from './workflow-org-fixture';
+
+const TEST_ORG_ID = crypto.randomUUID();
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
@@ -20,7 +23,8 @@ const createdExecIds: string[] = [];
 
 describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () => {
   beforeAll(async () => {
-    const { data } = await supabase
+    await createWorkflowOrg(TEST_ORG_ID);
+    const { data, error } = await supabase
       .from('workflows')
       .insert({
         organization_id: TEST_ORG_ID,
@@ -32,16 +36,20 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
       })
       .select('id')
       .single();
+    expect(error).toBeNull();
     testWorkflowId = data!.id as string;
   });
 
   afterAll(async () => {
     if (createdExecIds.length > 0) {
-      await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      const { error } = await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      expect(error).toBeNull();
     }
     if (testWorkflowId) {
-      await supabase.from('workflows').delete().eq('id', testWorkflowId);
+      const { error } = await supabase.from('workflows').delete().eq('id', testWorkflowId);
+      expect(error).toBeNull();
     }
+    await deleteWorkflowOrg(TEST_ORG_ID);
   });
 
   it('fires with chain_depth=1 when no parent given (PG trigger path)', async () => {
@@ -54,13 +62,14 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
     expect(error).toBeNull();
     expect(Number(count)).toBeGreaterThanOrEqual(1);
 
-    const { data: execs } = await supabase
+    const { data: execs, error: readError } = await supabase
       .from('workflow_executions')
       .select('id, chain_depth')
       .eq('workflow_id', testWorkflowId)
       .is('triggered_by_execution_id', null)
       .order('started_at', { ascending: false })
       .limit(1);
+    expect(readError).toBeNull();
     const latest = (execs ?? [])[0] as { id: string; chain_depth: number } | undefined;
     expect(latest).toBeDefined();
     expect(latest!.chain_depth).toBe(1);
@@ -69,7 +78,7 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
 
   it('fires with chain_depth=parent+1 when parent given', async () => {
     // Insert parent with chain_depth=4 directly
-    const { data: parent } = await supabase
+    const { data: parent, error: parentError } = await supabase
       .from('workflow_executions')
       .insert({
         workflow_id: testWorkflowId,
@@ -80,6 +89,7 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
       })
       .select('id')
       .single();
+    expect(parentError).toBeNull();
     const parentId = parent!.id as string;
     createdExecIds.push(parentId);
 
@@ -93,18 +103,19 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
     expect(error).toBeNull();
     expect(Number(count)).toBe(1);
 
-    const { data: child } = await supabase
+    const { data: child, error: childError } = await supabase
       .from('workflow_executions')
       .select('id, chain_depth')
       .eq('triggered_by_execution_id', parentId)
       .maybeSingle();
+    expect(childError).toBeNull();
     expect(child).not.toBeNull();
     expect((child as { chain_depth: number }).chain_depth).toBe(5);
     createdExecIds.push((child as { id: string }).id);
   });
 
   it('blocks when parent chain_depth is already at max (5)', async () => {
-    const { data: parent } = await supabase
+    const { data: parent, error: parentError } = await supabase
       .from('workflow_executions')
       .insert({
         workflow_id: testWorkflowId,
@@ -115,6 +126,7 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
       })
       .select('id')
       .single();
+    expect(parentError).toBeNull();
     const parentId = parent!.id as string;
     createdExecIds.push(parentId);
 
@@ -128,10 +140,11 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
     expect(error).toBeNull();
     expect(Number(count)).toBe(0);
 
-    const { data: child } = await supabase
+    const { data: child, error: childError } = await supabase
       .from('workflow_executions')
       .select('id')
       .eq('triggered_by_execution_id', parentId);
-    expect(child?.length ?? 0).toBe(0);
+    expect(childError).toBeNull();
+    expect(child).toEqual([]);
   });
 });

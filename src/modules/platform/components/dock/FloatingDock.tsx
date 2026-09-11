@@ -1,11 +1,10 @@
 /**
  * FloatingDock — um lugar só para os botões flutuantes.
  *
- * Antes disto, três componentes de três módulos diferentes renderizavam em
+ * Antes disto, componentes de módulos diferentes renderizavam em
  * `fixed bottom-6 right-6`, cada um com o seu z-index:
  *
  *   ChatBubbleFab (communication)      z-40
- *   OraculoFloatingButton (analytics)  z-50   ← cobria o chat no Dashboard
  *   QuickBlastProgressPanel (leads)    z-40
  *
  * Nenhum deles sabia dos outros. O bug já existia; adicionar um quarto botão
@@ -14,8 +13,7 @@
  * O dock não mantém um registro de itens em estado — isso obrigaria cada FAB a
  * se registrar e desregistrar, e um `useEffect` mal escrito viraria loop de
  * render. Ele expõe um container, e cada item se **portaliza** para dentro dele.
- * A ordem visual vem do `order` do flexbox, não da ordem de montagem: o Oráculo
- * só existe no Dashboard, e o dock não pode depender de quem montou primeiro.
+ * A ordem visual vem do `order` do flexbox, não da ordem de montagem.
  */
 
 import {
@@ -32,8 +30,7 @@ import { createPortal } from "react-dom";
  */
 export const DockOrder = {
   chat: 1,
-  oraculo: 2,
-  support: 3,
+  support: 2,
 } as const;
 
 const DockContainerContext = createContext<HTMLDivElement | null | undefined>(undefined);
@@ -56,7 +53,7 @@ const DockSetterContext = createContext<((el: HTMLDivElement | null) => void) | 
  * `pointer-events-none` no container e `auto` em cada item: a coluna vazia não
  * pode roubar cliques do conteúdo por baixo dela.
  *
- * `z-40`, não `z-50`: os painéis que estes botões abrem (chat, oráculo) sobem a
+ * `z-40`, não `z-50`: os painéis que estes botões abrem sobem a
  * partir de `bottom-24` e precisam cobrir os botões que ficaram acima do dock.
  */
 export function FloatingDock() {

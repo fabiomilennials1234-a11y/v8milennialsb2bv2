@@ -119,6 +119,9 @@ const ChecklistTemplatesManager = lazy(() =>
     default: m.ChecklistTemplatesManager,
   }))
 );
+const OraculoPerfilSettings = lazy(() =>
+  import("@/modules/copilot").then((m) => ({ default: m.OraculoPerfilSettings }))
+);
 const ApiKeysPanel = lazy(() =>
   import("@/modules/platform/components/settings/ApiKeysPanel").then((m) => ({
     default: m.ApiKeysPanel,
@@ -834,6 +837,16 @@ export default function Configuracoes() {
               <Card className="glass-card">
                 <CardContent className="pt-6">
                   <ChecklistTemplatesManager />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="oraculo-profile">
+            <Suspense fallback={<TabFallback label="Perfil da operação" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <OraculoPerfilSettings />
                 </CardContent>
               </Card>
             </Suspense>

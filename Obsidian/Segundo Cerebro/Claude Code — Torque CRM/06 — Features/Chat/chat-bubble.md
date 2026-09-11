@@ -3,7 +3,7 @@ type: feature
 title: Chat Bubble Kanban
 status: active
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-09-11
 tags: [uncategorized]
 related: []
 owner: gabriel
@@ -15,7 +15,7 @@ owner: gabriel
 
 Widget flutuante (FAB pílula gold + painel popover/sheet) renderizado nas Pipe pages do Torque CRM (`/pipe-whatsapp`, `/pipe-confirmacao`, `/pipe-propostas`, `/follow-ups`, `/pipe/custom/*`). Permite ao SDR/Closer conversar com leads via WhatsApp/Uazapi sem sair do contexto do Kanban — substitui o CTA temporário do drawer Lead que navegava para `/chat`.
 
-Diferenciação visual do `OraculoFloatingButton` (Dashboard, gradient roxo, pulse contínuo): aqui é gradient gold + pílula horizontal "Conversas" + sem pulse — coexistem sem confusão.
+Visual: gradient gold + pílula horizontal "Conversas" + sem pulse contínuo.
 
 Lazy-loaded — chunk só desce no primeiro open (~7.8 KB gz).
 

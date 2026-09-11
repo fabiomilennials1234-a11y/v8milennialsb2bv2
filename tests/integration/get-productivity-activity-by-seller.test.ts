@@ -113,6 +113,10 @@ describe.skipIf(shouldSkip)('get_productivity_activity_by_seller RPC', () => {
       const { error } = await supabase.from('organizations').upsert({ id, name, slug }, { onConflict: 'id' });
       if (error) throw new Error(error.message);
     }
+    const quota = await supabase.from('org_quotas').upsert([ORG, ORG_B].map(organization_id => ({
+      organization_id, resource_key: 'max_users', plan_base: 3, purchased_addons: 0, admin_adjustment: 0,
+    })), { onConflict: 'organization_id,resource_key' });
+    if (quota.error) throw quota.error;
     for (const t of ['meeting_events', 'pipeline_entries', 'lead_history', 'leads']) {
       await supabase.from(t).delete().in('organization_id', [ORG, ORG_B]);
     }

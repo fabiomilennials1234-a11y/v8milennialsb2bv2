@@ -1,73 +1,145 @@
-/**
- * O turno do Oráculo, visto do navegador.
- *
- * A pergunta aparece na hora e a resposta chega do servidor: o cliente NUNCA
- * inventa a fala do assistente. É a mesma razão pela qual `oraculo_turns` não
- * é escrevível por `authenticated` — a procedência exibida ("consultei
- * métricas") tem que ser a que o servidor registrou, não a que a tela supôs.
- */
-import { renderHook, act, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+/** Public hook and external HTTP boundary; real Supabase SDK and QueryClient. */
+import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useOraculoTurno } from './useOraculoTurno';
 
-const invokeMock = vi.fn();
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { functions: { invoke: (...a: unknown[]) => invokeMock(...a) } },
-}));
-
-import { useOraculoTurno } from "./useOraculoTurno";
-
-const newQc = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-const wrap = (qc: QueryClient) =>
-  ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
-
+const ORG = '20000000-0000-4000-8000-000000000001';
+let requests: Record<string, unknown>[];
+let actionRequests: Record<string, unknown>[];
+let profileRequests: Record<string, unknown>[];
+let reply: () => Response | Promise<Response>;
+let actionReply: () => Response | Promise<Response>;
+const success = () => Response.json({ conversa_id: 'c-1', turno_id: '50000000-0000-4000-8000-000000000001', resposta: 'Você fechou 3 vendas.',
+  procedencia: ['metricas'], restantes_hoje: 24, propostas: [{
+    kind: 'oraculo_action_proposal', id: '30000000-0000-4000-8000-000000000001',
+    acao: 'adicionar_tag', criterio: { tipo: 'leads_parados', dias: 14 },
+    parametros: { tag_id: 'tag-1' }, previsao: 5, status: 'pending',
+  }], perguntas_perfil: [{
+    id: '40000000-0000-4000-8000-000000000001',
+    question_key: 'sales_outside_crm',
+    prompt: 'Medi 3 vendas. Existe venda fora?',
+    measured_context: { source: 'metricas', vendas: 3 },
+  }] });
+const wrap = () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+};
 beforeEach(() => {
-  invokeMock.mockReset();
-  invokeMock.mockResolvedValue({
-    data: {
-      conversa_id: "c-1",
-      resposta: "Você fechou 3 vendas no período.",
-      procedencia: ["metricas"],
-      restantes_hoje: 24,
-    },
-    error: null,
+  requests = []; actionRequests = []; profileRequests = []; reply = success;
+  actionReply = () => Response.json({ status: 'sucesso', previstos: 5, qualificaveis_no_clique: 3, alterados: 3, ja_tratados: 2 });
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url.endsWith('/functions/v1/oraculo-action')) {
+      actionRequests.push(await request.json());
+      return actionReply();
+    }
+    if (request.url.endsWith('/functions/v1/oraculo-profile')) {
+      profileRequests.push(await request.json());
+      return Response.json({ status: 'answered' });
+    }
+    if (request.url.endsWith('/functions/v1/oraculo-feedback')) return new Response(null, { status: 204 });
+    if (!request.url.endsWith('/functions/v1/oraculo-turno')) throw new Error('Unexpected external request');
+    requests.push(await request.json());
+    return reply();
+  });
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+describe('Oráculo — contrato HTTP do navegador', () => {
+  it('envia organização ativa e mostra resposta com procedência', async () => {
+    const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+    act(() => result.current.perguntar('Quantas vendas?'));
+    expect(result.current.mensagens.map(m => m.content)).toEqual(['Quantas vendas?']);
+    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
+    expect(requests).toEqual([{ organization_id: ORG, pergunta: 'Quantas vendas?', conversa_id: null }]);
+    expect(result.current.mensagens[1]).toMatchObject({ content: 'Você fechou 3 vendas.', procedencia: ['metricas'] });
+    expect(result.current.mensagens[1].propostas?.[0]).toMatchObject({ previsao: 5, status: 'pending' });
+  });
+
+  it('confirma proposta em requisição separada e mostra o resultado real', async () => {
+    const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+    act(() => result.current.perguntar('Marque os parados como prioridade'));
+    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
+
+    act(() => result.current.executarProposta('30000000-0000-4000-8000-000000000001'));
+    await waitFor(() => expect(result.current.mensagens[1].propostas?.[0].status).toBe('executed'));
+
+    expect(actionRequests).toEqual([{
+      organization_id: ORG,
+      proposta_id: '30000000-0000-4000-8000-000000000001',
+    }]);
+    expect(result.current.mensagens[1].propostas?.[0].resultado).toMatchObject({ alterados: 3, ja_tratados: 2 });
+  });
+
+  it('não apresenta falha técnica como recusa de permissão', async () => {
+    actionReply = () => Response.json({ error: 'falha_interna' }, { status: 500 });
+    const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+    act(() => result.current.perguntar('Marque os parados como prioridade'));
+    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
+
+    act(() => result.current.executarProposta('30000000-0000-4000-8000-000000000001'));
+    await waitFor(() => expect(result.current.mensagens[1].propostas?.[0].erro).toContain('Tente de novo'));
+    expect(result.current.mensagens[1].propostas?.[0].erro).not.toContain('permissão');
+  });
+
+  it('responde pergunta de perfil em fronteira separada e mantém a conversa opcional', async () => {
+    const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+    act(() => result.current.perguntar('Quantas vendas?'));
+    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
+
+    act(() => result.current.responderPerguntaPerfil(
+      '40000000-0000-4000-8000-000000000001',
+      'Há duas vendas fora do CRM.',
+    ));
+    await waitFor(() => expect(result.current.mensagens[1].perguntasPerfil?.[0].status).toBe('answered'));
+
+    expect(profileRequests).toEqual([{
+      acao: 'responder',
+      pergunta_id: '40000000-0000-4000-8000-000000000001',
+      resposta: 'Há duas vendas fora do CRM.',
+      organization_id: ORG,
+    }]);
   });
 });
 
-describe("useOraculoTurno", () => {
-  it("mostra a pergunta na hora e anexa a resposta com a procedência que o servidor devolveu", async () => {
-    const qc = newQc();
-    const { result } = renderHook(() => useOraculoTurno(), { wrapper: wrap(qc) });
+it('sem organização não envia pergunta nem cria mensagem otimista', async () => {
+  const { result } = renderHook(() => useOraculoTurno(null), { wrapper: wrap() });
+  act(() => result.current.perguntar('Quantas vendas?'));
+  await waitFor(() => expect(result.current.erro).toContain('organização'));
+  expect(requests).toEqual([]);
+  expect(result.current.mensagens).toEqual([]);
+});
 
-    act(() => { result.current.perguntar("quantas vendas eu fiz?"); });
+it.each([
+  [403, 'acesso'], [409, 'outra resposta'], [429, 'limite'],
+])('HTTP %i explica recusa sem fabricar resposta', async (status, message) => {
+  reply = () => Response.json({ error: 'recusado' }, { status: status as number });
+  const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+  act(() => result.current.perguntar('Quantas vendas?'));
+  await waitFor(() => expect(result.current.erro).toContain(message));
+  expect(result.current.mensagens.filter(m => m.role === 'assistant')).toEqual([]);
+});
 
-    expect(result.current.mensagens.map((m) => m.content)).toEqual(["quantas vendas eu fiz?"]);
+it('resposta atrasada não entra na conversa aberta depois', async () => {
+  let finish!: (response: Response) => void;
+  reply = () => new Promise(resolve => { finish = resolve; });
+  const { result } = renderHook(() => useOraculoTurno(ORG), { wrapper: wrap() });
+  act(() => result.current.perguntar('Pergunta antiga'));
+  await waitFor(() => expect(requests).toHaveLength(1));
+  act(() => result.current.abrirConversa('outra', []));
+  await act(async () => { finish(success()); });
+  await waitFor(() => expect(result.current.pensando).toBe(false));
+  expect(result.current.conversaId).toBe('outra');
+  expect(result.current.mensagens).toEqual([]);
+});
 
-    await waitFor(() => expect(result.current.mensagens).toHaveLength(2));
-    expect(result.current.mensagens[1]).toMatchObject({
-      role: "assistant",
-      content: "Você fechou 3 vendas no período.",
-      procedencia: ["metricas"],
-    });
-    expect(result.current.conversaId).toBe("c-1");
-  });
-
-  it("no limite diário, diz o que houve em vez de falhar em silêncio", async () => {
-    invokeMock.mockResolvedValue({
-      data: null,
-      error: { message: "limite_diario", context: { status: 429 } },
-    });
-    const qc = newQc();
-    const { result } = renderHook(() => useOraculoTurno(), { wrapper: wrap(qc) });
-
-    act(() => { result.current.perguntar("e agora?"); });
-
-    await waitFor(() => expect(result.current.erro).toBeTruthy());
-    expect(result.current.erro).toContain("limite");
-    expect(result.current.mensagens.filter((m) => m.role === "assistant")).toHaveLength(0);
-  });
+it('continuação mantém mensagens recuperadas no histórico visível', async () => {
+  const saved = [{ id: 'saved', role: 'assistant' as const, content: 'Contexto anterior', criadaEm: new Date() }];
+  const { result } = renderHook(() => useOraculoTurno(ORG, 'c-1'), { wrapper: wrap() });
+  act(() => result.current.perguntar('Continue', saved));
+  await waitFor(() => expect(result.current.mensagens).toHaveLength(3));
+  expect(result.current.mensagens[0].content).toBe('Contexto anterior');
+  expect(requests[0].conversa_id).toBe('c-1');
 });

@@ -10,14 +10,19 @@
  *   2. Quando ele não sabe. Silêncio vira desconfiança; "não tenho base" não.
  */
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Loader2, MessageSquarePlus, Sparkles } from "lucide-react";
-import { useAuth } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useOraculoTurno } from "../hooks/useOraculoTurno";
+import { useOraculoFeedback } from "../hooks/useOraculoFeedback";
 import { useOraculoConversas, useOraculoTurnos } from "../hooks/useOraculoConversas";
+import { OraculoPropostaCard } from "../components/oraculo/OraculoPropostaCard";
+import { OraculoPerfilPerguntaCard } from "../components/oraculo/OraculoPerfilPerguntaCard";
+import { OraculoFeedbackControl } from "../components/oraculo/OraculoFeedbackControl";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -27,15 +32,30 @@ const SUGESTOES = [
 
 export default function Oraculo() {
   const { user } = useAuth();
-  const [rascunho, setRascunho] = useState("");
-  const oraculo = useOraculoTurno();
-  const { data: conversas } = useOraculoConversas(user?.id);
-  const { data: turnosSalvos } = useOraculoTurnos(oraculo.conversaId);
+  const { organizationId, isReady } = useOrganization();
+  if (!user || !isReady || !organizationId) return <p role="status">Carregando organização…</p>;
+  return <ConversaDaOrganizacao key={`${user.id}:${organizationId}`} userId={user.id} organizationId={organizationId} />;
+}
 
+function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; organizationId: string }) {
+  const [searchParams] = useSearchParams();
+  const conversaParam = searchParams.get("conversa") ?? "";
+  const conversaInicial = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversaParam)
+    ? conversaParam
+    : undefined;
+  const [rascunho, setRascunho] = useState("");
+  const oraculo = useOraculoTurno(organizationId, conversaInicial);
+  const feedback = useOraculoFeedback(organizationId, oraculo.conversaId);
+  const { data: conversas } = useOraculoConversas(userId, organizationId);
+  const historico = useOraculoTurnos(oraculo.conversaId, userId, organizationId);
+
+  const turnosSalvos = historico.data;
+  const aguardandoHistorico = !!oraculo.conversaId && !historico.isSuccess;
   const mensagens = oraculo.mensagens.length > 0 ? oraculo.mensagens : (turnosSalvos ?? []);
 
   const enviar = () => {
-    oraculo.perguntar(rascunho);
+    if (aguardandoHistorico) return;
+    oraculo.perguntar(rascunho, turnosSalvos ?? []);
     setRascunho("");
   };
 
@@ -90,11 +110,26 @@ export default function Oraculo() {
               {oraculo.restantesHoje} perguntas hoje
             </span>
           )}
+          {oraculo.conversaId && (
+            <OraculoFeedbackControl
+              label="esta conversa"
+              value={feedback.state.conversation}
+              busy={feedback.busyTarget === oraculo.conversaId}
+              onSubmit={feedback.submitConversation}
+            />
+          )}
         </header>
 
         <ScrollArea className="flex-1 px-6">
           <div className="mx-auto max-w-3xl space-y-6 py-6">
-            {mensagens.length === 0 && (
+            {oraculo.conversaId && historico.isPending && <p role="status">Carregando histórico…</p>}
+            {historico.isError && (
+              <div role="alert">
+                <p>Não consegui carregar o histórico.</p>
+                <Button variant="outline" onClick={() => void historico.refetch()}>Tentar novamente</Button>
+              </div>
+            )}
+            {mensagens.length === 0 && !aguardandoHistorico && (
               <div className="space-y-4 pt-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
@@ -102,7 +137,7 @@ export default function Oraculo() {
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {SUGESTOES.map((s) => (
-                    <Button key={s} variant="outline" size="sm" onClick={() => oraculo.perguntar(s)}>
+                    <Button key={s} disabled={aguardandoHistorico || oraculo.pensando} variant="outline" size="sm" onClick={() => oraculo.perguntar(s, turnosSalvos ?? [])}>
                       {s}
                     </Button>
                   ))}
@@ -126,6 +161,32 @@ export default function Oraculo() {
                       Consultei: {m.procedencia.join(", ")}
                     </p>
                   )}
+                  {m.propostas?.map((proposta) => (
+                    <OraculoPropostaCard
+                      key={proposta.id}
+                      proposta={proposta}
+                      onConfirmar={oraculo.executarProposta}
+                      ocupada={oraculo.executandoPropostaId === proposta.id}
+                      desabilitada={oraculo.executandoPropostaId !== null}
+                    />
+                  ))}
+                  {m.perguntasPerfil?.map((question) => (
+                    <OraculoPerfilPerguntaCard
+                      key={question.id}
+                      question={question}
+                      onAnswer={oraculo.responderPerguntaPerfil}
+                      onSkip={oraculo.ignorarPerguntaPerfil}
+                      busy={oraculo.salvandoPerguntaPerfilId === question.id}
+                    />
+                  ))}
+                  {m.role === "assistant" && (
+                    <OraculoFeedbackControl
+                      label="esta resposta"
+                      value={feedback.state.responses[m.id]}
+                      busy={feedback.busyTarget === m.id}
+                      onSubmit={(value) => feedback.submitResponse(m.id, value)}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -148,6 +209,7 @@ export default function Oraculo() {
         <div className="border-t border-border p-4">
           <div className="mx-auto flex max-w-3xl gap-2">
             <Textarea
+              disabled={aguardandoHistorico}
               value={rascunho}
               onChange={(e) => setRascunho(e.target.value)}
               onKeyDown={(e) => {
@@ -160,7 +222,7 @@ export default function Oraculo() {
               rows={1}
               className="max-h-40 min-h-[44px] resize-none"
             />
-            <Button onClick={enviar} disabled={!rascunho.trim() || oraculo.pensando}>
+            <Button onClick={enviar} disabled={!rascunho.trim() || oraculo.pensando || aguardandoHistorico}>
               Perguntar
             </Button>
           </div>

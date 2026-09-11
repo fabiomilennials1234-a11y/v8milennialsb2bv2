@@ -2,9 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { DockItem, DockOrder, FloatingDock, FloatingDockProvider } from "./FloatingDock";
 
 /**
- * O dock existe para resolver um bug que já estava em produção: `ChatBubbleFab`,
- * `OraculoFloatingButton` e o painel de progresso do disparo renderizavam todos
- * em `fixed bottom-6 right-6`, empilhando-se e ocultando uns aos outros.
+ * O dock existe para resolver um bug que já estava em produção: `ChatBubbleFab`
+ * e o painel de progresso do disparo renderizavam em `fixed bottom-6 right-6`,
+ * empilhando-se e ocultando uns aos outros.
  */
 describe("FloatingDock", () => {
   it("renderiza os itens que se registraram", () => {
@@ -31,8 +31,7 @@ describe("FloatingDock", () => {
   });
 
   // O item mais usado fica mais perto do polegar. A ordem visual vem do `order`
-  // do flexbox, não da ordem em que os componentes montaram — o Oráculo só
-  // existe no Dashboard, e o dock não pode depender de quem montou primeiro.
+  // do flexbox, não da ordem em que os componentes montaram.
   it("ordena pelo `order`, não pela ordem de montagem", () => {
     render(
       <FloatingDockProvider>
@@ -64,13 +63,13 @@ describe("FloatingDock", () => {
     rerender(
       <FloatingDockProvider>
         <FloatingDock />
-        <DockItem order={DockOrder.oraculo}>
-          <button>oráculo</button>
+        <DockItem order={DockOrder.support}>
+          <button>suporte</button>
         </DockItem>
       </FloatingDockProvider>,
     );
 
-    expect(screen.getByRole("button", { name: "oráculo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "suporte" })).toBeInTheDocument();
   });
 
   // Um DockItem fora do provider seria um botão invisível — pior que um erro.
@@ -87,7 +86,6 @@ describe("FloatingDock", () => {
   });
 
   it("a ordem canônica coloca o chat mais perto do canto", () => {
-    expect(DockOrder.chat).toBeLessThan(DockOrder.oraculo);
-    expect(DockOrder.oraculo).toBeLessThan(DockOrder.support);
+    expect(DockOrder.chat).toBeLessThan(DockOrder.support);
   });
 });

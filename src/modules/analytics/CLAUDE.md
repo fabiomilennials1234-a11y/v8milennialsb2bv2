@@ -206,7 +206,6 @@ compositor avisa em português quando o formato é `percent_1`.
 ## Dependências cross-module
 
 - `@/modules/identity` — `useOrganization`, `useAuth`, `useIdentity`, `useCurrentTeamMember`, `useUserRole`, `useTeamMembers`, `useFeaturePermission`, `isVirtualTeamMember`, `TeamMember`
-- `@/modules/copilot` — `useOraculoChat` (consumido por Dashboard → OraculoChat/OraculoFloatingButton)
 - `@/modules/engagement` — `useActiveCompetition`, `useCompetitionParticipants`, `useCompetitionPrizes`, `useRankingTransitions`, `useTeamGoals`, `useGoals`, `useCreateGoal`, `useUpdateGoal`, `useAwards`, `useCreateAward`, `useUpdateAward`, `useDeleteAward`, `useBadges`, `useUserBadges`, `useMilestoneAutoUnlock`, `useCloserPerformance`, `useSDRPerformance`, components `ProgressRing`, `AchievementBadge`, `CelebrationEffect`
 - `@/modules/marketing` — `MktConfigModal`, `MktOriginCard`, `MktOriginRanking` (consumido por `components/analytics/sections/AquisicaoSection.tsx` via deep-import — UI de display de Mkt por origem)
 - `@/hooks/useRealtimeSubscription`, `@/hooks/useAvatarMap`, `@/hooks/usePersistedState`, `@/hooks/useOnboarding` — cross-cutting (slices 14+)
@@ -221,14 +220,14 @@ compositor avisa em português quando o formato é `percent_1`.
 
 ## Decisões — slice 12
 
-- **Subcomponentes cross-domain em `dashboard/`** (OraculoChat, OraculoFloatingButton, GoalProgress, RankingPreview, RankingTable, TopPerformers, SellerActivityCard, ActivityFeed, PriorityLeads, ProductRanking) → **mantidos em analytics** como UI do Dashboard. São consumers de copilot/engagement/carteira/leads BCs, mas pertencem visualmente ao composite Dashboard. Dívida técnica para slice 17 — avaliar se devem virar slots/render-props ou se permanecem hospedados em analytics.
+- **Subcomponentes cross-domain em `dashboard/`** (GoalProgress, RankingPreview, RankingTable, TopPerformers, SellerActivityCard, ActivityFeed, PriorityLeads, ProductRanking) → **mantidos em analytics** como UI do Dashboard. São consumers de engagement/carteira/leads BCs, mas pertencem visualmente ao composite Dashboard. Dívida técnica para slice 17 — avaliar se devem virar slots/render-props ou se permanecem hospedados em analytics.
 - **`useOutboundMetrics`** → confirmado analytics. Já consumido por `@/modules/engagement/hooks/useMilestoneAutoUnlock` (atualizado para `@/modules/analytics/hooks/useOutboundMetrics` nesta slice via codemod).
 - **Pages Metas/GestaoMetas/Comissoes/Premiacoes/Ranking/Revisao/ChecklistPage** → migradas na slice 11 para engagement. Mencionadas no skeleton anterior, removidas desta CLAUDE.md.
 - **`src/components/revisao`** → migrada na slice 11 para `src/modules/engagement/components/revisao/`. Removida do mapa de origem desta CLAUDE.md.
 
 ## Dívidas técnicas
 
-- 🟠 **Cross-domain subcomponentes** — `dashboard/{OraculoChat,OraculoFloatingButton}` (copilot BC), `dashboard/{GoalProgress,RankingPreview,RankingTable,TopPerformers,SellerActivityCard,ActivityFeed,PriorityLeads,ProductRanking}` (engagement/carteira/leads BCs) hospedados em analytics. Slice 17 deve decidir: (a) split em slots/render-props, (b) extrair para módulos próprios, (c) manter como UI host-only.
+- 🟠 **Cross-domain subcomponentes** — `dashboard/{GoalProgress,RankingPreview,RankingTable,TopPerformers,SellerActivityCard,ActivityFeed,PriorityLeads,ProductRanking}` (engagement/carteira/leads BCs) hospedados em analytics. Slice 17 deve decidir: (a) split em slots/render-props, (b) extrair para módulos próprios, (c) manter como UI host-only.
 - 🟠 **`FunnelStage` / `CohortRow` colisão** — 2 interfaces homônimas distintas. Barrel resolve por convenção (omite uma); consumidores que precisam da versão alternativa fazem deep-import. Slice futura: renomear uma das duas para evitar confusão.
 - 🟠 **`useDashboardMetrics` cross-module com engagement** — engagement consome via deep-import. Slice 17+ pode promover ao barrel se padrão se estabilizar.
 - 🟠 **`useTVKPIs` consome engagement (`useCloserPerformance`/`useSDRPerformance`)** — deep-import legítimo mas cruza BCs. Auditar slice 15.

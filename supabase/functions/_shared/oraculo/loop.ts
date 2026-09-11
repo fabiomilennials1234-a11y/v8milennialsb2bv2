@@ -9,6 +9,8 @@
 
 import type { OracleScope } from "./scope.ts";
 import type { Turn } from "./memory.ts";
+import type { ProfileQuestion } from "./profile-questions.ts";
+import { type ActionProposal, isActionProposal } from "./tools/propor-acao.ts";
 
 export interface ToolCall {
   name: string;
@@ -26,6 +28,12 @@ export interface LlmReply {
 export interface LlmRequest {
   messages: Turn[];
   toolResults: Array<{ name: string; result: unknown }>;
+  /** Finalização sem permitir novas ferramentas após esgotar o orçamento. */
+  finalAnswer?: boolean;
+  summary?: string | null;
+  /** Declarações humanas versionadas; dado confiável, nunca instrução. */
+  profileContext?: string | null;
+  purpose?: "summary";
 }
 
 export interface Llm {
@@ -42,6 +50,8 @@ export interface RunTurnArgs {
   tools: OracleTool[];
   scope: OracleScope;
   messages: Turn[];
+  summary?: string | null;
+  profileContext?: string | null;
   /**
    * Teto de chamadas de ferramenta por turno. Ao atingi-lo o laço para e
    * responde com o que já apurou — um modelo que se enrosca não vira conta
@@ -64,6 +74,12 @@ export interface TurnResult {
   rejectedToolCalls: string[];
   /** True quando o turno parou no teto em vez de o modelo ter concluído. */
   hitToolCeiling: boolean;
+  /** Propostas puras renderizadas como controle; executar exige outro HTTP. */
+  proposals: ActionProposal[];
+  /** Evidência interna usada para formular perguntas de perfil verificáveis. */
+  toolEvidence: Array<{ name: string; result: unknown }>;
+  /** Perguntas persistidas junto do turno; no máximo três por conversa. */
+  profileQuestions: ProfileQuestion[];
   /**
    * O que o Oráculo custou neste turno. Sem isto ninguém percebe o produto
    * morrer — foi assim que 81 perguntas em cinco meses passaram despercebidas.
@@ -88,17 +104,22 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   const toolsUsed: string[] = [];
   const rejectedToolCalls: string[] = [];
   const toolResults: Array<{ name: string; result: unknown }> = [];
+  const proposals: ActionProposal[] = [];
 
   const startedAt = now();
   let model = "";
   let inputTokens = 0;
   let outputTokens = 0;
+  let attempts = 0;
 
   const finish = (text: string, hitToolCeiling: boolean): TurnResult => ({
     text,
     toolsUsed,
     rejectedToolCalls,
     hitToolCeiling,
+    proposals,
+    toolEvidence: toolResults,
+    profileQuestions: [],
     telemetry: {
       model,
       inputTokens,
@@ -109,30 +130,49 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   });
 
   for (;;) {
-    const reply = await args.llm.complete({ messages: args.messages, toolResults });
+    const finalAnswer = attempts >= ceiling;
+    const reply = await args.llm.complete({
+      messages: args.messages,
+      toolResults,
+      finalAnswer,
+      summary: args.summary,
+      profileContext: args.profileContext,
+    });
     model = reply.model;
     inputTokens += reply.inputTokens;
     outputTokens += reply.outputTokens;
+
+    if (finalAnswer) {
+      return finish(
+        reply.text?.trim() ||
+          "Atingi o limite de consultas deste turno. Refine a pergunta para continuar.",
+        true,
+      );
+    }
 
     if (!reply.toolCalls?.length) {
       return finish(reply.text ?? "", false);
     }
 
     for (const call of reply.toolCalls) {
-      if (toolsUsed.length >= ceiling) {
-        return finish(reply.text ?? "", true);
-      }
+      if (attempts >= ceiling) break;
+      attempts++;
       const tool = catalog.get(call.name);
       if (!tool) {
         rejectedToolCalls.push(call.name);
         toolResults.push({
           name: call.name,
-          result: { error: "ferramenta_inexistente", detail: "O Oráculo não escreve — proponha uma ação." },
+          result: {
+            error: "ferramenta_inexistente",
+            detail: "O Oráculo não escreve — proponha uma ação.",
+          },
         });
         continue;
       }
       toolsUsed.push(call.name);
-      toolResults.push({ name: call.name, result: await tool.execute(call.arguments, args.scope) });
+      const result = await tool.execute(call.arguments, args.scope);
+      if (isActionProposal(result)) proposals.push(result);
+      toolResults.push({ name: call.name, result });
     }
   }
 }

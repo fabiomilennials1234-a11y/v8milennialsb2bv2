@@ -67,18 +67,38 @@ async function createTestUser(
   orgId: string
 ): Promise<string> {
   // Create auth user (idempotent via service_role)
-  await admin.auth.admin.createUser({
+  const { error: userError } = await admin.auth.admin.createUser({
+    id: userId,
     email,
     password: "TestProxy123!",
     user_metadata: {},
     email_confirm: true,
   });
+  if (userError) throw new Error(`Auth user creation failed: ${userError.message}`);
 
-  // Upsert organization
-  await admin
+  // Create a complete tenant fixture. Silent setup failures previously made
+  // every authenticated request stop at the proxy's "No organization" gate.
+  const { error: orgError } = await admin
     .from("organizations")
-    .upsert({ id: orgId, name: `Test Org ${orgId.slice(-4)}` })
-    .eq("id", orgId);
+    .insert({
+      id: orgId,
+      name: `Test Org ${orgId.slice(-4)}`,
+      slug: `proxy-test-${orgId.slice(-4)}`,
+    });
+  if (orgError) throw new Error(`Organization creation failed: ${orgError.message}`);
+
+  const { error: featureError } = await admin.from("organization_features").insert({
+    organization_id: orgId,
+    feature_key: "chat",
+    enabled: true,
+  });
+  if (featureError) throw new Error(`Chat feature setup failed: ${featureError.message}`);
+
+  const { error: quotaError } = await admin.from("org_quotas").insert([
+    { organization_id: orgId, resource_key: "max_users", plan_base: 10, purchased_addons: 0, admin_adjustment: 0 },
+    { organization_id: orgId, resource_key: "max_whatsapp_instances", plan_base: 10, purchased_addons: 0, admin_adjustment: 0 },
+  ]);
+  if (quotaError) throw new Error(`Quota setup failed: ${quotaError.message}`);
 
   // Upsert team_member linking user → org
   // We need the actual auth user ID from Supabase, not our mock UUID
@@ -86,17 +106,17 @@ async function createTestUser(
   const authUser = userList?.users?.find((u) => u.email === email);
   if (!authUser) throw new Error(`Auth user not found for ${email}`);
 
-  await admin
+  const { error: memberError } = await admin
     .from("team_members")
-    .upsert({
+    .insert({
       user_id: authUser.id,
       organization_id: orgId,
       name: `Test User ${email}`,
       role: "admin",
       email,
-    })
-    .eq("user_id", authUser.id)
-    .eq("organization_id", orgId);
+      is_active: true,
+    });
+  if (memberError) throw new Error(`Team member setup failed: ${memberError.message}`);
 
   // Sign in to get JWT
   const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'torque-test-proxy-anon' } });
@@ -114,16 +134,16 @@ async function createTestUser(
 }
 
 async function insertTestInstance(orgId: string, instanceId: string) {
-  await admin
+  const { error } = await admin
     .from("whatsapp_instances")
-    .upsert({
+    .insert({
       id: instanceId,
       organization_id: orgId,
       instance_name: `test-instance-${instanceId.slice(-4)}`,
       provider: "evolution",
-      status: "open",
-    })
-    .eq("id", instanceId);
+      status: "connected",
+    });
+  if (error) throw new Error(`WhatsApp instance setup failed: ${error.message}`);
 }
 
 async function cleanupTestData() {

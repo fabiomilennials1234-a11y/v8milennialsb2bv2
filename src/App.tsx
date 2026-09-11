@@ -121,6 +121,7 @@ const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/m
 const MasterSupportTickets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterSupportTickets")));
 const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
 const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
+const MasterOraculoFeedback = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOraculoFeedback")));
 const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotReasoning")));
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
 const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
@@ -793,6 +794,7 @@ function AppRoutes() {
         <Route path="gestores" element={<MasterGestores />} />
         <Route path="automation-health" element={<MasterAutomationHealth />} />
         <Route path="whatsapp-health" element={<MasterWhatsAppHealth />} />
+        <Route path="oraculo-feedback" element={<MasterOraculoFeedback />} />
         <Route path="copilot-reasoning" element={<CopilotReasoning />} />
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />

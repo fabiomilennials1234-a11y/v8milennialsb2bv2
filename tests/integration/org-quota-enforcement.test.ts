@@ -27,6 +27,7 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 
 // Resolved in beforeAll — a valid auth.users ID needed for FK constraints
 let VALID_USER_ID = '';
+let originalQuotas: Array<{ organization_id: string; resource_key: string; plan_base: number; purchased_addons: number; admin_adjustment: number }> | null = null;
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -68,17 +69,32 @@ async function cleanupCopilotAgents() {
     .like('name', 'qa-%');
 }
 
-async function resetQuotas() {
-  await supabase
-    .from('org_quotas')
-    .update({ plan_base: 0, purchased_addons: 0, admin_adjustment: 0 })
-    .eq('organization_id', TEST_ORG_ID);
+async function restoreQuotas() {
+  if (originalQuotas === null) return;
+  const current = await supabase.from('org_quotas').select('resource_key').eq('organization_id', TEST_ORG_ID);
+  if (current.error) throw current.error;
+  const originalKeys = new Set(originalQuotas.map(row => row.resource_key));
+  const addedKeys = current.data!.map(row => row.resource_key).filter(key => !originalKeys.has(key));
+  if (addedKeys.length) {
+    const removed = await supabase.from('org_quotas').delete()
+      .eq('organization_id', TEST_ORG_ID).in('resource_key', addedKeys);
+    if (removed.error) throw removed.error;
+  }
+  if (originalQuotas.length) {
+    const restored = await supabase.from('org_quotas').upsert(originalQuotas, { onConflict: 'organization_id,resource_key' });
+    if (restored.error) throw restored.error;
+  }
 }
 
 // ─── Tests ────────────────────────────────────────────────────
 
 describe.skipIf(shouldSkip)('org-quota-enforcement — integration', () => {
   beforeAll(async () => {
+    const snapshot = await supabase.from('org_quotas')
+      .select('organization_id, resource_key, plan_base, purchased_addons, admin_adjustment')
+      .eq('organization_id', TEST_ORG_ID);
+    if (snapshot.error) throw snapshot.error;
+    originalQuotas = snapshot.data;
     // Get a valid auth user for FK constraints
     const { data } = await supabase.auth.admin.listUsers({ perPage: 1 });
     VALID_USER_ID = data.users[0]?.id ?? '';
@@ -88,7 +104,7 @@ describe.skipIf(shouldSkip)('org-quota-enforcement — integration', () => {
   afterAll(async () => {
     await cleanupWhatsAppInstances();
     await cleanupCopilotAgents();
-    await resetQuotas();
+    await restoreQuotas();
     // Clean audit log entries from tests
     await supabase
       .from('quota_audit_log')

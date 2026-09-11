@@ -79,7 +79,6 @@ import { useWhatsAppConversations } from "@/modules/communication/hooks/useWhats
 import { useMilestoneAutoUnlock } from "@/modules/engagement/hooks/useMilestoneAutoUnlock";
 import { useWorkflowPortability } from "@/modules/workflows/hooks/useWorkflowPortability";
 import { useCopilotSubscription } from "@/modules/copilot/hooks/useCopilotSubscription";
-import { useOraculoChat } from "@/modules/copilot/hooks/useOraculoChat";
 import { usePrefetchPipes } from "@/modules/pipelines/hooks/perf/usePrefetchPipes";
 import { useCouponValidation } from "@/modules/billing/hooks/useCouponValidation";
 import { useMetaConnection } from "@/modules/communication/hooks/useMetaConnection";
@@ -108,7 +107,6 @@ const hooks: [string, () => any][] = [
   ["useSegmentBenchmark", () => useSegmentBenchmark()],
   ["useMilestoneAutoUnlock", () => useMilestoneAutoUnlock()],
   ["useCopilotSubscription", () => useCopilotSubscription()],
-  ["useOraculoChat", () => useOraculoChat()],
   ["usePrefetchPipes", () => usePrefetchPipes()],
   ["useCouponValidation", () => useCouponValidation()],
   ["useProductMaterials", () => useProductMaterials("prod-1")],

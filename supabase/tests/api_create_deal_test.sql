@@ -57,6 +57,15 @@ INSERT INTO public.pipelines (id, organization_id, name, slug, type) VALUES
   ('deadbeef-0000-4000-8000-0000000000fc', 'deadbeef-0000-4000-8000-0000000000f1', 'Qualificação', 'whatsapp', 'system')
 ON CONFLICT (id) DO NOTHING;
 
+-- fn_entrada_sistema_criar só aceita etapas ativas. Um funil sem etapa não é
+-- uma fixture válida para o caminho feliz: produziria um card invisível.
+INSERT INTO public.pipeline_stages
+  (id, organization_id, pipeline_id, pipeline_type, stage_key, name, position, is_active)
+VALUES
+  ('deadbeef-0000-4000-8000-0000000000fd', 'deadbeef-0000-4000-8000-0000000000f1',
+   'deadbeef-0000-4000-8000-0000000000fc', 'whatsapp', 'novo', 'Novo', 0, true)
+ON CONFLICT (id) DO NOTHING;
+
 SET LOCAL session_replication_role = origin;
 
 -- ===========================================================================

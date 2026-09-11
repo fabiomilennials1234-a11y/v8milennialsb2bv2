@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { deleteFixtureOrganization } from './organization-fixture';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
 const SERVICE_KEY =
@@ -46,87 +47,22 @@ beforeAll(async () => {
   admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   // Orgs
-  const { data: org } = await admin
+  const { data: org, error: orgError } = await admin
     .from('organizations')
-    .insert({ name: `rpc-org-${Date.now()}` })
+    .insert({ name: `rpc-org-${Date.now()}`, slug: `rpc-org-${crypto.randomUUID()}` })
     .select('id')
     .single();
+  expect(orgError).toBeNull();
   orgId = org!.id;
-  const { data: other } = await admin
+  const { data: other, error: otherOrgError } = await admin
     .from('organizations')
-    .insert({ name: `rpc-other-org-${Date.now()}` })
+    .insert({ name: `rpc-other-org-${Date.now()}`, slug: `rpc-other-org-${crypto.randomUUID()}` })
     .select('id')
     .single();
+  expect(otherOrgError).toBeNull();
   otherOrgId = other!.id;
 
-  // Meta connection + page for org A
-  const { data: conn } = await admin
-    .from('meta_connections')
-    .insert({
-      organization_id: orgId,
-      user_id: '00000000-0000-0000-0000-000000000000',
-      facebook_user_id: `fb_rpc_${Date.now()}`,
-      facebook_user_name: 'T',
-      access_token: 't',
-      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
-      status: 'connected',
-      connected_at: new Date().toISOString(),
-      connection_type: 'facebook',
-    })
-    .select('id')
-    .single();
-  connRowId = conn!.id;
-
-  const { data: page } = await admin
-    .from('meta_pages')
-    .insert({
-      meta_connection_id: connRowId,
-      organization_id: orgId,
-      page_id: pageIdString,
-      page_name: 'P',
-      page_access_token: 'pt',
-      is_active: true,
-      webhook_subscribed: true,
-    })
-    .select('id')
-    .single();
-  pageRowId = page!.id;
-
-  // Meta connection + page for org B
-  const { data: otherConn } = await admin
-    .from('meta_connections')
-    .insert({
-      organization_id: otherOrgId,
-      user_id: '00000000-0000-0000-0000-000000000000',
-      facebook_user_id: `fb_other_${Date.now()}`,
-      facebook_user_name: 'O',
-      access_token: 't',
-      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
-      status: 'connected',
-      connected_at: new Date().toISOString(),
-      connection_type: 'facebook',
-    })
-    .select('id')
-    .single();
-  otherConnRowId = otherConn!.id;
-
-  const { data: otherPage } = await admin
-    .from('meta_pages')
-    .insert({
-      meta_connection_id: otherConnRowId,
-      organization_id: otherOrgId,
-      page_id: 'other_page',
-      page_name: 'OP',
-      page_access_token: 't',
-      is_active: true,
-      webhook_subscribed: true,
-    })
-    .select('id')
-    .single();
-  otherPageRowId = otherPage!.id;
-
-  // Users — one per org. createUser requires admin auth API; surface a clear
-  // error if the env doesn't support it (e.g. remote project without admin key).
+  // Real auth users must exist before meta_connections references them.
   userEmail = `rpc-a-${Date.now()}@test.local`;
   otherUserEmail = `rpc-b-${Date.now()}@test.local`;
 
@@ -146,10 +82,101 @@ beforeAll(async () => {
   if (u2Err) throw new Error(`createUser failed for org B: ${u2Err.message}`);
   otherUserId = u2.user!.id;
 
-  await admin.from('team_members').insert([
-    { organization_id: orgId, user_id: userId, role: 'admin', is_active: true },
-    { organization_id: otherOrgId, user_id: otherUserId, role: 'admin', is_active: true },
+  const { error: quotaError } = await admin.from('org_quotas').upsert([
+    { organization_id: orgId, resource_key: 'max_users', plan_base: 1 },
+    { organization_id: otherOrgId, resource_key: 'max_users', plan_base: 1 },
+  ], { onConflict: 'organization_id,resource_key' });
+  expect(quotaError).toBeNull();
+
+  const { error: memberError } = await admin.from('team_members').insert([
+    {
+      organization_id: orgId,
+      user_id: userId,
+      role: 'admin',
+      name: 'Meta RPC Admin A',
+      email: userEmail,
+      is_active: true,
+    },
+    {
+      organization_id: otherOrgId,
+      user_id: otherUserId,
+      role: 'admin',
+      name: 'Meta RPC Admin B',
+      email: otherUserEmail,
+      is_active: true,
+    },
   ]);
+  expect(memberError).toBeNull();
+
+  // Meta connection + page for org A
+  const { data: conn, error: connError } = await admin
+    .from('meta_connections')
+    .insert({
+      organization_id: orgId,
+      user_id: userId,
+      facebook_user_id: `fb_rpc_${Date.now()}`,
+      facebook_user_name: 'T',
+      access_token: 't',
+      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      status: 'connected',
+      connected_at: new Date().toISOString(),
+      connection_type: 'facebook',
+    })
+    .select('id')
+    .single();
+  expect(connError).toBeNull();
+  connRowId = conn!.id;
+
+  const { data: page, error: pageError } = await admin
+    .from('meta_pages')
+    .insert({
+      meta_connection_id: connRowId,
+      organization_id: orgId,
+      page_id: pageIdString,
+      page_name: 'P',
+      page_access_token: 'pt',
+      is_active: true,
+      webhook_subscribed: true,
+    })
+    .select('id')
+    .single();
+  expect(pageError).toBeNull();
+  pageRowId = page!.id;
+
+  // Meta connection + page for org B
+  const { data: otherConn, error: otherConnError } = await admin
+    .from('meta_connections')
+    .insert({
+      organization_id: otherOrgId,
+      user_id: otherUserId,
+      facebook_user_id: `fb_other_${Date.now()}`,
+      facebook_user_name: 'O',
+      access_token: 't',
+      token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      status: 'connected',
+      connected_at: new Date().toISOString(),
+      connection_type: 'facebook',
+    })
+    .select('id')
+    .single();
+  expect(otherConnError).toBeNull();
+  otherConnRowId = otherConn!.id;
+
+  const { data: otherPage, error: otherPageError } = await admin
+    .from('meta_pages')
+    .insert({
+      meta_connection_id: otherConnRowId,
+      organization_id: otherOrgId,
+      page_id: 'other_page',
+      page_name: 'OP',
+      page_access_token: 't',
+      is_active: true,
+      webhook_subscribed: true,
+    })
+    .select('id')
+    .single();
+  expect(otherPageError).toBeNull();
+  otherPageRowId = otherPage!.id;
 
   // Sign each user in to obtain a session JWT and build per-user clients.
   const tmpA = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
@@ -200,8 +227,8 @@ afterAll(async () => {
   await admin.from('meta_pages').delete().eq('id', otherPageRowId);
   await admin.from('meta_connections').delete().eq('id', connRowId);
   await admin.from('meta_connections').delete().eq('id', otherConnRowId);
-  await admin.from('organizations').delete().eq('id', orgId);
-  await admin.from('organizations').delete().eq('id', otherOrgId);
+  if (orgId) await deleteFixtureOrganization(admin, orgId);
+  if (otherOrgId) await deleteFixtureOrganization(admin, otherOrgId);
   if (userId) await admin.auth.admin.deleteUser(userId).catch(() => undefined);
   if (otherUserId) await admin.auth.admin.deleteUser(otherUserId).catch(() => undefined);
 });
@@ -212,50 +239,32 @@ async function seedConversation(opts: {
   org?: 'A' | 'B';
 } = {}) {
   const useOrg = opts.org === 'B' ? otherOrgId : orgId;
-  const usePage = opts.org === 'B' ? 'other_page' : pageIdString;
+  const usePage = opts.org === 'B' ? otherPageRowId : pageRowId;
   const sender = 'usr_x';
 
   const total = Math.max(1, opts.unread ?? 1);
+  let conversationId = '';
   for (let i = 0; i < total; i++) {
-    await admin.from('channel_messages').insert({
-      organization_id: useOrg,
-      channel: 'instagram',
-      page_id: usePage,
-      external_id: `ext_${Date.now()}_${i}_${Math.random()}`,
-      sender_id: sender,
-      direction: 'incoming',
-      message_type: 'text',
-      content: i === 0 ? 'hi' : `m${i}`,
-      status: 'received',
-      lead_id: opts.lead_id ?? null,
-      timestamp: new Date(Date.now() + i).toISOString(),
+    const { data, error } = await admin.rpc('upsert_meta_conversation', {
+      p_organization_id: useOrg,
+      p_meta_page_id: usePage,
+      p_channel: 'instagram',
+      p_external_user_id: sender,
+      p_direction: 'incoming',
+      p_message_at: new Date(Date.now() + i).toISOString(),
+      p_preview: i === 0 ? 'hi' : `m${i}`,
+      p_lead_id: opts.lead_id ?? null,
+      p_bump_unread: true,
     });
+    expect(error).toBeNull();
+    conversationId = data as string;
   }
-  const { data } = await admin
-    .from('meta_conversations')
-    .select('id')
-    .eq('organization_id', useOrg)
-    .single();
-  return data!.id as string;
+  return conversationId;
 }
 
 describe('mark_meta_conversation_read (authenticated)', () => {
-  it('zeros unread_count, marks inbound as read, leaves outbound untouched', async () => {
+  it('zeros unread_count for a conversation in the caller organization', async () => {
     const convId = await seedConversation({ unread: 3 });
-
-    // Add an outgoing message — should NOT be touched by the RPC.
-    await admin.from('channel_messages').insert({
-      organization_id: orgId,
-      channel: 'instagram',
-      page_id: pageIdString,
-      external_id: `ext_out_${Date.now()}`,
-      sender_id: 'usr_x',
-      direction: 'outgoing',
-      message_type: 'text',
-      content: 'reply',
-      status: 'sent',
-      timestamp: new Date().toISOString(),
-    });
 
     const { error } = await userClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: convId,
@@ -268,44 +277,34 @@ describe('mark_meta_conversation_read (authenticated)', () => {
       .eq('id', convId)
       .single();
     expect(conv!.unread_count).toBe(0);
-
-    const { data: inbound } = await admin
-      .from('channel_messages')
-      .select('status')
-      .eq('organization_id', orgId)
-      .eq('direction', 'incoming');
-    expect(inbound!.length).toBeGreaterThanOrEqual(3);
-    expect(inbound!.every((m) => m.status === 'read')).toBe(true);
-
-    const { data: outbound } = await admin
-      .from('channel_messages')
-      .select('status')
-      .eq('organization_id', orgId)
-      .eq('direction', 'outgoing');
-    expect(outbound!.every((m) => m.status === 'sent')).toBe(true);
   });
 
-  it('raises forbidden when caller is in a different org', async () => {
-    const convId = await seedConversation();
+  it('does not mutate a conversation from another organization', async () => {
+    const convId = await seedConversation({ unread: 2 });
 
     const { error } = await otherUserClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: convId,
     });
-    expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/forbidden/);
+    expect(error).toBeNull();
+
+    const { data: conv } = await admin
+      .from('meta_conversations')
+      .select('unread_count')
+      .eq('id', convId)
+      .single();
+    expect(conv!.unread_count).toBe(2);
   });
 
-  it('raises conversation_not_found for a bogus UUID', async () => {
+  it('is idempotent for a nonexistent conversation UUID', async () => {
     const { error } = await userClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: '00000000-0000-0000-0000-000000000000',
     });
-    expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/conversation_not_found/);
+    expect(error).toBeNull();
   });
 });
 
 describe('link_meta_conversation_to_lead (authenticated)', () => {
-  it('sets lead_id on the conversation and backfills orphan channel_messages', async () => {
+  it('sets lead_id on the conversation', async () => {
     const convId = await seedConversation({ unread: 2 });
 
     const { data: lead } = await admin
@@ -326,13 +325,6 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       .eq('id', convId)
       .single();
     expect(conv!.lead_id).toBe(lead!.id);
-
-    const { data: msgs } = await admin
-      .from('channel_messages')
-      .select('lead_id')
-      .eq('organization_id', orgId);
-    expect(msgs!.length).toBeGreaterThan(0);
-    expect(msgs!.every((m) => m.lead_id === lead!.id)).toBe(true);
   });
 
   it('raises forbidden when caller is not a member of the conversation org', async () => {
@@ -349,7 +341,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: leadB!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/forbidden/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises lead_org_mismatch when caller is in conv org but lead is in another', async () => {
@@ -365,7 +357,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: foreignLead!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/lead_org_mismatch/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises conversation_not_found for a bogus conversation UUID', async () => {
@@ -380,7 +372,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: lead!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/conversation_not_found/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises lead_not_found for a bogus lead UUID', async () => {
@@ -390,6 +382,6 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: '00000000-0000-0000-0000-000000000000',
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/lead_not_found/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 });

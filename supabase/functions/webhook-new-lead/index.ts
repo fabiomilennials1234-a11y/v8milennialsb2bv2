@@ -306,7 +306,10 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
           if (existingConfirmacao) {
             await updatePipeEntryById(supabase, existingConfirmacao.id, {
               stageKey: meetDest.stageKey,
-              metadata: { meeting_date: newCompromissoDate },
+              metadata: {
+                meeting_date: newCompromissoDate,
+                pre_sale_responsible_id: sdr_id || existingLead.pre_sale_responsible_id || null,
+              },
             });
           } else {
             await upsertPipeEntry(supabase, {
@@ -316,6 +319,7 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
               stageKey: meetDest.stageKey,
               metadata: {
                 sdr_id: sdr_id || existingLead.sdr_id || null,
+                pre_sale_responsible_id: sdr_id || existingLead.pre_sale_responsible_id || null,
                 meeting_date: newCompromissoDate,
               },
               assignedTo: sdr_id || existingLead.sdr_id || null,
@@ -401,7 +405,6 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       p_rating: rating ? parseInt(String(rating), 10) : 0,
       p_sdr_id: sdr_id || null,
       p_responsible_id: sdr_id || null,
-      p_pre_sale_responsible_id: sdr_id || null,
       p_compromisso_date: compromisso_date || null,
       p_utm_source: utm_source || null,
       p_utm_medium: utm_medium || null,
@@ -428,8 +431,15 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
         slug: dest.ref,
         stageKey: dest.stageKey,
         metadata: compromisso_date
-          ? { sdr_id: sdr_id || null, meeting_date: compromisso_date }
-          : { sdr_id: sdr_id || null },
+          ? {
+            sdr_id: sdr_id || null,
+            pre_sale_responsible_id: sdr_id || null,
+            meeting_date: compromisso_date,
+          }
+          : {
+            sdr_id: sdr_id || null,
+            pre_sale_responsible_id: sdr_id || null,
+          },
         assignedTo: sdr_id || null,
       });
     } else if (!dest) {

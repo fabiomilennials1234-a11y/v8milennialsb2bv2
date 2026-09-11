@@ -1,5 +1,5 @@
 /**
- * Integration tests — pipe_confirmacao + pipe_propostas stage moves
+ * Integration tests — confirmation and proposal pipeline_entries stage moves
  *
  * No seed data exists for these tables; each describe block creates
  * its own lead + pipe entry and cleans up in afterAll.
@@ -9,16 +9,35 @@
  * Covers (per pipe):
  *   - Entry creation at first stage
  *   - Forward stage transitions through qualification sequence
- *   - Terminal stage transitions (compareceu / vendido / perdido)
+ *   - Named column transitions (compareceu / vendido / perdido); no outcome mutation
  *   - Idempotent update (same status twice = no error)
  *   - Read-back confirms persisted status
  *   - Org-B isolation (data model, not RLS policy)
  */
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID, TEST_ORG_B_ID } from './setup';
+import { supabase, TEST_ORG_ID, TEST_ORG_B_ID, getSystemPipelineId } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
+
+
+async function prepareStages(slug: 'confirmacao' | 'propostas', keys: readonly string[], added: string[]) {
+  const pipelineId = await getSystemPipelineId(TEST_ORG_ID, slug);
+  const { data: stages, error } = await supabase.from('pipeline_stages')
+    .select('stage_key, position').eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId);
+  expect(error).toBeNull();
+  let position = Math.max(-1, ...(stages ?? []).map(stage => stage.position));
+  for (const stageKey of keys) {
+    if (stages?.some(stage => stage.stage_key === stageKey)) continue;
+    const { data, error: insertError } = await supabase.from('pipeline_stages').insert({
+      organization_id: TEST_ORG_ID, pipeline_id: pipelineId,
+      stage_key: stageKey, name: stageKey, position: ++position, stage_role: 'open',
+    }).select('id').single();
+    expect(insertError).toBeNull();
+    added.push(data!.id);
+  }
+  return pipelineId;
+}
 
 // ─── pipe_confirmacao ────────────────────────────────────────────────────────
 
@@ -31,13 +50,16 @@ const CONFIRMACAO_STAGES = [
   'confirmacao_no_dia',
   'compareceu',
 ] as const;
-type ConfirmacaoStage = typeof CONFIRMACAO_STAGES[number];
+
 
 describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
   let leadId: string;
   let pipeEntryId: string;
+  let pipelineId: string;
+  const addedStageIds: string[] = [];
 
   beforeAll(async () => {
+    pipelineId = await prepareStages('confirmacao', [...CONFIRMACAO_STAGES, 'remarcar', 'perdido'], addedStageIds);
     const { data: lead, error: leadErr } = await supabase
       .from('leads')
       .insert({
@@ -53,13 +75,13 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
     leadId = lead!.id;
 
     const { data: pipe, error: pipeErr } = await supabase
-      .from('pipe_confirmacao')
+      .from('pipeline_entries')
       .insert({
         lead_id: leadId,
         organization_id: TEST_ORG_ID,
-        status: 'reuniao_marcada',
+        pipeline_id: pipelineId, stage_key: 'reuniao_marcada',
       })
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(pipeErr).toBeNull();
@@ -69,17 +91,24 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   afterAll(async () => {
     if (pipeEntryId) {
-      await supabase.from('pipe_confirmacao').delete().eq('id', pipeEntryId);
+      const { error } = await supabase.from('pipeline_entries').delete()
+        .eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId).eq('lead_id', leadId);
+      expect(error).toBeNull();
     }
     if (leadId) {
-      await supabase.from('leads').delete().eq('id', leadId);
+      const { error } = await supabase.from('leads').delete().eq('id', leadId);
+      expect(error).toBeNull();
+    }
+    if (addedStageIds.length) {
+      const { error } = await supabase.from('pipeline_stages').delete().in('id', addedStageIds);
+      expect(error).toBeNull();
     }
   });
 
   it('entry created at reuniao_marcada', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .select('id, status, lead_id, organization_id')
+      .from('pipeline_entries')
+      .select('id, status:stage_key, lead_id, organization_id')
       .eq('id', pipeEntryId)
       .single();
 
@@ -91,10 +120,10 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('reuniao_marcada → confirmar_d5', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d5' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d5' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -103,10 +132,10 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('confirmar_d5 → confirmar_d3', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d3' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d3' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -115,22 +144,22 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('confirmar_d3 → confirmar_d1 (skipping d2)', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d1' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d1' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
     expect(data?.status).toBe('confirmar_d1');
   });
 
-  it('confirmar_d1 → compareceu (terminal positive stage)', async () => {
+  it('confirmar_d1 → compareceu (column only; outcome is independent)', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'compareceu' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'compareceu' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -139,16 +168,16 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('full sequence reuniao_marcada → compareceu persists each step', async () => {
     await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'reuniao_marcada' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'reuniao_marcada' })
       .eq('id', pipeEntryId);
 
     for (const stage of CONFIRMACAO_STAGES) {
       const { data, error } = await supabase
-        .from('pipe_confirmacao')
-        .update({ status: stage })
+        .from('pipeline_entries')
+        .update({ stage_key: stage })
         .eq('id', pipeEntryId)
-        .select('id, status')
+        .select('id, status:stage_key')
         .single();
       expect(error).toBeNull();
       expect(data?.status).toBe(stage);
@@ -157,35 +186,35 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('remarcar branch: confirmacao_no_dia → remarcar → reuniao_marcada', async () => {
     await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmacao_no_dia' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmacao_no_dia' })
       .eq('id', pipeEntryId);
 
     const { data: remarcar, error: e1 } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'remarcar' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'remarcar' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
     expect(e1).toBeNull();
     expect(remarcar?.status).toBe('remarcar');
 
     const { data: back, error: e2 } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'reuniao_marcada' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'reuniao_marcada' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
     expect(e2).toBeNull();
     expect(back?.status).toBe('reuniao_marcada');
   });
 
-  it('perdido terminal stage is reachable', async () => {
+  it('perdido column is reachable', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'perdido' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'perdido' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -194,15 +223,15 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('idempotent update: same status twice has no error', async () => {
     await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d5' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d5' })
       .eq('id', pipeEntryId);
 
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d5' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d5' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -211,13 +240,13 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('read-back confirms persisted status', async () => {
     await supabase
-      .from('pipe_confirmacao')
-      .update({ status: 'confirmar_d3' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'confirmar_d3' })
       .eq('id', pipeEntryId);
 
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .select('id, status')
+      .from('pipeline_entries')
+      .select('id, status:stage_key')
       .eq('id', pipeEntryId)
       .single();
 
@@ -227,8 +256,8 @@ describe.skipIf(shouldSkip)('Pipe Confirmacao — stage moves', () => {
 
   it('org-B cannot see org-A confirmacao entry', async () => {
     const { data, error } = await supabase
-      .from('pipe_confirmacao')
-      .select('id, status')
+      .from('pipeline_entries')
+      .select('id, status:stage_key')
       .eq('lead_id', leadId)
       .eq('organization_id', TEST_ORG_B_ID);
 
@@ -244,13 +273,16 @@ const PROPOSTAS_FORWARD_STAGES = [
   'compromisso_marcado',
   'vendido',
 ] as const;
-type PropostasStage = typeof PROPOSTAS_FORWARD_STAGES[number];
+
 
 describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
   let leadId: string;
   let pipeEntryId: string;
+  let pipelineId: string;
+  const addedStageIds: string[] = [];
 
   beforeAll(async () => {
+    pipelineId = await prepareStages('propostas', [...PROPOSTAS_FORWARD_STAGES, 'esfriou', 'reativar', 'futuro', 'perdido'], addedStageIds);
     const { data: lead, error: leadErr } = await supabase
       .from('leads')
       .insert({
@@ -266,13 +298,13 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
     leadId = lead!.id;
 
     const { data: pipe, error: pipeErr } = await supabase
-      .from('pipe_propostas')
+      .from('pipeline_entries')
       .insert({
         lead_id: leadId,
         organization_id: TEST_ORG_ID,
-        status: 'marcar_compromisso',
+        pipeline_id: pipelineId, stage_key: 'marcar_compromisso',
       })
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(pipeErr).toBeNull();
@@ -282,17 +314,24 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   afterAll(async () => {
     if (pipeEntryId) {
-      await supabase.from('pipe_propostas').delete().eq('id', pipeEntryId);
+      const { error } = await supabase.from('pipeline_entries').delete()
+        .eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId).eq('lead_id', leadId);
+      expect(error).toBeNull();
     }
     if (leadId) {
-      await supabase.from('leads').delete().eq('id', leadId);
+      const { error } = await supabase.from('leads').delete().eq('id', leadId);
+      expect(error).toBeNull();
+    }
+    if (addedStageIds.length) {
+      const { error } = await supabase.from('pipeline_stages').delete().in('id', addedStageIds);
+      expect(error).toBeNull();
     }
   });
 
   it('entry created at marcar_compromisso', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .select('id, status, lead_id, organization_id')
+      .from('pipeline_entries')
+      .select('id, status:stage_key, lead_id, organization_id')
       .eq('id', pipeEntryId)
       .single();
 
@@ -304,22 +343,22 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('marcar_compromisso → compromisso_marcado', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'compromisso_marcado' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'compromisso_marcado' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
     expect(data?.status).toBe('compromisso_marcado');
   });
 
-  it('compromisso_marcado → vendido (terminal positive stage)', async () => {
+  it('compromisso_marcado → vendido (column only; outcome is independent)', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'vendido' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'vendido' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -328,24 +367,24 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('reativar branch: esfriou → reativar → compromisso_marcado', async () => {
     await supabase
-      .from('pipe_propostas')
-      .update({ status: 'esfriou' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'esfriou' })
       .eq('id', pipeEntryId);
 
     const { data: reativar, error: e1 } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'reativar' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'reativar' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
     expect(e1).toBeNull();
     expect(reativar?.status).toBe('reativar');
 
     const { data: back, error: e2 } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'compromisso_marcado' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'compromisso_marcado' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
     expect(e2).toBeNull();
     expect(back?.status).toBe('compromisso_marcado');
@@ -353,22 +392,22 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('futuro stage is reachable (long-cycle deal)', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'futuro' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'futuro' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
     expect(data?.status).toBe('futuro');
   });
 
-  it('perdido terminal stage is reachable', async () => {
+  it('perdido column is reachable', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'perdido' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'perdido' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -377,16 +416,16 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('forward sequence marcar_compromisso → vendido persists each step', async () => {
     await supabase
-      .from('pipe_propostas')
-      .update({ status: 'marcar_compromisso' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'marcar_compromisso' })
       .eq('id', pipeEntryId);
 
     for (const stage of PROPOSTAS_FORWARD_STAGES) {
       const { data, error } = await supabase
-        .from('pipe_propostas')
-        .update({ status: stage })
+        .from('pipeline_entries')
+        .update({ stage_key: stage })
         .eq('id', pipeEntryId)
-        .select('id, status')
+        .select('id, status:stage_key')
         .single();
       expect(error).toBeNull();
       expect(data?.status).toBe(stage);
@@ -395,10 +434,10 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('propostas entry stores sale_value correctly', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ sale_value: 150000.0, status: 'compromisso_marcado' })
+      .from('pipeline_entries')
+      .update({ metadata: { sale_value: 150000.0 }, stage_key: 'compromisso_marcado' })
       .eq('id', pipeEntryId)
-      .select('id, status, sale_value')
+      .select('id, status:stage_key, sale_value:metadata->sale_value')
       .single();
 
     expect(error).toBeNull();
@@ -408,15 +447,15 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('idempotent update: same status twice has no error', async () => {
     await supabase
-      .from('pipe_propostas')
-      .update({ status: 'compromisso_marcado' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'compromisso_marcado' })
       .eq('id', pipeEntryId);
 
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .update({ status: 'compromisso_marcado' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'compromisso_marcado' })
       .eq('id', pipeEntryId)
-      .select('id, status')
+      .select('id, status:stage_key')
       .single();
 
     expect(error).toBeNull();
@@ -425,13 +464,13 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('read-back confirms persisted status', async () => {
     await supabase
-      .from('pipe_propostas')
-      .update({ status: 'esfriou' })
+      .from('pipeline_entries')
+      .update({ stage_key: 'esfriou' })
       .eq('id', pipeEntryId);
 
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .select('id, status')
+      .from('pipeline_entries')
+      .select('id, status:stage_key')
       .eq('id', pipeEntryId)
       .single();
 
@@ -441,8 +480,8 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
 
   it('org-B cannot see org-A propostas entry', async () => {
     const { data, error } = await supabase
-      .from('pipe_propostas')
-      .select('id, status')
+      .from('pipeline_entries')
+      .select('id, status:stage_key')
       .eq('lead_id', leadId)
       .eq('organization_id', TEST_ORG_B_ID);
 
@@ -450,17 +489,18 @@ describe.skipIf(shouldSkip)('Pipe Propostas — stage moves', () => {
     expect(data).toHaveLength(0);
   });
 
-  it('duplicate pipe entry for same lead conflicts or is prevented', async () => {
-    const { error } = await supabase
-      .from('pipe_propostas')
-      .insert({
-        lead_id: leadId,
-        organization_id: TEST_ORG_ID,
-        status: 'marcar_compromisso',
-      });
-
-    if (error) {
-      expect(['23505', '23503']).toContain(error.code);
-    }
+  it('same lead can have a second distinct proposal deal', async () => {
+    const { data, error } = await supabase.from('pipeline_entries').insert({
+      lead_id: leadId, organization_id: TEST_ORG_ID,
+      pipeline_id: pipelineId, stage_key: 'marcar_compromisso',
+    }).select('id').single();
+    expect(error).toBeNull();
+    expect(data?.id).toBeTruthy();
+    expect(data?.id).not.toBe(pipeEntryId);
+    const { data: entries, error: readError } = await supabase.from('pipeline_entries')
+      .select('id').eq('organization_id', TEST_ORG_ID)
+      .eq('pipeline_id', pipelineId).eq('lead_id', leadId);
+    expect(readError).toBeNull();
+    expect(new Set(entries!.map(entry => entry.id))).toEqual(new Set([pipeEntryId, data!.id]));
   });
 });

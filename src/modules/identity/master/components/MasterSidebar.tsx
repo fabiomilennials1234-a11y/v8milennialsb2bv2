@@ -60,6 +60,7 @@ const allNavItems: NavItem[] = [
   { label: "Operations", icon: Monitor, path: "/master/operations", permission: "audit" },
   { label: "Automation Health", icon: Heart, path: "/master/automation-health", permission: "audit" },
   { label: "WhatsApp Health", icon: MessageSquare, path: "/master/whatsapp-health", permission: "audit" },
+  { label: "Qualidade Oráculo", icon: Brain, path: "/master/oraculo-feedback", permission: "audit", requiresFullMaster: true },
   { label: "Copilot Reasoning", icon: Brain, path: "/master/copilot-reasoning", permission: "audit" },
   { label: "Copilot Toggle Audit", icon: ToggleLeft, path: "/master/copilot-toggle-audit", permission: "audit" },
   { label: "Etapas Won/Lost", icon: CircleDollarSign, path: "/master/stage-roles", permission: "audit" },
