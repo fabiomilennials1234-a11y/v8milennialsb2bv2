@@ -28,6 +28,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 
 import { LeadCard } from "@/modules/leads/components/lead-card/LeadCard";
 import { LEAD_EXEMPLO } from "@/modules/leads/components/lead-card/fixtures";
+import { LeadConversationActionProvider } from "@/shared/components/LeadConversationActionSlot";
 import type { LeadCardData } from "@/modules/leads/components/lead-card/types";
 
 // ── Mocks do container ──────────────────────────────────────────────────────
@@ -78,6 +79,26 @@ vi.mock("sonner", () => ({
 }));
 
 import { LeadCardContainer } from "@/modules/leads/components/lead-card/LeadCardContainer";
+
+it("não oferece uma ação de conversa inerte sem integração", () => {
+  render(<LeadCard lead={LEAD_EXEMPLO} />);
+  expect(screen.queryByRole("button", { name: "Abrir conversa" })).not.toBeInTheDocument();
+});
+
+it("liga a ação de conversa ao contato exibido no cabeçalho", () => {
+  cardDataRef.value = { ...LEAD_EXEMPLO, id: "contato-chat", telefone: "5548999991234" };
+  cardDataRef.visibility = "exists";
+  const abrir = vi.fn();
+  render(
+    <LeadConversationActionProvider value={(lead) => (
+      <button aria-label="Abrir conversa" onClick={() => abrir(lead)}>Chat</button>
+    )}>
+      <LeadCardContainer leadId="contato-chat" isOpen />
+    </LeadConversationActionProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Abrir conversa" }));
+  expect(abrir).toHaveBeenCalledWith({ id: "contato-chat", telefone: "5548999991234" });
+});
 import { LeadCallActionProvider } from "@/shared/components/LeadCallActionSlot";
 
 function lead(over: Partial<LeadCardData> = {}): LeadCardData {

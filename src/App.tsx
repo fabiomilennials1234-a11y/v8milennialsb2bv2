@@ -73,7 +73,9 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communicati
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
-import { VoiceCallButton, VoiceCallProvider } from "@/modules/communication";
+import { VoiceCallButton, VoiceCallProvider, AbrirConversaButton } from "@/modules/communication";
+import { MessageCircle } from "lucide-react";
+import { LeadConversationActionProvider, type LeadConversationActionRenderer } from "@/shared/components/LeadConversationActionSlot";
 import { LeadCallActionProvider, type LeadCallActionRenderer } from "@/shared/components/LeadCallActionSlot";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
@@ -867,6 +869,20 @@ const renderLeadCallAction: LeadCallActionRenderer = (lead) => (
   <VoiceCallButton variant="icon" leadId={lead.id} leadName={lead.nome} />
 );
 
+const renderLeadConversationAction: LeadConversationActionRenderer = (lead) => (
+  <AbrirConversaButton
+    leadId={lead.id}
+    phone={lead.telefone}
+    variant="outline"
+    size="icon"
+    className="size-8 rounded-lg"
+    title="Abrir conversa"
+    aria-label="Abrir conversa"
+  >
+    <MessageCircle className="size-[15px]" />
+  </AbrirConversaButton>
+);
+
 const App = () => {
   const hasSupabaseEnv = Boolean(SUPABASE_URL?.trim() && SUPABASE_ANON_KEY?.trim());
   if (!hasSupabaseEnv) {
@@ -908,10 +924,12 @@ const App = () => {
                                     `communication` sem fechar ciclo entre os
                                     dois módulos. Ver LeadCallActionSlot. */}
                                 <LeadCallActionProvider value={renderLeadCallAction}>
-                                  <AppRoutes />
-                                  <CommandPaletteComponent />
-                                  <SupportPanel />
-                                  <SupportAnnouncement />
+                                  <LeadConversationActionProvider value={renderLeadConversationAction}>
+                                    <AppRoutes />
+                                    <CommandPaletteComponent />
+                                    <SupportPanel />
+                                    <SupportAnnouncement />
+                                  </LeadConversationActionProvider>
                                 </LeadCallActionProvider>
                               </VoiceCallProvider>
                             </GlobalShortcutsProvider>
