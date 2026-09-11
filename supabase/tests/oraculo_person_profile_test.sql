@@ -22,11 +22,12 @@ INSERT INTO public.team_members (id,organization_id,name,role,is_active,metric_t
 -- Quatro praticantes de fechamento: taxas 0%, 40%, 60%, 80%; mediana 50%.
 -- Ana nunca vendeu. O impacto dela ainda usa o ticket observado do time.
 INSERT INTO public.sale_events (
-  id,organization_id,lead_id,deal_id,event_type,sale_value,sold_at,sale_responsible_id,revenue_stream
+  id,organization_id,lead_id,deal_id,event_type,sale_value,sold_at,sale_responsible_id,
+  revenue_stream,producer
 )
 SELECT gen_random_uuid(),'a6040000-0000-4000-8000-000000000001',gen_random_uuid(),gen_random_uuid(),
   CASE WHEN g <= successes THEN 'sale' ELSE 'sale_lost' END,
-  CASE WHEN g <= successes THEN 1000 END,'2026-08-10 12:00+00',member_id,'novo_negocio'
+  CASE WHEN g <= successes THEN 1000 END,'2026-08-10 12:00+00',member_id,'novo_negocio','deal'
 FROM (VALUES
  ('a6040000-0000-4000-8000-000000000011'::uuid,0),
  ('a6040000-0000-4000-8000-000000000012'::uuid,4),
@@ -34,10 +35,12 @@ FROM (VALUES
  ('a6040000-0000-4000-8000-000000000014'::uuid,8)
 ) people(member_id,successes) CROSS JOIN generate_series(1,10) g;
 INSERT INTO public.sale_events (
-  id,organization_id,lead_id,deal_id,event_type,sale_value,sold_at,sale_responsible_id,revenue_stream
+  id,organization_id,lead_id,deal_id,event_type,sale_value,sold_at,sale_responsible_id,
+  revenue_stream,producer
 )
 SELECT gen_random_uuid(),'a6040000-0000-4000-8000-000000000001',gen_random_uuid(),gen_random_uuid(),
-  'sale_lost',NULL,'2026-07-01 12:00+00','a6040000-0000-4000-8000-000000000011','novo_negocio'
+  'sale_lost',NULL,'2026-07-01 12:00+00','a6040000-0000-4000-8000-000000000011',
+  'novo_negocio','deal'
 FROM generate_series(1,10) g;
 
 CREATE TEMP TABLE profile_result AS
