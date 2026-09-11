@@ -1,7 +1,16 @@
 # Navegação canônica — correção do PR #2092
 
-Status: implementada na branch; ensaio PostgreSQL aprovado em 2026-09-11.
-Publicação pendente; nenhuma escrita em produção.
+Status: migration aplicada em produção em 2026-09-11T19:17:08Z, autorizada
+por Gabriel na sessão; publicação do frontend pelo PR #2101 em andamento.
+
+Apply reconciliou 399 entidades e as cinco ocultações previstas, sem divergências.
+Transação repetível comparou hashes integrais antes/depois de 49.562 entradas,
+4.778 etapas e 1.952 eventos de venda, identidade dos funis e defaults de orgs;
+todos preservados. Ledger registra versão `20271019000020`. SHA-256 do SQL:
+`6f0f77113a5dd1ee7b945b086fe80ebc66c371c47647db48871069b3cf8b3b5a`.
+Snapshot pré/pós e rollback condicional guardados em diretório operacional
+privado, fora de Git. A aplicação abortaria diante de mudança após snapshot,
+diferença no pós-estado esperado ou alteração das invariantes.
 
 ## Contrato
 
