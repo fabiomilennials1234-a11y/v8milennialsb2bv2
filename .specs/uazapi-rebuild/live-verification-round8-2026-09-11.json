@@ -1,0 +1,119 @@
+{
+  "environment": "QA only; production unchanged",
+  "pagination": {
+    "real_rows": 214,
+    "pages": [
+      100,
+      100,
+      14
+    ],
+    "synthetic_plus_real_rows": 1314,
+    "pages_loaded": 14,
+    "mounted_final": 18,
+    "synthetic_rows_removed": true,
+    "unique_rows": 1314,
+    "duplicate_rows": 0
+  },
+  "network": {
+    "samples": [
+      {
+        "path": "/rest/v1/rpc/whatsapp_thread_manifest",
+        "status": 200,
+        "bytes": 6985,
+        "rows": null,
+        "limit": null
+      },
+      {
+        "path": "/rest/v1/whatsapp_messages",
+        "status": 200,
+        "bytes": 97476,
+        "rows": 100,
+        "limit": null
+      },
+      {
+        "path": "/rest/v1/rpc/whatsapp_thread_manifest",
+        "status": 200,
+        "bytes": 88,
+        "rows": null,
+        "limit": null
+      },
+      {
+        "path": "/rest/v1/rpc/whatsapp_thread_manifest",
+        "status": 200,
+        "bytes": 88,
+        "rows": null,
+        "limit": null
+      }
+    ],
+    "providerCalls": 0,
+    "virtualized": 1,
+    "mountedTimelineItems": 10
+  },
+  "rls": {
+    "admin": {
+      "rows": 100,
+      "unchanged": true,
+      "secondBytes": 83
+    },
+    "outsider": {
+      "rows": 0,
+      "unchanged": true,
+      "secondBytes": 83
+    }
+  },
+  "enrollment_concurrency": {
+    "first": 1,
+    "disabled": 0,
+    "cooldown": 0,
+    "concurrentAttempts": 8,
+    "concurrentAccepted": 1
+  },
+  "fire_trigger": {
+    "before": [
+      {
+        "re_enrollment_enabled": false,
+        "re_enrollment_max_times": 1
+      }
+    ],
+    "http": 200,
+    "result": {
+      "mode": "fire_trigger",
+      "triggered": 0
+    },
+    "executions": [
+      {
+        "status": "completed"
+      },
+      {
+        "status": "cancelled"
+      }
+    ]
+  },
+  "small_load_probe": {
+    "admin": {
+      "requests": 30,
+      "concurrency": 10,
+      "errors": [],
+      "p50Ms": 145,
+      "p95Ms": 189
+    }
+  },
+  "limitations": [
+    "Not production-scale certification",
+    "No provider messages sent for synthetic volume test",
+    "Lifecycle dedicated instance unavailable",
+    "Upstream missing-history recovery unproven",
+    "CRM transcription persistence/UI pending",
+    "Production migration replay and CI pending"
+  ],
+  "validation": {
+    "unit_tests": 967,
+    "files": 70,
+    "sql_assertions": "passed including in-flight enrollment",
+    "build": "passed",
+    "deno": "passed",
+    "lint_introduced": 0,
+    "typescript_introduced": 0,
+    "master_ghost_guard": "fails identically on previous HEAD: 23 violations and 42 stale baseline entries, no delta"
+  }
+}

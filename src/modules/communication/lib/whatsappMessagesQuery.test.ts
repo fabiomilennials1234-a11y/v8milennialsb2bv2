@@ -30,7 +30,9 @@ const builder = {
   eq: vi.fn(() => builder),
   in: vi.fn(() => builder),
   order: vi.fn(() => builder),
-  limit: vi.fn(() => Promise.resolve(queryResult)),
+  limit: vi.fn(() => builder),
+  or: vi.fn(() => builder),
+  then: (resolve: (value: typeof queryResult) => unknown) => Promise.resolve(queryResult).then(resolve),
 };
 const fromMock = vi.fn((..._args: unknown[]) => builder);
 const rpcResult: { data: unknown; error: unknown } = { data: null, error: null };
@@ -45,7 +47,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 import {
   fetchConversationMessages,
   WHATSAPP_MESSAGE_COLUMNS,
-  THREAD_MESSAGE_LIMIT,
+  MESSAGE_PAGE_SIZE,
 } from "./whatsappMessagesQuery";
 import { clearChipInstanceIdsCache } from "./chipInstanceIds";
 
@@ -157,21 +159,21 @@ describe("fetchConversationMessages — janela ancorada nas mensagens recentes",
     // sobravam as MAIS ANTIGAS.
     expect(builder.order).toHaveBeenCalledWith("timestamp", { ascending: false });
     expect(builder.order).not.toHaveBeenCalledWith("timestamp", { ascending: true });
-    expect(builder.limit).toHaveBeenCalledWith(THREAD_MESSAGE_LIMIT);
-    expect(THREAD_MESSAGE_LIMIT).toBeLessThanOrEqual(1000);
+    expect(builder.limit).toHaveBeenCalledWith(MESSAGE_PAGE_SIZE);
+    expect(MESSAGE_PAGE_SIZE).toBeLessThanOrEqual(1000);
   });
 
-  it("desempata por created_at — sem isso a fronteira da janela varia entre refetches", async () => {
+  it("desempata por id — sem isso a fronteira da janela varia entre refetches", async () => {
     await fetchConversationMessages({
       organizationId: "org-1",
       instanceId: "inst-1",
       phoneNumber: "5515992486581",
     });
 
-    expect(builder.order).toHaveBeenCalledWith("created_at", { ascending: false });
-    // A ordem dos critérios importa: timestamp primeiro, created_at desempata.
+    expect(builder.order).toHaveBeenCalledWith("id", { ascending: false });
+    // A ordem dos critérios importa: timestamp primeiro, id desempata.
     const orderedCols = builder.order.mock.calls.map((c) => (c as unknown[])[0]);
-    expect(orderedCols).toEqual(["timestamp", "created_at"]);
+    expect(orderedCols).toEqual(["timestamp", "id"]);
   });
 
   it("devolve em ordem ascendente — a UI assume cronológico", async () => {
@@ -255,5 +257,17 @@ describe('UAZAPI persisted message actions', () => {
     const rows = await fetchConversationMessages({ organizationId: 'org', instanceId: 'instance', phoneNumber: '5511999999999' });
     for (const column of ['reactions', 'edited', 'pinned_at', 'deleted_at']) expect(WHATSAPP_MESSAGE_COLUMNS.split(', ').includes(column)).toBe(true);
     expect(rows[0]).toMatchObject({ reactions: [{ emoji: '🧪', from: 'me', count: 1 }], edited: true });
+  });
+});
+
+describe('cursor pagination', () => {
+  it('preserves microseconds and applies a strict UUID tie-breaker', async () => {
+    const timestamp = '2026-09-11T12:00:00.123456+00:00';
+    const id = '11111111-1111-4111-8111-111111111111';
+    await fetchConversationMessages({ organizationId: 'org', instanceId: 'chip', phoneNumber: '4891005289', before: { timestamp, id } });
+    expect(builder.or).toHaveBeenLastCalledWith(`timestamp.lt.${timestamp},and(timestamp.eq.${timestamp},id.lt.${id})`);
+  });
+  it('rejects filter injection in a cursor', async () => {
+    await expect(fetchConversationMessages({ organizationId: 'org', instanceId: 'chip', phoneNumber: '4891005289', before: { timestamp: '2026-09-11),id.gt.0', id: '11111111-1111-4111-8111-111111111111' } })).rejects.toThrow('Cursor inválido');
   });
 });

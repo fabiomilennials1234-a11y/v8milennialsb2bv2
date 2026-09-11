@@ -585,22 +585,22 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 
     // ON CONFLICT DO NOTHING (ignoreDuplicates) → concurrent identical fires that
     // computed the same key collapse to a single row at the DB. The returned count
-    // is the ATTEMPTED count; the unique index is the actual guarantee.
-    const { error: insertError } = await supabase
+    // includes only accepted rows: dedup and enrollment limits can suppress inserts.
+    const { data: inserted, error: insertError } = await supabase
       .from("workflow_executions")
       .upsert(executions, {
         onConflict: "workflow_id,lead_id,trigger_dedup_key",
         ignoreDuplicates: true,
-      });
+      }).select("id");
 
     if (insertError) {
       console.warn("[workflow-trigger] Insert failed:", insertError.message);
       return 0;
     }
 
-    console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType} (dedup-keyed)`);
+    console.log(`[workflow-trigger] Fired ${inserted?.length ?? 0} workflows for ${triggerType} (dedup-keyed)`);
 
-    return deduped.length;
+    return inserted?.length ?? 0;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);
     return 0;

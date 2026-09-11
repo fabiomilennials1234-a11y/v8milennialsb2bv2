@@ -9,8 +9,8 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 | Documentação | Inventário de 139 operações, campos, respostas e paginação | OpenAPI 2.1.1; inventário completo não equivale a 139 funcionalidades homologadas |
 | Texto e menus | Envios reais via provider, node e compositor | Aceitos; entrega e leitura confirmadas entre dois números |
 | Imagem e documento | Enviar, consultar, baixar e persistir | Imagem/documento entregues; downloads decodificados; imagem enviada e recebida carregadas no chat |
-| Áudio e voz | Áudio comum e PTT | Aceitos e posteriormente Sent; reprodução/transcrição completa não homologadas nesta rodada |
-| Vídeo | Envio e consulta | Aceito e posteriormente Sent; reprodução completa no front não homologada |
+| Áudio e voz | Áudio comum e PTT | Playback real de áudio/PTT: 7,01 s, currentTime avançando; transcrição integrada no CRM pendente |
+| Vídeo | Envio e consulta | MP4 recuperado para Storage; playback real de 2 s no Chromium |
 | Figurinha | Envio, download, Storage e renderização | Enviada; download WebP 200; imagem carregada no navegador após configurar bucket media no QA |
 | Localização e contato | Envio e validação de parâmetros | Chamadas aceitas; coordenadas inválidas/contatos múltiplos recusados. (0,0) falhou no fornecedor; coordenadas válidas passaram |
 | Ações de mensagem | Editar, reagir, fixar/desfixar, marcar leitura, apagar mensagem própria | Chamadas aceitas; reação persistida e visível. Markread inicial usou mensagem própria, não prova leitura pelo cliente |
@@ -18,7 +18,7 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 | Quick Blast | Preview, criação, polling, conclusão e isolamento | Uma mensagem enviada, zero falhas; cleanup removeu pasta e marcou job cancelled após conclusão |
 | Mass Send | Sessão, organização e limiar | 401 sem sessão; 403 entre organizações; 400 abaixo do limiar. Não foi disparado lote de 50 destinatários |
 | Nodes | Texto/lista reais, demais handlers em testes automatizados | Tracking, rótulo de lista, destinatário e template por organização, persistência sem regredir recibos |
-| Grafo de workflow | Motor real: trigger → texto → lista → end | Banco/provider reais em QA; execução completed, quatro passos registrados. Worker de cron/publicação pelo editor ainda não homologados |
+| Grafo de workflow | Motor real: trigger → texto → lista → end | Banco/provider reais em QA; execução completed, quatro passos registrados. Cron real e publicação guiada versão 1 homologados; reentrada corrigida e testada |
 | Respostas recebidas | Seleções reais por segundo aparelho | fromMe=false, tipo list_response, conteúdo Validar/Concluir, status received |
 | Webhook e replay | Envelope real, repetição de texto/reação, segredo inválido | Sem duplicação nos casos testados; segredo incorreto 404; DLQ vazia na verificação registrada |
 | Chat | Compositor, respostas, recibos, reações, imagens, figurinha e lista lateral | Entrada à esquerda; seleção identificada; títulos legíveis; entrega/leitura; overflow lateral corrigido |
@@ -26,7 +26,7 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 | Recuperação de histórico | history e exact | history reconhecido. exact: 404 no primeiro caso; 200/success no segundo chat com ambos os IDs. Recuperação de mensagem ausente e conclusão assíncrona ainda não comprovadas |
 | Segurança | JWT, org, segredo, credenciais e RPC | Bloqueios positivos/negativos confirmados; credenciais fora do frontend/Git |
 | Ambiente | Schema, isolamento, URLs internas e cron | Schema QA comparado com origem; sem dados comerciais copiados; referências fixas redirecionadas; zero cron ativo |
-| Qualidade | Suíte direcionada ampliada | 645 testes em 50 arquivos. Deno, build e ratchets frontend aprovados nas mudanças correspondentes; baselines não ampliados |
+| Qualidade | Suíte direcionada ampliada | 967 testes em 70 arquivos. Deno, build e ratchets frontend aprovados nas mudanças correspondentes; baselines não ampliados |
 
 ## Falhas encontradas e tratadas
 
@@ -44,7 +44,7 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 
 ## Pendências reais
 
-- Corrigir reentrada: configuração desativada não impediu nova execução após conclusão. Publicação versionada e cron real já passaram.
+- Medir carga representativa de produção. Reentrada corrigida e verificada na rodada 8; publicação versionada e cron real já passaram.
 - Homologar recuperação de histórico ausente no próprio provider; retomada de checkpoint e paginação truncada já corrigidas.
 - Provar recuperação de mensagem ausente e término do sync assíncrono, além do acknowledgement.
 - Transcrição ponta a ponta e visualização específica de PIX no CRM (playback já validado).
@@ -106,3 +106,21 @@ Transcrição via /message/download retornou texto não vazio usando configuraç
 Desempenho: conversa de 214 mensagens produziu duas respostas de 199.006 bytes de JSON decodificado na observação de 23 s; virtualização montou 11 itens. Zero chamadas do navegador ao provider nesse período. Janela máxima de 1.000 mensagens e backstop de 20 s são candidatos prioritários para paginação/reconciliação mais econômica. Não houve benchmark representativo de carga; análise em OPTIMIZACAO-CHAT.md.
 
 711 testes em 60 arquivos passaram; build, Deno check e ratchets TypeScript/lint sem problemas introduzidos. CI remoto só apresenta Supabase Preview skipped; não certificado. Somente history-sync-worker atualizado em QA. Produção preservada.
+
+## Rodada 8 — paginação, reconciliação e reentrada
+
+Chat abre 100 mensagens e carrega anteriores por cursor `(timestamp,id)`, preservando microssegundos. Chromium: conversa real 100+100+14; fixture de volume 1.314 mensagens em 14 páginas, sem truncamento e com 18 itens montados na amostra final. As 1.100 linhas sintéticas foram removidas; não houve envio WhatsApp para esse ensaio. Ligações acompanham o início do intervalo carregado; seu limite independente de 1.000 registros permanece.
+
+Backstop 20s / fallback 10s preservados. Nova RPC SECURITY INVOKER retorna fingerprint das versões visíveis (`xmin`); corpos só são buscados para IDs novos/alterados. Não acrescenta trigger de escrita ao webhook. Atualizações antigas, hard deletes, páginas sobrepostas, mensagens otimistas e patches Realtime durante HTTP têm cobertura. Snapshot usa todo o intervalo carregado; seu custo cresce com páginas abertas, não é uma fila incremental de eventos.
+
+Navegador: abertura 6.985 bytes de manifesto + 97.476 bytes de conteúdo (100 mensagens), antes 199.006 bytes de conteúdo (214 mensagens). Poll sem mudanças: 88 bytes de resposta HTTP decodificada, antes 199.006. JSON reserializado no teste direto mede 83 bytes; não são bytes comprimidos na rede. Nenhuma chamada do navegador ao domínio UAZAPI. RPC autenticada: organização correta vê 100 IDs; usuário externo vê zero. Sondagem pequena: 30 consultas em concorrência 10, zero erros, p50 145ms/p95 189ms. Não representa volume/concorrência de produção nem certifica SLA.
+
+Reentrada corrigida no banco: trigger invoker serializa por organização/workflow/lead e respeita negócio quando informado. Primeira entrada permitida; execução em voo, desativada, cooldown e máximo total bloqueiam nova inscrição. Canceladas/falhas contam; retomadas por UPDATE não criam nova inscrição. Oito INSERTs simultâneos disputando uma vaga aceitaram exatamente um. Fixture SQL com rollback passou. Workflow guiado publicado ativado via RPC para repetir fire_trigger: HTTP 200, triggered=0, nenhuma execução nova; desativado novamente. Contador do fireTrigger agora informa somente linhas inseridas.
+
+Migrations 20271021000001/000002/000003 aplicadas somente no QA; process-workflow-executions e test-workflow-system atualizados no QA. Antes de qualquer rollout, aplicar RPC antes do frontend e revisar impacto dos limites de inscrição nos workflows existentes. Nenhuma alteração em produção.
+
+Pendências restantes: transcrição persistida/apresentada no CRM; lifecycle com instância dedicada; recuperação de mensagem inexistente no cache upstream; replay completo das migrations/CI; benchmark representativo de banco/Realtime e análise de índices com volume de produção. Não adicionar índices sobrepostos sem medir custo de leitura e ingestão.
+
+Validação da rodada 8: 967 testes / 70 arquivos; build, Deno, TypeScript e lint sem novos problemas. Baselines não ampliados.
+
+Guard adicional master-ghost continua falhando: 23 violações e 42 entradas obsoletas. Comparação executada contra arquivo Git do HEAD anterior produziu saída idêntica; nenhum delta desta rodada. Baseline preservado.

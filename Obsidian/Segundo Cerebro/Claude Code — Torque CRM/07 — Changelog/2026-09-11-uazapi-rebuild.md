@@ -120,3 +120,7 @@ Transcrição via /message/download retornou texto não vazio usando configuraç
 Desempenho: conversa de 214 mensagens produziu duas respostas de 199.006 bytes de JSON decodificado na observação de 23 s; virtualização montou 11 itens. Zero chamadas do navegador ao provider nesse período. Janela máxima de 1.000 mensagens e backstop de 20 s são candidatos prioritários para paginação/reconciliação mais econômica. Não houve benchmark representativo de carga; análise em OPTIMIZACAO-CHAT.md.
 
 711 testes em 60 arquivos passaram; build, Deno check e ratchets TypeScript/lint sem problemas introduzidos. CI remoto só apresenta Supabase Preview skipped; não certificado. Somente history-sync-worker atualizado em QA. Produção preservada.
+
+## Paginação e reentrada — rodada 8
+
+QA validou páginas de 100 e histórico com 1.314 registros; 18 itens montados. Reconciliação por versões visíveis/RLS reduziu poll sem mudanças de 199.006 para 88 bytes de JSON decodificado na conversa medida. Reentrada desativada/cooldown/máximo agora aplicados no banco; 8 tentativas concorrentes aceitaram uma vaga. fire_trigger devolveu 0 com reinscrição desativada. Produção intacta; rollout exige RPC antes do front e análise dos limites existentes. Evidência e limitações em `.specs/uazapi-rebuild/live-verification-round8-2026-09-11.json` e `OPTIMIZACAO-CHAT.md`.

@@ -1,23 +1,21 @@
-# Otimização do chat — avaliação em 2026-09-11
+# Otimização do chat — estado atual
 
-Integração melhorou em correção de contratos e resiliência. Ainda não homologada para escala de CRM: não houve ensaio representativo de concorrência, volume de produção ou p95.
+Paginação e reconciliação leve implementadas e verificadas em QA. Escala de produção ainda depende de ensaio representativo de banco, ingestão e Realtime. Comparações abaixo usam JSON decodificado, não tráfego comprimido.
 
-## Evidência observada
+## Rodada 8 — paginação, reconciliação e reentrada
 
-- Chromium no QA, conversa com 214 mensagens: duas respostas HTTP 200 de 199.006 bytes de JSON decodificado, durante abertura e observação por 23 segundos. Não é medição de bytes comprimidos na rede.
-- Nenhuma chamada do navegador ao domínio UAZAPI nesse período. Leitura do chat vem do Supabase.
-- Virtualização ativa; 11 itens de timeline montados na amostra.
-- `fetchConversationMessages` busca até 1.000 mensagens com projeção explícita e ordem decrescente, depois reverte. Não existe navegação para mensagens além dessa janela.
-- Realtime aplica patches incrementais. Backstop consulta novamente a janela a cada 20 segundos; fallback desconectado usa 10 segundos. Remover esse mecanismo sem substituição faria reaparecer perdas silenciosas de eventos já documentadas.
-- Histórico usa batches, orçamento de execução e checkpoints. Retomada agora preserva checkpoint, sem novo job; página cheia da UAZAPI é seguida mesmo quando hasMore=false contradiz a existência de próxima página.
-- Storage recuperou vídeo/figurinha e playback foi validado. Transcrição do provider retornou texto; integração completa dessa saída no CRM não foi validada.
+Chat abre 100 mensagens e carrega anteriores por cursor `(timestamp,id)`, preservando microssegundos. Chromium: conversa real 100+100+14; fixture de volume 1.314 mensagens em 14 páginas, sem truncamento e com 18 itens montados na amostra final. As 1.100 linhas sintéticas foram removidas; não houve envio WhatsApp para esse ensaio. Ligações acompanham o início do intervalo carregado; seu limite independente de 1.000 registros permanece.
 
-## Prioridades antes de chamar o chat de otimizado
+Backstop 20s / fallback 10s preservados. Nova RPC SECURITY INVOKER retorna fingerprint das versões visíveis (`xmin`); corpos só são buscados para IDs novos/alterados. Não acrescenta trigger de escrita ao webhook. Atualizações antigas, hard deletes, páginas sobrepostas, mensagens otimistas e patches Realtime durante HTTP têm cobertura. Snapshot usa todo o intervalo carregado; seu custo cresce com páginas abertas, não é uma fila incremental de eventos.
 
-1. Corrigir reentrada: teste real criou nova execução com reinscrição desativada. É defeito funcional confirmado, não uma hipótese de performance.
-2. Paginar mensagens por cursor estável e oferecer “carregar anteriores”, preservando ligações e mensagens otimistas.
-3. Reconciliar alterações com consulta menor, mantendo garantia de recuperação quando Realtime perde eventos. Não simplesmente desligar polling.
-4. Medir planos de consulta, CPU, I/O, tráfego e latência com volume e concorrência representativos. Só então ajustar índices: existem vários índices parcialmente sobrepostos, cada novo índice também encarece escrita/webhook.
-5. Completar transcrição no CRM, lifecycle dedicado, replay de migrations e CI antes de rollout.
+Navegador: abertura 6.985 bytes de manifesto + 97.476 bytes de conteúdo (100 mensagens), antes 199.006 bytes de conteúdo (214 mensagens). Poll sem mudanças: 88 bytes de resposta HTTP decodificada, antes 199.006. JSON reserializado no teste direto mede 83 bytes; não são bytes comprimidos na rede. Nenhuma chamada do navegador ao domínio UAZAPI. RPC autenticada: organização correta vê 100 IDs; usuário externo vê zero. Sondagem pequena: 30 consultas em concorrência 10, zero erros, p50 145ms/p95 189ms. Não representa volume/concorrência de produção nem certifica SLA.
 
-Arquivos principais: `whatsappMessagesQuery.ts`, `useWhatsAppMessages.ts`, `useRealtimeFallback.ts`, `MessageList.tsx`, `history-sync-worker/index.ts`. Evidência numérica: `live-verification-round7-2026-09-11.json`.
+Reentrada corrigida no banco: trigger invoker serializa por organização/workflow/lead e respeita negócio quando informado. Primeira entrada permitida; execução em voo, desativada, cooldown e máximo total bloqueiam nova inscrição. Canceladas/falhas contam; retomadas por UPDATE não criam nova inscrição. Oito INSERTs simultâneos disputando uma vaga aceitaram exatamente um. Fixture SQL com rollback passou. Workflow guiado publicado ativado via RPC para repetir fire_trigger: HTTP 200, triggered=0, nenhuma execução nova; desativado novamente. Contador do fireTrigger agora informa somente linhas inseridas.
+
+Migrations 20271021000001/000002/000003 aplicadas somente no QA; process-workflow-executions e test-workflow-system atualizados no QA. Antes de qualquer rollout, aplicar RPC antes do frontend e revisar impacto dos limites de inscrição nos workflows existentes. Nenhuma alteração em produção.
+
+Pendências restantes: transcrição persistida/apresentada no CRM; lifecycle com instância dedicada; recuperação de mensagem inexistente no cache upstream; replay completo das migrations/CI; benchmark representativo de banco/Realtime e análise de índices com volume de produção. Não adicionar índices sobrepostos sem medir custo de leitura e ingestão.
+
+Validação da rodada 8: 967 testes / 70 arquivos; build, Deno, TypeScript e lint sem novos problemas. Baselines não ampliados.
+
+Guard adicional master-ghost continua falhando: 23 violações e 42 entradas obsoletas. Comparação executada contra arquivo Git do HEAD anterior produziu saída idêntica; nenhum delta desta rodada. Baseline preservado.

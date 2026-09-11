@@ -224,6 +224,7 @@ function ChatView({
     isError: messagesError,
     isFetching: messagesFetching,
     refetch: refetchMessages,
+    hasOlderMessages, loadOlderMessages, isLoadingOlder, olderError,
   } = useWhatsAppMessages(phoneNumber, instanceId);
 
   useEffect(() => {
@@ -246,7 +247,7 @@ function ChatView({
 
   // Ligações da mesma conversa, para entrarem na linha do tempo junto das
   // mensagens. Uma requisição por conversa aberta, cacheada — sem poll.
-  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId);
+  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId, hasOlderMessages ? messages?.[0]?.timestamp : undefined);
 
   // ── C1: useTakeover real — FSM ia_state da conversa ──────────────────────
   const {
@@ -413,6 +414,7 @@ function ChatView({
         ) : (
           <MessageList
             messages={messages}
+            hasOlderMessages={hasOlderMessages} onLoadOlder={loadOlderMessages} isLoadingOlder={isLoadingOlder} olderError={olderError}
             transferEvents={[]}
             failedMessages={failedMessages}
             calls={calls}

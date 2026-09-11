@@ -48,10 +48,8 @@
  * ASCENDENTE o que sobrava eram as linhas mais ANTIGAS. Limite implícito não é
  * "sem limite" — é limite que ninguém vê.
  *
- * As duas janelas ainda não são o MESMO recorte (tabelas e volumes distintos);
- * hoje isso não morde porque `call_logs` é minúsculo. Quando a thread virar
- * paginada, o certo é recortar as ligações pelo intervalo da página de
- * mensagens — e aí este comentário é o aviso.
+ * Quando existem páginas anteriores, `since` alinha as ligações ao intervalo
+ * das mensagens carregadas. O limite independente de ligações permanece 1000.
  */
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/normalizePhone";
@@ -114,6 +112,7 @@ export interface FetchConversationCallsParams {
   phoneNumber: string | null;
   /** Lead resolvido da conversa, quando existe. Segunda identidade. */
   leadId?: string | null;
+  since?: string;
 }
 
 /** Só aceita UUID canônico — o valor entra numa expressão `.or()` do PostgREST. */
@@ -167,6 +166,7 @@ export async function fetchConversationCalls({
   organizationId,
   phoneNumber,
   leadId,
+  since,
 }: FetchConversationCallsParams): Promise<ConversationCall[]> {
   const normalized = normalizePhone(phoneNumber);
 
@@ -181,7 +181,7 @@ export async function fetchConversationCalls({
 
   if (identities.length === 0) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("call_logs")
     .select(CONVERSATION_CALL_COLUMNS)
     .eq("organization_id", organizationId)
@@ -189,6 +189,8 @@ export async function fetchConversationCalls({
     // DESC + limit: mesma direção da janela das mensagens. Ver docblock.
     .order("started_at", { ascending: false })
     .limit(THREAD_MESSAGE_LIMIT);
+  if (since) query = query.gte("started_at", since);
+  const { data, error } = await query;
 
   if (error) throw error;
   return ((data ?? []) as unknown as ConversationCall[]).reverse();

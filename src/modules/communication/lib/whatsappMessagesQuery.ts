@@ -20,31 +20,9 @@
  * formato de origem, e alinha o fetch ao realtime (que já usa `normalizePhone`
  * de `@/lib/normalizePhone`, espelho fiel da função do Postgres).
  *
- * ── Por que a janela é DESC + limit, e não "a thread inteira" ──
- * O PostgREST de prod está com `max_rows = 1000`. A versão anterior desta
- * query pedia `order("timestamp", asc)` SEM `.limit()`, acreditando carregar a
- * thread inteira num único fetch; na prática o gateway cortava em 1000 linhas
- * **sem erro nenhum** — e, com a ordem ASCENDENTE, o que sobrava eram as 1000
- * mensagens MAIS ANTIGAS. Toda conversa acima do teto ficava congelada numa
- * data passada, enquanto o realtime seguia colando as mensagens novas no fim:
- * a thread abria com um buraco no meio.
- *
- * Medido em prod (2026-08-06): 265 threads acima de 1000 mensagens, em 19
- * orgs, 554.662 mensagens fora da janela. Caso do chamado (Chique
- * Distribuidora): thread de 1272 mensagens parava em 31/07 e escondia as 272
- * mais recentes.
- *
- * Agora a janela é explícita e ancorada no fim da conversa: ordena DESC,
- * `.limit(THREAD_MESSAGE_LIMIT)` e reverte no cliente para devolver ASC. O
- * corte passa a ser deliberado e cai onde importa menos — nas mensagens mais
- * antigas, como em qualquer app de mensagem. `created_at` entra como segundo
- * critério porque `timestamp` tem precisão de segundo e empata: sem desempate
- * estável, a fronteira da janela variava entre um refetch e outro.
- *
- * ⚠️ Enquanto não existir "carregar mensagens anteriores" na UI, o que passa
- * de `THREAD_MESSAGE_LIMIT` fica inalcançável na tela (segue no banco). A
- * paginação é o passo seguinte — e, quando vier, a janela das ligações em
- * `conversationCallsQuery.ts` tem que andar junto.
+ * Mensagens abrem em páginas de 100, com cursor (timestamp, id). Reconciliação
+ * usa versões visíveis via RPC com RLS; conteúdo só trafega quando muda.
+ * O array do cache permanece compatível com composer e patches Realtime.
  *
  * ── Por que a instância virou um CONJUNTO, e por que o chip fica na chave ──
  * O terceiro sabor de "mensagem sumiu" não era formato nem janela: era o
@@ -80,22 +58,27 @@ export const WHATSAPP_MESSAGE_COLUMNS =
   "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context, reactions, edited, pinned_at, deleted_at, uazapi_menu_sections:raw_payload->content->sections, uazapi_menu_title:raw_payload->content->title, uazapi_menu_description:raw_payload->content->description, uazapi_menu_button:raw_payload->content->buttonText, uazapi_menu_footer:raw_payload->content->footerText";
 
 /**
- * Tamanho da janela da thread, ancorada na mensagem mais recente.
+ * Limite independente do histórico de ligações. Mensagens usam MESSAGE_PAGE_SIZE.
  *
  * Igual ao `max_rows` do PostgREST de prod (1000) de propósito: pedir mais não
  * traria mais — o gateway cortaria de novo, e de novo em silêncio.
  */
-export const THREAD_MESSAGE_LIMIT = 1000;
+export const THREAD_MESSAGE_LIMIT = 1000; // independent legacy call-history cap
+export const MESSAGE_PAGE_SIZE = 100;
+export interface MessageCursor { timestamp: string; id: string }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isPersistedMessage(m: WhatsAppMessage) { return UUID.test(m.id); }
 
 export interface FetchConversationMessagesParams {
   organizationId: string;
   instanceId: string;
   /** Telefone em qualquer formato — é normalizado antes do filtro. */
   phoneNumber: string;
+  before?: MessageCursor;
 }
 
 /**
- * Busca as `THREAD_MESSAGE_LIMIT` mensagens mais recentes de uma conversa
+ * Busca até `MESSAGE_PAGE_SIZE` mensagens mais recentes de uma conversa
  * (org + chip + telefone) e devolve em ordem cronológica ascendente.
  * Filtra por `normalized_phone` pra capturar a thread inteira mesmo com
  * formatos divergentes de `phone_number`, e pelo conjunto de `instance_id` que
@@ -115,7 +98,7 @@ export async function fetchConversationMessages(
   // `chipInstanceIds.ts`. Nunca rejeita, então não precisa de guarda aqui.
   const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("whatsapp_messages")
     .select(WHATSAPP_MESSAGE_COLUMNS)
     .eq("organization_id", organizationId)
@@ -123,8 +106,14 @@ export async function fetchConversationMessages(
     .eq("normalized_phone", normalized)
     // DESC + limit = a janela cai nas MAIS RECENTES. Ver docblock.
     .order("timestamp", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(THREAD_MESSAGE_LIMIT);
+    .order("id", { ascending: false })
+    .limit(MESSAGE_PAGE_SIZE);
+  if (params.before) {
+    const { timestamp, id } = params.before;
+    if (!UUID.test(id) || !/^[0-9TtZz:+. -]+$/.test(timestamp) || !Number.isFinite(Date.parse(timestamp))) throw new Error("Cursor inválido");
+    query = query.or(`timestamp.lt.${timestamp},and(timestamp.eq.${timestamp},id.lt.${id})`);
+  }
+  const { data, error } = await query;
 
   if (error) throw error;
   // O resto da UI (auto-scroll, divisor de não-lidas, merge com ligações)
