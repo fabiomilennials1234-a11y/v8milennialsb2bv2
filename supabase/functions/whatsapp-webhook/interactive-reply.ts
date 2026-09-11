@@ -20,6 +20,7 @@ export function extractInteractiveSelection(data: any): string | null {
   >;
   const raw =
     c.selectedDisplayText ??
+    (c.singleSelectReply && typeof c.title === "string" && c.title.trim() ? c.title : undefined) ??
     c.selectedID ??
     data.buttonOrListid ??
     data.vote ??

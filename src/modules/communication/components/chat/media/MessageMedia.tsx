@@ -229,3 +229,13 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
     </a>
   );
 }
+
+/** A failed sticker must remain identifiable instead of becoming an empty bubble. */
+export function MessageSticker({ src }: { src: string | null }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const usable = src && !["https://a.whatsapp.net", "https://web.whatsapp.net"].includes(src);
+  if (!usable || failedSrc === src) {
+    return <div className="rounded bg-muted/40 p-3 text-xs text-muted-foreground" role="status">Figurinha indisponível</div>;
+  }
+  return <img src={src} alt="Figurinha" className="w-32 h-32 max-w-full object-contain rounded" onError={() => setFailedSrc(src)} />;
+}

@@ -155,3 +155,7 @@ Ver `[[whatsapp-stability-100pct]]` no backlog em-progresso.
 Branch `codex/uazapi-rebuild` parte da main `23cbd6796`. Adapter traduz mídia/menu, usa criação documentada, filtra histórico por chatid e isola circuitos por credencial/servidor. Diagnóstico de limites mantém desconhecido como null. Fixture cobre campos das 139 operações; testes de contrato exercitam a superfície alterada.
 
 Não homologado contra instância real. Ambiente Supabase e destinatário de teste pendentes. Estado verificável em `.specs/uazapi-rebuild/STATE.md`; referência de contrato em `docs/integrations/uazapi-rebuild.md`. Números históricos de cobertura acima não medem esta branch.
+
+## Reconstrução isolada — rodada 2 (2026-09-11)
+
+Branch `codex/uazapi-rebuild`: delays de disparo convertidos de ms para segundos, polling tolera falha transitória sem terminalizar job, nodes isolam destinatário/template por org e preservam recibos. Lista ganha rótulo configurável. Chat identifica seleção e mostra título em vez de ID. Testes reais no QA; sem promoção para produção. Estado, limitações e evidências em `.specs/uazapi-rebuild/STATE.md` e [[2026-09-11-uazapi-rebuild]].

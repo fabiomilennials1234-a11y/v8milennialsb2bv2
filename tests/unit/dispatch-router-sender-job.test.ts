@@ -58,7 +58,7 @@ function supabaseStub() {
 
 /** Fake provider whose senderAdvanced returns the REAL CREATE shape. */
 function providerReturning(res: Record<string, unknown>) {
-  return { senderAdvanced: vi.fn(async () => res) };
+  return { senderAdvanced: vi.fn(async (_input: unknown) => res) };
 }
 
 beforeEach(() => {
@@ -205,5 +205,22 @@ describe("runUazapiSenderJob — fails loud, never persists an unpollable row (B
     ).rejects.toThrow();
 
     expect(supabase.captured.insertedRow).toBeUndefined();
+  });
+});
+
+
+describe("sender documented request units", () => {
+  it("converts CRM milliseconds to provider seconds and media captions to text", async () => {
+    const provider = providerReturning({ folder_id: "folder", count: 1 });
+    mockGetProvider.mockResolvedValue(provider);
+    const sb = supabaseStub();
+    await runUazapiSenderJob(sb, INSTANCE, { recipients: [{ number: "5511999990001", type: "image", file: "https://test.invalid/image.png", caption: "Caption" }], delayMin: 3500, delayMax: 7000, trackSource: "qa" });
+    expect(provider.senderAdvanced).toHaveBeenCalledWith(expect.objectContaining({ delayMin: 4, delayMax: 7, info: "qa", messages: [{ number: "5511999990001", type: "image", file: "https://test.invalid/image.png", text: "Caption" }] }));
+    expect(provider.senderAdvanced.mock.calls[0][0]).not.toHaveProperty("track_source");
+    expect(sb.captured.insertedRow.payload.delayMin).toBe(3500);
+  });
+  it("refuses an invalid schedule before reaching the provider", async () => {
+    await expect(runUazapiSenderJob(supabaseStub(), INSTANCE, { recipients: [{ number: "5511999990001", type: "text", text: "test" }], scheduledFor: "not-a-date" })).rejects.toThrow("Invalid scheduled_for");
+    expect(mockGetProvider).not.toHaveBeenCalled();
   });
 });

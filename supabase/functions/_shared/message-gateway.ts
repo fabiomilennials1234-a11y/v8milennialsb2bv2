@@ -67,6 +67,7 @@ export interface GatewaySendRequest {
     type: "button" | "list" | "poll" | "carousel";
     choices: string[];
     footer?: string;
+    listButtonLabel?: string;
     selectableCount?: number;
   };
   pix_payload?: {
@@ -235,6 +236,7 @@ async function persistMessage(
     source: MessageSource;
     lead_id?: string;
     media_url?: string;
+    provider_status?: "queued" | "sent" | "failed";
   },
 ): Promise<"ok" | string> {
   try {
@@ -249,7 +251,7 @@ async function persistMessage(
         message_type: params.message_type === "text" ? "conversation" : params.message_type,
         content: params.content,
         media_url: params.media_url ?? null,
-        status: "sent",
+        status: params.provider_status === "queued" ? "pending" : params.provider_status ?? "sent",
         timestamp: new Date().toISOString(),
         lead_id: params.lead_id ?? null,
         sent_by_ai: params.source !== "manual",
@@ -261,9 +263,16 @@ async function persistMessage(
               ? "workflow"
               : "manual",
       },
-      { onConflict: "message_id,instance_id", ignoreDuplicates: false },
+      { onConflict: "message_id,instance_id", ignoreDuplicates: true },
     );
-    if (error) return error.message;
+    if (error) return error.code ?? "persistence_failed";
+    const { error: metadataError } = await supabase.from("whatsapp_messages").update({
+      sent_by_ai: params.source !== "manual",
+      sent_source: ["campaign", "pipe", "mass", "workflow"].includes(params.source)
+        ? "workflow" : params.source === "copilot" ? "copilot" : "manual",
+      ...(params.lead_id ? { lead_id: params.lead_id } : {}),
+    }).eq("organization_id", params.organization_id).eq("instance_id", params.instance_id).eq("message_id", params.message_id);
+    if (metadataError) return metadataError.code ?? "metadata_persistence_failed";
     return "ok";
   } catch (e) {
     return (e as Error).message;
@@ -279,7 +288,7 @@ async function dispatchToProvider(
   instance: WhatsAppInstance,
   normalizedPhone: string,
   req: GatewaySendRequest,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; error?: string; status?: "queued" | "sent" | "failed" }> {
   switch (req.message_type) {
     case "text":
       return sendTextViaInstance(supabase, instance, normalizedPhone, req.content ?? "", {
@@ -302,6 +311,7 @@ async function dispatchToProvider(
         text: req.content ?? "",
         choices: req.menu_options.choices,
         footer: req.menu_options.footer,
+        listButtonLabel: req.menu_options.listButtonLabel,
         selectableCount: req.menu_options.selectableCount,
       }, {
         trackSource: req.source,
@@ -486,6 +496,7 @@ export async function sendMessage(
     source: req.source,
     lead_id: req.lead_id,
     media_url: req.media_url,
+    provider_status: sendResult.status,
   });
   steps.persist = persistResult;
 

@@ -27,6 +27,7 @@ import {
   getWhatsAppProvider,
   type WhatsAppInstance,
   type WhatsAppProvider,
+  type SendResult,
 } from "./whatsapp-client.ts";
 import {
   isStrictWriteEnabled,
@@ -306,8 +307,15 @@ export async function resolveDispatchContext(
 export type SendResultSimple = {
   success: boolean;
   messageId?: string;
+  status?: SendResult["status"];
   error?: string;
 };
+
+/** Acceptance advances the workflow, but must not manufacture a delivery receipt. */
+export function dispatchSendResult(result: SendResult): SendResultSimple {
+  if (result.status === "failed") return { success: false, messageId: result.message_id, status: "failed", error: "provider_send_failed" };
+  return { success: true, messageId: result.message_id, ...(result.status ? { status: result.status } : {}) };
+}
 
 export async function sendTextViaInstance(
   supabaseAdmin: any,
@@ -348,7 +356,7 @@ export async function sendTextViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,
@@ -455,7 +463,7 @@ export async function sendTemplateViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,
@@ -499,7 +507,7 @@ export async function sendAudioViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,
@@ -517,6 +525,7 @@ export async function sendMenuViaInstance(
     text: string;
     choices: string[];
     footer?: string;
+    listButtonLabel?: string;
     selectableCount?: number;
   },
   opts: { trackSource?: string; trackId?: string; delay?: number; idempotencyKey?: string } = {}
@@ -551,6 +560,7 @@ export async function sendMenuViaInstance(
           text: menu.text,
           choices: menu.choices,
           footer: menu.footer,
+          listButtonLabel: menu.listButtonLabel,
           selectableCount: menu.selectableCount,
           delay: opts.delay,
           trackSource: opts.trackSource,
@@ -560,7 +570,7 @@ export async function sendMenuViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,
@@ -621,7 +631,7 @@ export async function sendPixButtonViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,
@@ -672,7 +682,7 @@ export async function sendMediaViaInstance(
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }
-    return { success: true, messageId: governed.message_id };
+    return dispatchSendResult(governed);
   } catch (error) {
     return {
       success: false,

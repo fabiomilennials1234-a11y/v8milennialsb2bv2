@@ -1,3 +1,4 @@
+import { refreshSenderSnapshot } from "../_shared/uazapi-sender-refresh.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
  * mass-send-status — poll/refresh status de um uazapi_sender_jobs row.
@@ -8,7 +9,7 @@
  *
  * Auth: Bearer JWT user (role=admin/master) OU x-cron-secret.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -44,7 +45,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
  * and the cron depend on.
  */
 async function syncRecipientFailures(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseClient,
   provider: unknown,
   job: { id: string; uazapi_sender_id: string | null; payload: unknown; organization_id?: string }
 ): Promise<void> {
@@ -101,7 +102,7 @@ async function syncRecipientFailures(
 
   if (result.error) {
     await logRuntime({
-      module: "mass-send-status",
+      module: "campaign",
       action: "failure_sync",
       status: "error",
       organizationId: job.organization_id,
@@ -110,7 +111,7 @@ async function syncRecipientFailures(
     });
   } else if (result.synced > 0) {
     await logRuntime({
-      module: "mass-send-status",
+      module: "campaign",
       action: "failure_sync",
       status: "success",
       organizationId: job.organization_id,
@@ -120,7 +121,7 @@ async function syncRecipientFailures(
 }
 
 async function refreshJob(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseClient,
   jobId: string
 ): Promise<{ ok: boolean; status?: string; error?: string }> {
   const { data: job } = await supabaseAdmin
@@ -137,7 +138,7 @@ async function refreshJob(
 
   // Terminal jobs are never re-polled: the Uazapi folder may already be gone
   // (a cancelled job deletes its folder), so senderGet would 404 and the catch
-  // below would clobber a legitimate completed/cancelled state to "failed".
+  // would otherwise turn a legitimate terminal state into a polling error.
   // The cron only polls queued|running, so this guards the manual re-poll path.
   const TERMINAL = new Set(["completed", "failed", "cancelled"]);
   if (TERMINAL.has((job as any).status)) {
@@ -151,16 +152,15 @@ async function refreshJob(
       | ((id: string) => Promise<{ status: string; sent: number; failed: number; total: number }>);
     if (!impl) return { ok: false, error: "provider does not expose senderGet" };
 
-    const res = await impl.call(provider, (job as any).uazapi_sender_id);
-    await supabaseAdmin
-      .from("uazapi_sender_jobs")
-      .update({
-        status: res.status,
-        sent: res.sent ?? 0,
-        failed: res.failed ?? 0,
-        total_messages: res.total ?? (job as any).total_messages,
-      })
-      .eq("id", jobId);
+    const res = await refreshSenderSnapshot(
+      () => impl.call(provider, (job as any).uazapi_sender_id),
+      async (snapshot) => {
+        const { error } = await supabaseAdmin.from("uazapi_sender_jobs").update({
+          status: snapshot.status, sent: snapshot.sent, failed: snapshot.failed, total_messages: snapshot.total,
+        }).eq("id", jobId).eq("organization_id", (job as any).organization_id);
+        if (error) throw error;
+      },
+    );
 
     // Per-recipient failure sync (ADR-0016, #948) — after the aggregates, on
     // this same poll tick (cron = 1/min ⇒ a provider-reported failure lands on
@@ -177,7 +177,7 @@ async function refreshJob(
       });
     } catch (syncErr) {
       await logRuntime({
-        module: "mass-send-status",
+        module: "campaign",
         action: "failure_sync",
         status: "error",
         organizationId: (job as any).organization_id,
@@ -189,10 +189,8 @@ async function refreshJob(
     return { ok: true, status: res.status };
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
-    await supabaseAdmin
-      .from("uazapi_sender_jobs")
-      .update({ status: "failed" })
-      .eq("id", jobId);
+    // A polling failure is not evidence of send failure. Preserve the state so
+    // the next cron can reconcile instead of abandoning an active campaign.
     return { ok: false, error: msg };
   }
 }

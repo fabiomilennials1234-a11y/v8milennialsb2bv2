@@ -84,8 +84,8 @@ export async function getWhatsAppInstance(
 
 // ─── Lead phone resolution ─────────────────────────────────────────────────
 
-export async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
-  const { data } = await supabase.from("leads").select("phone").eq("id", leadId).maybeSingle();
+export async function getLeadPhone(supabase: SupabaseClient, leadId: string, organizationId: string): Promise<string | null> {
+  const { data } = await supabase.from("leads").select("phone").eq("id", leadId).eq("organization_id", organizationId).maybeSingle();
   if (!data?.phone) return null;
   let phone = String(data.phone).replace(/\D/g, "");
   if (!phone.startsWith("55")) phone = "55" + phone;
@@ -296,6 +296,7 @@ export type OutboundMessage = {
   provider: string | null | undefined;
   /** O id devolvido pelo provider no `/send`. Ver `persistOutboundMessage`. */
   providerMessageId?: string | null;
+  providerStatus?: "queued" | "sent" | "failed";
   /** Telefone do destinatário; normalizado aqui antes de virar `remote_jid`. */
   phone: string;
   /** Como o chat vai renderizar: `image`, `video`, `conversation`, `poll`, … */
@@ -320,10 +321,8 @@ export type OutboundMessage = {
  * disparada por automação. Com um id sintético não há colisão: o eco insere uma
  * SEGUNDA linha, com `sent_source` no default `manual`, e o gatilho dispara.
  *
- * `ignoreDuplicates: false` (merge), e não `true`: o eco pode chegar ANTES do
- * retorno do `/send`. Se este upsert virasse no-op nesse caso, a linha ficaria
- * rotulada `manual` / `sent_by_ai=false` para sempre. Com merge, quem enviou
- * corrige o rótulo de quem enviou.
+ * Insert-on-conflict preserves webhook content and delivery receipts. A scoped
+ * metadata-only update then marks the sender, including when the echo wins.
  *
  * ⚠️ DÍVIDA CONHECIDA — o merge conserta o RÓTULO, não a PAUSA
  * ---------------------------------------------------------
@@ -340,7 +339,7 @@ export type OutboundMessage = {
  * `COALESCE(sent_by_ai,false) = false`. Se o eco insere primeiro,
  * ele entra com `sent_source` no default `manual` e `sent_by_ai=false`: o
  * gatilho dispara e grava `human_paused_until` em `phone_ai_preferences` e em
- * `conversations`. Nosso upsert chega depois como UPDATE — não refaz o INSERT,
+ * `conversations`. Nossa atualização de metadados chega depois como UPDATE — não refaz o INSERT,
  * logo não refaz o gatilho, e o efeito colateral já commitado NÃO é desfeito.
  * O Copilot daquele lead fica pausado por causa de uma mídia que a automação
  * enviou.
@@ -350,7 +349,7 @@ export type OutboundMessage = {
  *
  * A correção real é no gate do gatilho (distinguir eco de envio humano), muda
  * comportamento do Copilot e é decisão do CTO — fora deste módulo. Registrado
- * aqui para que ninguém leia o merge como se resolvesse a corrida inteira.
+ * aqui para que ninguém leia a atualização como se resolvesse a corrida inteira.
  *
  * Falha de escrita nunca derruba a action: a mensagem já está no WhatsApp do
  * cliente, e devolver erro aqui só provocaria retentativa — ou seja, mensagem
@@ -390,7 +389,7 @@ export async function persistOutboundMessage(
     message_type: msg.messageType,
     content: msg.content ?? null,
     timestamp: new Date().toISOString(),
-    status: "sent",
+    status: msg.providerStatus === "queued" ? "pending" : msg.providerStatus ?? "sent",
     sent_by_ai: true,
     sent_source: "workflow",
   };
@@ -402,7 +401,13 @@ export async function persistOutboundMessage(
   try {
     const { error } = await supabase
       .from("whatsapp_messages")
-      .upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      .upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+    if (!error) {
+      const { error: metadataError } = await supabase.from("whatsapp_messages").update({
+        sent_by_ai: true, sent_source: "workflow", ...(msg.leadId ? { lead_id: msg.leadId } : {}),
+      }).eq("organization_id", msg.organizationId).eq("instance_id", msg.instanceId).eq("message_id", messageId);
+      if (metadataError) console.error("[whatsapp-helpers] sender metadata failed", { code: metadataError.code });
+    }
     if (error) {
       // `error.message` do PostgREST fica FORA do log de propósito: a linha que
       // falhou carrega `phone_number`, `remote_jid` e o `content` da mensagem

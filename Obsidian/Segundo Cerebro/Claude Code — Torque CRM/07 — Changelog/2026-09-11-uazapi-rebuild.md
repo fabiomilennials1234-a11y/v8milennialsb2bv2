@@ -45,3 +45,24 @@ Quatro Edge Functions publicadas em QA. JWT real validou 401/403/200 e envio que
 179 testes direcionados, Deno check de três handlers, build, lint e tipos verificados. Inventário das 139 operações registra 32 referências estáticas e 23 sondas, sem afirmar cobertura integral de produto. Estado e limitações atualizados em `.specs/uazapi-rebuild/STATE.md`; evidências em `live-verification-2026-09-11.json`. PR #2099 continua draft, sem produção.
 
 Teste visual adicional encontrou SELECT sem metadados de ações. Query passou a carregar reactions/edited/pinned_at/deleted_at; reação real agora renderiza após reload. Composer mantém queued como pending, incluindo fallback persistido e bolha otimista. Mais 43 testes passaram, total 224 em 15 arquivos; build e lint repetidos após correção frontend.
+
+## Rodada 2 — disparos, nodes e chat (2026-09-11)
+
+- `/sender/advanced`: CRM mantém delays em ms; adapter converte para segundos inteiros, arredondando para cima. Caption passa como `text`; origem como `info`. Agendamento inválido falha antes de enviar.
+- Erro transitório de polling preserva estado da campanha; snapshot inválido não grava contadores. Atualização filtrada por organização.
+- Quick Blast real: preview 200, outra organização recusada com `instance_org_mismatch`, criação de 1 mensagem e polling completed. Pasta removida; cleanup marca job cancelled mantendo 1 enviado/0 falhas. Não foi disparado lote de 50 destinatários para forçar o limiar de Mass Send.
+- Handlers reais de texto/lista enviaram; lead de outra organização recusado. Menus/PIX preservam tracking; lista ganhou rótulo configurável no node e preview. Templates de campanha também filtram organização.
+- Persistência do node/gateway preserva recibos e conteúdo do eco, atualizando só atribuição. Pending do provider fica pendente. Eco autoritativo avança status por UPDATE condicional, sem regressão.
+- Chat Chromium em QA: envio pelo compositor, imagem recebida/enviada carregadas; seleções reais reprocessadas mostram título e selo “Selecionou (lista)”, em vez de ID técnico. Figurinha não carregou: fallback explícito substitui bolha vazia; causa do download ainda exige validação.
+- Primeiro destinatário é o dono da instância: fromMe=true está correto. Segundo número autorizado para validar entrada real separada; evidência complementar registrada após resposta.
+- Controles de UI de lista ainda exibem texto principal da mensagem enviada; representação completa das opções e recuperação de histórico com progresso são próximos incrementos, não funcionalidades homologadas nesta rodada.
+
+Evidência: `live-verification-round2-2026-09-11.json`. Payloads brutos, telefones e tokens ficam fora do Git. A medição de timestamp do sender representa enqueue, não intervalo de entrega; não usar para afirmar intervalo exato.
+
+### Fechamento da conversa entre dois números
+
+Segundo destinatário autorizado: SSE real → webhook QA → banco → navegador. Duas seleções `fromMe=false` persistidas como `list_response`, `received`, títulos Validar/Concluir; bolhas recebidas à esquerda, com selo. Texto e lista de saída chegaram a `read`. Resposta enviada pelo compositor ao segundo número chegou a `delivered`. Não houve resposta textual “Resposta QA”; foram seleções reais, suficientes para o fluxo interativo. Relé filtrado de SSE não altera webhook remoto de produção.
+
+Adicionado suporte visual ao tipo canônico `list_response` além de `listResponse`. Corrigido overflow horizontal da lista de conversas observado no navegador (preview longo alargava wrapper table do Radix). Figura indisponível tem fallback; download de figurinha permanece limitação registrada.
+
+523 testes direcionados em 45 arquivos passaram; Deno check em webhook, status e handlers texto/lista passou. Build e ratchets frontend sem novas falhas nas verificações desta rodada. Não houve execução completa do grafo de workflow nem homologação de PIX ou lifecycle destrutivo.

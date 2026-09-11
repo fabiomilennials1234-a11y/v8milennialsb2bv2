@@ -147,3 +147,16 @@ Operações sem referência indicam capacidade ainda não integrada nesta base, 
 | `POST /business/catalog/hide` | Ocultar um produto do catálogo | Não localizada | Não |
 | `POST /admin/restart` | Reiniciar a aplicação | Não localizada | Não |
 | `POST /admin/token/rotate` | Rotacionar admin token | Não localizada | Não |
+
+## Incrementos úteis ao Torque CRM
+
+| Prioridade | Capacidade | Uso e estado |
+| --- | --- | --- |
+| Implementado nesta reconstrução | Menus com rótulo de lista, tracking e seleção legível | Node e preview configuram o botão; parser/chat mostram título escolhido. Card completo das opções enviadas ainda pendente. |
+| Implementado no backend | Localização, contato, bloquear/desbloquear, recuperação history | Contratos/guards presentes; controles dedicados e homologação por fluxo ainda necessários. |
+| Próximo | Histórico com progresso e retomada | Permite recuperar conversas sem importação cega; history assíncrono e exact 404 precisam fechamento antes da UI. |
+| Próximo | Card do menu enviado, contexto de resposta e resultado de enquetes | Atendente precisa ver opções apresentadas e escolhidas; seleção básica já corrigida com payload real. |
+| Avaliar | Arquivar/silenciar/bloquear e etiquetas sincronizadas | Exige definir se a ação vale no CRM, no WhatsApp ou em ambos; não espelhar automaticamente tags comerciais. |
+| Adiar | Chatbot nativo, Chatwoot, gestão de grupos/catálogos/perfil/admin | Sem necessidade comprovada no fluxo atual; chatbot paralelo pode disputar a conversa com Copilot. |
+
+A existência de método no adapter não implica funcionalidade disponível na interface. Mass Send/Quick Blast compartilham contrato do sender; nodes usam envios individuais. Homologação de cada Edge Function consumidora continua necessária antes do rollout.

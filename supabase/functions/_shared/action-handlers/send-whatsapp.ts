@@ -14,7 +14,7 @@ import {
   buildTrackId,
   recipientGate,
   isRetryableSendFailure,
-  providerPersistsOwnMessages,
+  persistOutboundMessage,
 } from "./whatsapp-helpers.ts";
 import { enviarTemplateAprovado } from "./enviar-template.ts";
 import {
@@ -38,7 +38,7 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   // Pre-flight: a recipient not on WhatsApp fails permanently. Skip the send and
@@ -136,24 +136,11 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     } else {
       const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
 
-      // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
-      // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
-      if (!providerPersistsOwnMessages(wa.instance.provider)) {
-        await supabase.from("whatsapp_messages").upsert({
-          organization_id: organizationId,
-          instance_id: wa.instanceId,
-          message_id: messageId,
-          remote_jid: phone + "@s.whatsapp.net",
-          phone_number: phone,
-          direction: "outgoing",
-          message_type: "conversation",
-          content: message,
-          timestamp: new Date().toISOString(),
-          status: "sent",
-          sent_by_ai: true,
-          sent_source: "workflow",
-        }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-      }
+      await persistOutboundMessage(supabase, {
+        organizationId, instanceId: wa.instanceId, provider: wa.instance.provider,
+        providerMessageId: messageId, providerStatus: sendResult.status,
+        phone, messageType: "conversation", content: message, leadId,
+      });
     }
   } else if (!gwResult.success) {
     console.error("[send-whatsapp] Gateway send failed:", gwResult.error);

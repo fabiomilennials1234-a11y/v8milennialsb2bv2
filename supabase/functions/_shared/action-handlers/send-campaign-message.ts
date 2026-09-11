@@ -22,7 +22,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
-  providerPersistsOwnMessages,
+  persistOutboundMessage,
 } from "./whatsapp-helpers.ts";
 
 export async function sendCampaignMessage(input: ActionInput): Promise<ActionResult> {
@@ -41,6 +41,7 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
     .from("campaign_templates")
     .select("content, message_type, audio_url")
     .eq("id", templateId)
+    .eq("organization_id", organizationId)
     .maybeSingle();
 
   if (!template) return { success: false, error: "Template not found" };
@@ -58,7 +59,7 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
   // Resolve phone
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -102,25 +103,12 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
 
     const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
 
-    // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
-    // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
-    if (!providerPersistsOwnMessages(wa.instance.provider)) {
-      await supabase.from("whatsapp_messages").upsert({
-        organization_id: organizationId,
-        instance_id: wa.instanceId,
-        message_id: messageId,
-        remote_jid: phone + "@s.whatsapp.net",
-        phone_number: phone,
-        direction: "outgoing",
-        message_type: isAudio ? "audio" : "conversation",
-        content: isAudio ? null : message,
-        media_url: isAudio ? template.audio_url : null,
-        timestamp: new Date().toISOString(),
-        status: "sent",
-        sent_by_ai: true,
-        sent_source: "workflow",
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-    }
+    await persistOutboundMessage(supabase, {
+      organizationId, instanceId: wa.instanceId, provider: wa.instance.provider,
+      providerMessageId: messageId, providerStatus: sendResult.status,
+      phone, messageType: isAudio ? "audio" : "conversation", content: isAudio ? null : message,
+      mediaUrl: isAudio ? template.audio_url : undefined, leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-campaign-message] Gateway campaign message send failed:", gwResult.error);
     return { success: false, error: `Campaign message send failed: ${gwResult.error}` };

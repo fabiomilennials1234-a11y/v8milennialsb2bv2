@@ -1,0 +1,266 @@
+{
+  "environment": "persistent QA branch only",
+  "docs": "https://docs.uazapi.com/",
+  "openapi": "2.1.1",
+  "mass": {
+    "cases": [
+      {
+        "label": "cross-org",
+        "http": 400,
+        "error": "instance_org_mismatch"
+      },
+      {
+        "label": "preview",
+        "http": 200,
+        "count": 1
+      },
+      {
+        "label": "create",
+        "http": 200,
+        "count": 1
+      },
+      {
+        "label": "poll",
+        "http": 200,
+        "ok": true,
+        "status": "completed"
+      }
+    ],
+    "cleanup": {
+      "http": 200,
+      "ok": true
+    }
+  },
+  "senderDelay": {
+    "delayMin": 3,
+    "delayMax": 3,
+    "unitFromDocs": "seconds",
+    "polls": [
+      {
+        "status": "running",
+        "sent": 1,
+        "failed": 0,
+        "total": 2
+      },
+      {
+        "status": "completed",
+        "sent": 2,
+        "failed": 0,
+        "total": 2
+      }
+    ],
+    "rowShapes": [
+      {
+        "id": "string",
+        "messageid": "string",
+        "chatid": "string",
+        "chatlid": "string",
+        "fromMe": "boolean",
+        "isGroup": "boolean",
+        "messageType": "string",
+        "messageTimestamp": "number",
+        "edited": "string",
+        "quoted": "string",
+        "reaction": "string",
+        "sender": "string",
+        "senderName": "string",
+        "source": "string",
+        "status": "string",
+        "text": "string",
+        "vote": "string",
+        "buttonOrListid": "string",
+        "convertOptions": "string",
+        "pinned": "boolean",
+        "fileURL": "string",
+        "content": "string",
+        "owner": "string",
+        "wasSentByApi": "boolean",
+        "send_function": "string",
+        "send_payload": "string",
+        "send_folder_id": "string",
+        "error": "string",
+        "track_source": "string",
+        "track_id": "string",
+        "ai_metadata": "object",
+        "sender_pn": "object",
+        "sender_lid": "object",
+        "is_incoming_broadcast": "boolean",
+        "broadcast_list_jid": "string",
+        "broadcast_list_owner": "string"
+      },
+      {
+        "id": "string",
+        "messageid": "string",
+        "chatid": "string",
+        "chatlid": "string",
+        "fromMe": "boolean",
+        "isGroup": "boolean",
+        "messageType": "string",
+        "messageTimestamp": "number",
+        "edited": "string",
+        "quoted": "string",
+        "reaction": "string",
+        "sender": "string",
+        "senderName": "string",
+        "source": "string",
+        "status": "string",
+        "text": "string",
+        "vote": "string",
+        "buttonOrListid": "string",
+        "convertOptions": "string",
+        "pinned": "boolean",
+        "fileURL": "string",
+        "content": "string",
+        "owner": "string",
+        "wasSentByApi": "boolean",
+        "send_function": "string",
+        "send_payload": "string",
+        "send_folder_id": "string",
+        "error": "string",
+        "track_source": "string",
+        "track_id": "string",
+        "ai_metadata": "object",
+        "sender_pn": "object",
+        "sender_lid": "object",
+        "is_incoming_broadcast": "boolean",
+        "broadcast_list_jid": "string",
+        "broadcast_list_owner": "string"
+      }
+    ],
+    "final": {
+      "status": "completed",
+      "sent": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "removed": true,
+    "timingLimitation": "Provider messageTimestamp is enqueue time; exact delivery interval was not measured. Completion verified by polling."
+  },
+  "nodes": {
+    "cases": [
+      {
+        "label": "foreign-lead",
+        "success": false,
+        "error": "Lead has no phone",
+        "retryable": false
+      },
+      {
+        "label": "text",
+        "success": true
+      },
+      {
+        "label": "list",
+        "success": true
+      }
+    ],
+    "persisted": [
+      {
+        "message_type": "list",
+        "status": "pending",
+        "sent_source": "workflow",
+        "sent_by_ai": true
+      },
+      {
+        "message_type": "text",
+        "status": "sent",
+        "sent_source": "manual",
+        "sent_by_ai": false
+      },
+      {
+        "message_type": "conversation",
+        "status": "pending",
+        "sent_source": "workflow",
+        "sent_by_ai": true
+      }
+    ]
+  },
+  "selectionParser": [
+    {
+      "message_type": "listResponse",
+      "content": "Concluir",
+      "direction": "outgoing"
+    },
+    {
+      "message_type": "listResponse",
+      "content": "Validar",
+      "direction": "outgoing"
+    }
+  ],
+  "frontend": {
+    "browser": "Playwright Chromium, QA auth and backend",
+    "realComposerSend": true,
+    "selectionDisplayLabels": true,
+    "incomingImageLoaded": true,
+    "outgoingImageLoaded": true,
+    "stickerLoadFailed": true,
+    "stickerFallbackAdded": true,
+    "limitations": [
+      "First destination equals instance owner; selection is correctly outgoing.",
+      "Provider SSE/history replay forwarded only authorized chats to QA; production webhook unchanged.",
+      "Unrelated QA requests: master_users 406, attach-to-org-by-pending-invite 401, upsell 404."
+    ],
+    "sidebarOverflow": {
+      "before": {
+        "width": 280,
+        "scrollWidth": 670
+      },
+      "after": {
+        "width": 280,
+        "scrollWidth": 280
+      }
+    }
+  },
+  "separateRecipient": {
+    "realIncomingSelections": [
+      {
+        "type": "list_response",
+        "direction": "incoming",
+        "status": "received",
+        "title": "Validar"
+      },
+      {
+        "type": "list_response",
+        "direction": "incoming",
+        "status": "received",
+        "title": "Concluir"
+      }
+    ],
+    "outgoingStatuses": [
+      "read",
+      "read",
+      "delivered"
+    ],
+    "composerReplyDelivered": true,
+    "browserIncomingLabelsVisible": true,
+    "webhookTransport": "Live provider SSE relayed to QA webhook, authorized recipient only"
+  },
+  "checks": {
+    "targetedTests": 523,
+    "testFiles": 45,
+    "denoHandlersChecked": 4,
+    "uiCasesAfterHelperMove": 5
+  },
+  "massCreateGuards": [
+    {
+      "label": "no-session",
+      "http": 401,
+      "error": "Missing auth"
+    },
+    {
+      "label": "missing-input",
+      "http": 400,
+      "error": "Missing instance_id or recipients"
+    },
+    {
+      "label": "cross-org",
+      "http": 403,
+      "error": "Forbidden"
+    },
+    {
+      "label": "below-threshold",
+      "http": 400,
+      "error": "mass send not eligible for server-side /sender/*",
+      "suggestedRoute": "custom_dispatcher"
+    }
+  ]
+}

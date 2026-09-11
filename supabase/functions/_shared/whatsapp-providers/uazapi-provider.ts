@@ -397,6 +397,9 @@ export class UazapiProvider implements WhatsAppProvider {
       footer: opts.footer,
       selectableCount: opts.selectableCount,
       listButton: opts.listButtonLabel,
+      delay: opts.delay,
+      track_source: opts.trackSource,
+      track_id: opts.trackId,
     });
     return normalizeUazapiMessageResult(resp);
   }
@@ -409,6 +412,9 @@ export class UazapiProvider implements WhatsAppProvider {
       merchantName: opts.merchantName,
       amount: opts.amount,
       text: opts.text,
+      delay: opts.delay,
+      track_source: opts.trackSource,
+      track_id: opts.trackId,
     });
     return normalizeUazapiMessageResult(resp);
   }

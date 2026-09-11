@@ -31,10 +31,12 @@ import {
   lerBolha,
   TIPOS_NORMALIZADOS,
 } from "@/modules/communication/lib/inbound-metadata";
+import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
+import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
 import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
-import { MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
+import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
 import { Button } from "@/components/ui/button";
 import { Reply } from "lucide-react";
 import {
@@ -174,6 +176,7 @@ export function MessageBubble({
   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
+  const isInteractiveResponse = isInteractiveResponseType(messageType);
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
   const isTemplate = messageType === "template";
   // A LEITURA NORMALIZADA, quando a linha tem uma.
@@ -402,6 +405,8 @@ export function MessageBubble({
 
             {usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
+            ) : isInteractiveResponse ? (
+              <InteractiveResponseBubble content={message.content} messageType={messageType!} isOutgoing={isOutgoing} />
             ) : (
               <>
             {/* Texto / Legenda */}
@@ -454,14 +459,7 @@ export function MessageBubble({
 
             {/* Sticker */}
             {!isMediaExpired && isSticker && (
-              message.media_url && !["https://a.whatsapp.net", "https://web.whatsapp.net"].includes(message.media_url)
-                ? <img
-                    src={message.media_url}
-                    alt="Sticker"
-                    className="w-32 h-32 max-w-full object-contain rounded"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                : <span className="inline-block w-20 h-20 rounded bg-muted/40 text-3xl flex items-center justify-center" title="Figurinha">🏷️</span>
+              <MessageSticker src={message.media_url} />
             )}
 
             {/* Location */}

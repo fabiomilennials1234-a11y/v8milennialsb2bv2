@@ -44,6 +44,7 @@ import {
   POISON_DROP_LOG_SAMPLE,
 } from "./poison-denylist.ts";
 import { extractQuotedText } from "./quoted-text.ts";
+import { echoStatus, statusesBeforeEcho } from "./echo-status.ts";
 import { extractInteractiveSelection } from "./interactive-reply.ts";
 import {
   buildMessageIdCandidates,
@@ -561,7 +562,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     condition_text_source: conditionTextSource,
     media_url: mediaUrl,
     push_name: data.pushName ?? data.senderName ?? null,
-    status: direction === "incoming" ? "received" : "sent",
+    status: echoStatus(direction, data.status),
     timestamp: new Date(tsSeconds * 1000).toISOString(),
     raw_payload: data as Record<string, unknown>,
     is_group: isGroup,
@@ -992,6 +993,15 @@ export async function persistMessage(
       throw new Error("message_lost: upsert e DLQ falharam para a mesma mensagem");
     }
     return null;
+  }
+  const earlierStatuses = normalized.direction === "outgoing" ? statusesBeforeEcho(normalized.status) : [];
+  if (earlierStatuses.length) {
+    const { error: statusError } = await supabase.from("whatsapp_messages")
+      .update({ status: normalized.status })
+      .eq("organization_id", normalized.organization_id).eq("instance_id", normalized.instance_id)
+      .eq("message_id", normalized.message_id!).eq("direction", "outgoing")
+      .in("status", earlierStatuses);
+    if (statusError) throw new Error("message_echo_status_update_failed");
   }
   const { data: stored } = await supabase.from("whatsapp_messages").select("id")
     .eq("organization_id", normalized.organization_id).eq("message_id", normalized.message_id!)

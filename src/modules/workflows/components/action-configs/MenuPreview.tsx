@@ -15,9 +15,10 @@ interface Props {
   text: string;
   choices: string[];
   footer?: string;
+  listButtonLabel?: string;
 }
 
-export function MenuPreview({ type, text, choices, footer }: Props) {
+export function MenuPreview({ type, text, choices, footer, listButtonLabel }: Props) {
   return (
     <div className="rounded-lg border border-border/40 bg-muted/20 p-3 max-w-xs">
       <div className="bg-card rounded-md border border-border/40 px-3 py-2 space-y-2">
@@ -56,6 +57,8 @@ export function MenuPreview({ type, text, choices, footer }: Props) {
             ))}
           </div>
         )}
+
+        {type === "list" && <p className="text-xs text-primary text-center font-medium pt-2">{listButtonLabel || "Ver opções"}</p>}
 
         {footer && (
           <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-2">

@@ -42,6 +42,7 @@ vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
 
 import {
   persistOutboundMessage,
+  getLeadPhone,
   providerPersistsOwnMessages,
 } from "../../../supabase/functions/_shared/action-handlers/whatsapp-helpers";
 import { sendWhatsAppImage } from "../../../supabase/functions/_shared/action-handlers/send-whatsapp-media";
@@ -149,16 +150,18 @@ describe("persistOutboundMessage", () => {
     });
   });
 
-  it("faz merge no conflito, para o eco que chegar primeiro não congelar o rótulo 'manual'", async () => {
-    const { sb, mockTable, getUpsertOpts } = createMockSupabase();
-    mockTable("whatsapp_messages", []);
+  it("preserva recibo do eco e atualiza somente a atribuição da automação", async () => {
+    const { sb, mockTable, getUpsertOpts, getUpdated } = createMockSupabase();
+    mockTable("whatsapp_messages", [{ organization_id: "org-1", instance_id: "inst-1", message_id: "BATATA:BBB", status: "read", content: "webhook content" }]);
 
-    await persistOutboundMessage(sb, { ...BASE, providerMessageId: "BATATA:BBB" });
+    await persistOutboundMessage(sb, { ...BASE, provider: "uazapi", providerStatus: "queued", providerMessageId: "BATATA:BBB" });
 
     expect(getUpsertOpts("whatsapp_messages")[0]).toEqual({
       onConflict: "message_id,instance_id",
-      ignoreDuplicates: false,
+      ignoreDuplicates: true,
     });
+    expect(getUpdated("whatsapp_messages")[0]).toMatchObject({ sent_by_ai: true, sent_source: "workflow" });
+    expect(getUpdated("whatsapp_messages")[0]).toMatchObject({ status: "read", content: "webhook content" });
   });
 
   it("normaliza o telefone antes de montar o remote_jid (a UI reage/edita por ele)", async () => {
@@ -317,5 +320,14 @@ describe("providerPersistsOwnMessages", () => {
     });
 
     expect(getInserted("whatsapp_messages")).toHaveLength(1);
+  });
+});
+
+describe("workflow recipient tenant isolation", () => {
+  it("never resolves a foreign lead through the service client", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    expect(await getLeadPhone(sb, LEAD.id, "other-org")).toBeNull();
+    expect(await getLeadPhone(sb, LEAD.id, LEAD.organization_id)).toBe("5511999887766");
   });
 });

@@ -534,6 +534,7 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
       type: "button",
       text: "Choose one",
       choices: ["Option A", "Option B"],
+      trackSource: "workflow", trackId: "run-1", delay: 500,
     });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0];
@@ -541,6 +542,7 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
     const body = JSON.parse(init?.body as string);
     expect(body.type).toBe("button");
     expect(body.choices).toEqual(["Option A", "Option B"]);
+    expect(body).toMatchObject({ track_source: "workflow", track_id: "run-1", delay: 500 });
     expect(result.message_id).toBe("msg-menu-1");
   });
 });

@@ -118,12 +118,13 @@ export type UazapiSenderInput = {
 /**
  * Uazapi expects `scheduled_for` as epoch milliseconds. Our callers pass an
  * ISO 8601 string (or nothing, for immediate send). Convert here; an undefined
- * or unparseable value resolves to undefined (immediate send).
+ * value resolves to undefined (immediate send); invalid dates are rejected.
  */
 function toEpochMs(iso: string | undefined): number | undefined {
   if (!iso) return undefined;
   const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? undefined : ms;
+  if (!Number.isFinite(ms)) throw new Error("Invalid scheduled_for; refusing immediate dispatch");
+  return ms;
 }
 
 /** Server-side floor for the Uazapi /sender inter-message delay (anti-ban
@@ -154,6 +155,7 @@ export async function runUazapiSenderJob(
   instance: WhatsAppInstance,
   input: UazapiSenderInput
 ): Promise<{ sender_job_id: string; uazapi_sender_id: string }> {
+  const scheduledFor = toEpochMs(input.scheduledFor);
   const provider = await getWhatsAppProvider(instance, supabaseAdmin);
   const impl = (provider as any).senderAdvanced as undefined | ((
     p: Record<string, unknown>
@@ -186,11 +188,12 @@ export async function runUazapiSenderJob(
     },
     () =>
       impl.call(provider, {
-        messages: input.recipients,
-        delayMin,
-        delayMax,
-        scheduled_for: toEpochMs(input.scheduledFor),
-        track_source: input.trackSource ?? "dispatch-router-mass",
+        messages: input.recipients.map(({ caption, ...message }) => ({ ...message, text: caption ?? message.text })),
+        // Our scheduling/budget contract is milliseconds; UAZAPI sender uses seconds.
+        delayMin: Math.ceil(delayMin / 1000),
+        delayMax: Math.ceil(delayMax / 1000),
+        scheduled_for: scheduledFor,
+        info: input.trackSource ?? "dispatch-router-mass",
       }),
   );
 
@@ -234,7 +237,7 @@ export async function runUazapiSenderJob(
       triggered_by_user_id: input.triggeredByUserId ?? null,
       triggered_via: input.triggeredVia ?? "api",
       payload: {
-        // Effective values sent to Uazapi (post-clamp), not the raw client input.
+        // Effective delay configuration in CRM milliseconds; provider uses seconds.
         delayMin,
         delayMax,
         scheduledFor: input.scheduledFor,

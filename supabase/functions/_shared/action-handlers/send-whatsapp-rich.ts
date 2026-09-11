@@ -46,7 +46,7 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -101,7 +101,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -128,6 +128,9 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     ? await resolveVariables(supabase, leadId, params.menuFooter as string, executionContext)
     : undefined;
 
+  const listButtonLabel = menuType === "list"
+    ? await resolveVariables(supabase, leadId, String(params.menuListButton ?? "Ver opções"), executionContext)
+    : undefined;
   const trackId = buildTrackId(params);
 
   // Gateway dual-path
@@ -145,6 +148,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
       type: menuType as "button" | "list" | "poll" | "carousel",
       choices,
       footer,
+      listButtonLabel,
       selectableCount: params.menuSelectableCount as number | undefined,
     },
   });
@@ -161,6 +165,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
         text,
         choices,
         footer,
+        listButtonLabel,
         selectableCount: params.menuSelectableCount as number | undefined,
       },
       { trackSource: "workflow-action-menu", trackId: params._executionId as string | undefined },
@@ -173,6 +178,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: menuType,
       content: text,
@@ -200,7 +206,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -268,6 +274,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "pix_button",
       content: text || `[PIX R$ ${amount.toFixed(2)}]`,
