@@ -258,8 +258,13 @@ describe("Sidebar", () => {
       "aria-expanded",
       "true",
     );
-    // O painel é `React.lazy`: o que se vê no primeiro paint é o fallback.
-    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
+    // O painel é `React.lazy`: o que se vê no primeiro paint é o fallback, e
+    // resolver o módulo dinâmico é assíncrono. O 1s padrão do `findBy*` é
+    // apertado na suíte inteira em paralelo — este teste entrou como INSTÁVEL
+    // no `test:ratchet` com o teto default.
+    expect(
+      await screen.findByLabelText("Atividades", undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Agenda/ }));
     expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
