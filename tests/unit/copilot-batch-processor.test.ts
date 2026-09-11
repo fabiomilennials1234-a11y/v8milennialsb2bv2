@@ -162,6 +162,14 @@ describe("montarPayloadDoAgente", () => {
     });
   });
 
+  it("carrega a identidade exata da última mensagem persistida do lote", () => {
+    const messageContext = { storage: "whatsapp_messages" as const, messageId: "msg-row-1",
+      boxId: "inst-1", provider: "uazapi", participantId: "5547999999999" };
+    const payload = montarPayloadDoAgente({ phone: "5547999999999", orgId: "org-1", content: "oi",
+      instanceId: "inst-1", messageContext });
+    expect(payload.message_context).toEqual(messageContext);
+  });
+
   // Batch é agrupado por telefone+org, não por Instance. Se a linha não trouxer
   // a Instance, mandar `undefined` é melhor que inventar: o matcher reprova por
   // fail-closed em vez de disparar como se fosse o número certo.

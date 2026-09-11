@@ -5,7 +5,7 @@ import { WaitBusinessWindowNode } from "./WaitBusinessWindowNode";
 
 const window = { id: "morning", name: "Manhã", days: ["mon"], start: "08:00", end: "12:00" };
 function node(actions: string[], warning?: string) {
-  const props = { id: "bw", data: { windows: actions.map((action, i) => ({ ...window, id: `${i}`, action })), __configIssue: warning } } as NodeProps;
+  const props = { id: "bw", data: { windows: actions.map((action, i) => ({ ...window, id: `${i}`, action })), __configIssue: warning } } as unknown as NodeProps;
   return render(<ReactFlowProvider><WaitBusinessWindowNode {...props} /></ReactFlowProvider>);
 }
 

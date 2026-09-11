@@ -56,13 +56,8 @@ const funis = {
   isError: false,
 };
 
-const displayConfig = {
-  data: [] as Array<{ pipe_type: string; display_name: string }>,
-};
-
 vi.mock("@/modules/pipelines", () => ({
   usePipelines: () => funis,
-  usePipelineDisplayConfig: () => displayConfig,
 }));
 
 const leadsDoFunil = {
@@ -117,7 +112,6 @@ beforeEach(() => {
   funis.data = [COMERCIAL, REATIVACAO];
   funis.isLoading = false;
   funis.isError = false;
-  displayConfig.data = [];
   leadsDoFunil.data = { leads: [], temMais: false };
   leadsDoFunil.isFetching = false;
   leadsDoFunil.isError = false;
@@ -152,17 +146,10 @@ describe("LeadPorFunilPicker", () => {
     ]);
   });
 
-  it("🚨 rotula funil de SISTEMA pelo nome que a org usa, nao pelo nome do seed", () => {
-    // `pipelines.name` de funil de sistema é fixo no seed ("Qualificação"),
-    // mas a navegação e o hub rotulam por `display_name` ("Oportunidades", e
-    // renomeável por org). Sem o cruzamento, o seletor da Agenda seria o único
-    // lugar do produto a chamar o funil por um nome que a pessoa nunca viu.
+  it("🚨 rotula qualquer funil pelo nome canônico escolhido pela org", () => {
     funis.data = [
-      { id: "p-wa", name: "Qualificação", slug: "whatsapp", type: "system" },
+      { id: "p-wa", name: "Oportunidades", slug: "whatsapp", type: "system" },
       { id: "p-cus", name: "Funil do Bolívar", type: "custom" },
-    ];
-    displayConfig.data = [
-      { pipe_type: "whatsapp", display_name: "Oportunidades" },
     ];
     montar();
 
@@ -171,8 +158,6 @@ describe("LeadPorFunilPicker", () => {
     ).map((o) => o.textContent);
 
     expect(opcoes).toContain("Oportunidades");
-    expect(opcoes).not.toContain("Qualificação");
-    // Funil custom não entra nessa tabela — o nome dele já é o que o usuário deu.
     expect(opcoes).toContain("Funil do Bolívar");
   });
 

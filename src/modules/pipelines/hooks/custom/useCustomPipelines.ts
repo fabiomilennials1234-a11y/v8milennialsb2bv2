@@ -4,13 +4,11 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
-import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { moverNegocio, invalidateAfterMove } from "../../lib/moverNegocio";
 import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
 import {
   createCustomPipelineEntry,
-  createSystemPipelineEntry,
   updateCustomPipelineEntry,
-  updateSystemPipelineEntry,
 } from "@/integrations/supabase/pipeline-entry-rpc";
 import {
   createCustomPipelineStage,
@@ -1032,70 +1030,6 @@ export function useAddLeadToCustomPipe() {
   });
 }
 
-/** Funis de sistema alcançáveis pela auto-transição (slugs em `pipelines`). */
-type SystemPipeSlug = "whatsapp" | "confirmacao" | "propostas";
-
-/**
- * Teto de linhas lidas por `(funil de sistema, lead)` — espelha
- * `PIPELINE_ENTRY_READ_CAP` em `../model/usePipelineEntries.ts`.
- */
-const SYSTEM_PIPE_ENTRY_READ_CAP = 50;
-
-/**
- * O negócio CORRENTE do lead num funil de sistema, ou `null` se ele ainda não
- * está nele.
- *
- * Lê `pipeline_entries` em vez das views `pipe_*` porque `pipe_whatsapp` e
- * `pipe_confirmacao` não expõem `closed_at`, e sem ele não dá pra aplicar o
- * mesmo critério que o kanban e o Copilot já usam. O `pipelines!inner`
- * reproduz o JOIN da view; a escrita chama as funções compartilhadas, que
- * traduzem o vocabulário da UI para `pipeline_entries`.
- *
- * Corrente = ABERTO primeiro, depois o de movimentação mais recente — mesma
- * regra de `readActivePipelineEntry` (`../model/usePipelineEntries.ts`) e de
- * `pickActiveEntry` (`_shared/pipeline-adapter.ts`). Aqui errar tem preço
- * concreto: tirar um card da etapa de ganho dispara `fn_capture_sale_event`,
- * que grava estorno e não se desfaz.
- *
- * Por que não `.maybeSingle()`: com mais de uma linha o postgrest-js zera o
- * `data` e devolve `PGRST116`; o chamador lia isso como "não existe" e inseria
- * outro negócio a cada passagem. Depois do M1 (`20270730000050`, que derrubou
- * os três uniques do par funil+lead) N linhas é o caso normal — é assim que
- * recompra existe.
- *
- * Lança em falha de leitura: o `catch` da auto-transição pula a transição e
- * loga, em vez de inserir às cegas e duplicar o negócio.
- */
-async function readCurrentSystemPipeEntry(
-  slug: SystemPipeSlug,
-  leadId: string,
-  organizationId: string,
-) {
-  const { data, error } = await supabase
-    .from("pipeline_entries")
-    .select("id, closed_at, pipeline:pipelines!inner(slug)")
-    .eq("organization_id", organizationId)
-    .eq("lead_id", leadId)
-    .eq("pipeline.slug", slug)
-    .eq("pipeline.type", "system")
-    .order("closed_at", { ascending: false, nullsFirst: true })
-    .order("stage_changed_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(SYSTEM_PIPE_ENTRY_READ_CAP);
-
-  if (error) throw error;
-
-  const rows = data ?? [];
-  if (rows.length > 1) {
-    // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
-    console.warn(
-      `[auto-transition] ${rows.length} negócios para lead=${leadId} no funil ${slug}; usando o primeiro ABERTO, ou o mais recente se todos estiverem fechados.`,
-    );
-  }
-  return rows.find((r) => r.closed_at == null) ?? rows[0] ?? null;
-}
-
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
@@ -1120,111 +1054,53 @@ export function useMoveLeadInCustomPipe() {
           ? "Permissões ainda carregando — tente novamente"
           : "Sem permissão para mover registros no pipe");
       }
-      await updateCustomPipelineEntry(entry_id, {
-        stage_id,
-        stage_changed_at: new Date().toISOString(),
-      });
-      const { data, error } = await supabase
-        .from("pipeline_entries")
-        .select("*")
-        .eq("id", entry_id)
-        .eq("organization_id", teamMember.organization_id)
-        .single();
-
-      if (error) throw error;
-
-      // Fetch stage data for workflow trigger and auto-transition
-      const { data: stageRow } = await supabase
+      const { data: stageRow, error: stageError } = await supabase
         .from("pipeline_stages")
         .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
         .eq("id", stage_id)
+        .eq("pipeline_id", pipeline_id)
         .eq("organization_id", teamMember.organization_id)
-        .maybeSingle();
+        .single();
+      if (stageError) throw stageError;
 
-      // stage_changed handled by PG trigger (trg_workflow_custom_pipe_stage_change)
-
-      // Auto-transition: check if target stage has a transition configured
-      try {
-
-      if (stageRow?.is_final_positive && data.lead_id && data.organization_id) {
-        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-          // Transition to another custom pipeline (helper compartilhado)
-          await upsertLeadIntoCustomPipe({
-            leadId: data.lead_id,
-            organizationId: data.organization_id,
-            targetPipelineId: stageRow.target_pipeline_id,
-            targetStageId: stageRow.target_stage_id,
-          });
-        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
-          // Transition to a standard pipeline
-          const pipeType = stageRow.target_pipe_type;
-          const targetStageKey = stageRow.target_stage_key;
-
-          if (pipeType === "whatsapp") {
-            // SCRUM-202: a transição escreve só a entry (via a view homônima). O
-            // espelho `leads.pipe_whatsapp` sai daqui por dois motivos, e nenhum
-            // é estilo:
-            //
-            //   1. era REDUNDANTE — quem alimenta a coluna é o gatilho
-            //      `sync_pipeline_entry_to_lead_pipe_whatsapp`, que dispara no
-            //      write da entry logo abaixo. Escrever dos dois lados só cria a
-            //      chance de divergirem;
-            //   2. era ESCRITA DIRETA em `leads` fora da porta do Negócio, e
-            //      desde a `20270803000040` o espelho deixou de acompanhar o
-            //      move — então este UPDATE podia deixar a coluna dizendo uma
-            //      etapa que a entry não confirma.
-            //
-            // A coluna é dropada na fatia 3 (SCRUM-222); esta linha viraria erro
-            // de coluna inexistente derrubando a transição inteira.
-            const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id, data.organization_id);
-            if (existing) {
-              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
-            } else {
-              await createSystemPipelineEntry({
-                leadId: data.lead_id,
-                organizationId: data.organization_id,
-                slug: "whatsapp",
-                stageKey: targetStageKey,
-              });
-            }
-          } else if (pipeType === "confirmacao") {
-            const existing = await readCurrentSystemPipeEntry("confirmacao", data.lead_id, data.organization_id);
-            if (existing) {
-              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
-            } else {
-              await createSystemPipelineEntry({
-                leadId: data.lead_id,
-                organizationId: data.organization_id,
-                slug: "confirmacao",
-                stageKey: targetStageKey,
-              });
-            }
-          } else if (pipeType === "propostas") {
-            const existing = await readCurrentSystemPipeEntry("propostas", data.lead_id, data.organization_id);
-            if (existing) {
-              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
-            } else {
-              await createSystemPipelineEntry({
-                leadId: data.lead_id,
-                organizationId: data.organization_id,
-                slug: "propostas",
-                stageKey: targetStageKey,
-              });
-            }
-          } else if (pipeType === "upsell_base") {
-            await supabase.from("upsell_clients").update({ tipo_cliente_tempo: targetStageKey }).eq("lead_id", data.lead_id);
-          } else if (pipeType === "upsell_gestao") {
-            await supabase.from("upsell_clients").update({ gestao_stage: targetStageKey }).eq("lead_id", data.lead_id);
-          }
+      let targetPipelineId = stageRow.target_pipeline_id;
+      let targetStage = stageRow.target_stage_id;
+      if (stageRow.is_final_positive && !targetPipelineId && stageRow.target_pipe_type
+          && stageRow.target_stage_key && !stageRow.target_pipe_type.startsWith("upsell_")) {
+        const { data: target, error } = await supabase.from("pipelines").select("id")
+          .eq("organization_id", teamMember.organization_id)
+          .eq("slug", stageRow.target_pipe_type).eq("is_active", true).single();
+        if (error) throw error;
+        targetPipelineId = target.id;
+        targetStage = stageRow.target_stage_key;
+      }
+      if (stageRow.is_final_positive && targetPipelineId && targetStage) {
+        // Origem e destino na mesma transação e na mesma posição.
+        await moverNegocio({ entryId: entry_id, targetPipelineId,
+          targetStageKey: targetStage, stageOrigem: stageRow.stage_key });
+      } else {
+        await updateCustomPipelineEntry(entry_id, {
+          stage_id, stage_changed_at: new Date().toISOString(),
+        });
+      }
+      const { data, error } = await supabase.from("pipeline_entries").select("*")
+        .eq("id", entry_id).eq("organization_id", teamMember.organization_id).single();
+      if (error) throw error;
+      // Carteira não é outro negócio de funil: preserva sua integração.
+      if (stageRow.is_final_positive && data.lead_id && stageRow.target_stage_key) {
+        const field = stageRow.target_pipe_type === "upsell_base" ? "tipo_cliente_tempo"
+          : stageRow.target_pipe_type === "upsell_gestao" ? "gestao_stage" : null;
+        if (field) {
+          const { error: carteiraError } = await supabase.from("upsell_clients")
+            .update({ [field]: stageRow.target_stage_key }).eq("lead_id", data.lead_id)
+            .eq("organization_id", teamMember.organization_id);
+          if (carteiraError) throw carteiraError;
         }
       }
-      } catch (transitionErr) {
-        console.error("[auto-transition] Failed:", transitionErr);
-      }
-
       return data as CustomPipeEntry;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      invalidateAfterMove(queryClient, data.lead_id ?? undefined);
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipeline_id] });

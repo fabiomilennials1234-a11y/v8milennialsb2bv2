@@ -2,6 +2,7 @@
  * Unit tests for whatsapp-webhook pure logic (no Deno.serve invocation).
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { extractQuotedText } from "../../supabase/functions/whatsapp-webhook/quoted-text.ts";
 
 const envStub: Record<string, string> = {
   SUPABASE_URL: "https://local.supabase.test",
@@ -43,7 +44,6 @@ const {
   checkRateLimit,
   normalizeMessage,
   handleConnectionEvent,
-  extractQuotedText,
   rateLimitState,
   RATE_LIMIT_MAX,
   REPLAY_WINDOW_MS,
@@ -56,7 +56,6 @@ const {
     instance: { id: string; organization_id: string; instance_name: string },
     data: unknown,
   ) => Promise<void>;
-  extractQuotedText: (data: unknown) => string | null;
   rateLimitState: Map<string, unknown>;
   RATE_LIMIT_MAX: number;
   REPLAY_WINDOW_MS: number;
@@ -166,6 +165,7 @@ describe("normalizeMessage", () => {
         fromMe: false,
         type: "text",
         text: "hello",
+        caption: "hello",
         timestamp: 1700000000,
         pushName: "Fabio",
       },
@@ -177,6 +177,8 @@ describe("normalizeMessage", () => {
     expect(n.direction).toBe("incoming");
     expect(n.message_type).toBe("text");
     expect(n.content).toBe("hello");
+    expect(n.condition_text).toBe("hello");
+    expect(n.condition_text_source).toBe("text");
     expect(n.phone_number).toBe("5511999999999");
     expect(n.status).toBe("received");
     expect(n.push_name).toBe("Fabio");
@@ -204,6 +206,8 @@ describe("normalizeMessage", () => {
     expect(n.message_type).toBe("image");
     expect(n.media_url).toBe("https://cdn/x.jpg");
     expect(n.content).toBe("p");
+    expect(n.condition_text).toBe("p");
+    expect(n.condition_text_source).toBe("caption");
   });
   it("falls back to remoteJid when chatid absent", () => {
     const n = normalizeMessage(
@@ -249,6 +253,8 @@ describe("normalizeMessage", () => {
     );
     expect(n.message_type).toBe("text");
     expect(n.content).toBe('[Em resposta a: "500k"]\nEsse é o valor');
+    expect(n.condition_text).toBe("Esse é o valor");
+    expect(n.condition_text_source).toBe("text");
   });
   it("folds quoted text into content (legacy nested message shape)", () => {
     const n = normalizeMessage(
@@ -266,6 +272,8 @@ describe("normalizeMessage", () => {
     );
     // No flat `text`, so body stays null but the quote is still surfaced.
     expect(n.content).toBe('[Em resposta a: "E você é de qual cidade?"]');
+    expect(n.condition_text).toBeNull();
+    expect(n.condition_text_source).toBeNull();
   });
   it("uses quoted media caption, else a typed placeholder", () => {
     const withCaption = normalizeMessage(

@@ -1,9 +1,13 @@
-import { X, Trash2, AlertTriangle, Copy } from "lucide-react";
+import { getGuidedConditionFields } from '../lib/guided-condition-summary';
+import { useState } from 'react';
+import { X, Trash2, AlertTriangle, Copy, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
 import { ActionPanel } from "./sidebar-panels/ActionPanel";
 import { ConditionPanel } from "./sidebar-panels/ConditionPanel";
+import { GuidedConditionPanel } from "./sidebar-panels/GuidedConditionPanel";
+import { WorkflowDataGrantPanel } from "./sidebar-panels/WorkflowDataGrantPanel";
 import { DelayPanel } from "./sidebar-panels/DelayPanel";
 import { CopilotPanel } from "./sidebar-panels/CopilotPanel";
 import { WaitResponsePanel } from "./sidebar-panels/WaitResponsePanel";
@@ -16,7 +20,7 @@ import { CodeJsonPanel } from "./sidebar-panels/CodeJsonPanel";
 import { CodeJavascriptPanel } from "./sidebar-panels/CodeJavascriptPanel";
 import { CodeHttpsPanel } from "./sidebar-panels/CodeHttpsPanel";
 import { NODE_LABELS } from "@/types/workflow";
-import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
+import type { WorkflowNode, WorkflowNodeData, ConditionNodeData } from "@/types/workflow";
 
 /**
  * Fields that reference org-specific resources.
@@ -51,7 +55,19 @@ function getUnresolvedFields(data: Record<string, unknown>): string[] {
   return unresolved;
 }
 
+function getLegacyConditionReview(data: ConditionNodeData): { details: string; source: Record<string, unknown> } | null {
+  const review = data.legacyConditionReview;
+  if (!review || typeof review !== "object" || Array.isArray(review)) return null;
+  const value = review as Record<string, unknown>;
+  if (typeof value.details !== "string" || !value.source || typeof value.source !== "object" || Array.isArray(value.source)) return null;
+  return { details: value.details, source: value.source as Record<string, unknown> };
+}
+
 interface WorkflowSidebarProps {
+  actorId?: string;
+  workflowId?: string;
+  canManageDataGrant?: boolean;
+  organizationId?: string;
   selectedNode: WorkflowNode | null;
   onClose: () => void;
   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
@@ -61,6 +77,10 @@ interface WorkflowSidebarProps {
 }
 
 export function WorkflowSidebar({
+  actorId,
+  workflowId,
+  canManageDataGrant = false,
+  organizationId,
   selectedNode,
   onClose,
   onUpdateNode,
@@ -68,12 +88,14 @@ export function WorkflowSidebar({
   onDuplicateNode,
   allNodes = [],
 }: WorkflowSidebarProps) {
+  const [expanded, setExpanded] = useState(false);
   if (!selectedNode) return null;
 
   const nodeData = selectedNode.data as unknown as WorkflowNodeData;
   const nodeType = nodeData.type;
   // Trigger is singular per workflow — never duplicable.
   const canDuplicate = nodeType !== "trigger";
+  const guided = nodeType === 'condition' && Boolean((nodeData as ConditionNodeData).guidedCondition);
   const title = NODE_LABELS[nodeType] || "Configuração";
 
   const handleUpdate = (updates: Partial<WorkflowNodeData>) => {
@@ -87,6 +109,28 @@ export function WorkflowSidebar({
       case "action":
         return <ActionPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "condition":
+        if ((nodeData as ConditionNodeData).guidedCondition) {
+          const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);
+          const source = legacyReview?.source;
+          return <>{legacyReview && <div role="note" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm">
+            <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div><p className="font-medium">Correção pendente da regra antiga</p>
+                <p className="mt-1 text-muted-foreground">Antes: {String(source?.field ?? "sem campo")} · {String(source?.operator ?? "sem operador")}{source?.value ? ` · ${String(source.value)}` : ""}</p>
+                <p className="mt-1 text-muted-foreground">{legacyReview.details}</p>
+              </div></div>
+          </div>}<GuidedConditionPanel
+            key={`${actorId}:${organizationId}:${selectedNode.id}`}
+            actorId={actorId ?? ''}
+            organizationId={organizationId ?? ''}
+            condition={(nodeData as ConditionNodeData).guidedCondition!}
+            onChange={guidedCondition => handleUpdate({ guidedCondition, legacyConditionReview: undefined })}
+          />{workflowId && organizationId && <WorkflowDataGrantPanel
+            key={`${actorId}:${organizationId}:${workflowId}`}
+            actorId={actorId ?? ''}
+            workflowId={workflowId} organizationId={organizationId} canManage={canManageDataGrant}
+            requiredFields={getGuidedConditionFields((nodeData as ConditionNodeData).guidedCondition!)}
+          />}</>;
+        }
         return <ConditionPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "delay":
         return <DelayPanel data={nodeData as any} onUpdate={handleUpdate} />;
@@ -122,13 +166,18 @@ export function WorkflowSidebar({
   };
 
   return (
-    <div className="w-[360px] border-l bg-card flex flex-col h-full">
+    <div role="complementary" aria-label={`Configurar ${title}`} className="min-w-0 max-w-full shrink-0 border-l bg-card flex flex-col h-full" style={{ width: guided && expanded ? 640 : 360 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-sm">Configurar {title}</h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+        <div className="flex items-center gap-1">
+        {guided && <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={expanded ? 'Reduzir painel' : 'Ampliar painel'} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>
+          {expanded ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </Button>}
+        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Fechar painel" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
+        </div>
       </div>
 
       {/* Unresolved references warning */}

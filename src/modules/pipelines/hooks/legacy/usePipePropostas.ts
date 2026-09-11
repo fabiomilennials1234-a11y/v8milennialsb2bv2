@@ -254,6 +254,11 @@ export function useUpdatePipeProposta() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+      // O board unificado usa o RPC paginado, não a query `pipeline_entries`.
+      // Recarrega o card para refletir `metadata.sale_value` logo após salvar.
+      queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas_by_lead"] });
     },
   });
 }

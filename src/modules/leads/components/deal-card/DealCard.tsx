@@ -1,3 +1,4 @@
+import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
 import {
@@ -278,6 +279,7 @@ export function DealCard({
   movendo,
   comentarios = [],
   onComentar,
+  onBaixarAnexo,
   onEditarComentario,
   onApagarComentario,
   comentando,
@@ -288,6 +290,7 @@ export function DealCard({
   excluindo,
   etiquetas,
   acaoLigar,
+  acaoCopiar,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -322,7 +325,8 @@ export function DealCard({
    * releitura de etapas, mediana e produtos.
    */
   comentarios?: DealCardComentario[];
-  onComentar?: (texto: string) => void | Promise<void>;
+  onComentar?: (texto: string, files?: File[]) => void | Promise<void>;
+  onBaixarAnexo?: (file: CommentAttachment) => Promise<void>;
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
@@ -387,6 +391,7 @@ export function DealCard({
    * Não reestampa a pessoa — é um ato sobre ela, não uma identidade.
    */
   acaoLigar?: ReactNode;
+  acaoCopiar?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -428,7 +433,7 @@ export function DealCard({
   const { total } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* ── Cabeçalho ─────────────────────────────────────────────────────
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
@@ -490,10 +495,11 @@ export function DealCard({
             top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
             do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
             comum de faxina de funil. */}
-        {(aberto || onExcluir || acaoLigar) && (
+        {(aberto || onExcluir || acaoLigar || acaoCopiar) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
             {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
                 negócio aberto, e o único que não o encerra. */}
+            {acaoCopiar}
             {acaoLigar}
             {aberto && (
               <AcaoPrimaria
@@ -775,28 +781,21 @@ export function DealCard({
               )}
             </div>
 
-            {/* Comentários — bloco FIXO no pé da aba, não uma quarta sub-aba.
-                A escolha é do dono do produto (24/08) e tem precedente medido:
-                `leads.notes` está preenchido em 74,9% dos leads e `lead_comments`
-                em 4,4%, e a diferença mais provável entre os dois nunca foi
-                preferência por texto solto — é que a nota estava na cara e o
-                comentário atrás de uma aba. Repetir a aba aqui seria repetir o
-                experimento sabendo o resultado.
 
-                Ele fica DEPOIS do dinheiro de propósito: quem abre o negócio
-                abre para decidir, e o que decide (tempo, valor, etapa, produto)
-                tem de vir antes da conversa sobre a decisão. */}
-            <div className="border-t border-border pt-5">
-              <DealCardComments
-                comentarios={comentarios}
-                onComentar={onComentar}
-                onEditar={onEditarComentario}
-                onApagar={onApagarComentario}
-                enviando={comentando}
-              />
-            </div>
           </div>
         )}
+        {/* Keep drafts and in-flight uploads mounted while switching tabs. */}
+        <div hidden={aba !== "negocio"} className="mt-5 border-t border-border pt-5">
+          <DealCardComments
+            key={negocio.id}
+            comentarios={comentarios}
+            onComentar={onComentar}
+            onBaixarAnexo={onBaixarAnexo}
+            onEditar={onEditarComentario}
+            onApagar={onApagarComentario}
+            enviando={comentando}
+          />
+        </div>
       </div>
     </div>
   );

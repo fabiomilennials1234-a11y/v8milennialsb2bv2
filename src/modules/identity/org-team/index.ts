@@ -33,6 +33,7 @@ export type { SeatUsage } from "./hooks/useSeatUsage";
 // ── Team members + profiles ────────────────────────────────────────────────
 export {
   useTeamMembers,
+  useGuidedResponsibleOptions,
   useTeamMember,
   useCurrentTeamMember,
   useResponsibleMembers,

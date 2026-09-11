@@ -69,6 +69,7 @@ export type {
 // ── Hooks: lead origins registry (fonte única de lista/label/cor) ──────────
 export {
   useLeadOrigins,
+  useLeadOriginOptions,
   BUILTIN_LEAD_ORIGINS,
   FALLBACK_ORIGIN_COLOR,
 } from "./hooks/useLeadOrigins";
@@ -234,7 +235,7 @@ export type { AttachedLeadTag } from "./hooks/lead/useLeadTagsAttached";
 // Org-scoped tag dictionary (CRUD). Consumed cross-module by the Disparo
 // audience-conditions selector (tag filter) and any surface that needs the
 // org's tag list outside a lead context.
-export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
+export { useTags, useTagOptions, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
 export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
 
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────
@@ -304,3 +305,5 @@ export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
 // pipelines para leads na inversão F7. pipelines consome via este barrel.
 export { CompareceuModal } from "./components/leads/funnel-contexts/modals/CompareceuModal";
 export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";
+
+export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';

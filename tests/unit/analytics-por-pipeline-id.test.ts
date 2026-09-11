@@ -96,14 +96,14 @@ describe("useAnalyticsPipelineOptions", () => {
     expect(result.current.orgDefault).toBe("id-whats");
   });
 
-  it("closingDefault prefere o funil de slug 'propostas' (default legado dos gráficos de venda)", () => {
+  it("closingDefault respeita o funil padrão escolhido pela organização", () => {
     const { result } = renderHook(() => useAnalyticsPipelineOptions(), {
       wrapper: createWrapper(),
     });
-    expect(result.current.closingDefault).toBe("id-prop");
+    expect(result.current.closingDefault).toBe("id-whats");
   });
 
-  it("closingDefault cai para orgDefault quando não há funil 'propostas'", () => {
+  it("closingDefault independe dos slugs técnicos existentes", () => {
     mockUsePipelines.mockReturnValue({
       data: FUNIS.filter((f) => f.slug !== "propostas"),
       isLoading: false,

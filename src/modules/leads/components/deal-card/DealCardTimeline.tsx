@@ -74,13 +74,13 @@ export function DealCardTimeline({ movimentacoes }: { movimentacoes: DealCardMov
                 {nascimento ? (
                   <>
                     <span className="text-muted-foreground">Negócio criado em</span>
-                    <span className="font-semibold">{m.para}</span>
+                    <span className="font-semibold">{m.funilPara ? `${m.funilPara} · ` : ""}{m.para}</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-muted-foreground">{m.de}</span>
+                    <span className="text-muted-foreground">{m.funilDe ? `${m.funilDe} · ` : ""}{m.de}</span>
                     <ArrowRight className="size-3 shrink-0 text-muted-foreground/50" aria-hidden="true" />
-                    <span className="font-semibold">{m.para}</span>
+                    <span className="font-semibold">{m.funilPara ? `${m.funilPara} · ` : ""}{m.para}</span>
                   </>
                 )}
               </div>

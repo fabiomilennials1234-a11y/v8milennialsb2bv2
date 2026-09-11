@@ -5,7 +5,15 @@ import {
   parseGuardConfig,
   reachedChatCap,
   reachedGlobalCap,
+  classifyConversationCoverage,
 } from "./guards.ts";
+
+Deno.test('cobertura só é completa no fim natural sem cap, skip ou perda', () => {
+  assertEquals(classifyConversationCoverage({ naturalEnd: true, dataLoss: false }), 'complete');
+  assertEquals(classifyConversationCoverage({ naturalEnd: false, dataLoss: false, capped: true }), 'gapped');
+  assertEquals(classifyConversationCoverage({ naturalEnd: true, dataLoss: true }), 'gapped');
+  assertEquals(classifyConversationCoverage({ naturalEnd: true, dataLoss: false, hitExisting: true }), 'gapped');
+});
 
 // ---------------------------------------------------------------------------
 // Teto por conversa — a regressão do incidente de 2026-08-06

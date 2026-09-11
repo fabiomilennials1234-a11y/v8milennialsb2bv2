@@ -11,7 +11,7 @@
  * - Retry: up to 3 attempts via job-tracker backoff
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -235,7 +235,7 @@ Deno.serve(
  * só acontece com features.automations !== true explícito.
  */
 async function orgAutomationsAllowed(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   organizationId: string,
   cache: Map<string, boolean>,
 ): Promise<boolean> {
@@ -259,7 +259,7 @@ async function orgAutomationsAllowed(
 }
 
 async function processExecution(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   execution: Record<string, unknown>,
   stats: { claimed: number; completed: number; failed: number; paused: number; cancelled: number; skipped_plan: number },
   planGateCache: Map<string, boolean>,
@@ -287,12 +287,14 @@ async function processExecution(
     }
 
     // Fetch workflow definition + trigger_config for condition validation
-    const { data: workflow, error: wfError } = await supabase
+    const { data: currentWorkflow, error: wfError } = await supabase
       .from("workflows")
       .select("definition, loop_limit, is_active, name, trigger_type, trigger_config")
       .eq("id", workflowId)
+      .eq("organization_id", organizationId)
       .maybeSingle();
 
+    let workflow = currentWorkflow;
     if (wfError || !workflow) {
       console.error(`[process-workflow-executions] Workflow ${workflowId} not found`);
       await supabase.from("workflow_executions").update({
@@ -312,6 +314,24 @@ async function processExecution(
       }).eq("id", executionId);
       stats.failed++;
       return;
+    }
+
+    const guidedVersionId = typeof execution.guided_version_id === 'string' ? execution.guided_version_id : null;
+    if (guidedVersionId) {
+      const version = await supabase.from('workflow_guided_versions').select('definition, settings')
+        .eq('id', guidedVersionId).eq('workflow_id', workflowId).eq('organization_id', organizationId).maybeSingle();
+      const trigger = Array.isArray(version.data?.definition?.nodes)
+        ? version.data.definition.nodes.find((node: { type?: string }) => node?.type === 'trigger') : null;
+      if (version.error || !trigger || typeof trigger.data?.triggerType !== 'string') {
+        await supabase.from('workflow_executions').update({ status: 'failed', error: 'execution_version_unavailable',
+          completed_at: new Date().toISOString() }).eq('id', executionId).eq('organization_id', organizationId);
+        stats.failed++;
+        return;
+      }
+      workflow = { ...workflow, definition: version.data!.definition,
+        name: version.data!.settings?.name ?? workflow.name,
+        loop_limit: version.data!.settings?.loop_limit ?? 100,
+        trigger_type: trigger.data.triggerType, trigger_config: trigger.data.config ?? {} };
     }
 
     // Revalida trigger_config contra o snapshot persistido antes do primeiro nó.
@@ -358,6 +378,7 @@ async function processExecution(
       // cair no critério de sempre quando não recebem.
       entryId: (execution.pipeline_entry_id as string | null) ?? null,
       dealId: (execution.deal_id as string | null) ?? null,
+      guidedVersionId,
       definition: workflow.definition as { nodes: { id: string; type: string; data: Record<string, unknown> }[]; edges: { id: string; source: string; target: string; sourceHandle?: string | null; data?: { loopLimit?: number } }[] },
       loopLimit: workflow.loop_limit || 100,
       context,
@@ -480,7 +501,7 @@ async function processExecution(
  * - followup_overdue: follow_ups past due_date without completed_at
  */
 async function processPeriodicTriggers(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<number> {
   let count = 0;
 
@@ -499,11 +520,11 @@ async function processPeriodicTriggers(
         const cutoff = new Date(Date.now() - timeoutHours * 3_600_000).toISOString();
 
         // Find leads with last outbound message before cutoff and no inbound since
-        const { data: candidates } = await supabase.rpc("find_leads_no_reply", {
+        const { data: candidates } = await Promise.resolve(supabase.rpc("find_leads_no_reply", {
           p_organization_id: wf.organization_id,
           p_cutoff: cutoff,
           p_limit: 50,
-        }).catch(() => ({ data: null }));
+        })).catch(() => ({ data: null }));
 
         // Fallback: if RPC doesn't exist, skip
         if (candidates) {
@@ -649,7 +670,7 @@ async function processPeriodicTriggers(
 }
 
 async function checkWorkflowFailureAlert(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   workflowId: string,
   organizationId: string,
   workflowName: string,

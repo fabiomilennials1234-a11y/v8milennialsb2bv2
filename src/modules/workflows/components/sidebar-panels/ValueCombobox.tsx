@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/popover";
 
 interface ValueComboboxProps {
+  id?: string;
+  onSearchChange?: (search: string) => void;
   /** Valores distintos que já existem na org (deduplicados + ordenados). */
   values: string[];
   /** Valor atual (`data.value`). Pode ser um item da lista ou texto livre. */
@@ -41,6 +43,8 @@ interface ValueComboboxProps {
  * Reusa o padrão visual de ProductCombobox/OrgInsightsCombobox.
  */
 export function ValueCombobox({
+  id,
+  onSearchChange,
   values,
   value,
   onChange,
@@ -64,6 +68,7 @@ export function ValueCombobox({
     onChange(v);
     setOpen(false);
     setSearch("");
+    onSearchChange?.("");
   };
 
   return (
@@ -71,11 +76,12 @@ export function ValueCombobox({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setSearch("");
+        if (!o) { setSearch(""); onSearchChange?.(""); }
       }}
     >
       <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
           role="combobox"
@@ -94,9 +100,20 @@ export function ValueCombobox({
           <CommandInput
             placeholder="Buscar ou digitar valor…"
             value={search}
-            onValueChange={setSearch}
+            onValueChange={value => { setSearch(value); onSearchChange?.(value); }}
           />
           <CommandList>
+            {showCreate && (
+              <CommandGroup>
+                <CommandItem
+                  value={`__create__${term}`}
+                  onSelect={() => commit(term)}
+                >
+                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">Usar "{term}"</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
             {isLoading ? (
               <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -125,20 +142,9 @@ export function ValueCombobox({
                     ))}
                   </CommandGroup>
                 )}
-
-                {showCreate && (
-                  <CommandGroup>
-                    <CommandItem
-                      value={`__create__${term}`}
-                      onSelect={() => commit(term)}
-                    >
-                      <Plus className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">Usar "{term}"</span>
-                    </CommandItem>
-                  </CommandGroup>
-                )}
               </>
             )}
+
           </CommandList>
         </Command>
       </PopoverContent>

@@ -20,8 +20,8 @@
  * A config do nó mora PLANA em `node.data` — o executor faz `params: {...ctx.nodeData}`.
  */
 
-import { ehModoTemplateMeta } from "./modo-de-mensagem";
-import { businessWindowConfigErrors, businessWindowConnectionIssues } from "./business-window";
+import { ehModoTemplateMeta } from "./modo-de-mensagem.ts";
+import { businessWindowConfigErrors, businessWindowConnectionIssues } from "./business-window.ts";
 
 export type NodeConfig = Record<string, unknown>;
 
@@ -185,6 +185,13 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[], edges?: { source
 
   for (const node of nodes ?? []) {
     const config = node.data ?? {};
+    // Both editor and list activation must preserve guided conditions as
+    // drafts until the organization-authorized publication path is available.
+    if (node.type === "condition" && Object.prototype.hasOwnProperty.call(config, "guidedCondition")) {
+      issues.push({ nodeId: node.id, nodeLabel: (config.label as string) || "Condição",
+        actionType: "condition", missing: "publicação autorizada da condição" });
+      continue;
+    }
     if (node.type === "wait_business_window" || config.type === "wait_business_window") {
       issues.push(...businessWindowConfigErrors(config).map(missing => ({ nodeId: node.id, nodeLabel: String(config.label || "Janela Comercial"), actionType: "wait_business_window", missing })));
     }

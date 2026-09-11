@@ -49,6 +49,7 @@ export {
   useOrgQuotas,
   useOrgSwitcher,
   useTeamMembers,
+  useGuidedResponsibleOptions,
   useCurrentTeamMember,
   useResponsibleMembers,
   useCreateTeamMember,

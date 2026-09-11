@@ -56,7 +56,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+import { useOrganization, useCanDo } from "@/modules/identity";
 import { CompareceuModal } from "@/modules/leads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { track } from "@/lib/analytics";
@@ -151,6 +151,7 @@ export function useFunilMoveFlow({
   findEntry,
 }: UseFunilMoveFlowParams) {
   const { organizationId } = useOrganization();
+  const movePermission = useCanDo("move_pipe_record");
   const queryClient = useQueryClient();
   const mover = useMoverCardNoFunil(pipeline ? { id: pipeline.id, type: pipeline.type } : null);
   const updateEntryConfirmacao = useUpdatePipeConfirmacao();
@@ -291,14 +292,10 @@ export function useFunilMoveFlow({
     ) => {
       const entry = findEntry(entryId);
       try {
+        if (!movePermission.allowed) throw new Error("Sem permissão para mover registros no pipe");
         if (opts.metadataPatch && Object.keys(opts.metadataPatch).length > 0) {
           await patchEntryMetadata(entryId, opts.metadataPatch);
         }
-        await mover.mutateAsync({ entryId, stageId: stage.id, stageKey: stage.stage_key });
-
-        if (entry) posMoveSistema(entry, stage);
-        if (opts.successToast) toast.success(opts.successToast);
-
         if (
           ehSystem &&
           stage.is_final_positive &&
@@ -308,14 +305,20 @@ export function useFunilMoveFlow({
           entry?.lead_id
         ) {
           await upsertLeadIntoCustomPipe({
+            sourceEntryId: entryId,
+            sourceStageKey: stage.stage_key,
             leadId: entry.lead_id,
             organizationId,
             targetPipelineId: stage.target_pipeline_id,
             targetStageId: stage.target_stage_id,
           });
-          queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
-          toast.success("Lead movido para o funil de destino automaticamente!");
+          invalidateAfterMove(queryClient, entry.lead_id);
+          toast.success("Negócio movido para o funil de destino automaticamente!");
+        } else {
+          await mover.mutateAsync({ entryId, stageId: stage.id, stageKey: stage.stage_key });
         }
+        if (entry) posMoveSistema(entry, stage);
+        if (opts.successToast) toast.success(opts.successToast);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "";
         toast.error(
@@ -323,7 +326,7 @@ export function useFunilMoveFlow({
         );
       }
     },
-    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient],
+    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed],
   );
 
   // ── Vendido (won) ────────────────────────────────────────────────────────
