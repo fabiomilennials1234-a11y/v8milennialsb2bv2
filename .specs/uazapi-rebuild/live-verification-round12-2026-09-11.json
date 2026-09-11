@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-11",
+  "scope": "QA compositor TorqueSDR; no production deployment or lifecycle calls",
+  "ui": {
+    "emptyCoordinatesBlocked": true,
+    "invalidPhoneBlocked": true,
+    "sends": [
+      {
+        "action": "sendLocation",
+        "http": 200,
+        "status": "queued",
+        "realId": true
+      },
+      {
+        "action": "sendContact",
+        "http": 200,
+        "status": "queued",
+        "realId": true
+      }
+    ],
+    "persisted": [
+      {
+        "type": "location",
+        "status": "pending",
+        "realId": true
+      },
+      {
+        "type": "contact",
+        "status": "pending",
+        "realId": true
+      }
+    ],
+    "leadScope": true,
+    "locationAfterReload": true,
+    "contactAfterReload": true,
+    "mapsLink": 1,
+    "mapsHrefCorrect": true,
+    "copiedPhoneMatches": true
+  },
+  "provider": [
+    {
+      "type": "contact",
+      "http": 200,
+      "found": true,
+      "status": "Delivered",
+      "providerType": "ContactMessage"
+    },
+    {
+      "type": "location",
+      "http": 200,
+      "found": true,
+      "status": "Delivered",
+      "providerType": "LocationMessage"
+    }
+  ],
+  "validation": {
+    "testsPassed": 67,
+    "testFiles": 5,
+    "build": "passed",
+    "lintIntroduced": 0,
+    "typescript": "ratchet passed; zero introduced",
+    "vaultLint": "passed",
+    "vaultIndexes": "passed"
+  },
+  "limitations": [
+    "Contact/location received variants were not newly exercised; outgoing canonical display tested.",
+    "Contact form sends one phone and optional email; multiple phone variants not homologated.",
+    "Production provider webhook unchanged; pending local status was tested separately from provider Delivered lookup."
+  ]
+}

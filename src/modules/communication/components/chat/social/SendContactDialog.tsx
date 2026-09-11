@@ -1,3 +1,4 @@
+import { validateContactPhone } from '@/modules/communication/lib/rich-message-input';
 /**
  * SendContactDialog — mandar um cartão de contato.
  *
@@ -48,16 +49,22 @@ export function SendContactDialog({
     if (!nome.trim()) { toast.error("Informe o nome"); return; }
     if (!telefone.trim()) { toast.error("Informe o telefone"); return; }
 
+    let phone;
+    try { phone = validateContactPhone(telefone); }
+    catch (error) { toast.error((error as Error).message); return; }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      toast.error("Informe um e-mail válido"); return;
+    }
     setEnviando(true);
     try {
       await enviar([
         {
           nome: nome.trim(),
-          telefones: [{ numero: telefone.trim() }],
+          telefones: [{ numero: phone }],
           ...(email.trim() ? { emails: [email.trim()] } : {}),
         },
       ]);
-      toast.success("Contato enviado");
+      toast.success("Contato encaminhado para envio");
       onOpenChange(false);
       setNome("");
       setTelefone("");

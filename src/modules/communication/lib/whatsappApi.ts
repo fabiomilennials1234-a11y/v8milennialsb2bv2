@@ -231,16 +231,17 @@ export async function sendMenu(
   });
 }
 
-/** Ponto no mapa. Canal oficial (Meta) — a Uazapi devolve 422. */
+/** Ponto no mapa, conforme capacidade do provider. */
 export async function sendLocation(
   instanceId: string,
   number: string,
   local: { latitude: number; longitude: number; name?: string; address?: string },
+  leadId?: string,
 ): Promise<{ message_id: string; status: string; timestamp: number }> {
-  return callProxy("sendLocation", { instance_id: instanceId, payload: { number, ...local } });
+  return callProxy("sendLocation", { instance_id: instanceId, payload: { number, ...local, ...(leadId ? { lead_id: leadId } : {}) } });
 }
 
-/** Cartão de contato. Canal oficial (Meta) — a Uazapi devolve 422. */
+/** Cartão de contato; UAZAPI aceita um por mensagem. */
 export async function sendContact(
   instanceId: string,
   number: string,
@@ -249,8 +250,9 @@ export async function sendContact(
     telefones: Array<{ numero: string; waId?: string }>;
     emails?: string[];
   }>,
+  leadId?: string,
 ): Promise<{ message_id: string; status: string; timestamp: number }> {
-  return callProxy("sendContact", { instance_id: instanceId, payload: { number, contacts } });
+  return callProxy("sendContact", { instance_id: instanceId, payload: { number, contacts, ...(leadId ? { lead_id: leadId } : {}) } });
 }
 
 export async function sendPixButton(

@@ -9,6 +9,8 @@ export interface AcceptedInteractiveResult {
 }
 
 type InteractiveContent =
+  | { kind: 'location'; latitude: number; longitude: number; name?: string; address?: string }
+  | { kind: 'contact'; name: string; phone: string; email?: string }
   | { kind: 'menu'; menu: MenuMontado }
   | { kind: 'pix'; text: string; key: string; name: string; keyType: string };
 
@@ -33,6 +35,15 @@ export function acceptedInteractiveRow(
     direction: 'outgoing',
     status: ['sent', 'delivered', 'read', 'failed'].includes(status ?? '') ? status! : 'pending',
     timestamp: timestamp.toISOString(),
+  };
+  if (content.kind === 'location') return {
+    ...base, message_type: 'location',
+    content: [content.name || 'Localização compartilhada', content.address,
+      `https://www.google.com/maps?q=${content.latitude},${content.longitude}`].filter(Boolean).join('\n'),
+  };
+  if (content.kind === 'contact') return {
+    ...base, message_type: 'contact',
+    content: [content.name, content.phone, content.email].filter(Boolean).join('\n'),
   };
   if (content.kind === 'pix') return {
     ...base, message_type: 'pix-button', content: content.text,

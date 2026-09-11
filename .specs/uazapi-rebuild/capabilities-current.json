@@ -270,9 +270,9 @@
       "category": "Enviar Mensagem",
       "summary": "Enviar cartão de contato (vCard)",
       "implementation": "Backend integrado (escopo parcial)",
-      "sessionChange": "Adicionado provider/proxy; rejeita múltiplos contatos/emails sem truncar.",
-      "validation": "Aceitação real + validações negativas.",
-      "pending": "Controle dedicado no compositor; homologar todos os campos visuais.",
+      "sessionChange": "Provider/proxy + compositor TorqueSDR; cartão legível, copiar telefone e validações de telefone/e-mail.",
+      "validation": "R12: envio pelo navegador HTTP200/queued, pending local com ID real, reload/clipboard conferidos; fornecedor Delivered/ContactMessage.",
+      "pending": "Variações recebidas pelo webhook e múltiplos telefones além do formulário de um número.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -283,9 +283,9 @@
       "category": "Enviar Mensagem",
       "summary": "Enviar localização geográfica",
       "implementation": "Backend integrado (escopo parcial)",
-      "sessionChange": "Adicionado provider/proxy com validação.",
-      "validation": "Coordenadas válidas aceitas; (0,0) recusado pelo fornecedor.",
-      "pending": "Controle dedicado no compositor e divergência (0,0).",
+      "sessionChange": "Provider/proxy + compositor TorqueSDR; coordenadas validadas e cartão com link seguro para mapa.",
+      "validation": "R12: envio pelo navegador HTTP200/queued, pending local com ID real, reload e link conferidos; fornecedor Delivered/LocationMessage.",
+      "pending": "Variações recebidas pelo webhook e divergência do fornecedor em (0,0).",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -321,7 +321,7 @@
       "summary": "Enviar menu interativo (botões, carrosel, lista ou enquete)",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Campos documentados + opções/seleção no chat; nodes e gateway preservam metadata.",
-      "validation": "Lista real enviada/lida; seleção recebida; fluxo wait_response/timeout.",
+      "validation": "Lista real enviada/lida; seleção recebida; fluxo wait_response/timeout. R11: envio pelo compositor confirmado Delivered; rótulo/descrição no fornecedor e UI após reload.",
       "pending": "Demais variantes de botões/enquete e limites não homologados integralmente.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
@@ -367,7 +367,7 @@
       "summary": "Enviar botão PIX",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Endpoint já existia; payload preservado; novo card PIX e copiar chave no chat.",
-      "validation": "Envio real Read; copiar chave conferido no navegador; nenhum pagamento.",
+      "validation": "Envio real Read; copiar chave conferido no navegador; nenhum pagamento. R11: compositor preserva ID real/pending e card após reload; fornecedor Delivered.",
       "pending": "Entrada PIX recebida/variações; não é confirmação financeira.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
@@ -1611,5 +1611,6 @@
       "priority": "P3 — administração restrita",
       "codeReferences": []
     }
-  ]
+  ],
+  "coverageUpdatedThrough": "R12: compositor de localização/contato; R11: compositor lista/PIX. codeCommit identifica a auditoria inicial."
 }

@@ -1,3 +1,4 @@
+import { parseLocation } from '@/modules/communication/lib/rich-message-input';
 /**
  * SendLocationDialog — mandar um ponto no mapa.
  *
@@ -69,13 +70,10 @@ export function SendLocationDialog({
   };
 
   const submeter = async () => {
-    const latitude = Number(lat.replace(",", "."));
-    const longitude = Number(lng.replace(",", "."));
-    // `0` é coordenada válida — a checagem é de finitude, não de verdade.
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      toast.error("Informe latitude e longitude");
-      return;
-    }
+    let location;
+    try { location = parseLocation(lat, lng); }
+    catch (error) { toast.error((error as Error).message); return; }
+    const { latitude, longitude } = location;
 
     setEnviando(true);
     try {
@@ -85,7 +83,7 @@ export function SendLocationDialog({
         name: nome.trim() || undefined,
         address: endereco.trim() || undefined,
       });
-      toast.success("Localização enviada");
+      toast.success("Localização encaminhada para envio");
       onOpenChange(false);
       setNome("");
       setEndereco("");
@@ -151,12 +149,14 @@ export function SendLocationDialog({
               <Input
                 value={lat}
                 onChange={(e) => setLat(e.target.value)}
+                aria-label="Latitude"
                 placeholder="-25.510785"
                 inputMode="decimal"
               />
               <Input
                 value={lng}
                 onChange={(e) => setLng(e.target.value)}
+                aria-label="Longitude"
                 placeholder="-48.310882"
                 inputMode="decimal"
               />

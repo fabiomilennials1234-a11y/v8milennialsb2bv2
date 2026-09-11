@@ -189,3 +189,13 @@ Navegador QA: lista e PIX enviados pelo compositor ao segundo número autorizado
 61 testes passaram em cinco arquivos. Suíte adicional `pix-charge-flow.test.tsx` (Asaas) falhou no carregamento por import legado inexistente; arquivo não alterado nesta rodada. Build, TypeScript e lint ratchets passaram, zero problemas introduzidos. Evidência: `.specs/uazapi-rebuild/live-verification-round11-2026-09-11.json`.
 
 Controles de localização/contato na TorqueSDR continuam pendentes; os formulários existentes pertencem ao canal oficial. Esta rodada priorizou corrigir o envio interativo já oferecido. Nenhuma nova chamada de lifecycle; nenhuma promoção a produção.
+
+## Rodada 12 — localização e contato no compositor (2026-09-11)
+
+Menu “Mais tipos de mensagem” disponível para TorqueSDR/UAZAPI no compositor principal. Reutiliza formulários do canal oficial; escopo da conversa reinicia ao trocar conversa e o lead segue ao proxy para as guardas existentes. Validação rejeita coordenadas vazias, não numéricas ou fora de intervalo, telefone inválido e e-mail malformado. Coordenada zero continua válida no contrato local (limitação real UAZAPI em (0,0) já registrada).
+
+Persistência usa ID/status/timestamp aceitos e INSERT-ignore. Localização aparece como cartão com nome/endereço e link seguro para mapa; contato mostra nome/número/e-mail e copiar telefone. URLs inválidas ficam como texto, sem navegação. Não carrega mapas nem envia geolocalização automaticamente. Pedido de localização do navegador só ocorre por clique explícito no formulário.
+
+QA Chromium: duas mensagens reais pelo compositor, queued → pending na gravação; campos inválidos impediram chamadas; lead presente nos dois requests. Após reload: cartões visíveis, coordenadas do link conferidas, clipboard confere telefone. Consulta UAZAPI `/message/find` confirmou Delivered, tipos ContactMessage/LocationMessage. Sem reconexão/desconexão; sem promoção de código/schema a produção.
+
+67 testes em cinco arquivos passaram; build, TypeScript e lint ratchets passaram, zero problemas introduzidos. Evidência consolidada em `.specs/uazapi-rebuild/live-verification-round12-2026-09-11.json`. Inventário/CSV atualizados sem alterar totais de endpoints: os dois já tinham backend, agora têm compositor validado. Variações recebidas por webhook e contatos com múltiplos telefones continuam pendentes.

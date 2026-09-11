@@ -1,3 +1,4 @@
+import { SendRichContactActions } from "./SendRichContactActions";
 import { ReplyPreview } from "../ReplyContext";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 /**
@@ -584,6 +585,7 @@ export function ChatComposer({
             {/* Menu + Pix — Uazapi-only (hidden for Meta/Evolution instances) */}
             {caps.canUseUazapiActions && (
               <>
+                <SendRichContactActions key={conversationKey} instanceId={instanceId} phoneNumber={phoneNumber} leadId={leadId} disabled={!canReply || sendMessage.isPending || sendMedia.isPending} />
                 {/* Menu interativo */}
                 <Button
                   variant="ghost"

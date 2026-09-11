@@ -1,3 +1,4 @@
+import { RichContactBubble } from "./bubbles/RichContactBubble";
 import { readUazapiPix, type UazapiPixFields } from "../../lib/uazapiPixDisplay";
 import { PixMessage } from "./media/PixMessage";
 import { AudioTranscription } from "./media/AudioTranscription";
@@ -414,6 +415,8 @@ export function MessageBubble({
               <BolhaNormalizada bolha={bolhaNormalizada} />
             ) : uazapiMenu ? (
               <UazapiMenuBubble menu={uazapiMenu} fallbackText={message.content} />
+            ) : isLocation || isContact ? (
+              <RichContactBubble content={message.content} location={isLocation} />
             ) : isInteractiveResponse ? (
               <InteractiveResponseBubble content={message.content} messageType={messageType!} isOutgoing={isOutgoing} />
             ) : (
