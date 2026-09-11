@@ -81,3 +81,20 @@ describe("InboxFilterBar", () => {
     expect(screen.getByText("Oportunidades")).toBeInTheDocument();
   });
 });
+
+it("preserves labels and stage chips of a saved hidden funnel filter", () => {
+  const { props } = setup({
+    filter: { ...DEFAULT_INBOX_FILTER, funnels: ["hidden"], stages: ["hidden-stage"] },
+    funnelOptions: [{ pipelineId: "hidden", label: "Funil preservado", isVisible: false, stages: [{ stageKey: "hidden-stage", label: "Etapa preservada" }] }],
+  });
+  expect(screen.getByText("Funil preservado")).toBeInTheDocument();
+  expect(screen.getByText("Etapa preservada")).toBeInTheDocument();
+  expect(props.patch).not.toHaveBeenCalled();
+});
+
+it("does not offer hidden funnels when adding a new filter", async () => {
+  setup({ funnelOptions: [{ pipelineId: "hidden", label: "Funil oculto", isVisible: false, stages: [] }] });
+  fireEvent.click(screen.getByRole("button", { name: /Filtro/i }));
+  fireEvent.click(await screen.findByText("Funil"));
+  expect(screen.queryByText("Funil oculto")).not.toBeInTheDocument();
+});

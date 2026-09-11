@@ -1,3 +1,4 @@
+import { isPipelineVisible } from "@/modules/pipelines";
 /**
  * AudienceByStage — the "Por etapa do funil" audience source (#902).
  *
@@ -206,7 +207,7 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
                   Funis
                 </SelectLabel>
                 {funnels.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
                     {p.label}
                   </SelectItem>
                 ))}

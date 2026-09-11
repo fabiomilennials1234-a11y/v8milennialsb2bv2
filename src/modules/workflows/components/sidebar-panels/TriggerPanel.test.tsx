@@ -18,7 +18,8 @@ const mockStages = vi.fn(() => ({ data: [] as unknown[] }));
 const mockEtapas = vi.fn((_pipelineId?: string) => ({ etapas: [] as unknown[], isLoading: false }));
 const mockInstances = vi.fn(() => ({ data: [] as unknown[] }));
 
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   // O painel lê por `useFunisDaOrg`, que devolve o funil com `label` — o nome
   // que a ORG usa. `usePipelines` fica mockado porque outros módulos
   // importados no topo ainda o consomem.

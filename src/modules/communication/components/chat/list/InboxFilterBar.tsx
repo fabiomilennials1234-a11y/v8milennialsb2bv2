@@ -123,7 +123,7 @@ function DimensionEditor({
       return (
         <PopoverList>
           {funnelOptions.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">Nenhum funil</p>}
-          {funnelOptions.map((f) => (
+          {funnelOptions.filter((f) => f.isVisible !== false || filter.funnels.includes(f.pipelineId)).map((f) => (
             <OptionRow key={f.pipelineId} label={f.label}
               selected={filter.funnels.includes(f.pipelineId)}
               onClick={() => toggleMulti("funnels", f.pipelineId)} />
@@ -134,7 +134,7 @@ function DimensionEditor({
       // Etapas dependem do funil escolhido; sem funil, agrupa por funil.
       const selectedFunnels = filter.funnels.length
         ? funnelOptions.filter((f) => filter.funnels.includes(f.pipelineId))
-        : funnelOptions;
+        : funnelOptions.filter((f) => f.isVisible !== false || f.stages.some((stage) => filter.stages.includes(stage.stageKey)));
       const grouped = filter.funnels.length === 0 && funnelOptions.length > 1;
       return (
         <PopoverList>

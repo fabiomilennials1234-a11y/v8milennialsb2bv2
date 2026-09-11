@@ -25,7 +25,8 @@ vi.mock("@/modules/leads", () => ({
   useLeadCustomFields: () => ({ data: customFields }),
 }));
 
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   useFunisDaOrg: () => ({
     data: [{ id: "pipeline-1", label: "Comercial" }],
   }),

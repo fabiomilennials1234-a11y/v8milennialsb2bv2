@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useMemo } from "react";
 import { useFunisAtivosDaOrg } from "@/modules/pipelines";
 import { useOrgFunnelStages } from "./useOrgFunnelStages";
@@ -8,6 +9,7 @@ export interface PipeTypeOption {
   label: string;
   pipelineId?: string;
   slug?: string;
+  isVisible?: boolean;
 }
 
 export interface CopilotFunnelOptions {
@@ -40,11 +42,12 @@ export function useCopilotFunnelOptions(
   const { byPipelineId, isLoading: loadingStages } = useOrgFunnelStages();
 
   return useMemo(() => {
-    const funnelOptions: PipeTypeOption[] = funnels.map((funnel) => ({
+    const funnelOptions: PipeTypeOption[] = sortPipelinesForNavigation(funnels).map((funnel) => ({
       value: funnel.type === "system" ? funnel.slug : funnel.id,
       label: funnel.label,
       pipelineId: funnel.id,
       slug: funnel.slug,
+      isVisible: isPipelineVisible(funnel),
     }));
     const options = incluirCampanha
       ? [...funnelOptions, { value: "campanha", label: "Campanhas" }]

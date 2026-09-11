@@ -338,3 +338,5 @@ export type { MoverNegocioParams } from "./lib/moverNegocio";
 // Cor/ícone de QUALQUER funil vêm de `pipelines`; a lateral (platform) resolve
 // o ícone por aqui — mapa canônico único, sem cópias por tela.
 export { FUNIL_ICON_MAP, funilIcon } from "./lib/funil-icons";
+
+export { isPipelineVisible, sortPipelinesForNavigation, selectVisiblePipelines } from "./lib/pipeline-navigation";

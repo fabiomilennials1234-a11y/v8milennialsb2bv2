@@ -71,7 +71,8 @@ const funis = {
   isError: false,
 };
 
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   usePipelines: () => funis,
   usePipelineDisplayConfig: () => ({ data: [] }),
 }));

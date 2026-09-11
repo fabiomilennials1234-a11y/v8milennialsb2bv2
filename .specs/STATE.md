@@ -92,3 +92,11 @@ Status: **construído, atrás de flag, pgTAP 19/19 + unit 21/21 verdes** (2026-0
 `CommentAttachment` em `leads/lib/comment-attachments/files.ts` descreve
 `path/name/size/type`. `lead_comments.attachments` é JSONB imutável após criação.
 Download por callback mantém preview sem banco. Migration deve preceder frontend.
+
+## Navegação de funis — 2026-09-11
+
+`pipelines.config.navigation.is_visible` guarda visibilidade explícita; ausente
+significa visível. `pipelines.display_order` é fonte única de ordem.
+`is_active` segue operacional. Importação histórica limitada ao pré-#2092;
+leitura permanente agnóstica a tipo/slug. Detalhes e limitações de validação:
+[correção de navegação](features/funis-unificacao/correcao-navegacao-2026-09-11.md).
