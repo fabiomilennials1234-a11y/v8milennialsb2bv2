@@ -111,7 +111,7 @@ Rename físico = projeto separado (ver "Rename futuro" abaixo).
 | `generate-custom-instructions` | UI | JWT |
 | `generate-faq-embeddings` | UI / pg_cron | x-cron-secret / JWT |
 | `generate-faqs` | UI | JWT |
-| `oraculo-comercial` | UI | apikey + internal |
+| `oraculo-comercial` | TV Dashboard (`tv_analysis`) | JWT + plano |
 | `oraculo-turno` | UI Oráculo | JWT + plano + escopo server-side |
 | `oraculo-action` | confirmação humana | JWT + permissão revalidada |
 | `oraculo-profile` | entrevista / configurações | JWT + plano; tabelas server-only |

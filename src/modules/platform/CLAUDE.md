@@ -57,7 +57,7 @@ Slice 16 movimentou para os módulos os hooks/components que residiam em `src/co
 | `useGoogleCalendar`, `useGoogleCalendarSharing` | `integrations` |
 | `useLossReasons` | `pipelines` |
 | `components/team/*`, `useAvatarMap`, `useAutoAdminAssignment` | `identity` |
-| `components/oraculo/OraculoComercial` | `copilot` |
+| `components/oraculo/OraculoComercial` | removido pelo SCRUM-606 após substituição pelo Oráculo dedicado |
 | `components/calls/LogCallModal`, `components/ai/CoachingSidebar`, `components/ai/NextBestActionsPanel` | `engagement` |
 | `useRealtimeChannel`, `useRealtimeChannelStatus`, `useRealtimeSubscription` | `src/shared/realtime/` |
 | `usePersistedState`, `useDebounce`, `useOptimisticConflictHandler`, `useCountUp`, `use-viewport`, `useAutoSaveField`, `useExplicitSaveForm` | `src/shared/hooks/` |

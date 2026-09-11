@@ -7,8 +7,7 @@
  *
  * Open: colapsa para círculo 56×56 com X — feedback claro de "fechar".
  *
- * Diferenciação do OraculoFloatingButton (gradient roxo, círculo simples,
- * pulse infinito): aqui é gold + pílula esticada + sem pulse contínuo.
+ * Visual: gold + pílula esticada + sem pulse contínuo.
  *
  * Hover: scale 1.04 + cubic-bezier(0.16, 1, 0.3, 1), 150ms.
  * Tap: scale 0.96, 100ms.

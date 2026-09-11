@@ -1,5 +1,5 @@
 {
-  "count": 805,
+  "count": 804,
   "generatedFrom": "node ./node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit",
   "errors": [
     "src/App.tsx|TS6133|'Campanhas' is declared but its value is never read.",
@@ -32,7 +32,6 @@
     "src/modules/analytics/components/analytics/tabs/UtmsTab.tsx|TS6133|'campaign' is declared but its value is never read.",
     "src/modules/analytics/components/dashboard/ConversionChart.tsx|TS6133|'Progress' is declared but its value is never read.",
     "src/modules/analytics/components/dashboard/DashboardHeader.tsx|TS6133|'LayoutDashboard' is declared but its value is never read.",
-    "src/modules/analytics/components/dashboard/OraculoChat.tsx|TS6133|'ScrollArea' is declared but its value is never read.",
     "src/modules/analytics/components/dashboard/PerformanceChart.tsx|TS2769|No overload matches this call.",
     "src/modules/analytics/components/dashboard/PriorityLeads.tsx|TS6133|'Badge' is declared but its value is never read.",
     "src/modules/analytics/components/dashboard/QuickStats.tsx|TS6133|'Minus' is declared but its value is never read.",

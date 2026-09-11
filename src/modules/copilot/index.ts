@@ -125,13 +125,8 @@ export {
 
 export { useQuickPromptAnalysis } from "./hooks/useQuickPromptAnalysis";
 
-// Subscription + Oraculo + tool logs
+// Subscription + tool logs
 export { useCopilotSubscription } from "./hooks/useCopilotSubscription";
-
-export {
-  useOraculoChat,
-  type ChatMessage as OraculoChatMessage,
-} from "./hooks/useOraculoChat";
 
 export {
   useToolCallLogs,

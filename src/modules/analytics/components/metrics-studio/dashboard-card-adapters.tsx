@@ -1,7 +1,7 @@
-import { lazy, Suspense, useState, type ComponentProps } from "react";
+import { lazy, Suspense, type ComponentProps } from "react";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
-import { useOraculoChat } from "@/modules/copilot";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import type { FixedCardContext } from "@/modules/analytics/lib/metrics-studio-fixed-card-contract";
 
@@ -9,7 +9,6 @@ const Overview = lazy(() => import("../dashboard/v2/TabVisaoGeralV2").then((m) =
 const Performance = lazy(() => import("../dashboard/v2/TabPerformanceV2").then((m) => ({ default: m.TabPerformanceV2 })));
 const Health = lazy(() => import("../dashboard/TabSaude").then((m) => ({ default: m.TabSaude })));
 const Map = lazy(() => import("../dashboard/v2/TabMapa").then((m) => ({ default: m.TabMapa })));
-const Chat = lazy(() => import("../dashboard/OraculoChat").then((m) => ({ default: m.OraculoChat })));
 
 type OverviewSection = ComponentProps<typeof Overview>["section"];
 type PerformanceSection = ComponentProps<typeof Performance>["section"];
@@ -42,12 +41,9 @@ export function BriefingCard(props: FixedCardContext) {
   const features = useOrgFeaturesOptional();
   const enabled = features ? features.hasFeature("oraculo") : true;
   const { data: member } = useCurrentTeamMember();
-  const oraculo = useOraculoChat({ month: props.month, year: props.year });
-  // O chat fica dentro deste card só quando solicitado; fechar não altera o painel.
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   if (!enabled) return <p className="p-4 text-sm text-muted-foreground">O Oráculo não está incluído no plano desta organização.</p>;
   return <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-    <Overview {...props} section="oraculo" isAdmin={member?.role === "admin"} onAskOraculo={() => setOpen(true)} />
-    {open && <Chat messages={oraculo.messages} isLoading={oraculo.isLoading} rateLimit={oraculo.rateLimit} onSend={oraculo.sendMessage} onClose={() => setOpen(false)} />}
+    <Overview {...props} section="oraculo" isAdmin={member?.role === "admin"} onAskOraculo={() => navigate("/oraculo")} />
   </Suspense>;
 }

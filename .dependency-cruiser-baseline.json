@@ -2564,7 +2564,6 @@
         "src/modules/workflows/components/sidebar-panels/WaitBusinessWindowPanel.tsx",
         "src/modules/workflows/components/WorkflowToolbar.tsx",
         "src/modules/workflows/pages/AutomacoesExecucoes.tsx",
-        "src/modules/analytics/components/dashboard/OraculoChat.tsx",
         "src/modules/analytics/components/analytics/AnalyticsFilters.tsx",
         "src/modules/analytics/components/analytics/sections/AquisicaoSection.tsx",
         "src/modules/analytics/components/analytics/AnalyticsErrorBoundary.tsx",
@@ -4102,7 +4101,6 @@
         "src/modules/analytics/hooks/useComandoAgenda.ts",
         "src/modules/analytics/components/dashboard/v2/CardTarefasDoDia.tsx",
         "src/modules/analytics/components/dashboard/v2/TabVisaoGeralV2.tsx",
-        "src/modules/copilot/hooks/useOraculoChat.ts",
         "src/modules/analytics/pages/MetricsStudio.tsx",
         "src/modules/analytics/hooks/useMetricCustomDefinitions.ts",
         "src/modules/analytics/hooks/useMetricMeasure.ts",
@@ -4906,7 +4904,6 @@
         "src/modules/analytics/hooks/useDashboardMetrics.ts",
         "src/modules/analytics/hooks/useConversasAguardando.ts",
         "src/modules/analytics/hooks/useComandoAgenda.ts",
-        "src/modules/copilot/hooks/useOraculoChat.ts",
         "src/modules/analytics/hooks/useMetricCustomDefinitions.ts",
         "src/modules/analytics/hooks/useMetricMeasure.ts",
         "src/modules/analytics/hooks/useMetricsStudioPanel.ts",
@@ -5011,7 +5008,6 @@
         "src/modules/copilot/hooks/useAgentKanbanRules.ts",
         "src/modules/copilot/hooks/useAgentMetrics.ts",
         "src/modules/copilot/hooks/useFollowupSituationConfig.ts",
-        "src/modules/copilot/components/oraculo/OraculoComercial.tsx",
         "src/modules/copilot/hooks/usePromptAnalysis.ts",
         "src/modules/copilot/hooks/useCopilotAgentAudios.ts",
         "src/modules/copilot/hooks/useQuickPromptAnalysis.ts",
@@ -9090,7 +9086,6 @@
         "src/modules/communication/components/chat/list/InboxFilterBar.tsx",
         "src/modules/communication/components/chat/view/MessageList.tsx",
         "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
-        "src/modules/analytics/components/dashboard/OraculoChat.tsx",
         "src/modules/carteira/components/upsell/ImportUpsellClientsContent.tsx",
         "src/modules/copilot/pages/Oraculo.tsx",
         "src/modules/identity/master/pages/CopilotReasoning.tsx",
@@ -100649,26 +100644,6 @@
           "valid": true
         },
         {
-          "dynamic": false,
-          "module": "@/modules/analytics/components/dashboard/OraculoChat",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/modules/analytics/components/dashboard/OraculoChat.tsx",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
           "dynamic": true,
           "module": "@/modules/analytics/components/dashboard/TabAnalyticsV2",
           "moduleSystem": "es6",
@@ -100841,26 +100816,6 @@
             "import"
           ],
           "resolved": "src/modules/analytics/hooks/useCommandMetrics.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
-          "dynamic": false,
-          "module": "@/modules/copilot/hooks/useOraculoChat",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/modules/copilot/hooks/useOraculoChat.ts",
           "coreModule": false,
           "followable": true,
           "couldNotResolve": false,
@@ -101279,56 +101234,6 @@
       ],
       "dependents": [
         "src/modules/analytics/pages/DashboardOutbound.tsx"
-      ],
-      "orphan": false,
-      "valid": true
-    },
-    {
-      "source": "src/modules/analytics/components/dashboard/OraculoChat.tsx",
-      "dependencies": [
-        {
-          "dynamic": false,
-          "module": "@/components/ui/button",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/components/ui/button.tsx",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
-          "dynamic": false,
-          "module": "@/components/ui/scroll-area",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/components/ui/scroll-area.tsx",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        }
-      ],
-      "dependents": [
-        "src/modules/analytics/pages/Dashboard.tsx"
       ],
       "orphan": false,
       "valid": true
@@ -111182,57 +111087,6 @@
       ],
       "dependents": [
         "src/modules/analytics/pages/Dashboard.tsx"
-      ],
-      "orphan": false,
-      "valid": true
-    },
-    {
-      "source": "src/modules/copilot/hooks/useOraculoChat.ts",
-      "dependencies": [
-        {
-          "dynamic": false,
-          "module": "@/integrations/supabase/client",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/integrations/supabase/client.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
-          "dynamic": false,
-          "module": "@/modules/identity",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/modules/identity/index.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        }
-      ],
-      "dependents": [
-        "src/modules/analytics/pages/Dashboard.tsx",
-        "src/modules/copilot/index.ts"
       ],
       "orphan": false,
       "valid": true
@@ -166524,19 +166378,6 @@
       ]
     },
     {
-      "source": "src/modules/analytics/components/dashboard/OraculoFloatingButton.tsx",
-      "dependencies": [],
-      "dependents": [],
-      "orphan": true,
-      "valid": false,
-      "rules": [
-        {
-          "severity": "warn",
-          "name": "no-orphans"
-        }
-      ]
-    },
-    {
       "source": "src/modules/analytics/components/dashboard/PerformanceChart.tsx",
       "dependencies": [
         {
@@ -175084,34 +174925,6 @@
       "valid": true
     },
     {
-      "source": "src/modules/copilot/components/oraculo/OraculoComercial.tsx",
-      "dependencies": [
-        {
-          "dynamic": false,
-          "module": "@/integrations/supabase/client",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "aliased",
-            "aliased-tsconfig",
-            "aliased-tsconfig-paths",
-            "local",
-            "import"
-          ],
-          "resolved": "src/integrations/supabase/client.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        }
-      ],
-      "dependents": [],
-      "orphan": false,
-      "valid": true
-    },
-    {
       "source": "src/modules/copilot/components/playground/PlaygroundFollowup.tsx",
       "dependencies": [
         {
@@ -176197,23 +176010,6 @@
             "export"
           ],
           "resolved": "src/modules/copilot/hooks/useFollowupSituationConfig.ts",
-          "coreModule": false,
-          "followable": true,
-          "couldNotResolve": false,
-          "matchesDoNotFollow": false,
-          "circular": false,
-          "valid": true
-        },
-        {
-          "dynamic": false,
-          "module": "./hooks/useOraculoChat",
-          "moduleSystem": "es6",
-          "exoticallyRequired": false,
-          "dependencyTypes": [
-            "local",
-            "export"
-          ],
-          "resolved": "src/modules/copilot/hooks/useOraculoChat.ts",
           "coreModule": false,
           "followable": true,
           "couldNotResolve": false,
@@ -198473,15 +198269,6 @@
       },
       {
         "type": "module",
-        "from": "src/modules/analytics/components/dashboard/OraculoFloatingButton.tsx",
-        "to": "src/modules/analytics/components/dashboard/OraculoFloatingButton.tsx",
-        "rule": {
-          "severity": "warn",
-          "name": "no-orphans"
-        }
-      },
-      {
-        "type": "module",
         "from": "src/modules/analytics/components/tv/ConversionByCloser.tsx",
         "to": "src/modules/analytics/components/tv/ConversionByCloser.tsx",
         "rule": {
@@ -198946,8 +198733,8 @@
     "warn": 106,
     "info": 0,
     "ignore": 0,
-    "totalCruised": 1892,
-    "totalDependenciesCruised": 7552,
+    "totalCruised": 1888,
+    "totalDependenciesCruised": 7544,
     "optionsUsed": {
       "baseDir": "/Users/gabrielaureliogipp/Dev/wt-agenda",
       "combinedDependencies": false,

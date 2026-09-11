@@ -1,5 +1,5 @@
 {
-  "count": 747,
+  "count": 745,
   "generatedFrom": "node \"C:\\\\Users\\\\torch\\\\Desktop\\\\milennials\\\\v8-hotfix\\\\node_modules\\\\eslint\\\\bin\\\\eslint.js\" . --format json --cache --cache-location .eslintcache",
   "note": "Divida de lint congelada. So encolhe. Nao adicione entrada na mao — corrija o warning.",
   "errors": [
@@ -148,7 +148,6 @@
     "src/modules/copilot/components/AgentMetricsTab.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/components/AgentTasksTab.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/components/BehaviorWindowsEditor.tsx|react-refresh/only-export-components|Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.",
-    "src/modules/copilot/components/oraculo/OraculoComercial.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/components/playground/CopilotPlayground.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/components/playground/LivePreviewChat.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/components/playground/LivePreviewChat.tsx|prefer-const|'currentMessages' is never reassigned. Use 'const' instead.",
@@ -166,7 +165,6 @@
     "src/modules/copilot/hooks/useCopilotPause.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/hooks/useCopilotPromptBuilder.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/hooks/useCopilotToggleAudit.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
-    "src/modules/copilot/hooks/useOraculoChat.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/hooks/usePromptAnalysis.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/hooks/useQuickPromptAnalysis.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/copilot/hooks/useToolCallLogs.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",

@@ -40,7 +40,6 @@ const LOOSE_HOOKS = [
   "useCopilotToggleAudit",
   "useCopilotToggleRealtime",
   "useCopilotToggle",
-  "useOraculoChat",
   "usePromptAnalysis",
   "useQuickPromptAnalysis",
   "useToolCallLogs",
