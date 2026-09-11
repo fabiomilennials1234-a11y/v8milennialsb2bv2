@@ -48,7 +48,7 @@ Inventário de 139 operações é referência documental; **não significa 139 f
 - Suite direcionada: 164 testes passaram em 10 arquivos; mais 2 casos de conexão/credenciais passaram na rodada final do contrato (14 casos no arquivo).
 - Build de produção local: passou. Sem deploy.
 - Lint ratchet: passou, zero problemas introduzidos.
-- Tipos: ratchet passou, zero erros introduzidos. Suite global: ratchet reportou 152 candidatos fora do baseline; comparação contra main limpa em execução, sem tratar o baseline salvo como prova de regressão.
+- Tipos: ratchet passou, zero erros introduzidos. Suite global: baseline salvo reportou 152 candidatos. Comparação com main limpa confirmou zero falhas introduzidas: main 12.862 testes / 296 falhas; branch 12.874 testes / 295 falhas. Falhas de coleta: 7 em ambos. Evidência em `test-comparison.json`. Baseline não foi ampliado.
 - Testes frontend de whatsappApi têm duas falhas de localStorage indisponível no harness; arquivo de teste não alterado.
 - `scripts/uazapi-readonly-probe.mjs`: preparado e sintaticamente verificado; não executado contra fornecedor. Exige identidade remota esperada antes de consultar limites/webhooks; saída exclui credenciais, números, URLs de webhook e QR.
 
