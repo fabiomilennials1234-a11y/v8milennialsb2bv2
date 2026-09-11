@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { applyLeadListFilters } from "./lead-list-filters";
 import { isStageUuid } from "./export-columns";
-import type { ExportLeadsOptions } from "../hooks/useExportLeads";
+import type { ExportLeadsOptions } from "./export-types";
 import { VENTIMAIS_ORGANIZATION_ID, VENTIMAIS_EXPORT_FLAG, isVentimaisExportEnabled, type VentimaisExportData, type ExportLead, type ExportEntry } from "./ventimais-export";
 
 const PAGE_SIZE = 500;
