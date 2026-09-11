@@ -47,6 +47,27 @@ Deno.test("HTTP — conversa_detalhe devolve a conversa ao responsável e vazio 
   });
 });
 
+Deno.test("HTTP — member não recebe dimensão pessoa nem nome de colega pelo Gargalo", async () => {
+  await withOracle(async (services, post) => {
+    const member = services.tables.team_members.find((row) => row.organization_id === ORG_A)!;
+    Object.assign(member, { id: OWNER_TM, role: "member" });
+    services.model = () => services.modelRequests.length === 1
+      ? Response.json({ model: "test-model", choices: [{ message: { tool_calls: [{
+        id: "call-gargalo", type: "function",
+        function: { name: "gargalo", arguments: "{}" },
+      }] } }] })
+      : services.completion("Autoavaliação recebida.");
+
+    const res = await post({ organization_id: ORG_A, pergunta: "Quem é o gargalo?" });
+
+    assertEquals(res.status, 200);
+    const evidence = JSON.stringify(services.savedToolTraces[0]);
+    assertEquals(evidence.includes("Colega Secreto"), false);
+    assertEquals(evidence.includes('"dimension":"person"'), false);
+    assertEquals(evidence.includes('"dimension":"self"'), true);
+  });
+});
+
 Deno.test("HTTP — falha ao ler limite da organização não adota quota padrão", async () => {
   await withOracle(async (services, post) => {
     services.failRead = "organizations";

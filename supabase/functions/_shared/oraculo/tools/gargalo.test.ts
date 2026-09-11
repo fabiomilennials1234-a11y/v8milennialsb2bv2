@@ -35,3 +35,40 @@ Deno.test("gargalo — usa somente organização e pessoa resolvidas pelo servid
   }]);
   assertEquals(result, { status: "none" });
 });
+
+Deno.test("gargalo — member recebe somente autoavaliação anônima", async () => {
+  const scope: OracleScope = {
+    kind: "assigned",
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    teamMemberId: "20000000-0000-4000-8000-000000000001",
+  };
+  const result = await gargaloTool.execute({}, scope, {
+    db: { rpc: () => Promise.resolve({
+      data: {
+        status: "bottleneck",
+        people: [{ team_member_name: "Colega" }],
+        bottleneck: {
+          dimension: "person",
+          key: "30000000-0000-4000-8000-000000000001",
+          label: "Colega",
+          team_member_id: "30000000-0000-4000-8000-000000000001",
+          team_member_name: "Colega",
+          comparison_basis: "team_median",
+          estimated_leaked_revenue: 5_000,
+        },
+      },
+      error: null,
+    }) },
+  });
+
+  assertEquals(result, {
+    status: "bottleneck",
+    bottleneck: {
+      dimension: "self",
+      key: "self",
+      label: "Seu desempenho",
+      comparison_basis: "team_median",
+      estimated_leaked_revenue: 5_000,
+    },
+  });
+});
