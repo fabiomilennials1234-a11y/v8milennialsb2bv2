@@ -9,7 +9,7 @@
  * se decide forma: recolhida ou não, expandida ou não, tooltip ou rótulo.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { ChevronLeft, ChevronRight, HelpCircle, Settings } from "lucide-react";
 
@@ -26,8 +26,11 @@ import {
   SIDEBAR_WIDTH_COLLAPSED,
 } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
+import { useDegrauDoSlot } from "@/modules/platform/hooks/useDegrauDoSlot";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { SidebarBrand } from "./SidebarBrand";
+import { SlotDoOraculo } from "./SlotDoOraculo";
+import { OraculoPanel } from "./OraculoPanel";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
 import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
@@ -71,6 +74,7 @@ export function Sidebar() {
   const [agendaOpen, setAgendaOpen] = useState(false);
   // Fica `true` no primeiro clique e nunca volta — ver o bloco de montagem.
   const [agendaJaAberta, setAgendaJaAberta] = useState(false);
+  const [oraculoAberto, setOraculoAberto] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
@@ -102,6 +106,23 @@ export function Sidebar() {
     [model],
   );
 
+  // As quatro referências que o slot do Oráculo mede. `data-medida` no JSX
+  // marca os mesmos elementos, para o teste da lateral montada saber quais são.
+  const lateralRef = useRef<HTMLElement>(null);
+  const topoRef = useRef<HTMLDivElement>(null);
+  const rodapeRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+
+  const degrauDoOraculo = useDegrauDoSlot({
+    lateralRef,
+    topoRef,
+    rodapeRef,
+    navRef,
+    colapsada: collapsed,
+    // Recorte (a): sem produtor de briefing, o slot degrada em vez de sumir.
+    temBriefing: false,
+  });
+
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
 
   return (
@@ -113,12 +134,14 @@ export function Sidebar() {
           que apagava o nome da org. Ancorar a cor aqui conserta a herança de todo
           descendente, não só a do seletor. */}
       <aside
+        ref={lateralRef}
+        data-medida="lateral"
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
         className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
       >
-        <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
+        <div ref={topoRef} data-medida="topo" className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
               na borda ele cobria o título do Pitstop quando o painel abria. */}
           <div className="flex h-7 items-center gap-2">
@@ -150,7 +173,7 @@ export function Sidebar() {
         </div>
 
         <ScrollArea className="flex-1">
-          <nav className="flex flex-col gap-0.5 px-2.5 pb-3 pt-1">
+          <nav ref={navRef} data-medida="nav" className="flex flex-col gap-0.5 px-2.5 pb-3 pt-1">
             {model.primary.map((item) => {
               const hasChildren = (item.children?.length ?? 0) > 0;
               const isOpen = !collapsed && hasChildren && !!expanded[item.label];
@@ -194,7 +217,20 @@ export function Sidebar() {
           </nav>
         </ScrollArea>
 
-        <div className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5">
+        {degrauDoOraculo !== "ausente" && (
+          <SlotDoOraculo
+            degrau={degrauDoOraculo}
+            // Sem produtor de briefing ainda: o slot é a porta, não o resumo.
+            gargalo={null}
+            onAbrir={() => setOraculoAberto(true)}
+          />
+        )}
+
+        <div
+          ref={rodapeRef}
+          data-medida="rodape"
+          className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5"
+        >
           {/* A Agenda não navega: abre painel por cima da tela atual, deixando
               a página de baixo à mostra. Por isso o "ativo" vem do estado do
               painel, e não da rota — que continua existindo para o celular e
@@ -296,6 +332,12 @@ export function Sidebar() {
           />
         </Suspense>
       )}
+
+      <OraculoPanel
+        open={oraculoAberto}
+        onClose={() => setOraculoAberto(false)}
+        sidebarWidth={width}
+      />
 
       {upgradeFeature && (
         <UpgradeModal
