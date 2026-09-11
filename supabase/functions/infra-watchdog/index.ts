@@ -35,6 +35,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
+import { resolveSupportSender, sendSupportText } from "../_shared/support-channel.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -136,9 +137,11 @@ async function checkSupportNotifyHealth(supabase: SupabaseClient): Promise<Alert
       `🔴 *Aviso de Chamado não está entregando*\n\n` +
       `As últimas ${NOTIFY_FAILURE_STREAK} tentativas falharam.\n` +
       `Erro: ${detail}\n\n` +
-      `Chamado de cliente está entrando sem ninguém ser avisado.\n` +
-      `Se for 401, o token da instância de suporte foi revogado — ` +
-      `renovar SUPPORT_UAZAPI_TOKEN.`,
+      `Chamado de cliente está entrando sem ninguém ser avisado.\n\n` +
+      `A credencial vem da instância conectada apontada em cron_config ` +
+      `(support_sender_org_id / support_sender_instance_id). 401 = token da ` +
+      `instância revogado; 503 "session is not reconnectable" = a linha ` +
+      `deslogou e precisa ser repareada no Uazapi.`,
   };
 }
 
@@ -272,32 +275,48 @@ async function checkExposedTables(supabase: any): Promise<Alert | null> {
   };
 }
 
-async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
-  // Secrets próprias primeiro. O fallback para as do suporte existe para o
-  // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
-  // ele o watchdog fica cego para a falha do próprio canal de suporte, que é
-  // exatamente um dos casos que ele deveria pegar.
-  const token = Deno.env.get("WATCHDOG_UAZAPI_TOKEN") ?? Deno.env.get("SUPPORT_UAZAPI_TOKEN");
-  const jid = Deno.env.get("WATCHDOG_WHATSAPP_JID") ?? Deno.env.get("SUPPORT_WHATSAPP_GROUP_JID");
+/**
+ * Por onde o aviso sai.
+ *
+ * Secrets PRÓPRIAS primeiro (`WATCHDOG_UAZAPI_TOKEN` / `WATCHDOG_WHATSAPP_JID`).
+ * Sem elas, cai no canal de suporte — resolvido do banco, não mais da secret
+ * estática que morreu em 14/07 e de novo em 02/09.
+ *
+ * A queda de 02/09 provou o custo desse fallback: as três tentativas do alerta
+ * `support_notify` saíram pela mesma instância morta que o alerta denunciava, e
+ * as três tomaram o mesmo 503. O vigia virou cúmplice, exatamente como o
+ * cabeçalho deste arquivo previa. Enquanto as secrets próprias não existirem, o
+ * `selfBlind` abaixo carimba isso no `runtime_logs` — o remédio é um segundo
+ * número, e o rastro é o que impede a lacuna de sumir de vista de novo.
+ */
+async function resolveChannel(
+  supabase: SupabaseClient,
+): Promise<
+  | { ok: true; send: (text: string) => Promise<{ ok: boolean; detail?: string }>; selfBlind: boolean }
+  | { ok: false; detail: string }
+> {
+  const ownToken = Deno.env.get("WATCHDOG_UAZAPI_TOKEN");
+  const ownJid = Deno.env.get("WATCHDOG_WHATSAPP_JID");
   const baseUrl = Deno.env.get("UAZAPI_BASE_URL");
 
-  if (!token || !jid || !baseUrl) return { ok: false, detail: "secrets ausentes" };
-
-  try {
-    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/send/text`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", token },
-      body: JSON.stringify({ number: jid, text }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!resp.ok) {
-      const detail = await resp.text().catch(() => "");
-      return { ok: false, detail: `uazapi ${resp.status}: ${detail.slice(0, 200)}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  if (ownToken && ownJid && baseUrl) {
+    const sender = {
+      token: ownToken,
+      baseUrl,
+      groupJid: ownJid,
+      source: "env" as const,
+    };
+    return { ok: true, send: (text: string) => sendSupportText(sender, text), selfBlind: false };
   }
+
+  const resolved = await resolveSupportSender(supabase, (k) => Deno.env.get(k));
+  if (!resolved.ok) return { ok: false, detail: resolved.reason };
+
+  return {
+    ok: true,
+    send: (text: string) => sendSupportText(resolved.sender, text),
+    selfBlind: true,
+  };
 }
 
 Deno.serve(
@@ -340,20 +359,32 @@ Deno.serve(
     const suppressed: string[] = [];
     const failed: string[] = [];
 
+    const channel = await resolveChannel(supabase);
+
     for (const alert of alerts) {
       if (!(await shouldAlert(supabase, alert.key, alert.cooldownMinutes))) {
         suppressed.push(alert.key);
         continue;
       }
 
-      const res = await sendWhatsApp(alert.text);
+      const res = channel.ok
+        ? await channel.send(alert.text)
+        : { ok: false, detail: channel.detail };
       if (res.ok) {
         sent.push(alert.key);
         await logRuntime({
           module: "job_monitor",
           action: "watchdog_alert",
           status: "success",
-          payloadSnapshot: { alert: alert.key, ...(alert.logPayload ?? {}) },
+          // `self_blind` vai no caminho de SUCESSO também, e não só no de erro:
+          // sem ele, um aviso entregue não diz por qual canal saiu, e o dia em
+          // que as secrets próprias forem provisionadas fica indistinguível do
+          // dia em que alguém as apagar sem querer.
+          payloadSnapshot: {
+            alert: alert.key,
+            self_blind: channel.ok ? channel.selfBlind : null,
+            ...(alert.logPayload ?? {}),
+          },
         });
       } else {
         failed.push(alert.key);
@@ -372,6 +403,10 @@ Deno.serve(
           payloadSnapshot: {
             alert: alert.key,
             message_preview: alert.text.slice(0, 200),
+            // `true` quando o watchdog está usando o canal de suporte por não ter
+            // o próprio: se o alerta que falhou for o `support_notify`, esta
+            // linha é a explicação de por que ninguém foi avisado.
+            self_blind: channel.ok ? channel.selfBlind : null,
             ...(alert.logPayload ?? {}),
           },
         });

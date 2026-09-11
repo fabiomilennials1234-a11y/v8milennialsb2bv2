@@ -8,9 +8,15 @@
  * A mensagem traz Organização, Impacto, tipo, título e um deep-link pro console
  * master — o suficiente pra alguém decidir se larga o que está fazendo.
  *
- * Envia pela instância da plataforma (`SUPPORT_UAZAPI_TOKEN`), para o grupo
- * (`SUPPORT_WHATSAPP_GROUP_JID`), via `UAZAPI_BASE_URL`. Nunca pela instância
- * comercial: essas são secrets dedicadas, distintas das credenciais de vendas.
+ * Envia pela instância CONECTADA da organização da plataforma — resolvida do
+ * banco a cada disparo por `_shared/support-channel.ts` — para o grupo
+ * (`SUPPORT_WHATSAPP_GROUP_JID`), via `UAZAPI_BASE_URL`.
+ *
+ * A credencial deixou de ser uma secret copiada à mão porque a secret já morreu
+ * duas vezes em silêncio: token revogado em 14/07/2026 (24 dias, 37 avisos
+ * perdidos) e sessão irrecuperável em 02/09/2026, quando o número reconectou sob
+ * outra instância da Uazapi. O banco sabe qual instância está de pé; a secret,
+ * não. Ver o cabeçalho de `support-channel.ts`.
  *
  * Best-effort por design: o Chamado já está gravado quando este endpoint roda
  * (o trigger é AFTER INSERT, desacoplado por pg_net). Falha de entrega nunca
@@ -25,6 +31,11 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildStaffMessage } from "./message.ts";
+import {
+  resolveSupportSender,
+  sendSupportText,
+  senderTrace,
+} from "../_shared/support-channel.ts";
 
 Deno.serve(
   withErrorBoundary("support-notify-staff", async (req: Request): Promise<Response> => {
@@ -89,11 +100,9 @@ Deno.serve(
       .single();
     const orgName = org?.name ?? "Organização";
 
-    // --- Secrets do canal de suporte (dedicadas, jamais as de vendas) ---
-    const token = Deno.env.get("SUPPORT_UAZAPI_TOKEN");
-    const groupJid = Deno.env.get("SUPPORT_WHATSAPP_GROUP_JID");
-    const baseUrl = Deno.env.get("UAZAPI_BASE_URL");
-    if (!token || !groupJid || !baseUrl) {
+    // --- Quem manda: instância conectada da org da plataforma, do banco ---
+    const resolved = await resolveSupportSender(supabase, (k) => Deno.env.get(k));
+    if (!resolved.ok) {
       await logRuntime({
         organizationId: ticket.organization_id,
         module: "support",
@@ -101,56 +110,31 @@ Deno.serve(
         status: "skipped",
         entityType: "support_ticket",
         entityId: ticketId,
-        errorMessage: "secrets do canal de suporte ausentes (SUPPORT_UAZAPI_TOKEN/SUPPORT_WHATSAPP_GROUP_JID/UAZAPI_BASE_URL)",
+        errorMessage: `canal de suporte sem remetente: ${resolved.reason}`,
       });
-      return json({ ok: false, skipped: "missing_support_secrets" });
+      return json({ ok: false, skipped: "no_support_sender" });
     }
+    const sender = resolved.sender;
 
     const text = buildStaffMessage(ticket, orgName);
 
     // --- Envia. Best-effort: falha aqui não pode virar 5xx que o trigger repita. ---
-    try {
-      const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/send/text`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", token },
-        body: JSON.stringify({ number: groupJid, text }),
-        signal: AbortSignal.timeout(15_000),
-      });
+    // O rastro do remetente entra nos DOIS caminhos: sem ele, "falhou" não
+    // distingue instância morta de canal apontado para o lugar errado, que foi
+    // exatamente a ambiguidade que custou 24 dias em julho.
+    const envio = await sendSupportText(sender, text);
 
-      if (!resp.ok) {
-        const detail = await resp.text().catch(() => "");
-        await logRuntime({
-          organizationId: ticket.organization_id,
-          module: "support",
-          action: "notify_staff",
-          status: "error",
-          entityType: "support_ticket",
-          entityId: ticketId,
-          errorMessage: `uazapi ${resp.status}: ${detail.slice(0, 200)}`,
-        });
-        return json({ ok: false, uazapi_status: resp.status });
-      }
+    await logRuntime({
+      organizationId: ticket.organization_id,
+      module: "support",
+      action: "notify_staff",
+      status: envio.ok ? "success" : "error",
+      entityType: "support_ticket",
+      entityId: ticketId,
+      errorMessage: envio.ok ? undefined : (envio.detail ?? "envio falhou"),
+      payloadSnapshot: senderTrace(sender),
+    });
 
-      await logRuntime({
-        organizationId: ticket.organization_id,
-        module: "support",
-        action: "notify_staff",
-        status: "success",
-        entityType: "support_ticket",
-        entityId: ticketId,
-      });
-      return json({ ok: true });
-    } catch (err) {
-      await logRuntime({
-        organizationId: ticket.organization_id,
-        module: "support",
-        action: "notify_staff",
-        status: "error",
-        entityType: "support_ticket",
-        entityId: ticketId,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-      return json({ ok: false, error: "send_failed" });
-    }
+    return json(envio.ok ? { ok: true } : { ok: false, error: "send_failed" });
   })
 );
