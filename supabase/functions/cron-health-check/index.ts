@@ -12,6 +12,14 @@
  *   - Reads `cron_config.cron_secret` (table) and the local `CRON_SECRET` env.
  *   - Issues a probe call to `process-workflow-executions` with the table secret.
  *   - If response != 200 → log error to runtime_logs ("CRON secret drift").
+ *   - Vigia o ENVIO do alerta do `infra-watchdog` (`module='job_monitor'`,
+ *     `action='watchdog_alert'`, `status='error'`). Ver `watchdog-delivery.ts`.
+ *
+ * Por que a vigilância do watchdog mora AQUI e não nele: o watchdog vigiando o
+ * próprio envio é auto-referência — se ele cair, os dois lados calam juntos.
+ * Aqui é outra edge function, disparada por OUTRO job de pg_cron
+ * (`invoke_cron_health_check()` vs `invoke_infra_watchdog()`), sem encadeamento
+ * entre as duas em nenhuma direção.
  *
  * Schedule: every 5 minutes via pg_cron (see migration 20261001000003).
  * Auth: same x-cron-secret / service_role pattern as other cron-driven functions.
@@ -23,7 +31,36 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runHealthCheck, PROBE_TIMEOUT_MS } from "./health-check.ts";
+import { WATCHDOG_DELIVERY_LOOKBACK_MINUTES } from "./watchdog-delivery.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
+
+/**
+ * Lê as falhas de ENVIO do alerta do infra-watchdog.
+ *
+ * O watchdog grava aqui quando o WhatsApp do alerta não sai — e chama isso de
+ * "último recurso". Sem alguém lendo, o último recurso é uma prateleira muda.
+ * Quem lê é esta função, que roda por OUTRO job de pg_cron: watchdog vigiando o
+ * próprio envio calaria junto com ele.
+ */
+function buildWatchdogFailureFetcher(supabase: ReturnType<typeof createClient>) {
+  return async () => {
+    const desde = new Date(Date.now() - WATCHDOG_DELIVERY_LOOKBACK_MINUTES * 60_000).toISOString();
+    const { data, error } = await supabase
+      .from("runtime_logs")
+      .select("created_at")
+      .eq("module", "job_monitor")
+      .eq("action", "watchdog_alert")
+      .eq("status", "error")
+      .gte("created_at", desde)
+      .order("created_at", { ascending: true })
+      .limit(500);
+
+    // Erro de consulta NÃO vira lista vazia: "não sei" e "não há falha" são
+    // coisas diferentes, e confundir as duas é o defeito que este código ataca.
+    if (error) throw new Error(error.message);
+    return (data ?? []) as { created_at: string }[];
+  };
+}
 
 function buildProbe(supabaseUrl: string): (secret: string) => Promise<number | null> {
   return async (secret: string) => {
@@ -128,6 +165,7 @@ Deno.serve(
       fetchTableSecret: buildTableSecretFetcher(supabase),
       envSecret: CRON_SECRET,
       probe: buildProbe(SUPABASE_URL),
+      fetchWatchdogDeliveryFailures: buildWatchdogFailureFetcher(supabase),
     });
 
     await logRuntime({
@@ -140,6 +178,13 @@ Deno.serve(
         table_secret_present: report.table_secret_present,
         secrets_match: report.secrets_match,
         edge_probe_status: report.edge_probe_status,
+        // Quantas e desde quando — "houve falha" não diz se é um tropeço ou
+        // uma semana de silêncio.
+        watchdog_delivery_failures: report.watchdog_delivery?.count ?? null,
+        watchdog_delivery_oldest_at: report.watchdog_delivery?.oldest_at ?? null,
+        // Discriminador: sem ele, "0 falhas" e "não consegui contar" viram a
+        // mesma linha em runtime_logs.
+        watchdog_delivery_readable: report.watchdog_delivery?.readable ?? null,
       },
     });
 
