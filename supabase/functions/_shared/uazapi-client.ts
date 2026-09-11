@@ -612,14 +612,36 @@ export class UazapiClient {
       body.operator = "AND";
       body.wa_isGroup = type === "group";
     }
-    const result = await this.request<any>("POST", "/chat/find", body);
-    const raw: any[] = Array.isArray(result)
-      ? result
-      : Array.isArray(result?.data)
-        ? result.data
-        : Array.isArray(result?.chats)
-          ? result.chats
-          : [];
+    const raw: any[] = [];
+    const seen = new Set<string>();
+    for (let page = 0; ; page++) {
+      // Fail explicitly instead of returning an incomplete import or looping
+      // indefinitely when a provider ignores offsets.
+      if (page >= 1000) throw { status: 502, provider_code: "chat_pagination_limit",
+        message: "Uazapi chat pagination exceeded the safety limit" } satisfies UazapiError;
+      const result = await this.request<any>("POST", "/chat/find", body);
+      const rows: any[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.chats)
+            ? result.chats
+            : [];
+      let added = 0;
+      for (const row of rows) {
+        const id = row.wa_chatid ?? row.jid ?? row.chatId ?? row.wa_id ?? row.phone ?? row.id;
+        if (id && !seen.has(id)) { seen.add(id); raw.push(row); added++; }
+      }
+      const total = result?.pagination?.totalRecords;
+      if (total === undefined) break; // Legacy response without metadata.
+      if (!Number.isSafeInteger(total) || total < 0) throw { status: 502,
+        provider_code: "invalid_chat_pagination", message: "Uazapi chat total is invalid" } satisfies UazapiError;
+      const nextOffset = Number(body.offset) + rows.length;
+      if (!added && (rows.length > 0 || nextOffset < total)) throw { status: 502, provider_code: "invalid_chat_pagination",
+        message: "Uazapi chat pagination did not advance" } satisfies UazapiError;
+      if (nextOffset >= total) break;
+      body.offset = nextOffset;
+    }
     for (const c of raw) {
       const jid = c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id;
       if (jid) this.savedContactNames.set(jid, nonBlankName(c.wa_contactName));
@@ -629,7 +651,7 @@ export class UazapiClient {
       name: nonBlankName(c.wa_contactName, c.wa_name, c.name, c.pushName, c.notify),
       isGroup: c.wa_isGroup === true || String(c.wa_chatid ?? c.jid ?? c.id ?? "").endsWith("@g.us"),
       lastMessageTimestamp: c.wa_lastMsgTimestamp ?? c.lastMessageTimestamp ?? c.t ?? undefined,
-    }));
+    })).filter(c => type === "all" || c.isGroup === (type === "group"));
   }
 
   async historySync(input: {
@@ -671,10 +693,25 @@ export class UazapiClient {
       }
     }
     const savedName = this.savedContactNames.get(input.number);
-    const offset = (Number(input.cursor) || 0) + messages.length;
+    const currentOffset = Number(input.cursor) || 0;
+    const offset = currentOffset + messages.length;
+    let nextCursor: string | undefined;
+    if (typeof result?.hasMore === "boolean") {
+      if (result.hasMore) {
+        // A non-advancing provider cursor would reimport the same page forever.
+        if (!Number.isSafeInteger(result.nextOffset) || result.nextOffset <= currentOffset) {
+          throw { status: 502, provider_code: "invalid_history_cursor",
+            message: "Uazapi history cursor did not advance" } satisfies UazapiError;
+        }
+        nextCursor = String(result.nextOffset);
+      }
+    } else if (messages.length >= (input.limit ?? 100)) {
+      // Older installations return only arrays without pagination metadata.
+      nextCursor = String(offset);
+    }
     return {
       messages: savedName ? messages.map(m => ({ ...(m as Record<string, unknown>), wa_contactName: savedName })) : messages,
-      nextCursor: messages.length >= (input.limit ?? 100) ? String(offset) : undefined,
+      nextCursor,
     };
   }
 

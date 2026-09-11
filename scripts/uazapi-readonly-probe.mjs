@@ -14,21 +14,46 @@ if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed
   throw new Error('Require an HTTPS API base URL without credentials, query or fragment');
 }
 const root = baseUrl.replace(/\/$/, '');
-async function get(path) {
+async function read(path, body) {
   const response = await fetch(`${root}${path}`, {
-    headers: { token },
+    method: body ? 'POST' : 'GET',
+    headers: { token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
     redirect: 'error',
     signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
   return response.json();
 }
+// Keep field names and types only; never persist sample message contents.
+function fields(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return { type: 'array', count: value.length };
+  if (typeof value !== 'object') return typeof value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+    item === null ? 'null' : Array.isArray(item) ? 'array' : typeof item,
+  ]));
+}
 try {
-  const status = await get('/instance/status');
+  const status = await read('/instance/status');
   const instance = status.instance ?? status;
   if (instance.id !== expectedId) throw new Error('Instance identity mismatch; probe stopped');
-  const limits = await get('/instance/wa_messages_limits');
-  const webhooks = await get('/webhook');
+  const limits = await read('/instance/wa_messages_limits');
+  const webhooks = await read('/webhook');
+  const operations = [];
+  // These POST endpoints query provider storage; they do not send messages.
+  for (const [path, body] of [
+    ['/sender/listfolders', undefined],
+    ['/chat/find', { limit: 1, offset: 0 }],
+    ['/message/find', { limit: 1, offset: 0 }],
+  ]) {
+    try {
+      const payload = await read(path, body);
+      operations.push({ path, method: body ? 'POST' : 'GET', fields: fields(payload) });
+    } catch {
+      operations.push({ path, method: body ? 'POST' : 'GET', failed: true });
+    }
+  }
   // Output excludes tokens, QR/pairing codes, phone numbers, webhook URLs and payloads.
   console.log(JSON.stringify({
     checkedAt: new Date().toISOString(),
@@ -40,6 +65,7 @@ try {
       hasTimelockObject: typeof limits.reachout_timelock === 'object' && limits.reachout_timelock !== null,
     },
     webhookContract: { isArray: Array.isArray(webhooks), count: Array.isArray(webhooks) ? webhooks.length : null },
+    operations,
   }, null, 2));
 } catch (error) {
   // Do not emit remote bodies or fetch error causes: they may contain credentials/PII.

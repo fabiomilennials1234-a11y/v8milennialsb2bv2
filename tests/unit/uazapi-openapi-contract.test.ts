@@ -33,6 +33,42 @@ beforeEach(() => { UazapiClient._resetCircuitState(); vi.stubGlobal("fetch", vi.
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("UAZAPI 2.1.1 request contracts", () => {
+  it("excludes group JIDs even when the provider labels them individual", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ chats: [
+      { wa_chatid: "individual@s.whatsapp.net", wa_isGroup: false },
+      { wa_chatid: "group@g.us", wa_isGroup: false },
+    ], pagination: { totalRecords: 2 } }));
+    expect((await new UazapiClient(config).listChats("individual")).map(c => c.id)).toEqual(["individual@s.whatsapp.net"]);
+  });
+  it("loads every documented chat page while retaining the group filter", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ chats: [{ wa_chatid: "a", wa_isGroup: false }], pagination: { totalRecords: 2 } }))
+      .mockResolvedValueOnce(response({ chats: [{ wa_chatid: "b", wa_isGroup: false }], pagination: { totalRecords: 2 } }));
+    const chats = await new UazapiClient(config).listChats("individual");
+    expect(chats.map(c => c.id)).toEqual(["a", "b"]);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body))).toMatchObject({ offset: 1, wa_isGroup: false });
+    assertRequestContract();
+  });
+  it("fails instead of returning silently truncated chats when pages stop advancing", async () => {
+    vi.mocked(fetch).mockImplementation(async () => response({ chats: [{ wa_chatid: "a" }], pagination: { totalRecords: 5 } }));
+    await expect(new UazapiClient(config).listChats()).rejects.toMatchObject({ provider_code: "invalid_chat_pagination" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    [{ hasMore: true, nextOffset: 17 }, "17"],
+    [{ hasMore: false, nextOffset: 0 }, undefined],
+  ])("honors provider history pagination %j", async (pagination, expected) => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ messages: [message], ...pagination }))
+      .mockResolvedValueOnce(response({ chats: [] }));
+    const result = await new UazapiClient(config).historySync({ number: "chat@s.whatsapp.net", limit: 1 });
+    expect(result.nextCursor).toBe(expected);
+    assertRequestContract();
+  });
+  it.each([0, -1, "1", null, 1.5])("rejects non-advancing or invalid history cursor %j", async (nextOffset) => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ messages: [message], hasMore: true, nextOffset }))
+      .mockResolvedValueOnce(response({ chats: [] }));
+    await expect(new UazapiClient(config).historySync({ number: "chat@s.whatsapp.net", limit: 1 }))
+      .rejects.toMatchObject({ provider_code: "invalid_history_cursor" });
+  });
   it("pins all 139 documented operations without exposing them through a generic proxy", () => {
     expect(Object.keys(operations)).toHaveLength(139);
   });

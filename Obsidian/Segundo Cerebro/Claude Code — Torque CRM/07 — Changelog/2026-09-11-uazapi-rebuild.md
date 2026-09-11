@@ -25,3 +25,7 @@ Cliente/provider alinhados a campos documentados de criação, mídia, menus, re
 ## Pendências
 
 Provisionamento Supabase, contrato do servidor efetivo e homologação com destinatário controlado. Auditoria inicial usou checkout antigo; não representa main atual.
+
+## Validação real de leitura
+
+TorqueSDR: identidade remota confirmada, seis endpoints HTTP 200. Payloads estruturais anonimizados registrados. Paginação de chats e mensagens corrigida com base em respostas reais. Fornecedor devolveu quatro JIDs de grupo com flag individual; filtro final usa classificação normalizada. Custo da branch Supabase (US$ 0,01344/hora) segue aguardando confirmação exigida pelo conector. Não houve escrita em produção nem envio.
