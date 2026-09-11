@@ -172,26 +172,26 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
     expect(onDefinirDesfecho).not.toHaveBeenCalled();
   });
 
-  it("o x do selo Perdido reabre o negócio sem mover a etapa", () => {
+  it.each(["perdido", "ganho"] as const)("o x do selo %s reabre o negócio sem mover a etapa", (estado) => {
     const onDefinirDesfecho = vi.fn();
     const onMoverEtapa = vi.fn();
     const { rerender } = render(
-      <DealCard negocio={negocio({ estado: "perdido" })}
+      <DealCard negocio={negocio({ estado })}
         onDefinirDesfecho={onDefinirDesfecho} onMoverEtapa={onMoverEtapa} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Remover de perdido" }));
+    fireEvent.click(screen.getByRole("button", { name: `Remover de ${estado}` }));
     expect(onDefinirDesfecho).toHaveBeenCalledExactlyOnceWith("open");
     expect(onMoverEtapa).not.toHaveBeenCalled();
     rerender(<DealCard negocio={negocio({ estado: "aberto" })} />);
-    expect(screen.queryByRole("button", { name: "Remover de perdido" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `Remover de ${estado}` })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
   });
 
-  it("desabilita o x do selo enquanto salva", () => {
+  it.each(["perdido", "ganho"] as const)("desabilita o x do selo %s enquanto salva", (estado) => {
     const onDefinirDesfecho = vi.fn();
-    render(<DealCard negocio={negocio({ estado: "perdido" })}
+    render(<DealCard negocio={negocio({ estado })}
       onDefinirDesfecho={onDefinirDesfecho} decidindo />);
-    const remover = screen.getByRole("button", { name: "Remover de perdido" });
+    const remover = screen.getByRole("button", { name: `Remover de ${estado}` });
     expect(remover).toBeDisabled();
     fireEvent.click(remover);
     expect(onDefinirDesfecho).not.toHaveBeenCalled();

@@ -275,7 +275,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           throw new Error(error.message);
         }
 
-        toast.success(desfecho === "open" ? "Negócio removido de perdido" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
