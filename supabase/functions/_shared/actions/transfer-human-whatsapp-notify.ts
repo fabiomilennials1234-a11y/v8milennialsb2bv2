@@ -2,6 +2,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
+import { persistOutboundMessage } from "../action-handlers/whatsapp-helpers.ts";
 
 interface HandoffMessageParams {
   leadName: string;
@@ -94,13 +95,35 @@ export async function executeTransferHumanWhatsappNotify(
 
   for (const phone of phones) {
     try {
-      await provider.sendText({
-        number: normalizeBrazilianPhone(phone) || phone,
+      const target = normalizeBrazilianPhone(phone) || phone;
+      const res = await provider.sendText({
+        number: target,
         text: message,
         trackSource: "handoff-whatsapp-notify",
         trackId: `handoff_notify_${leadId}_${phone}`,
       });
+      // Entregue. A contagem fecha AQUI, antes de persistir: a linha no banco é
+      // rastro, não condição de entrega, e não pode transformar envio bem
+      // sucedido em `failed` no relatório.
       sent++;
+
+      // Sem isto, o eco `fromMe` entra como `sent_source='manual'` e o
+      // `trg_human_pause_on_manual_send` pausa a IA — aqui, para o número do
+      // PRÓPRIO vendedor notificado, que é quem recebe esta mensagem.
+      //
+      // `leadId` fica de fora de propósito: o destinatário é a equipe, não o
+      // lead. Carimbar o lead colaria a notificação interna dentro da thread do
+      // cliente no chat.
+      await persistOutboundMessage(supabase, {
+        organizationId,
+        instanceId: instance.id,
+        providerMessageId: res?.message_id,
+        phone: target,
+        messageType: "conversation",
+        content: message,
+        sentSource: "copilot",
+        fallbackIdPrefix: "handoff",
+      });
     } catch (err) {
       console.warn(`[handoff-whatsapp-notify] Failed to send to ${phone}:`, err);
       failed++;

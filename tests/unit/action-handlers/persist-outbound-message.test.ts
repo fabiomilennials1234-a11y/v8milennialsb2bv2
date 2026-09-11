@@ -149,6 +149,48 @@ describe("persistOutboundMessage", () => {
     });
   });
 
+  it("aceita sent_source='copilot' — o Copilot não pode pausar a si mesmo", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+
+    await persistOutboundMessage(sb, {
+      ...BASE,
+      providerMessageId: "BATATA:CP2",
+      sentSource: "copilot",
+    });
+
+    expect(getInserted("whatsapp_messages")[0]).toMatchObject({
+      sent_by_ai: true,
+      sent_source: "copilot",
+    });
+  });
+
+  it("omitir sentSource mantém 'workflow' — quem chamava antes não muda de comportamento", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+
+    await persistOutboundMessage(sb, { ...BASE, providerMessageId: "BATATA:DEF" });
+
+    expect(getInserted("whatsapp_messages")[0].sent_source).toBe("workflow");
+  });
+
+  it("nunca grava 'manual' — é o único valor que faria o gatilho pausar o Copilot", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+
+    for (const sentSource of ["workflow", "copilot"] as const) {
+      await persistOutboundMessage(sb, { ...BASE, providerMessageId: `BATATA:${sentSource}`, sentSource });
+    }
+
+    // O CHECK do banco aceita `manual | copilot | workflow`; o tipo do parâmetro
+    // exclui `manual` de propósito. Este teste é a trava em runtime do que o
+    // tipo já garante em compilação — e o que o gatilho lê.
+    for (const row of getInserted("whatsapp_messages")) {
+      expect(row.sent_source).not.toBe("manual");
+      expect(row.sent_by_ai).toBe(true);
+    }
+  });
+
   it("faz merge no conflito, para o eco que chegar primeiro não congelar o rótulo 'manual'", async () => {
     const { sb, mockTable, getUpsertOpts } = createMockSupabase();
     mockTable("whatsapp_messages", []);

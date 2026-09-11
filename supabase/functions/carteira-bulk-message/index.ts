@@ -8,6 +8,7 @@ import {
   normalizeBrazilianPhone,
 } from "../_shared/whatsapp-dispatch.ts";
 import { getTimeBasedVariables } from "../_shared/time-variables.ts";
+import { persistOutboundMessage } from "../_shared/action-handlers/whatsapp-helpers.ts";
 import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
 
 // Anti-ban Onda 0 QW3: espaçamento 3–8s entre envios do lote. Este endpoint é
@@ -199,6 +200,32 @@ Deno.serve(
         success: sendResult.success,
         error: sendResult.error,
       });
+
+      // `channel_messages` (abaixo) alimenta a timeline do lead; NÃO alimenta o
+      // chat, que lê `whatsapp_messages`. Sem esta linha o disparo da carteira
+      // some da conversa e, pior, o eco `fromMe` volta rotulado `manual` — e o
+      // `trg_human_pause_on_manual_send` pausa o Copilot de CADA cliente do lote.
+      // Só no sucesso: sem entrega não há id de provider com que casar o eco.
+      if (sendResult.success) {
+        // `as never`: esta função fixa `supabase-js@2.49.4` no import e o helper
+        // importa `@2`. São a MESMA classe em runtime, mas os genéricos de
+        // `SupabaseClient` mudaram de aridade entre as versões, então o
+        // structural check falha em `supabaseUrl` (protected). Alinhar a versão
+        // aqui trocaria um erro de tipo por uma troca de versão em runtime, que
+        // é o risco maior. O cast é local e não afrouxa a assinatura do helper
+        // para os outros dez chamadores.
+        await persistOutboundMessage(supabaseAdmin as never, {
+          organizationId: organization_id,
+          instanceId: instance.id,
+          providerMessageId: sendResult.messageId,
+          phone: normalized,
+          messageType: "conversation",
+          content: resolvedMessage,
+          leadId: client.lead_id,
+          sentSource: "workflow",
+          fallbackIdPrefix: "carteira",
+        });
+      }
 
       if (client.lead_id) {
         await supabaseAdmin.from("channel_messages").insert({

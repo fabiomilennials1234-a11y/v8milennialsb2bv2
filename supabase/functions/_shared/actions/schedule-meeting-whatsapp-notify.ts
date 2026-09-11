@@ -13,6 +13,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
+import { persistOutboundMessage } from "../action-handlers/whatsapp-helpers.ts";
 
 interface MeetingMessageParams {
   leadName: string;
@@ -143,13 +144,31 @@ export async function executeScheduleMeetingWhatsappNotify(
 
   for (const phone of phones) {
     try {
-      await provider.sendText({
-        number: normalizeBrazilianPhone(phone) || phone,
+      const target = normalizeBrazilianPhone(phone) || phone;
+      const res = await provider.sendText({
+        number: target,
         text: message,
         trackSource: "schedule-meeting-whatsapp-notify",
         trackId: `meeting_notify_${leadId}_${phone}`,
       });
+      // Entregue. Contagem fecha antes do persist — rastro no banco não pode
+      // rebaixar envio bem sucedido a `failed`.
       sent++;
+
+      // Sem esta linha o eco `fromMe` entra como `sent_source='manual'` e o
+      // `trg_human_pause_on_manual_send` pausa a IA para o número do vendedor
+      // notificado. `leadId` fora de propósito: o destinatário é a equipe, e
+      // carimbar o lead colaria o aviso interno na thread do cliente.
+      await persistOutboundMessage(supabase, {
+        organizationId,
+        instanceId: instance.id,
+        providerMessageId: res?.message_id,
+        phone: target,
+        messageType: "conversation",
+        content: message,
+        sentSource: "copilot",
+        fallbackIdPrefix: "meeting",
+      });
     } catch (err) {
       console.warn(`[schedule-meeting-whatsapp-notify] Failed to send to ${phone}:`, err);
       failed++;
