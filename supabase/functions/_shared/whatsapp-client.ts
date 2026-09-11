@@ -289,9 +289,10 @@ export interface WhatsAppProvider {
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }>;
   getMessageLimits?(): Promise<{
-    current: number;
-    limit: number;
+    current: number | null;
+    limit: number | null;
     reachout_timelock?: number;
+    can_send_new_messages?: boolean | null;
   }>;
 
   // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send.

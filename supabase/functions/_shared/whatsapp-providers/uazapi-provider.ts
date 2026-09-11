@@ -123,28 +123,16 @@ export class UazapiProvider implements WhatsAppProvider {
 
     const resp = await this.client.initInstance({
       name: input.instance_name,
-      // Linked-device label WhatsApp shows for this number. Derived per
-      // Organization so our tenants do not all pair as the same device
-      // (#1167). Undefined when underivable — the field is then omitted and
-      // the provider default applies, never a shared literal.
-      systemName: deriveDeviceName(input.organization_id),
       adminField01: input.organization_id,
       adminField02: input.instance_id,
-      webhookUrl,
-      // Fase 2 scope: messages + messages_update + connection. Other events
-      // (presence, history, call, groups) remain off to reduce ingress volume.
-      webhookEvents: ["messages", "messages_update", "connection"],
-      // Echo elimination at source (Uazapi server-side). Defense in depth:
-      // UPSERT idempotent preserved in whatsapp-webhook (contract from 3066b5e).
-      webhookExcludeMessages: ["wasSentByApi"],
-      // Append /<event> to webhook URL — future routing to split workers.
-      webhookAddUrlEvents: true,
-      webhookAddUrlTypesMessages: false,
     });
 
     // Extract from nested response: instance.id, instance.token, top-level status object
     const instanceId = resp.instance?.id ?? (resp as any).id;
     const instanceToken = resp.instance?.token ?? resp.token;
+    if (typeof instanceId !== "string" || !instanceId || typeof instanceToken !== "string" || !instanceToken) {
+      throw new Error("Uazapi creation response is missing instance identity or token");
+    }
 
     // Persist token via RPC — service_role only
     const { error: rpcError } = await this.supabaseAdmin.rpc(
@@ -163,8 +151,8 @@ export class UazapiProvider implements WhatsAppProvider {
       );
     }
 
-    // /instance/init may ignore inline webhook fields — explicitly configure
-    // via /instance/updateWebhook using the newly obtained instance token.
+    // Creation only accepts name/admin metadata. Configure the webhook explicitly
+    // using the newly obtained instance token.
     const instanceClient = new UazapiClient({
       baseUrl: this.baseUrl,
       token: instanceToken,
@@ -251,7 +239,7 @@ export class UazapiProvider implements WhatsAppProvider {
         `[uazapi] connect with managed proxy region ${region.proxy_managed_state}/${region.proxy_managed_city}`
       );
     }
-    const raw: any = await this.client.connectInstance(phone, region ?? undefined);
+    const raw: any = await this.client.connectInstance(phone, region ?? undefined, deriveDeviceName(this.organizationId));
     return {
       qrcode: raw.instance?.qrcode || raw.qrcode,
       paircode: raw.instance?.paircode || raw.paircode,
@@ -394,6 +382,9 @@ export class UazapiProvider implements WhatsAppProvider {
       type: opts.type,
       text: opts.text,
       choices: opts.choices,
+      footer: opts.footer,
+      selectableCount: opts.selectableCount,
+      listButton: opts.listButtonLabel,
     });
     return {
       message_id: resp.id,
@@ -460,9 +451,10 @@ export class UazapiProvider implements WhatsAppProvider {
   }
 
   async getMessageLimits(): Promise<{
-    current: number;
-    limit: number;
+    current: number | null;
+    limit: number | null;
     reachout_timelock?: number;
+    can_send_new_messages?: boolean | null;
   }> {
     return this.client.getMessageLimits();
   }

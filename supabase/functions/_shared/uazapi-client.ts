@@ -164,8 +164,8 @@ export class UazapiClient {
   ): Promise<UazapiInstanceResponse> {
     return this.request<UazapiInstanceResponse>(
       "POST",
-      "/instance/init",
-      input,
+      "/instance/create",
+      { name: input.name, adminField01: input.adminField01, adminField02: input.adminField02 },
       { useAdminToken: true }
     );
   }
@@ -232,13 +232,15 @@ export class UazapiClient {
       proxy_managed_country: string;
       proxy_managed_state: string;
       proxy_managed_city: string;
-    }
+    },
+    systemName?: string,
   ): Promise<{
     qrcode?: string;
     paircode?: string;
   }> {
     const body: Record<string, unknown> = {};
     if (phone) body.phone = phone;
+    if (systemName) body.systemName = systemName;
     if (region) Object.assign(body, region);
 
     return this.request(
@@ -309,16 +311,28 @@ export class UazapiClient {
   }
 
   async getMessageLimits(): Promise<{
-    current: number;
-    limit: number;
+    current: number | null;
+    limit: number | null;
+    can_send_new_messages: boolean | null;
     reachout_timelock?: number;
   }> {
-    return this.request(
-      "GET",
-      "/instance/wa_messages_limits",
-      undefined,
-      { useAdminToken: false }
-    );
+    const raw = await this.request<{
+      current?: number; limit?: number; can_send_new_messages?: boolean | null;
+      new_chat_message_capping?: { available?: boolean; used_quota?: number; total_quota?: number };
+      reachout_timelock?: number | { active?: boolean; until?: string };
+    }>("GET", "/instance/wa_messages_limits");
+    const quota = raw.new_chat_message_capping;
+    const count = (value: unknown): number | null =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    const lock = raw.reachout_timelock;
+    const until = typeof lock === "number" ? lock : lock?.active && lock.until
+      ? Date.parse(lock.until) / 1000 : undefined;
+    return {
+      current: quota?.available === false ? null : count(quota?.used_quota ?? raw.current),
+      limit: quota?.available === false ? null : count(quota?.total_quota ?? raw.limit),
+      can_send_new_messages: typeof raw.can_send_new_messages === "boolean" ? raw.can_send_new_messages : null,
+      ...(until !== undefined && Number.isFinite(until) ? { reachout_timelock: until } : {}),
+    };
   }
 
   // =========================================================================
@@ -335,13 +349,15 @@ export class UazapiClient {
     return this.request<UazapiMessageResponse>(
       "POST",
       "/send/media",
-      input,
+      { ...input, caption: undefined, filename: undefined, text: input.caption, docName: input.filename },
       { timeoutMs: MEDIA_TIMEOUT_MS }
     );
   }
 
   async sendMenu(input: UazapiSendMenuInput): Promise<UazapiMessageResponse> {
-    return this.request<UazapiMessageResponse>("POST", "/send/menu", input);
+    return this.request<UazapiMessageResponse>("POST", "/send/menu", {
+      ...input, footer: undefined, footerText: input.footer,
+    });
   }
 
   async sendPixButton(
@@ -498,7 +514,7 @@ export class UazapiClient {
     await this.request<unknown>("POST", "/message/react", {
       id: messageId,
       number,
-      emoji,
+      text: emoji,
     });
   }
 
@@ -574,12 +590,16 @@ export class UazapiClient {
     mimetype: string;
     filename?: string;
   }> {
-    return this.request(
-      "POST",
-      "/message/download",
-      { id: messageId },
-      { timeoutMs: MEDIA_TIMEOUT_MS }
-    );
+    const result = await this.request<{
+      base64Data?: string; base64?: string; mimetype?: string; filename?: string;
+    }>("POST", "/message/download", { id: messageId, return_base64: true, return_link: false },
+      { timeoutMs: MEDIA_TIMEOUT_MS });
+    const base64 = result?.base64Data ?? result?.base64;
+    if (!base64 || !result?.mimetype) {
+      throw { status: 502, provider_code: "invalid_media_response",
+        message: "Uazapi download did not return base64 media and MIME type" } satisfies UazapiError;
+    }
+    return { base64, mimetype: result.mimetype, filename: result.filename };
   }
 
   async listChats(type: "all" | "individual" | "group" = "all"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
@@ -590,7 +610,7 @@ export class UazapiClient {
     };
     if (type !== "all") {
       body.operator = "AND";
-      body.filter = [{ field: "wa_isGroup", operator: "eq", value: type === "group" }];
+      body.wa_isGroup = type === "group";
     }
     const result = await this.request<any>("POST", "/chat/find", body);
     const raw: any[] = Array.isArray(result)
@@ -617,8 +637,9 @@ export class UazapiClient {
     limit?: number;
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }> {
+    if (!input.number?.trim()) throw new Error("A chat identifier is required for history import");
     const body: Record<string, unknown> = {
-      chatId: input.number,
+      chatid: input.number,
       limit: input.limit ?? 100,
     };
     if (input.cursor) {
@@ -637,7 +658,7 @@ export class UazapiClient {
     if (!this.savedContactNames.has(input.number)) {
       try {
         const found = await this.request<any>("POST", "/chat/find", {
-          operator: "AND", filter: [{ field: "wa_chatid", operator: "eq", value: input.number }],
+          operator: "AND", wa_chatid: input.number,
           limit: 1, offset: 0,
         });
         const rows = Array.isArray(found) ? found : found?.data ?? found?.chats ?? [];
@@ -681,9 +702,10 @@ export class UazapiClient {
     opts?: { useAdminToken?: boolean; timeoutMs?: number }
   ): Promise<T> {
     const useAdmin = opts?.useAdminToken ?? false;
-    const scope = useAdmin
-      ? `admin:${this.adminToken ? "[present]" : "[missing]"}`
-      : `token:${this.token ? "[present]" : "[missing]"}`;
+    // Never expose this key in errors/logs. Isolate credentials AND servers,
+    // while preserving the media circuit's independence from text delivery.
+    const credential = useAdmin ? this.adminToken : this.token;
+    const scope = JSON.stringify([this.baseUrl, useAdmin ? "admin" : "token", credential]);
     // Circuit breaker is scoped per endpoint group so a transient failure on
     // one endpoint never blocks unrelated ones sharing the same token. Media
     // sends transcode server-side on the provider (mp3/webm → ogg/opus for
@@ -757,8 +779,10 @@ export class UazapiClient {
           const errBody = await res.json().catch(() => ({}));
           const err: UazapiError = {
             provider_code:
+              (errBody as any)?.error_key ??
               (errBody as any)?.code ??
               (errBody as any)?.error_code ??
+              (errBody as any)?.provider_code ??
               undefined,
             status: res.status,
             message:
@@ -909,6 +933,9 @@ export class UazapiClient {
    */
   private static isReplaySafe(method: string, path: string): boolean {
     if (method === "GET") return true;
+    // Creation can succeed remotely before the response is lost. Never create
+    // another instance/webhook on an ambiguous transport failure.
+    if (path === "/instance/create" || path === "/webhook") return false;
     const isDelivery = DELIVERY_PATH_PREFIXES.some((p) => path.startsWith(p));
     if (!isDelivery) return true;
     return REPLAY_SAFE_DELIVERY_PATHS.includes(path);

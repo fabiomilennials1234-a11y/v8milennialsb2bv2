@@ -203,7 +203,10 @@ export function ChatHeader({
   isReactivating,
 }: ChatHeaderProps) {
   const { data: limits } = useMessageLimits(instanceId ?? null, organizationId);
-  const limitsWarning = limits && limits.limit > 0 && (limits.current / limits.limit) >= 0.8;
+  const limitsPercent = limits?.current != null && limits?.limit != null && limits.limit > 0
+    ? Math.round((limits.current / limits.limit) * 100) : null;
+  const newChatsRestricted = limits?.can_send_new_messages === false;
+  const limitsWarning = newChatsRestricted || (limitsPercent !== null && limitsPercent >= 80);
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   return (
@@ -303,10 +306,10 @@ export function ChatHeader({
           <TooltipTrigger asChild>
             <Badge variant="outline" className="border-amber-400 text-amber-500 gap-1 text-xs shrink-0">
               <AlertTriangle className="h-3 w-3" />
-              {limits!.current}/{limits!.limit}
+              {newChatsRestricted ? "Restrição WhatsApp" : `${limits?.current}/${limits?.limit}`}
             </Badge>
           </TooltipTrigger>
-          <TooltipContent>Limite de mensagens próximo ({Math.round((limits!.current / limits!.limit) * 100)}%)</TooltipContent>
+          <TooltipContent>{newChatsRestricted ? "WhatsApp restringiu novas conversas nesta conta" : `Limite de novas conversas próximo (${limitsPercent}%)`}</TooltipContent>
         </Tooltip>
       )}
 

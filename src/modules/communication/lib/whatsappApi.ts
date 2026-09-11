@@ -309,7 +309,7 @@ export async function syncHistory(
 export async function getMessageLimits(
   instanceId: string,
   organizationId?: string
-): Promise<{ current: number; limit: number; reachout_timelock?: number }> {
+): Promise<{ current: number | null; limit: number | null; reachout_timelock?: number; can_send_new_messages?: boolean | null }> {
   return callProxy("getMessageLimits", {
     instance_id: instanceId,
     organization_id: organizationId,

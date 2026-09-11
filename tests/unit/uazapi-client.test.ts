@@ -156,7 +156,7 @@ describe("circuit breaker — failure accounting", () => {
 
     expect(result).toMatchObject({ status: "connected" });
 
-    const state = UazapiClient._circuitState().get("token:[present]:default");
+    const state = UazapiClient._circuitState().get("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default");
     expect(state?.failures ?? 0).toBe(0);
   });
 });
@@ -213,7 +213,7 @@ describe("sendText — 4xx error", () => {
       ).rejects.toMatchObject({ status: 401 });
     }
 
-    const state = UazapiClient._circuitState().get("token:[present]:default");
+    const state = UazapiClient._circuitState().get("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default");
     expect(state?.failures ?? 0).toBe(0);
     expect(state?.openUntil ?? 0).toBe(0);
   });
@@ -399,7 +399,7 @@ describe("timeout — AbortError handling", () => {
     // One replay-safe call: 3 attempts = 3 failures → circuit opens
     await expect(withTimers(client.getInstanceStatus())).rejects.toBeDefined();
 
-    const state = UazapiClient._circuitState().get("token:[present]:default");
+    const state = UazapiClient._circuitState().get("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default");
     expect(state?.openUntil).toBeGreaterThan(Date.now());
   });
 
@@ -417,13 +417,13 @@ describe("timeout — AbortError handling", () => {
       ).rejects.toBeDefined();
     }
 
-    const state = UazapiClient._circuitState().get("token:[present]:default");
+    const state = UazapiClient._circuitState().get("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default");
     expect(state?.openUntil).toBeGreaterThan(Date.now());
   });
 
   it("throws circuit_breaker_open immediately when breaker is open", async () => {
     // Force breaker open by setting state directly
-    UazapiClient._circuitState().set("token:[present]:default", {
+    UazapiClient._circuitState().set("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default", {
       failures: 0,
       openUntil: Date.now() + 120_000,
     });
@@ -465,14 +465,14 @@ describe("initInstance — admin token", () => {
     expect(headers["token"]).toBeUndefined();
   });
 
-  it("POSTs to /instance/init", async () => {
+  it("POSTs to /instance/create", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, INSTANCE_RESPONSE));
 
     const client = new UazapiClient(BASE_CONFIG);
     await client.initInstance({ name: "my-instance" });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("https://uazapi.example.com/instance/init");
+    expect(url).toBe("https://uazapi.example.com/instance/create");
     expect(init?.method).toBe("POST");
   });
 
@@ -652,9 +652,9 @@ describe("circuit breaker — per-endpoint isolation", () => {
       ).rejects.toMatchObject({ status: 500 });
     }
 
-    const mediaState = UazapiClient._circuitState().get("token:[present]:media");
+    const mediaState = UazapiClient._circuitState().get("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:media");
     const defaultState = UazapiClient._circuitState().get(
-      "token:[present]:default"
+      "[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default"
     );
     expect(mediaState?.openUntil ?? 0).toBeGreaterThan(Date.now());
     // Default circuit untouched — text sends must remain available.
@@ -663,7 +663,7 @@ describe("circuit breaker — per-endpoint isolation", () => {
 
   it("text still sends while the media circuit is open", async () => {
     // Pre-open the media circuit; default circuit is clean.
-    UazapiClient._circuitState().set("token:[present]:media", {
+    UazapiClient._circuitState().set("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:media", {
       failures: 0,
       openUntil: Date.now() + 120_000,
     });
@@ -680,7 +680,7 @@ describe("circuit breaker — per-endpoint isolation", () => {
   });
 
   it("blocks further media calls while the media circuit is open", async () => {
-    UazapiClient._circuitState().set("token:[present]:media", {
+    UazapiClient._circuitState().set("[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:media", {
       failures: 0,
       openUntil: Date.now() + 120_000,
     });
