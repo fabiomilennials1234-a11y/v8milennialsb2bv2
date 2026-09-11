@@ -193,3 +193,7 @@ Desempenho: conversa de 214 mensagens produziu duas respostas de 199.006 bytes d
 ## Paginação e reentrada — rodada 8
 
 QA validou páginas de 100 e histórico com 1.314 registros; 18 itens montados. Reconciliação por versões visíveis/RLS reduziu poll sem mudanças de 199.006 para 88 bytes de JSON decodificado na conversa medida. Reentrada desativada/cooldown/máximo agora aplicados no banco; 8 tentativas concorrentes aceitaram uma vaga. fire_trigger devolveu 0 com reinscrição desativada. Produção intacta; rollout exige RPC antes do front e análise dos limites existentes. Evidência e limitações em `.specs/uazapi-rebuild/live-verification-round8-2026-09-11.json` e `OPTIMIZACAO-CHAT.md`.
+
+## Transcrição e PIX — rodada 9
+
+Transcrição sob demanda com JWT/RLS, gate de responsável, lease e cache persistido com proveniência. Chromium confirmou texto após reload; concorrência 200/409 e tenant externo 403. PIX nativo passou a exibir recebedor/chave e copiar chave, sem inferir pagamento. Corrigido contrato nullable dos limites de alcance; Deno de todo _shared passou. Evidência: `.specs/uazapi-rebuild/live-verification-round9-2026-09-11.json`. Lifecycle adiado por nova orientação: instância alternativa já havia sido desconectada; reconexão não confirmada, nenhuma exclusão, TorqueSDR sem chamadas de lifecycle nesta rodada.

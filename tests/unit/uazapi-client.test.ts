@@ -1044,3 +1044,16 @@ describe("markRead — contrato do payload", () => {
     await expect(withTimers(client.markRead(["a", "b"]))).resolves.toBeUndefined();
   });
 });
+
+describe('paid transcription contract',()=>{
+ it('requests text only using the documented flags',async()=>{
+  vi.mocked(fetch).mockResolvedValue(makeResponse(200,{transcription:'  Hello  '}));
+  expect(await new UazapiClient(BASE_CONFIG).transcribeAudio('audio-id')).toBe('Hello');
+  expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({id:'audio-id',transcribe:true,return_link:false,return_base64:false});
+ });
+ it('does not replay an ambiguous paid request',async()=>{
+  vi.mocked(fetch).mockResolvedValue(makeResponse(503,{error:'busy'}));
+  await expect(new UazapiClient(BASE_CONFIG).transcribeAudio('audio-id')).rejects.toMatchObject({status:503});
+  expect(fetch).toHaveBeenCalledTimes(1);
+ });
+});

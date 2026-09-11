@@ -1,3 +1,6 @@
+import { readUazapiPix, type UazapiPixFields } from "../../lib/uazapiPixDisplay";
+import { PixMessage } from "./media/PixMessage";
+import { AudioTranscription } from "./media/AudioTranscription";
 /**
  * MessagePrimitives — componentes de mensagem extraídos de WhatsAppChat.tsx (legacy).
  *
@@ -178,6 +181,7 @@ export function MessageBubble({
   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
+  const pix = readUazapiPix(message as UazapiPixFields);
   const uazapiMenu = readUazapiMenu(message as UazapiMenuFields);
   const isInteractiveResponse = isInteractiveResponseType(messageType);
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
@@ -406,7 +410,7 @@ export function MessageBubble({
               </div>
             )}
 
-            {usaBolhaNormalizada ? (
+            {pix ? <PixMessage pix={pix} /> : usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
             ) : uazapiMenu ? (
               <UazapiMenuBubble menu={uazapiMenu} fallbackText={message.content} />
@@ -440,6 +444,8 @@ export function MessageBubble({
                 />
               </div>
             )}
+
+            {isAudio && isWhatsAppMsg && enableActions && <AudioTranscription message={message as WhatsAppMessage} />}
 
             {/* Imagem */}
             {isImage && message.media_url && (

@@ -26,7 +26,7 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 | Recuperação de histórico | history e exact | history reconhecido. exact: 404 no primeiro caso; 200/success no segundo chat com ambos os IDs. Recuperação de mensagem ausente e conclusão assíncrona ainda não comprovadas |
 | Segurança | JWT, org, segredo, credenciais e RPC | Bloqueios positivos/negativos confirmados; credenciais fora do frontend/Git |
 | Ambiente | Schema, isolamento, URLs internas e cron | Schema QA comparado com origem; sem dados comerciais copiados; referências fixas redirecionadas; zero cron ativo |
-| Qualidade | Suíte direcionada ampliada | 967 testes em 70 arquivos. Deno, build e ratchets frontend aprovados nas mudanças correspondentes; baselines não ampliados |
+| Qualidade | Suíte direcionada ampliada | 997 testes em 73 arquivos. Deno, build e ratchets frontend aprovados nas mudanças correspondentes; baselines não ampliados |
 
 ## Falhas encontradas e tratadas
 
@@ -47,8 +47,8 @@ Atualizado em 11/09/2026. Branch `codex/uazapi-rebuild`, PR #2099 em draft. QA S
 - Medir carga representativa de produção. Reentrada corrigida e verificada na rodada 8; publicação versionada e cron real já passaram.
 - Homologar recuperação de histórico ausente no próprio provider; retomada de checkpoint e paginação truncada já corrigidas.
 - Provar recuperação de mensagem ausente e término do sync assíncrono, além do acknowledgement.
-- Transcrição ponta a ponta e visualização específica de PIX no CRM (playback já validado).
-- Reconectar/desconectar/excluir somente em instância dedicada; não exercitado na TorqueSDR ativa.
+- Transcrição e PIX no CRM concluídos na rodada 9; falta homologar voz recebida real.
+- Lifecycle adiado pelo usuário para o final, usando TorqueSDR. Instância alternativa desconectada antes do adiamento ainda aguarda reconexão.
 - Homologar todos os consumidores que embutem o adapter antes do rollout.
 - Bootstrap automático do Supabase ainda sinaliza MIGRATIONS_FAILED: schema foi restaurado manualmente. Não promover banco como se todas as migrations tivessem sido reproduzidas.
 - QA apresentou erros em convite/upsell fora do fluxo testado; não tratados como sucesso do sistema inteiro.
@@ -124,3 +124,19 @@ Pendências restantes: transcrição persistida/apresentada no CRM; lifecycle co
 Validação da rodada 8: 967 testes / 70 arquivos; build, Deno, TypeScript e lint sem novos problemas. Baselines não ampliados.
 
 Guard adicional master-ghost continua falhando: 23 violações e 42 entradas obsoletas. Comparação executada contra arquivo Git do HEAD anterior produziu saída idêntica; nenhum delta desta rodada. Baseline preservado.
+
+## Rodada 9 — transcrição, PIX e contrato de limites
+
+Transcrição sob demanda implementada no adapter e proxy autenticado. Mensagem consultada com JWT/RLS e escopo org/instância; gate de responsável revalidado antes do provider. Somente áudio/PTT não apagado. Lease de 120s impede chamadas concorrentes por mensagem; falhas ambíguas da transcrição não são repetidas automaticamente; resultado completo é cacheado com transcription_text/provider/created_at, sem sobrescrever content. Corpo remoto solicita transcribe=true, return_link=false e return_base64=false; credenciais não transitam no navegador. A lease não promete exactly-once se o provider concluir e a persistência falhar.
+
+Chromium: ação real retornou HTTP 200, texto apareceu na bolha e persistiu após reload. Segunda solicitação retornou cached=true; outro tenant recebeu 403. Duas solicitações simultâneas de outro áudio resultaram em 200 e 409. Lease liberada ao concluir. Campos foram acrescentados à projeção do chat, compatível com reconciliação por versões. Não há transcrição automática no webhook. Teste real desta rodada é áudio de saída; o componente e handler não filtram direção.
+
+PIX: card lê projeção mínima de sendPayload ou NativeFlowMessage/payment_info. Mostra recebedor e chave; copia somente a chave, sem apresentar status de mensagem como pagamento. Payload nativo real validado no Chromium; clipboard conferido. Node e gateway persistem somente metadata de exibição para render imediato, sem gravar request inteiro. Nenhum pagamento efetuado.
+
+CI anterior falhava no Deno: getMessageLimits admite números nulos, mas ReachLimit exigia números. Contrato corrigido; null permanece desconhecido e can_send_new_messages=false bloqueia envio explicitamente. Deno check de todo _shared/ passou; 997 testes em 73 arquivos passaram.
+
+Histórico upstream: amostra de 12 mensagens antigas controladas, todas encontradas no fornecedor. Não prova recuperação quando ausentes. Docker não instalado neste host; replay local completo não executado. CI do HEAD permanece sem certificação; resultado de Supabase Preview skipped não é sucesso.
+
+Lifecycle: usuário autorizou instância alternativa. Desconexão e geração de QR concluíram antes da mensagem seguinte, que adiou esta etapa. Reconexão não confirmada; nenhuma exclusão realizada. Usuário foi informado imediatamente. Por nova orientação, lifecycle fica por último usando TorqueSDR; nenhuma chamada adicional de conexão foi feita. Nenhum deploy/schema em produção. A alteração operacional da conexão autorizada não deve ser confundida com produção intacta.
+
+Validação final da rodada 9: build e ratchets TypeScript/lint sem novos problemas; Deno de todo _shared aprovado; guarda de versões de migrations sem colisões. Baselines preservados.

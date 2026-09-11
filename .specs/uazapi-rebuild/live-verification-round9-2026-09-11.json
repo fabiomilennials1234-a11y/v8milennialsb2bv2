@@ -1,0 +1,59 @@
+{
+  "transcription": {
+    "http": 200,
+    "textPresent": true,
+    "persistedAfterReload": true,
+    "provider": "uazapi",
+    "cached": false,
+    "providerCalls": 4,
+    "browser_provider_requests_note": "Four browser requests to provider domain were media URLs; transcription request uses the authenticated edge function."
+  },
+  "transcription_auth": {
+    "admin": {
+      "http": 200,
+      "cached": true
+    },
+    "outsider": {
+      "http": 403
+    }
+  },
+  "concurrency": {
+    "admin": [
+      {
+        "http": 200,
+        "cached": false
+      },
+      {
+        "http": 409
+      }
+    ]
+  },
+  "pix": {
+    "cardVisible": true,
+    "copiedKeyMatches": true,
+    "paymentInitiated": false
+  },
+  "upstream": {
+    "sampled": 12,
+    "found": 12,
+    "absent": 0
+  },
+  "validation": {
+    "unit_tests": 997,
+    "files": 73,
+    "shared_deno_check": "passed",
+    "local_migration_replay": "Docker missing",
+    "typescript_introduced": 0,
+    "lint_introduced": 0,
+    "build": "passed",
+    "migration_collisions": 0
+  },
+  "lifecycle": {
+    "authorized_alternate_instance_disconnected": true,
+    "qr_generated": true,
+    "reconnected": false,
+    "deleted": false,
+    "user_steering": "Defer lifecycle until last, using TorqueSDR; no further lifecycle calls"
+  },
+  "production_deploy": false
+}

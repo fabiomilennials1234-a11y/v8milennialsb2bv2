@@ -1,3 +1,4 @@
+import { outboundPixDisplay } from "./outbound-pix-display.ts";
 import { outboundMenuDisplay } from "./outbound-menu-display.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
@@ -500,7 +501,7 @@ export async function sendMessage(
     lead_id: req.lead_id,
     media_url: req.media_url,
     provider_status: sendResult.status,
-    display_payload: outboundMenuDisplay(req.menu_options, req.content),
+    display_payload: req.message_type === "pix_button" ? outboundPixDisplay(req.pix_payload) : outboundMenuDisplay(req.menu_options, req.content),
   });
   steps.persist = persistResult;
 

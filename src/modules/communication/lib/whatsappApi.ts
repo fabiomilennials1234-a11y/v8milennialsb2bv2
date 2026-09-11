@@ -384,3 +384,7 @@ export async function requestHistoryRecovery(
     payload: { number: opts.chatJid, mode: opts.mode ?? "history", messageid: opts.messageId, count: opts.count },
   });
 }
+
+export function transcribeAudio(instanceId: string, rowId: string) {
+  return callProxy<{ text: string; provider: string; createdAt: string; cached: boolean }>("transcribeAudio", { instance_id: instanceId, payload: { row_id: rowId } });
+}

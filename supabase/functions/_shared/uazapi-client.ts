@@ -616,6 +616,15 @@ export class UazapiClient {
     }
   }
 
+  async transcribeAudio(messageId: string): Promise<string> {
+    const result = await this.request<{ transcription?: unknown }>("POST", "/message/download",
+      { id: messageId, transcribe: true, return_link: false, return_base64: false }, { timeoutMs: MEDIA_TIMEOUT_MS, noRetry: true });
+    if (typeof result?.transcription !== "string" || !result.transcription.trim() || result.transcription.length > 100_000) {
+      throw new Error("Transcrição indisponível para este áudio");
+    }
+    return result.transcription.trim();
+  }
+
   async downloadMedia(messageId: string): Promise<{
     base64: string;
     mimetype: string;
@@ -770,7 +779,7 @@ export class UazapiClient {
     method: string,
     path: string,
     body?: unknown,
-    opts?: { useAdminToken?: boolean; timeoutMs?: number }
+    opts?: { useAdminToken?: boolean; timeoutMs?: number; noRetry?: boolean }
   ): Promise<T> {
     const useAdmin = opts?.useAdminToken ?? false;
     // Never expose this key in errors/logs. Isolate credentials AND servers,
@@ -823,7 +832,7 @@ export class UazapiClient {
     const url = `${this.baseUrl}${path}`;
     const timeout = opts?.timeoutMs ?? this.timeoutMs;
 
-    const maxAttempts = UazapiClient.isReplaySafe(method, path)
+    const maxAttempts = !opts?.noRetry && UazapiClient.isReplaySafe(method, path)
       ? MAX_RETRIES
       : 1;
 

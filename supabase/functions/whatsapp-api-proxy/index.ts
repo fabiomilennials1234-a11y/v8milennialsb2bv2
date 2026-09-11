@@ -1,3 +1,4 @@
+import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -957,6 +958,11 @@ Deno.serve(
       let result: unknown;
 
       switch (action) {
+        case "transcribeAudio": {
+          try { result = await transcribeChatAudio(supabaseUser, supabaseAdmin, provider, callerOrgId, instanceId, payload.row_id); }
+          catch (error) { if (error instanceof TranscriptionError) return jsonResponse(error.status, { error: error.message }, corsHeaders); throw error; }
+          break;
+        }
         case "getStatus": {
           result = await provider.getStatus();
           break;

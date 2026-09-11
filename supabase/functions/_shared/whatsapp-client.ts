@@ -218,6 +218,7 @@ export interface WhatsAppProvider {
   sendText(opts: SendTextOptions): Promise<SendResult>;
   sendMedia(opts: SendMediaOptions): Promise<SendResult>;
   setPresence(number: string, state: "composing" | "available"): Promise<void>;
+  transcribeAudio?(messageId: string): Promise<string>;
   downloadMedia(messageId: string): Promise<{ base64: string; mimetype: string }>;
 
   // Meta-only — send a pre-approved template (ignores the 24h window). Absent on

@@ -146,3 +146,8 @@ describe("cachedReachLimitSource", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('nullable provider limits',()=>{
+ it('preserves unknown instead of inventing zero capacity',()=>{expect(assessReach({current:null,limit:null})).toMatchObject({exhausted:false,headroom:null});});
+ it('honors explicit rejection even when numeric limits are absent',()=>{expect(assessReach({current:null,limit:null,can_send_new_messages:false})).toMatchObject({exhausted:true,headroom:0});});
+});

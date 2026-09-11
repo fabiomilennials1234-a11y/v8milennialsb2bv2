@@ -1,3 +1,4 @@
+import { outboundPixDisplay } from "../outbound-pix-display.ts";
 import { outboundMenuDisplay } from "../outbound-menu-display.ts";
 /**
  * send_whatsapp_template / send_whatsapp_menu / send_whatsapp_pix_button action handlers.
@@ -283,6 +284,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
       content: text || `[PIX R$ ${amount.toFixed(2)}]`,
       leadId,
       fallbackIdPrefix: "wf_pix",
+      displayPayload: outboundPixDisplay({ pixkey, merchantName, pixkeyType }),
     });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway PIX button send failed:", gwResult.error);
