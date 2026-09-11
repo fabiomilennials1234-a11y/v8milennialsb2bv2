@@ -42,6 +42,25 @@ describe("UAZAPI 2.1.1 request contracts", () => {
     assertRequestContract();
     expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get("admintoken")).toBe("admin-a");
   });
+  it("keeps organization device labels distinct at connection time", async () => {
+    vi.mocked(fetch).mockImplementation(async () => response({ paircode: "test-code" }));
+    for (const organizationId of ["org-a", "org-b"]) {
+      const provider = new UazapiProvider({ ...config, instanceId: "instance-id", organizationId, supabaseAdmin: {} as never });
+      await provider.connectQR("14155552671");
+    }
+    assertRequestContract();
+    const bodies = vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies[0].systemName).toBeTypeOf("string");
+    expect(bodies[1].systemName).not.toBe(bodies[0].systemName);
+  });
+  it("does not persist incomplete creation credentials", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ instance: { id: "new-instance" } }));
+    const rpc = vi.fn();
+    const provider = new UazapiProvider({ ...config, instanceId: "instance-id", organizationId: "org-id", supabaseAdmin: { rpc } as never });
+    await expect(provider.createInstance({ instance_id: "instance-id", organization_id: "org-id", instance_name: "QA", webhook_url: "https://example.test/hook", webhook_secret: "test-secret" })).rejects.toThrow("missing instance identity or token");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("maps internal media names without leaking them to the provider", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response(message));
     await new UazapiClient(config).sendMedia({ number: "5511999999999", type: "document", file: "https://example.test/qa.pdf", caption: "Invoice", filename: "invoice.pdf", replyid: "quoted" });

@@ -45,10 +45,10 @@ Inventário de 139 operações é referência documental; **não significa 139 f
 ## Validação local registrada
 
 - Baseline antes das mudanças: 108 passaram, 1 teste antigo de historySync falhou por mock/rota desatualizados. Esse teste foi corrigido para /message/find.
-- Suite direcionada final: 164 testes passaram em 10 arquivos.
+- Suite direcionada: 164 testes passaram em 10 arquivos; mais 2 casos de conexão/credenciais passaram na rodada final do contrato (14 casos no arquivo).
 - Build de produção local: passou. Sem deploy.
 - Lint ratchet: passou, zero problemas introduzidos.
-- Verificações globais de tipos/testes: em execução no momento deste registro.
+- Tipos: ratchet passou, zero erros introduzidos. Suite global: ratchet reportou 152 candidatos fora do baseline; comparação contra main limpa em execução, sem tratar o baseline salvo como prova de regressão.
 - Testes frontend de whatsappApi têm duas falhas de localStorage indisponível no harness; arquivo de teste não alterado.
 - `scripts/uazapi-readonly-probe.mjs`: preparado e sintaticamente verificado; não executado contra fornecedor. Exige identidade remota esperada antes de consultar limites/webhooks; saída exclui credenciais, números, URLs de webhook e QR.
 
