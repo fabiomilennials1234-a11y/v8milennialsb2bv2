@@ -736,8 +736,11 @@ export class UazapiClient {
         }
         nextCursor = String(result.nextOffset);
       }
-    } else if (messages.length >= (input.limit ?? 100)) {
-      // Older installations return only arrays without pagination metadata.
+    }
+    // Some installations return hasMore=false on a full page even though the
+    // next offset still contains messages. Probe once more instead of silently
+    // truncating history. An empty/short page terminates; offset always advances.
+    if (!nextCursor && messages.length > 0 && messages.length >= (input.limit ?? 100)) {
       nextCursor = String(offset);
     }
     return {

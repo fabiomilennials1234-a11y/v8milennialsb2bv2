@@ -78,13 +78,24 @@ describe("UAZAPI 2.1.1 request contracts", () => {
   });
   it.each([
     [{ hasMore: true, nextOffset: 17 }, "17"],
-    [{ hasMore: false, nextOffset: 0 }, undefined],
+    [{ hasMore: false, nextOffset: 0 }, "1"],
   ])("honors provider history pagination %j", async (pagination, expected) => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ messages: [message], ...pagination }))
       .mockResolvedValueOnce(response({ chats: [] }));
     const result = await new UazapiClient(config).historySync({ number: "chat@s.whatsapp.net", limit: 1 });
     expect(result.nextCursor).toBe(expected);
     assertRequestContract();
+  });
+  it("continues after a full false-hasMore page and stops at a short page", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ messages: [message, message], hasMore: false, nextOffset: 2 }))
+      .mockResolvedValueOnce(response({ chats: [] }))
+      .mockResolvedValueOnce(response({ messages: [message], hasMore: false, nextOffset: 3 }));
+    const client = new UazapiClient(config);
+    const first = await client.historySync({ number: "chat@s.whatsapp.net", limit: 2 });
+    expect(first.nextCursor).toBe("2");
+    const last = await client.historySync({ number: "chat@s.whatsapp.net", limit: 2, cursor: first.nextCursor });
+    expect(last.messages).toHaveLength(1);
+    expect(last.nextCursor).toBeUndefined();
   });
   it.each([0, -1, "1", null, 1.5])("rejects non-advancing or invalid history cursor %j", async (nextOffset) => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ messages: [message], hasMore: true, nextOffset }))

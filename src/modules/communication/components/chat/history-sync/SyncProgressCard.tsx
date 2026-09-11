@@ -78,9 +78,9 @@ export function SyncProgressCard({ job }: Props) {
   const handleRetry = async () => {
     try {
       await control.mutateAsync({ job, action: "retry" });
-      toast.success("Retry agendado");
+      toast.success("Retomada agendada");
     } catch (e) {
-      toast.error(`Erro ao retentar: ${(e as Error).message}`);
+      toast.error(`Erro ao retomar: ${(e as Error).message}`);
     }
   };
 
@@ -186,7 +186,7 @@ export function SyncProgressCard({ job }: Props) {
                 disabled={control.isPending}
               >
                 <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                Retentar
+                Retomar
               </Button>
             )}
           </div>
