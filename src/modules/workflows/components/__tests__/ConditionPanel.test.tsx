@@ -19,10 +19,15 @@ vi.mock("@/modules/identity", () => ({
 const customFields = [
   { id: "f1", field_name: "Você tem interesse em:" },
   { id: "f2", field_name: "Cidade:" },
+  { id: "f3", field_name: "Quantidade", field_type: "number" },
+  { id: "f4", field_name: "Data", field_type: "date" },
+  { id: "f5", field_name: "Aceita", field_type: "boolean" },
+  { id: "f6", field_name: "Plano", field_type: "select", field_options: ["Mensal", "Anual"] },
 ];
 vi.mock("@/modules/leads", () => ({
   useLeadOrigins: () => ({ origins: [] as Array<{ slug: string; label: string }> }),
   useLeadCustomFields: () => ({ data: customFields }),
+  useTags: () => ({ data: [{ id: "t1", name: "Cliente VIP" }, { id: "t2", name: "Retorno" }], isLoading: false, isError: false }),
 }));
 
 vi.mock("@/modules/pipelines", () => ({
@@ -38,6 +43,10 @@ vi.mock("@/modules/pipelines", () => ({
       is_active: true,
     }],
   }),
+}));
+
+vi.mock("@/modules/workflows/hooks/useOrgConditionValues", () => ({
+  useOrgConditionValues: () => ({ values: ["Indústria", "Alta"], isLoading: false, isError: false }),
 }));
 
 // Hooks read-only stubados — o comportamento deles tem teste próprio.
@@ -153,9 +162,9 @@ describe("ConditionPanel — campo UTM", () => {
     expect(screen.queryByPlaceholderText("Ex: 50")).not.toBeInTheDocument();
   });
 
-  it("renderiza o Input livre para campo de texto simples (faturamento)", () => {
-    render(<ConditionPanel data={baseData({ field: "faturamento" })} onUpdate={vi.fn()} />);
-    expect(screen.getByPlaceholderText("Ex: 50")).toBeInTheDocument();
+  it("renderiza entrada de texto apenas para texto livre (empresa)", () => {
+    render(<ConditionPanel data={baseData({ field: "company" })} onUpdate={vi.fn()} />);
+    expect(screen.getByPlaceholderText("Digite o texto a comparar")).toBeInTheDocument();
     expect(screen.queryByTestId("utm-combobox")).not.toBeInTheDocument();
   });
 
@@ -268,5 +277,75 @@ describe("ConditionPanel — campo personalizado", () => {
     expect(onUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ field: "custom", operator: "contains" }),
     );
+  });
+});
+
+
+describe("Tag condition", () => {
+  it("selects an existing tag instead of accepting free text", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "tag" })} onUpdate={update} />);
+    expect(screen.queryByPlaceholderText("Ex: 50")).not.toBeInTheDocument();
+    fireEvent.change(selectWithOption("Cliente VIP"), { target: { value: "Cliente VIP" } });
+    expect(update).toHaveBeenCalledWith({ field: "tags", value: "Cliente VIP", operator: "has_tag" });
+  });
+  it("clears a numeric value and selects a membership operator when switching to tags", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "score", operator: "greater_than", value: "50" })} onUpdate={update} />);
+    fireEvent.change(selectWithValue("score"), { target: { value: "tags" } });
+    expect(update).toHaveBeenCalledWith({ field: "tags", value: "", operator: "has_tag" });
+  });
+  it("preserves a saved missing tag until the user replaces it", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "tags", operator: "has_tag", value: "Antiga" })} onUpdate={update} />);
+    expect(screen.getByText("Antiga (fora do catálogo)")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+  it("does not request a tag for the empty check", () => {
+    render(<ConditionPanel data={baseData({ field: "tags", operator: "is_empty" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByText("Cliente VIP")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("guided condition controls", () => {
+  it.each(["has_open_deal", "custom.Aceita"])("offers Sim/Não for %s", (field) => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field, operator: "equals" })} onUpdate={update} />);
+    fireEvent.change(selectWithOption("true"), { target: { value: "false" } });
+    expect(update).toHaveBeenCalledWith({ value: "false" });
+    expect(screen.queryByPlaceholderText("Digite o texto a comparar")).not.toBeInTheDocument();
+  });
+  it("uses configured options before any lead has answered", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "custom.Plano", operator: "equals" })} onUpdate={update} />);
+    fireEvent.change(selectWithOption("Anual"), { target: { value: "Anual" } });
+    expect(update).toHaveBeenCalledWith({ value: "Anual" });
+    expect(screen.queryByTestId("utm-combobox")).not.toBeInTheDocument();
+  });
+  it.each([["custom.Quantidade", "number"], ["custom.Data", "date"], ["score", "number"], ["days_in_stage", "number"]])(
+    "uses a typed value for %s", (field, type) => {
+      render(<ConditionPanel data={baseData({ field, operator: "equals" })} onUpdate={vi.fn()} />);
+      expect(screen.getByLabelText("Valor da condição")).toHaveAttribute("type", type);
+    },
+  );
+  it.each(["segment", "urgency", "faturamento"])("suggests actual org values for %s", (field) => {
+    render(<ConditionPanel data={baseData({ field })} onUpdate={vi.fn()} />);
+    expect(screen.getByTestId("utm-combobox")).toHaveAttribute("data-values", "Indústria|Alta");
+  });
+  it("omits value for unary boolean operator", () => {
+    render(<ConditionPanel data={baseData({ field: "has_open_deal", operator: "is_true" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByText("Sim")).not.toBeInTheDocument();
+  });
+  it("excludes nonsensical operators for numbers", () => {
+    render(<ConditionPanel data={baseData({ field: "score", operator: "equals" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByRole("option", { name: "Tem a tag" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Contém" })).not.toBeInTheDocument();
+  });
+  it("keeps legacy unsupported fields visible without offering them to new rules", () => {
+    const { rerender } = render(<ConditionPanel data={baseData()} onUpdate={vi.fn()} />);
+    expect(screen.queryByRole("option", { name: /Última mensagem/ })).not.toBeInTheDocument();
+    rerender(<ConditionPanel data={baseData({ field: "last_message" })} onUpdate={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("não é calculado pelo executor");
   });
 });

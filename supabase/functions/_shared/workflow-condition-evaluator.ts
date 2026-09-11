@@ -74,9 +74,16 @@ export async function evaluateCondition(
     // Custom field: custom.campo_name
     const customFieldName = field.substring(7);
     fieldValue = await getCustomFieldValue(supabase, leadId, customFieldName, leadData);
-  } else if (field === "tags") {
-    // Special: tags field — returns comma-separated tag names
-    fieldValue = await getLeadTags(supabase, leadId);
+  } else if (field === "tags" || field === "tag") {
+    // `tag` é o nome emitido pelo editor antigo; ambas as formas leem vínculos.
+    // Membership compares whole names, including names containing commas.
+    const names = await getLeadTagNames(supabase, leadId);
+    if (operator === "has_tag" || operator === "not_has_tag") {
+      const found = names.some((name) => name.toLowerCase() === value.toLowerCase());
+      return operator === "has_tag" ? found : !found;
+    }
+    // Legacy text operators retain their original joined-string semantics.
+    fieldValue = names.join(",");
   } else if (field === "stage") {
     // ADR-0023 §10: a etapa é a do NEGÓCIO, não a da coluna espelho do lead.
     //
@@ -392,17 +399,21 @@ export async function getLeadTags(
   supabase: SupabaseClient,
   leadId: string,
 ): Promise<string> {
+  return (await getLeadTagNames(supabase, leadId)).join(",");
+}
+
+async function getLeadTagNames(supabase: SupabaseClient, leadId: string): Promise<string[]> {
   const { data: tags } = await supabase
     .from("lead_tags")
     .select("tag:tags(name)")
     .eq("lead_id", leadId);
 
-  if (!tags || tags.length === 0) return "";
+  if (!tags || tags.length === 0) return [];
   // Sem o `Database` gerado, o parser de tipos do postgrest-js chuta ARRAY para
   // o embed `tag:tags(name)`. A relação é muitos-para-um
   // (`lead_tags.tag_id → tags.id`) e o PostgREST devolve OBJETO — que é o que
   // este código lê. Asserção (e não `.returns<>()`, que é chamada de runtime no
   // builder) para que o acerto seja só de tipo.
   const tagRows = tags as unknown as Array<{ tag: { name: string | null } | null }>;
-  return tagRows.map((t) => t.tag?.name || "").filter(Boolean).join(",");
+  return tagRows.map((t) => t.tag?.name || "").filter(Boolean);
 }
