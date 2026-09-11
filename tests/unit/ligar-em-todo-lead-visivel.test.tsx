@@ -76,9 +76,14 @@ describe("Card do Negócio — Ligar no cluster do cabeçalho, antes de Ganhou/P
     expect(within(header).queryByRole("button", { name: /ganhou/i })).not.toBeInTheDocument();
   });
 
-  it("sem o slot, nada muda no cabeçalho do negócio fechado", () => {
+  it("sem o slot, não oferece Ligar no cabeçalho do negócio fechado", () => {
     const { container } = render(<DealCard negocio={NEGOCIO_GANHO} />);
-    expect(container.querySelector("header")!.querySelectorAll("button")).toHaveLength(0);
+    const header = within(container.querySelector("header")!);
+    // O selo pode oferecer reabertura; ausência do slot só governa a ligação.
+    expect(header.queryByRole("button", { name: /^ligar$/i })).not.toBeInTheDocument();
+    expect(header.queryByTestId("slot-ligar")).not.toBeInTheDocument();
+    expect(header.queryByRole("button", { name: /^(ganhou|perdeu)$/i })).not.toBeInTheDocument();
+    expect(header.getByText("Ganho")).toBeInTheDocument();
   });
 });
 

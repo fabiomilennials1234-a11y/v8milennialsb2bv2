@@ -27,7 +27,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 const mockUsePipelines = vi.fn();
 // O hook lê por `useFunisDaOrg` — os funis da org já com `label`, o nome que
 // ela usa. `usePipelines` segue mockado porque outros imports do barril o usam.
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   useFunisDaOrg: () => mockUsePipelines(),
   usePipelines: () => mockUsePipelines(),
 }));

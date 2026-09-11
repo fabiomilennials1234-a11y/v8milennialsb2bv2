@@ -25,6 +25,7 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 const pipelines = [
+  { id: "p-hidden", slug: "hidden", name: "Oculto", label: "Oculto", is_active: true, config: { navigation: { is_visible: false } } },
   { id: "p-entrada", slug: "whatsapp", name: "seed", label: "Entrada VIP", is_active: true },
   { id: "p-vendas", slug: "propostas", name: "seed", label: "Fechamento Sul", is_active: true },
 ];
@@ -104,4 +105,16 @@ describe("TransitionSelector — funis canônicos", () => {
       targetStageKey: null,
     });
   });
+});
+
+it("does not offer hidden funnels but preserves a saved target", () => {
+  const onChangeTarget = vi.fn();
+  const props = { targetPipelineId: null, targetStageId: null, targetPipeType: null, targetStageKey: null, onChangeTarget };
+  const view = render(<TransitionSelector {...props} />);
+  expect(screen.queryByText("Oculto")).toBeNull();
+  view.rerender(<TransitionSelector {...props} targetPipelineId="p-hidden" />);
+  expect(screen.getByText("Oculto")).toBeInTheDocument();
+  expect(screen.queryByText("Funil removido")).toBeNull();
+  expect(screen.getAllByRole("combobox")[0]).toHaveValue("p-hidden");
+  expect(onChangeTarget).not.toHaveBeenCalled();
 });

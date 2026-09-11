@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -400,8 +401,8 @@ function DealCreatedConfig({
   const selectedStageIds = stageConfigIsValid && Array.isArray(cfg.stage_ids)
     ? (cfg.stage_ids as string[])
     : [];
-  const visiblePipelines = (pipelines || []).filter(
-    (pipeline) => pipeline.is_active || selectedPipelineIds.includes(pipeline.id),
+  const visiblePipelines = sortPipelinesForNavigation(pipelines || []).filter(
+    (pipeline) => (pipeline.is_active && isPipelineVisible(pipeline)) || selectedPipelineIds.includes(pipeline.id),
   );
 
   const togglePipeline = (pipelineId: string, checked: boolean) => {
@@ -621,8 +622,8 @@ function LeadRepliedConfig({
   // Funil desativado some da lista, mas se ele ainda estiver salvo no filtro
   // precisa continuar visível — senão o usuário vê "0 funis" numa automação
   // que na verdade está restrita, e desmarcar vira impossível.
-  const visiblePipelines = (pipelines || []).filter(
-    (p) => p.is_active || selectedIds.includes(p.id),
+  const visiblePipelines = sortPipelinesForNavigation(pipelines || []).filter(
+    (p) => (p.is_active && isPipelineVisible(p)) || selectedIds.includes(p.id),
   );
   // Etapas visíveis são só as dos funis marcados: etapa é um recorte DENTRO do
   // funil, e mostrar as 4.759 etapas da base inteira não seria uma escolha, era
@@ -876,8 +877,8 @@ function LeadCreatedConfig({
     (pipeline) => pipeline.id === filterPipe || pipeline.slug === legacySlug,
   )?.id;
   const currentPipeValue = filterPipelineId || resolvedLegacyId || "__any__";
-  const visiblePipelines = pipelines.filter(
-    (pipeline) => pipeline.is_active || pipeline.id === currentPipeValue,
+  const visiblePipelines = sortPipelinesForNavigation(pipelines).filter(
+    (pipeline) => (pipeline.is_active && isPipelineVisible(pipeline)) || pipeline.id === currentPipeValue,
   );
 
   const handlePipeChange = (value: string) => {
@@ -921,7 +922,7 @@ function LeadCreatedConfig({
                 Funis
               </SelectLabel>
               {visiblePipelines.map((pipeline) => (
-                <SelectItem key={pipeline.id} value={pipeline.id}>
+                <SelectItem key={pipeline.id} value={pipeline.id} disabled={!isPipelineVisible(pipeline)}>
                   {pipeline.label}
                   {!pipeline.is_active ? " (desativado)" : ""}
                 </SelectItem>
@@ -968,7 +969,7 @@ function StageChangedConfig({
     ((cfg.pipeline_id as string) || "") ||
     (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
 
-  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+  const funis = sortPipelinesForNavigation(pipelines ?? []).filter((p) => (p.is_active !== false && isPipelineVisible(p)) || p.id === pipelineId);
 
   const { etapas } = useEtapasDoFunil(!isCampaign && pipelineId ? pipelineId : null);
   const { data: campanhaStages } = useCampanhaStages(
@@ -1017,7 +1018,7 @@ function StageChangedConfig({
                 Funis
               </SelectLabel>
               {funis.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
                   {p.label}
                 </SelectItem>
               ))}
@@ -1098,7 +1099,7 @@ function ScheduledDateConfig({
     ((cfg.pipeline_id as string) || "") ||
     (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
 
-  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+  const funis = sortPipelinesForNavigation(pipelines ?? []).filter((p) => (p.is_active !== false && isPipelineVisible(p)) || p.id === pipelineId);
 
   const { etapas } = useEtapasDoFunil(pipelineId || null);
   const stages = etapas.map((e) => ({ id: e.id, legacyKey: e.stageKey, name: e.label }));
@@ -1148,7 +1149,7 @@ function ScheduledDateConfig({
                 Funis
               </SelectLabel>
               {funis.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
                   {p.label}
                 </SelectItem>
               ))}

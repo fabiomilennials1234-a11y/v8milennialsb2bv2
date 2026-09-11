@@ -1,3 +1,4 @@
+import { selectVisiblePipelines } from "@/modules/pipelines";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -188,7 +189,7 @@ export function WorkflowTemplates() {
 
   async function handleUseTemplate(template: WorkflowTemplate) {
     try {
-      const definition = canonicalizeTemplateFunnelRefs(template.definition, pipelines, stages);
+      const definition = canonicalizeTemplateFunnelRefs(template.definition, selectVisiblePipelines(pipelines), stages);
       const triggerNode = (definition as any).nodes?.find(
         (n: any) => n.type === "trigger",
       );

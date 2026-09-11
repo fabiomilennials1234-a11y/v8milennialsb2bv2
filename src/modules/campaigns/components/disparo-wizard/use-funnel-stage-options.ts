@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 /**
  * useFunnelStageOptions — shared funnel + stage picker data for the Disparos
  * wizard. Fatia B (Funil é Funil): a lista de funis é a lista REAL da org
@@ -65,8 +66,8 @@ export function useFunnelStageOptions(sel: FunnelStageSelection) {
   // A lista do picker: só funis ATIVOS (funil desligado não é destino nem
   // fonte de público novo). `usePipelines` já ordena por display_order.
   const funnels = useMemo<FunilDaOrg[]>(
-    () => pipelines.filter((p) => p.is_active !== false),
-    [pipelines],
+    () => sortPipelinesForNavigation(pipelines).filter((p) => (p.is_active !== false && isPipelineVisible(p)) || p.id === sel.pipelineId),
+    [pipelines, sel.pipelineId],
   );
 
   const stagesQuery = useStagesDoFunil(!isAll ? sel.pipelineId : null);
@@ -83,7 +84,7 @@ export function useFunnelStageOptions(sel: FunnelStageSelection) {
 
   const funnelLabel = isAll
     ? ALL_FUNNELS_LABEL
-    : funnels.find((p) => p.id === sel.pipelineId)?.label ?? "Funil";
+    : pipelines.find((p) => p.id === sel.pipelineId)?.label ?? "Funil";
 
   return { funnels, stages, stagesLoading, funnelLabel, hasFunnel };
 }

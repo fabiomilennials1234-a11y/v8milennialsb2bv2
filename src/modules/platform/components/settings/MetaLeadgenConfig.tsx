@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 /**
  * Configuracao de acoes pos-captura para Lead Ads (Meta)
  * Permite configurar o que acontece quando um lead chega via formulario de anuncio:
@@ -424,8 +425,8 @@ function PageLeadgenCard({
     (funnel) => funnel.id === config.assign_to_pipe || funnel.slug === legacySlug,
   );
   const selectedFunnelValue = selectedFunnel?.id ?? config.assign_to_pipe ?? "none";
-  const visibleFunnels = funnels.filter(
-    (funnel) => funnel.is_active || funnel.id === selectedFunnel?.id,
+  const visibleFunnels = sortPipelinesForNavigation(funnels).filter(
+    (funnel) => (funnel.is_active && isPipelineVisible(funnel)) || funnel.id === selectedFunnel?.id,
   );
   const selectedFunnelStages = selectedFunnel
     ? allStages.filter(
@@ -622,7 +623,7 @@ function PageLeadgenCard({
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
                   {visibleFunnels.map((funnel) => (
-                    <SelectItem key={funnel.id} value={funnel.id}>
+                    <SelectItem key={funnel.id} value={funnel.id} disabled={!isPipelineVisible(funnel)}>
                       {funnel.label}
                     </SelectItem>
                   ))}

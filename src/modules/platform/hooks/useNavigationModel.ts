@@ -18,6 +18,7 @@ import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPag
 import {
   funilIcon,
   usePipelines,
+  selectVisiblePipelines,
 } from "@/modules/pipelines";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import {
@@ -117,7 +118,9 @@ export function useNavigationModel(): NavigationModel {
    * mesmo tratamento para todo funil. O nome vem sempre de `pipelines.name`.
    */
   const funisChildren = useMemo<NavNode[]>(() => {
-    return pipelineRows.filter((pipe) => pipe.is_active).map((pipe) => ({
+    return selectVisiblePipelines(pipelineRows).filter((pipe) =>
+      pipe.is_active && !(pipe.config?.lifecycle_type === "temporary" && pipe.config?.status === "ended")
+    ).map((pipe) => ({
       label: pipe.name,
       icon: funilIcon(pipe.icon),
       color: pipe.color ?? undefined,

@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 /**
  * useInboxFunnelOptions — opções de Funil + Etapa para o filtro do inbox.
  *
@@ -22,6 +23,7 @@ export interface FunnelStageOption {
 }
 export interface FunnelOption {
   pipelineId: string;
+  isVisible?: boolean;
   label: string;
   stages: FunnelStageOption[];
 }
@@ -62,17 +64,17 @@ export function useInboxFunnelOptions(): FunnelOption[] {
     }
 
     const options: (FunnelOption & { order: number })[] = [];
-    for (const p of pipelines) {
+    for (const p of sortPipelinesForNavigation(pipelines)) {
       if (!p.is_active) continue;
       options.push({
         pipelineId: p.id,
+        isVisible: isPipelineVisible(p),
         label: p.label,
         stages: stagesByPipeline.get(p.id) ?? [],
         order: p.display_order,
       });
     }
     return options
-      .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
   }, [pipelines, stages]);
 }

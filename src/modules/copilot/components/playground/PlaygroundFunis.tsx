@@ -144,7 +144,7 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
           <CardTitle className="text-sm">Funis</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
-          {pipeTypeOptions.map((pipe) => {
+          {pipeTypeOptions.filter((pipe) => pipe.isVisible !== false || state.activePipes.includes(pipe.value)).map((pipe) => {
             const isActive = state.activePipes.includes(pipe.value);
             const isExpanded = expanded[pipe.value] ?? false;
             const pipeStages = state.activeStages[pipe.value] || [];

@@ -81,6 +81,15 @@ beforeEach(() => {
 });
 
 describe("useFunnelOptions — o que entra na navegação", () => {
+  it("não ressuscita os três seeds ocultos ativos da TorqueCRM", () => {
+    pipelinesRef.value = [
+      ...SYS.map((p) => ({ ...p, config: { navigation: { is_visible: false } } })),
+      { ...SYS[0], id: "leads", slug: "leads", name: "Leads", type: "custom" },
+    ];
+    const { result } = renderHook(() => useFunnelOptions());
+    expect(result.current.options.map((o) => o.label)).toEqual(["Leads"]);
+  });
+
   it("lista todos os funis pelo registro único e usa chave por id", () => {
     const { result } = renderHook(() => useFunnelOptions());
 
