@@ -27,8 +27,6 @@ import {
 } from "../components/leads/LeadListRow";
 import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
 import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
-import { LeadsUiVersionToggle } from "../components/leads/LeadsUiVersionToggle";
-import { useLeadsUiVersion } from "../hooks/useLeadsUiVersion";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -488,9 +486,12 @@ function LeadsInner() {
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
-  // Antes / Depois — validação visual do CTO. "antes" é o código intocado.
-  const [uiVersion, setUiVersion] = useLeadsUiVersion();
-  const isV2 = uiVersion === "depois";
+  // Redesign aprovado pelo CTO em 2026-09-11 — a tela é a versão nova.
+  // O ramo antigo (isV2=false) fica dormente e sai por inteiro no ship.
+  const isV2 = true;
+
+  // Busca em foco: o input cresce e a contagem à direita sai de cena.
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const stats = useMemo(() => ({
     total: totalLeads ?? leads.length,
@@ -696,12 +697,10 @@ function LeadsInner() {
           </p>
         </div>
 
-        {/* Grupo de ações alinhado à direita. O toggle Antes/Depois é temporário
-            (validação do CTO); quando sair, o grupo continua exatamente aqui. */}
+        {/* Grupo de ações alinhado à direita. */}
         <div className="flex flex-wrap items-center gap-2">
-          <LeadsUiVersionToggle value={uiVersion} onChange={setUiVersion} />
           {isV2 ? (
-            <Button variant="ghost" onClick={() => setIsImportHistoryOpen(true)} className="gap-2 text-muted-foreground hover:text-foreground">
+            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)} className="gap-2">
               <History className="w-4 h-4" />
               Importações
             </Button>
@@ -784,12 +783,21 @@ function LeadsInner() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+        {/* A busca respira no foco: cresce, e a contagem à direita cede a vez —
+            os dois com a mesma transição pra linha inteira se acomodar junto. */}
+        <div
+          className={cn(
+            "relative flex-1 transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+            searchFocused ? "max-w-xl" : "max-w-sm",
+          )}
+        >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, empresa, email ou telefone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             className="pl-9"
           />
         </div>
@@ -886,9 +894,17 @@ function LeadsInner() {
           onActiveViewChange={handleActiveViewChange}
         />
         {/* Contagem do recorte junto dos filtros — o rodapé só aparece com
-            mais de uma página, e o número é a resposta que o filtro dá. */}
+            mais de uma página, e o número é a resposta que o filtro dá.
+            Some enquanto a busca está focada, cedendo o espaço da expansão. */}
         {isV2 && totalLeads !== undefined && (
-          <span className="self-center whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+          <span
+            className={cn(
+              "self-center overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground",
+              "transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+              searchFocused ? "max-w-0 opacity-0" : "max-w-[220px] opacity-100",
+            )}
+            aria-hidden={searchFocused}
+          >
             {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
             {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
           </span>
@@ -980,8 +996,10 @@ function LeadsInner() {
             )}
           </div>
         ) : (
-          <div className={cn("overflow-x-auto", !isV2 && "pb-1")}>
-            <div className={LEAD_LIST_MIN_WIDTH}>
+          // V2 cabe na viewport por desenho (grade compressível + truncate):
+          // sem min-width e sem rolagem lateral. A V1 mantém as suas.
+          <div className={cn(!isV2 && "overflow-x-auto pb-1")}>
+            <div className={isV2 ? "w-full" : LEAD_LIST_MIN_WIDTH}>
               {isV2 ? (
                 <LeadListHeaderV2
                   sort={sort}
@@ -1049,7 +1067,6 @@ function LeadsInner() {
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
                     originLabel={originLabels[lead.origin] || lead.origin}
                     originClassName={originColors[lead.origin] || originColors.outro}
-                    actions={leadActionsMenu(lead)}
                   />
                 ))
               ) : (

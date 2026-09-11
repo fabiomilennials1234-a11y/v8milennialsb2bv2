@@ -10,7 +10,6 @@ import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { erpLabel } from "@/shared/format/erp-code";
 import {
   LeadAvatar,
-  RelacaoCell,
   SituacaoCell,
   SortableLabel,
   type LeadListItem,
@@ -35,10 +34,13 @@ import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
  * — só a pele muda. Se a grade divergir, o cabeçalho e a linha desencontram.
  */
 const GRID_COLS =
-  // Situação e Negócios em duas linhas pedem menos largura que a versão de
-  // uma linha — a sobra vai pra Nome e Tags, que são as que truncam.
-  // A coluna Recompra (60px do anel) entrou entre Negócios e Dono, igual à V1.
-  "grid items-center gap-x-4 grid-cols-[34px_minmax(220px,1.6fr)_minmax(150px,0.9fr)_minmax(150px,1.1fr)_minmax(84px,0.45fr)_minmax(140px,0.9fr)_minmax(170px,1.2fr)_minmax(60px,0.32fr)_minmax(104px,0.7fr)_minmax(96px,0.6fr)_40px]";
+  // SEM rolagem lateral: a soma dos mínimos + gaps fica < ~1050px e o resto é
+  // fr com truncate. Pra isso a coluna Relação saiu da grade — vira selo junto
+  // ao nome (só quando é Cliente/Perdido; "Lead" era coluna gasta em 97% das
+  // linhas) — e a Recompra encolheu pra 52px (traço quando não há compra).
+  // Sem coluna de ações ("···"): a linha inteira já abre o lead, e Editar/
+  // Excluir vivem no painel. O espaço volta pras colunas de conteúdo.
+  "grid items-center gap-x-3 grid-cols-[30px_minmax(170px,1.5fr)_minmax(120px,0.9fr)_minmax(96px,0.8fr)_minmax(120px,1fr)_minmax(140px,1.1fr)_92px_minmax(84px,0.6fr)_minmax(72px,0.5fr)]";
 
 /** Acima disso a coluna Negócios vira lista e a linha deixa de ser linha. */
 const MAX_DEALS_VISIVEIS = 2;
@@ -98,13 +100,11 @@ export function LeadListHeaderV2({
       {sortable("Nome", "name")}
       <span>Contatos</span>
       <span>Tags</span>
-      <span>Relação</span>
       <span>Situação</span>
       <span>Negócios</span>
-      <span>Recompra</span>
-      <span>Dono da conta</span>
-      {sortable("Criado em", "created_at")}
-      <span />
+      <span className="text-center">Recompra</span>
+      <span>Dono</span>
+      {sortable("Criado", "created_at")}
     </div>
   );
 }
@@ -124,7 +124,6 @@ interface LeadListRowV2Props {
   createdLabel: string;
   originLabel: string;
   originClassName: string;
-  actions?: ReactNode;
 }
 
 export function LeadListRowV2({
@@ -140,7 +139,6 @@ export function LeadListRowV2({
   createdLabel,
   originLabel,
   originClassName,
-  actions,
 }: LeadListRowV2Props) {
   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
   const owner =
@@ -192,7 +190,34 @@ export function LeadListRowV2({
       <div className="flex min-w-0 items-center gap-3">
         <LeadAvatar name={lead.name} size="sm" />
         <div className="min-w-0 leading-tight">
-          <p className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-foreground">{erpLabel(lead)}</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-semibold tracking-[-0.01em] text-foreground">
+            <span className="truncate">{erpLabel(lead)}</span>
+            {/* Relação como selo, não coluna: só aparece quando diz algo.
+                Continua um fato separado da Situação (ADR-0023 §6) — mudou o
+                lugar, não a semântica. */}
+            {standing?.relacao === "cliente" && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-1.5 py-px text-[10.5px] font-semibold text-primary"
+                title={
+                  relacaoPorCadastroErp
+                    ? "Cadastrado no ERP"
+                    : standing.prova === "ambas"
+                      ? "Comprou pelo funil e tem pedido no ERP"
+                      : standing.prova === "erp"
+                        ? "Tem pedido no ERP"
+                        : "Fechou negócio no funil"
+                }
+              >
+                <span className="size-1 rounded-full bg-primary" />
+                Cliente
+              </span>
+            )}
+            {standing?.relacao === "perdido" && (
+              <span className="shrink-0 rounded-md border border-destructive/35 bg-destructive/5 px-1.5 py-px text-[10.5px] font-medium text-destructive/80">
+                Perdido
+              </span>
+            )}
+          </p>
           <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             {lead.company && <span className="truncate">{lead.company}</span>}
             {lead.company && <span aria-hidden="true" className="shrink-0 opacity-50">·</span>}
@@ -248,10 +273,6 @@ export function LeadListRowV2({
         )}
       </div>
 
-      <div>
-        <RelacaoCell standing={standing} porCadastroErp={relacaoPorCadastroErp} />
-      </div>
-
       {/* situação — duas linhas, como Contatos: o que está acontecendo / onde */}
       <div className="min-w-0 leading-tight">
         {standing?.emNegociacao ? (
@@ -278,22 +299,37 @@ export function LeadListRowV2({
       <div className="min-w-0 leading-tight">
         {deals.length > 0 ? (
           <div className="flex flex-col gap-1.5">
-            {emAndamento.slice(0, MAX_DEALS_VISIVEIS).map((deal) => (
-              <div key={deal.id} className="min-w-0">
-                <p className="truncate text-[13px] text-foreground/90" title={deal.title}>
-                  {deal.title}
-                </p>
-                <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: deal.funnelColor }} />
-                  <span className={cn("truncate", deal.outcome === "lost" && "text-destructive/80")}>
-                    {deal.stageName}
-                  </span>
-                  {deal.value > 0 && (
-                    <span className="shrink-0 font-medium tabular-nums text-foreground/80">· {formatBRL(deal.value)}</span>
+            {emAndamento.slice(0, MAX_DEALS_VISIVEIS).map((deal) => {
+              // Título derivado costuma ser o próprio nome do lead — repetir na
+              // mesma linha é eco. Só mostra quando alguém o renomeou de verdade.
+              const tituloDizAlgo =
+                deal.title && deal.title.trim().toLowerCase() !== (lead.name ?? "").trim().toLowerCase();
+              return (
+                <div key={deal.id} className="min-w-0">
+                  {tituloDizAlgo && (
+                    <p className="truncate text-[13px] text-foreground/90" title={deal.title}>
+                      {deal.title}
+                    </p>
                   )}
-                </p>
-              </div>
-            ))}
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: deal.funnelColor }} />
+                    <span
+                      className={cn(
+                        "truncate",
+                        tituloDizAlgo ? "text-muted-foreground" : "text-[13px] text-foreground/90",
+                        deal.outcome === "lost" && "text-destructive/80",
+                      )}
+                      title={deal.funnelName ? `${deal.funnelName} · ${deal.stageName}` : deal.stageName}
+                    >
+                      {deal.stageName}
+                    </span>
+                    {deal.value > 0 && (
+                      <span className="shrink-0 font-medium tabular-nums text-foreground/80">· {formatBRL(deal.value)}</span>
+                    )}
+                  </p>
+                </div>
+              );
+            })}
             {emAndamento.length > MAX_DEALS_VISIVEIS && (
               <p className="text-xs text-muted-foreground">
                 +{emAndamento.length - MAX_DEALS_VISIVEIS} em andamento
@@ -323,7 +359,8 @@ export function LeadListRowV2({
         )}
       </div>
 
-      {/* recompra — de quanto em quanto tempo esta pessoa compra */}
+      {/* recompra — o anel sempre visível, como na V1 (pedido do CTO):
+          o próprio anel desenha o estado "sem compra". */}
       <div className="flex justify-center">
         {ciclo ? (
           <ReorderCycleRing ciclo={ciclo} />
@@ -350,13 +387,6 @@ export function LeadListRowV2({
       <span className="text-[12.5px] tabular-nums text-muted-foreground" title={`Criado em ${createdLabel}`}>
         {relativeDay(lead.created_at) ?? createdLabel}
       </span>
-
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="opacity-60 transition-opacity duration-100 group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        {actions}
-      </div>
     </div>
   );
 }
