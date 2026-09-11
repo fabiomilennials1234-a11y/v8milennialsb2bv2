@@ -10,6 +10,7 @@ import { useProdutosPorNegocio } from "../lead-card/useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { montarReuniaoDoNegocio } from "./reuniao-do-negocio";
 import type { DealCardData, DealCardMove, DealCardStage } from "./types";
 
@@ -56,6 +57,7 @@ function papelDaEtapa(role: unknown): DealCardStage["papel"] {
 }
 
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { organizationId, teamMemberId, role } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
 
@@ -120,7 +122,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           .order("position"),
         supabase
           .from("pipeline_stage_events")
-          .select("id, from_stage_key, to_stage_key, occurred_at, actor, source")
+          .select("*")
+          .eq("organization_id", organizationId!)
           .eq("entry_id", entryId!)
           .order("occurred_at", { ascending: false }),
         // Amostra para a mediana: mesma org, mesmo funil, mesma etapa.
@@ -258,6 +261,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     const l = lead as Linha;
 
     const standing = deriveLeadStanding({
+      usaLeiDoErp,
       deals: dealsMap?.[String(l.id)] ?? [],
       vendas: vendasMap?.[String(l.id)],
       carteira: carteiraMap?.[String(l.id)],
@@ -285,15 +289,17 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
     const movimentacoes: DealCardMove[] = (extras.data?.movimentos ?? []).map((m) => ({
       id: String(m.id),
-      de: m.from_stage_key ? (nomePorChave.get(String(m.from_stage_key)) ?? String(m.from_stage_key)) : null,
-      para: nomePorChave.get(String(m.to_stage_key)) ?? String(m.to_stage_key ?? ""),
+      de: m.from_stage_key ? String(m.from_stage_name ?? (m.pipeline_id === negocioBase.pipelineId ? nomePorChave.get(String(m.from_stage_key)) : null) ?? m.from_stage_key) : null,
+      funilDe: typeof m.from_pipeline_name === "string" ? m.from_pipeline_name : null,
+      funilPara: typeof m.to_pipeline_name === "string" ? m.to_pipeline_name : null,
+      para: String(m.to_stage_name ?? (m.pipeline_id === negocioBase.pipelineId ? nomePorChave.get(String(m.to_stage_key)) : null) ?? m.to_stage_key ?? ""),
       // A chave crua segue junto do nome: é por ela que a régua carimba a data
       // na casa certa, e ela sobrevive a renomear etapa.
-      paraChave: typeof m.to_stage_key === "string" && m.to_stage_key !== "" ? m.to_stage_key : null,
+      paraChave: m.pipeline_id === negocioBase.pipelineId && typeof m.to_stage_key === "string" && m.to_stage_key !== "" ? m.to_stage_key : null,
       quando: String(m.occurred_at ?? ""),
-      autor: typeof m.actor === "string" && m.actor !== "" ? m.actor : null,
+      autor: typeof m.actor_name === "string" && m.actor_name !== "" ? m.actor_name : null,
       origem:
-        m.source === "automation" ? "automacao" : m.source === "manual" ? "manual" : "sistema",
+        m.source === "automation" ? "automacao" : m.actor ? "manual" : "sistema",
     }));
 
     const amostra = (extras.data?.amostra ?? [])
@@ -532,6 +538,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       })),
     };
   }, [
+    usaLeiDoErp,
     lead,
     negocioBase,
     dealsMap,

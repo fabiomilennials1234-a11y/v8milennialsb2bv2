@@ -27,7 +27,7 @@ export function useWhatsAppInstancesForUser(options?: { enabled?: boolean }) {
   const isAdmin = teamMemberRole === "admin";
 
   return useQuery({
-    queryKey: ["whatsapp_instances_for_user", organizationId, teamMemberId],
+    queryKey: ["whatsapp_instances_for_user", organizationId, teamMemberId, teamMemberRole],
     queryFn: async () => {
       if (!organizationId || !teamMemberId) return [];
 
@@ -46,21 +46,24 @@ export function useWhatsAppInstancesForUser(options?: { enabled?: boolean }) {
         return instances as WhatsAppInstanceForUser[];
       }
 
-      const { data: allowedRows } = await supabase
+      const { data: allowedRows, error: allowedError } = await supabase
         .from("whatsapp_instance_allowed_members")
         .select("whatsapp_instance_id")
         .in("whatsapp_instance_id", instances.map((i) => i.id));
+
+      if (allowedError) throw allowedError;
 
       const instanceIdsWithRestriction = new Set(
         (allowedRows ?? []).map((r) => r.whatsapp_instance_id)
       );
       const allowedMemberByInstance: Record<string, boolean> = {};
       if (allowedRows?.length) {
-        const { data: memberRows } = await supabase
+        const { data: memberRows, error: memberError } = await supabase
           .from("whatsapp_instance_allowed_members")
           .select("whatsapp_instance_id, team_member_id")
           .in("whatsapp_instance_id", instances.map((i) => i.id))
           .eq("team_member_id", teamMemberId);
+        if (memberError) throw memberError;
         for (const row of memberRows ?? []) {
           allowedMemberByInstance[row.whatsapp_instance_id] = true;
         }

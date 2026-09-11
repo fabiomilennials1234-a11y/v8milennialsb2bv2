@@ -2,25 +2,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Avançar é MOVER, não copiar — ADR-0023 decisão 4.
- *
- * Até aqui, chegar na etapa de sucesso de um funil fazia DUAS escritas: um
- * UPDATE na etapa do card de origem e um INSERT de um card novo no destino. A
- * origem nunca saía, e o gêmeo ficava para trás — é ele que faz o mesmo lead
- * aparecer em Qualificação e em Orçamentos ao mesmo tempo (801 leads em prod,
- * medido 2026-08-03).
- *
- * Este módulo existe para que as quatro telas que fazem essa transição
- * convirjam num caminho só. Repetir a chamada em cada uma delas foi como o
- * defeito nasceu: hoje 3 dos 5 caminhos ignoram a configuração de
- * `pipeline_stages` e chumbam a etapa no código, então já divergem entre si.
- *
- * ── SÓ SISTEMA → SISTEMA ──────────────────────────────────────────────────
- * O destino ser um funil customizado é outro problema, e mais caro: card de
- * funil custom vive numa tabela diferente, espelhada por chave primária, e a
- * sincronia nunca reescreve o funil. Atravessar essa fronteira obriga apagar e
- * recriar — o negócio sobrevive, o card perde o id e leva o histórico junto.
- * A função no banco RECUSA esse destino em vez de fingir que resolve.
+ * Transfere a MESMA posição entre funis de sistema ou customizados.
+ * A etapa de sucesso da origem e o destino são gravados na mesma transação.
+ * O id da entrada, vínculo com o negócio, itens e histórico são preservados.
  */
 
 export interface MoverNegocioParams {
@@ -84,6 +68,9 @@ export function invalidateAfterMove(queryClient: QueryClient, leadId?: string): 
   queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
   queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
   queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+  queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+  queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });
+  queryClient.invalidateQueries({ queryKey: ["deal-card-extras"] });
 
   // Camada de negócio: a lista de Leads e o drawer leem daqui.
   queryClient.invalidateQueries({ queryKey: ["leads-deals"] });

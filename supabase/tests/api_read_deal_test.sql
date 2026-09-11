@@ -226,4 +226,5 @@ SELECT ok(
           WHERE id = 'deadbeef-0000-4000-8000-00000000ad01'),
   '(INCREMENTAL) Negócio que só mudou de TÍTULO também entra');
 
+SELECT * FROM finish();
 ROLLBACK;

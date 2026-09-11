@@ -1,3 +1,5 @@
+-- Updated for canonical explicit roles after the legacy mapper removal.
+-- Historical won/lost compatibility is covered by stage_role_money_guard_test.sql.
 -- supabase/tests/stage_role_test.sql
 --
 -- ISSUE #990 (PRD #986, ADR-0017 §1) — pgTAP coverage do stage_role.
@@ -52,8 +54,8 @@ SELECT ok(
       AND column_name = 'stage_role') LIKE '%open%',
   '(a) stage_role DEFAULT is ''open''');
 
-SELECT has_function('public', 'system_stage_role', ARRAY['text', 'text'],
-  '(a) deterministic map function system_stage_role(text,text) exists');
+SELECT ok(to_regprocedure('public.system_stage_role(text,text)') IS NULL,
+  '(a) removed name-based mapper stays absent; roles are explicit data');
 
 -- ---------------------------------------------------------------------------
 -- Fixture: uma org nova, seed default de stages COM triggers ativos
@@ -90,6 +92,12 @@ SET LOCAL role service_role;
 -- sozinho a RPC continuava recusando com access_denied.
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
+INSERT INTO public.pipelines (organization_id, name, slug, type)
+SELECT '99099099-0000-0000-0000-000000000990', pipe, pipe, 'system'
+FROM unnest(ARRAY['whatsapp', 'confirmacao', 'propostas']) pipe;
+INSERT INTO public.pipeline_display_config (organization_id, pipe_type, display_name)
+SELECT '99099099-0000-0000-0000-000000000990', pipe, pipe
+FROM unnest(ARRAY['whatsapp', 'confirmacao', 'propostas']) pipe;
 SELECT create_default_pipeline_stages('99099099-0000-0000-0000-000000000990');
 
 -- Chaves do funil mergeado (ADR-0004) não vêm no default — insere como o
@@ -109,49 +117,49 @@ SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'propostas' AND stage_key = 'vendido'),
-  'won', '(c) propostas/vendido → won');
+  'open', '(c) default seed does not infer stage_role: propostas/vendido → won');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'propostas' AND stage_key = 'perdido'),
-  'lost', '(c) propostas/perdido → lost');
+  'open', '(c) default seed does not infer stage_role: propostas/perdido → lost');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'confirmacao' AND stage_key = 'perdido'),
-  'lost', '(c) confirmacao/perdido → lost');
+  'open', '(c) default seed does not infer stage_role: confirmacao/perdido → lost');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'whatsapp' AND stage_key = 'agendado'),
-  'meeting_booked', '(c) whatsapp/agendado → meeting_booked');
+  'open', '(c) default seed does not infer stage_role: whatsapp/agendado → meeting_booked');
 
 SELECT is(
   (SELECT count(*)::int FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'confirmacao' AND stage_role = 'meeting_booked'),
-  6, '(c) confirmacao: reuniao_marcada + d5/d3/d2/d1 + no_dia = 6 meeting_booked');
+  0, '(c) names alone do not infer meeting_booked roles');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'confirmacao' AND stage_key = 'compareceu'),
-  'meeting_held', '(c) confirmacao/compareceu → meeting_held');
+  'open', '(c) default seed does not infer stage_role: confirmacao/compareceu → meeting_held');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'whatsapp' AND stage_key = 'compareceu'),
-  'meeting_held', '(c) funil mergeado: whatsapp/compareceu → meeting_held');
+  'open', '(c) default seed does not infer stage_role: funil mergeado: whatsapp/compareceu → meeting_held');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'whatsapp' AND stage_key = 'nao_compareceu'),
-  'lost', '(c) funil mergeado: whatsapp/nao_compareceu → lost');
+  'open', '(c) default seed does not infer stage_role: funil mergeado: whatsapp/nao_compareceu → lost');
 
 SELECT is(
   (SELECT count(*)::int FROM public.pipeline_stages
@@ -173,9 +181,8 @@ SELECT is(
 SELECT is(
   (SELECT count(*)::int FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
-      AND stage_role IS DISTINCT FROM
-          public.system_stage_role(pipeline_type, stage_key)),
-  0, '(c) 100% de cobertura: zero divergências do mapa determinístico');
+      AND stage_role <> 'open'),
+  0, '(c) all default stages remain open until explicitly governed');
 
 -- ---------------------------------------------------------------------------
 -- (d) Custom fica open; role explícito no INSERT é respeitado
@@ -236,7 +243,7 @@ SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'propostas' AND stage_key = 'vendido'),
-  'won', '(e) rename (name) preserva stage_role = won');
+  'open', '(e) rename to a financial label does not infer won');
 
 UPDATE public.pipeline_stages
 SET position = 42
@@ -247,7 +254,7 @@ SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99099099-0000-0000-0000-000000000990'
       AND pipeline_type = 'propostas' AND stage_key = 'vendido'),
-  'won', '(e) reorder (position) preserva stage_role = won');
+  'open', '(e) reorder preserves the stored role');
 
 -- ---------------------------------------------------------------------------
 -- (f) RLS de pipeline_stages intacta

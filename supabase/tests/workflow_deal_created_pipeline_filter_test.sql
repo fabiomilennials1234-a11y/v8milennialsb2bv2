@@ -62,4 +62,5 @@ SELECT is(
   '(FAIL-CLOSED) matcher SQL recusa contexto sem pipeline_id'
 );
 
+SELECT * FROM finish();
 ROLLBACK;

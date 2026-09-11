@@ -75,7 +75,7 @@ function Linha({
         {campo.somenteLeitura && (
           <Lock
             className="size-3 shrink-0 opacity-45"
-            aria-label="Campo ainda sem coluna no banco"
+            aria-label={campo.origemErp ? "Sincronizado do ERP, somente leitura" : "Campo ainda sem coluna no banco"}
           />
         )}
       </span>
@@ -101,7 +101,7 @@ function Linha({
           type="button"
           disabled={!editavel}
           onClick={startEditing}
-          title={campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined}
+          title={campo.origemErp ? "Sincronizado do ERP. Altere o cadastro no Toth." : campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined}
           className={cn(
             "flex min-w-0 items-center gap-1.5 break-words rounded text-left text-[13.5px]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

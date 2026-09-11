@@ -1,3 +1,5 @@
+import { ReplyPreview } from "../ReplyContext";
+import { useChatReply } from "../../../hooks/chat/useChatReply";
 /**
  * MobileComposerContextual — WhatsApp-style contextual composer for mobile.
  *
@@ -116,7 +118,9 @@ export function MobileComposerContextual({
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const reply = useChatReply();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
 
   const isSending = sendMessage.isPending || sendMedia.isPending;
   const hasText = message.trim().length > 0;
@@ -336,6 +340,7 @@ export function MobileComposerContextual({
       className="border-t border-border/60 bg-background shrink-0"
       style={{ paddingBottom: offset || undefined }}
     >
+      <ReplyPreview />
       {/* Hidden file inputs */}
       <input
         ref={cameraInputRef}

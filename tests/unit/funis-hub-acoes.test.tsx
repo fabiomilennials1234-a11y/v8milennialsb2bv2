@@ -23,12 +23,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ── Dados do hub ────────────────────────────────────────────────────────────
-const SYS = [
-  { pipe_type: "whatsapp", display_name: "Oportunidades", is_visible: true },
-];
-const PERMANENTES = [
-  { id: "c1", name: "Pós-venda", slug: "pos-venda", color: "#22c55e", status: "active" },
-];
 const TEMPORARIOS = [
   { id: "t1", name: "Black Friday", slug: "bf", color: "#f59e0b", status: "ended" },
 ];
@@ -37,7 +31,7 @@ const PIPELINES = [
     id: "p-sys",
     slug: "whatsapp",
     type: "system",
-    name: "Qualificação",
+    name: "Oportunidades",
     icon: "target",
     color: "#3b82f6",
     is_active: true,
@@ -62,18 +56,11 @@ const PIPELINES = [
   },
 ];
 
-vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({
-  usePipelineDisplayConfig: () => ({ data: SYS, isLoading: false }),
-}));
 vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
-  usePermanentCustomFunnels: () => ({ data: PERMANENTES, isLoading: false }),
   useTemporaryFunnels: () => ({ data: TEMPORARIOS, isLoading: false }),
 }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
   usePipelines: () => ({ data: PIPELINES, isLoading: false }),
-}));
-vi.mock("@/contexts/OrgFeaturesContext", () => ({
-  useOrgFeatures: () => ({ hasFeature: () => false }),
 }));
 vi.mock("@/lib/analytics", () => ({ trackModuleVisit: vi.fn() }));
 
@@ -130,7 +117,7 @@ describe("Hub de funis — renomear e excluir no cartão", () => {
   it("todo funil listado tem menu de ações, de fábrica ou personalizado", () => {
     render(<FunisHub />);
 
-    // O nome do funil de sistema é o do registro (display_name vence).
+    // Todo nome vem diretamente do registro canônico.
     expect(
       screen.getByRole("button", { name: "Ações do funil Oportunidades" }),
     ).toBeTruthy();
@@ -165,8 +152,7 @@ describe("Hub de funis — renomear e excluir no cartão", () => {
     await abrirMenuDe(usuario, "Oportunidades");
     await usuario.click(await screen.findByTestId("funnel-actions-renomear"));
 
-    // O campo nasce com o display_name do registro, não com o `pipelines.name`
-    // de fábrica ("Qualificação") — a precedência de `usePipelineIdentity`.
+    // O campo nasce com o nome canônico escolhido pelo usuário.
     const campo = (await screen.findByLabelText("Nome do Funil")) as HTMLInputElement;
     expect(campo.value).toBe("Oportunidades");
     expect(screen.getByText(/renomear funil/i)).toBeTruthy();

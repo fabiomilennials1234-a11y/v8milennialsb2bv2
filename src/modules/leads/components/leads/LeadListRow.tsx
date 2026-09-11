@@ -66,6 +66,8 @@ interface LeadListRowProps {
   deals?: LeadDealRef[];
   /** Relação + Situação já derivadas — ver `lib/lead-relacao-situacao`. */
   standing?: LeadStanding;
+  /** No piloto, Cliente comprova cadastro, não necessariamente compra. */
+  relacaoPorCadastroErp?: boolean;
   /** Tempo médio de recompra — ver `lib/reorder-cycle`. */
   ciclo?: CicloDeRecompra;
   selected: boolean;
@@ -209,20 +211,22 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
  * tirar da lista. `Cliente` é 1% e é o único valor da linha que merece o accent
  * da marca. Os dois continuam sempre escritos — muda quanto cada um grita.
  */
-function RelacaoCell({ standing }: { standing?: LeadStanding }) {
+function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStanding; porCadastroErp?: boolean }) {
   if (standing?.relacao !== "cliente") {
-    return <span className="text-[13px] text-muted-foreground">Lead</span>;
+    return <span className="text-[13px] text-muted-foreground">{standing?.relacao === "perdido" ? "Perdido" : "Lead"}</span>;
   }
 
   return (
     <span
       className="inline-flex w-fit items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[12.5px] font-semibold text-primary"
       title={
-        standing.prova === "ambas"
-          ? "Comprou pelo funil e tem pedido no ERP"
-          : standing.prova === "erp"
-            ? "Tem pedido no ERP"
-            : "Fechou negócio no funil"
+        porCadastroErp
+          ? "Cadastrado no ERP"
+          : standing.prova === "ambas"
+            ? "Comprou pelo funil e tem pedido no ERP"
+            : standing.prova === "erp"
+              ? "Tem pedido no ERP"
+              : "Fechou negócio no funil"
       }
     >
       <span className="size-1.5 shrink-0 rounded-full bg-primary" />
@@ -271,6 +275,7 @@ export function LeadListRow({
   metrics,
   deals = [],
   standing,
+  relacaoPorCadastroErp,
   ciclo,
   selected,
   onToggleSelect,
@@ -393,7 +398,7 @@ export function LeadListRow({
 
       {/* relação — quem essa pessoa é pra operação */}
       <div>
-        <RelacaoCell standing={standing} />
+        <RelacaoCell standing={standing} porCadastroErp={relacaoPorCadastroErp} />
       </div>
 
       {/* situação — o que está acontecendo com ela agora */}

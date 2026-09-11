@@ -58,14 +58,30 @@ export function usePipelineDisplayConfig() {
       // a cada leitura ela reinseria os 4 funis, o que fazia toda org nova
       // nascer com eles e desfazia qualquer exclusão. A RPC virou no-op na
       // migration 20270902000000 e a chamada saiu junto.
-      const { data, error } = await supabase
-        .from("pipeline_display_config")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .order("position");
+      const [configResult, pipelineResult] = await Promise.all([
+        supabase
+          .from("pipeline_display_config")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .order("position"),
+        supabase
+          .from("pipelines")
+          .select("slug, name")
+          .eq("organization_id", organizationId),
+      ]);
 
-      if (error) throw error;
-      return (data ?? []) as PipelineDisplayConfig[];
+      if (configResult.error) throw configResult.error;
+      if (pipelineResult.error) throw pipelineResult.error;
+
+      // Adaptador legado: existência/visibilidade ainda vêm desta tabela, mas
+      // o nome sempre vem do registro único escolhido pelo usuário.
+      const nameBySlug = new Map<string, string>(
+        (pipelineResult.data ?? []).map((p: { slug: string; name: string }) => [p.slug, p.name]),
+      );
+      return ((configResult.data ?? []) as PipelineDisplayConfig[]).map((config) => ({
+        ...config,
+        display_name: nameBySlug.get(config.pipe_type) ?? config.display_name,
+      }));
     },
     enabled: isReady && !!organizationId,
     staleTime: 5 * 60 * 1000,

@@ -23,7 +23,7 @@ import { FunnelSwitcher } from "./FunnelSwitcher";
  */
 
 interface FunnelControlBarProps {
-  /** Chave do funil aberto (`sys:whatsapp`, `custom:<id>`) — ver `funnel-nav`. */
+  /** Chave do funil aberto (`pipeline:<id>`) — ver `funnel-nav`. */
   funnelKey: string;
   funnelLabel: string;
   funnelColor?: string;

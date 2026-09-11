@@ -134,11 +134,12 @@ SELECT ok(
   (SELECT relrowsecurity FROM pg_class WHERE relname = 'metric_custom_definitions'),
   'SC2: RLS ligada — sem ela, definição de uma org seria legível por qualquer autenticado');
 
-SELECT is(
-  (SELECT count(*) FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'metric_custom_definitions'),
-  4::bigint,
-  'SC3: as 4 policies (select/insert/update/delete) estão de pé');
+SELECT results_eq(
+  $$SELECT cmd::text FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'metric_custom_definitions'
+    ORDER BY cmd$$,
+  $$VALUES ('ALL'::text), ('DELETE'), ('INSERT'), ('SELECT'), ('UPDATE')$$,
+  'SC3: quatro policies tenant e a policy master ALL estão de pé');
 
 -- A helper de escrita NÃO pode ser `get_my_admin_organization_ids()`: aquela
 -- inclui gestor de portfólio (ADR-0021), papel escopado a funis, que não

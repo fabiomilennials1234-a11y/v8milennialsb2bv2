@@ -670,6 +670,24 @@ describe("useMoveLeadInCustomPipe", () => {
     }]));
   });
 
+  it.each(["custom", "system"])("transfere o próprio negócio para destino %s", async (kind) => {
+    mockFrom.mockImplementation((table) => createChainMock(table === "pipeline_stages" ? [{
+      stage_key: "won", is_final_positive: true,
+      target_pipeline_id: kind === "custom" ? "target" : null,
+      target_stage_id: kind === "custom" ? "target-stage" : null,
+      target_pipe_type: kind === "system" ? "propostas" : null,
+      target_stage_key: kind === "system" ? "open" : null,
+    }] : table === "pipelines" ? [{ id: "target" }] : [{ ...ENTRY, id: "e1", lead_id: "l1", organization_id: "org-t" }]));
+    const { result } = renderHook(() => useMoveLeadInCustomPipe(), { wrapper: createWrapper() });
+    await act(async () => { await result.current.mutateAsync({ entry_id: "e1", pipeline_id: "p1", stage_id: "won-stage" }); });
+    expect(supabase.rpc).toHaveBeenCalledWith("mover_negocio", expect.objectContaining({
+      p_entry_id: "e1", p_stage_origem: "won", p_target_pipeline_id: "target",
+      p_target_stage_key: kind === "custom" ? "target-stage" : "open",
+    }));
+    expect(vi.mocked(supabase.rpc).mock.calls.some(([name]) => String(name).includes("criar"))).toBe(false);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
   it("moves a lead between stages", async () => {
     const { result } = renderHook(() => useMoveLeadInCustomPipe(), { wrapper: createWrapper() });
     await act(async () => {

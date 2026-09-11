@@ -46,6 +46,10 @@ INSERT INTO public.pipelines (id, organization_id, name, slug, type) VALUES
   ('deadbeef-0000-4000-8000-00000000ca0e', 'deadbeef-0000-4000-8000-00000000ca01', 'Meu Funil',    'meu-funil', 'custom')
 ON CONFLICT (id) DO NOTHING;
 
+-- A transferência valida que a etapa existe no destino.
+INSERT INTO public.pipeline_stages (organization_id, pipeline_id, pipeline_type, stage_key, name, position)
+VALUES ('deadbeef-0000-4000-8000-00000000ca01', 'deadbeef-0000-4000-8000-00000000ca0d', 'propostas', 'enviada', 'Enviada', 0);
+
 INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, last_activity_at) VALUES
   ('deadbeef-0000-4000-8000-00000000cd01', 'deadbeef-0000-4000-8000-00000000ca01', 'deadbeef-0000-4000-8000-00000000ca0a', 'Para mover', 'api', '2020-01-01T00:00:00Z'),
   ('deadbeef-0000-4000-8000-00000000cd02', 'deadbeef-0000-4000-8000-00000000ca01', 'deadbeef-0000-4000-8000-00000000ca0a', 'Órfão',      'api', '2020-01-01T00:00:00Z');
@@ -144,4 +148,5 @@ SELECT is(
   'propostas',
   '(TENANT) e a posição não mudou depois das recusas');
 
+SELECT * FROM finish();
 ROLLBACK;

@@ -29,7 +29,8 @@ export async function rpcNaoTipada<T>(
   args: Record<string, unknown>,
 ): Promise<T> {
   const chamar = supabase.rpc as unknown as ChamadaRpc;
-  const { data, error } = await chamar(nome, args);
+  // SupabaseClient.rpc acessa this.rest; preservar o cliente como receiver.
+  const { data, error } = await chamar.call(supabase, nome, args);
   if (error) throw new Error(error.message);
   return data as T;
 }

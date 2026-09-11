@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { memo, useEffect } from "react";
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { CalendarClock } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 import type { WaitBusinessWindowNodeData, WorkflowBehaviorWindow } from "@/types/workflow";
@@ -15,9 +15,10 @@ function pickRouteHandles(windows: WorkflowBehaviorWindow[]): Array<{ key: strin
   const seen = new Set<string>();
   const out: Array<{ key: string; windowName: string }> = [];
   for (const w of windows) {
-    if (typeof w?.action === "string" && w.action.startsWith("route:")) {
-      const key = w.action.slice("route:".length);
-      if (key && !seen.has(key)) {
+    const action = typeof w?.action === "string" ? w.action.trim() : "";
+    if (action.startsWith("route:")) {
+      const key = action.slice("route:".length);
+      if (key.trim() && !seen.has(key)) {
         seen.add(key);
         out.push({ key, windowName: w.name });
       }
@@ -51,6 +52,14 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
   const routeHandles = pickRouteHandles(windows);
   // Quando há rotas, suprime handle default da BaseNode e renderiza custom abaixo.
   const hasRoutes = routeHandles.length > 0;
+  const hasDefault = windows.length === 0 || windows.some(w => {
+    const action = typeof w.action === "string" ? w.action.trim() : "";
+    if (action.startsWith("route:") && action.slice(6).trim()) return false;
+    return !(action.startsWith("hold_until:") && action.slice(11).trim());
+  });
+  const updateNodeInternals = useUpdateNodeInternals();
+  const handleSignature = JSON.stringify([hasDefault, routeHandles]);
+  useEffect(() => { updateNodeInternals(id); }, [id, handleSignature, updateNodeInternals]);
 
   return (
     <div className="relative">
@@ -61,7 +70,8 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
         title={nodeData.label || "Janela Comercial"}
         subtitle={subtitle}
         selected={selected}
-        showSourceHandle={!hasRoutes}
+        warning={typeof data.__configIssue === "string" ? data.__configIssue : undefined}
+        showSourceHandle={!hasRoutes && hasDefault}
       >
         {hasRoutes && (
           <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
@@ -69,17 +79,13 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
             {routeHandles.map((rh) => (
               <div key={rh.key} className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground truncate">{rh.windowName}</span>
-                <span className="font-mono text-[10px] text-amber-500">{rh.key}</span>
+                <span className="text-[10px] text-muted-foreground">Saída</span>
               </div>
             ))}
-            {/* Qualquer janela que não seja `route:` sai pela alça default.
-                Mesmo booleano que a enumeração antiga (`pass` ou `hold_until:`)
-                para toda definição viva em prod, mas sem depender de conhecer o
-                vocabulário inteiro — inclusive o que ainda não existe. */}
-            {windows.some(w => !(typeof w?.action === "string" && w.action.startsWith("route:"))) && (
+            {/* Janelas de passagem usam a saída padrão; bloqueios não liberam o fluxo. */}
+            {hasDefault && (
               <div className="flex items-center justify-between text-xs pt-1 border-t border-border/30">
-                <span className="text-muted-foreground">Default (demais janelas)</span>
-                <span className="font-mono text-[10px] text-emerald-500">default</span>
+                <span className="text-muted-foreground">Saída padrão</span>
               </div>
             )}
           </div>
@@ -89,7 +95,7 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
       {hasRoutes && (
         <>
           {routeHandles.map((rh, idx) => {
-            const total = routeHandles.length + 1; // +1 default
+            const total = routeHandles.length + (hasDefault ? 1 : 0);
             const left = ((idx + 1) / (total + 1)) * 100;
             return (
               <Handle
@@ -97,18 +103,20 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Bottom}
                 id={rh.key}
+                aria-label={`Saída ${rh.windowName}`}
                 style={{ left: `${left}%` }}
                 className="!w-3 !h-3 !bg-amber-500 !border-2 !border-background"
               />
             );
           })}
-          <Handle
+          {hasDefault && <Handle
             type="source"
             position={Position.Bottom}
             id="default"
+            aria-label="Saída padrão"
             style={{ left: `${((routeHandles.length + 1) / (routeHandles.length + 2)) * 100}%` }}
             className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-background"
-          />
+          />}
         </>
       )}
     </div>

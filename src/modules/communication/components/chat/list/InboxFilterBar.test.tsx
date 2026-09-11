@@ -32,6 +32,14 @@ function setup(overrides = {}) {
 }
 
 describe("InboxFilterBar", () => {
+  it("opens Nova Conversa between Não lidas and Filtro", () => {
+    const onNewConversation = vi.fn();
+    setup({ onNewConversation });
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.slice(0, 3).map((button) => button.textContent)).toEqual(["Não lidas5", "Nova Conversa", "Filtro"]);
+    fireEvent.click(screen.getByRole("button", { name: "Nova Conversa" }));
+    expect(onNewConversation).toHaveBeenCalledOnce();
+  });
   it("escolher uma dimensão multi no menu cria o chip (regressão: clicar Funil não fazia nada)", async () => {
     setup();
 

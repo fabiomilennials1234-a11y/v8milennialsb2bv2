@@ -7,7 +7,11 @@
 
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
 
+export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
+
 export interface WhatsAppMessage {
+  reply_context?: ReplyContext | null;
+  retry_attempt?: number;
   id: string;
   organization_id: string;
   instance_id: string | null;
@@ -39,6 +43,8 @@ export interface WhatsAppMessage {
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
 export interface FailedMessage {
+  replyContext?: ReplyContext;
+  retry_attempt?: number;
   id: string;
   phoneNumber: string;
   instanceId: string | null;
@@ -87,6 +93,8 @@ export interface ChatContact {
    * errado.
    */
   instance_id: string | null;
+  /** Address-book name on this connected WhatsApp account. */
+  saved_contact_name?: string | null;
   phone_number: string;
   push_name: string | null;
   last_message: string | null;
@@ -322,7 +330,7 @@ export function interlocutorDaChave(chave: string | null | undefined): string | 
  */
 export function contactLabel(c: InboxContact): string {
   if (c.channel === "whatsapp") {
-    const nome = (c.push_name || c.lead_name || "").trim();
+    const nome = c.saved_contact_name?.trim() || (c.push_name || c.lead_name || "").trim();
     if (nome) return nome;
     // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um
     // canal, exibi-lo cru põe `210028246085780` no lugar do contato. Ver

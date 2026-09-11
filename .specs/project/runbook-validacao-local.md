@@ -12,6 +12,18 @@ tropeços estão descritos porque todos eles vão acontecer de novo.
 
 ## Antes de começar
 
+**Lei de custo (CTO, 2026-09-08):** teste só termina quando a própria branch foi
+excluída e sua ausência foi confirmada. Isso também vale para falha e cancelamento.
+Não deixar para o fim do dia. Cleanup falho é pendência bloqueante e deve informar
+o ref e o risco de cobrança; nunca apagar uma branch pertencente a outro trabalho.
+
+No Windows, o ensaio SQL completo pode rodar com lifecycle automático:
+`scripts/supabase-branch.sh ensaio qa-studio-<slug> <sql-1> <sql-2> ...`.
+O runner usa finally, exclui no sucesso/erro e confirma o inventário. Suspensão
+ou encerramento forçado do processo não executa finally: conferir recursos ao
+retomar, e excluir antes de pausar voluntariamente. A exceção
+`--allow-concurrent` exige autorização explícita do CTO.
+
 1. **Checkout não pode estar linkado.** `scripts/db-push-branch.sh` recusa se estiver, e
    está certo: link ambiente é o vetor do acidente — um `db push` sem `--db-url` vai
    para onde o link aponta.
@@ -22,7 +34,8 @@ tropeços estão descritos porque todos eles vão acontecer de novo.
    ⚠️ `scripts/deploy-create-org-user.sh` roda `supabase link` em **prod** sem condição e
    deixa o checkout linkado. Se você rodou aquele script, `unlink` antes deste runbook.
 
-2. **Nunca duas branches.** `list_branches` primeiro.
+2. **Uma branch por vez, salvo autorização explícita do CTO.** `list_branches`
+   primeiro. A exceção não autoriza apagar a branch do outro trabalho.
 
 3. **Saiba o que está pendente.** Compare o ledger de prod com o repo antes de qualquer
    coisa — o número de arquivos em `supabase/migrations/` **não** é o número de

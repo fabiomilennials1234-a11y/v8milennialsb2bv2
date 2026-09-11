@@ -64,27 +64,12 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
-  const gates = { metaPagesConnected: false, metricsStudioEnabled: false };
+  const gates = { metaPagesConnected: false };
 
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
     expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/dashboard"]);
     expect(filterByGate(items, { ...gates, metaPagesConnected: true })).toHaveLength(2);
-  });
-
-  it("esconde Métricas enquanto a org não está no rollout", () => {
-    const items = [node("/performance"), node("/metricas", { gate: "metrics_studio_enabled" })];
-    expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/performance"]);
-    expect(filterByGate(items, { ...gates, metricsStudioEnabled: true })).toHaveLength(2);
-  });
-
-  it("os dois gates são independentes", () => {
-    const items = [
-      node("/atendimento/meta", { gate: "meta_pages_connected" }),
-      node("/metricas", { gate: "metrics_studio_enabled" }),
-    ];
-    const soMetrics = filterByGate(items, { metaPagesConnected: false, metricsStudioEnabled: true });
-    expect(soMetrics.map((i) => i.path)).toEqual(["/metricas"]);
   });
 });
 
@@ -112,10 +97,10 @@ describe("inventário da navegação", () => {
     expect(rotulos).not.toContain("Combustível");
   });
 
-  it("Métricas é porta da lateral, entre Comando e Chat, e mantém o gate", () => {
+  it("Métricas é porta da lateral, entre Comando e Chat, sem gate de rollout", () => {
     const metricas = SIDEBAR_PRIMARY.find((item) => item.path === "/metricas");
     expect(metricas).toBeDefined();
-    expect(metricas?.gate).toBe("metrics_studio_enabled");
+    expect(metricas?.gate).toBeUndefined();
     // A posição é o pedido, não detalhe: entre Comando e Chat.
     expect(caminhosLaterais.indexOf("/metricas")).toBe(caminhosLaterais.indexOf("/dashboard") + 1);
     expect(caminhosLaterais.indexOf("/chat-whatsapp")).toBe(caminhosLaterais.indexOf("/metricas") + 1);
@@ -233,5 +218,16 @@ describe("isRouteActive", () => {
     expect(isRouteActive("/copilot", "/turbo", TURBO_PATHS)).toBe(true);
     expect(isRouteActive("/automacoes/novo", "/turbo", TURBO_PATHS)).toBe(true);
     expect(isRouteActive("/leads", "/turbo", TURBO_PATHS)).toBe(false);
+  });
+});
+
+// The actual navigation inventory must expose native metrics to every org type.
+describe("native metrics navigation", () => {
+  it.each([false, true])("shows metrics to a regular member (outbound=%s)", (outbound) => {
+    const visible = filterByGate(
+      filterByMaster(filterByOutbound(SIDEBAR_PRIMARY, outbound), false),
+      { metaPagesConnected: false },
+    );
+    expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });
 });

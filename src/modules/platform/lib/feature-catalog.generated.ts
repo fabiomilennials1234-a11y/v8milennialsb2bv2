@@ -246,7 +246,7 @@ export const FEATURES: FeatureMeta[] = [
   },
   {
     key: "funnels_custom",
-    label: "Funis Customizados",
+    label: "Funis",
     description: "Funis personalizados",
     icon: "GitBranch",
     category: "modules",

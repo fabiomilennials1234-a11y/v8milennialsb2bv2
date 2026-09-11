@@ -1,3 +1,4 @@
+import type { CommentAttachment } from "../../lib/comment-attachments/files";
 /**
  * Formato de entrada do Card do Negócio.
  *
@@ -55,6 +56,8 @@ export interface DealCardStage {
 
 export interface DealCardMove {
   id: string;
+  funilDe?: string | null;
+  funilPara?: string | null;
   de: string | null;
   para: string;
   /**
@@ -78,7 +81,7 @@ export interface DealCardLeadRef {
   empresa: string | null;
   telefone: string | null;
   /** `Cliente` quando a pessoa já comprou alguma vez — ADR-0023 §6/§7. */
-  relacao: "lead" | "cliente";
+  relacao: "lead" | "cliente" | "perdido";
 
   /**
    * ── O bloco do lead DENTRO do negócio ──────────────────────────────────
@@ -140,6 +143,7 @@ export interface DealCardActivity {
  * selo": ou nasceu aqui, ou é do lead e vale para todos.
  */
 export interface DealCardComentario {
+  anexos?: CommentAttachment[];
   id: string;
   corpo: string;
   autor: string;

@@ -25,7 +25,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 --
 -- Tudo como `authenticated`: `postgres` bypassa RLS e produziria falso verde.
 
-SELECT plan(11);
+SELECT plan(12);
 
 -- ===========================================================================
 -- (1) ESTRUTURA E GRANTS — OR REPLACE não pode ter resetado nada

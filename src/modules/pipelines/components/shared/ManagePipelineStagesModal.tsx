@@ -28,20 +28,18 @@ import {
   getStageFamilyName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
-  useCustomPipelines,
   useCreateCustomPipelineStage,
   useUpdateCustomPipelineStage,
   useReorderCustomPipelineStages,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { usePipeDispatchRules } from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
-import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
-import { NOME_DE_FABRICA } from "@/contracts/pipe";
+import { useFunisDaOrg } from "@/modules/pipelines/hooks/model/useFunisDaOrg";
 import {
   TransitionSelector,
   type TransitionTarget,
 } from "@/modules/pipelines/components/shared/TransitionSelector";
 import { classifyStageRole } from "@/modules/pipelines/lib/stage-role-classifier";
-import { STAGE_ROLES, STAGE_ROLE_META } from "@/modules/pipelines/lib/stage-role";
+import { STAGE_ROLES_ATRIBUIVEIS, STAGE_ROLE_META, papelAtribuivel } from "@/modules/pipelines/lib/stage-role";
 import type { StageRole } from "@/contracts/pipe";
 import {
   Plus,
@@ -139,9 +137,8 @@ const STAGE_COLORS = [
 /**
  * Dropdown do papel semântico da etapa (stage_role, ADR-0017 §1).
  *
- * won/lost selecionáveis manualmente — escolha explícita do admin conta como
- * confirmação humana. A sugestão do classifier (#991) só PRÉ-PREENCHE; quem
- * decide é sempre quem salva.
+ * Ganho/perda são desfechos do negócio, não opções de etapa.
+ * Valores históricos permanecem legíveis sem poder ser atribuídos de novo.
  */
 function StageRoleSelect({
   value,
@@ -172,7 +169,12 @@ function StageRoleSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {STAGE_ROLES.map((role) => (
+          {!STAGE_ROLES_ATRIBUIVEIS.includes(value) && (
+            <SelectItem value={value} disabled>
+              {STAGE_ROLE_META[value].label} — legado; definido pelo negócio
+            </SelectItem>
+          )}
+          {STAGE_ROLES_ATRIBUIVEIS.map((role) => (
             <SelectItem key={role} value={role}>
               <div className="flex items-center gap-2.5 py-0.5">
                 <span
@@ -270,13 +272,9 @@ function SortableStageItem({
     isDragging,
   } = useSortable({ id: stage.id });
 
-  const { data: customPipelines } = useCustomPipelines();
-  // Nome do funil de sistema alvo como a ORG o vê (SCRUM-641): display_config
-  // manda; linha ausente = a org não tem mais o funil → fallback honesto.
-  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const { data: pipelines } = useFunisDaOrg();
   const nomeDoPipeAlvo = (pipeType: string): string => {
-    const c = displayConfigs?.find((x) => x.pipe_type === pipeType);
-    return c ? c.display_name || NOME_DE_FABRICA[pipeType] || pipeType : "Funil removido";
+    return pipelines.find((pipeline) => pipeline.slug === pipeType)?.label ?? "Funil removido";
   };
 
   const style = {
@@ -437,7 +435,7 @@ function SortableStageItem({
               )}
               {stage.is_final_positive && stage.target_pipeline_id && (
                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  → {customPipelines?.find((p) => p.id === stage.target_pipeline_id)?.name ?? "Funil custom"}
+                  → {pipelines.find((p) => p.id === stage.target_pipeline_id)?.label ?? "Funil removido"}
                 </span>
               )}
               {stage.is_final_negative && (
@@ -578,7 +576,7 @@ export function ManagePipelineStagesContent({
   });
   const newStageRole: StageRole = newStageRoleTouched
     ? newStageRoleManual
-    : newStageRoleSuggestion?.role ?? "open";
+    : papelAtribuivel(newStageRoleSuggestion?.role);
 
   // Etapa marcada para remoção + quantos cards ela ainda tem.
   const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;
@@ -1145,15 +1143,14 @@ export function ManagePipelineStagesModal({
   pipelineId,
   stages,
 }: ManagePipelineStagesModalProps) {
-  // SCRUM-641: família de sistema é batizada pelo display_config da org;
-  // `getStageFamilyName` fica só para o resíduo Carteira (upsell_*).
-  const { data: displayConfigs } = usePipelineDisplayConfig();
-  const configDaFamilia = displayConfigs?.find((c) => c.pipe_type === pipelineType);
-  const nomeDaFamilia = configDaFamilia
-    ? configDaFamilia.display_name || NOME_DE_FABRICA[pipelineType] || pipelineType
-    : pipelineType === "upsell_base" || pipelineType === "upsell_gestao"
+  const { data: pipelines } = useFunisDaOrg();
+  const pipeline = pipelines.find(
+    (candidate) => candidate.id === pipelineId || candidate.slug === pipelineType,
+  );
+  const nomeDaFamilia = pipeline?.label ??
+    (pipelineType === "upsell_base" || pipelineType === "upsell_gestao"
       ? getStageFamilyName(pipelineType)
-      : "Funil removido";
+      : "Funil removido");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">

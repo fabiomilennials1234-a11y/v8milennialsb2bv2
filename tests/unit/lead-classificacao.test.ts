@@ -72,7 +72,7 @@ describe("applyLeadListFilters — recorte por gaveta", () => {
     const { q, calls } = queryEspia();
     applyLeadListFilters(q, { filterClassificacao: "cliente", usaLeiDoErp: false });
     expect(calls.some((c) => c.args[0] === "classificacao")).toBe(false);
-    expect(calls.some((c) => String(c.args[0]).includes("primeira_venda_at"))).toBe(true);
+    expect(calls).toContainEqual({ fn: "eq", args: ["relacao_negocios", "cliente"] });
   });
 
   /**

@@ -12,12 +12,16 @@ import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
 import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
 import { useTeamGoals } from "@/modules/engagement";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface TabPerformanceV2Props {
+  section?: "ranking" | "produtos" | "atividade" | "jornada" | "metas-equipe" | "metas-individuais" | "perdas" | "real-esperado";
   month: number;
   year: number;
   /** Intervalo global do Comando (hoje/semana/mês/trim/personalizado). */
   range: PeriodRange;
+  monthlyRange?: PeriodRange;
 }
 
 function formatK(value: number): string {
@@ -31,18 +35,21 @@ function formatK(value: number): string {
  * ganho/perda, metas individuais, produtos campeões, jornada e atividade.
  * Absorveu a antiga aba Inteligência (fusão 2026-06-11).
  */
-function TabPerformanceV2Base({ month, year, range }: TabPerformanceV2Props) {
+function TabPerformanceV2Base({ month, year, range, monthlyRange, section }: TabPerformanceV2Props) {
+  const show = (id: TabPerformanceV2Props["section"]) => !section || section === id;
   // Peças period-scoped (ranking, produtos, atividade, vendas, jornada, perda)
   // seguem o RANGE global — reagem a hoje/semana/mês/trim/personalizado.
-  const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
+  const { data: totalMetrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end }, null);
 
   // Metas são MENSAIS por natureza — a tabela `goals` é chaveada por month/year,
   // sem range. monthRange fixa o mês selecionado independentemente do período
   // global, pro gauge comparar realizado-do-mês vs meta-do-mês (mesmo padrão do
   // gauge da Visão Geral).
-  const monthRange = useMemo(() => computePeriodRange("month", month, year), [month, year]);
-  const { data: gaugeMetrics } = useCommandMetrics({ start: monthRange.start, end: monthRange.end }, null);
-  const { data: teamGoals } = useTeamGoals(month, year);
+  const monthRange = useMemo(() => monthlyRange ?? computePeriodRange("month", month, year), [monthlyRange, month, year]);
+  const gaugeQuery = useCommandMetrics({ start: monthRange.start, end: monthRange.end }, null);
+  const goalsQuery = useTeamGoals(month, year);
+  const { data: gaugeMetrics } = gaugeQuery;
+  const { data: teamGoals } = goalsQuery;
   // Override Milennials: "reuniões marcadas" segue a coorte correta da aba
   // Saúde (get_funnel_health) em vez do get_dashboard_metrics inflado. Mensal,
   // pois alimenta o gauge de meta (também mensal).
@@ -102,41 +109,45 @@ function TabPerformanceV2Base({ month, year, range }: TabPerformanceV2Props) {
 
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento" && g.target_value > 0);
 
+  const monthlyQueries = show("metas-equipe") || show("real-esperado") ? [gaugeQuery, goalsQuery] : [];
+  if (isError || monthlyQueries.some((query) => query.isError)) return <div role="alert" className="p-4 text-sm">Não foi possível carregar a performance.<Button variant="link" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button></div>;
+  if (isLoading || monthlyQueries.some((query) => query.isLoading)) return <Skeleton className="h-full min-h-32 w-full" />;
+
   return (
-    <div className="mt-3.5 grid grid-cols-12 gap-3.5">
+    <div className={section ? "h-full [&>*]:h-full" : "mt-3.5 grid grid-cols-12 gap-3.5"}>
       {/* Peças period-scoped — seguem o range global */}
-      <div className="col-span-8">
+      {show("ranking") && <div className="col-span-8">
         <RankingPodium range={range} teamSalesTotal={totalMetrics?.vendaTotal ?? 0} />
-      </div>
-      <div className="col-span-4">
+      </div>}
+      {show("produtos") && <div className="col-span-4">
         <ProductChampions range={range} />
-      </div>
-      <div className="col-span-8">
+      </div>}
+      {show("atividade") && <div className="col-span-8">
         <TeamActivityCard range={range} />
-      </div>
-      <div className="col-span-4">
+      </div>}
+      {show("jornada") && <div className="col-span-4">
         <LeadJourney
           startDate={range.start.toISOString()}
           endDate={range.end.toISOString()}
           totalSales={totalMetrics?.funnelVendas ?? 0}
         />
-      </div>
+      </div>}
 
       {/* Blocos vindos da antiga aba Inteligência */}
-      <div className="col-span-5">
+      {show("metas-equipe") && <div className="col-span-5">
         <TeamGoalsGauges gauges={gauges} expectedPercent={expectedPercent} />
-      </div>
-      <div className="col-span-4">
+      </div>}
+      {show("metas-individuais") && <div className="col-span-4">
         <IndividualGoalsList month={month} year={year} />
-      </div>
-      <div className="col-span-3">
+      </div>}
+      {show("perdas") && <div className="col-span-3">
         <LossReasonsCard
           startDate={range.start.toISOString()}
           endDate={range.end.toISOString()}
           totalWon={totalMetrics?.funnelVendas ?? 0}
         />
-      </div>
-      <div className="col-span-12">
+      </div>}
+      {show("real-esperado") && <div className="col-span-12">
         {/* Metas mensais: dailySales vem do gaugeMetrics (mês), não do range. */}
         <RealVsExpectedChart
           dailySales={gaugeMetrics?.dailySales ?? []}
@@ -144,7 +155,7 @@ function TabPerformanceV2Base({ month, year, range }: TabPerformanceV2Props) {
           month={month}
           year={year}
         />
-      </div>
+      </div>}
     </div>
   );
 }

@@ -12,7 +12,7 @@
  * `relacao: "cliente"`. O sistema inteiro tem dois cards: este e o do Negócio.
  */
 
-export type LeadRelacao = "lead" | "cliente";
+export type LeadRelacao = "lead" | "cliente" | "perdido";
 
 /** Prova de que já comprou. `null` enquanto é `lead`. */
 export type ProvaDeCompra = "funil" | "erp" | "ambas";
@@ -121,6 +121,8 @@ export interface LeadCardField {
    * texto e perdê-lo.
    */
   somenteLeitura?: boolean;
+  /** Fonte externa autoritativa; alterações são feitas no ERP. */
+  origemErp?: boolean;
 }
 
 export interface LeadCardFieldGroup {

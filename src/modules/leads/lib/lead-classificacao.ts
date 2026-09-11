@@ -14,14 +14,17 @@
  *   situação do parceiro está entre as que a org considera ativas", gravado em
  *   `leads.classificacao` pela migration `20270922000000`. `indefinido` só
  *   existe aqui: é o cadastrado cuja situação não está na lista.
- * - **org SEM integração** — `cliente` significa "comprou": venda líquida no
- *   funil OU pedido no ERP, a lei que `lead-relacao-situacao.ts` já usa na
- *   coluna "Relação" e que `primeira_venda_at`/`primeiro_pedido_erp_at`
- *   materializam para o filtro poder rodar no banco.
+ * - **org SEM integração** — ganho atual ou venda líquida histórica = Cliente;
+ *   somente perdas e nenhum aberto = Perdido; demais = Lead. Pedido de ERP
+ *   isolado não decide. Campo calculado `relacao_negocios` aplica a regra
+ *   no banco antes da paginação (decisão CTO, 2026-09-08).
  *
  * As duas discordam quando ambas existiriam, e está medido: na Café Jurerê,
  * dos 5.442 leads com `classificacao='cliente'`, **exatamente 1** tem venda.
  * Por isso não convivem na mesma tela — quem escolhe é `useOrgUsaLeiDoErp`.
+ * Exceção opt-in da página Café Jurerê (2026-09-10): cadastro ERP é Cliente,
+ * perda sem ganho e sem cadastro é Perdido, demais Lead. A flag local da
+ * organização prevalece sobre as duas leis sem mudar o vocabulário gravável.
  */
 
 export const LEAD_CLASSIFICACOES = ["lead", "cliente", "indefinido"] as const;
@@ -59,6 +62,18 @@ export const LEAD_CLASSIFICACAO_CONFIG: Record<
 
 /** Sentinel do seletor: sem recorte por classificação. */
 export const CLASSIFICACAO_TODAS = "all";
+
+/** O seletor da Relação não altera o vocabulário gravável da Lei do ERP. */
+export function leadClassificacaoOptions(usaLeiDoErp: boolean, usaCadastroErpCafeJurere = false) {
+  return [
+    { value: CLASSIFICACAO_TODAS, label: "Todos" },
+    { value: "lead", label: "Lead" },
+    { value: "cliente", label: "Cliente" },
+    usaLeiDoErp && !usaCadastroErpCafeJurere
+      ? { value: "indefinido", label: "Indefinido" }
+      : { value: "perdido", label: "Perdido" },
+  ];
+}
 
 export function isLeadClassificacao(v: unknown): v is LeadClassificacao {
   return typeof v === "string" && (LEAD_CLASSIFICACOES as readonly string[]).includes(v);

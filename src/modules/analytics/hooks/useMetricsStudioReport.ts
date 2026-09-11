@@ -11,7 +11,7 @@ import {
   type ReportItem,
   type ReportScope,
 } from "@/modules/analytics/lib/metrics-studio-report";
-import { periodoAnterior, periodoAtual } from "@/modules/analytics/lib/metrics-studio-period";
+import { periodoAnterior, periodoAtual, referenciaNaOrg } from "@/modules/analytics/lib/metrics-studio-period";
 import type { StudioWindow } from "./useMetricsStudio";
 
 /**
@@ -35,7 +35,7 @@ function rotuloDoPeriodo(scope: ReportScope, hoje: Date): string {
 }
 
 export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string, EngineMetric>) {
-  const { organizationId } = useOrganization();
+  const { organizationId, timezone } = useOrganization();
   const [exportando, setExportando] = useState<ReportScope | null>(null);
 
   const exportar = useCallback(
@@ -44,7 +44,8 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
       setExportando(scope);
 
       try {
-        const hoje = new Date();
+        const geradoEm = new Date();
+        const hoje = referenciaNaOrg(geradoEm, timezone ?? "UTC");
 
         // `useOrganization` não expõe o nome da org — expõe id, tipo e fuso.
         // Buscar aqui, no clique, evita alterar um hook de identidade que meio
@@ -85,7 +86,7 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
           orgNome,
           scope,
           periodoLabel: rotuloDoPeriodo(scope, hoje),
-          geradoEm: hoje,
+          geradoEm,
           itens,
         });
 
@@ -119,7 +120,7 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
         setExportando(null);
       }
     },
-    [organizationId, windows, byId, exportando],
+    [organizationId, timezone, windows, byId, exportando],
   );
 
   return { exportar, exportando };

@@ -143,4 +143,5 @@ SELECT results_eq(
   '(WORKFLOWS) só referência ativa à etapa removida é desativada'
 );
 
+SELECT * FROM finish();
 ROLLBACK;

@@ -1,5 +1,13 @@
 # Module — leads
 
+## Vendas históricas
+
+`RegisterHistoricalSalesDialog` na aba Negócios registra valor/data em lote pela
+RPC `registrar_vendas_historicas`. Cria negócio ganho sem posição em funil e
+pedido/evento de receita vinculados. `useLeadsDeals` inclui também esses negócios
+sem `pipeline_entries`; `historicalSale` os distingue dos cards. Detalhes:
+`docs/historical-sales.md`.
+
 **Status:** 🟢 Active (slice 4 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** leads
 **Entidade primária:** Lead
@@ -187,3 +195,21 @@ com só 7, + maps locais). Slice A criou a tabela registry `lead_origins` e o ho
 - Auditoria duplicatas: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/modularizacao/auditoria-duplicatas.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md`
 - Slices roadmap: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/10 — Remodelagem/04-execucao/slices.md`
+
+### Lei da Relação — 2026-09-08
+
+Ganho atual ou venda histórica líquida prevalece: Cliente mesmo com perdas.
+Somente negócios perdidos, sem nenhum aberto ou ganho: Perdido. Demais: Lead.
+Pedido de ERP isolado não classifica na Lei da Relação. A Lei do ERP mantém
+classificacao e Indefinido. Filtro/contagem/exportação usam relacao_negocios(leads)
+no banco; migration deve preceder o frontend. Ver .specs/fixes/lei-relacao-ganho-perdido.md.
+
+### Piloto de abas Café Jurerê — 2026-09-10
+
+Somente `/leads`, com flag `leads_cafe_jurere_cadastro_erp` e ID da Café Jurerê:
+cadastro ERP (`erp_code` preenchido) = Cliente; sem cadastro, alguma perda e
+nenhum ganho = Perdido, mesmo com negócio aberto; demais = Lead. Filtra no
+banco por `classificacao_cafe_jurere`, incluindo contagem/exportação. Não altera
+importação, classificação persistida ou as regras das outras organizações.
+Migration antes da ativação da flag; roteiro em
+`.specs/features/leads-cafe-jurere-cadastro-erp.md`.

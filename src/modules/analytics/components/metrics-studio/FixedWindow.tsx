@@ -15,10 +15,12 @@
 import { StudioWindowFrame } from "./StudioWindowFrame";
 import { resolveFixedCard } from "@/modules/analytics/lib/metrics-studio-fixed-cards";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
+import type { FixedCardContext } from "@/modules/analytics/lib/metrics-studio-fixed-card-contract";
 
 interface FixedWindowProps {
   win: StudioWindow;
-  range: { start: Date; end: Date };
+  context: FixedCardContext;
+  podeVerPorPessoa: boolean;
   editavel: boolean;
   selected: boolean;
   canvas: { width: number; height: number };
@@ -30,7 +32,8 @@ interface FixedWindowProps {
 
 export function FixedWindow({
   win,
-  range,
+  context,
+  podeVerPorPessoa,
   editavel,
   selected,
   canvas,
@@ -66,7 +69,9 @@ export function FixedWindow({
       {/* `min-h-0` é o que impede o corpo de empurrar a moldura: sem ele, um
           card com conteúdo alto estoura a altura que o usuário escolheu. */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <Corpo range={range} />
+        {card.requiresPerformance && !podeVerPorPessoa
+          ? <p className="p-4 text-sm text-muted-foreground">Você não tem permissão para ver a performance da equipe.</p>
+          : <Corpo {...context} />}
       </div>
     </StudioWindowFrame>
   );

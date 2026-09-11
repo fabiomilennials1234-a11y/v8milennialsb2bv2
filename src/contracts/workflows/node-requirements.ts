@@ -21,6 +21,7 @@
  */
 
 import { ehModoTemplateMeta } from "./modo-de-mensagem.ts";
+import { businessWindowConfigErrors, businessWindowConnectionIssues } from "./business-window.ts";
 
 export type NodeConfig = Record<string, unknown>;
 
@@ -179,7 +180,7 @@ interface WorkflowNodeLike {
  * tem regra aqui passa. Gate que bloqueia o que não entende trava o produto a cada
  * feature nova — e o time aprende a contorná-lo.
  */
-export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue[] {
+export function findNodeConfigIssues(nodes: WorkflowNodeLike[], edges?: { source: string; target: string; sourceHandle?: string | null }[]): NodeConfigIssue[] {
   const issues: NodeConfigIssue[] = [];
 
   for (const node of nodes ?? []) {
@@ -190,6 +191,9 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
       issues.push({ nodeId: node.id, nodeLabel: (config.label as string) || "Condição",
         actionType: "condition", missing: "publicação autorizada da condição" });
       continue;
+    }
+    if (node.type === "wait_business_window" || config.type === "wait_business_window") {
+      issues.push(...businessWindowConfigErrors(config).map(missing => ({ nodeId: node.id, nodeLabel: String(config.label || "Janela Comercial"), actionType: "wait_business_window", missing })));
     }
     const actionType = config.actionType as string | undefined;
     if (!actionType) continue;
@@ -210,6 +214,7 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
     }
   }
 
+  if (edges) issues.push(...businessWindowConnectionIssues(nodes, edges));
   return issues;
 }
 

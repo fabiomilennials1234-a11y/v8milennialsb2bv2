@@ -1,5 +1,5 @@
 /**
- * Integration tests — bulk_add_to_custom_pipe RPC
+ * Integration tests — bulk_add_to_pipeline RPC
  *
  * Cobre a feature "Mover leads em massa para um FUNIL CUSTOM" pelo BulkActionBar.
  * A RPC é SECURITY DEFINER e resolve a org POR LEAD (nunca confia em input de org),
@@ -48,21 +48,22 @@ const svc = createServiceClient();
 
 async function entryFor(pipelineId: string, leadId: string) {
   return svc
-    .from('custom_pipe_entries')
+    .from('pipeline_entries')
     .select('id, stage_id, organization_id')
     .eq('pipeline_id', pipelineId)
     .eq('lead_id', leadId)
     .maybeSingle();
 }
 
-describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
+describe.skipIf(shouldSkip)('bulk_add_to_pipeline RPC', () => {
   beforeAll(async () => {
     // Funis custom de teste (org A e org B) + etapas. Idempotente via upsert.
-    await svc.from('custom_pipelines').upsert([
+    await svc.from('pipelines').upsert([
       {
         id: PIPE_A_ID,
         organization_id: TEST_ORG_ID,
         name: 'Bulk Custom A',
+        type: 'custom',
         slug: 'bulk-custom-a',
         is_active: true,
       },
@@ -70,12 +71,13 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
         id: PIPE_B_ID,
         organization_id: TEST_ORG_B_ID,
         name: 'Bulk Custom B',
+        type: 'custom',
         slug: 'bulk-custom-b',
         is_active: true,
       },
     ]);
 
-    await svc.from('custom_pipeline_stages').upsert([
+    await svc.from('pipeline_stages').upsert([
       {
         id: PIPE_A_STAGE_1,
         organization_id: TEST_ORG_ID,
@@ -103,19 +105,19 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
     ]);
 
     // Estado limpo: remove qualquer entry pré-existente dos funis de teste.
-    await svc.from('custom_pipe_entries').delete().in('pipeline_id', [PIPE_A_ID, PIPE_B_ID]);
+    await svc.from('pipeline_entries').delete().in('pipeline_id', [PIPE_A_ID, PIPE_B_ID]);
   });
 
   afterAll(async () => {
     // Cascade: deletar os pipelines remove stages + entries.
-    await svc.from('custom_pipe_entries').delete().in('pipeline_id', [PIPE_A_ID, PIPE_B_ID]);
-    await svc.from('custom_pipelines').delete().in('id', [PIPE_A_ID, PIPE_B_ID]);
+    await svc.from('pipeline_entries').delete().in('pipeline_id', [PIPE_A_ID, PIPE_B_ID]);
+    await svc.from('pipelines').delete().in('id', [PIPE_A_ID, PIPE_B_ID]);
     await clearClients();
   });
 
   it('membro move leads da própria org para funil custom (insere na etapa)', async () => {
     const member = await getOrgAMember1();
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_ALPHA_ID, TEST_LEAD_BETA_ID],
       p_pipeline_id: PIPE_A_ID,
       p_stage_id: PIPE_A_STAGE_1,
@@ -132,7 +134,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
   it('upsert on-conflict: lead já no funil vira update de etapa (sem erro de dup)', async () => {
     const member = await getOrgAMember1();
     // ALPHA já está em PIPE_A_STAGE_1 (teste anterior). Reenviar em outra etapa.
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_ALPHA_ID],
       p_pipeline_id: PIPE_A_ID,
       p_stage_id: PIPE_A_STAGE_2,
@@ -144,7 +146,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
 
     // Continua sendo UMA única entry (não duplicou).
     const { count } = await svc
-      .from('custom_pipe_entries')
+      .from('pipeline_entries')
       .select('id', { count: 'exact', head: true })
       .eq('pipeline_id', PIPE_A_ID)
       .eq('lead_id', TEST_LEAD_ALPHA_ID);
@@ -153,7 +155,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
 
   it('isolamento: membro NÃO move lead de outra org (no-op)', async () => {
     const member = await getOrgAMember1();
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_ORGB_1_ID],
       p_pipeline_id: PIPE_A_ID,
       p_stage_id: PIPE_A_STAGE_1,
@@ -167,7 +169,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
 
   it('isolamento: funil de outra org não é destino válido para lead da própria org (no-op)', async () => {
     const member = await getOrgAMember1();
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_GAMMA_ID],
       p_pipeline_id: PIPE_B_ID, // funil da org B
       p_stage_id: PIPE_B_STAGE_1,
@@ -180,7 +182,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
 
   it('master cross-org: move lead de outra org para funil daquela org (OK)', async () => {
     const master = await getMaster();
-    const { error } = await master.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await master.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_ORGB_1_ID],
       p_pipeline_id: PIPE_B_ID,
       p_stage_id: PIPE_B_STAGE_1,
@@ -194,7 +196,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
 
   it('pipeline inexistente → no-op (sem erro)', async () => {
     const member = await getOrgAMember1();
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_ALPHA_ID],
       p_pipeline_id: RANDOM_UUID,
       p_stage_id: PIPE_A_STAGE_1,
@@ -208,7 +210,7 @@ describe.skipIf(shouldSkip)('bulk_add_to_custom_pipe RPC', () => {
   it('stage que não pertence ao pipeline → no-op (sem erro)', async () => {
     const member = await getOrgAMember1();
     // GAMMA ainda não está em PIPE_A. Usar stage da org B (não pertence a PIPE_A).
-    const { error } = await member.rpc('bulk_add_to_custom_pipe', {
+    const { error } = await member.rpc('bulk_add_to_pipeline', {
       p_lead_ids: [TEST_LEAD_GAMMA_ID],
       p_pipeline_id: PIPE_A_ID,
       p_stage_id: PIPE_B_STAGE_1,

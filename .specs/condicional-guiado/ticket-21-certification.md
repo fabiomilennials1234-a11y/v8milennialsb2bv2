@@ -81,10 +81,10 @@ integralmente `[from,to)`. Cobertura inexistente, em andamento ou com lacuna vir
 ## Rollback e liberação
 
 Migration aditiva:
-`supabase/migrations/20271017000055_guided_workload_limits.sql`.
+`supabase/migrations/20271020000055_guided_workload_limits.sql`.
 
 Rollback:
-`supabase/migrations/rollback/20271017000055_guided_workload_limits.sql`.
+`supabase/migrations/rollback/20271020000055_guided_workload_limits.sql`.
 
 Ensaio reproduzível:
 

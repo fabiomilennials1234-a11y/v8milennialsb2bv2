@@ -1,3 +1,4 @@
+import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
 import {
@@ -278,6 +279,7 @@ export function DealCard({
   movendo,
   comentarios = [],
   onComentar,
+  onBaixarAnexo,
   onEditarComentario,
   onApagarComentario,
   comentando,
@@ -288,18 +290,19 @@ export function DealCard({
   excluindo,
   etiquetas,
   acaoLigar,
+  acaoCopiar,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
   /** Move o negócio entre etapas. NÃO decide desfecho — ver `onDefinirDesfecho`. */
   onMoverEtapa?: (chave: string) => void;
   /**
-   * Marca o negócio como ganho ou perdido, na etapa em que ele estiver
+   * Marca o negócio como ganho/perdido ou reabre, na etapa em que ele estiver
    * (ADR-0023 Emenda 1). Quem escreve é o `DealCardPanel`: este arquivo está no
    * grafo de `/preview.html` e não pode alcançar o banco (inv:H5-17).
    */
-  onDefinirDesfecho?: (desfecho: "won" | "lost") => void;
-  /** Desfecho em voo — trava os dois botões para não emitir venda duplicada. */
+  onDefinirDesfecho?: (desfecho: "open" | "won" | "lost") => void;
+  /** Desfecho em voo — trava as ações de fechamento e reabertura. */
   decidindo?: boolean;
   /** Abre OUTRO negócio do mesmo lead, na aba "Negócios". */
   onOpenDeal?: (entryId: string) => void;
@@ -322,7 +325,8 @@ export function DealCard({
    * releitura de etapas, mediana e produtos.
    */
   comentarios?: DealCardComentario[];
-  onComentar?: (texto: string) => void | Promise<void>;
+  onComentar?: (texto: string, files?: File[]) => void | Promise<void>;
+  onBaixarAnexo?: (file: CommentAttachment) => Promise<void>;
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
@@ -387,6 +391,7 @@ export function DealCard({
    * Não reestampa a pessoa — é um ato sobre ela, não uma identidade.
    */
   acaoLigar?: ReactNode;
+  acaoCopiar?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -428,7 +433,7 @@ export function DealCard({
   const { total } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* ── Cabeçalho ─────────────────────────────────────────────────────
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
@@ -447,7 +452,16 @@ export function DealCard({
             )}
             {negocio.estado === "perdido" && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/35 bg-destructive/[0.08] px-2 py-0.5 text-[12px] font-semibold text-destructive">
-                <X className="size-3" />
+                <button
+                  type="button"
+                  aria-label="Remover de perdido"
+                  title="Remover de perdido"
+                  disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
+                  onClick={() => onDefinirDesfecho?.("open")}
+                  className="grid size-5 place-items-center rounded hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
                 Perdido
               </span>
             )}
@@ -481,10 +495,11 @@ export function DealCard({
             top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
             do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
             comum de faxina de funil. */}
-        {(aberto || onExcluir || acaoLigar) && (
+        {(aberto || onExcluir || acaoLigar || acaoCopiar) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
             {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
                 negócio aberto, e o único que não o encerra. */}
+            {acaoCopiar}
             {acaoLigar}
             {aberto && (
               <AcaoPrimaria
@@ -766,28 +781,21 @@ export function DealCard({
               )}
             </div>
 
-            {/* Comentários — bloco FIXO no pé da aba, não uma quarta sub-aba.
-                A escolha é do dono do produto (24/08) e tem precedente medido:
-                `leads.notes` está preenchido em 74,9% dos leads e `lead_comments`
-                em 4,4%, e a diferença mais provável entre os dois nunca foi
-                preferência por texto solto — é que a nota estava na cara e o
-                comentário atrás de uma aba. Repetir a aba aqui seria repetir o
-                experimento sabendo o resultado.
 
-                Ele fica DEPOIS do dinheiro de propósito: quem abre o negócio
-                abre para decidir, e o que decide (tempo, valor, etapa, produto)
-                tem de vir antes da conversa sobre a decisão. */}
-            <div className="border-t border-border pt-5">
-              <DealCardComments
-                comentarios={comentarios}
-                onComentar={onComentar}
-                onEditar={onEditarComentario}
-                onApagar={onApagarComentario}
-                enviando={comentando}
-              />
-            </div>
           </div>
         )}
+        {/* Keep drafts and in-flight uploads mounted while switching tabs. */}
+        <div hidden={aba !== "negocio"} className="mt-5 border-t border-border pt-5">
+          <DealCardComments
+            key={negocio.id}
+            comentarios={comentarios}
+            onComentar={onComentar}
+            onBaixarAnexo={onBaixarAnexo}
+            onEditar={onEditarComentario}
+            onApagar={onApagarComentario}
+            enviando={comentando}
+          />
+        </div>
       </div>
     </div>
   );

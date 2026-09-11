@@ -83,3 +83,12 @@ Status: **construído, atrás de flag, pgTAP 19/19 + unit 21/21 verdes** (2026-0
 - `TVComposableShell` — `data-surface="tv"` + indicador de frescor (§5.4).
 - Gate: `TVDashboardRouter` em `TVDashboard.tsx`. Flag OFF nem monta o caminho novo.
 - Libs puras testadas: `tv-metric-format` (ausência = `—`, nunca 0), `tv-provenance`, `tv-density` (teto de 8 dispara por **tipografia**, não por célula).
+
+
+## Documentos nos comentários do negócio — 2026-09-10
+
+`DealCardComments.onComentar(texto, files?)` → `DealCardPanel` →
+`useCreateLeadComment`. Até 5 × 20 MB; `pipelineEntryId` obrigatório para anexos.
+`CommentAttachment` em `leads/lib/comment-attachments/files.ts` descreve
+`path/name/size/type`. `lead_comments.attachments` é JSONB imutável após criação.
+Download por callback mantém preview sem banco. Migration deve preceder frontend.

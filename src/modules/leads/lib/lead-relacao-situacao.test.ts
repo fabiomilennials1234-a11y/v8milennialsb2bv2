@@ -70,14 +70,20 @@ describe("Relação", () => {
     expect(s.prova).toBe("funil");
   });
 
-  it("pedido de ERP torna Cliente", () => {
+  it("pedido de ERP isolado não torna Cliente na Lei da Relação", () => {
     const s = deriveLeadStanding({ carteira: carteira() });
+    expect(s.relacao).toBe("lead");
+    expect(s.prova).toBeNull();
+  });
+
+  it("a prova de pedido é preservada para a Lei do ERP", () => {
+    const s = deriveLeadStanding({ carteira: carteira(), usaLeiDoErp: true });
     expect(s.relacao).toBe("cliente");
     expect(s.prova).toBe("erp");
   });
 
   it("as duas provas juntas", () => {
-    const s = deriveLeadStanding({ vendas: vendas(), carteira: carteira() });
+    const s = deriveLeadStanding({ vendas: vendas(), carteira: carteira(), usaLeiDoErp: true });
     expect(s.prova).toBe("ambas");
   });
 
@@ -99,12 +105,34 @@ describe("Relação", () => {
     expect(s.relacao).toBe("lead");
   });
 
-  it("card numa etapa ganha NÃO decide sozinho a Relação", () => {
-    // A fonte é o ledger, não a posição — decisão 4 fez o card sair da etapa
-    // onde ganhou. Em prod, cards em etapa ganha sem evento são 0, então esta
-    // combinação não existe na base; o teste fixa a regra, não o dado.
+  it("negócio ganho torna Cliente mesmo antes de carregar as vendas", () => {
     const s = deriveLeadStanding({ deals: [negocio({ outcome: "won", won: true })] });
-    expect(s.relacao).toBe("lead");
+    expect(s.relacao).toBe("cliente");
+  });
+
+  it.each([
+    [[], "lead"],
+    [["open"], "lead"],
+    [["lost"], "perdido"],
+    [["lost", "lost"], "perdido"],
+    [["lost", "open"], "lead"],
+    [["won", "lost"], "cliente"],
+    [["lost", "won", "open"], "cliente"],
+  ] as const)("desfechos %j classificam como %s", (outcomes, expected) => {
+    const deals = outcomes.map((outcome, i) => negocio({ id: String(i), outcome }));
+    expect(deriveLeadStanding({ deals }).relacao).toBe(expected);
+  });
+
+  it("ganho histórico líquido prevalece sobre os negócios perdidos atuais", () => {
+    expect(deriveLeadStanding({ vendas: vendas(), deals: [negocio({ outcome: "lost" })] }).relacao).toBe("cliente");
+  });
+
+  it("pedido de ERP não promove quem só tem perdas", () => {
+    expect(deriveLeadStanding({ carteira: carteira(), deals: [negocio({ outcome: "lost" })] }).relacao).toBe("perdido");
+  });
+
+  it("a lista usa a mesma classificação calculada que recortou a página no banco", () => {
+    expect(deriveLeadStanding({ relacao: "perdido", vendas: vendas() }).relacao).toBe("perdido");
   });
 });
 

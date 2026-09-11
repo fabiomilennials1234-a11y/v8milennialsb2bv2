@@ -1,3 +1,4 @@
+import { historyContactName } from "../_shared/whatsapp-contact-name.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
  * history-sync-worker v2 — processes history_sync_jobs with time-budgeted loops.
@@ -279,7 +280,7 @@ async function upsertMessages(
         ),
         content: msg.text ?? msg.body ?? msg.caption ?? null,
         media_url: msg.mediaUrl ?? msg.media_url ?? null,
-        push_name: msg.pushName ?? msg.wa_pushName ?? null,
+        push_name: historyContactName(msg, fromMe),
         status: fromMe ? "sent" : "received",
         timestamp: tsSeconds
           ? new Date(tsSeconds * 1000).toISOString()

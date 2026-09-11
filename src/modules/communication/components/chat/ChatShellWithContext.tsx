@@ -1,3 +1,5 @@
+import { queueConversationReadChange } from "../../lib/conversationReadQueue";
+import { ChatReplyProvider } from "./ReplyContext";
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
@@ -44,6 +46,8 @@ import { ChatShell } from "@/modules/communication/components/chat/layout/ChatSh
 import { MobileChatLayout } from "@/modules/communication/components/chat/layout/MobileChatLayout";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
+import { NewConversationDialog } from "./NewConversationDialog";
+import { hasEstablishedOutgoing, newConversationUnavailableReason, prepareNewConversation } from "../../lib/newConversation";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
 import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
@@ -148,6 +152,7 @@ function SocialRealtimeMount() {
 // ─── ChatView — coluna central (header + messages + composer) ────────────────
 
 interface ChatViewProps {
+  onConversationEstablished?: () => void;
   selectedContact: ChatContact | null;
   selectedPhone: string | null;
   instanceId: string | null;
@@ -155,13 +160,14 @@ interface ChatViewProps {
   organizationId: string | null;
   mountTime: number;
   onBack: () => void;
-  onOpenLeadModal: () => void;
+  onOpenLeadModal?: () => void;
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
   isMobile: boolean;
 }
 
 function ChatView({
+  onConversationEstablished,
   selectedContact,
   selectedPhone,
   instanceId,
@@ -219,6 +225,12 @@ function ChatView({
     isFetching: messagesFetching,
     refetch: refetchMessages,
   } = useWhatsAppMessages(phoneNumber, instanceId);
+
+  useEffect(() => {
+    if (hasEstablishedOutgoing(messages)) {
+      onConversationEstablished?.();
+    }
+  }, [messages, onConversationEstablished]);
 
   // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
   // badge interno do CRM e nunca falou com o WhatsApp).
@@ -290,6 +302,7 @@ function ChatView({
     {
       pushName: selectedContact?.push_name ?? null,
       nomeDoLead: effectiveLeadName,
+      savedContactName: selectedContact?.saved_contact_name,
       telefone: phoneNumber ?? null,
     },
     { nomeDoWhatsappPrimeiro },
@@ -310,6 +323,7 @@ function ChatView({
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
   return (
+    <ChatReplyProvider key={conversationKey} messages={messages}>
     <div className="flex flex-col h-full min-h-0 min-w-0">
       {/* C1 — Banner WAITING_HUMAN */}
       {isWaitingHuman && (
@@ -477,6 +491,7 @@ function ChatView({
         onClose={() => setPreviewUrl(null)}
       />
     </div>
+    </ChatReplyProvider>
   );
 }
 
@@ -595,6 +610,9 @@ export function ChatShellWithContext() {
    * que sai a caixa de referência da tela inteira.
    */
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [draftConversationKey, setDraftConversationKey] = useState<string | null>(null);
+  const handleConversationEstablished = useCallback(() => setDraftConversationKey(null), []);
 
   /**
    * De qual caixa sai a resposta — a decisão D6, num lugar só e testável.
@@ -920,6 +938,18 @@ export function ChatShellWithContext() {
     [contacts, selectedKey],
   );
 
+  const handleStartConversation = (phone: string) => {
+    // Use only the currently selected, authorized QR inbox. Unified inboxes
+    // without a selection must not silently send from somebody else's number.
+    const conversation = prepareNewConversation(phone, selectedBox, contacts);
+    if (!conversation) return;
+    setDraftConversationKey(conversation.isNew ? conversation.key : null);
+    setSelectedKey(conversation.key);
+    setSearchQuery("");
+    clearFilter();
+    setActiveTab("active");
+  };
+
   /**
    * O TELEFONE da conversa aberta, extraído da chave.
    *
@@ -987,6 +1017,20 @@ export function ChatShellWithContext() {
   // a RPC conta as incoming dos últimos 7 dias pra sempre → conversa nunca sai de
   // "não lida". Espelha o padrão que o chat-bubble flutuante já usa
   // (ChatBubbleContext.markReadServer). Otimista no cache + RPC fire-and-forget.
+  const handleMarkUnread = useCallback(async (phone: string, instanceId?: string | null) => {
+    const norm = normalizePhone(phone);
+    if (!instanceId || !norm) return;
+    // Close first so opening again is the explicit acknowledgement of this reminder.
+    if (telefoneSelecionado === phone && selectedInstanceId === instanceId) setSelectedKey(null);
+    const { error } = await queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_unread" as never, {
+      p_instance_id: instanceId, p_normalized_phone: norm,
+    } as never)).catch(() => ({ error: new Error("Falha de conexão") }));
+    if (error) { toast.error("Não foi possível marcar como não lido"); return; }
+    await queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+    await queryClient.invalidateQueries({ predicate: query => query.queryKey.some(key => typeof key === "string" && /unread|nao.lidas/.test(key)) });
+    toast.success("Conversa marcada como não lida");
+  }, [telefoneSelecionado, selectedInstanceId, queryClient]);
+
   const markConversationRead = useCallback(
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
@@ -1011,11 +1055,10 @@ export function ChatShellWithContext() {
           c.phone_number === phone &&
           (c.instance_id == null || c.instance_id === instanceId),
       );
-      void supabase
-        .rpc("mark_conversation_read", {
+      void queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_read", {
           p_instance_id: instanceId,
           p_normalized_phone: norm,
-        })
+        }))
         .then(undefined, () => {
           /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
         });
@@ -1337,6 +1380,7 @@ export function ChatShellWithContext() {
       <ShellComponent
         list={
           <ConversationList
+            onNewConversation={() => setNewConversationOpen(true)}
             contacts={contatosParaLista}
             selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
@@ -1357,6 +1401,7 @@ export function ChatShellWithContext() {
             // A lista NÃO relê a flag: quem manda `p_include_groups` na busca é
             // este componente, e as duas pontas têm que ser a mesma leitura.
             abasDeGrupos={abasDeGrupos}
+            onMarkUnread={handleMarkUnread}
             onArchive={handleArchive}
             onUnarchive={handleUnarchive}
             onDelete={handleDelete}
@@ -1403,6 +1448,7 @@ export function ChatShellWithContext() {
             />
           ) : (
             <ChatView
+              onConversationEstablished={draftConversationKey === selectedKey ? handleConversationEstablished : undefined}
               selectedContact={selectedContact}
               selectedPhone={telefoneSelecionado}
               instanceId={selectedInstanceId}
@@ -1410,7 +1456,7 @@ export function ChatShellWithContext() {
               organizationId={organizationId}
               mountTime={mountTimeRef.current}
               onBack={handleBack}
-              onOpenLeadModal={handleOpenLeadModal}
+              onOpenLeadModal={draftConversationKey === selectedKey ? undefined : handleOpenLeadModal}
               density={density}
               onDensityChange={setDensity}
               isMobile={isMobile}
@@ -1418,7 +1464,7 @@ export function ChatShellWithContext() {
           )
         }
         context={
-          selectedKey ? (
+          selectedKey && draftConversationKey !== selectedKey ? (
             // Duas colunas de contexto, e não uma com ramos: a de WhatsApp
             // resolve o lead pelo TELEFONE e é o caminho quente de 30 orgs; a
             // social resolve pelo vínculo em `lead_social_identities` e, quando
@@ -1458,14 +1504,24 @@ export function ChatShellWithContext() {
         densityCssVars={cssVars}
       />
 
+      {newConversationOpen && (
+        <NewConversationDialog
+          open={newConversationOpen}
+          onOpenChange={setNewConversationOpen}
+          instanceName={selectedBox?.name}
+          unavailableReason={newConversationUnavailableReason(selectedBox)}
+          onStart={handleStartConversation}
+        />
+      )}
+
       {/* Recebe `phoneNumber` e monta a ficha do lead a partir dele — um
           contato de Instagram não tem telefone, então o modal não existe lá. */}
-      {selectedContact && !isSocialBox && (
+      {telefoneSelecionado && !isSocialBox && draftConversationKey !== selectedKey && (
         <LeadContactModal
           isOpen={leadModalOpen}
           onClose={handleCloseLeadModal}
-          phoneNumber={selectedContact.phone_number}
-          pushName={selectedContact.push_name ?? undefined}
+          phoneNumber={telefoneSelecionado}
+          pushName={selectedContact?.push_name ?? undefined}
         />
       )}
 

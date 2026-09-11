@@ -1,3 +1,5 @@
+import { downloadCommentFile } from "../../lib/comment-attachments/storage";
+import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -223,7 +225,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const [pedindoValor, setPedindoValor] = useState(false);
 
   const definirDesfecho = useCallback(
-    async (desfecho: "won" | "lost", valor?: number) => {
+    async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
       setDecidindo(true);
       try {
@@ -248,6 +250,10 @@ export const DealCardPanel = memo(function DealCardPanel() {
           // Então degrada para o comportamento anterior: mover para a etapa
           // terminal, quando ela existe. Some sozinho quando a RPC responder.
           if (isMissingSchemaError(error)) {
+            if (desfecho === "open") {
+              toast.error("Não foi possível reabrir o negócio. A atualização do funil precisa estar disponível.");
+              return;
+            }
             const papel = desfecho === "won" ? "ganho" : "perdido";
             const terminal = data?.etapas.find((e) => e.papel === papel);
             if (terminal) {
@@ -269,11 +275,14 @@ export const DealCardPanel = memo(function DealCardPanel() {
           throw new Error(error.message);
         }
 
-        toast.success(desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        toast.success(desfecho === "open" ? "Negócio removido de perdido" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
         queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+        for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Não foi possível registrar o desfecho");
       } finally {
@@ -400,6 +409,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         return {
           id: c.id,
           corpo: c.body,
+          anexos: c.attachments ?? [],
           autor: c.author?.name ?? "Usuário",
           autorAvatar: c.author?.avatar_url ?? null,
           criadoEm: c.created_at,
@@ -412,13 +422,14 @@ export const DealCardPanel = memo(function DealCardPanel() {
   }, [comentariosBrutos, entryId, tituloPorNegocio, membroId, souAdmin]);
 
   const comentar = useCallback(
-    async (texto: string) => {
+    async (texto: string, files?: File[]) => {
       if (!leadId || !organizacaoId) return;
       try {
         await criarComentario.mutateAsync({
           leadId,
           organizationId: organizacaoId,
           body: texto,
+          files,
           // É isto que responde "em qual negócio isto foi dito".
           pipelineEntryId: entryId,
         });
@@ -509,6 +520,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     ) : data ? (
       <DealCard
         negocio={data}
+        acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
         etiquetas={
           !comLead && leadId ? (
             <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
@@ -535,6 +547,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}
+        onBaixarAnexo={downloadCommentFile}
         onEditarComentario={podeComentar ? editarComentario : undefined}
         onApagarComentario={podeComentar ? apagarComentario : undefined}
         comentando={criarComentario.isPending}

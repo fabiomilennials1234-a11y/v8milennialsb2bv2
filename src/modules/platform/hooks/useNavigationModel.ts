@@ -1,9 +1,8 @@
 /**
  * Monta a navegação lateral já filtrada para o usuário atual.
  *
- * Junta quatro fontes que a top bar consultava soltas: config de exibição dos
- * pipes, funis customizados, matriz de permissão e gating de plano. O
- * componente que consome isto não decide mais nada — só desenha.
+ * Junta o registro canônico de funis, a matriz de permissão e o gating de
+ * plano. O componente que consome isto não decide mais nada — só desenha.
  *
  * Diferença relevante em relação a `TopNavigation`: lá os filhos de Funis eram
  * escritos por cima da constante de módulo (`funisItem.children = ...`), o que
@@ -14,15 +13,10 @@ import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from "@/modules/identity";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
-import { useMetricsStudioEnabled } from "@/modules/analytics";
 import {
   funilIcon,
-  useActiveTemporaryFunnels,
-  usePermanentCustomFunnels,
-  usePipelineDisplayConfig,
   usePipelines,
 } from "@/modules/pipelines";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
@@ -74,18 +68,13 @@ export function useNavigationModel(): NavigationModel {
   const { data: featurePerms } = useFeaturePermissions();
   const { hasFeature } = useOrgFeatures();
   const { orgType } = useOrganization();
-  const { data: displayConfig } = usePipelineDisplayConfig();
-  const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
-  const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
   // Registro único dos funis — a lateral reflete cor/ícone que o usuário
   // escolheu (SCRUM-637), em vez do ícone fixo pra todo mundo.
   const { data: pipelineRows = [] } = usePipelines();
   const { data: metaPages } = useMetaPages();
-  const metricsStudio = useMetricsStudioEnabled();
 
   const isOutboundMember = orgType === "outbound" && userRole?.role === "member";
   const metaPagesConnected = (metaPages?.pages.length ?? 0) > 0;
-  const metricsStudioEnabled = metricsStudio.enabled;
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -125,55 +114,16 @@ export function useNavigationModel(): NavigationModel {
    * Não há classe de funil na lateral — mas há IDENTIDADE: cada funil aparece
    * com a cor e o ícone que o usuário escolheu (`pipelines.icon/color`,
    * SCRUM-637). O que morreu foi o ícone fixo por espécie; o que fica é o
-   * mesmo tratamento pra todo funil, de fábrica ou criado pelo usuário. Nome
-   * de funil de sistema continua vindo do display_config (rename prevalece).
-   *
-   * A ORDEM de concatenação fica: é a que o usuário já conhece (os da org por
-   * `position`, depois os criados por ele). Ordem não é rótulo de categoria.
+   * mesmo tratamento para todo funil. O nome vem sempre de `pipelines.name`.
    */
   const funisChildren = useMemo<NavNode[]>(() => {
-    const rowBySlug = new Map(pipelineRows.map((p) => [p.slug, p] as const));
-    const rowById = new Map(pipelineRows.map((p) => [p.id, p] as const));
-
-    // Visibilidade + Carteira fora + merge de oportunidades: regra ÚNICA em
-    // contracts (`funisDeSistemaNavegaveis`), compartilhada com o hub `/funis`
-    // e o seletor da faixa. Ela também ordena — e sobre CÓPIA: o `.sort()` que
-    // vivia aqui reordenava o próprio array do cache do react-query.
-    const pipes: NavNode[] = funisDeSistemaNavegaveis(displayConfig, {
-      mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
-    })
-      .map((c) => {
-        const row = rowBySlug.get(c.pipe_type);
-        return {
-          label: c.display_name,
-          icon: funilIcon(row?.icon),
-          color: row?.color,
-          // SCRUM-637 (flip): funil de sistema navega pela rota única, igual
-          // aos custom — o PIPE_PATH_MAP morreu junto com as páginas /pipe-*.
-          path: `/funil/${c.pipe_type}`,
-        };
-      });
-
-    // Membro de org outbound continua vendo só os pipes: este `return` é o
-    // único ponto onde a distinção carrega semântica de ACESSO, não de estilo.
-    if (isOutboundMember) return pipes;
-
-    const permanentes: NavNode[] = permanentPipelines.map((pipe) => ({
+    return pipelineRows.filter((pipe) => pipe.is_active).map((pipe) => ({
       label: pipe.name,
-      icon: funilIcon(rowById.get(pipe.id)?.icon),
-      color: rowById.get(pipe.id)?.color ?? undefined,
+      icon: funilIcon(pipe.icon),
+      color: pipe.color ?? undefined,
       path: `/funil/${pipe.slug}`,
     }));
-
-    const temporarios: NavNode[] = temporaryFunnels.map((pipe) => ({
-      label: pipe.name,
-      icon: funilIcon(rowById.get(pipe.id)?.icon),
-      color: rowById.get(pipe.id)?.color ?? undefined,
-      path: `/funil/${pipe.slug}`,
-    }));
-
-    return [...pipes, ...permanentes, ...temporarios];
-  }, [displayConfig, hasFeature, isOutboundMember, permanentPipelines, temporaryFunnels, pipelineRows]);
+  }, [pipelineRows]);
 
   const primary = useMemo(() => {
     // Cópia: a constante do módulo nunca é escrita.
@@ -183,7 +133,7 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected, metricsStudioEnabled },
+        { metaPagesConnected },
       ),
       canViewRoute,
     );
@@ -193,7 +143,6 @@ export function useNavigationModel(): NavigationModel {
     isOutboundMember,
     isMaster,
     metaPagesConnected,
-    metricsStudioEnabled,
     canViewRoute,
   ]);
 
@@ -210,14 +159,13 @@ export function useNavigationModel(): NavigationModel {
     return groups
       .map((group) => ({
         ...group,
-        // O Pitstop passa pelo mesmo gate da lateral: Métricas vive aqui e
-        // continua escondida enquanto a org não estiver no rollout.
-        items: filterByGate(group.items, { metaPagesConnected, metricsStudioEnabled }).filter(
+        // O Pitstop respeita os mesmos gates de runtime e permissões da lateral.
+        items: filterByGate(group.items, { metaPagesConnected }).filter(
           (item) => canViewRoute(item.path),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, metricsStudioEnabled, orgType]);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, orgType]);
 
   const isActive = useMemo(
     () =>

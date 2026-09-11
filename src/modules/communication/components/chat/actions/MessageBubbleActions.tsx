@@ -8,8 +8,9 @@
  *  - Hooks useMessageActions executam mutations.
  *  - Erros NotSupportedError (instance=evolution) → toast informativo.
  */
+import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useState } from "react";
-import { Pencil, Pin, Trash2, Check, Download } from "lucide-react";
+import { Reply, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ export function MessageBubbleActions({
   onRequestEdit,
   className,
 }: MessageBubbleActionsProps) {
+  const reply = useChatReply();
   const reactMut = useReactMessage();
   const pinMut = usePinMessage();
   const deleteMut = useDeleteMessage();
@@ -133,12 +135,13 @@ export function MessageBubbleActions({
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity rounded-lg bg-background/95 backdrop-blur shadow-sm border border-border/40 px-1 py-0.5",
+          "flex items-center gap-0.5 opacity-0 max-sm:opacity-100 group-hover:opacity-100 focus-within:opacity-100 transition-opacity rounded-lg bg-background/95 backdrop-blur shadow-sm border border-border/40 px-1 py-0.5",
           className
         )}
         role="group"
         aria-label="Ações da mensagem"
       >
+        {reply && <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Responder mensagem" title="Responder" onClick={() => reply.select(messageId)}><Reply className="h-3.5 w-3.5" /></Button>}
         <EmojiPickerPopover onSelect={handleReact} disabled={reactMut.isPending} />
 
         {canEdit && (

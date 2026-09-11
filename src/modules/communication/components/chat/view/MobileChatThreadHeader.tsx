@@ -13,7 +13,7 @@ export interface MobileChatThreadHeaderProps {
   hasLead: boolean;
   leadId?: string;
   onBack: () => void;
-  onTapContact: () => void;
+  onTapContact?: () => void;
 }
 
 export function MobileChatThreadHeader({
@@ -43,12 +43,12 @@ export function MobileChatThreadHeader({
       </Button>
 
       <div
-        role="button"
-        tabIndex={0}
+        role={onTapContact ? "button" : undefined}
+        tabIndex={onTapContact ? 0 : undefined}
         className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer rounded-lg -my-1 py-1 hover:bg-muted/50 transition-colors"
         onClick={onTapContact}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onTapContact();
+          if (e.key === "Enter" || e.key === " ") onTapContact?.();
         }}
       >
         <Avatar className="w-8 h-8 shrink-0">

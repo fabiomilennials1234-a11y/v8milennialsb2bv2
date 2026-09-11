@@ -50,19 +50,13 @@ const PIPELINE_SISTEMA = {
   id: "p-sys",
   slug: "whatsapp",
   type: "system",
-  name: "Qualificação",
+  name: "Oportunidades",
   icon: "target",
   color: "#3b82f6",
   is_active: true,
 };
 vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
   usePipelines: () => ({ data: [PIPELINE_SISTEMA], isLoading: false }),
-}));
-vi.mock("@/modules/pipelines/hooks/config/usePipelineDisplayConfig", () => ({
-  usePipelineDisplayConfig: () => ({
-    data: [{ pipe_type: "whatsapp", display_name: "Oportunidades", is_visible: true }],
-    isLoading: false,
-  }),
 }));
 
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";

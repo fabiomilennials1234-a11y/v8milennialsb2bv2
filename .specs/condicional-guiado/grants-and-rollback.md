@@ -14,14 +14,14 @@
 
 Alvo desta sessão: `mkpjjtwjyvgabavnxqgp`, não produção. Aplicadas em ordem:
 
-1. `20271017000000_workflow_data_grants.sql`
-2. `20271017000001_workflow_grant_revision_conflict.sql`
-3. `20271017000002_guided_condition_authorized_read.sql`
-4. `20271017000003_guided_workflow_drafts.sql`
-5. `20271017000004_guided_workflow_master_authorization.sql`
-6. `20271017000005_create_guided_workflow_draft.sql`
-7. `20271017000006_guided_workflow_draft_settings.sql`
-8. `20271017000007_create_guided_workflow_draft_settings.sql`
+1. `20271020000000_workflow_data_grants.sql`
+2. `20271020000001_workflow_grant_revision_conflict.sql`
+3. `20271020000002_guided_condition_authorized_read.sql`
+4. `20271020000003_guided_workflow_drafts.sql`
+5. `20271020000004_guided_workflow_master_authorization.sql`
+6. `20271020000005_create_guided_workflow_draft.sql`
+7. `20271020000006_guided_workflow_draft_settings.sql`
+8. `20271020000007_create_guided_workflow_draft_settings.sql`
 
 A segunda é correção aditiva: a primeira migração aplicada permanece imutável. O teste real revelou timeout na resposta de revisão antiga com o SQLSTATE de serialização original.
 
@@ -29,14 +29,14 @@ A segunda é correção aditiva: a primeira migração aplicada permanece imutá
 
 Interromper novas execuções guiadas antes de reverter. Nesta etapa elas já estão bloqueadas pelo executor.
 
-1. Aplicar rollback de `20271017000007_create_guided_workflow_draft_settings.sql`.
-2. Aplicar rollback de `20271017000006_guided_workflow_draft_settings.sql`.
-3. Aplicar rollback de `20271017000005_create_guided_workflow_draft.sql`.
-4. Aplicar rollback de `20271017000004_guided_workflow_master_authorization.sql`.
-5. Aplicar rollback de `20271017000003_guided_workflow_drafts.sql`.
-6. Aplicar rollback de `20271017000002_guided_condition_authorized_read.sql`.
-7. Aplicar rollback de `20271017000001_workflow_grant_revision_conflict.sql`.
-8. Aplicar rollback de `20271017000000_workflow_data_grants.sql`.
+1. Aplicar rollback de `20271020000007_create_guided_workflow_draft_settings.sql`.
+2. Aplicar rollback de `20271020000006_guided_workflow_draft_settings.sql`.
+3. Aplicar rollback de `20271020000005_create_guided_workflow_draft.sql`.
+4. Aplicar rollback de `20271020000004_guided_workflow_master_authorization.sql`.
+5. Aplicar rollback de `20271020000003_guided_workflow_drafts.sql`.
+6. Aplicar rollback de `20271020000002_guided_condition_authorized_read.sql`.
+7. Aplicar rollback de `20271020000001_workflow_grant_revision_conflict.sql`.
+8. Aplicar rollback de `20271020000000_workflow_data_grants.sql`.
 
 Rollback completo remove RPC/policy e revoga permissões, preservando tabela e histórico. Não desabilita RLS, não concede acesso amplo e não altera workflows legados. Reaplicar as oito migrações na ordem original restaura a funcionalidade. Não reaplicar apenas a primeira em uma instalação que já recebeu a correção de conflitos.
 
@@ -64,7 +64,7 @@ Verificar no alvo os privilégios de `set_workflow_data_grant(uuid,text[],intege
 
 Applied/registered only on preview mkpjjtwjyvgabavnxqgp. Forward adds workflow_guided_versions and workflow_guided_publications plus service-only finalize_guided_workflow_publication. Authenticated clients may read under administration RLS; service/authenticated clients have no direct INSERT/UPDATE/DELETE. Finalizer EXECUTE is service_role only, checks verified actor authority, exact draft revision/content and current grant under locks.
 
-Rollback file: supabase/migrations/rollback/20271017000008_guided_workflow_publication.sql. Drops finalizer and policies and revokes table access; preserves version records and selected pointer. Roll back 08 before 07..00 because policies depend on the administration helper. Reapply in ascending order. Expanded scripts/check-guided-grant-rollback.mjs rehearsed all nine migrations in one preview transaction and verified preservation plus effective grants. This is schema rollback evidence; runtime publication is still gated and production deployment remains unauthorized.
+Rollback file: supabase/migrations/rollback/20271020000008_guided_workflow_publication.sql. Drops finalizer and policies and revokes table access; preserves version records and selected pointer. Roll back 08 before 07..00 because policies depend on the administration helper. Reapply in ascending order. Expanded scripts/check-guided-grant-rollback.mjs rehearsed all nine migrations in one preview transaction and verified preservation plus effective grants. This is schema rollback evidence; runtime publication is still gated and production deployment remains unauthorized.
 
 ### Execution pin migration 20271017000009
 

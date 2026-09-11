@@ -107,6 +107,7 @@ interface ConversationListProps {
    * telefone), e no modo unificado a linha clicada pode não ser da caixa da
    * conversa aberta. Opcional para não quebrar quem chama sem ela.
    */
+  onMarkUnread?: (phone: string, instanceId?: string | null) => void;
   onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
   onDelete: (phone: string, instanceId?: string | null) => void;
@@ -117,6 +118,7 @@ interface ConversationListProps {
   onAddTag: (phone: string, tagId: string, instanceId?: string | null) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
   onOpenInstances?: () => void;
+  onNewConversation?: () => void;
   /** Modo de densidade para altura estimada dos itens. */
   density?: DensityMode;
   // ─── Filtro (modelo Linear) ─────────────────────────────────────────────────
@@ -159,6 +161,7 @@ export function ConversationList({
   activeTab,
   onTabChange,
   abasDeGrupos = false,
+  onMarkUnread,
   onArchive,
   onUnarchive,
   onDelete,
@@ -169,6 +172,7 @@ export function ConversationList({
   onAddTag,
   onRemoveTag,
   onOpenInstances,
+  onNewConversation,
   density = "comfortable",
   filter,
   patch,
@@ -385,6 +389,7 @@ export function ConversationList({
       {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
       {isMobile ? (
         <MobileChatListHeader
+          onNewConversation={onNewConversation ? () => { setMobileFilter("all"); onNewConversation(); } : undefined}
           instanceName={selectedBox?.name ?? "WhatsApp"}
           instanceConnected={selectedBox?.status === "connected"}
           channel={selectedBox?.kind ?? "whatsapp"}
@@ -451,6 +456,7 @@ export function ConversationList({
             Um chip que não recorta nada é pior que chip nenhum. */}
         {!isSocialBox && (
           <InboxFilterBar
+            onNewConversation={onNewConversation}
             filter={filter}
             patch={patch}
             toggleMulti={toggleMulti}
@@ -601,6 +607,7 @@ export function ConversationList({
                     instanceId={instanceId}
                     organizationId={organizationId}
                     allTags={allTags}
+                    onMarkUnread={onMarkUnread}
                     onArchive={onArchive}
                     onUnarchive={onUnarchive}
                     onDelete={onDelete}
@@ -637,7 +644,8 @@ export function ConversationList({
                   instanceId={instanceId}
                   organizationId={organizationId}
                   allTags={allTags}
-                  onArchive={onArchive}
+                  onMarkUnread={onMarkUnread}
+                    onArchive={onArchive}
                   onUnarchive={onUnarchive}
                   onDelete={onDelete}
                   onAddTag={onAddTag}
