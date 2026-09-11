@@ -55,6 +55,15 @@ export class ExternalServices {
       return Response.json({ plan_name: "test", features: this.features });
     }
     if (url.pathname === "/rest/v1/rpc/oraculo_metricas") return Response.json({ vendas: 1 });
+    if (url.pathname === "/rest/v1/rpc/oraculo_revenue_bottleneck") return Response.json({
+      status: "bottleneck",
+      people: [{ team_member_name: "Colega Secreto" }],
+      bottleneck: {
+        dimension: "person", key: crypto.randomUUID(), label: "Colega Secreto",
+        team_member_id: crypto.randomUUID(), team_member_name: "Colega Secreto",
+        comparison_basis: "team_median", estimated_leaked_revenue: 5_000,
+      },
+    });
     if (url.pathname === "/rest/v1/rpc/oraculo_meeting_profile_metrics") return Response.json({ reunioes_marcadas: 0, reunioes_realizadas: 0 });
     if (url.pathname === "/rest/v1/rpc/oraculo_get_profile_context") return Response.json(null);
     if (url.pathname === "/rest/v1/rpc/oraculo_conversa_detalhe") {
