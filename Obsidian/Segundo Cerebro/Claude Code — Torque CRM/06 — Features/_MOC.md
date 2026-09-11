@@ -53,6 +53,7 @@ owner: claude-agent
 - [[Copiar resumo do negócio|Copiar resumo do negócio]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
 - [[Filtros do Kanban|Filtros do Kanban]]
+- [[Funis canonicos|Funis canônicos]]
 - [[Lead Card|Lead Card (Kanban) — Trello-style]]
 - [[Lead Detail Modal|Lead Detail Modal]]
 - [[Pipe Confirmacao|Pipe Confirmacao]]

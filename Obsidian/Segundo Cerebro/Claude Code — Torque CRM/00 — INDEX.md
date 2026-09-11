@@ -110,3 +110,5 @@ Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`.
 
 - **Subagente do harness** (arquiteto/design/engenheiro) — ferramenta dev → ver [[Subagentes]]
 - **Agente IA do produto (Copilot)** — IA conversacional pra leads → ver [[Copilot]]
+
+- [[06 — Features/Vendas/Funis canonicos|Funis canônicos]] — entidade, ordem e visibilidade.
