@@ -182,6 +182,7 @@ export {
   useProducts,
   useProductsWithVariants,
   useActiveProducts,
+  useGuidedProductOptions,
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,

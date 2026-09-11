@@ -1731,6 +1731,12 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
       content: { ...conteudo, mediaUrl: midiaFinal },
+      conditionText: conteudo.content,
+      conditionTextSource: conteudo.content == null ? null
+        : conteudo.metadata.tipo === "midia" ? "caption"
+        : conteudo.metadata.tipo === "resposta" ? "interactive"
+        : conteudo.metadata.tipo === "localizacao" || conteudo.metadata.tipo === "contato" || conteudo.metadata.tipo === "reacao" ? "synthetic"
+        : "text",
       metadata: metadataFinal,
       // O id ESTÁVEL. É ele que uma reação aponta e que uma resposta citada
       // carrega — sem isto gravado, reagir a uma mensagem do cliente é apontar
@@ -1828,7 +1834,16 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
             source: "webhook",
             // Sem isto o filtro de canal do gatilho passava sempre: o matcher
             // só compara quando o contexto traz o campo.
-            context: reacoes.contextoDoGatilho ?? undefined,
+            context: reacoes.contextoDoGatilho ? {
+              ...reacoes.contextoDoGatilho,
+              message_context: {
+                storage: "channel_messages",
+                messageId: inserted,
+                boxId: channel!.id,
+                provider: "notificame",
+                participantId: row.contact_external_id,
+              },
+            } : undefined,
           });
         }
       } catch (err) {

@@ -163,7 +163,7 @@ export default function Automacoes() {
                 className="h-8 w-8"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleExport(workflow);
+                  void handleExport(workflow);
                 }}
                 title="Exportar workflow"
               >

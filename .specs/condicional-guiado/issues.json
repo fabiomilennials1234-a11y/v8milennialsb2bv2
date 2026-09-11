@@ -1,0 +1,204 @@
+{
+  "01": {
+    "number": 2016,
+    "id": 5381266023,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2016",
+    "title": "Testar uma condição simples com contrato novo e legado preservado",
+    "blocked_by": []
+  },
+  "02": {
+    "number": 2017,
+    "id": 5381266420,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2017",
+    "title": "Autorizar acesso da organização e revogá-lo sem depender do criador",
+    "blocked_by": [
+      "01"
+    ]
+  },
+  "03": {
+    "number": 2018,
+    "id": 5381266830,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2018",
+    "title": "Editar rascunho e publicar versão válida e autorizada",
+    "blocked_by": [
+      "02"
+    ]
+  },
+  "04": {
+    "number": 2019,
+    "id": 5381267132,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2019",
+    "title": "Executar e retomar pela versão inicial das regras",
+    "blocked_by": [
+      "03"
+    ]
+  },
+  "05": {
+    "number": 2020,
+    "id": 5381267447,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2020",
+    "title": "Montar e testar grupos Todas/Qualquer até três níveis",
+    "blocked_by": [
+      "01"
+    ]
+  },
+  "06": {
+    "number": 2021,
+    "id": 5381267680,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2021",
+    "title": "Selecionar dados padrão do lead sem digitar referências",
+    "blocked_by": [
+      "01"
+    ]
+  },
+  "07": {
+    "number": 2022,
+    "id": 5381267982,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2022",
+    "title": "Configurar campos personalizados pelo tipo e identidade",
+    "blocked_by": [
+      "06"
+    ]
+  },
+  "08": {
+    "number": 2023,
+    "id": 5381268280,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2023",
+    "title": "Avaliar negócio específico, etapa, valor e permanência atual",
+    "blocked_by": [
+      "02",
+      "06"
+    ]
+  },
+  "09": {
+    "number": 2024,
+    "id": 5381268688,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2024",
+    "title": "Consultar existência de negócio com grupo e recorte explícitos",
+    "blocked_by": [
+      "05",
+      "08"
+    ]
+  },
+  "10": {
+    "number": 2025,
+    "id": 5381268915,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2025",
+    "title": "Consultar última venda que permanece ganha",
+    "blocked_by": [
+      "08"
+    ]
+  },
+  "11": {
+    "number": 2026,
+    "id": 5381269282,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2026",
+    "title": "Fixar conversa e avaliar mensagem do gatilho com fonte textual",
+    "blocked_by": [
+      "02",
+      "06"
+    ]
+  },
+  "12": {
+    "number": 2027,
+    "id": 5381269495,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2027",
+    "title": "Comprovar cobertura do histórico antes de concluir ausência",
+    "blocked_by": [
+      "11"
+    ]
+  },
+  "13": {
+    "number": 2028,
+    "id": 5381269696,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2028",
+    "title": "Buscar palavras e expressões em mensagem ou período",
+    "blocked_by": [
+      "05",
+      "12"
+    ]
+  },
+  "14": {
+    "number": 2029,
+    "id": 5381269994,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2029",
+    "title": "Medir quem aguarda resposta e há quanto tempo corrido",
+    "blocked_by": [
+      "12"
+    ]
+  },
+  "15": {
+    "number": 2030,
+    "id": 5381270213,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2030",
+    "title": "Recuperar avaliação temporariamente indisponível sem repetir ações",
+    "blocked_by": [
+      "04"
+    ]
+  },
+  "16": {
+    "number": 2031,
+    "id": 5381270549,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2031",
+    "title": "Consultar histórico sem herdar privilégios da automação",
+    "blocked_by": [
+      "04"
+    ]
+  },
+  "17": {
+    "number": 2032,
+    "id": 5381270859,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2032",
+    "title": "Consultar atividades com vínculo e significado explícitos",
+    "blocked_by": [
+      "02",
+      "06"
+    ]
+  },
+  "18": {
+    "number": 2033,
+    "id": 5381271132,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2033",
+    "title": "Consultar produto pela relação comercial correta",
+    "blocked_by": [
+      "08"
+    ]
+  },
+  "19": {
+    "number": 2034,
+    "id": 5381271463,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2034",
+    "title": "Importar e duplicar condições com referências seguras",
+    "blocked_by": [
+      "05",
+      "07",
+      "09",
+      "10",
+      "13",
+      "14",
+      "17",
+      "18"
+    ]
+  },
+  "20": {
+    "number": 2035,
+    "id": 5381271667,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2035",
+    "title": "Migrar legado explicitamente com comparação de significado",
+    "blocked_by": [
+      "04",
+      "15",
+      "16",
+      "19"
+    ]
+  },
+  "21": {
+    "number": 2036,
+    "id": 5381271854,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2036",
+    "title": "Validar jornada completa e limites antes da liberação",
+    "blocked_by": [
+      "20"
+    ]
+  }
+}

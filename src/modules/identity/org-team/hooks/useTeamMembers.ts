@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
@@ -164,4 +165,36 @@ export function useDeleteTeamMember() {
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
     },
   });
+}
+
+// Additive preview view; retain canonical generated database types unchanged.
+const guidedCatalogue: SupabaseClient = supabase;
+type GuidedResponsibleOption = { id: string; name: string; is_active: boolean };
+
+/** Caller-RLS catalogue for searchable selectors. Scope comes from the editor's
+ * authenticated context; each identity gets independent cached results. */
+export function useGuidedResponsibleOptions(actorId: string, organizationId: string, search: string, selectedId: string) {
+  const enabled = Boolean(actorId && organizationId);
+  const options = useQuery({
+    queryKey: ['team_members', organizationId, 'guided-options', actorId, search], enabled,
+    queryFn: async ({ signal }) => {
+      let query = guidedCatalogue.from('guided_responsible_members').select('id, name, is_active').eq('organization_id', organizationId)
+        .order('name').order('id').limit(25).abortSignal(signal);
+      if (search) query = query.ilike('name', `%${search.replace(/[\\%_]/g, '\\$&')}%`);
+      const { data, error } = await query.returns<GuidedResponsibleOption[]>();
+      if (error) throw error;
+      return data;
+    },
+  });
+  // A search page cannot prove that the selected identity was removed.
+  const selected = useQuery({
+    queryKey: ['team_members', organizationId, 'guided-selected', actorId, selectedId], enabled: enabled && Boolean(selectedId),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await guidedCatalogue.from('guided_responsible_members').select('id, name, is_active')
+        .eq('organization_id', organizationId).eq('id', selectedId).abortSignal(signal).returns<GuidedResponsibleOption[]>().maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  return { options, selected };
 }

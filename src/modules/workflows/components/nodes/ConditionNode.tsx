@@ -1,3 +1,4 @@
+import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { memo, useCallback } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
@@ -12,7 +13,7 @@ function ConditionNodeComponent({ id, data, selected }: NodeProps) {
   const operatorLabel = nodeData.operator
     ? CONDITION_OPERATOR_LABELS[nodeData.operator]
     : "";
-  const subtitle = nodeData.field
+  const subtitle = nodeData.guidedCondition ? summarizeGuidedCondition(nodeData.guidedCondition) : nodeData.field
     ? `${nodeData.field} ${operatorLabel} ${nodeData.value || ""}`
     : "Configure a condição";
 
@@ -58,7 +59,7 @@ function ConditionNodeComponent({ id, data, selected }: NodeProps) {
             <p className="text-sm font-semibold text-foreground truncate">
               {nodeData.label || "Condição"}
             </p>
-            <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+            <p className="text-xs text-muted-foreground truncate" title={subtitle}>{subtitle}</p>
           </div>
         </div>
       </div>

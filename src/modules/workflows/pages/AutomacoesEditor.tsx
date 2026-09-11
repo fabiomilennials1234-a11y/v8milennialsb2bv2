@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useNodesState, useEdgesState } from "@xyflow/react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -12,16 +12,20 @@ import {
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
+import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
 import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
+import { useOrganization, useAuth } from "@/modules/identity";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
 import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
 import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
+import { LegacyConditionReviewDialog } from "@/modules/workflows/components/LegacyConditionReviewDialog";
 import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useWorkflow,
@@ -29,6 +33,8 @@ import {
   useUpdateWorkflow,
 } from "@/modules/workflows/hooks/useWorkflows";
 import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
+import { useGuidedWorkflowDraft, GuidedPublicationError, type GuidedPublicationIssue } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
+import { buildLegacyConditionReviewDraft, inspectLegacyConditions } from "@/modules/workflows/lib/legacy-condition-review";
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -72,6 +78,9 @@ const EMPTY_ENROLLMENT = {
   conditions: [] as Array<{ field: string; operator: string; value: string }>,
 };
 
+const GUIDED_CONDITIONS_ENABLED = import.meta.env.DEV
+  && import.meta.env.VITE_GUIDED_CONDITIONS === "true";
+
 function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
   switch (type) {
     case "trigger":
@@ -79,7 +88,14 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "action":
       return { type: "action", actionType: "send_whatsapp", label: "Ação" } as ActionNodeData;
     case "condition":
-      return { type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field" } as ConditionNodeData;
+      return {
+        type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field",
+        // New creation only. Saved legacy nodes retain their original contract.
+        // Production exposure waits for the complete publication/grant journey.
+        ...(GUIDED_CONDITIONS_ENABLED ? {
+          guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
+        } : {}),
+      } as ConditionNodeData;
     case "delay":
       return { type: "delay", label: "Delay", amount: 1, unit: "hours" } as DelayNodeData;
     case "copilot":
@@ -161,6 +177,15 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
 let nodeIdCounter = 1;
 
 export default function AutomacoesEditor() {
+  const { user } = useAuth();
+  const { organizationId } = useOrganization();
+  const { id } = useParams<{ id: string }>();
+  return <AutomacoesEditorContent key={`${user?.id}:${organizationId}:${id}`} />;
+}
+
+function AutomacoesEditorContent() {
+  const { user } = useAuth();
+  const { organizationId, role } = useOrganization();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -177,7 +202,8 @@ export default function AutomacoesEditor() {
     return { pipe_type, pipeline_id, stage, stage_name };
   }, [searchParams]);
 
-  const { data: workflow, isLoading } = useWorkflow(isNew ? undefined : id);
+  const { data: workflow, isLoading, isError: workflowLoadFailed, refetch: retryWorkflow } = useWorkflow(isNew ? undefined : id);
+  const guidedDraft = useGuidedWorkflowDraft(user?.id, organizationId, isNew ? undefined : id);
   const createWorkflow = useCreateWorkflow();
   const updateWorkflow = useUpdateWorkflow();
   const handleExport = useExportWorkflow();
@@ -186,12 +212,17 @@ export default function AutomacoesEditor() {
   const [isActive, setIsActive] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [publicationIssues, setPublicationIssues] = useState<GuidedPublicationIssue[]>([]);
+  const [draftRevision, setDraftRevision] = useState(0);
+  const [newGuidedId] = useState(() => crypto.randomUUID());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [legacyReviewOpen, setLegacyReviewOpen] = useState(false);
   const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
   const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
+  const legacyReview = useMemo(() => inspectLegacyConditions({ nodes, edges }), [nodes, edges]);
 
   // Node unificado gateado por org (ADR-0012). Fail-closed: só converte os nós
   // legados quando a flag está ON para a org corrente.
@@ -244,28 +275,30 @@ export default function AutomacoesEditor() {
   useEffect(() => {
     // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
     // valor fail-closed (false) e depois "pular" para o convertido.
-    if (workflow && !initialized && !unifiedLoading) {
-      setName(workflow.name);
+    if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess && !guidedDraft.isFetching) {
+      setName(guidedDraft.data?.settings?.name ?? workflow.name);
       setIsActive(workflow.is_active);
-      if (workflow.definition?.nodes?.length) {
+      const definition = guidedDraft.data?.definition ?? workflow.definition;
+      setDraftRevision(guidedDraft.data?.revision ?? 0);
+      if (definition?.nodes) {
         // Lazy migration (ADR-0012): legacy WhatsApp send nodes become the
         // unified send_whatsapp_message node; persisted on next save. Gateado
         // por org — orgs sem a flag mantêm os nós legados intactos.
         setNodes(
           unifiedEnabled
-            ? upgradeWorkflowNodes(workflow.definition.nodes)
-            : workflow.definition.nodes,
+            ? upgradeWorkflowNodes(definition.nodes)
+            : definition.nodes,
         );
-        setEdges(workflow.definition.edges || []);
+        setEdges(definition.edges || []);
         // Track max node id for counter
-        const maxId = workflow.definition.nodes.reduce((max, n) => {
+        const maxId = definition.nodes.reduce((max, n) => {
           const num = parseInt(n.id.split("-").pop() || "0");
           return num > max ? num : max;
         }, 0);
         nodeIdCounter = maxId + 1;
       }
       // Load enrollment/reenrollment from DB columns
-      const wf = workflow as any;
+      const wf = { ...workflow, ...guidedDraft.data?.settings } as any;
       if (wf.enrollment_criteria && typeof wf.enrollment_criteria === "object") {
         setEnrollment({
           enabled: wf.enrollment_criteria.enabled ?? false,
@@ -282,7 +315,7 @@ export default function AutomacoesEditor() {
       }
       setInitialized(true);
     }
-  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading]);
+  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading, guidedDraft.data, guidedDraft.isSuccess, guidedDraft.isFetching]);
 
   // For new workflows, apply pre-configured trigger if present
   useEffect(() => {
@@ -349,7 +382,11 @@ export default function AutomacoesEditor() {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId
-            ? { ...n, data: { ...n.data, ...dataUpdates } as any }
+            ? { ...n, data: (() => {
+              const merged = { ...n.data, ...dataUpdates } as Record<string, unknown>;
+              for (const [key, value] of Object.entries(dataUpdates)) if (value === undefined) delete merged[key];
+              return merged as typeof n.data;
+            })() }
             : n
         )
       );
@@ -494,7 +531,8 @@ export default function AutomacoesEditor() {
     }
 
     const triggerNode = nodes.find((n) => n.type === "trigger");
-    if (!triggerNode) {
+    const isGuidedDraft = Boolean(guidedDraft.data) || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'));
+    if (!triggerNode && !isGuidedDraft) {
       toast.error("O workflow precisa de um nó Trigger");
       return;
     }
@@ -508,7 +546,7 @@ export default function AutomacoesEditor() {
       return;
     }
 
-    const triggerData = triggerNode.data as unknown as TriggerNodeData;
+    const triggerData = triggerNode?.data as unknown as TriggerNodeData;
 
     // Nó de ação incompleto não impede SALVAR (rascunho pela metade é legítimo),
     // mas impede ATIVAR. Medido em produção: ~6.400 execuções morreram em 90 dias
@@ -531,7 +569,7 @@ export default function AutomacoesEditor() {
       }),
     );
 
-    if (isActive && issues.length > 0) {
+    if (isActive && issues.length > 0 && !(isGuidedDraft && workflow?.is_active)) {
       const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");
       toast.error(
         issues.length === 1
@@ -560,6 +598,13 @@ export default function AutomacoesEditor() {
 
     try {
       if (isNew) {
+        if (nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const created = await guidedDraft.create.mutateAsync({ id: newGuidedId, settings: { name, ...extraFields }, definition });
+          setDraftRevision(created.revision);
+          toast.success("Rascunho criado. Publique quando estiver pronto.");
+          navigate(`/automacoes/${created.workflow_id}`, { replace: true });
+          return;
+        }
         const result = await createWorkflow.mutateAsync({
           name,
           is_active: isActive,
@@ -571,6 +616,12 @@ export default function AutomacoesEditor() {
         toast.success("Workflow criado!");
         navigate(`/automacoes/${result.id}`, { replace: true });
       } else {
+        if (guidedDraft.data || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision, settings: { name, ...extraFields } });
+          setDraftRevision(saved.revision);
+          toast.success("Rascunho salvo. A versão publicada permanece igual.");
+          return saved.revision;
+        }
         await updateWorkflow.mutateAsync({
           id: id!,
           name,
@@ -583,17 +634,98 @@ export default function AutomacoesEditor() {
         toast.success("Workflow salvo!");
       }
     } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar workflow");
+      toast.error(err.code === 'PT409'
+        ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
+        : err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment]);
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
+
+  const handleToggleActive = useCallback(async () => {
+    if (!isNew && guidedDraft.data && (isActive || guidedDraft.publication.data)) {
+      try {
+        const result = await guidedDraft.setActive.mutateAsync(!isActive);
+        setIsActive(result.is_active);
+        toast.success(result.is_active ? 'Automação ativada.' : 'Automação desativada.');
+      } catch {
+        toast.error('Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados.');
+      }
+      return;
+    }
+    setIsActive(!isActive);
+  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive]);
+
+  const handlePublish = useCallback(async () => {
+    setPublicationIssues([]);
+    const revision = await handleSave();
+    if (typeof revision !== 'number') return;
+    try {
+      const published = await guidedDraft.publish.mutateAsync(revision);
+      toast.success(`Versão ${published.version_number} publicada.`);
+    } catch (error) {
+      if (error instanceof GuidedPublicationError) {
+        const messages: Record<string, string> = {
+          access_denied: 'Acesso negado. Verifique sua permissão e a autorização de dados da automação.',
+          reference_unavailable: 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.',
+          draft_revision_conflict: 'Outra pessoa alterou o rascunho. Compare a versão atual antes de publicar.',
+          temporarily_unavailable: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`,
+        };
+        setPublicationIssues(error.issues.length ? error.issues : [{ code: error.code,
+          message: messages[error.code] ?? 'Não foi possível publicar. Seu rascunho foi preservado.' }]);
+      }
+      toast.error('Não foi possível publicar. Seu rascunho foi preservado.');
+    }
+  }, [handleSave, guidedDraft.publish]);
+
+  const handleCreateLegacyReviewDraft = useCallback(async () => {
+    if (!GUIDED_CONDITIONS_ENABLED || isNew || !id || guidedDraft.data || legacyReview.items.length === 0) return;
+    const converted = buildLegacyConditionReviewDraft({ nodes, edges });
+    const settings = {
+      name,
+      enrollment_criteria: enrollment,
+      re_enrollment_enabled: reenrollment.enabled,
+      re_enrollment_cooldown_days: reenrollment.cooldown_days,
+      re_enrollment_max_times: reenrollment.max_times,
+    };
+    try {
+      const saved = await guidedDraft.save.mutateAsync({ definition: converted.definition, revision: 0, settings });
+      setNodes(converted.definition.nodes);
+      setEdges(converted.definition.edges);
+      setDraftRevision(saved.revision);
+      await guidedDraft.refetch();
+      setLegacyReviewOpen(false);
+      toast.success("Rascunho de revisão criado. A automação ativa permanece igual.");
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code === "PT409") await guidedDraft.refetch();
+      toast.error(code === "PT409"
+        ? "Outra pessoa já iniciou esta revisão. Recarregue o rascunho atual."
+        : "Não foi possível criar o rascunho de revisão.");
+    }
+  }, [isNew, id, guidedDraft, legacyReview.items.length,
+    nodes, edges, name, enrollment, reenrollment, setNodes, setEdges]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
     : null;
 
-  const isSaving = createWorkflow.isPending || updateWorkflow.isPending;
+  const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending || guidedDraft.create.isPending;
 
-  if (!isNew && isLoading) {
+  if (!isNew && workflowLoadFailed) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar a automação.</p>
+      <Button variant="outline" onClick={() => retryWorkflow()}>Tentar novamente</Button></div>;
+  }
+
+  if (!isNew && workflow === null) {
+    return <div role="alert" className="space-y-3 p-6"><p>Automação indisponível ou sem acesso.</p>
+      <Button variant="outline" onClick={() => navigate('/automacoes')}>Voltar às automações</Button></div>;
+  }
+
+  if (!isNew && guidedDraft.isError) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
+      <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
+  }
+
+  if (!isNew && (isLoading || guidedDraft.isPending || !initialized)) {
     return (
       <div className="flex items-center justify-center h-[80vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -607,13 +739,22 @@ export default function AutomacoesEditor() {
         name={name}
         onNameChange={setName}
         isActive={isActive}
-        onToggleActive={() => setIsActive(!isActive)}
+        onToggleActive={handleToggleActive}
+        isToggleDisabled={Boolean(guidedDraft.data) && (guidedDraft.setActive.isPending || (!isActive && (guidedDraft.publication.isPending || guidedDraft.publication.isError)))}
         onSave={handleSave}
         isSaving={isSaving}
+        onPublish={!isNew && guidedDraft.data ? handlePublish : undefined}
+        isPublishing={guidedDraft.publish.isPending}
         onAddNode={handleAddNode}
         isNew={isNew}
         workflowId={id}
-        onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
+        onExport={!isNew && workflow ? () => {
+          const trigger = nodes.find(node => node.type === "trigger")?.data as TriggerNodeData | undefined;
+          void handleExport({ ...workflow, name,
+            trigger_type: trigger?.triggerType ?? workflow.trigger_type,
+            trigger_config: trigger?.config ?? workflow.trigger_config,
+          }, { nodes, edges });
+        } : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
         // O executor deliberadamente não roda JavaScript sem sandbox. A flag
         // antiga podia expor um node que sempre era ignorado; oculto até haver
@@ -621,6 +762,31 @@ export default function AutomacoesEditor() {
         hiddenNodeTypes={["code_javascript"]}
       />
 
+      {GUIDED_CONDITIONS_ENABLED && !guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
+            <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
+      </div>}
+      {GUIDED_CONDITIONS_ENABLED && guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
+          <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
+      </div>}
+
+      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p>Não foi possível consultar a versão publicada.</p>
+        <button type="button" className="mt-1 underline underline-offset-4" disabled={guidedDraft.publication.isFetching}
+          onClick={() => guidedDraft.publication.refetch()}>Recarregar publicação</button>
+      </div>}
+      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p className="font-medium">Publicação não concluída</p>
+        <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
+          {issue.nodeId ? <button type="button" className="text-left underline underline-offset-4"
+            onClick={() => setSelectedNodeId(issue.nodeId!)}>{issue.message}</button> : issue.message}
+        </li>)}</ul>
+      </div>}
       <div className="flex flex-1 overflow-hidden">
         <WorkflowCanvas
           initialNodes={nodes}
@@ -636,6 +802,10 @@ export default function AutomacoesEditor() {
         />
 
         <WorkflowSidebar
+          actorId={user?.id}
+          workflowId={isNew ? undefined : id}
+          canManageDataGrant={role === "admin"}
+          organizationId={organizationId ?? undefined}
           selectedNode={selectedNode as any}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={handleUpdateNode}
@@ -677,6 +847,14 @@ export default function AutomacoesEditor() {
           </Tabs>
         </SheetContent>
       </Sheet>
+
+      {GUIDED_CONDITIONS_ENABLED && <LegacyConditionReviewDialog
+        open={legacyReviewOpen}
+        onOpenChange={setLegacyReviewOpen}
+        review={legacyReview}
+        onCreateDraft={() => void handleCreateLegacyReviewDraft()}
+        isCreating={guidedDraft.save.isPending}
+      />}
     </div>
   );
 }

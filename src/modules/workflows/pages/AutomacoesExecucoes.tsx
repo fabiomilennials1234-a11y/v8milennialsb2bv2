@@ -28,10 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw, LockKeyhole } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
 import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
 import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
 
@@ -51,6 +50,25 @@ const STEP_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   failed: { label: "Falhou", color: "text-red-600" },
   skipped: { label: "Pulado", color: "text-muted-foreground" },
 };
+
+const ERROR_LABELS: Record<string, string> = {
+  access_denied: "Acesso aos dados revogado",
+  context_unavailable: "Contexto removido",
+  reference_unavailable: "Referência indisponível",
+  invalid_configuration: "Configuração inválida",
+  history_insufficient: "Histórico insuficiente",
+  history_sync_in_progress: "Histórico em sincronização",
+  temporarily_unavailable: "Dados temporariamente indisponíveis",
+  execution_version_unavailable: "Versão da execução indisponível",
+  loop_limit_reached: "Limite de repetição atingido",
+  protected_error: "Detalhe protegido pelas suas permissões atuais",
+  execution_failed: "Falha na execução",
+};
+
+function errorLabel(code: string | null): string {
+  if (!code) return "-";
+  return ERROR_LABELS[code] ?? "Falha na execução";
+}
 
 export default function AutomacoesExecucoes() {
   const { id } = useParams<{ id: string }>();
@@ -149,6 +167,7 @@ export default function AutomacoesExecucoes() {
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>
+                <TableHead>Versão</TableHead>
                 <TableHead>Lead</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Duração</TableHead>
@@ -181,11 +200,16 @@ export default function AutomacoesExecucoes() {
                         {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true, locale: ptBR })}
                       </div>
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {exec.version_number ? `v${exec.version_number}` : "Legada"}
+                    </TableCell>
                     <TableCell>
-                      {exec.lead_id ? (
-                        <LeadName leadId={exec.lead_id} />
+                      {exec.data_visible && exec.lead_id ? (
+                        <LeadName leadId={exec.lead_id} name={exec.lead_name} />
                       ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
+                        <span className="inline-flex items-center gap-1 text-muted-foreground text-sm">
+                          <LockKeyhole className="h-3.5 w-3.5" /> Protegido
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -206,10 +230,10 @@ export default function AutomacoesExecucoes() {
                       {duration}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate text-sm text-red-600">
-                      {exec.error || "-"}
+                      {errorLabel(exec.error_code)}
                     </TableCell>
                     <TableCell>
-                      {exec.status === "failed" && (
+                      {exec.can_retry && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -235,7 +259,8 @@ export default function AutomacoesExecucoes() {
       {/* Steps dialog */}
       <StepsDialog
         executionId={selectedExecutionId}
-        executionStatus={executions?.find(e => e.id === selectedExecutionId)?.status || null}
+        canRetry={executions?.find(e => e.id === selectedExecutionId)?.can_retry ?? false}
+        dataVisible={executions?.find(e => e.id === selectedExecutionId)?.data_visible ?? false}
         open={!!selectedExecutionId}
         onClose={() => setSelectedExecutionId(null)}
         onRetry={(execId) => setRetryTargetId(execId)}
@@ -279,28 +304,31 @@ function StatCard({ label, value, className }: { label: string; value: number; c
   );
 }
 
-function LeadName({ leadId }: { leadId: string }) {
+function LeadName({ leadId, name }: { leadId: string; name: string | null }) {
   return (
-    <span className="text-sm font-mono text-muted-foreground">
-      {leadId.slice(0, 8)}...
-    </span>
+    <div>
+      {name && <p className="text-sm font-medium">{name}</p>}
+      <span className="text-xs font-mono text-muted-foreground">{leadId.slice(0, 8)}...</span>
+    </div>
   );
 }
 
 function StepsDialog({
   executionId,
-  executionStatus,
+  canRetry,
+  dataVisible,
   open,
   onClose,
   onRetry,
 }: {
   executionId: string | null;
-  executionStatus: string | null;
+  canRetry: boolean;
+  dataVisible: boolean;
   open: boolean;
   onClose: () => void;
   onRetry: (executionId: string) => void;
 }) {
-  const { data: steps, isLoading } = useWorkflowExecutionSteps(executionId || undefined);
+  const { data: steps, isLoading } = useWorkflowExecutionSteps(dataVisible ? executionId || undefined : undefined);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -308,7 +336,7 @@ function StepsDialog({
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>Steps da Execução</DialogTitle>
-            {executionStatus === "failed" && executionId && (
+            {canRetry && executionId && (
               <Button
                 variant="outline"
                 size="sm"
@@ -322,7 +350,14 @@ function StepsDialog({
           </div>
         </DialogHeader>
 
-        {isLoading ? (
+        {!dataVisible ? (
+          <div role="status" className="rounded-lg border border-border bg-muted/40 p-5 text-sm text-muted-foreground">
+            <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
+              <LockKeyhole className="h-4 w-4" /> Detalhes protegidos
+            </div>
+            Valores, resultados e caminho seguem suas permissões atuais sobre o lead.
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
@@ -358,8 +393,8 @@ function StepsDialog({
                       </Badge>
                     )}
 
-                    {step.error && (
-                      <p className="text-xs text-red-600 mt-1">{step.error}</p>
+                    {step.error_code && (
+                      <p className="text-xs text-red-600 mt-1">{errorLabel(step.error_code)}</p>
                     )}
 
                     {step.node_type === "split_ab" && step.output_data && (

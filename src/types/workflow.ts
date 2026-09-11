@@ -1,3 +1,5 @@
+import type { GuidedDateComparison } from '@/contracts/workflows/guided-dates';
+import type { GuidedResponsibleField, GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
 /**
@@ -640,6 +642,71 @@ export interface ActionNodeData {
   [key: string]: unknown;
 }
 
+/** Draft for the guided contract; server validates before evaluation. */
+export type GuidedScalarRuleDraft = {
+  version: 1;
+  id: string;
+  field: GuidedTextField;
+} & GuidedTextComparison;
+
+export type GuidedTagRuleDraft = {
+  version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
+  /** Display hint only. The evaluator always resolves the current name by ID. */
+  tagLabel?: string;
+};
+export type GuidedNumberRuleDraft = { version: 1; id: string; field: GuidedNumberField }
+  & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedOriginRuleDraft = { version: 1; id: string; field: 'lead.origin' }
+  & ({ operator: 'equals' | 'not_equals'; originId: string; originLabel?: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedResponsibleRuleDraft = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field }
+  & ({ operator: 'equals' | 'not_equals'; memberId: string; memberLabel?: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' })
+}[GuidedResponsibleField];
+export type GuidedCustomTextRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'text'; fieldLabel?: string } & GuidedTextComparison;
+export type GuidedCustomNumberRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'number'; fieldLabel?: string }
+  & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedCustomBooleanRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'boolean'; fieldLabel?: string }
+  & ({ operator: 'equals' | 'not_equals'; value: boolean | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedCustomDateRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'date'; fieldLabel?: string } & GuidedDateComparison;
+export type GuidedCustomSelectRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'select'; fieldLabel?: string }
+  & ({ operator: 'equals' | 'not_equals'; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedTriggerBusinessStageRuleDraft = { version: 1; id: string; field: 'business.trigger.stage';
+  operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string };
+export type GuidedTriggerBusinessValueRuleDraft = { version: 1; id: string; field: 'business.trigger.value' }
+  & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedTriggerBusinessStageElapsedRuleDraft = { version: 1; id: string; field: 'business.trigger.stage_elapsed';
+  operator: GuidedNumberOperator; value: number | ''; unit: 'minutes' | 'hours' | 'days' };
+export type GuidedLastWonDateRuleDraft = { version: 1; id: string; field: 'business.last_won_date' } & GuidedDateComparison;
+export type GuidedTriggerMessageTextRuleDraft = { version: 1; id: string; field: 'message.trigger.text';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string } }
+  & GuidedTextComparison;
+export type GuidedMessagePeriodRuleDraft = { version: 1; id: string; field: 'message.period.exists';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
+  operator: 'exists' | 'not_exists'; from: string; to: string };
+export type GuidedMessageSearchRuleDraft = { version: 1; id: string; field: 'message.search.text';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
+  source: { kind: 'trigger' } | { kind: 'last_received' } | { kind: 'period'; from: string; to: string };
+  operator: 'matches' | 'not_matches'; expressionMatch: 'any' | 'all'; matchMode: 'whole_phrase' | 'substring'; expressions: string[] };
+export type GuidedMessageWaitingRuleDraft = { version: 1; id: string; field: 'message.waiting.elapsed';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string; boxLabel?: string };
+  waitingFor: 'lead' | 'company'; operator: GuidedNumberOperator; value: number | ''; unit: 'minutes' | 'hours' | 'days' };
+export type GuidedFollowUpRuleDraft = { version: 1; id: string; field: 'activity.follow_up';
+  relation: 'lead' | 'trigger_business'; state: 'pending' | 'completed'; operator: 'exists' | 'not_exists';
+  dateOperator: 'any' | Exclude<GuidedDateComparison['operator'], 'is_empty' | 'is_not_empty'>; date?: string };
+export type GuidedProductRuleDraft = { version: 1; id: string; field: 'product.relationship';
+  relation: 'trigger_business_item' | 'lead_association' | 'won_deal_history';
+  productId: string; productLabel?: string; operator: 'has_product' | 'not_has_product' };
+export type GuidedBusinessExistenceChildDraft =
+  | { version: 1; id: string; field: 'business.stage'; operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string }
+  | ({ version: 1; id: string; field: 'business.value' }
+    & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' }));
+export type GuidedBusinessExistenceDraft = { version: 1; id: string; kind: 'business_exists';
+  lifecycle: 'open' | 'won' | 'lost' | 'all'; match: 'all' | 'any'; children: GuidedBusinessExistenceChildDraft[] };
+export type GuidedRuleDraft = GuidedProductRuleDraft | GuidedFollowUpRuleDraft | GuidedMessageWaitingRuleDraft | GuidedMessageSearchRuleDraft | GuidedMessagePeriodRuleDraft | GuidedTriggerMessageTextRuleDraft | GuidedLastWonDateRuleDraft | GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+
+export type GuidedConditionDraft = GuidedRuleDraft | GuidedBusinessExistenceDraft | {
+  version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];
+};
+
 export interface ConditionNodeData {
   type: "condition";
   label: string;
@@ -648,6 +715,7 @@ export interface ConditionNodeData {
   value: string;
   conditionMode?: ConditionMode;
   timeWindow?: TimeWindowConfig;
+  guidedCondition?: GuidedConditionDraft;
   [key: string]: unknown;
 }
 
@@ -1019,6 +1087,39 @@ export interface WorkflowExecutionStep {
   output_data: Record<string, unknown> | null;
   error: string | null;
   executed_at: string;
+}
+
+/** Server-filtered history. It intentionally has no execution context/input. */
+export interface WorkflowExecutionHistoryItem {
+  id: string;
+  workflow_id: string;
+  status: WorkflowExecutionStatus;
+  started_at: string;
+  completed_at: string | null;
+  retry_of: string | null;
+  guided_version_id: string | null;
+  version_number: number | null;
+  version_published_at: string | null;
+  data_visible: boolean;
+  lead_id: string | null;
+  lead_name: string | null;
+  current_node_id: string | null;
+  error_code: string | null;
+  can_retry: boolean;
+}
+
+/** Server-filtered step. Input payloads never cross the API boundary. */
+export interface WorkflowExecutionHistoryStep {
+  id: string;
+  execution_id: string;
+  node_id: string;
+  node_type: WorkflowNodeType;
+  node_label: string;
+  status: WorkflowStepStatus;
+  output_data: Record<string, unknown> | null;
+  error_code: string | null;
+  executed_at: string;
+  data_visible: true;
 }
 
 // =====================================================

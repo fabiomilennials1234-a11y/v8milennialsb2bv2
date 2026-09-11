@@ -808,6 +808,8 @@ export interface InboundChannelMessageRow {
   direction: "incoming" | "outgoing";
   message_type: string;
   content: string | null;
+  condition_text: string | null;
+  condition_text_source: "text" | "caption" | "interactive" | "synthetic" | null;
   media_url: string | null;
   status: "received" | "sent";
   sender_id: string | null;
@@ -896,6 +898,8 @@ export function buildInboundChannelMessageRow(params: {
   contact: InboundContact;
   contactExternalId: string;
   content: InboundContent;
+  conditionText?: string | null;
+  conditionTextSource?: "text" | "caption" | "interactive" | "synthetic" | null;
   timestampIso: string;
   rawPayload: unknown;
   /**
@@ -941,6 +945,8 @@ export function buildInboundChannelMessageRow(params: {
     direction: params.direction ?? "incoming",
     message_type: params.content.messageType,
     content: params.content.content,
+    condition_text: params.conditionText ?? null,
+    condition_text_source: params.conditionTextSource ?? null,
     media_url: params.content.mediaUrl,
     // Uma mensagem que já saiu não está "recebida". O status alimenta o ícone da
     // bolha, e `received` numa linha de saída desenharia o cheque de entrega

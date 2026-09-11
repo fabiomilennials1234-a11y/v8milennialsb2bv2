@@ -42,8 +42,11 @@ interface WorkflowToolbarProps {
   onNameChange: (name: string) => void;
   isActive: boolean;
   onToggleActive: () => void;
+  isToggleDisabled?: boolean;
   onSave: () => void;
   isSaving: boolean;
+  onPublish?: () => void;
+  isPublishing?: boolean;
   onAddNode: (type: WorkflowNodeType) => void;
   isNew: boolean;
   workflowId?: string;
@@ -113,8 +116,11 @@ export function WorkflowToolbar({
   onNameChange,
   isActive,
   onToggleActive,
+  isToggleDisabled = false,
   onSave,
   isSaving,
+  onPublish,
+  isPublishing = false,
   onAddNode,
   isNew,
   workflowId,
@@ -225,13 +231,18 @@ export function WorkflowToolbar({
           </Label>
           <Switch
             id="workflow-active"
+            disabled={isToggleDisabled}
             checked={isActive}
             onCheckedChange={onToggleActive}
           />
         </div>
 
+        {onPublish && <Button onClick={onPublish} disabled={isSaving || isPublishing} size="sm">
+          {isPublishing && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+          Publicar
+        </Button>}
         {/* Save */}
-        <Button onClick={onSave} disabled={isSaving} size="sm">
+        <Button onClick={onSave} disabled={isSaving || isPublishing} size="sm">
           {isSaving ? (
             <Loader2 className="w-4 h-4 mr-1 animate-spin" />
           ) : (

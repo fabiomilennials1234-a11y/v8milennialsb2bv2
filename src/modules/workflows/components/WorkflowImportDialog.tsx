@@ -105,7 +105,7 @@ export function WorkflowImportDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-500" />
-              Workflow Importado
+              {report.mode === "guided_draft" ? "Rascunho importado" : "Workflow importado"}
             </DialogTitle>
             <DialogDescription>
               "{report.workflowName}" — {report.totalNodes} nós
@@ -114,6 +114,7 @@ export function WorkflowImportDialog({
                   ({report.unresolvedCount} pendência{report.unresolvedCount > 1 ? "s" : ""})
                 </span>
               )}
+              {report.unresolvedCount > 0 && <span className="block mt-1">Mapeie todas as dependências antes de publicar.</span>}
             </DialogDescription>
           </DialogHeader>
 
@@ -153,7 +154,7 @@ export function WorkflowImportDialog({
           <DialogTitle>Importar Workflow</DialogTitle>
           <DialogDescription>
             Selecione um arquivo .json exportado de outra organização.
-            O workflow será criado como inativo.
+            A automação será criada inativa. Árvores guiadas entram como rascunho e exigem nova seleção das referências.
           </DialogDescription>
         </DialogHeader>
 

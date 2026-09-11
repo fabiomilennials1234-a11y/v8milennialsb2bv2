@@ -93,7 +93,11 @@ Deno.serve(
         .update({
           status: "running",
           error: null,
+          completed_at: null,
           next_run_at: null,
+          guided_condition_retry_node_id: null,
+          guided_condition_retry_count: 0,
+          guided_condition_retry_error: null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", payload.id);

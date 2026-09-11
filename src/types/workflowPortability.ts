@@ -23,13 +23,18 @@ export type ExternalReferenceType =
   | "campaign_template"
   | "template_source"
   | "team_member"
+  | "origin"
   | "copilot_agent"
   | "tag"
+  | "custom_field"
+  | "custom_option"
+  | "product"
   | "tinyerp_product"
   | "audio_media"
   | "image_media"
   | "custom_pipeline"
-  | "pipeline_stage";
+  | "pipeline_stage"
+  | "message_channel";
 
 export interface ExternalReference {
   /** Which node this reference belongs to ("trigger" for trigger_config refs) */
@@ -75,6 +80,7 @@ export interface ImportReportItem {
 }
 
 export interface ImportReport {
+  mode: "guided_draft" | "legacy_inactive";
   workflowId: string;
   workflowName: string;
   items: ImportReportItem[];
