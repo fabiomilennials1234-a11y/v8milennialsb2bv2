@@ -3,7 +3,7 @@ type: feature
 title: WhatsApp Stability — estado consolidado
 status: active
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-09-11
 tags: [uncategorized]
 related: []
 owner: gabriel
@@ -149,3 +149,9 @@ Ver `[[whatsapp-stability-100pct]]` no backlog em-progresso.
 - **DLQ retention**: 5 attempts. Após exhausted, ficam no DB pra audit; não auto-deletados.
 - **Auto-rebind cooldown**: 30min/instance. Evita rebind loop em caso de problema persistente.
 - **Group messages**: dropados (decisão atual, B documenta reversão).
+
+## 2026-09-11 — reconstrução em branch, sem rollout
+
+Branch `codex/uazapi-rebuild` parte da main `23cbd6796`. Adapter traduz mídia/menu, usa criação documentada, filtra histórico por chatid e isola circuitos por credencial/servidor. Diagnóstico de limites mantém desconhecido como null. Fixture cobre campos das 139 operações; testes de contrato exercitam a superfície alterada.
+
+Não homologado contra instância real. Ambiente Supabase e destinatário de teste pendentes. Estado verificável em `.specs/uazapi-rebuild/STATE.md`; referência de contrato em `docs/integrations/uazapi-rebuild.md`. Números históricos de cobertura acima não medem esta branch.

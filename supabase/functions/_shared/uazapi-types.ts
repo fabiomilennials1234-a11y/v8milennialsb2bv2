@@ -6,7 +6,7 @@
  * Uazapi uses per-instance auth via `token` header for instance-scoped ops,
  * and `admintoken` header for admin-level ops (instance create/delete/etc).
  *
- * Docs: https://api.uazapi.com/docs
+ * Docs: https://docs.uazapi.com/
  */
 
 // ---------------------------------------------------------------------------
@@ -97,6 +97,7 @@ export type UazapiSendMenuInput = {
   type: "button" | "list" | "poll" | "carousel";
   text: string;
   footer?: string;
+  listButton?: string;
   /** Button/list/poll choices */
   choices?: string[];
   /** Poll multi-select count */
@@ -172,8 +173,10 @@ export type UazapiInstanceResponse = {
 export type UazapiMessageResponse = {
   /** Uazapi-assigned message ID */
   id: string;
-  status: "sent" | "queued" | "failed";
-  timestamp: number;
+  status: string;
+  timestamp?: number;
+  messageTimestamp?: number;
+  messageid?: string;
   track_id?: string;
 };
 

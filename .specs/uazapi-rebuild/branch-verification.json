@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-09-11T18:48:07.222Z",
+  "branchRef": "qtkohfnephshaxgtzksz",
+  "anonymousCredentialAccessHttp": 401,
+  "serviceCredentialAccessHttp": 200,
+  "organizationVerified": true,
+  "providerIdentityVerified": true,
+  "providerState": "connected",
+  "individualChats": 451,
+  "uniqueChats": 451,
+  "allIndividual": true,
+  "quotaShape": {
+    "current": "number",
+    "limit": "number",
+    "sendVerdict": "boolean"
+  },
+  "safety": [
+    {
+      "active_crons": 0,
+      "stored_messages": 0
+    }
+  ],
+  "persistent": true,
+  "costUsdHourly": 0.01344,
+  "baselinePublicTables": 256,
+  "schemaParity": "baseline_only_not_current_production",
+  "automaticReplayStatus": "MIGRATIONS_FAILED",
+  "projectHealth": "ACTIVE_HEALTHY"
+}

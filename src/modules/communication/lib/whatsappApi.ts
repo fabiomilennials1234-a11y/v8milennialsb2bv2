@@ -59,7 +59,7 @@ export type CreateInstanceResult = {
 
 export type InstanceStatus = {
   connected: boolean;
-  state: "connecting" | "connected" | "disconnected" | "unknown";
+  state: "connecting" | "connected" | "disconnected" | "hibernated" | "unknown";
   qrcode?: string;
   paircode?: string;
   /** Connected account's own number as bare digits. Best-effort from provider. */
@@ -309,7 +309,7 @@ export async function syncHistory(
 export async function getMessageLimits(
   instanceId: string,
   organizationId?: string
-): Promise<{ current: number; limit: number; reachout_timelock?: number }> {
+): Promise<{ current: number | null; limit: number | null; reachout_timelock?: number; can_send_new_messages?: boolean | null }> {
   return callProxy("getMessageLimits", {
     instance_id: instanceId,
     organization_id: organizationId,
@@ -372,4 +372,15 @@ export async function listSignupInvites(instanceId: string, limite = 20): Promis
     payload: { limite },
   });
   return r.invites;
+}
+
+/** Ask WhatsApp to recover older messages; acceptance is asynchronous. */
+export async function requestHistoryRecovery(
+  instanceId: string,
+  opts: { chatJid: string; mode?: "history" | "exact"; messageId?: string; count?: number },
+): Promise<{ success: boolean; mode?: string }> {
+  return callProxy("requestHistory", {
+    instance_id: instanceId,
+    payload: { number: opts.chatJid, mode: opts.mode ?? "history", messageid: opts.messageId, count: opts.count },
+  });
 }

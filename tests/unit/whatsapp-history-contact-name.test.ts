@@ -25,7 +25,7 @@ describe("importação prioriza agenda do vendedor", () => {
     const first = await api.historySync({ number: jid, limit: 1 });
     const second = await api.historySync({ number: jid, cursor: first.nextCursor });
     expect(historyContactName(second.messages[0] as Record<string, unknown>, false)).toBe("Cliente salvo");
-    expect(request.mock.calls[1][2]).toMatchObject({ filter: [{ field: "wa_chatid", operator: "eq", value: jid }] });
+    expect(request.mock.calls[1][2]).toMatchObject({ wa_chatid: jid });
     expect(request).toHaveBeenCalledTimes(3);
   });
   it("ignora nome vazio e nunca usa perfil de mensagem enviada como nome do cliente", () => {

@@ -9,6 +9,7 @@
  * createInstance also persists the per-instance token via set_uazapi_credentials RPC.
  */
 
+import { normalizeUazapiMessageResult } from "../uazapi-message-result.ts";
 import { UazapiClient } from "../uazapi-client.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
 import { deriveDeviceName } from "../whatsapp-device-name.ts";
@@ -58,9 +59,10 @@ function normaliseStatus(raw: {
     state = statusObj.connected ? "connected" : "disconnected";
   } else if (s === "connected") state = "connected";
   else if (s === "connecting") state = "connecting";
+  else if (s === "hibernated") state = "hibernated";
   else if (s === "disconnected" || s === "closed") state = "disconnected";
 
-  const isConnected = statusObj?.connected ?? raw.connected ?? state === "connected";
+  const isConnected = state === "hibernated" ? false : statusObj?.connected ?? raw.connected ?? state === "connected";
 
   return {
     connected: isConnected,
@@ -78,7 +80,7 @@ function normaliseStatus(raw: {
 export interface UazapiProviderConfig {
   baseUrl: string;
   token: string;
-  adminToken: string;
+  adminToken?: string;
   instanceId: string;
   organizationId: string;
   supabaseAdmin: SupabaseClient;
@@ -123,28 +125,16 @@ export class UazapiProvider implements WhatsAppProvider {
 
     const resp = await this.client.initInstance({
       name: input.instance_name,
-      // Linked-device label WhatsApp shows for this number. Derived per
-      // Organization so our tenants do not all pair as the same device
-      // (#1167). Undefined when underivable — the field is then omitted and
-      // the provider default applies, never a shared literal.
-      systemName: deriveDeviceName(input.organization_id),
       adminField01: input.organization_id,
       adminField02: input.instance_id,
-      webhookUrl,
-      // Fase 2 scope: messages + messages_update + connection. Other events
-      // (presence, history, call, groups) remain off to reduce ingress volume.
-      webhookEvents: ["messages", "messages_update", "connection"],
-      // Echo elimination at source (Uazapi server-side). Defense in depth:
-      // UPSERT idempotent preserved in whatsapp-webhook (contract from 3066b5e).
-      webhookExcludeMessages: ["wasSentByApi"],
-      // Append /<event> to webhook URL — future routing to split workers.
-      webhookAddUrlEvents: true,
-      webhookAddUrlTypesMessages: false,
     });
 
     // Extract from nested response: instance.id, instance.token, top-level status object
     const instanceId = resp.instance?.id ?? (resp as any).id;
     const instanceToken = resp.instance?.token ?? resp.token;
+    if (typeof instanceId !== "string" || !instanceId || typeof instanceToken !== "string" || !instanceToken) {
+      throw new Error("Uazapi creation response is missing instance identity or token");
+    }
 
     // Persist token via RPC — service_role only
     const { error: rpcError } = await this.supabaseAdmin.rpc(
@@ -163,8 +153,8 @@ export class UazapiProvider implements WhatsAppProvider {
       );
     }
 
-    // /instance/init may ignore inline webhook fields — explicitly configure
-    // via /instance/updateWebhook using the newly obtained instance token.
+    // Creation only accepts name/admin metadata. Configure the webhook explicitly
+    // using the newly obtained instance token.
     const instanceClient = new UazapiClient({
       baseUrl: this.baseUrl,
       token: instanceToken,
@@ -194,7 +184,7 @@ export class UazapiProvider implements WhatsAppProvider {
     const inst = raw.instance ?? raw;
     return normaliseStatus({
       status: inst.status,
-      connected: inst.connected ?? raw.connected,
+      connected: inst.connected ?? raw.status?.connected ?? raw.connected,
       qrcode: inst.qrcode,
       paircode: inst.paircode,
       owner: extractOwnerNumber(raw),
@@ -251,7 +241,7 @@ export class UazapiProvider implements WhatsAppProvider {
         `[uazapi] connect with managed proxy region ${region.proxy_managed_state}/${region.proxy_managed_city}`
       );
     }
-    const raw: any = await this.client.connectInstance(phone, region ?? undefined);
+    const raw: any = await this.client.connectInstance(phone, region ?? undefined, deriveDeviceName(this.organizationId));
     return {
       qrcode: raw.instance?.qrcode || raw.qrcode,
       paircode: raw.instance?.paircode || raw.paircode,
@@ -280,11 +270,25 @@ export class UazapiProvider implements WhatsAppProvider {
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
+  }
+
+  async sendLocation(opts: { number: string; latitude: number; longitude: number; name?: string; address?: string }): Promise<SendResult> {
+    return normalizeUazapiMessageResult(await this.client.sendLocation(opts));
+  }
+
+  async sendContact(opts: { number: string; contacts: Array<{ nome: string; telefones: Array<{ numero: string; waId?: string }>; emails?: string[] }> }): Promise<SendResult> {
+    if (opts.contacts.length !== 1 || (opts.contacts[0].emails?.length ?? 0) > 1) throw new Error("Uazapi accepts one contact and one email per message");
+    const contact = opts.contacts[0];
+    return normalizeUazapiMessageResult(await this.client.sendContact({ number: opts.number, fullName: contact.nome,
+      phoneNumber: contact.telefones.map(p => p.numero).join(","), email: contact.emails?.[0] }));
+  }
+
+  async blockUser(number: string): Promise<void> { await this.client.blockContact(number, true); }
+  async unblockUser(number: string): Promise<void> { await this.client.blockContact(number, false); }
+  async listBlocked(): Promise<unknown> { return this.client.listBlocked(); }
+  async requestHistory(opts: { number: string; mode?: "history" | "exact"; messageid?: string; count?: number }): Promise<{ success: boolean; mode?: string }> {
+    return this.client.requestHistory(opts);
   }
 
   async sendMedia(opts: SendMediaOptions): Promise<SendResult> {
@@ -299,11 +303,7 @@ export class UazapiProvider implements WhatsAppProvider {
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   /**
@@ -394,12 +394,11 @@ export class UazapiProvider implements WhatsAppProvider {
       type: opts.type,
       text: opts.text,
       choices: opts.choices,
+      footer: opts.footer,
+      selectableCount: opts.selectableCount,
+      listButton: opts.listButtonLabel,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   async sendPixButton(opts: SendPixButtonOptions): Promise<SendResult> {
@@ -411,11 +410,7 @@ export class UazapiProvider implements WhatsAppProvider {
       amount: opts.amount,
       text: opts.text,
     });
-    return {
-      message_id: resp.id,
-      status: resp.status,
-      timestamp: resp.timestamp,
-    };
+    return normalizeUazapiMessageResult(resp);
   }
 
   async react(
@@ -460,9 +455,10 @@ export class UazapiProvider implements WhatsAppProvider {
   }
 
   async getMessageLimits(): Promise<{
-    current: number;
-    limit: number;
+    current: number | null;
+    limit: number | null;
     reachout_timelock?: number;
+    can_send_new_messages?: boolean | null;
   }> {
     return this.client.getMessageLimits();
   }

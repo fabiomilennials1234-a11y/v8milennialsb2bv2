@@ -87,7 +87,8 @@ describe("connectQR — region reaches the provider", () => {
 
     const [connectUrl] = vi.mocked(fetch).mock.calls[1];
     expect(String(connectUrl)).toBe("https://uazapi.test/instance/connect");
-    expect(connectBodyOf(1)).toEqual({
+    expect(connectBodyOf(1).systemName).toBeTypeOf("string");
+    expect(connectBodyOf(1)).toMatchObject({
       phone: "5548988887777",
       proxy_managed_country: "br",
       proxy_managed_state: "sc",
@@ -121,7 +122,7 @@ describe("connectQR — never costs a connection", () => {
     expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toBe("https://uazapi.test/instance/connect");
-    expect(connectBodyOf(0)).toEqual({ phone: "14155552671" });
+    expect(connectBodyOf(0)).toEqual({ phone: "14155552671", systemName: expect.any(String) });
   });
 
   it("connects without the region when the catalog request fails", async () => {
@@ -133,7 +134,7 @@ describe("connectQR — never costs a connection", () => {
     const res = await provider.connectQR("5548988887777");
 
     expect(res.paircode).toBe("3333-4444");
-    expect(connectBodyOf(1)).toEqual({ phone: "5548988887777" });
+    expect(connectBodyOf(1)).toMatchObject({ phone: "5548988887777" });
   });
 
   it("connects without the region when the catalog has no city for the UF", async () => {
@@ -144,7 +145,7 @@ describe("connectQR — never costs a connection", () => {
     const provider = makeProvider(null, "tok-region-5");
     await provider.connectQR("5548988887777");
 
-    expect(connectBodyOf(1)).toEqual({ phone: "5548988887777" });
+    expect(connectBodyOf(1)).toMatchObject({ phone: "5548988887777" });
   });
 
   it("connects without the region when the instance has no phone at all", async () => {
@@ -154,6 +155,6 @@ describe("connectQR — never costs a connection", () => {
     await provider.connectQR();
 
     expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
-    expect(connectBodyOf(0)).toEqual({});
+    expect(connectBodyOf(0)).toEqual({ systemName: expect.any(String) });
   });
 });

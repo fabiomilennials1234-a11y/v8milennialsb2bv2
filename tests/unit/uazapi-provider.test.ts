@@ -238,7 +238,7 @@ describe("UazapiProvider.createInstance", () => {
     };
   }
 
-  it("calls initInstance on /instance/init with admintoken header", async () => {
+  it("calls initInstance on /instance/create with admintoken header", async () => {
     vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
 
     const rpc = makeRpc({ data: null, error: null });
@@ -247,64 +247,17 @@ describe("UazapiProvider.createInstance", () => {
     await provider.createInstance(makeCreateInput());
 
     const [url, init] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("https://uazapi.test/instance/init");
+    expect(url).toBe("https://uazapi.test/instance/create");
     const headers = init?.headers as Record<string, string>;
     expect(headers["admintoken"]).toBe("admin-token-xyz");
   });
 
-  it("sends a systemName derived from the organization", async () => {
-    // Without it every Instance of every Organization reaches WhatsApp under
-    // the provider's default device label — from the platform's side all our
-    // tenants look like the same device, which is the correlation we want gone.
-    vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
-    );
-
+  it("only sends documented creation fields; device label belongs to connect", async () => {
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE)));
     const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
     await provider.createInstance(makeCreateInput());
-
-    const [, init] = vi.mocked(fetch).mock.calls[0];
-    const body = JSON.parse(init?.body as string);
-    expect(body.systemName).toBeTypeOf("string");
-    expect(body.systemName.length).toBeGreaterThan(0);
-    expect(body.systemName).not.toContain("org-uuid-456");
-  });
-
-  it("sends different systemNames for different organizations", async () => {
-    vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
-    );
-    const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
-
-    await provider.createInstance({ ...makeCreateInput(), organization_id: "org-aaa" });
-    const first = JSON.parse(
-      vi.mocked(fetch).mock.calls[0][1]?.body as string
-    ).systemName;
-
-    vi.mocked(fetch).mockClear();
-    await provider.createInstance({ ...makeCreateInput(), organization_id: "org-bbb" });
-    const second = JSON.parse(
-      vi.mocked(fetch).mock.calls[0][1]?.body as string
-    ).systemName;
-
-    expect(first).not.toBe(second);
-  });
-
-  it("still creates the Instance when the label cannot be derived", async () => {
-    // Graceful degradation: an underivable label omits the field and the
-    // provider default applies. It must never block provisioning.
-    vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(jsonRes(200, INSTANCE_INIT_RESPONSE))
-    );
-
-    const provider = makeProvider({ rpc: makeRpc({ data: null, error: null }) });
-
-    await expect(
-      provider.createInstance({ ...makeCreateInput(), organization_id: "" })
-    ).resolves.toBeDefined();
-
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
-    expect(body.systemName).toBeUndefined();
+    expect(Object.keys(body).sort()).toEqual(["adminField01", "adminField02", "name"]);
   });
 
   it("calls set_uazapi_credentials RPC with correct parameters", async () => {
@@ -513,7 +466,8 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
     const body = JSON.parse(init?.body as string);
     expect(body.id).toBe("msg-id-1");
     expect(body.number).toBe("5511999999999");
-    expect(body.emoji).toBe("👍");
+    expect(body.text).toBe("👍");
+    expect(body.emoji).toBeUndefined();
   });
 
   it("edit() calls /message/edit with correct body", async () => {
@@ -539,7 +493,8 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
     expect(url).toBe("https://uazapi.test/message/pin");
     const body = JSON.parse(init?.body as string);
     expect(body.id).toBe("msg-id-3");
-    expect(body.number).toBe("5511999999999");
+    expect(body.pin).toBe(true);
+    expect(body).not.toHaveProperty("number");
   });
 
   it("deleteForAll() calls /message/delete with correct body", async () => {
@@ -552,18 +507,18 @@ describe("UazapiProvider — Uazapi-only methods call correct endpoints", () => 
     expect(url).toBe("https://uazapi.test/message/delete");
   });
 
-  it("historySync() calls /message/history-sync", async () => {
+  it("historySync() reads stored messages via /message/find", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonRes(200, { messages: [], nextCursor: undefined })
-    );
+    ).mockResolvedValueOnce(jsonRes(200, []));
 
     const provider = makeProvider();
     const result = await provider.historySync({ chat_jid: "5511999999999@s.whatsapp.net", limit: 50 });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("https://uazapi.test/message/history-sync");
+    expect(url).toBe("https://uazapi.test/message/find");
     const body = JSON.parse(init?.body as string);
-    expect(body.chat_jid).toBe("5511999999999@s.whatsapp.net");
+    expect(body.chatid).toBe("5511999999999@s.whatsapp.net");
     expect(body.limit).toBe(50);
     expect(result.messages).toEqual([]);
   });

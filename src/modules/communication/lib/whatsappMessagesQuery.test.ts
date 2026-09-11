@@ -247,3 +247,13 @@ describe("fetchConversationMessages — thread por chip, não por instância", (
     ).rejects.toThrow("query morreu");
   });
 });
+
+describe('UAZAPI persisted message actions', () => {
+  it('requests the metadata needed after reload, not only realtime updates', async () => {
+    queryResult.data = [{ id: 'reaction-row', timestamp: '2026-09-11T12:00:00Z', reactions: [{ emoji: '🧪', from: 'me', count: 1 }], edited: true }];
+    queryResult.error = null;
+    const rows = await fetchConversationMessages({ organizationId: 'org', instanceId: 'instance', phoneNumber: '5511999999999' });
+    for (const column of ['reactions', 'edited', 'pinned_at', 'deleted_at']) expect(WHATSAPP_MESSAGE_COLUMNS.split(', ').includes(column)).toBe(true);
+    expect(rows[0]).toMatchObject({ reactions: [{ emoji: '🧪', from: 'me', count: 1 }], edited: true });
+  });
+});

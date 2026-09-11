@@ -1,0 +1,13 @@
+{
+  "base": "23cbd6796004113c24684dd394a7e2b2db5114c6",
+  "branch": "2d055d27d",
+  "node": "26.8.2",
+  "main_total": 12862,
+  "main_failed": 296,
+  "branch_total": 12874,
+  "branch_failed": 295,
+  "introduced_failures": [],
+  "resolved_failures": [
+    "tests/unit/uazapi-provider.test.ts::UazapiProvider — Uazapi-only methods call correct endpoints historySync() calls /message/history-sync"
+  ]
+}
