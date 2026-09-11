@@ -85,3 +85,13 @@ Segundo destinatário autorizado: SSE real → webhook QA → banco → navegado
 Adicionado suporte visual ao tipo canônico `list_response` além de `listResponse`. Corrigido overflow horizontal da lista de conversas observado no navegador (preview longo alargava wrapper table do Radix). Figura indisponível tem fallback; download de figurinha permanece limitação registrada.
 
 523 testes direcionados em 45 arquivos passaram; Deno check em webhook, status e handlers texto/lista passou. Build e ratchets frontend sem novas falhas nas verificações desta rodada. Não houve execução completa do grafo de workflow nem homologação de PIX ou lifecycle destrutivo.
+
+## Rodada adicional — grafo, mídia e exact
+
+Motor de workflow executou grafo trigger → texto → lista → end com banco/provider reais em QA: completed, quatro passos registrados. Isto cobre o grafo no motor; worker cron e publicação pelo editor continuam pendentes.
+
+Causa da figurinha no QA: bucket media ausente. Configuração reproduzida a partir da origem; download/persistência resultou WebP de 616 bytes, HTTP 200, renderização confirmada no navegador. Helper compartilhado também passa a aceitar base64Data e escopa update por organização.
+
+Exact retornou HTTP 200/success no segundo chat para messageid e id composto. O 404 anterior permanece evidência daquele caso, não indisponibilidade geral. Acknowledgement não prova recuperar conteúdo ausente nem concluir history assíncrono.
+
+645 testes passaram em 50 arquivos. Deno check passou no helper de mídia e motor; sem mudança frontend nesta rodada. Resumo consolidado em `.specs/uazapi-rebuild/RESUMO-TESTES.md`, evidências em `live-verification-round4-2026-09-11.json`.
