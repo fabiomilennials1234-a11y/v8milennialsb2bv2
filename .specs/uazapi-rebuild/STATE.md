@@ -7,7 +7,7 @@ Data: 2026-09-11.
 - Pedido CTO: reconstruir conforme documentação, em branches GitHub/Supabase baseadas em main/produção; validar com instância da organização TorqueCRM.
 - Git: `codex/uazapi-rebuild`, criada de `origin/main` em `23cbd6796004113c24684dd394a7e2b2db5114c6`.
 - Supabase pai: `jsjsmuncfkbsbzqzqhfq` (produção). Nenhuma escrita em produção autorizada por esta implementação.
-- Supabase branch: **ainda não criada**; organização confirmada pelo pedido do CTO. Custo informado pelo conector: US$ 0,01344/hora; confirmação explícita desse valor solicitada e pendente.
+- Supabase branch criada: `uazapi-rebuild`, ref `qtkohfnephshaxgtzksz`, ID `bcec3def-0873-4144-98ac-6fdc7856440a`. Custo US$ 0,01344/hora confirmado; CTO autorizou explicitamente manter durante reconstrução. Persistent=true. Não excluir ao fim da rodada; encerrar cobrança quando reconstrução terminar.
 - Já existe branch `condicional-guiado`, pertencente a outro trabalho; não reutilizar, resetar ou excluir.
 - Organização de validação: TorqueCRM, `b2ad1ffb-e136-4356-846b-9f210f902573`.
 - Instância identificada por SELECT: TorqueSDR, `3ea9d185-62bb-4efd-a9b4-b557938ba9e6`, provider UAZAPI, conectada.
@@ -32,8 +32,8 @@ A auditoria anterior inspecionou workspace em `ef3554799`, não a main atual. Se
 
 ## Ainda necessário para concluir pedido
 
-1. Confirmar custo e provisionar branch Supabase derivada de produção; inspecionar schema efetivo e replay (runbook alerta sobre baseline marcador).
-2. Provisionar apenas dados/configuração necessários à homologação TorqueCRM; bloquear cron/automação de saída na branch antes de inserir credenciais.
+1. Sincronizar schema completo da branch com produção atual. Branch foi criada do projeto pai, porém replay automático falhou. Baseline real do repo restaurado (256 tabelas); ainda NÃO é snapshot completo da produção atual.
+2. Expandir homologação para app/Edge Functions e permissões por usuário. Seed mínimo pronto: uma organização, uma instância e uma credencial; zero mensagens importadas e zero crons ativos.
 3. Expandir contrato medido do servidor: seis endpoints de leitura já responderam HTTP 200; operações de escrita seguem sem homologação.
 4. Implementar e homologar demais lacunas confirmadas: estados hibernated, recuperação de histórico, filtros de monitor e normalização de respostas.
 5. Validar interface, permissões por organização, envio/recebimento, mídia, reações/leitura, menus, PIX, sender e reconexão em ambiente isolado.
@@ -66,3 +66,15 @@ Sem novos endpoints, grants, tabelas ou bypass de autorização. Tokens permanec
 - Nenhum envio, mudança de webhook, reconexão, migração ou deploy em produção. Credencial administrativa fornecida pelo CTO não foi necessária nem persistida.
 
 - Rodada final: 59 testes direcionados passaram; lint ratchet sem problemas introduzidos. Adapter real devolveu 451 chats individuais únicos após excluir os quatro JIDs de grupo inconsistentes.
+
+## Branch Supabase provisionada — 2026-09-11
+
+- URL: https://supabase.com/dashboard/project/qtkohfnephshaxgtzksz
+- Organização QA mantém UUID da TorqueCRM; apenas name/slug/plano de teste semeados. Não é cópia completa dos dados da organização.
+- TorqueSDR vinculada pelo mesmo UUID interno e identidade remota. Token guardado somente em whatsapp_instance_secrets, recuperado diretamente do backend de produção com filtro de organização/instância. Webhook secret QA independente; webhook ativo do fornecedor não foi alterado.
+- Variável UAZAPI_BASE_URL definida na branch. Token administrativo não necessário para esta verificação nem persistido.
+- RPC get_uazapi_credentials testada pela REST API da branch: anon HTTP 401; service_role HTTP 200. ACL nega tabela e RPC para anon/authenticated. Credencial lida da branch validou identidade remota e 451 chats individuais únicos no adapter.
+- Replay automático continua sinalizado MIGRATIONS_FAILED; projeto ACTIVE_HEALTHY. Não mascarar esse status como migrações completas: baseline foi restaurado manualmente e pós-baseline ainda pendente.
+- Comparação limitada de seis tabelas encontrou 23 colunas de produção ausentes no baseline. Outras diferenças de funções, políticas e tabelas ainda precisam auditoria. Não usar este banco para afirmar paridade integral de produção nem realizar merge de migrations para prod.
+- Evidência: `branch-verification.json`. Sem deploy de Edge Functions nesta rodada; leitura realizada por adapter local com credencial recuperada da branch.
+- Retenção persistente autorizada pelo CTO na resposta “Manter durante a reconstrução”; exceção explícita ao cleanup por rodada do runbook. Custo segue ativo.

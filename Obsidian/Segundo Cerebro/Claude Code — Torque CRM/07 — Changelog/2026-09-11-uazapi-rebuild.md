@@ -29,3 +29,7 @@ Provisionamento Supabase, contrato do servidor efetivo e homologação com desti
 ## Validação real de leitura
 
 TorqueSDR: identidade remota confirmada, seis endpoints HTTP 200. Payloads estruturais anonimizados registrados. Paginação de chats e mensagens corrigida com base em respostas reais. Fornecedor devolveu quatro JIDs de grupo com flag individual; filtro final usa classificação normalizada. Custo da branch Supabase (US$ 0,01344/hora) segue aguardando confirmação exigida pelo conector. Não houve escrita em produção nem envio.
+
+## Branch Supabase aprovada e provisionada
+
+CTO confirmou custo e permanência durante reconstrução. Branch uazapi-rebuild, qtkohfnephshaxgtzksz, persistent=true, baseada no projeto de produção. Replay automático falhou no marcador do baseline; baseline do repo restaurado com 256 tabelas. Não representa ainda schema completo de produção atual. Seed restrito a org QA/TorqueSDR/credencial; zero crons ativos e mensagens importadas. RPC pela REST API negou anon (401), permitiu serviço (200); adapter com credencial da branch validou identidade e 451 chats individuais. Sem mudança remota de webhook ou envio. Evidência em .specs/uazapi-rebuild/branch-verification.json.
