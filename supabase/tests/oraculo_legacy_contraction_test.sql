@@ -1,4 +1,5 @@
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap;
 SELECT plan(10);
 
 SELECT hasnt_table('public', 'oraculo_usage', '(CONTRATO) tabela ativa do chat antigo não existe');

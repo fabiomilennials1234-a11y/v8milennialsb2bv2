@@ -331,9 +331,9 @@ SELECT lead_id, 'a6010000-0000-4000-8000-000000000005', 'Produto-' || period || 
   'outro', '2025-01-01'
 FROM product_fixture;
 
-INSERT INTO public.deals (id, organization_id, title, source_lead_id, created_at)
+INSERT INTO public.deals (id, organization_id, title, source_lead_id, source, created_at)
 SELECT deal_id, 'a6010000-0000-4000-8000-000000000005', 'Pacote-' || period || '-' || sequence,
-  lead_id, created_at
+  lead_id, 'human', created_at
 FROM product_fixture;
 
 INSERT INTO public.deal_items (

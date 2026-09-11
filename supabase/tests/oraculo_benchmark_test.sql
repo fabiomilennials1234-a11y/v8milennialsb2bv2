@@ -78,6 +78,8 @@ SELECT is(
   '(INICIALIZAÇÃO) externo pendente fica explícito e sem estimativa'
 );
 
+SET LOCAL session_replication_role = replica;
+
 INSERT INTO public.team_members (id, name, role, organization_id, is_active)
 SELECT
   ('c' || substr(replace(o.id::text, '-', ''), 2))::uuid,

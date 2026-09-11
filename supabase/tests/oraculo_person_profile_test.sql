@@ -8,6 +8,9 @@ SELECT ok(NOT has_function_privilege('authenticated', 'public.oraculo_revenue_bo
 
 INSERT INTO public.organizations (id,name,slug,timezone) VALUES
   ('a6040000-0000-4000-8000-000000000001','Org 604','org-604','America/Sao_Paulo');
+
+SET LOCAL session_replication_role = replica;
+
 INSERT INTO public.team_members (id,organization_id,name,role,is_active,metric_type) VALUES
   ('a6040000-0000-4000-8000-000000000011','a6040000-0000-4000-8000-000000000001','Ana','admin',true,'meetings');
 INSERT INTO public.team_members (id,organization_id,name,role,is_active,metric_type) VALUES
