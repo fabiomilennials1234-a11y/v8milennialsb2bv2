@@ -321,8 +321,8 @@
       "summary": "Enviar menu interativo (botões, carrosel, lista ou enquete)",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "Campos documentados + opções/seleção no chat; nodes e gateway preservam metadata.",
-      "validation": "Lista real enviada/lida; seleção recebida; fluxo wait_response/timeout. R11: envio pelo compositor confirmado Delivered; rótulo/descrição no fornecedor e UI após reload.",
-      "pending": "Demais variantes de botões/enquete e limites não homologados integralmente.",
+      "validation": "Lista real enviada/lida; seleção recebida; fluxo wait_response/timeout. R11: envio pelo compositor confirmado Delivered; rótulo/descrição no fornecedor e UI após reload. R14: botões enviados pelo compositor; queued/pending com ID real, Delivered confirmado; texto e opções em marcadores visíveis após reload.",
+      "pending": "Demais variantes de botões/enquete e limites não homologados integralmente. R14: resposta real ao botão e cartão visual dedicado continuam pendentes.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/uazapi-client.ts"
@@ -413,8 +413,8 @@
       "summary": "Baixar arquivo de uma mensagem",
       "implementation": "Backend integrado (escopo parcial)",
       "sessionChange": "base64Data + persistência de mídia; transcrição autenticada com cache/lease.",
-      "validation": "Downloads reais; transcrição HTTP200 persistida após reload; outsider403; concorrência200/409. R13: áudio recebido real reproduzido; transcribe=true devolveu HTTP200/cached com URL e MIME, sem texto; falha502 explícita no CRM, sem persistir transcrição vazia.",
-      "pending": "Resolver ausência de transcrição em resposta cached da UAZAPI para áudio recebido; nova homologação positiva após resolução. Não trocar provedor silenciosamente.",
+      "validation": "Downloads reais; transcrição HTTP200 persistida após reload; outsider403; concorrência200/409. R13: áudio recebido real reproduzido; transcribe=true devolveu HTTP200/cached com URL e MIME, sem texto; falha502 explícita no CRM, sem persistir transcrição vazia. R14: status da instância confirma openai_apikey vazio; documentação exige chave OpenAI válida para transcrição.",
+      "pending": "Configurar chave OpenAI por canal seguro e validar transcrição recebida positiva. Não atribuir resposta cached sem texto a bug interno sem evidência.",
       "priority": "P1 — concluir homologação CRM",
       "codeReferences": [
         "supabase/functions/_shared/whatsapp-media.ts",
