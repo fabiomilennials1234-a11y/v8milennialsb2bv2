@@ -1,3 +1,4 @@
+import type { AcceptedInteractiveResult } from './accepted-interactive-message';
 /**
  * menu-sender — quem envia uma mensagem interativa, por canal.
  *
@@ -88,21 +89,29 @@ export function criarEnviadorOficial(base: Base): EnviadorDeMenu {
  * abre o navegador.
  */
 export function criarEnviadorUazapi(
-  base: Base & { aoGravar?: (menu: MenuMontado, messageId: string | null) => Promise<void> },
+  base: Base & { aoGravar?: (menu: MenuMontado, messageId: string | null, result?: AcceptedInteractiveResult) => Promise<void> },
 ): EnviadorDeMenu {
   return {
     tipos: ["button", "list"],
     async enviar(menu) {
+      const options = menu.opcoes.map(option => {
+        if (menu.tipo !== "list" || !option.description) return option;
+        if (option.title.includes("|") || option.description.includes("|") || /^\[.*\]$/.test(option.title)) {
+          throw new Error("Remova os separadores | e títulos entre colchetes das opções com descrição.");
+        }
+        // UAZAPI list grammar: title|id|description. Keep the title as response ID.
+        return { title: `${option.title}|${option.title}|${option.description}` };
+      });
       const r = (await base.aoEnviar(
         base.instanceId,
         base.numero,
         menu.tipo,
         menu.texto,
-        menu.opcoes,
-        { footer: menu.rodape },
-      )) as { message_id?: string } | undefined;
+        options,
+        { footer: menu.rodape, listButtonLabel: menu.rotuloDaLista },
+      )) as AcceptedInteractiveResult | undefined;
 
-      await base.aoGravar?.(menu, r?.message_id ?? null);
+      await base.aoGravar?.(menu, r?.message_id ?? null, r);
       base.depois?.();
     },
   };

@@ -179,3 +179,13 @@ Validação final da rodada 9: build e ratchets TypeScript/lint sem novos proble
 Relatório consolidado vigente: `docs/integrations/uazapi-capabilities.md`. Substitui os totais iniciais por referência literal e as pendências históricas superadas nas rodadas seguintes. OpenAPI oficial consultado novamente: versão 2.1.1, 139 operações; 33 com integração no backend (escopo parcial), 1 somente em ferramenta QA (SSE), 105 não integradas. Cobertura por endpoint não certifica todas as opções nem interface completa. Matriz filtrável em `COBERTURA-UAZAPI.csv`; inventário atual em `capabilities-current.json`; o JSON inicial permanece histórico.
 
 Consultas reais somente leitura: blocklist HTTP200; catálogo regional HTTP200 (2.577 cidades); status TorqueSDR connected. Nenhuma conexão alterada nesta rodada. Vault lint e índices passaram. CI do commit de código 6602b48fc tem somente Supabase Preview skipped; CI completo atual não comprovado. Leo continua sem reconexão confirmada conforme registro da rodada anterior. Lifecycle adiado para última etapa na TorqueSDR.
+
+## Rodada 11 — compositor de lista/PIX (2026-09-11)
+
+Inspeção antes de ampliar o compositor encontrou persistência antiga que antecipava status sent e usava ID sintético no PIX. Corrigido: helper compartilhado exige ID real, mantém queued/desconhecido como pending, preserva timestamp do fornecedor, grava metadata mínima de lista/PIX e usa INSERT-ignore para não sobrescrever eco/receipt. Falha de persistência após aceitação avisa para aguardar sincronização, sem converter o envio aceito em erro que induz repetição. Lista agora repassa rótulo e codifica descrição conforme title|id|description; delimitadores ambíguos rejeitados antes do envio.
+
+Navegador QA: lista e PIX enviados pelo compositor ao segundo número autorizado. Ambos queued no retorno e pending na gravação local, IDs reais; lista expandida mostra rótulo/descrição após reload; PIX mostra card e copia chave correta. Consulta posterior `/message/find`: ambos Delivered; lista do fornecedor contém rótulo/descrição. Nenhum pagamento. O primeiro roteiro visual falhou por não rolar/expandir a lista; corrigido o roteiro, sem novo envio da lista.
+
+61 testes passaram em cinco arquivos. Suíte adicional `pix-charge-flow.test.tsx` (Asaas) falhou no carregamento por import legado inexistente; arquivo não alterado nesta rodada. Build, TypeScript e lint ratchets passaram, zero problemas introduzidos. Evidência: `.specs/uazapi-rebuild/live-verification-round11-2026-09-11.json`.
+
+Controles de localização/contato na TorqueSDR continuam pendentes; os formulários existentes pertencem ao canal oficial. Esta rodada priorizou corrigir o envio interativo já oferecido. Nenhuma nova chamada de lifecycle; nenhuma promoção a produção.

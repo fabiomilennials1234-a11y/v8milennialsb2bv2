@@ -128,3 +128,13 @@ QA validou páginas de 100 e histórico com 1.314 registros; 18 itens montados. 
 ## Transcrição e PIX — rodada 9
 
 Transcrição sob demanda com JWT/RLS, gate de responsável, lease e cache persistido com proveniência. Chromium confirmou texto após reload; concorrência 200/409 e tenant externo 403. PIX nativo passou a exibir recebedor/chave e copiar chave, sem inferir pagamento. Corrigido contrato nullable dos limites de alcance; Deno de todo _shared passou. Evidência: `.specs/uazapi-rebuild/live-verification-round9-2026-09-11.json`. Lifecycle adiado por nova orientação: instância alternativa já havia sido desconectada; reconexão não confirmada, nenhuma exclusão, TorqueSDR sem chamadas de lifecycle nesta rodada.
+
+## Rodada 11 — compositor de lista/PIX (2026-09-11)
+
+Inspeção antes de ampliar o compositor encontrou persistência antiga que antecipava status sent e usava ID sintético no PIX. Corrigido: helper compartilhado exige ID real, mantém queued/desconhecido como pending, preserva timestamp do fornecedor, grava metadata mínima de lista/PIX e usa INSERT-ignore para não sobrescrever eco/receipt. Falha de persistência após aceitação avisa para aguardar sincronização, sem converter o envio aceito em erro que induz repetição. Lista agora repassa rótulo e codifica descrição conforme title|id|description; delimitadores ambíguos rejeitados antes do envio.
+
+Navegador QA: lista e PIX enviados pelo compositor ao segundo número autorizado. Ambos queued no retorno e pending na gravação local, IDs reais; lista expandida mostra rótulo/descrição após reload; PIX mostra card e copia chave correta. Consulta posterior `/message/find`: ambos Delivered; lista do fornecedor contém rótulo/descrição. Nenhum pagamento. O primeiro roteiro visual falhou por não rolar/expandir a lista; corrigido o roteiro, sem novo envio da lista.
+
+61 testes passaram em cinco arquivos. Suíte adicional `pix-charge-flow.test.tsx` (Asaas) falhou no carregamento por import legado inexistente; arquivo não alterado nesta rodada. Build, TypeScript e lint ratchets passaram, zero problemas introduzidos. Evidência: `.specs/uazapi-rebuild/live-verification-round11-2026-09-11.json`.
+
+Controles de localização/contato na TorqueSDR continuam pendentes; os formulários existentes pertencem ao canal oficial. Esta rodada priorizou corrigir o envio interativo já oferecido. Nenhuma nova chamada de lifecycle; nenhuma promoção a produção.

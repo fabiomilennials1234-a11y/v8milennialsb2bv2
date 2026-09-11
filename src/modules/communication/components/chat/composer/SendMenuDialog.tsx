@@ -107,7 +107,7 @@ export function SendMenuDialog({ open, onOpenChange, enviador }: Props) {
         ctaUrl: ctaUrl.trim() || undefined,
       });
 
-      toast.success("Menu enviado");
+      toast.success("Menu encaminhado para envio");
       onOpenChange(false);
       setText("");
       setRotuloDaLista("");

@@ -49,7 +49,7 @@ import { ChatQuickActions } from "./ChatQuickActions";
 import { SendMenuDialog } from "./SendMenuDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/lib/menu-sender";
-import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/communication/lib/accepted-interactive-message";
 import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whatsappApi";
 import { SendPixDialog } from "./SendPixDialog";
 
@@ -115,36 +115,21 @@ export function ChatComposer({
     numero: phoneNumber,
     aoEnviar: (inst, numero, tipo, texto, opcoes, extras) =>
       enviarMenuNoProxy(inst, numero, tipo, texto, opcoes, extras),
-    aoGravar: async (menu: MenuMontado, messageId: string | null) => {
+    aoGravar: async (menu: MenuMontado, _messageId, result) => {
       const orgId = teamMember?.organization_id;
-      // ⚠️ SEM ID DO PROVEDOR, NÃO GRAVA. Antes havia um `menu_${Date.now()}` de
-      // reserva aqui: id sintético é novo a cada tentativa, derrota a UNIQUE que
-      // é a única guarda de idempotência desta tabela, e transforma reenvio em
-      // mensagem duplicada no inbox.
-      if (!orgId || !messageId) return;
-
-      const optionsText = menu.opcoes.map((c) => `• ${c.title}`).join("\n");
-
-      await supabase.from("whatsapp_messages").upsert({
-        organization_id: orgId,
-        instance_id: instanceId,
-        message_id: messageId,
-        // ⚠️ `formatPhoneForWhatsApp` e NÃO um `replace` de não-dígitos: ela
-        // normaliza DDI e o nono dígito. Trocá-la por algo mais simples só para
-        // evitar uma aresta no dep-cruiser produziria JID errado — e mensagem
-        // gravada na conversa errada.
-        remote_jid: `${formatPhoneForWhatsApp(phoneNumber)}@s.whatsapp.net`,
-        phone_number: phoneNumber,
-        direction: "outgoing",
-        message_type: menu.tipo === "button" ? "button" : "list",
-        content: `${menu.texto}\n\n${optionsText}`,
-        status: "sent",
-        timestamp: new Date().toISOString(),
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
-
-      menuQueryClient.invalidateQueries({
-        queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
-      });
+      if (!orgId) {
+        toast.warning("Envio aceito. Aguarde a sincronização antes de tentar novamente.");
+        return;
+      }
+      try {
+        const row = acceptedInteractiveRow({ organizationId: orgId, instanceId, phoneNumber }, result, { kind: "menu", menu });
+        if (!row) throw new Error("Missing accepted message identity");
+        const saved = await supabase.from("whatsapp_messages").upsert(row, interactiveInsertOptions);
+        if (saved.error) throw saved.error;
+      } catch {
+        toast.warning("Envio aceito. Histórico aguardando sincronização; não reenvie.");
+      }
+      void menuQueryClient.invalidateQueries({ queryKey: ["whatsapp_messages", orgId] });
     },
   });
 

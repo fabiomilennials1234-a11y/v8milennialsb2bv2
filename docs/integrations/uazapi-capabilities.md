@@ -8,6 +8,8 @@ Fonte: [OpenAPI oficial uazapiGO 2.1.1](https://docs.uazapi.com/openapi-bundled.
 
 O inventário inicial contava referências literais e deixou escapar `/proxy-managed/cities`, cuja URL é dinâmica. PIX, sender e lifecycle já existiam antes da reconstrução; esta sessão corrigiu contratos e consumidores. Não atribuímos a criação de todos esses recursos à sessão.
 
+Atualização R11: compositor de lista/PIX agora preserva pending, ID real, timestamp e metadata antes do webhook; lista repassa rótulo/descrição. Envios reais pelo navegador confirmados Delivered no fornecedor. [Evidência R11](../../.specs/uazapi-rebuild/live-verification-round11-2026-09-11.json). Sem novos endpoints nesta rodada; inventário JSON/CSV anterior permanece fotografia R10. Localização/contato no compositor continuam pendentes.
+
 ## O que foi construído/corrigido nesta sessão
 
 | Área | Entrega | Evidência / limite |
