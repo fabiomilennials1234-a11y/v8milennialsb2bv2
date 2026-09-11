@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
+import { MfaVerifyEffect } from '../components/MfaVerifyEffect';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -36,7 +37,7 @@ import {
 } from 'lucide-react';
 import torqueLogo from '@/assets/torque-logo.png';
 
-type Phase = 'loading' | 'enroll' | 'challenge' | 'done' | 'error';
+type Phase = 'loading' | 'enroll' | 'challenge' | 'celebrate' | 'done' | 'error';
 
 /** Fator TOTP como devolvido por listFactors(). */
 interface TotpFactor {
@@ -154,7 +155,9 @@ export default function MfaSetup() {
 
     // A sessão foi reemitida com aal2 — sem refresh a UI seguiria vendo aal1.
     await supabase.auth.refreshSession();
-    setPhase('done');
+    // `celebrate` roda a coreografia de sucesso (caixas → círculo → check) e
+    // termina num "Continuar". Quem já chega aal2 cai direto em `done`, sem show.
+    setPhase('celebrate');
     toast({
       title: 'Verificação em duas etapas ativa',
       description: 'Esta sessão está protegida.',
@@ -202,6 +205,14 @@ export default function MfaSetup() {
             Tentar de novo
           </Button>
         </div>
+      </MfaLayout>
+    );
+  }
+
+  if (phase === 'celebrate') {
+    return (
+      <MfaLayout>
+        <MfaVerifyEffect code={code} onContinue={() => navigate('/', { replace: true })} />
       </MfaLayout>
     );
   }
