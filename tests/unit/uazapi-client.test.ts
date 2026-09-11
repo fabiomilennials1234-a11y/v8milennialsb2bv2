@@ -612,6 +612,19 @@ describe("token not leaked", () => {
 // ---------------------------------------------------------------------------
 
 describe("sendMedia — extended timeout", () => {
+  it("sends the explanation as text and document name as docName on the wire", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+    await new UazapiClient(BASE_CONFIG).sendMedia({
+      number: "5511999999999", type: "image", file: "https://example.com/product.jpg",
+      caption: "B.Tox White: redução de volume e controle do frizz.", filename: "Produto.jpg",
+    });
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.text).toBe("B.Tox White: redução de volume e controle do frizz.");
+    expect(body.docName).toBe("Produto.jpg");
+    expect(body).not.toHaveProperty("caption");
+    expect(body).not.toHaveProperty("filename");
+  });
+
   it("calls fetch (media endpoint receives 60s timeout signal)", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
 

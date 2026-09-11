@@ -55,7 +55,7 @@ import { resolveDispatchContext } from "../../supabase/functions/_shared/whatsap
  *  the arguments passed to terminal/filter methods. */
 function tableBuilder(resolved: { data: any; error: any }, calls: Record<string, any[]> = {}) {
   const builder: any = {};
-  for (const m of ["select", "eq", "in", "neq", "ilike", "gte", "limit", "single", "maybeSingle", "delete", "upsert"]) {
+  for (const m of ["select", "eq", "in", "neq", "ilike", "gte", "limit", "single", "maybeSingle", "delete", "upsert", "update"]) {
     builder[m] = vi.fn((...args: any[]) => {
       (calls[m] ||= []).push(args);
       return builder;
@@ -73,12 +73,14 @@ interface SupabaseFixture {
   leadPhone?: string | null;
   lockAcquired?: boolean;
   sendMediaImpl?: () => Promise<any>;
+  preventRepeatedDocuments?: boolean;
+  approvedCaption?: string;
 }
 
 function buildSupabase(fx: SupabaseFixture) {
   const ilikeCalls: any[] = [];
   const sendMedia = vi.fn(fx.sendMediaImpl ?? (async () => ({ message_id: "m-1" })));
-  const rpc = vi.fn(async (name: string) => {
+  const rpc = vi.fn(async (name: string, _params?: { p_dedup_key: string }): Promise<{ data: boolean | null; error: { message: string } | null }> => {
     if (name === "copilot_v2_acquire_dedup_lock") {
       return { data: fx.lockAcquired ?? true, error: null };
     }
@@ -93,6 +95,7 @@ function buildSupabase(fx: SupabaseFixture) {
           return tableBuilder({
             data: fx.docFound === false ? null : {
               id: "doc-111",
+              agent_id: "agent-y",
               file_name: "Linha de produtos.mp4",
               file_path: "3f37decd/fc9cb9ca/1778310137920_Linha de produtos.mp4",
               mime_type: "video/mp4",
@@ -101,8 +104,15 @@ function buildSupabase(fx: SupabaseFixture) {
             },
             error: fx.docFound === false ? { message: "not found" } : null,
           });
-        case "pending_ai_actions":
-          return tableBuilder({ data: fx.priorAiActions ?? [], error: null });
+        case "pending_ai_actions": {
+          const result = { data: fx.priorAiActions ?? [], error: null };
+          const b = tableBuilder(result);
+          b.in = vi.fn((column: string, values: string[]) => {
+            if (column === "status") result.data = result.data.filter(row => !row.status || values.includes(row.status));
+            return b;
+          });
+          return b;
+        }
         case "whatsapp_messages": {
           const b = tableBuilder({ data: fx.priorWhatsapp ?? [], error: null });
           const origIlike = b.ilike;
@@ -117,6 +127,11 @@ function buildSupabase(fx: SupabaseFixture) {
           });
         case "conversations":
           return tableBuilder({ data: { agent_id: "agent-y" }, error: null });
+        case "copilot_agents":
+          return tableBuilder({ data: { conversation_style: { document_delivery_policy: {
+            prevent_repeated_documents: fx.preventRepeatedDocuments ?? false,
+            captions_by_document: { [VALID_DOC]: fx.approvedCaption },
+          } } }, error: null });
         case "whatsapp_instances":
           return tableBuilder({ data: null, error: null });
         case "copilot_v2_dedup_locks":
@@ -148,6 +163,58 @@ const VALID_DOC = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("agent opt-in prevents repeated documents across new actions", () => {
+  it("does not confuse a claimed sibling with a confirmed delivery", async () => {
+    const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true,
+      priorAiActions: [{ id: "claimed-sibling", status: "processing", payload: { document_id: VALID_DOC } }],
+    });
+    await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "first-action");
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+  });
+  it("attaches the operator's full product explanation to the actual media send", async () => {
+    const explanation = "B.Tox White, 1 kg. Reduz volume, reconstrói a massa capilar e controla o frizz. Contém pequena quantidade de formol.";
+    const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true, approvedCaption: explanation });
+    await executeSendDocument(supabase, { document_id: VALID_DOC, caption: "Foto do produto." }, "org-111", "lead-1", "conv-1", "action-new");
+    expect(sendMedia).toHaveBeenCalledWith(expect.objectContaining({ caption: explanation }));
+  });
+
+  it("allows a first real delivery when prior actions were only suppressed", async () => {
+    const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true,
+      priorAiActions: [{ id: "suppressed", payload: { document_id: VALID_DOC, suppressed_at: "2026-09-08T18:35:00Z" } }],
+    });
+    await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "first-send");
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send on an unknown lock outcome for an opted-in agent", async () => {
+    const { supabase, sendMedia, rpc } = buildSupabase({ preventRepeatedDocuments: true });
+    rpc.mockResolvedValue({ data: null, error: { message: "unavailable" } });
+    await expect(executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "new-action")).rejects.toThrow("Document send lock unavailable");
+    expect(sendMedia).not.toHaveBeenCalled();
+  });
+  it("does not deliver a new action for a document already delivered", async () => {
+    const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true,
+      priorAiActions: [{ id: "earlier-action", payload: { document_id: VALID_DOC, delivered_at: "2026-09-08T18:35:00Z" } }],
+    });
+    const result = await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "new-action");
+    expect(sendMedia).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ skipped: true, reason: "duplicate_document" });
+  });
+
+  it("uses a shared conversation/document lock for two distinct actions", async () => {
+    const { supabase, sendMedia, rpc } = buildSupabase({ preventRepeatedDocuments: true });
+    const held = new Set<string>();
+    rpc.mockImplementation(async (_name: string, params?: { p_dedup_key: string }) => {
+      const key = params!.p_dedup_key;
+      if (held.has(key)) return { data: false, error: null };
+      held.add(key); return { data: true, error: null };
+    });
+    await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "action-a");
+    await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "action-b");
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+  });
 });
 
 /* ------------------------------------------------------------------ */
