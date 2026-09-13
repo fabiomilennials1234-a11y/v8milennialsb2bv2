@@ -17,6 +17,7 @@ import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-tra
  */
 
 import { replySnapshot, type ReplySnapshot } from "../_shared/whatsapp-reply.ts";
+import { persistOutboundReaction } from "../_shared/persist-outbound-reaction.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -1147,6 +1148,11 @@ Deno.serve(
             return jsonResponse(400, { error: "Missing message_id/number/emoji" }, corsHeaders);
           }
           await provider.react(message_id, number, emoji);
+          if (instance.provider === "uazapi") {
+            await persistOutboundReaction(supabaseAdmin, {
+              organizationId: callerOrgId, instanceId: instance.id, messageId: message_id,
+            }, emoji);
+          }
           result = { ok: true };
           break;
         }
