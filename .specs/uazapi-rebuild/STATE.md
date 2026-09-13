@@ -247,3 +247,12 @@ Complemento: TypeScript ratchet passou com zero erros introduzidos (dívida exis
 Diagnóstico de produção: reação funciona no WhatsApp, mas reactions permanece vazio no banco. Proxy chamava provider.react sem refletir aceitação localmente; hook apenas invalidava cache. Corrigido no caminho UAZAPI: gravação após sucesso do fornecedor, limitada à organização, instância e mensagem. Compare-and-swap preserva atualizações recebidas concorrentes. Troca/remoção altera apenas reação da conta conectada; erro de persistência não é anunciado como sucesso.
 
 29 testes passaram em persist-outbound-reaction, message-actions e uazapi-event; Deno check do novo helper passou. Edição/exclusão relatadas funcionando pelo usuário referem-se a ações pelo Torque, não comprovam eventos recebidos de outro aparelho. Presença recebida segue pendente. Publicação e homologação real da correção de reações serão registradas no PR.
+
+
+## 2026-09-13 — legibilidade de reações e recuperação controlada
+
+Capturas do CTO mostraram emoji minúsculo e sem contraste na bolha amarela. Reações agora usam emoji colorido de 18px em cápsula com fundo sólido, borda e altura mínima de 28px, sem depender do amarelo como cor de texto. Contador permanece separado e origem disponível no tooltip.
+
+Dois corações antigos estavam ausentes do banco. Histórico UAZAPI da conversa controlada confirmou os ReactionMessage e seus alvos; registros recuperados com filtro de organização, instância, IDs exatos e compare-and-swap de reactions vazio. Nenhuma mensagem enviada para efetuar a recuperação. Não é backfill geral de todas as conversas.
+
+18 testes de ações/apresentação e build passaram. Publicação/inspeção visual serão registradas no PR.
