@@ -189,3 +189,10 @@ Preparados localmente: cartão de botões UAZAPI com labels inertes, metadados m
 Verificação desta continuação: 52 testes passaram em cinco arquivos (botões, persistência interativa, anexos e compositores); build de produção passou. Ainda sem publicação destes ajustes, sem nova mensagem real nesta continuação. Seleção real de botão e demais pendências de interface/homologação continuam abertas. Não interpretar testes locais como homologação em produção.
 
 Complemento: TypeScript ratchet passou com zero erros introduzidos (dívida existente preservada); lint dos helpers e testes alterados passou. Após restringir metadata ao tipo button, os 12 testes de persistência interativa passaram novamente.
+
+
+## 2026-09-13 — reação enviada pelo chat
+
+Diagnóstico de produção: reação funciona no WhatsApp, mas reactions permanece vazio no banco. Proxy chamava provider.react sem refletir aceitação localmente; hook apenas invalidava cache. Corrigido no caminho UAZAPI: gravação após sucesso do fornecedor, limitada à organização, instância e mensagem. Compare-and-swap preserva atualizações recebidas concorrentes. Troca/remoção altera apenas reação da conta conectada; erro de persistência não é anunciado como sucesso.
+
+29 testes passaram em persist-outbound-reaction, message-actions e uazapi-event; Deno check do novo helper passou. Edição/exclusão relatadas funcionando pelo usuário referem-se a ações pelo Torque, não comprovam eventos recebidos de outro aparelho. Presença recebida segue pendente. Publicação e homologação real da correção de reações serão registradas no PR.
