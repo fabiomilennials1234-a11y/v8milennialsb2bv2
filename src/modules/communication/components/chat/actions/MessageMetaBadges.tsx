@@ -75,20 +75,21 @@ export function MessageMetaBadges({
         <span className="text-[10px] italic text-muted-foreground/60">editado</span>
       )}
       {reactionsList.length > 0 && (
-        <div className="flex flex-wrap gap-1" aria-label="Reações">
+        <div className="flex w-full flex-wrap items-center gap-1.5 pt-1" aria-label="Reações">
           {reactionsList.map((r, i) => (
             <span
               key={`${r.emoji}-${r.from ?? "x"}-${i}`}
+              title={r.from === "me" ? "Você reagiu" : "Reação do contato"}
               className={cn(
-                "inline-flex items-center gap-0.5 text-[11px] rounded-full px-1.5 py-0.5",
+                "inline-flex min-h-7 min-w-8 shrink-0 items-center justify-center gap-1 rounded-full border bg-background px-2 py-1 text-foreground shadow-sm",
                 r.from === "me"
-                  ? "bg-primary/12 text-primary"
-                  : "bg-muted/60 text-foreground/80"
+                  ? "border-foreground/25"
+                  : "border-border"
               )}
             >
-              <span>{r.emoji}</span>
+              <span className="text-lg leading-none [font-family:'Apple_Color_Emoji','Segoe_UI_Emoji','Noto_Color_Emoji',sans-serif]">{r.emoji}</span>
               {r.count && r.count > 1 ? (
-                <span className="font-medium">{r.count}</span>
+                <span className="text-xs font-semibold tabular-nums leading-none">{r.count}</span>
               ) : null}
             </span>
           ))}
