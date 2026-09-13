@@ -25,6 +25,8 @@ import {
   LEAD_LIST_MIN_WIDTH,
   type LeadListItem,
 } from "../components/leads/LeadListRow";
+import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
+import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -34,7 +36,7 @@ import {
   type LeadSortKey,
 } from "../lib/lead-list-sort";
 import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
-import { useLeadsStats } from "../hooks/useLeadsStats";
+import { useLeadsStats, monthStartInTz } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import { useLeadsReorderCycle } from "../hooks/useLeadsReorderCycle";
@@ -479,10 +481,17 @@ function LeadsInner() {
    * O corte de "deste mês" também mudou de fuso: era o do navegador, virou o da
    * org, que é o que o resto do produto usa.
    */
-  const { data: orgStats } = useLeadsStats({
+  const { data: orgStats, isLoading: isLoadingStats } = useLeadsStats({
     searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
+
+  // Redesign aprovado pelo CTO em 2026-09-11 — a tela é a versão nova.
+  // O ramo antigo (isV2=false) fica dormente e sai por inteiro no ship.
+  const isV2 = true;
+
+  // Busca em foco: o input cresce e a contagem à direita sai de cena.
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const stats = useMemo(() => ({
     total: totalLeads ?? leads.length,
@@ -608,6 +617,69 @@ function LeadsInner() {
     }
   };
 
+  /**
+   * Menu "···" da linha — extraído pra ser o MESMO nas duas versões da lista
+   * (Antes/Depois). Comportamento idêntico ao inline anterior.
+   */
+  const leadActionsMenu = (lead: Lead) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
+          <Edit2 className="w-4 h-4 mr-2" />
+          Editar
+        </DropdownMenuItem>
+        {/* Gaveta do lead. Radio e não itens soltos porque as três são
+            mutuamente exclusivas — o usuário precisa ver em qual está antes de
+            mover. Mover aqui marca `classificacao_manual`, e a lei do ERP deixa
+            de tocar neste lead: é o que impede a escolha de sumir na
+            sincronização das 06:00. */}
+        {usaLeiDoErp && !usaCadastroErpCafeJurere && <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Tag className="w-4 h-4 mr-2" />
+            Classificação
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              // Mesma razão do cast em `useLeadClassificacao`: a coluna existe
+              // em prod, o `types.ts` commitado é que está atrasado. Regenerar
+              // expõe 15 erros de outras frentes.
+              value={(lead as { classificacao?: string }).classificacao ?? "lead"}
+              onValueChange={(v) =>
+                mudarClassificacao({
+                  leadId: lead.id,
+                  classificacao: v as LeadClassificacao,
+                })
+              }
+            >
+              {LEAD_CLASSIFICACOES.map((c) => (
+                <DropdownMenuRadioItem key={c} value={c}>
+                  {LEAD_CLASSIFICACAO_CONFIG[c].label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            setLeadToDelete(lead);
+            setDeleteConfirmOpen(true);
+          }}
+          className="text-destructive focus:text-destructive"
+          disabled={!canDeleteLead}
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Excluir
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -625,24 +697,60 @@ function LeadsInner() {
           </p>
         </div>
 
-        <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-          <History className="w-4 h-4" />
-        </Button>
-        <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
-          <FileUp className="w-4 h-4" />
-          Importar
-        </Button>
-        <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
-          <FileDown className="w-4 h-4" />
-          Exportar
-        </Button>
-        <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
-          <Plus className="w-4 h-4" />
-          Novo Lead
-        </Button>
+        {/* Grupo de ações alinhado à direita. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {isV2 ? (
+            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)} className="gap-2">
+              <History className="w-4 h-4" />
+              Importações
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
+              <History className="w-4 h-4" />
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
+            <FileUp className="w-4 h-4" />
+            Importar
+          </Button>
+          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
+            <FileDown className="w-4 h-4" />
+            Exportar
+          </Button>
+          <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
+            <Plus className="w-4 h-4" />
+            Novo Lead
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
+      {isV2 ? (
+        <LeadsStatsV2
+          total={stats.total}
+          thisMonth={stats.thisMonth}
+          withOwner={stats.withSDR}
+          isLoading={isLoadingStats}
+          filters={{
+            thisMonth: {
+              active: hasCreatedRange,
+              toggle: () => {
+                if (hasCreatedRange) return clearCreatedRange();
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("from", monthStartInTz(orgTimezone || "America/Sao_Paulo").toISOString());
+                  next.delete("to");
+                  return next;
+                }, { replace: true });
+              },
+            },
+            unassigned: {
+              active: filterResponsible === "none",
+              toggle: () => setFilterResponsible(filterResponsible === "none" ? "all" : "none"),
+            },
+          }}
+        />
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -671,15 +779,25 @@ function LeadsInner() {
           <p className="text-xl font-bold text-success">{stats.withSDR}</p>
         </motion.div>
       </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+        {/* A busca respira no foco: cresce, e a contagem à direita cede a vez —
+            os dois com a mesma transição pra linha inteira se acomodar junto. */}
+        <div
+          className={cn(
+            "relative flex-1 transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+            searchFocused ? "max-w-xl" : "max-w-sm",
+          )}
+        >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, empresa, email ou telefone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             className="pl-9"
           />
         </div>
@@ -775,6 +893,22 @@ function LeadsInner() {
           activeViewId={activeViewId}
           onActiveViewChange={handleActiveViewChange}
         />
+        {/* Contagem do recorte junto dos filtros — o rodapé só aparece com
+            mais de uma página, e o número é a resposta que o filtro dá.
+            Some enquanto a busca está focada, cedendo o espaço da expansão. */}
+        {isV2 && totalLeads !== undefined && (
+          <span
+            className={cn(
+              "self-center overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground",
+              "transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+              searchFocused ? "max-w-0 opacity-0" : "max-w-[220px] opacity-100",
+            )}
+            aria-hidden={searchFocused}
+          >
+            {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
+            {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
+          </span>
+        )}
       </div>
 
       {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
@@ -862,8 +996,23 @@ function LeadsInner() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto pb-1">
-            <div className={LEAD_LIST_MIN_WIDTH}>
+          // V2 cabe na viewport por desenho (grade compressível + truncate):
+          // sem min-width e sem rolagem lateral. A V1 mantém as suas.
+          <div className={cn(!isV2 && "overflow-x-auto pb-1")}>
+            <div className={isV2 ? "w-full" : LEAD_LIST_MIN_WIDTH}>
+              {isV2 ? (
+                <LeadListHeaderV2
+                  sort={sort}
+                  onSortChange={handleSortChange}
+                  selectAll={
+                    <Checkbox
+                      checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
+                      onCheckedChange={() => bulk.selectAll(allLeadIds)}
+                      aria-label="Selecionar todos os leads da página"
+                    />
+                  }
+                />
+              ) : (
               <LeadListHeader
                 sort={sort}
                 onSortChange={handleSortChange}
@@ -875,16 +1024,51 @@ function LeadsInner() {
                   />
                 }
               />
+              )}
               {isLoading ? (
+                isV2 ? (
+                  <div className="divide-y divide-border/70">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex h-14 items-center gap-4 px-4">
+                        <Skeleton className="size-4 rounded" />
+                        <Skeleton className="size-8 rounded-full" />
+                        <Skeleton className="h-3.5 w-40" />
+                        <Skeleton className="ml-auto h-3.5 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="space-y-2.5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Skeleton key={i} className="h-[70px] w-full rounded-lg" />
                   ))}
                 </div>
+                )
               ) : leads.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-card py-10 text-center text-sm text-muted-foreground">
+                <div className={cn(
+                  "py-10 text-center text-sm text-muted-foreground",
+                  isV2 ? "px-4" : "rounded-lg border border-dashed border-border bg-card",
+                )}>
                   Nenhum lead encontrado
                 </div>
+              ) : isV2 ? (
+                leads.map((lead: Lead) => (
+                  <LeadListRowV2
+                    key={lead.id}
+                    lead={lead as LeadListItem}
+                    metrics={dataMetrics[lead.id]}
+                    deals={leadDeals?.[lead.id]}
+                    standing={standings[lead.id]}
+                    relacaoPorCadastroErp={usaCadastroErpCafeJurere}
+                    ciclo={reorderCycles?.[lead.id]}
+                    selected={bulk.isSelected(lead.id)}
+                    onToggleSelect={() => bulk.toggle(lead.id)}
+                    onOpen={() => openLead(lead.id)}
+                    createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                    originLabel={originLabels[lead.origin] || lead.origin}
+                    originClassName={originColors[lead.origin] || originColors.outro}
+                  />
+                ))
               ) : (
                 leads.map((lead: Lead) => (
                   <LeadListRow
@@ -901,70 +1085,7 @@ function LeadsInner() {
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
                     originLabel={originLabels[lead.origin] || lead.origin}
                     originClassName={originColors[lead.origin] || originColors.outro}
-                    actions={
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
-                            <Edit2 className="w-4 h-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          {/* Gaveta do lead. Radio e não itens soltos porque as
-                              três são mutuamente exclusivas — o usuário precisa
-                              ver em qual está antes de mover.
-
-                              Mover aqui marca `classificacao_manual`, e a lei do
-                              ERP deixa de tocar neste lead: é o que impede a
-                              escolha de sumir na sincronização das 06:00. */}
-                          {usaLeiDoErp && !usaCadastroErpCafeJurere && <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                              <Tag className="w-4 h-4 mr-2" />
-                              Classificação
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                              <DropdownMenuRadioGroup
-                                // Mesma razão do cast em `useLeadClassificacao`:
-                                // a coluna existe em prod, o `types.ts`
-                                // commitado é que está atrasado. Regenerar
-                                // expõe 15 erros de outras frentes.
-                                value={
-                                  (lead as { classificacao?: string })
-                                    .classificacao ?? "lead"
-                                }
-                                onValueChange={(v) =>
-                                  mudarClassificacao({
-                                    leadId: lead.id,
-                                    classificacao: v as LeadClassificacao,
-                                  })
-                                }
-                              >
-                                {LEAD_CLASSIFICACOES.map((c) => (
-                                  <DropdownMenuRadioItem key={c} value={c}>
-                                    {LEAD_CLASSIFICACAO_CONFIG[c].label}
-                                  </DropdownMenuRadioItem>
-                                ))}
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setLeadToDelete(lead);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                            disabled={!canDeleteLead}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    }
+                    actions={leadActionsMenu(lead)}
                   />
                 ))
               )}

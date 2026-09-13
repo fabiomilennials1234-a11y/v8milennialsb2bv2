@@ -87,13 +87,14 @@ function nameHue(name: string): number {
   return h;
 }
 
-function LeadAvatar({ name }: { name: string }) {
+export function LeadAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   const hue = nameHue(name || "?");
   return (
     <div
       style={{ "--lead-hue": hue } as React.CSSProperties}
       className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold",
+        "flex shrink-0 items-center justify-center rounded-full font-semibold",
+        size === "sm" ? "size-8 text-[13px]" : "size-9 text-[15px]",
         "bg-[hsl(var(--lead-hue)_70%_92%)] text-[hsl(var(--lead-hue)_55%_34%)]",
         "dark:bg-[hsl(var(--lead-hue)_45%_24%)] dark:text-[hsl(var(--lead-hue)_55%_74%)]",
       )}
@@ -124,7 +125,7 @@ interface LeadListHeaderProps {
  * foco — e apontando pro lado que o clique VAI produzir, não pro lado oposto.
  * Três setas cinzas ao mesmo tempo não dizem qual está valendo.
  */
-function SortableLabel({
+export function SortableLabel({
   label,
   column,
   sort,
@@ -211,7 +212,7 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
  * tirar da lista. `Cliente` é 1% e é o único valor da linha que merece o accent
  * da marca. Os dois continuam sempre escritos — muda quanto cada um grita.
  */
-function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStanding; porCadastroErp?: boolean }) {
+export function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStanding; porCadastroErp?: boolean }) {
   if (standing?.relacao !== "cliente") {
     return <span className="text-[13px] text-muted-foreground">{standing?.relacao === "perdido" ? "Perdido" : "Lead"}</span>;
   }
@@ -243,7 +244,7 @@ function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStanding; po
  * "sem negócio". O nome do funil trunca; "Em negociação" não — cortado, ele
  * deixa de dizer o que é, que é a única função dele.
  */
-function SituacaoCell({ standing }: { standing?: LeadStanding }) {
+export function SituacaoCell({ standing }: { standing?: LeadStanding }) {
   if (!standing?.emNegociacao) {
     return (
       <span className="inline-block w-fit rounded-md border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">

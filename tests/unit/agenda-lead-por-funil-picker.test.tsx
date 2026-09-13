@@ -51,12 +51,14 @@ const funis = {
     slug?: string;
     type?: string;
     is_active?: boolean;
+    config?: unknown;
   }>,
   isLoading: false,
   isError: false,
 };
 
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   usePipelines: () => funis,
 }));
 
@@ -356,7 +358,7 @@ describe("LeadPorFunilPicker", () => {
     funis.data = [];
     montar();
     expect(
-      screen.getByText("Esta organização ainda não tem funis."),
+      screen.getByText("Nenhum funil disponível para seleção."),
     ).toBeTruthy();
   });
 
@@ -367,4 +369,16 @@ describe("LeadPorFunilPicker", () => {
       screen.getByText("Não foi possível carregar os funis."),
     ).toBeTruthy();
   });
+});
+
+it("hides new choices but resolves a meeting saved in a hidden funnel", () => {
+  funis.data = [{ ...COMERCIAL, config: { navigation: { is_visible: false } } }, REATIVACAO];
+  const onChange = vi.fn();
+  const view = render(<LeadPorFunilPicker value={{ pipelineId: null, leadId: null }} onChange={onChange} />);
+  expect(screen.queryByText(COMERCIAL.name)).toBeNull();
+  view.rerender(<LeadPorFunilPicker value={{ pipelineId: COMERCIAL.id, leadId: null }} onChange={onChange} />);
+  expect(screen.getByTestId("select-funil")).toHaveValue(COMERCIAL.id);
+  expect(screen.getByText(`${COMERCIAL.name} (oculto)`)).toBeInTheDocument();
+  expect(ultimaChamada?.pipelineId).toBe(COMERCIAL.id);
+  expect(onChange).not.toHaveBeenCalled();
 });

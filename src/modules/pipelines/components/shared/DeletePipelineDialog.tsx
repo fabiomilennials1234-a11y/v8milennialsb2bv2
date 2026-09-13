@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines/lib/pipeline-navigation";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
@@ -71,8 +72,8 @@ export function DeletePipelineDialog({
 
   const ehPadrao = settings.default_pipeline_id === pipeline.id;
   const bloqueado = (impacto?.cards_invasores ?? 0) > 0;
-  const candidatosPadrao = pipelines.filter(
-    (p) => p.id !== pipeline.id && p.is_active !== false,
+  const candidatosPadrao = sortPipelinesForNavigation(pipelines).filter(
+    (p) => p.id !== pipeline.id && p.is_active !== false && isPipelineVisible(p),
   );
   // Substituto é obrigatório quando o funil é o padrão — "sem padrão" é uma
   // escolha explícita válida (D4: default NULL = lead entra sem card).

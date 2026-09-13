@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 /**
  * O par Funil → Lead de uma reunião.
  *
@@ -195,13 +196,10 @@ export function LeadPorFunilPicker({
    * `SelectItem` com `value=""` faz o Radix levantar, então id vazio some da
    * lista em vez de derrubar a tela.
    *
-   * ⚠️ Deliberadamente NÃO filtra `is_visible` do display config: esconder um
-   * funil da navegação não tira os leads de dentro dele, e o pedido é que
-   * TODOS os funis da organização apareçam. Esconder aqui deixaria lead
-   * inalcançável.
+   * Visibilidade limita novas escolhas; vínculos salvos continuam resolvidos.
    */
   const funis = useMemo(
-    () => (funisRaw ?? []).filter((p) => !!p.id && p.is_active !== false),
+    () => sortPipelinesForNavigation(funisRaw ?? []).filter((p) => !!p.id && p.is_active !== false && isPipelineVisible(p)),
     [funisRaw],
   );
 
@@ -324,8 +322,8 @@ export function LeadPorFunilPicker({
             <SelectContent>
               <SelectItem value={SEM_FUNIL}>Nenhum funil</SelectItem>
               {funilArquivado && (
-                <SelectItem value={funilArquivado.id}>
-                  {nomearFunil(funilArquivado)} (arquivado)
+                <SelectItem value={funilArquivado.id} disabled>
+                  {nomearFunil(funilArquivado)}{funilArquivado.is_active === false ? " (arquivado)" : " (oculto)"}
                 </SelectItem>
               )}
               {funis.map((funil) => (
@@ -337,9 +335,9 @@ export function LeadPorFunilPicker({
           </Select>
         )}
 
-        {!carregandoFunis && !erroFunis && funis.length === 0 && (
+        {!carregandoFunis && !erroFunis && funis.length === 0 && !funilArquivado && (
           <p className="text-[11px] text-muted-foreground">
-            Esta organização ainda não tem funis.
+            Nenhum funil disponível para seleção.
           </p>
         )}
       </div>

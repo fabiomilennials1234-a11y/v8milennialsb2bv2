@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -567,8 +568,8 @@ function FunnelLegacyActionFields({
   const pipelineId = data.pipelineId || pipelines.find(
     (pipeline) => pipeline.id === legacyRef || pipeline.slug === normalizedLegacy,
   )?.id || "";
-  const visiblePipelines = pipelines.filter(
-    (pipeline) => pipeline.is_active || pipeline.id === pipelineId,
+  const visiblePipelines = sortPipelinesForNavigation(pipelines).filter(
+    (pipeline) => (pipeline.is_active && isPipelineVisible(pipeline)) || pipeline.id === pipelineId,
   );
   const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(
     mode === "duplicate" ? pipelineId || null : null,
@@ -596,7 +597,7 @@ function FunnelLegacyActionFields({
           </SelectTrigger>
           <SelectContent>
             {visiblePipelines.map((pipeline) => (
-              <SelectItem key={pipeline.id} value={pipeline.id}>
+              <SelectItem key={pipeline.id} value={pipeline.id} disabled={!isPipelineVisible(pipeline)}>
                 {pipeline.label}{!pipeline.is_active ? " (desativado)" : ""}
               </SelectItem>
             ))}
@@ -1325,7 +1326,7 @@ function MoveStageFields({
       ? pipelines?.find((p) => p.id === legacyRef || p.slug === normalizedLegacyRef)?.id ?? ""
       : "");
 
-  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+  const funis = sortPipelinesForNavigation(pipelines ?? []).filter((p) => (p.is_active !== false && isPipelineVisible(p)) || p.id === pipelineId);
 
   const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(pipelineId || null);
   const activeStages = etapas.map((e) => ({
@@ -1356,7 +1357,7 @@ function MoveStageFields({
                 Funis
               </SelectLabel>
               {funis.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
                   {p.label}
                 </SelectItem>
               ))}

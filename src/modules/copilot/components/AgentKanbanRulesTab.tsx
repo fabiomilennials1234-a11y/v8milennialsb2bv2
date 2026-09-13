@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 /**
  * Aba de Regras por Etapa (Kanban Rules)
  *
@@ -275,7 +276,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
     }
 
     setDrafts(seeded);
-    setSelectedFunnelId((prev) => prev ?? firstRuleFunnel ?? activeFunnels[0]?.id ?? null);
+    setSelectedFunnelId((prev) => prev ?? firstRuleFunnel ?? sortPipelinesForNavigation(activeFunnels).find(isPipelineVisible)?.id ?? null);
     setHydrated(true);
   }, [hydrated, loadingPipelines, loadingStages, loadingRules, rules, activeFunnels, byPipelineId]);
 
@@ -376,7 +377,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
               <SelectValue placeholder="Selecione um funil" />
             </SelectTrigger>
             <SelectContent>
-              {activeFunnels.map((funnel) => {
+              {sortPipelinesForNavigation(activeFunnels).filter((funnel) => isPipelineVisible(funnel) || funnel.id === selectedFunnelId || configuredByFunnel.has(funnel.id)).map((funnel) => {
                 const count = configuredByFunnel.get(funnel.id) ?? 0;
                 return (
                   <SelectItem key={funnel.id} value={funnel.id}>

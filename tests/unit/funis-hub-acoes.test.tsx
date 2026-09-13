@@ -56,11 +56,13 @@ const PIPELINES = [
   },
 ];
 
+let pipelineRows: unknown[] = PIPELINES;
+
 vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
   useTemporaryFunnels: () => ({ data: TEMPORARIOS, isLoading: false }),
 }));
 vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
-  usePipelines: () => ({ data: PIPELINES, isLoading: false }),
+  usePipelines: () => ({ data: pipelineRows, isLoading: false }),
 }));
 vi.mock("@/lib/analytics", () => ({ trackModuleVisit: vi.fn() }));
 
@@ -111,9 +113,22 @@ const abrirMenuDe = async (usuario: ReturnType<typeof userEvent.setup>, nome: st
 beforeEach(() => {
   vi.clearAllMocks();
   podeExcluir = true;
+  pipelineRows = PIPELINES;
 });
 
 describe("Hub de funis — renomear e excluir no cartão", () => {
+  it("preserva somente os funis visíveis da organização, inclusive entre encerrados", () => {
+    pipelineRows = PIPELINES.map((p) => ({
+      ...p,
+      config: { navigation: { is_visible: p.id === "c1" } },
+    }));
+    render(<FunisHub />);
+    expect(screen.getByText("Pós-venda")).toBeTruthy();
+    expect(screen.queryByText("Oportunidades")).toBeNull();
+    expect(screen.queryByText(/1 funil encerrado/i)).toBeNull();
+    expect(screen.getAllByTestId("funnel-actions-menu")).toHaveLength(1);
+  });
+
   it("todo funil listado tem menu de ações, de fábrica ou personalizado", () => {
     render(<FunisHub />);
 

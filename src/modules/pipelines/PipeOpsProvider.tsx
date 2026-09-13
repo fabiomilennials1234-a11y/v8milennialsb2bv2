@@ -1,3 +1,4 @@
+import { selectVisiblePipelines } from "./lib/pipeline-navigation";
 /**
  * PipeOpsProvider — implementação de PipeOpsPort (inversão leads↔pipelines).
  *
@@ -58,6 +59,12 @@ import { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
  * Objeto-port estável. Os hooks são referências de função (estáveis entre
  * renders), então `useMemo` sem deps é seguro e evita re-render dos consumers.
  */
+function useVisibleFunnels() {
+  const query = usePipelines();
+  const data = useMemo(() => query.data ? selectVisiblePipelines(query.data) : query.data, [query.data]);
+  return { ...query, data };
+}
+
 const port: PipeOpsPort = {
   // ADR-0023 decisão 4 — o drawer do lead também faz a transição
   // compareceu → Orçamentos, e entra por aqui em vez de importar o barrel de
@@ -68,7 +75,7 @@ const port: PipeOpsPort = {
   usePipelineStages,
   useAllPipelineStageOptions,
   // SCRUM-633 — modelo unificado por pipeline_id (bulk sem sentinela custom:)
-  useFunnels: usePipelines,
+  useFunnels: useVisibleFunnels,
   useFunnelStages: useStagesDoFunil,
   // SCRUM-608 — "quais funis de sistema a org TEM, e como ela os chama".
   // `PipelineDisplayConfig` é superset estrutural de `SystemPipeDisplay` (traz

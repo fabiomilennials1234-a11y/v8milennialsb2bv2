@@ -1,3 +1,4 @@
+import { isPipelineVisible } from "@/modules/pipelines";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const { data: funnels = [] } = useFunisDaOrg();
   const { data: pipelineStages = [] } = useAllPipelineStages();
   const stageItems = pipelineStages
-    .filter((stage) => stage.pipeline_id && (stage.is_active || stage.id === data.value))
+    .filter((stage) => stage.pipeline_id && ((stage.is_active && funnels.some((funnel) => funnel.id === stage.pipeline_id && isPipelineVisible(funnel))) || stage.id === data.value))
     .map((stage) => ({
       value: stage.id,
       label: `${funnels.find((funnel) => funnel.id === stage.pipeline_id)?.label ?? "Funil removido"} · ${stage.name}`,

@@ -1,6 +1,6 @@
 import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
+import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -446,7 +446,16 @@ export function DealCard({
             </h1>
             {negocio.estado === "ganho" && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 text-[12px] font-semibold text-success">
-                <Trophy className="size-3" />
+                <button
+                  type="button"
+                  aria-label="Remover de ganho"
+                  title="Remover de ganho"
+                  disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
+                  onClick={() => onDefinirDesfecho?.("open")}
+                  className="grid size-5 place-items-center rounded hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
                 Ganho
               </span>
             )}

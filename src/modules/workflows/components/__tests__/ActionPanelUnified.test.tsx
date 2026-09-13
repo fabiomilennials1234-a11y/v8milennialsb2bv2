@@ -45,7 +45,8 @@ const { FUNNEL_ID, STAGE_ID, SECOND_STAGE_ID } = vi.hoisted(() => ({
   SECOND_STAGE_ID: "33333333-3333-4333-8333-333333333333",
 }));
 
-vi.mock("@/modules/pipelines", () => ({
+vi.mock("@/modules/pipelines", async () => ({
+  ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   useFunisDaOrg: () => ({
     data: [{ id: FUNNEL_ID, slug: "black-friday", label: "Black Friday", name: "Black Friday", is_active: true }],
     isLoading: false,

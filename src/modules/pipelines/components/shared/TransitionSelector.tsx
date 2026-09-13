@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines/lib/pipeline-navigation";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -77,9 +78,9 @@ export function TransitionSelector({
     });
   };
 
-  const options = pipelines.filter(
+  const options = sortPipelinesForNavigation(pipelines).filter(
     (p) =>
-      p.is_active !== false &&
+      p.is_active !== false && isPipelineVisible(p) &&
       p.id !== currentPipelineId &&
       (!currentPipeType || p.slug !== currentPipeType),
   );
@@ -102,7 +103,7 @@ export function TransitionSelector({
               visível (fallback honesto) em vez de deixar o Radix cair no
               placeholder e a tela negar um vínculo que está no banco. */}
           {resolvedTargetPipelineId && !options.some((p) => p.id === resolvedTargetPipelineId) && (
-            <SelectItem value={resolvedTargetPipelineId}>Funil removido</SelectItem>
+            <SelectItem value={resolvedTargetPipelineId} disabled>{pipelines.find((p) => p.id === resolvedTargetPipelineId)?.label ?? "Funil removido"}</SelectItem>
           )}
         </SelectContent>
       </Select>

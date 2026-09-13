@@ -1,3 +1,4 @@
+import { selectVisiblePipelines } from "./pipeline-navigation";
 import { useTemporaryFunnels } from "../hooks/custom/useCustomPipelines";
 import { usePipelines } from "../hooks/model/usePipelines";
 
@@ -51,7 +52,7 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
   // funil de sistema personalizado deixa de aparecer com a cor de fábrica.
   const { data: pipelines = [], isLoading: pipelinesLoading } = usePipelines();
   const temporaryById = new Map(temporary.map((p) => [p.id, p] as const));
-  const options: FunnelOption[] = pipelines
+  const options: FunnelOption[] = selectVisiblePipelines(pipelines)
     .filter((pipeline) => pipeline.is_active || temporaryById.get(pipeline.id)?.status === "ended")
     .map((pipeline) => ({
       key: `pipeline:${pipeline.id}`,

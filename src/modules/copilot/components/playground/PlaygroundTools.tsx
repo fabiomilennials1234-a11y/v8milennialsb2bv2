@@ -209,7 +209,7 @@ export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundTool
                               </SelectTrigger>
                               <SelectContent>
                                 {(param.key === "pipe"
-                                  ? pipeTypeOptions
+                                  ? pipeTypeOptions.filter((pipe) => pipe.isVisible !== false || pipe.value === state.config[param.key])
                                   : param.options ?? []
                                 ).map((opt) => (
                                   <SelectItem key={opt.value} value={opt.value}>

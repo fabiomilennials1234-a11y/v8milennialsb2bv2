@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useCallback, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -552,8 +553,8 @@ function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
               automações precisa listar o funil desativado para o usuário
               conseguir desmarcá-lo. Aqui não: compor métrica sobre funil
               excluído devolve vazio para sempre, sem erro que explique. */}
-          {funis.filter((f) => f.id && f.is_active !== false).map((f) => (
-            <SelectItem key={f.id} value={f.id} className="text-[13px]">{f.label}</SelectItem>
+          {sortPipelinesForNavigation(funis).filter((f) => f.id && ((f.is_active !== false && isPipelineVisible(f)) || f.id === pipelineId)).map((f) => (
+            <SelectItem key={f.id} value={f.id} disabled={!isPipelineVisible(f)} className="text-[13px]">{f.label}</SelectItem>
           ))}
         </SelectContent>
       </Select>

@@ -1,3 +1,4 @@
+import { isPipelineVisible } from "@/modules/pipelines";
 /**
  * StepPostSend — "Destino" (post-send lead move).
  *
@@ -178,7 +179,7 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
                     </SelectTrigger>
                     <SelectContent>
                       {funnels.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
+                        <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
                           {p.label}
                         </SelectItem>
                       ))}

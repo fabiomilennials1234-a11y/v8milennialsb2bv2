@@ -96,3 +96,10 @@ Download por callback mantém preview sem banco. Migration deve preceder fronten
 ## UAZAPI — 2026-09-11, branch em homologação
 
 `codex/uazapi-rebuild`: fronteira do provider normaliza mídia/menu/quotas e usa rotas documentadas. `getMessageLimits` admite current/limit null e sinal can_send_new_messages. Circuito por servidor/credencial/grupo. Estado e bloqueios em `.specs/uazapi-rebuild/STATE.md`. Sem rollout em produção.
+## Navegação de funis — 2026-09-11
+
+`pipelines.config.navigation.is_visible` guarda visibilidade explícita; ausente
+significa visível. `pipelines.display_order` é fonte única de ordem.
+`is_active` segue operacional. Importação histórica limitada ao pré-#2092;
+leitura permanente agnóstica a tipo/slug. Detalhes e limitações de validação:
+[correção de navegação](features/funis-unificacao/correcao-navegacao-2026-09-11.md).

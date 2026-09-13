@@ -1,3 +1,4 @@
+import { isPipelineVisible, selectVisiblePipelines } from "../lib/pipeline-navigation";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
@@ -65,9 +66,12 @@ export default function FunisHub() {
   const isLoading = pipelinesLoading || temporaryLoading;
 
   // Encerrado não é categoria, é ESTADO — por isso segue recolhido no fim.
-  const endedTemporary = temporaryFunnels.filter((f) => f.status === "ended");
+  const endedTemporary = temporaryFunnels.filter((f) => {
+    const canonical = pipeById.get(f.id);
+    return f.status === "ended" && (!canonical || isPipelineVisible(canonical));
+  });
 
-  const allFunnels: FunilCard[] = pipelines
+  const allFunnels: FunilCard[] = selectVisiblePipelines(pipelines)
     .filter((pipeline) => pipeline.is_active && !endedTemporary.some((p) => p.id === pipeline.id))
     .map((pipeline) => {
       const pipe = temporaryById.get(pipeline.id);

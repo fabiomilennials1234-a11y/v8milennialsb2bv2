@@ -349,7 +349,7 @@ function RuleCard({
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {pipeTypeOptions.map((pipe) => (
+                      {pipeTypeOptions.filter((pipe) => pipe.isVisible !== false).map((pipe) => (
                         <SelectItem key={pipe.value} value={pipe.value}>
                           {pipe.label}
                         </SelectItem>

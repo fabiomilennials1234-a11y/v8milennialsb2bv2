@@ -1,3 +1,4 @@
+import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useMemo } from "react";
 import { useFunisDaOrg } from "@/modules/pipelines";
 import { useOrganizationSettings } from "@/modules/identity";
@@ -28,7 +29,7 @@ export function useAnalyticsPipelineOptions() {
   const defaultPipelineId = settings.default_pipeline_id;
 
   return useMemo(() => {
-    const active = (pipelines ?? []).filter((p) => p.is_active);
+    const active = sortPipelinesForNavigation(pipelines ?? []).filter((p) => p.is_active && isPipelineVisible(p));
     const options: AnalyticsPipelineOption[] = active.map((p) => ({
       id: p.id,
       name: p.label,
