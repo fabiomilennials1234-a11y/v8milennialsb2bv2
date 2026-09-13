@@ -1,4 +1,4 @@
-import type { AcceptedInteractiveResult } from './accepted-interactive-message';
+import type { AcceptedInteractiveResult } from './interactive-send-result';
 /**
  * menu-sender — quem envia uma mensagem interativa, por canal.
  *

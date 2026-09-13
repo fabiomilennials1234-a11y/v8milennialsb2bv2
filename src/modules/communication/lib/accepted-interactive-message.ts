@@ -1,12 +1,9 @@
 import type { TablesInsert } from '@/integrations/supabase/types';
-import { formatPhoneForWhatsApp } from './whatsapp';
+import { formatPhoneForWhatsApp } from './whatsappPhone';
 import type { MenuMontado } from './menu-sender';
 
-export interface AcceptedInteractiveResult {
-  message_id?: string;
-  status?: string;
-  timestamp?: number;
-}
+import type { AcceptedInteractiveResult } from './interactive-send-result';
+export type { AcceptedInteractiveResult } from './interactive-send-result';
 
 type InteractiveContent =
   | { kind: 'location'; latitude: number; longitude: number; name?: string; address?: string }
