@@ -3,7 +3,7 @@ type: feature
 title: WhatsApp Stability — estado consolidado
 status: active
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-09-11
 tags: [uncategorized]
 related: []
 owner: gabriel
@@ -149,3 +149,51 @@ Ver `[[whatsapp-stability-100pct]]` no backlog em-progresso.
 - **DLQ retention**: 5 attempts. Após exhausted, ficam no DB pra audit; não auto-deletados.
 - **Auto-rebind cooldown**: 30min/instance. Evita rebind loop em caso de problema persistente.
 - **Group messages**: dropados (decisão atual, B documenta reversão).
+
+## 2026-09-11 — reconstrução em branch, sem rollout
+
+Branch `codex/uazapi-rebuild` parte da main `23cbd6796`. Adapter traduz mídia/menu, usa criação documentada, filtra histórico por chatid e isola circuitos por credencial/servidor. Diagnóstico de limites mantém desconhecido como null. Fixture cobre campos das 139 operações; testes de contrato exercitam a superfície alterada.
+
+Não homologado contra instância real. Ambiente Supabase e destinatário de teste pendentes. Estado verificável em `.specs/uazapi-rebuild/STATE.md`; referência de contrato em `docs/integrations/uazapi-rebuild.md`. Números históricos de cobertura acima não medem esta branch.
+
+## Reconstrução isolada — rodada 2 (2026-09-11)
+
+Branch `codex/uazapi-rebuild`: delays de disparo convertidos de ms para segundos, polling tolera falha transitória sem terminalizar job, nodes isolam destinatário/template por org e preservam recibos. Lista ganha rótulo configurável. Chat identifica seleção e mostra título em vez de ID. Testes reais no QA; sem promoção para produção. Estado, limitações e evidências em `.specs/uazapi-rebuild/STATE.md` e [[2026-09-11-uazapi-rebuild]].
+
+## Rodada 6 — menus imediatos, playback e retomada
+
+Listas do node e gateway persistem metadata mínima de exibição no envio (seções/títulos/descrições/rodapé/botão), sem IDs internos das escolhas. Insert-on-conflict preserva payload e recibos se o eco chegar antes. Front lê a projeção SQL ou o payload do Realtime; opções e resposta QA ESPERA verificadas no Chromium.
+
+Áudio e PTT: readyState 4, duração 7,01 s e currentTime avançando. Vídeo estava com URL criptografada; helper recuperou MP4 para Storage (3.050 bytes, HTTP 200). Player reproduziu vídeo de 2 s. Não equivale a homologar transcrição.
+
+Espera: resposta real recebida via SSE filtrado → webhook QA → ramo replied → completed. Timeout de 1 minuto também concluiu pelo ramo timeout, após prazo real. Nova chamada do worker não repete execução concluída.
+
+Retry: falha 429 injetada antes do transporte revelou reserva de conteúdo suprimindo retry como falso sucesso. Executor agora fornece node/attempt e texto usa chave de replay por execução/nó/tentativa somente em retry; reserva inicial por conteúdo permanece. Worker retomou e persistiu uma única mensagem real. Falha 503 ambígua continua terminal. Menus, PIX e mensagem de campanha também classificam falhas ambíguas como não retentáveis.
+
+Gateway unificado validado com override temporário apenas em QA e restaurado. Corrigido vínculo do log operacional: usa UUID de lead/instância, nunca ID composto do provider em coluna UUID. Catálogo QA ganhou flag desabilitada por padrão.
+
+700 testes em 59 arquivos passaram. Build, Deno check, TypeScript e lint ratchets passaram sem novos problemas. Worker atualizado somente no QA; fluxos desta rodada desativados; cron segue inativo. Evidência: `live-verification-round6-2026-09-11.json`.
+
+Lifecycle aguarda indicação de instância dedicada. Recuperação de mensagem ausente no histórico upstream, transcrição, publicação versionada do editor guiado e pré-requisitos de produção seguem separados desta homologação.
+
+## Rodada 7 — publicação, cron, retomada e desempenho
+
+Publicação pelo editor guiado retornou published/version 1. Versão antiga recusada com 409; usuário de outra organização com 403. Agendamento real pg_cron chamou worker QA e concluiu execução dessa versão; job se removeu após chamada, segredo temporário removido, zero crons ativos. Tentativa inicial de ativação por UPDATE direto foi corretamente recusada; ativação válida usou RPC autenticada.
+
+Retomada de histórico agora atualiza o mesmo job failed → queued com compare-and-set, preservando cursor/contadores. Fixture interrompida no cursor 100 retomada pela interface. Encontrada contradição real da UAZAPI: offset 100 trouxe página cheia e hasMore=false, mas offset 200 continha mais 15 mensagens. Adapter passa a consultar próxima página quando a atual está cheia. Worker terminou com total 215, em vez de truncar em 200. Isso recupera omissão da paginação disponível; não prova recuperação de histórico ausente no próprio provider.
+
+Transcrição via /message/download retornou texto não vazio usando configuração existente da instância; nenhuma chave foi alterada. QA não tem credenciais OpenRouter/Gemini. Persistência/apresentação integrada da transcrição no CRM ainda não homologada.
+
+**Falha confirmada e ainda não corrigida: reentrada.** Workflow publicado com re_enrollment_enabled=false e execução concluída aceitou novo fire_trigger (triggered=1). Execução de teste cancelada e workflow desativado. Não confundir com proteção contra execução simultânea ou retry, que já foi testada. Este comportamento bloqueia homologação da reentrada.
+
+Desempenho: conversa de 214 mensagens produziu duas respostas de 199.006 bytes de JSON decodificado na observação de 23 s; virtualização montou 11 itens. Zero chamadas do navegador ao provider nesse período. Janela máxima de 1.000 mensagens e backstop de 20 s são candidatos prioritários para paginação/reconciliação mais econômica. Não houve benchmark representativo de carga; análise em OPTIMIZACAO-CHAT.md.
+
+711 testes em 60 arquivos passaram; build, Deno check e ratchets TypeScript/lint sem problemas introduzidos. CI remoto só apresenta Supabase Preview skipped; não certificado. Somente history-sync-worker atualizado em QA. Produção preservada.
+
+## Paginação e reentrada — rodada 8
+
+QA validou páginas de 100 e histórico com 1.314 registros; 18 itens montados. Reconciliação por versões visíveis/RLS reduziu poll sem mudanças de 199.006 para 88 bytes de JSON decodificado na conversa medida. Reentrada desativada/cooldown/máximo agora aplicados no banco; 8 tentativas concorrentes aceitaram uma vaga. fire_trigger devolveu 0 com reinscrição desativada. Produção intacta; rollout exige RPC antes do front e análise dos limites existentes. Evidência e limitações em `.specs/uazapi-rebuild/live-verification-round8-2026-09-11.json` e `OPTIMIZACAO-CHAT.md`.
+
+## Transcrição e PIX — rodada 9
+
+Transcrição sob demanda com JWT/RLS, gate de responsável, lease e cache persistido com proveniência. Chromium confirmou texto após reload; concorrência 200/409 e tenant externo 403. PIX nativo passou a exibir recebedor/chave e copiar chave, sem inferir pagamento. Corrigido contrato nullable dos limites de alcance; Deno de todo _shared passou. Evidência: `.specs/uazapi-rebuild/live-verification-round9-2026-09-11.json`. Lifecycle adiado por nova orientação: instância alternativa já havia sido desconectada; reconexão não confirmada, nenhuma exclusão, TorqueSDR sem chamadas de lifecycle nesta rodada.

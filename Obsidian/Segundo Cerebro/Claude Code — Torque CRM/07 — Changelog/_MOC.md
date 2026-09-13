@@ -147,4 +147,5 @@ owner: claude-agent
 - [[2026-09-10-janela-comercial|Janela Comercial — contrato e correções]]
 - [[2026-09-10-transferencia-real-negocio|Transferência real após etapa de ganho]] 🟡 draft
 - [[2026-09-10|Documentos nos comentários do negócio]]
+- [[2026-09-11-uazapi-rebuild|Reconstrução UAZAPI — início isolado]] 🟡 draft
 - [[2026-09-11|2026-09-11 — Reconciliação de navegação dos funis]]
