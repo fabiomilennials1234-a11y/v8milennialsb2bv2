@@ -36,7 +36,12 @@ vi.mock("@/integrations/supabase/client", () => ({
       subscribe: vi.fn().mockReturnValue(undefined),
     }),
     removeChannel: vi.fn(),
-    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+    rpc: vi.fn(async (name: string) => ({
+      data: name === "whatsapp_thread_manifest"
+        ? { fingerprint: "fixture-v1", unchanged: false, manifest: [{ id: "msg-1", revision: "1" }] }
+        : null,
+      error: null,
+    })),
     functions: { invoke: (...args: any[]) => mockFunctionsInvoke(...args) },
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),

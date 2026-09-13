@@ -604,7 +604,7 @@ describe("handleSendWhatsApp — deep", () => {
     }>;
     expect(opts.length).toBe(1);
     expect(opts[0]?.onConflict).toBe("message_id,instance_id");
-    expect(opts[0]?.ignoreDuplicates).toBe(false);
+    expect(opts[0]?.ignoreDuplicates).toBe(true);
   });
 });
 
@@ -1933,7 +1933,7 @@ describe("handleSendCampaignMessage — deep", () => {
     setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("campaign_templates", [{ id: "ct-1", content: "Promoção para {{nome}}", message_type: "text", audio_url: null }]);
+    mockTable("campaign_templates", [{ id: "ct-1", organization_id: "org-1", content: "Promoção para {{nome}}", message_type: "text", audio_url: null }]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
@@ -1956,7 +1956,7 @@ describe("handleSendCampaignMessage — deep", () => {
     setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("campaign_templates", [{ id: "ct-audio", content: null, message_type: "audio", audio_url: "https://audio.test/msg.ogg" }]);
+    mockTable("campaign_templates", [{ id: "ct-audio", organization_id: "org-1", content: null, message_type: "audio", audio_url: "https://audio.test/msg.ogg" }]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
