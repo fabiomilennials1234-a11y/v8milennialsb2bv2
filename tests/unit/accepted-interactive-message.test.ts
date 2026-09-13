@@ -2,9 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { acceptedInteractiveRow } from '../../src/modules/communication/lib/accepted-interactive-message';
 import { readUazapiMenu } from '../../src/modules/communication/lib/uazapiMenuDisplay';
 import { readUazapiPix } from '../../src/modules/communication/lib/uazapiPixDisplay';
+import { readUazapiButtons } from '../../src/modules/communication/lib/uazapiButtonsDisplay';
 const scope = { organizationId: 'org', instanceId: 'instance', phoneNumber: '5511999998888' };
 const menu = { kind: 'menu' as const, menu: { tipo: 'list' as const, texto: 'QA', opcoes: [{ title: 'Validar', description: 'Teste' }], rotuloDaLista: 'Abrir QA' } };
 describe('accepted interactive message fallback', () => {
+  it('retains button labels before webhook and after the narrow history projection', () => {
+    const row = acceptedInteractiveRow(scope, { message_id: 'real', status: 'queued' }, {
+      kind: 'menu', menu: { tipo: 'button', texto: 'Escolha', opcoes: [{ title: 'Validar' }] },
+    })!;
+    expect(row.message_type).toBe('button');
+    expect(readUazapiButtons(row)).toEqual({ text: 'Escolha', options: ['Validar'] });
+    expect(readUazapiButtons({ uazapi_interactive_display: (row.raw_payload as Record<string, unknown>).torqueInteractive })).toEqual(readUazapiButtons(row));
+  });
   it.each(['queued', 'pending', 'unknown', undefined])('does not claim delivery for %s', status => {
     expect(acceptedInteractiveRow(scope, { message_id: 'real', status }, menu)?.status).toBe('pending');
   });

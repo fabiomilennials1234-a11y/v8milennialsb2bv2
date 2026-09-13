@@ -229,3 +229,14 @@ Deploy agent-message somente QA concluído. Sondagem externa usando service_role
 Botões enviados uma única vez pelo compositor ao novo número autorizado: queued na API, pending no INSERT local, ID real; fornecedor confirmou Delivered/NativeFlowMessage. Após reload, chat mostra texto e as duas opções em marcadores. Não é cartão dedicado e seleção recebida ainda não foi validada. Roteiro visual inicial procurava virtualização numa conversa curta e depois opções como nós de texto separados; corrigido apenas o roteiro, sem reenviar mensagem. Evidência sanitizada: `.specs/uazapi-rebuild/live-verification-round14-2026-09-11.json`.
 
 Verificação final: lint ratchet zero problemas introduzidos; vault lint208 erros/77 avisos, mesmos totais com o changelog do HEAD anterior. Baselines não alterados. Nenhuma homologação global declarada.
+
+
+## Continuação — 2026-09-13 (ajustes locais)
+
+CTO retirou transcrição da rodada atual; não solicitar chave OpenAI nem tratar a ausência como bloqueio da homologação restante. Código de transcrição existente permanece; transcrição recebida positiva não homologada.
+
+Preparados localmente: cartão de botões UAZAPI com labels inertes, metadados mínimos preservados na projeção de histórico e validação MIME dos três compositores alinhada ao bucket media. Arquivos não aceitos passam a receber aviso antes do upload. Sem ampliação das permissões do Storage.
+
+Verificação desta continuação: 52 testes passaram em cinco arquivos (botões, persistência interativa, anexos e compositores); build de produção passou. Ainda sem publicação destes ajustes, sem nova mensagem real nesta continuação. Seleção real de botão e demais pendências de interface/homologação continuam abertas. Não interpretar testes locais como homologação em produção.
+
+Complemento: TypeScript ratchet passou com zero erros introduzidos (dívida existente preservada); lint dos helpers e testes alterados passou. Após restringir metadata ao tipo button, os 12 testes de persistência interativa passaram novamente.
