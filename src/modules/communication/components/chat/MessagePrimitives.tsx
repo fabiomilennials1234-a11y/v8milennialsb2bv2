@@ -38,6 +38,8 @@ import {
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
+import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
+import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
 import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
@@ -184,6 +186,7 @@ export function MessageBubble({
   const isPoll = messageType === "poll";
   const pix = readUazapiPix(message as UazapiPixFields);
   const uazapiMenu = readUazapiMenu(message as UazapiMenuFields);
+  const uazapiButtons = readUazapiButtons(message as UazapiButtonsFields);
   const isInteractiveResponse = isInteractiveResponseType(messageType);
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
   const isTemplate = messageType === "template";
@@ -413,6 +416,8 @@ export function MessageBubble({
 
             {pix ? <PixMessage pix={pix} /> : usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
+            ) : uazapiButtons ? (
+              <UazapiButtonsBubble text={uazapiButtons.text || message.content || ''} options={uazapiButtons.options} />
             ) : uazapiMenu ? (
               <UazapiMenuBubble menu={uazapiMenu} fallbackText={message.content} />
             ) : isLocation || isContact ? (

@@ -47,9 +47,12 @@ describe("deriveAttachmentMediaType", () => {
 });
 
 describe("shared attachment constants", () => {
-  it("accept list covers image, video and business documents (PDF, NF-e XML, ZIP)", () => {
-    for (const token of ["image/*", "video/*", "application/pdf", ".docx", ".xlsx", ".csv", ".xml", ".zip"]) {
-      expect(ATTACHMENT_ACCEPT).toContain(token);
+  it("only offers formats accepted by media storage", () => {
+    for (const token of ["image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "video/webm", "application/pdf"]) {
+      expect(ATTACHMENT_ACCEPT.split(',')).toContain(token);
+    }
+    for (const token of ["image/*", "video/*", ".docx", ".xlsx", ".csv", ".txt", ".xml", ".zip"]) {
+      expect(ATTACHMENT_ACCEPT).not.toContain(token);
     }
   });
 
@@ -63,6 +66,13 @@ describe("shared attachment constants", () => {
 });
 
 describe("getAttachmentValidationError", () => {
+  it.each(['text/plain', 'application/zip', 'image/svg+xml', 'video/quicktime', 'audio/mpeg', ''])('rejects unsupported MIME %s before upload', type => {
+    expect(getAttachmentValidationError({ size: 100, type })).toMatch(/Formato não aceito/);
+  });
+
+  it.each(['application/pdf', 'IMAGE/PNG', 'video/mp4'])('accepts supported MIME %s', type => {
+    expect(getAttachmentValidationError({ size: 100, type })).toBeNull();
+  });
   it("rejects empty files (0 bytes)", () => {
     expect(getAttachmentValidationError({ size: 0 })).toMatch(/vazio/);
   });

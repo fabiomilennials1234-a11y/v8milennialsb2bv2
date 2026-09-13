@@ -13,27 +13,33 @@ export type AttachmentMediaType = "image" | "video" | "document";
 /**
  * Teto único pra qualquer anexo do chat humano (desktop, mobile e bubble).
  * Uazapi/WhatsApp aguenta mais que imagem, mas base64 → Storage → provider
- * fica pesado acima disso; 16MB cobre PDF/planilha/vídeo curto sem travar
+ * fica pesado acima disso; 16MB cobre PDF/vídeo curto sem travar
  * o browser.
  */
 export const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 
 /**
- * Lista `accept` compartilhada dos file pickers do chat humano. Imagem, vídeo
- * e documentos de negócio (PDF, Office, CSV, TXT, XML de NF-e, ZIP). Áudio
- * fica de fora de propósito — nota de voz tem fluxo próprio (AudioRecorder).
+ * MIME types aceitos pelo bucket media, compartilhados pelos três composers.
+ * Notas de voz têm fluxo próprio (AudioRecorder).
  */
-export const ATTACHMENT_ACCEPT =
-  "image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.xml,.zip";
+export const ATTACHMENT_MIME_TYPES = [
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "video/mp4", "video/webm", "application/pdf",
+] as const;
+export const ATTACHMENT_ACCEPT = ATTACHMENT_MIME_TYPES.join(",");
 
 /**
  * Valida um arquivo anexado antes do preview/envio. Retorna a mensagem de
  * erro pronta pra toast, ou null se o arquivo é válido. Centraliza a regra
  * pros 3 composers (desktop, mobile, bubble) não divergirem.
  */
-export function getAttachmentValidationError(file: { size: number }): string | null {
+export function getAttachmentValidationError(file: { size: number; type?: string }): string | null {
   if (file.size === 0) return "Arquivo vazio — selecione outro arquivo.";
   if (file.size > MAX_ATTACHMENT_BYTES) return "Arquivo muito grande (máximo 16MB)";
+  const mime = file.type?.toLowerCase();
+  if (mime !== undefined && !ATTACHMENT_MIME_TYPES.some(type => type === mime)) {
+    return "Formato não aceito. Use PDF, JPG, PNG, GIF, WebP, MP4 ou WebM.";
+  }
   return null;
 }
 

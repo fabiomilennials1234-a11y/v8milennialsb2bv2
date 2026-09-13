@@ -54,7 +54,9 @@ export function acceptedInteractiveRow(
       description: menu.texto,
       sections: [{ title: '', rows: menu.opcoes.map(option => ({ title: option.title, description: option.description ?? '' })) }],
       buttonText: menu.rotuloDaLista || 'Ver opções', footerText: menu.rodape ?? '',
-    } } : null,
+    } } : menu.tipo === 'button'
+      ? { torqueInteractive: { type: 'button', text: menu.texto, options: menu.opcoes.map(option => option.title) } }
+      : null,
   };
 }
 
