@@ -1,0 +1,115 @@
+{
+  "date": "2026-09-11",
+  "environment": "QA only",
+  "guidedPublication": {
+    "http": 200,
+    "status": "published",
+    "version": 1,
+    "throughEditor": true,
+    "guards": [
+      {
+        "case": "stale_revision",
+        "http": 409,
+        "code": "draft_revision_conflict"
+      },
+      {
+        "case": "foreign_organization",
+        "http": 403,
+        "code": "access_denied"
+      }
+    ]
+  },
+  "cron": {
+    "actualScheduler": true,
+    "run": "succeeded",
+    "execution": "completed",
+    "publishedVersionUsed": true,
+    "oneShotRemoved": true
+  },
+  "historyResume": {
+    "fixture": "failed job seeded at cursor 100 / total_fetched 100; actual provider and worker used",
+    "sameJobRequeued": true,
+    "compareAndSetFailedStatus": true,
+    "startCursor": 100,
+    "finalCount": 215,
+    "status": "completed"
+  },
+  "pagination": {
+    "providerContradictionConfirmed": true,
+    "fullPageOffset100HasMore": false,
+    "offset200Rows": 15,
+    "correctedFullPageProbe": true
+  },
+  "transcription": {
+    "http": 200,
+    "transcriptionPresent": true,
+    "missingKey": false,
+    "fields": [
+      "cached",
+      "fileURL",
+      "mimetype",
+      "transcription"
+    ]
+  },
+  "performance": {
+    "samples": [
+      {
+        "status": 200,
+        "bytes": 199006,
+        "rows": 214,
+        "limit": "1000"
+      },
+      {
+        "status": 200,
+        "bytes": 199006,
+        "rows": 214,
+        "limit": "1000"
+      }
+    ],
+    "providerCalls": 0,
+    "virtualized": 1,
+    "mountedTimelineItems": 11
+  },
+  "reentry": {
+    "passed": false,
+    "reenrollmentEnabled": false,
+    "existingCompleted": 1,
+    "newTriggered": 1,
+    "testExecutionCancelled": true,
+    "workflowDisabled": true,
+    "fixImplemented": false
+  },
+  "cleanup": {
+    "activeCrons": [
+      {
+        "count": 0
+      }
+    ],
+    "temporarySecrets": [
+      {
+        "count": 0
+      }
+    ],
+    "guidedActive": [
+      {
+        "is_active": false
+      }
+    ]
+  },
+  "tests": {
+    "passed": 711,
+    "files": 60,
+    "build": "passed",
+    "deno": "passed",
+    "typecheckRatchet": "zero introduced",
+    "lintRatchet": "zero introduced",
+    "remoteCI": "only Supabase Preview SKIPPED"
+  },
+  "limits": [
+    "Dedicated lifecycle instance not supplied",
+    "End-to-end CRM transcription not verified",
+    "Upstream missing-provider-history recovery not proven",
+    "Migration bootstrap still unverified",
+    "No representative load benchmark"
+  ]
+}

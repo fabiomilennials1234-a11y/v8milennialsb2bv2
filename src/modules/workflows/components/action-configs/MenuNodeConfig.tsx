@@ -142,6 +142,14 @@ export function MenuNodeConfig({ data, onUpdate }: Props) {
         />
       </div>
 
+      {type === "list" && (
+        <div className="space-y-2">
+          <Label htmlFor="menu-list-button">Texto do botão da lista</Label>
+          <Input id="menu-list-button" value={data.menuListButton ?? "Ver opções"}
+            onChange={(e) => onUpdate({ menuListButton: e.target.value })} placeholder="Ver opções" />
+        </div>
+      )}
+
       {type === "poll" && (
         <div className="space-y-2">
           <Label>Quantidade selecionável (poll)</Label>
@@ -167,6 +175,7 @@ export function MenuNodeConfig({ data, onUpdate }: Props) {
           text={data.menuText ?? ""}
           choices={choices.filter((c) => c.trim().length > 0)}
           footer={data.menuFooter}
+          listButtonLabel={data.menuListButton}
         />
       </div>
     </div>

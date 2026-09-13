@@ -1,0 +1,88 @@
+{
+  "date": "2026-09-11",
+  "environment": "QA only",
+  "media": {
+    "ok": true,
+    "error": null,
+    "http": 200,
+    "mimetype": "image/webp",
+    "bytes": 616
+  },
+  "workflowEngine": {
+    "result": {
+      "success": true,
+      "status": "completed",
+      "stepsExecuted": 3
+    },
+    "steps": [
+      {
+        "node_id": "start",
+        "node_type": "trigger",
+        "status": "success"
+      },
+      {
+        "node_id": "text",
+        "node_type": "action",
+        "status": "success"
+      },
+      {
+        "node_id": "list",
+        "node_type": "action",
+        "status": "success"
+      },
+      {
+        "node_id": "end",
+        "node_type": "end",
+        "status": "success"
+      }
+    ],
+    "state": [
+      {
+        "status": "completed"
+      }
+    ]
+  },
+  "historyExact": [
+    {
+      "mode": "exact",
+      "variant": "messageid",
+      "http": 200,
+      "success": true,
+      "responseKeys": [
+        "details",
+        "message",
+        "mode",
+        "request_id",
+        "success",
+        "sync"
+      ]
+    },
+    {
+      "mode": "exact",
+      "variant": "id",
+      "http": 200,
+      "success": true,
+      "responseKeys": [
+        "details",
+        "message",
+        "mode",
+        "request_id",
+        "success",
+        "sync"
+      ]
+    }
+  ],
+  "browser": {
+    "stickerLoaded": true
+  },
+  "checks": {
+    "testsPassed": 645,
+    "testFiles": 50,
+    "denoCheck": "media helper and workflow executor passed"
+  },
+  "limitations": [
+    "Workflow engine executed with real QA database/provider; cron queue worker and complete editor publication not tested.",
+    "Exact returned success for both IDs on the second authorized chat; this does not prove recovery of previously missing messages.",
+    "Outgoing menu options card and async history progress UI remain pending."
+  ]
+}

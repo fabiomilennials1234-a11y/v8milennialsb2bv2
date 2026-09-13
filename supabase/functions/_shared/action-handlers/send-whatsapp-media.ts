@@ -36,7 +36,7 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -117,7 +117,7 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -168,6 +168,7 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "image",
       content: resolvedCaption || null,
@@ -199,7 +200,7 @@ export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResul
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -250,6 +251,7 @@ export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResul
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "video",
       content: resolvedCaption || null,
@@ -281,7 +283,7 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -328,6 +330,7 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "sticker",
       content: null,
@@ -360,7 +363,7 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -412,6 +415,7 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "document",
       content: resolvedCaption || null,

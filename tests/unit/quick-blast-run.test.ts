@@ -243,7 +243,7 @@ describe("runQuickBlast", () => {
     const activitySource = {
       async getLeadActivity() {
         return new Map([
-          ["a", { lastOutgoingAt: new Date("2026-06-04T00:00:00Z"), lastIncomingAt: null }],
+          ["a", { lastOutgoingAt: new Date(Date.now() - 24 * 60 * 60 * 1000), lastIncomingAt: null }],
           ["b", { lastOutgoingAt: null, lastIncomingAt: null }],
         ]);
       },
@@ -322,7 +322,7 @@ describe("runQuickBlast", () => {
     const supabase = supabaseStub({ cap: 200, leads: [lead("a", "11999990001")] });
     const activitySource = {
       async getLeadActivity() {
-        return new Map([["a", { lastOutgoingAt: new Date("2026-06-04T00:00:00Z"), lastIncomingAt: null }]]);
+        return new Map([["a", { lastOutgoingAt: new Date(Date.now() - 24 * 60 * 60 * 1000), lastIncomingAt: null }]]);
       },
     };
 

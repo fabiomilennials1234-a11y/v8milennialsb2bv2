@@ -43,7 +43,9 @@ describe.skipIf(shouldSkip)('resolve_wait_response_by_phone — integration', ()
         name: '__wait_resolve_wf__',
         trigger_type: 'lead_created',
         trigger_config: {},
-        is_active: true,
+        // The test inserts the waiting execution explicitly. Keep lead_created
+        // from enrolling it first and correctly rejecting our duplicate insert.
+        is_active: false,
         definition: { nodes: [], edges: [] },
       })
       .select('id')
@@ -190,7 +192,9 @@ describe.skipIf(shouldSkip)('resolve_wait_response_by_phone — BR mobile 9-pref
         name: '__wait_resolve_br_prefix_wf__',
         trigger_type: 'lead_created',
         trigger_config: {},
-        is_active: true,
+        // The test inserts the waiting execution explicitly. Keep lead_created
+        // from enrolling it first and correctly rejecting our duplicate insert.
+        is_active: false,
         definition: { nodes: [], edges: [] },
       })
       .select('id')

@@ -64,7 +64,7 @@ export function ChatBubbleThread({
   // mesma resposta. A bolha não tem `ChatContact`, então entra com `null` — o
   // resolvedor cai no lead por telefone, que é exatamente o que ela tem.
   const { leadId: effectiveLeadId } = resolveEffectiveLead(null, lead);
-  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId);
+  const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId, messagesQuery.hasOlderMessages ? messagesQuery.data?.[0]?.timestamp : undefined);
   const [isLinkInstanceOpen, setIsLinkInstanceOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -100,6 +100,8 @@ export function ChatBubbleThread({
         failedMessages={failedMessages}
         calls={calls}
         isLoading={messagesQuery.isLoading}
+        hasOlderMessages={messagesQuery.hasOlderMessages} onLoadOlder={messagesQuery.loadOlderMessages}
+        isLoadingOlder={messagesQuery.isLoadingOlder} olderError={messagesQuery.olderError}
         contactName={contactName}
         instanceName={instanceName}
         lastReadAt={lastReadAt}

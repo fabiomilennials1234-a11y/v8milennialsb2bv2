@@ -93,6 +93,9 @@ Status: **construído, atrás de flag, pgTAP 19/19 + unit 21/21 verdes** (2026-0
 `path/name/size/type`. `lead_comments.attachments` é JSONB imutável após criação.
 Download por callback mantém preview sem banco. Migration deve preceder frontend.
 
+## UAZAPI — 2026-09-11, branch em homologação
+
+`codex/uazapi-rebuild`: fronteira do provider normaliza mídia/menu/quotas e usa rotas documentadas. `getMessageLimits` admite current/limit null e sinal can_send_new_messages. Circuito por servidor/credencial/grupo. Estado e bloqueios em `.specs/uazapi-rebuild/STATE.md`. Sem rollout em produção.
 ## Navegação de funis — 2026-09-11
 
 `pipelines.config.navigation.is_visible` guarda visibilidade explícita; ausente

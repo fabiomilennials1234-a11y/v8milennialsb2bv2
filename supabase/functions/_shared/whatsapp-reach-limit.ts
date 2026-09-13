@@ -37,11 +37,12 @@
 /** What the provider reports about an account's reach allowance. */
 export interface ReachLimit {
   /** New contacts already reached in the current window. */
-  current: number;
+  current: number | null;
   /** Ceiling for that window. */
-  limit: number;
+  limit: number | null;
   /** Undocumented unit — carried for calibration, never judged. See above. */
   reachout_timelock?: number;
+  can_send_new_messages?: boolean | null;
 }
 
 /**
@@ -76,6 +77,7 @@ function isUsableCount(value: unknown): value is number {
  */
 export function assessReach(reading: ReachLimit | null | undefined): ReachVerdict {
   if (!reading) return UNKNOWN;
+  if (reading.can_send_new_messages === false) return { exhausted: true, headroom: 0, limit: reading };
 
   const { current, limit } = reading;
   if (!isUsableCount(current) || !isUsableCount(limit)) return UNKNOWN;

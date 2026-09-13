@@ -185,6 +185,6 @@ describe("workflow action: send_whatsapp_audio", () => {
       ignoreDuplicates?: boolean;
     }>;
     expect(opts[0]?.onConflict).toBe("message_id,instance_id");
-    expect(opts[0]?.ignoreDuplicates).toBe(false);
+    expect(opts[0]?.ignoreDuplicates).toBe(true);
   });
 });

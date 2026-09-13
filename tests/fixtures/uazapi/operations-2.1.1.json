@@ -1,0 +1,2615 @@
+{
+  "source": "https://docs.uazapi.com/openapi-bundled.json",
+  "retrieved": "2026-09-11",
+  "sha256": "ba13d184dba2b0bdba2d92f640d82fe3dd6d5001e45095fdf482493925f9096b",
+  "operations": {
+    "POST /instance/create": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "adminField01": {
+          "type": "string"
+        },
+        "adminField02": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /instance/all": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/connect": {
+      "required": [],
+      "fields": {
+        "phone": {
+          "type": "string"
+        },
+        "browser": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "safari",
+            "firefox",
+            "edge",
+            "chrome"
+          ]
+        },
+        "systemName": {
+          "type": "string"
+        },
+        "proxy_managed_country": {
+          "type": "string"
+        },
+        "proxy_managed_state": {
+          "type": "string"
+        },
+        "proxy_managed_city": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /instance/disconnect": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/reset": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /instance/status": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /instance/wa_messages_limits": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/updateFieldsMap": {
+      "required": [],
+      "fields": {
+        "lead_field01": {
+          "type": "string"
+        },
+        "lead_field02": {
+          "type": "string"
+        },
+        "lead_field03": {
+          "type": "string"
+        },
+        "lead_field04": {
+          "type": "string"
+        },
+        "lead_field05": {
+          "type": "string"
+        },
+        "lead_field06": {
+          "type": "string"
+        },
+        "lead_field07": {
+          "type": "string"
+        },
+        "lead_field08": {
+          "type": "string"
+        },
+        "lead_field09": {
+          "type": "string"
+        },
+        "lead_field10": {
+          "type": "string"
+        },
+        "lead_field11": {
+          "type": "string"
+        },
+        "lead_field12": {
+          "type": "string"
+        },
+        "lead_field13": {
+          "type": "string"
+        },
+        "lead_field14": {
+          "type": "string"
+        },
+        "lead_field15": {
+          "type": "string"
+        },
+        "lead_field16": {
+          "type": "string"
+        },
+        "lead_field17": {
+          "type": "string"
+        },
+        "lead_field18": {
+          "type": "string"
+        },
+        "lead_field19": {
+          "type": "string"
+        },
+        "lead_field20": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /instance/updateInstanceName": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /instance/updateAdminFields": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "adminField01": {
+          "type": "string"
+        },
+        "adminField02": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /instance/proxy": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/proxy": {
+      "required": [],
+      "fields": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "custom",
+            "internal",
+            "none"
+          ]
+        },
+        "proxy_url": {
+          "type": "string"
+        },
+        "proxy_fallback": {
+          "type": "string"
+        },
+        "confirm_no_proxy": {
+          "type": "boolean"
+        },
+        "rotate_now": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GET /proxy-managed/cities": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /profile/name": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /profile/image": {
+      "required": [
+        "image"
+      ],
+      "fields": {
+        "image": {
+          "type": "string"
+        }
+      }
+    },
+    "DELETE /instance": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /instance/privacy": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/privacy": {
+      "required": [],
+      "fields": {
+        "groupadd": {
+          "type": "string",
+          "enum": [
+            "all",
+            "contacts",
+            "contact_blacklist",
+            "none"
+          ]
+        },
+        "last": {
+          "type": "string",
+          "enum": [
+            "all",
+            "contacts",
+            "contact_blacklist",
+            "none"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "all",
+            "contacts",
+            "contact_blacklist",
+            "none"
+          ]
+        },
+        "profile": {
+          "type": "string",
+          "enum": [
+            "all",
+            "contacts",
+            "contact_blacklist",
+            "none"
+          ]
+        },
+        "readreceipts": {
+          "type": "string",
+          "enum": [
+            "all",
+            "none"
+          ]
+        },
+        "online": {
+          "type": "string",
+          "enum": [
+            "all",
+            "match_last_seen"
+          ]
+        },
+        "calladd": {
+          "type": "string",
+          "enum": [
+            "all",
+            "known"
+          ]
+        }
+      }
+    },
+    "POST /instance/presence": {
+      "required": [
+        "presence"
+      ],
+      "fields": {
+        "presence": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        }
+      }
+    },
+    "POST /send/text": {
+      "required": [
+        "number",
+        "text"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "linkPreview": {
+          "type": "boolean"
+        },
+        "linkPreviewTitle": {
+          "type": "string"
+        },
+        "linkPreviewDescription": {
+          "type": "string"
+        },
+        "linkPreviewImage": {
+          "type": "string"
+        },
+        "linkPreviewLarge": {
+          "type": "boolean"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "forward": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /send/media": {
+      "required": [
+        "number",
+        "type",
+        "file"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "image",
+            "video",
+            "videoplay",
+            "document",
+            "audio",
+            "myaudio",
+            "ptt",
+            "ptv",
+            "sticker"
+          ]
+        },
+        "file": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "docName": {
+          "type": "string"
+        },
+        "thumbnail": {
+          "type": "string"
+        },
+        "mimetype": {
+          "type": "string"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "forward": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "viewOnce": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /send/contact": {
+      "required": [
+        "number",
+        "fullName",
+        "phoneNumber"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "phoneNumber": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "forward": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /send/location": {
+      "required": [
+        "number",
+        "latitude",
+        "longitude"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "forward": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /message/presence": {
+      "required": [
+        "number",
+        "presence"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "presence": {
+          "type": "string",
+          "enum": [
+            "composing",
+            "recording",
+            "paused"
+          ]
+        },
+        "delay": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /send/status": {
+      "required": [
+        "type"
+      ],
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "image",
+            "video",
+            "audio",
+            "myaudio",
+            "ptt"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "background_color": {
+          "type": "integer"
+        },
+        "font": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        "file": {
+          "type": "string"
+        },
+        "thumbnail": {
+          "type": "string"
+        },
+        "mimetype": {
+          "type": "string"
+        },
+        "recipients": {
+          "type": "array"
+        },
+        "max_recipients": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /send/menu": {
+      "required": [
+        "number",
+        "type",
+        "text",
+        "choices"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "button",
+            "list",
+            "poll",
+            "carousel"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "footerText": {
+          "type": "string"
+        },
+        "listButton": {
+          "type": "string"
+        },
+        "selectableCount": {
+          "type": "integer"
+        },
+        "choices": {
+          "type": "array"
+        },
+        "imageButton": {
+          "type": "string"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /send/carousel": {
+      "required": [
+        "number",
+        "text",
+        "carousel"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "carousel": {
+          "type": "array"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "forward": {
+          "type": "boolean"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /send/location-button": {
+      "required": [
+        "number",
+        "text"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /send/request-payment": {
+      "required": [
+        "number",
+        "amount"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "footer": {
+          "type": "string"
+        },
+        "itemName": {
+          "type": "string"
+        },
+        "invoiceNumber": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "pixKey": {
+          "type": "string"
+        },
+        "pixType": {
+          "type": "string"
+        },
+        "pixName": {
+          "type": "string"
+        },
+        "paymentLink": {
+          "type": "string"
+        },
+        "fileUrl": {
+          "type": "string"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "boletoCode": {
+          "type": "string"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /send/pix-button": {
+      "required": [
+        "number",
+        "pixType",
+        "pixKey"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "pixType": {
+          "type": "string"
+        },
+        "pixKey": {
+          "type": "string"
+        },
+        "pixName": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "readchat": {
+          "type": "boolean"
+        },
+        "readmessages": {
+          "type": "boolean"
+        },
+        "replyid": {
+          "type": "string"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /message/async": {
+      "required": [],
+      "fields": {}
+    },
+    "DELETE /message/async": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /instance/updateDelaySettings": {
+      "required": [
+        "msg_delay_min",
+        "msg_delay_max"
+      ],
+      "fields": {
+        "msg_delay_min": {
+          "type": "integer"
+        },
+        "msg_delay_max": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /message/download": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "return_base64": {
+          "type": "boolean"
+        },
+        "generate_mp3": {
+          "type": "boolean"
+        },
+        "return_link": {
+          "type": "boolean"
+        },
+        "transcribe": {
+          "type": "boolean"
+        },
+        "openai_apikey": {
+          "type": "string"
+        },
+        "download_quoted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /message/find": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "chatid": {
+          "type": "string"
+        },
+        "track_source": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /message/history-sync": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "history",
+            "exact"
+          ]
+        },
+        "messageid": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /message/markread": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /message/react": {
+      "required": [
+        "number",
+        "text",
+        "id"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /message/delete": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /message/edit": {
+      "required": [
+        "id",
+        "text"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /message/pin": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "pin": {
+          "type": "boolean"
+        },
+        "duration": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /group/create": {
+      "required": [
+        "name",
+        "participants"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "participants": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /group/info": {
+      "required": [
+        "groupjid"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "getInviteLink": {
+          "type": "boolean"
+        },
+        "getRequestsParticipants": {
+          "type": "boolean"
+        },
+        "force": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /group/inviteInfo": {
+      "required": [
+        "invitecode"
+      ],
+      "fields": {
+        "invitecode": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/join": {
+      "required": [
+        "invitecode"
+      ],
+      "fields": {
+        "invitecode": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/leave": {
+      "required": [
+        "groupjid"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /group/list": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /group/list": {
+      "required": [],
+      "fields": {
+        "limit": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "search": {
+          "type": "string"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "noParticipants": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /group/resetInviteCode": {
+      "required": [
+        "groupjid"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/updateAnnounce": {
+      "required": [
+        "groupjid",
+        "announce"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "announce": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /group/updateJoinApproval": {
+      "required": [
+        "groupjid",
+        "IsJoinApprovalRequired"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "IsJoinApprovalRequired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /group/updateMemberAddMode": {
+      "required": [
+        "groupjid",
+        "MemberAddMode"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "MemberAddMode": {
+          "type": "string",
+          "enum": [
+            "admin_add",
+            "all_member_add"
+          ]
+        }
+      }
+    },
+    "POST /group/updateDescription": {
+      "required": [
+        "groupjid",
+        "description"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/ephemeral": {
+      "required": [
+        "groupjid",
+        "duration"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "duration": {}
+      }
+    },
+    "POST /group/updateImage": {
+      "required": [
+        "groupjid",
+        "image"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/updateLocked": {
+      "required": [
+        "groupjid",
+        "locked"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /group/updateName": {
+      "required": [
+        "groupjid",
+        "name"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /group/updateParticipants": {
+      "required": [
+        "groupjid",
+        "action",
+        "participants"
+      ],
+      "fields": {
+        "groupjid": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "add",
+            "remove",
+            "promote",
+            "demote",
+            "approve",
+            "reject"
+          ]
+        },
+        "participants": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /community/create": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /community/editgroups": {
+      "required": [
+        "community",
+        "action",
+        "groupjids"
+      ],
+      "fields": {
+        "community": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "add",
+            "remove"
+          ]
+        },
+        "groupjids": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /newsletter/create": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "picture": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /newsletter/list": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /newsletter/info": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/link": {
+      "required": [
+        "key"
+      ],
+      "fields": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/subscribe": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/messages": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "beforeid": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /newsletter/messages/edit": {
+      "required": [
+        "text"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "messageid": {
+          "type": "string"
+        },
+        "serverid": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "maxpages": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /newsletter/messages/delete": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "messageid": {
+          "type": "string"
+        },
+        "serverid": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "maxpages": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /newsletter/updates": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "afterid": {
+          "type": "integer"
+        },
+        "since": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /newsletter/viewed": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "serverids": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /newsletter/reaction": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "serverid": {
+          "type": "integer"
+        },
+        "reaction": {
+          "type": "string"
+        },
+        "reactionmessageid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/follow": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/unfollow": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/mute": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/unmute": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/delete": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/picture": {
+      "required": [
+        "picture"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "picture": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/name": {
+      "required": [
+        "name"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/description": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/settings": {
+      "required": [
+        "reactionCodes"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "reactionCodes": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/search": {
+      "required": [],
+      "fields": {
+        "limit": {
+          "type": "integer"
+        },
+        "view": {
+          "type": "string"
+        },
+        "countryCodes": {
+          "type": "array"
+        },
+        "searchText": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/admin/invite": {
+      "required": [
+        "phone"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/admin/accept": {
+      "required": [],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/admin/remove": {
+      "required": [
+        "phone"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/admin/revoke": {
+      "required": [
+        "phone"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /newsletter/owner/transfer": {
+      "required": [
+        "phone"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "jid": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "quitAdmin": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GET /webhook": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /webhook": {
+      "required": [
+        "url"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array"
+        },
+        "excludeMessages": {
+          "type": "array"
+        },
+        "addUrlEvents": {
+          "type": "boolean"
+        },
+        "addUrlTypesMessages": {
+          "type": "boolean"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "add",
+            "update",
+            "delete"
+          ]
+        }
+      }
+    },
+    "GET /webhook/errors": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /globalwebhook": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /globalwebhook": {
+      "required": [
+        "url",
+        "events"
+      ],
+      "fields": {
+        "url": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array"
+        },
+        "excludeMessages": {
+          "type": "array"
+        },
+        "addUrlEvents": {
+          "type": "boolean"
+        },
+        "addUrlTypesMessages": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GET /globalwebhook/errors": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /sse": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /sender/simple": {
+      "required": [
+        "numbers",
+        "type",
+        "delayMin",
+        "delayMax",
+        "scheduled_for"
+      ],
+      "fields": {
+        "numbers": {
+          "type": "array"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "image",
+            "video",
+            "videoplay",
+            "audio",
+            "document",
+            "contact",
+            "location",
+            "list",
+            "button",
+            "poll",
+            "carousel"
+          ]
+        },
+        "folder": {
+          "type": "string"
+        },
+        "delayMin": {
+          "type": "integer"
+        },
+        "delayMax": {
+          "type": "integer"
+        },
+        "scheduled_for": {
+          "type": "integer"
+        },
+        "info": {
+          "type": "string"
+        },
+        "delay": {
+          "type": "integer"
+        },
+        "mentions": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "linkPreview": {
+          "type": "boolean"
+        },
+        "linkPreviewTitle": {
+          "type": "string"
+        },
+        "linkPreviewDescription": {
+          "type": "string"
+        },
+        "linkPreviewImage": {
+          "type": "string"
+        },
+        "linkPreviewLarge": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string"
+        },
+        "docName": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "phoneNumber": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "footerText": {
+          "type": "string"
+        },
+        "buttonText": {
+          "type": "string"
+        },
+        "listButton": {
+          "type": "string"
+        },
+        "selectableCount": {
+          "type": "integer"
+        },
+        "choices": {
+          "type": "array"
+        },
+        "imageButton": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /sender/advanced": {
+      "required": [
+        "messages"
+      ],
+      "fields": {
+        "delayMin": {
+          "type": "integer"
+        },
+        "delayMax": {
+          "type": "integer"
+        },
+        "info": {
+          "type": "string"
+        },
+        "scheduled_for": {
+          "type": "integer"
+        },
+        "messages": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /sender/edit": {
+      "required": [
+        "folder_id",
+        "action"
+      ],
+      "fields": {
+        "folder_id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "stop",
+            "continue",
+            "delete"
+          ]
+        }
+      }
+    },
+    "POST /sender/cleardone": {
+      "required": [],
+      "fields": {
+        "hours": {
+          "type": "integer"
+        }
+      }
+    },
+    "DELETE /sender/clearall": {
+      "required": [],
+      "fields": {}
+    },
+    "GET /sender/listfolders": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /sender/listmessages": {
+      "required": [
+        "folder_id"
+      ],
+      "fields": {
+        "folder_id": {
+          "type": "string"
+        },
+        "messageStatus": {
+          "type": "string",
+          "enum": [
+            "Scheduled",
+            "Sent",
+            "Failed"
+          ]
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /chat/block": {
+      "required": [
+        "number",
+        "block"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "block": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GET /chat/blocklist": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /chat/labels": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "labelids": {
+          "type": "array"
+        },
+        "add_labelid": {
+          "type": "string"
+        },
+        "remove_labelid": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /chat/delete": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "deleteChatDB": {
+          "type": "boolean"
+        },
+        "deleteMessagesDB": {
+          "type": "boolean"
+        },
+        "deleteChatWhatsApp": {
+          "type": "boolean"
+        },
+        "clearChatWhatsApp": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/archive": {
+      "required": [
+        "number",
+        "archive"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "archive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/ephemeral": {
+      "required": [
+        "number",
+        "duration"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "duration": {}
+      }
+    },
+    "POST /chat/read": {
+      "required": [
+        "number",
+        "read"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "read": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/mute": {
+      "required": [
+        "number",
+        "muteEndTime"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "muteEndTime": {
+          "type": "integer",
+          "enum": [
+            0,
+            8,
+            168,
+            -1
+          ]
+        }
+      }
+    },
+    "POST /chat/pin": {
+      "required": [
+        "number",
+        "pin"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "pin": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/find": {
+      "required": [],
+      "fields": {
+        "operator": {
+          "type": "string",
+          "enum": [
+            "AND",
+            "OR"
+          ]
+        },
+        "sort": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "wa_fastid": {
+          "type": "string"
+        },
+        "wa_chatid": {
+          "type": "string"
+        },
+        "wa_archived": {
+          "type": "boolean"
+        },
+        "wa_contactName": {
+          "type": "string"
+        },
+        "wa_name": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "wa_isBlocked": {
+          "type": "boolean"
+        },
+        "wa_isGroup": {
+          "type": "boolean"
+        },
+        "wa_isGroup_admin": {
+          "type": "boolean"
+        },
+        "wa_isGroup_announce": {
+          "type": "boolean"
+        },
+        "wa_isGroup_member": {
+          "type": "boolean"
+        },
+        "wa_isPinned": {
+          "type": "boolean"
+        },
+        "wa_label": {
+          "type": "string"
+        },
+        "wa_notes": {
+          "type": "string"
+        },
+        "lead_tags": {
+          "type": "string"
+        },
+        "lead_isTicketOpen": {
+          "type": "boolean"
+        },
+        "lead_assignedAttendant_id": {
+          "type": "string"
+        },
+        "lead_status": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /chat/notes": {
+      "required": [],
+      "fields": {
+        "number": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /chat/notes/refresh": {
+      "required": [],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "force": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/notes/edit": {
+      "required": [],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /chat/editLead": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "chatbot_disableUntil": {
+          "type": "integer"
+        },
+        "lead_isTicketOpen": {
+          "type": "boolean"
+        },
+        "lead_assignedAttendant_id": {
+          "type": "string"
+        },
+        "lead_kanbanOrder": {
+          "type": "integer"
+        },
+        "lead_tags": {
+          "type": "array"
+        },
+        "lead_name": {
+          "type": "string"
+        },
+        "lead_fullName": {
+          "type": "string"
+        },
+        "lead_email": {
+          "type": "string"
+        },
+        "lead_personalid": {
+          "type": "string"
+        },
+        "lead_status": {
+          "type": "string"
+        },
+        "lead_notes": {
+          "type": "string"
+        },
+        "lead_field01": {
+          "type": "string"
+        },
+        "lead_field02": {
+          "type": "string"
+        },
+        "lead_field03": {
+          "type": "string"
+        },
+        "lead_field04": {
+          "type": "string"
+        },
+        "lead_field05": {
+          "type": "string"
+        },
+        "lead_field06": {
+          "type": "string"
+        },
+        "lead_field07": {
+          "type": "string"
+        },
+        "lead_field08": {
+          "type": "string"
+        },
+        "lead_field09": {
+          "type": "string"
+        },
+        "lead_field10": {
+          "type": "string"
+        },
+        "lead_field11": {
+          "type": "string"
+        },
+        "lead_field12": {
+          "type": "string"
+        },
+        "lead_field13": {
+          "type": "string"
+        },
+        "lead_field14": {
+          "type": "string"
+        },
+        "lead_field15": {
+          "type": "string"
+        },
+        "lead_field16": {
+          "type": "string"
+        },
+        "lead_field17": {
+          "type": "string"
+        },
+        "lead_field18": {
+          "type": "string"
+        },
+        "lead_field19": {
+          "type": "string"
+        },
+        "lead_field20": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /contacts": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /contacts/list": {
+      "required": [],
+      "fields": {
+        "limit": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "contactScope": {
+          "type": "string",
+          "enum": [
+            "address_book",
+            "outside_address_book",
+            "all"
+          ]
+        }
+      }
+    },
+    "POST /contact/add": {
+      "required": [
+        "number",
+        "name"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /contact/remove": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /chat/details": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /chat/check": {
+      "required": [],
+      "fields": {
+        "numbers": {
+          "type": "array"
+        }
+      }
+    },
+    "POST /label/edit": {
+      "required": [
+        "labelid"
+      ],
+      "fields": {
+        "labelid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "integer"
+        },
+        "delete": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GET /labels": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /labels/refresh": {
+      "required": [],
+      "fields": {
+        "force": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /quickreply/edit": {
+      "required": [
+        "shortCut",
+        "type"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "delete": {
+          "type": "boolean"
+        },
+        "onWhatsApp": {
+          "type": "boolean"
+        },
+        "shortCut": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "audio",
+            "myaudio",
+            "ptt",
+            "document",
+            "video",
+            "image"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "docName": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /quickreply/showall": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /call/make": {
+      "required": [
+        "number"
+      ],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "call_duration": {
+          "type": "integer"
+        }
+      }
+    },
+    "POST /call/reject": {
+      "required": [],
+      "fields": {
+        "number": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /chatwoot/config": {
+      "required": [],
+      "fields": {}
+    },
+    "PUT /chatwoot/config": {
+      "required": [
+        "enabled",
+        "url",
+        "access_token",
+        "account_id",
+        "inbox_id"
+      ],
+      "fields": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "string"
+        },
+        "access_token": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "integer"
+        },
+        "inbox_id": {
+          "type": "integer"
+        },
+        "ignore_groups": {
+          "type": "boolean"
+        },
+        "sign_messages": {
+          "type": "boolean"
+        },
+        "create_new_conversation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "POST /business/get/profile": {
+      "required": [],
+      "fields": {
+        "jid": {
+          "type": "string"
+        }
+      }
+    },
+    "GET /business/get/categories": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /business/update/profile": {
+      "required": [],
+      "fields": {
+        "description": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /business/catalog/list": {
+      "required": [
+        "jid"
+      ],
+      "fields": {
+        "jid": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /business/catalog/info": {
+      "required": [
+        "jid",
+        "id"
+      ],
+      "fields": {
+        "jid": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /business/catalog/delete": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /business/catalog/show": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /business/catalog/hide": {
+      "required": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "POST /admin/restart": {
+      "required": [],
+      "fields": {}
+    },
+    "POST /admin/token/rotate": {
+      "required": [],
+      "fields": {}
+    }
+  }
+}

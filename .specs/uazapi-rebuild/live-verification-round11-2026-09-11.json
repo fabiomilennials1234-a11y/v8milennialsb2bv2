@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-11",
+  "scope": "QA frontend compositor UAZAPI; no lifecycle or production deployment",
+  "menu": {
+    "accepted": true,
+    "providerStatus": "queued",
+    "persistedStatus": "pending",
+    "labelInRequest": true,
+    "descriptionInRequest": true,
+    "realIdUsed": true,
+    "labelInRow": true,
+    "optionVisible": true,
+    "descriptionVisible": true,
+    "persistedAfterReload": true,
+    "visualCheck": "Scrolled to latest message and expanded list after reload"
+  },
+  "pix": {
+    "accepted": true,
+    "providerStatus": "queued",
+    "persistedStatus": "pending",
+    "realIdUsed": true,
+    "keyMetadataCorrect": true,
+    "paymentExecuted": false,
+    "cardAfterReload": true,
+    "clipboardMatches": true
+  },
+  "provider": [
+    {
+      "type": "pix-button",
+      "http": 200,
+      "found": true,
+      "status": "Delivered"
+    },
+    {
+      "type": "list",
+      "http": 200,
+      "found": true,
+      "status": "Delivered",
+      "menuLabelPresent": true,
+      "menuDescriptionPresent": true
+    }
+  ],
+  "validation": {
+    "testsPassed": 61,
+    "filesPassed": 5,
+    "additionalSuiteFailure": "pix-charge-flow.test.tsx fails to resolve legacy Asaas hook import; test and hook paths unchanged by this round",
+    "build": "passed",
+    "typescriptIntroduced": 0,
+    "lintIntroduced": 0
+  },
+  "limitations": [
+    "New location/contact composer controls remain pending; existing menu/PIX acceptance defects took priority.",
+    "QA uses no permanent provider webhook relay; UI persisted pending before separate provider Delivered lookup.",
+    "No payment executed.",
+    "Lifecycle remains deferred; no connection changed."
+  ]
+}

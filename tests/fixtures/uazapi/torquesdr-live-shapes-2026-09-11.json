@@ -1,0 +1,277 @@
+{
+  "checkedAt": "2026-09-11T18:40:08.476Z",
+  "identityVerified": true,
+  "apiHost": "milennialstech.uazapi.com",
+  "state": "connected",
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/instance/status",
+      "http": 200,
+      "shape": {
+        "instance": {
+          "id": "string",
+          "token": "string",
+          "status": "string",
+          "paircode": "string",
+          "qrcode": "string",
+          "name": "string",
+          "profileName": "string",
+          "profilePicUrl": "string",
+          "isBusiness": "boolean",
+          "plataform": "string",
+          "systemName": "string",
+          "owner": "string",
+          "current_presence": "string",
+          "lastDisconnect": "string",
+          "lastDisconnectReason": "string",
+          "adminField01": "string",
+          "adminField02": "string",
+          "openai_apikey": "string",
+          "chatbot_enabled": "boolean",
+          "chatbot_ignoreGroups": "boolean",
+          "chatbot_stopConversation": "string",
+          "chatbot_stopMinutes": "number",
+          "chatbot_stopWhenYouSendMsg": "number",
+          "created": "string",
+          "updated": "string",
+          "currentTime": "string",
+          "msg_delay_min": "number",
+          "msg_delay_max": "number",
+          "proxy_managed_country": "string"
+        },
+        "status": {
+          "connected": "boolean",
+          "jid": "string",
+          "loggedIn": "boolean",
+          "resetting": "boolean"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/instance/wa_messages_limits",
+      "http": 200,
+      "shape": {
+        "can_send_new_messages": "boolean",
+        "diagnostics_endpoint": "string",
+        "message": "string",
+        "message_ptbr": "string",
+        "new_chat_message_capping": {
+          "available": "boolean",
+          "cycle_end": "string",
+          "server_sent_at": "string",
+          "status": "string",
+          "total_quota": "number",
+          "used_quota": "number"
+        },
+        "provider": "string",
+        "reachable": "boolean",
+        "reachout_timelock": {
+          "active": "boolean",
+          "available": "boolean"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/webhook",
+      "http": 200,
+      "shape": {
+        "type": "array",
+        "length": 1,
+        "item": {
+          "addUrlEvents": "boolean",
+          "addUrlTypesMessages": "boolean",
+          "enabled": "boolean",
+          "events": {
+            "type": "array",
+            "length": 3,
+            "item": "string"
+          },
+          "excludeMessages": {
+            "type": "array",
+            "length": 1,
+            "item": "string"
+          },
+          "id": "string",
+          "url": "string"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sender/listfolders",
+      "http": 200,
+      "shape": {
+        "type": "array",
+        "length": 0
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/chat/find",
+      "http": 200,
+      "shape": {
+        "chats": {
+          "type": "array",
+          "length": 1,
+          "item": {
+            "chatbot_agentResetMemoryAt": "number",
+            "chatbot_disableUntil": "number",
+            "chatbot_lastTriggerAt": "number",
+            "chatbot_lastTrigger_id": "string",
+            "id": "string",
+            "image": "string",
+            "imagePreview": "string",
+            "lead_assignedAttendant_id": "string",
+            "lead_email": "string",
+            "lead_field01": "string",
+            "lead_field02": "string",
+            "lead_field03": "string",
+            "lead_field04": "string",
+            "lead_field05": "string",
+            "lead_field06": "string",
+            "lead_field07": "string",
+            "lead_field08": "string",
+            "lead_field09": "string",
+            "lead_field10": "string",
+            "lead_field11": "string",
+            "lead_field12": "string",
+            "lead_field13": "string",
+            "lead_field14": "string",
+            "lead_field15": "string",
+            "lead_field16": "string",
+            "lead_field17": "string",
+            "lead_field18": "string",
+            "lead_field19": "string",
+            "lead_field20": "string",
+            "lead_fullName": "string",
+            "lead_isTicketOpen": "boolean",
+            "lead_kanbanOrder": "number",
+            "lead_name": "string",
+            "lead_notes": "string",
+            "lead_personalid": "string",
+            "lead_status": "string",
+            "lead_tags": {
+              "type": "array",
+              "length": 0
+            },
+            "name": "string",
+            "owner": "string",
+            "phone": "string",
+            "wa_archived": "boolean",
+            "wa_chatid": "string",
+            "wa_chatlid": "string",
+            "wa_contactName": "string",
+            "wa_ephemeralExpiration": "number",
+            "wa_fastid": "string",
+            "wa_isBlocked": "boolean",
+            "wa_isGroup": "boolean",
+            "wa_isGroup_admin": "boolean",
+            "wa_isGroup_announce": "boolean",
+            "wa_isGroup_community": "boolean",
+            "wa_isGroup_member": "boolean",
+            "wa_isPinned": "boolean",
+            "wa_label": {
+              "type": "array",
+              "length": 0
+            },
+            "wa_lastMessageSender": "string",
+            "wa_lastMessageTextVote": "string",
+            "wa_lastMessageType": "string",
+            "wa_lastMsgTimestamp": "number",
+            "wa_muteEndTime": "number",
+            "wa_name": "string",
+            "wa_notes": "string",
+            "wa_unreadCount": "number"
+          }
+        },
+        "pagination": {
+          "limit": "number",
+          "offset": "number",
+          "totalRecords": "number"
+        },
+        "totalChatsStats": {
+          "total_chats": {
+            "total": "number",
+            "unread": "number"
+          },
+          "open_chats": {
+            "total": "number",
+            "unread": "number"
+          },
+          "archived_chats": {
+            "total": "number",
+            "unread": "number"
+          },
+          "group_chats": {
+            "total": "number",
+            "unread": "number"
+          },
+          "blocked_chats": {
+            "total": "number",
+            "unread": "number"
+          },
+          "label_counts": {
+            "type": "array",
+            "length": 0
+          },
+          "attendant_counts": {
+            "type": "array",
+            "length": 0
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/message/find",
+      "http": 200,
+      "shape": {
+        "hasMore": "boolean",
+        "limit": "number",
+        "messages": {
+          "type": "array",
+          "length": 1,
+          "item": {
+            "buttonOrListid": "string",
+            "chatid": "string",
+            "content": {
+              "text": "string"
+            },
+            "convertOptions": "string",
+            "edited": "string",
+            "error": "string",
+            "fileURL": "string",
+            "fromMe": "boolean",
+            "id": "string",
+            "isGroup": "boolean",
+            "messageTimestamp": "number",
+            "messageType": "string",
+            "messageid": "string",
+            "owner": "string",
+            "pinned": "boolean",
+            "quoted": "string",
+            "reaction": "string",
+            "send_folder_id": "string",
+            "sender": "string",
+            "senderName": "string",
+            "sender_lid": "string",
+            "sender_pn": "string",
+            "source": "string",
+            "status": "string",
+            "text": "string",
+            "track_id": "string",
+            "track_source": "string",
+            "vote": "string"
+          }
+        },
+        "nextOffset": "number",
+        "offset": "number",
+        "returnedMessages": "number"
+      }
+    }
+  ],
+  "note": "Field names and types only. No provider bodies, secrets, message contents or personal identifiers retained."
+}

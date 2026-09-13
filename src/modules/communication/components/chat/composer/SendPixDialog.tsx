@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { sendPixButton } from "@/modules/communication/lib/whatsappApi";
-import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/communication/lib/accepted-interactive-message";
 
 interface Props {
   open: boolean;
@@ -60,26 +60,19 @@ export function SendPixDialog({ open, onOpenChange, instanceId, phoneNumber }: P
         text: messageText,
       });
       const orgId = teamMember?.organization_id;
-      if (orgId) {
-        const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-        const content = messageText;
-        await supabase.from("whatsapp_messages").upsert({
-          organization_id: orgId,
-          instance_id: instanceId,
-          message_id: result.message_id || `pix_${Date.now()}`,
-          remote_jid: `${formattedNumber}@s.whatsapp.net`,
-          phone_number: phoneNumber,
-          direction: "outgoing",
-          message_type: "pix-button",
-          content,
-          status: "sent",
-          timestamp: new Date().toISOString(),
-        }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
-        queryClient.invalidateQueries({
-          queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
-        });
+      try {
+        const row = orgId ? acceptedInteractiveRow(
+          { organizationId: orgId, instanceId, phoneNumber }, result,
+          { kind: "pix", text: messageText, key: pixkey.trim(), name: merchantName.trim(), keyType: pixkeyType },
+        ) : null;
+        if (!row) throw new Error("Missing accepted message identity");
+        const saved = await supabase.from("whatsapp_messages").upsert(row, interactiveInsertOptions);
+        if (saved.error) throw saved.error;
+      } catch {
+        toast.warning("Envio aceito. Histórico aguardando sincronização; não reenvie.");
       }
-      toast.success("Botão Pix enviado");
+      if (orgId) void queryClient.invalidateQueries({ queryKey: ["whatsapp_messages", orgId] });
+      toast.success("Botão Pix encaminhado para envio");
       onOpenChange(false);
       setPixkey("");
       setMerchantName("");

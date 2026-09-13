@@ -76,7 +76,7 @@ export type SendMediaOptions = {
 
 export type InstanceStatus = {
   connected: boolean;
-  state: "connecting" | "connected" | "disconnected" | "unknown";
+  state: "connecting" | "connected" | "disconnected" | "hibernated" | "unknown";
   qrcode?: string;
   paircode?: string;
   /**
@@ -218,6 +218,7 @@ export interface WhatsAppProvider {
   sendText(opts: SendTextOptions): Promise<SendResult>;
   sendMedia(opts: SendMediaOptions): Promise<SendResult>;
   setPresence(number: string, state: "composing" | "available"): Promise<void>;
+  transcribeAudio?(messageId: string): Promise<string>;
   downloadMedia(messageId: string): Promise<{ base64: string; mimetype: string }>;
 
   // Meta-only — send a pre-approved template (ignores the 24h window). Absent on
@@ -283,15 +284,17 @@ export interface WhatsAppProvider {
   }): Promise<unknown>;
   listSignupInvites?(limite?: number): Promise<unknown>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
+  requestHistory?(opts: { number: string; mode?: "history" | "exact"; messageid?: string; count?: number }): Promise<{ success: boolean; mode?: string }>;
   historySync?(opts: {
     chat_jid?: string;
     limit?: number;
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }>;
   getMessageLimits?(): Promise<{
-    current: number;
-    limit: number;
+    current: number | null;
+    limit: number | null;
     reachout_timelock?: number;
+    can_send_new_messages?: boolean | null;
   }>;
 
   // Mass send / sender (Uazapi-only) — drives Quick Blast + CSV Mass Send.
@@ -464,8 +467,8 @@ export async function getWhatsAppProvider(
   if (effectiveProvider === "uazapi") {
     const baseUrl = (Deno as any).env.get("UAZAPI_BASE_URL");
     const adminToken = (Deno as any).env.get("UAZAPI_ADMIN_TOKEN");
-    if (!baseUrl || !adminToken) {
-      throw new Error("UAZAPI_BASE_URL / UAZAPI_ADMIN_TOKEN not set");
+    if (!baseUrl || (options?.bootstrap && !adminToken)) {
+      throw new Error(options?.bootstrap ? "UAZAPI_BASE_URL / UAZAPI_ADMIN_TOKEN not set" : "UAZAPI_BASE_URL not set");
     }
 
     const { UazapiProvider } = await import("./whatsapp-providers/uazapi-provider.ts");

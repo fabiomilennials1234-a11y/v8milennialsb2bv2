@@ -527,7 +527,8 @@ export function ConversationList({
       )}
 
       {/* ─── Lista ──────────────────────────────────────────────────────────── */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
+      {/* Radix's table wrapper takes the preview's intrinsic width; block keeps long messages inside the sidebar. */}
+      <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
         {isLoading || filterGate === "pending" ? (
           // `pending` conta como carregando: sem o enriquecimento a lista filtrada
           // seria vazia por falta de dado, e "Total: 0" piscaria a cada troca de

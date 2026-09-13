@@ -1,0 +1,59 @@
+{
+  "date": "2026-09-11",
+  "round": 14,
+  "environment": "persistent_supabase_qa",
+  "documentation": "https://docs.uazapi.com/openapi-bundled.json",
+  "copilot": {
+    "date": "2026-09-11",
+    "qaOnly": true,
+    "activeAgents": 0,
+    "aiSecretNames": [],
+    "noAgent": {
+      "http": 401
+    },
+    "unauthorized": 401,
+    "missingTenant": 401,
+    "noAiResponseTested": true
+  },
+  "providerConfiguration": {
+    "http": 200,
+    "hasOpenaiKeyField": true,
+    "openaiConfigured": false,
+    "status": "connected"
+  },
+  "buttons": {
+    "accepted": true,
+    "status": "queued",
+    "persistedStatus": "pending",
+    "realId": true,
+    "visibleAfterReload": true,
+    "optionsInText": true,
+    "rendering": "text_with_option_bullets",
+    "actualReplyPending": true
+  },
+  "buttonDelivery": {
+    "http": 200,
+    "found": true,
+    "status": "Delivered",
+    "type": "NativeFlowMessage"
+  },
+  "checks": {
+    "unitTests": 23,
+    "unitFiles": 3,
+    "denoErrors": 31,
+    "baselineDenoErrors": 31,
+    "sameDenoDiagnostics": true,
+    "lintIntroduced": 0,
+    "vaultErrors": 208,
+    "baselineVaultErrors": 208,
+    "vaultWarnings": 77,
+    "baselineVaultWarnings": 77
+  },
+  "limitations": [
+    "External service-role probe rejected by internal auth; successful internal hop not yet verified live.",
+    "No live Copilot AI turn: QA credentials and active agent missing.",
+    "Native received transcription awaits required OpenAI credential.",
+    "Buttons rendered as text and option bullets, not a dedicated interactive card; real button reply pending.",
+    "No direct provider webhook certification; no lifecycle action."
+  ]
+}

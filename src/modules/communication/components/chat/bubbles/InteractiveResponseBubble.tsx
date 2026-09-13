@@ -21,12 +21,13 @@ export function InteractiveResponseBubble({
   isOutgoing,
 }: Props) {
   const isButtonResponse =
+    messageType === "button_response" ||
     messageType === "buttonResponse" ||
     messageType === "buttonResponseMessage";
   const isListResponse =
-    messageType === "listResponse" || messageType === "listResponseMessage";
+    messageType === "list_response" || messageType === "listResponse" || messageType === "listResponseMessage";
   const isPollUpdate =
-    messageType === "pollUpdate" || messageType === "pollUpdateMessage";
+    messageType === "poll_update" || messageType === "pollUpdate" || messageType === "pollUpdateMessage";
 
   if (!isButtonResponse && !isListResponse && !isPollUpdate) return null;
 

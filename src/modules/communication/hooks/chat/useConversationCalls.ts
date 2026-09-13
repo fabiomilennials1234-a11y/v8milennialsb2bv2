@@ -27,6 +27,7 @@ import {
 export function useConversationCalls(
   phoneNumber: string | null,
   leadId: string | null,
+  since?: string,
 ) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
@@ -36,13 +37,14 @@ export function useConversationCalls(
   const normalized = useMemo(() => normalizePhone(phoneNumber), [phoneNumber]);
 
   return useQuery({
-    queryKey: chatQueryKeys.calls(organizationId, normalized, leadId),
+    queryKey: [...chatQueryKeys.calls(organizationId, normalized, leadId), ...(since ? [since] : [])],
     queryFn: async (): Promise<ConversationCall[]> => {
       if (!organizationId) return [];
       return fetchConversationCalls({
         organizationId,
         phoneNumber: normalized,
         leadId,
+        since,
       });
     },
     // Sem telefone E sem lead não há conversa a consultar.

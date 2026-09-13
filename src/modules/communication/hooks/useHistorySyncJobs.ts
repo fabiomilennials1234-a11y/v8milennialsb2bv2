@@ -18,6 +18,7 @@ export type SyncScope = "default" | "full" | "chat" | "incremental";
 
 type JobFilter = {
   instanceId?: string;
+  chatJid?: string;
   status?: HistorySyncJob["status"];
 };
 
@@ -50,7 +51,7 @@ export function useHistorySyncJobs(filter: JobFilter = {}) {
   }, [orgId, qc]);
 
   return useQuery({
-    queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null],
+    queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null, filter.chatJid ?? null],
     queryFn: async (): Promise<HistorySyncJob[]> => {
       if (!orgId) return [];
       let query = supabase
@@ -61,11 +62,13 @@ export function useHistorySyncJobs(filter: JobFilter = {}) {
         .limit(50);
       if (filter.instanceId) query = query.eq("instance_id", filter.instanceId);
       if (filter.status) query = query.eq("status", filter.status);
+      if (filter.chatJid) query = query.eq("chat_jid", filter.chatJid);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as HistorySyncJob[];
     },
     enabled: !!orgId,
+    refetchInterval: query => query.state.data?.some(job => job.status === "queued" || job.status === "running") ? 5000 : false,
   });
 }
 
@@ -138,18 +141,17 @@ export function useControlHistorySyncJob() {
         if (error) throw error;
         return { ok: true as const };
       }
-      // retry — insert a new queued job with same params, reset cursor
-      const { error: insertErr } = await supabase.from("history_sync_jobs").insert({
-        organization_id: orgId,
-        instance_id: job.instance_id,
-        scope: job.scope,
-        chat_jid: job.chat_jid,
-        max_days: job.max_days,
-        max_messages_per_chat: job.max_messages_per_chat,
-        max_chats: job.max_chats,
-        status: "queued",
-      });
-      if (insertErr) throw insertErr;
+      // Resume the persisted checkpoint. Compare-and-set prevents two clients
+      // from queueing the same failed job or overwriting worker progress.
+      const { data: resumed, error: resumeError } = await supabase.from("history_sync_jobs")
+        .update({ status: "queued", error: null, completed_at: null })
+        .eq("id", job.id)
+        .eq("organization_id", orgId)
+        .eq("status", "failed")
+        .select("id")
+        .maybeSingle();
+      if (resumeError) throw resumeError;
+      if (!resumed) throw new Error("A importação já mudou de estado. Atualize o andamento.");
       return { ok: true as const };
     },
     onSuccess: () => {

@@ -1,0 +1,388 @@
+{
+  "date": "2026-09-11",
+  "environment": "qtkohfnephshaxgtzksz",
+  "instance": "TorqueSDR",
+  "recipient": "controlled recipient explicitly authorized by CTO; identifiers omitted",
+  "checks": {
+    "schema-restore": {
+      "checkedAt": "2026-09-11T19:08:36.306Z",
+      "source": "Schema-only pg_dump of public/private/backup, using temporary read-only production login. No business rows copied.",
+      "sha256": "3021a2af79ad45fd5a3579a1168b4c8e27f422ef35bf3a43e9d5f3e08e1c0eaa",
+      "prod": [
+        {
+          "tables": 334,
+          "policies": 979,
+          "functions": 1053
+        }
+      ],
+      "branch": [
+        {
+          "tables": 334,
+          "policies": 979,
+          "functions": 1053
+        }
+      ],
+      "safety": [
+        {
+          "active_crons": 0,
+          "organizations": 1,
+          "credentials": 1
+        }
+      ]
+    },
+    "isolation-verification": {
+      "checkedAt": "2026-09-11T19:09:09.235Z",
+      "columnMetadataEqual": true,
+      "columnCount": 4218,
+      "functionsRepointed": [
+        {
+          "schema": "public",
+          "name": "invoke_process_followup_situations"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_billing_provision_worker"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_mass_send_status"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_followup_reclassify"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_history_sync_worker"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_infra_watchdog"
+        },
+        {
+          "schema": "public",
+          "name": "invoke_send_push"
+        },
+        {
+          "schema": "public",
+          "name": "trigger_google_calendar_sync"
+        }
+      ],
+      "remainingProductionUrls": 0,
+      "crons": [
+        {
+          "active": 0
+        }
+      ],
+      "columnComparisonNote": "Physical ordinal gaps from dropped columns excluded; names, types, nullability and defaults compared."
+    },
+    "delivery-verification": [
+      {
+        "name": "text",
+        "http": 200,
+        "found": true,
+        "status": "Sent",
+        "hasMessageTimestamp": true,
+        "hasTracking": true,
+        "errorPresent": false
+      },
+      {
+        "name": "image",
+        "http": 200,
+        "found": true,
+        "status": "Delivered",
+        "hasMessageTimestamp": true,
+        "hasTracking": true,
+        "errorPresent": false
+      },
+      {
+        "name": "document",
+        "http": 200,
+        "found": true,
+        "status": "Delivered",
+        "hasMessageTimestamp": true,
+        "hasTracking": true,
+        "errorPresent": false
+      },
+      {
+        "name": "menu",
+        "http": 200,
+        "found": true,
+        "status": "Delivered",
+        "hasMessageTimestamp": true,
+        "hasTracking": true,
+        "errorPresent": false
+      },
+      {
+        "name": "image-download",
+        "success": true,
+        "mimetype": "image/jpeg",
+        "bytes": 105052
+      },
+      {
+        "name": "document-download",
+        "success": true,
+        "mimetype": "text/plain",
+        "bytes": 56
+      }
+    ],
+    "capability-recheck": [
+      {
+        "operation": "location-documented-example",
+        "success": true,
+        "acknowledged": null,
+        "status": "Pending"
+      },
+      {
+        "operation": "history-request-default",
+        "success": true,
+        "acknowledged": true,
+        "status": null
+      }
+    ],
+    "sender-verification": [
+      {
+        "operation": "sender-create",
+        "accepted": 1,
+        "status": "queued"
+      },
+      {
+        "operation": "sender-list",
+        "count": 1
+      },
+      {
+        "operation": "sender-pause",
+        "status": "paused",
+        "sent": 0,
+        "failed": 0,
+        "total": 1
+      },
+      {
+        "operation": "sender-resume",
+        "rawStatus": "sending",
+        "status": "running",
+        "sent": 0,
+        "failed": 0,
+        "total": 1
+      },
+      {
+        "operation": "sender-cleanup",
+        "removed": true
+      }
+    ],
+    "edge-verification": [
+      {
+        "test": "no-auth",
+        "status": 401,
+        "responseKeys": [
+          "error"
+        ],
+        "error": "Missing auth"
+      },
+      {
+        "test": "outsider",
+        "status": 403,
+        "responseKeys": [
+          "error"
+        ],
+        "error": "Forbidden"
+      },
+      {
+        "test": "admin",
+        "status": 200,
+        "responseKeys": [
+          "ok",
+          "result"
+        ]
+      }
+    ],
+    "edge-actions-verification": [
+      {
+        "test": "history-foreign-org",
+        "http": 403,
+        "expected": 403,
+        "passed": true,
+        "success": null
+      },
+      {
+        "test": "history-invalid",
+        "http": 400,
+        "expected": 400,
+        "passed": true,
+        "success": null
+      },
+      {
+        "test": "history-accepted",
+        "http": 200,
+        "expected": 200,
+        "passed": true,
+        "success": true
+      },
+      {
+        "test": "location-invalid",
+        "http": 400,
+        "expected": 400,
+        "passed": true,
+        "success": null
+      },
+      {
+        "test": "contact-multiple-rejected",
+        "http": 400,
+        "expected": 400,
+        "passed": true,
+        "success": null
+      }
+    ],
+    "replay-verification": [
+      {
+        "test": "wrong-secret",
+        "http": 404
+      },
+      {
+        "test": "text",
+        "http": 200
+      },
+      {
+        "test": "text-replay",
+        "http": 200
+      },
+      {
+        "test": "reaction",
+        "http": 200
+      },
+      {
+        "test": "reaction-replay",
+        "http": 200
+      },
+      {
+        "test": "persistence",
+        "messages": 1,
+        "types": [
+          "text"
+        ],
+        "reactionCounts": [
+          1
+        ],
+        "reactionValues": [
+          {
+            "emoji": "🧪",
+            "count": 1,
+            "from": "me"
+          }
+        ],
+        "dlq": []
+      }
+    ],
+    "media-verification": [
+      {
+        "type": "audio",
+        "accepted": true,
+        "status": "queued",
+        "timestampValid": true
+      },
+      {
+        "type": "ptt",
+        "accepted": true,
+        "status": "queued",
+        "timestampValid": true
+      },
+      {
+        "type": "video",
+        "accepted": true,
+        "status": "queued",
+        "timestampValid": true
+      },
+      {
+        "type": "sticker",
+        "accepted": true,
+        "status": "queued",
+        "timestampValid": true
+      }
+    ],
+    "media-delivery-verification": [
+      {
+        "type": "audio",
+        "http": 200,
+        "matched": true,
+        "status": "Sent",
+        "providerType": "AudioMessage",
+        "error": false
+      },
+      {
+        "type": "ptt",
+        "http": 200,
+        "matched": true,
+        "status": "Sent",
+        "providerType": "AudioMessage",
+        "error": false
+      },
+      {
+        "type": "video",
+        "http": 200,
+        "matched": true,
+        "status": "Sent",
+        "providerType": "VideoMessage",
+        "error": false
+      },
+      {
+        "type": "sticker",
+        "http": 200,
+        "matched": true,
+        "status": "Sent",
+        "providerType": "StickerMessage",
+        "error": false
+      }
+    ],
+    "message-actions-verification": [
+      {
+        "operation": "pin",
+        "accepted": true
+      },
+      {
+        "operation": "unpin-cleanup",
+        "http": 200
+      },
+      {
+        "operation": "markread-own-test-message",
+        "accepted": true
+      },
+      {
+        "operation": "delete-own-test-message",
+        "accepted": true
+      }
+    ],
+    "ui": {
+      "qaLogin": true,
+      "testConversationRendered": true,
+      "testMessageRendered": true,
+      "persistedReactionRendered": true,
+      "productionRequestsBlockedByHarness": true,
+      "unrelatedRequests": [
+        {
+          "path": "/rest/v1/master_users",
+          "http": 406
+        },
+        {
+          "path": "/functions/v1/attach-to-org-by-pending-invite",
+          "http": 401
+        }
+      ]
+    },
+    "code": {
+      "targetedTests": 224,
+      "testFiles": 15,
+      "denoCheckHandlers": 3,
+      "lintNewIssues": 0,
+      "build": "passed",
+      "frontendTypes": "ratchet passed; zero introduced"
+    }
+  },
+  "limitations": [
+    "Exact history recovery returned 404 for selected sent test message; history mode acknowledged, asynchronous completion not asserted.",
+    "Zero-coordinate location returned 400; valid public coordinates accepted.",
+    "No live lifecycle disconnect/delete of TorqueSDR; no remote webhook rebind.",
+    "Current schema restored manually; automatic branch status remains MIGRATIONS_FAILED. Six default-ACL blocks for platform owners omitted; existing explicit object grants restored.",
+    "No PIX live message; contract fixture coverage only.",
+    "SSE messages envelope replay verified; not an end-to-end remote webhook delivery into QA."
+  ]
+}

@@ -1,3 +1,4 @@
+import { providerSendStatus } from "@/modules/communication/lib/providerSendStatus";
 import { useChatReply } from "./useChatReply";
 /**
  * useSendWhatsAppMessage + useSendWhatsAppMedia + useFailedMessages + useRetryMessage
@@ -289,7 +290,7 @@ export function useSendWhatsAppMessage() {
         message_type: "text",
         content: message,
         ...(replyContext ? { reply_context: replyContext } : {}),
-        status: "sent",
+        status: providerSendStatus(data),
         timestamp,
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
         .then(({ error: e }) => { if (e) console.warn("[send] upsert fallback failed:", e.message); });
@@ -382,8 +383,8 @@ export function useSendWhatsAppMessage() {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
           (old) => realMessageId
-            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId)
-            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: "sent", retry_attempt: undefined } : m),
+            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId, providerSendStatus(data))
+            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: providerSendStatus(data), retry_attempt: undefined } : m),
         );
       }
 
@@ -538,7 +539,7 @@ export function useSendWhatsAppMedia() {
         content: caption || null,
         media_url: mediaUrl,
         ...(replyContext ? { reply_context: replyContext } : {}),
-        status: "sent",
+        status: providerSendStatus(data),
         timestamp: new Date().toISOString(),
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
         .then(({ error: e }) => { if (e) console.warn("[send] media upsert fallback failed:", e.message); });
@@ -598,8 +599,8 @@ export function useSendWhatsAppMedia() {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
           (old) => realMessageId
-            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId)
-            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: "sent", retry_attempt: undefined } : m),
+            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId, providerSendStatus(data))
+            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: providerSendStatus(data), retry_attempt: undefined } : m),
         );
       }
     },

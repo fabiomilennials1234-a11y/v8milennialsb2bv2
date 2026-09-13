@@ -12,7 +12,7 @@ describe("reply contract", () => {
   });
   it("labels media with no caption", () => expect(replySnapshot({ ...message, content: null, message_type: "audio" }, "5551999999999")?.text).toBe("Áudio"));
   it("forwards the reply id to provider media API", async () => {
-    const send = vi.spyOn(UazapiClient.prototype, "sendMedia").mockResolvedValue({ id: "sent" } as never);
+    const send = vi.spyOn(UazapiClient.prototype, "sendMedia").mockResolvedValue({ id: "sent", status: "queued", messageTimestamp: 1770000000 } as never);
     const provider = new UazapiProvider({ baseUrl: "https://test.invalid", token: "test", adminToken: "test", instanceId: "instance", organizationId: "org", supabaseAdmin: {} as never });
     await provider.sendMedia({ number: "5551999999999", type: "image", file: "https://test.invalid/img", replyid: "original" });
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ replyid: "original" }));

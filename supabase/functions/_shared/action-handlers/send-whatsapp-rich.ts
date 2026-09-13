@@ -1,3 +1,5 @@
+import { outboundPixDisplay } from "../outbound-pix-display.ts";
+import { outboundMenuDisplay } from "../outbound-menu-display.ts";
 /**
  * send_whatsapp_template / send_whatsapp_menu / send_whatsapp_pix_button action handlers.
  * Extracted from workflow-action-handler.ts. Rich/interactive WhatsApp messages.
@@ -13,6 +15,7 @@ import {
   buildTrackId,
   recipientGate,
   persistOutboundMessage,
+  isRetryableSendFailure,
 } from "./whatsapp-helpers.ts";
 import { enviarTemplateAprovado } from "./enviar-template.ts";
 
@@ -46,7 +49,7 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -101,7 +104,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -128,6 +131,9 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     ? await resolveVariables(supabase, leadId, params.menuFooter as string, executionContext)
     : undefined;
 
+  const listButtonLabel = menuType === "list"
+    ? await resolveVariables(supabase, leadId, String(params.menuListButton ?? "Ver opções"), executionContext)
+    : undefined;
   const trackId = buildTrackId(params);
 
   // Gateway dual-path
@@ -145,6 +151,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
       type: menuType as "button" | "list" | "poll" | "carousel",
       choices,
       footer,
+      listButtonLabel,
       selectableCount: params.menuSelectableCount as number | undefined,
     },
   });
@@ -161,27 +168,30 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
         text,
         choices,
         footer,
+        listButtonLabel,
         selectableCount: params.menuSelectableCount as number | undefined,
       },
       { trackSource: "workflow-action-menu", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
+    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}`, retryable: isRetryableSendFailure(sendResult.error) };
 
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: menuType,
       content: text,
       leadId,
       fallbackIdPrefix: "wf_menu",
+      displayPayload: outboundMenuDisplay({ type: menuType, choices, footer, listButtonLabel }, text),
     });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway menu send failed:", gwResult.error);
-    return { success: false, error: `Menu send failed: ${gwResult.error}` };
+    return { success: false, error: `Menu send failed: ${gwResult.error}`, retryable: isRetryableSendFailure(gwResult.error) };
   }
 
   return { success: true, message: `WhatsApp ${menuType} menu sent` };
@@ -200,7 +210,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
   if (!wa.ok) return wa.failure;
   await enforceWhatsAppRateLimit(supabase, wa.instanceId);
 
-  const phone = await getLeadPhone(supabase, leadId);
+  const phone = await getLeadPhone(supabase, leadId, organizationId);
   if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
@@ -261,22 +271,24 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
       { trackSource: "workflow-action-pix", trackId: params._executionId as string | undefined },
     );
 
-    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
+    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}`, retryable: isRetryableSendFailure(sendResult.error) };
 
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
       provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
+      providerStatus: sendResult.status,
       phone,
       messageType: "pix_button",
       content: text || `[PIX R$ ${amount.toFixed(2)}]`,
       leadId,
       fallbackIdPrefix: "wf_pix",
+      displayPayload: outboundPixDisplay({ pixkey, merchantName, pixkeyType }),
     });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-rich] Gateway PIX button send failed:", gwResult.error);
-    return { success: false, error: `PIX button failed: ${gwResult.error}` };
+    return { success: false, error: `PIX button failed: ${gwResult.error}`, retryable: isRetryableSendFailure(gwResult.error) };
   }
 
   return { success: true, message: "PIX button sent" };

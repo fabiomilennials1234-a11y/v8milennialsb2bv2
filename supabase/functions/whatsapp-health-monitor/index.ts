@@ -21,6 +21,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { countUazapiInboundWindow } from "../_shared/uazapi-inbound-window.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -28,7 +29,7 @@ const REBIND_COOLDOWN_MS = 30 * 60_000;
 const DRIFT_WARNING_BELOW = 0.9;
 const DRIFT_CRITICAL_BELOW = 0.5;
 const MIN_UAZAPI_SAMPLE = 5;   // ignore drift on near-zero traffic
-const UAZAPI_MAX_LIMIT = 200;
+
 
 type DbInstance = {
   id: string;
@@ -42,30 +43,7 @@ type DbInstance = {
 type Secrets = { uazapi_token: string | null; uazapi_instance_id: string | null };
 
 async function fetchUazapiInbound1h(baseUrl: string, token: string): Promise<number | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const cutoffSeconds = Math.floor(Date.now() / 1000) - 3600;
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/message/find`, {
-      method: "POST",
-      headers: { "token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        limit: UAZAPI_MAX_LIMIT,
-        fromMe: false,
-        isGroup: false,
-        afterTimestamp: cutoffSeconds,
-      }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    const list = Array.isArray(body) ? body : (body?.messages ?? body?.data ?? []);
-    return Array.isArray(list) ? list.length : 0;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  return countUazapiInboundWindow(baseUrl, token, Math.floor(Date.now() / 1000) - 3600);
 }
 
 async function triggerRebind(

@@ -42,6 +42,7 @@ vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
 
 import {
   useCreateHistorySyncJob,
+  useControlHistorySyncJob,
   type HistorySyncJob,
 } from "@/modules/communication/hooks/useHistorySyncJobs";
 import { SyncProgressCard } from "@/modules/communication/components/chat/history-sync/SyncProgressCard";
@@ -122,7 +123,7 @@ describe("SyncProgressCard", () => {
   it("renders queued state", () => {
     render(<SyncProgressCard job={baseJob} />, { wrapper });
     expect(screen.getByText("Sync padrão (30d)")).toBeInTheDocument();
-    expect(screen.getByText("queued")).toBeInTheDocument();
+    expect(screen.getByText("Na fila")).toBeInTheDocument();
     expect(screen.getByLabelText("Cancelar job")).toBeInTheDocument();
   });
 
@@ -133,7 +134,7 @@ describe("SyncProgressCard", () => {
       />,
       { wrapper }
     );
-    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByText("Importando")).toBeInTheDocument();
     expect(screen.getByText(/250 mensagens/)).toBeInTheDocument();
   });
 
@@ -150,8 +151,8 @@ describe("SyncProgressCard", () => {
       />,
       { wrapper }
     );
-    expect(screen.getByText("completed")).toBeInTheDocument();
-    expect(screen.getByText(/1500 mensagens/)).toBeInTheDocument();
+    expect(screen.getByText("Concluído")).toBeInTheDocument();
+    expect(screen.getByText(/1\.500 mensagens/)).toBeInTheDocument();
   });
 
   it("renders failed state with error + retry button", () => {
@@ -165,9 +166,9 @@ describe("SyncProgressCard", () => {
       />,
       { wrapper }
     );
-    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("Falhou")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("timeout");
-    expect(screen.getByRole("button", { name: /Retentar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retomar/i })).toBeInTheDocument();
   });
 
   it("renders chat scope label with jid", () => {
@@ -177,6 +178,26 @@ describe("SyncProgressCard", () => {
       />,
       { wrapper }
     );
-    expect(screen.getByText(/Chat específico:.*5511999999999@c\.us/)).toBeInTheDocument();
+    expect(screen.getByText(/Chat: 5511999999999/)).toBeInTheDocument();
+  });
+});
+
+
+describe("history checkpoint resume", () => {
+  it("requeues the same failed job without overwriting cursor or counts", async () => {
+    const eq = vi.fn().mockReturnThis();
+    updateMock.mockReturnValue({ eq, select: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "j-1" }, error: null }) });
+    const { result } = renderHook(() => useControlHistorySyncJob(), { wrapper });
+    await result.current.mutateAsync({ job: { id: "j-1", cursor: "100", total_fetched: 100 } as HistorySyncJob, action: "retry" });
+    expect(updateMock).toHaveBeenCalledWith({ status: "queued", error: null, completed_at: null });
+    expect(eq).toHaveBeenCalledWith("organization_id", "org-a");
+    expect(eq).toHaveBeenCalledWith("status", "failed");
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+  it("rejects a retry when another worker or user changed the state", async () => {
+    updateMock.mockReturnValue({ eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    const { result } = renderHook(() => useControlHistorySyncJob(), { wrapper });
+    await expect(result.current.mutateAsync({ job: { id: "j-1" } as HistorySyncJob, action: "retry" })).rejects.toThrow("já mudou de estado");
+    expect(insertMock).not.toHaveBeenCalled();
   });
 });

@@ -56,3 +56,26 @@ describe("o que sai para o proxy", () => {
     expect(aoEnviar.mock.calls[0][4]).toEqual([{ title: "A", description: "detalhe" }]);
   });
 });
+
+describe('UAZAPI composer contract', () => {
+  it('preserves label, description and accepted result for local persistence', async () => {
+    const result = { message_id: 'real-id', status: 'queued', timestamp: 1789130000 };
+    const aoEnviar = vi.fn().mockResolvedValue(result);
+    const aoGravar = vi.fn();
+    const menu = { tipo: 'list' as const, texto: 'QA', opcoes: [{ title: 'Validar', description: 'Teste' }], rotuloDaLista: 'Abrir QA' };
+    await criarEnviadorUazapi({ instanceId: 'i', numero: 'n', aoEnviar, aoGravar }).enviar(menu);
+    expect(aoEnviar).toHaveBeenCalledWith('i', 'n', 'list', 'QA', [{ title: 'Validar|Validar|Teste' }], { footer: undefined, listButtonLabel: 'Abrir QA' });
+    expect(aoGravar).toHaveBeenCalledWith(menu, 'real-id', result);
+  });
+  it('does not persist a rejected send', async () => {
+    const aoGravar = vi.fn();
+    const sender = criarEnviadorUazapi({ instanceId: 'i', numero: 'n', aoEnviar: vi.fn().mockRejectedValue(new Error('timeout')), aoGravar });
+    await expect(sender.enviar({ tipo: 'list', texto: 'QA', opcoes: [{ title: 'A' }] })).rejects.toThrow('timeout');
+    expect(aoGravar).not.toHaveBeenCalled();
+  });
+  it('rejects ambiguous list delimiters before sending', async () => {
+    const aoEnviar = vi.fn();
+    await expect(criarEnviadorUazapi({ instanceId: 'i', numero: 'n', aoEnviar }).enviar({ tipo: 'list', texto: 'QA', opcoes: [{ title: 'A|B', description: 'D' }] })).rejects.toThrow('separadores');
+    expect(aoEnviar).not.toHaveBeenCalled();
+  });
+});

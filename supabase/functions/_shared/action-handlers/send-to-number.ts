@@ -205,7 +205,7 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
     } catch (err) {
       console.warn("[send-to-number] summary generation failed (non-fatal):", err);
     }
-    const leadPhone = await getLeadPhone(supabase, leadId);
+    const leadPhone = await getLeadPhone(supabase, leadId, organizationId);
     if (leadPhone) message += `\n\n📞 Telefone do lead: ${leadPhone}`;
   }
 

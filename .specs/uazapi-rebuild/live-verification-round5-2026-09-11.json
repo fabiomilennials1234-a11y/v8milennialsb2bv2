@@ -1,0 +1,49 @@
+{
+  "date": "2026-09-11",
+  "environment": "QA only",
+  "workflow": {
+    "editor": "legacy editor activation and save",
+    "foreignOrganizationHttp": 403,
+    "ownOrganizationHttp": 200,
+    "workerHttp": 200,
+    "completed": 1,
+    "failed": 0,
+    "successfulSteps": 4,
+    "schedulerEnabled": false,
+    "testWorkflowDisabledAfterRun": true
+  },
+  "history": {
+    "scope": "authorized second conversation",
+    "workerHttp": 200,
+    "status": "completed",
+    "fetched": 205,
+    "dialogVerified": true,
+    "missingMessageRecoveryProven": false
+  },
+  "menu": {
+    "optionsVisible": true,
+    "incomingSelectionVisible": true,
+    "limitation": "Requires persisted provider menu metadata; immediate node-only outbound card remains pending"
+  },
+  "pix": {
+    "http": 200,
+    "found": true,
+    "status": "Read",
+    "paymentExecuted": false
+  },
+  "tests": {
+    "unitFiles": 58,
+    "unitTestsPassed": 691,
+    "denoScopeHelper": "passed",
+    "build": "passed",
+    "lintRatchet": "zero introduced",
+    "typecheckRatchet": "zero introduced"
+  },
+  "limits": [
+    "No lifecycle disconnect/delete on active instance",
+    "No real cron schedule enabled",
+    "No audio/video playback proof in this round",
+    "Guided workflow version publication not exercised",
+    "No production rollout"
+  ]
+}

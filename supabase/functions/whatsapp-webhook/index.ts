@@ -1,3 +1,5 @@
+import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
+import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
  * whatsapp-webhook — Uazapi provider webhook ingress.
@@ -20,7 +22,7 @@
  * verify_jwt = false (configured in config.toml).
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -42,6 +44,7 @@ import {
   POISON_DROP_LOG_SAMPLE,
 } from "./poison-denylist.ts";
 import { extractQuotedText } from "./quoted-text.ts";
+import { echoStatus, statusesBeforeEcho } from "./echo-status.ts";
 import { extractInteractiveSelection } from "./interactive-reply.ts";
 import {
   buildMessageIdCandidates,
@@ -201,7 +204,7 @@ type ResolvedInstance = {
 };
 
 async function resolveInstance(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   uazapiInstanceId: string
 ): Promise<ResolvedInstance | null> {
   const { data, error } = await supabase
@@ -225,7 +228,7 @@ async function resolveInstance(
 // Uazapi V2 sometimes omits instance_id at the top level but still sends the
 // per-instance token. Resolve by uazapi_token as a defensive fallback.
 async function resolveInstanceByToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   uazapiToken: string
 ): Promise<ResolvedInstance | null> {
   const { data, error } = await supabase
@@ -313,7 +316,7 @@ function pickUazapiToken(payload: Record<string, unknown> | null | undefined): s
  * que a conversa perdida de um cliente.
  */
 async function enqueueDlq(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   input: {
     source_ip: string | null;
     url_path: string;
@@ -357,7 +360,7 @@ function dlqOutcomeResponse(persisted: boolean, reason: string): Response {
 // whatsapp_media_jobs row first (idempotent UPSERT) so a missed inline
 // attempt is recoverable by the whatsapp-media-retry cron.
 async function persistMediaToStorage(
-  sb: ReturnType<typeof createClient>,
+  sb: SupabaseClient,
   instance: ResolvedInstance,
   messageId: string,
   messageType: string,
@@ -559,7 +562,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     condition_text_source: conditionTextSource,
     media_url: mediaUrl,
     push_name: data.pushName ?? data.senderName ?? null,
-    status: direction === "incoming" ? "received" : "sent",
+    status: echoStatus(direction, data.status),
     timestamp: new Date(tsSeconds * 1000).toISOString(),
     raw_payload: data as Record<string, unknown>,
     is_group: isGroup,
@@ -582,7 +585,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
  * All errors are swallowed — webhook always returns 200.
  */
 export async function triggerReactions(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   persisted: PersistedMessage,
   context: ReactionContext,
 ): Promise<void> {
@@ -900,7 +903,7 @@ export async function triggerReactions(
 
   // Mantém o isolate vivo até a entrega terminar (ver comentário no fetch acima).
   if (typeof (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil === "function") {
-    (globalThis as { EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime.waitUntil(aiDeliveryPromise);
+    (globalThis as unknown as { EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime.waitUntil(aiDeliveryPromise);
   }
 
   void logRuntime({
@@ -921,7 +924,7 @@ export async function triggerReactions(
 // ============================================================================
 
 export async function persistMessage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
   normalized: NormalizedMessage,
   replayTag: string | null,
@@ -991,6 +994,15 @@ export async function persistMessage(
     }
     return null;
   }
+  const earlierStatuses = normalized.direction === "outgoing" ? statusesBeforeEcho(normalized.status) : [];
+  if (earlierStatuses.length) {
+    const { error: statusError } = await supabase.from("whatsapp_messages")
+      .update({ status: normalized.status })
+      .eq("organization_id", normalized.organization_id).eq("instance_id", normalized.instance_id)
+      .eq("message_id", normalized.message_id!).eq("direction", "outgoing")
+      .in("status", earlierStatuses);
+    if (statusError) throw new Error("message_echo_status_update_failed");
+  }
   const { data: stored } = await supabase.from("whatsapp_messages").select("id")
     .eq("organization_id", normalized.organization_id).eq("message_id", normalized.message_id!)
     .eq("instance_id", normalized.instance_id).maybeSingle();
@@ -1044,11 +1056,31 @@ export async function persistMessage(
 // ============================================================================
 
 async function handleMessagesEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
   data: any,
   receivedVia: "webhook" | "dlq_replay" = "webhook",
 ) {
+  const reaction = uazapiMessageReaction(data);
+  if (reaction) {
+    const ids = buildMessageIdCandidates(reaction.messageId, instance.phone_number, data.owner);
+    // Compare-and-swap prevents simultaneous reactions from overwriting each other.
+    // Failure goes through the existing DLQ; do not acknowledge lost updates.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: target, error } = await supabase.from("whatsapp_messages")
+        .select("id,reactions").eq("organization_id", instance.organization_id)
+        .eq("instance_id", instance.id).in("message_id", ids).limit(1).maybeSingle();
+      if (error || !target) throw new Error("Reaction target unavailable");
+      const next = mergeUazapiReaction(target.reactions, reaction);
+      const { data: changed, error: updateError } = await supabase.from("whatsapp_messages")
+        .update({ reactions: next }).eq("id", target.id)
+        .eq("organization_id", instance.organization_id).eq("instance_id", instance.id)
+        .eq("reactions", JSON.stringify(target.reactions)).select("id");
+      if (updateError) throw new Error("Reaction persistence failed");
+      if (changed?.length) return;
+    }
+    throw new Error("Reaction update contention");
+  }
   const normalized = normalizeMessage(data, instance) as NormalizedMessage;
   normalized.received_via = receivedVia;
 
@@ -1080,7 +1112,7 @@ async function handleMessagesEvent(
 }
 
 async function handlePaymentResponseEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
   data: any
 ) {
@@ -1157,7 +1189,7 @@ async function handlePaymentResponseEvent(
 }
 
 async function handleMessagesUpdateEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
   data: any
 ) {
@@ -1262,20 +1294,13 @@ async function handleMessagesUpdateEvent(
 }
 
 async function handleConnectionEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
   data: any
 ) {
   const state = String(data.status ?? data.state ?? "").toLowerCase();
-  const statusMap: Record<string, string> = {
-    connected: "connected",
-    connecting: "connecting",
-    disconnected: "disconnected",
-    close: "disconnected",
-    closed: "disconnected",
-    open: "connected",
-  };
-  const mapped = statusMap[state] ?? "unknown";
+  const mapped = storedUazapiConnectionState(state);
+  if (!mapped) return; // Unknown vendor states must not violate the persisted status constraint.
 
   const { data: prevInstance } = await supabase
     .from("whatsapp_instances")
@@ -1317,7 +1342,7 @@ async function handleConnectionEvent(
 }
 
 async function maybeAutoSync(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   instance: ResolvedInstance,
 ) {
   try {
@@ -1599,14 +1624,7 @@ Deno.serve(
         (async () => {
           switch (event) {
             case "messages": {
-              // Uazapi V2: message object in payload.message. Legacy: payload.data.
-              const msgData = payload.data
-                ?? (typeof payload.message === "object" && payload.message ? payload.message : null)
-                ?? payload;
-              // Uazapi V2: payload.chat has the phone JID; message.chatid may be LID
-              if (payload.chat && typeof payload.chat === "string") {
-                msgData._phone_jid = payload.chat;
-              }
+              const msgData = uazapiEventMessage(payload);
               await handleMessagesEvent(supabase, instance, msgData, replaySource);
               break;
             }

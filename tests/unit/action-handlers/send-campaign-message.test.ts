@@ -50,6 +50,7 @@ const LEAD = {
 };
 
 const TEMPLATE = {
+  organization_id: "org-1",
   id: "tpl-1",
   content: "Oi {{nome}}, tudo bem?",
   message_type: "text",

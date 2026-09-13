@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-11",
+  "environment": "QA only",
+  "menu": {
+    "legacyNodePersisted": true,
+    "gatewayPersisted": {
+      "success": true,
+      "delegated": true,
+      "status": "pending",
+      "displaySource": "torque_outbound_display",
+      "sections": [
+        {
+          "rows": [
+            {
+              "title": "Gateway validado",
+              "description": "Opção persistida no envio"
+            }
+          ],
+          "title": ""
+        }
+      ]
+    },
+    "uiOptionsVisible": true,
+    "realtimeProjectionCovered": true
+  },
+  "playback": {
+    "audio": {
+      "readyState": 4,
+      "durationSeconds": 7.011792,
+      "timeAdvanced": true
+    },
+    "ptt": {
+      "readyState": 4,
+      "durationSeconds": 7.011792,
+      "timeAdvanced": true
+    },
+    "video": {
+      "readyState": 4,
+      "durationSeconds": 2,
+      "timeAdvanced": true,
+      "recovery": {
+        "ok": true,
+        "error": null,
+        "http": 200,
+        "mimetype": "video/mp4",
+        "bytes": 3050
+      }
+    }
+  },
+  "responseWait": {
+    "realIncoming": true,
+    "finalStatus": "completed",
+    "branch": "replied",
+    "uiResponseVisible": true
+  },
+  "timeout": {
+    "waitedActualDeadline": true,
+    "finalStatus": "completed",
+    "branch": "timeout"
+  },
+  "retry": {
+    "injectedHttp429BeforeDispatch": true,
+    "scheduledRetryCount": 1,
+    "recoveredThroughWorker": true,
+    "persistedMessages": 1,
+    "injectedHttp503Terminal": true,
+    "note": "Faults injected locally before network dispatch; recovery used real provider. Original content reservation is kept; retries use an execution/node/attempt replay key."
+  },
+  "tests": {
+    "files": 59,
+    "passed": 700,
+    "denoCheck": "passed",
+    "typecheckRatchet": "zero introduced",
+    "lintRatchet": "zero introduced",
+    "build": "passed"
+  },
+  "limits": [
+    "No lifecycle changes to TorqueSDR; dedicated test instance requested",
+    "No missing upstream WhatsApp history recovery proof",
+    "Transcription and guided version publication not exercised",
+    "Production migration replay/CI/review remain prerequisites"
+  ]
+}

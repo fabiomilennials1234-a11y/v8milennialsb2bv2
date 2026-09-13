@@ -222,7 +222,7 @@ export async function downloadAndPersistMedia(
 
     // Uazapi v2 returns fileURL; legacy/Evolution returned base64
     const fileURL: string = result?.fileURL ?? "";
-    const rawB64: string = result?.base64 ?? "";
+    const rawB64: string = result?.base64Data ?? result?.base64 ?? "";
 
     if (fileURL) {
       const fileRes = await fetch(fileURL, { signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
@@ -255,7 +255,8 @@ export async function downloadAndPersistMedia(
         .from("whatsapp_messages")
         .update({ media_url: publicUrl })
         .eq("message_id", input.messageId)
-        .eq("instance_id", input.instanceId);
+        .eq("instance_id", input.instanceId)
+        .eq("organization_id", input.organizationId);
     }
 
     return { ok: true, storagePath, publicUrl };

@@ -45,16 +45,6 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (!openRouterApiKey) {
-    return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-
-  const openRouter = new OpenRouterClient(openRouterApiKey);
-
   try {
     // Parse webhook de Twilio ou formato genérico
     const body = await req.json();
@@ -486,6 +476,18 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       .eq("id", organizationId)
       .maybeSingle();
     const engineVersion = (orgRow?.copilot_engine_version as string) ?? "v1";
+
+    // AI credentials are required only for an eligible turn. Non-AI gates
+    // and lead_replied workflows must still run when no model key is configured.
+    const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!openRouterApiKey) {
+      return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const openRouter = new OpenRouterClient(openRouterApiKey);
 
     // 2.5 INITIALIZE AGENT ENGINE
     const engine = new AgentEngine(supabase, openRouter, organizationId);

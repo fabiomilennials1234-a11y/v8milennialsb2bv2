@@ -1,0 +1,1043 @@
+[
+  {
+    "operation": "POST /instance/create",
+    "category": "Admininstração",
+    "summary": "Criar Instancia",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /instance/all",
+    "category": "Admininstração",
+    "summary": "Listar todas as instâncias",
+    "codeReferences": [
+      "supabase/functions/whatsapp-session-watchdog/index.ts",
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/connect",
+    "category": "Instancia",
+    "summary": "Conectar instância ao WhatsApp",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/disconnect",
+    "category": "Instancia",
+    "summary": "Desconectar instância",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/reset",
+    "category": "Instancia",
+    "summary": "Reiniciar runtime da instância",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /instance/status",
+    "category": "Instancia",
+    "summary": "Verificar status da instância",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "GET /instance/wa_messages_limits",
+    "category": "Instancia",
+    "summary": "Consultar limites atuais de novas conversas no WhatsApp",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /instance/updateFieldsMap",
+    "category": "CRM",
+    "summary": "Atualizar campos personalizados de leads",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/updateInstanceName",
+    "category": "Instancia",
+    "summary": "Atualizar nome da instância",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/updateAdminFields",
+    "category": "Admininstração",
+    "summary": "Atualizar campos administrativos",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /instance/proxy",
+    "category": "Proxy",
+    "summary": "Obter configuração de proxy da instância",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/proxy",
+    "category": "Proxy",
+    "summary": "Configurar ou alterar o proxy",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /proxy-managed/cities",
+    "category": "Proxy",
+    "summary": "Proxy Interno - Listar cidades disponíveis",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /profile/name",
+    "category": "Perfil",
+    "summary": "Altera o nome do perfil do WhatsApp",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /profile/image",
+    "category": "Perfil",
+    "summary": "Altera a imagem do perfil do WhatsApp",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "DELETE /instance",
+    "category": "Instancia",
+    "summary": "Deletar instância",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /instance/privacy",
+    "category": "Instancia",
+    "summary": "Buscar configurações de privacidade",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/privacy",
+    "category": "Instancia",
+    "summary": "Alterar configurações de privacidade",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/presence",
+    "category": "Instancia",
+    "summary": "Atualizar status de presença da instância",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/text",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar mensagem de texto",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts",
+      "supabase/functions/_shared/action-handlers/whatsapp-helpers.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /send/media",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar mídia (imagem, vídeo, áudio ou documento)",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /send/contact",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar cartão de contato (vCard)",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /send/location",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar localização geográfica",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/presence",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar atualização de presença",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/status",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar status (stories)",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/menu",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar menu interativo (botões, carrosel, lista ou enquete)",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /send/carousel",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar carrossel de mídia com botões",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/location-button",
+    "category": "Enviar Mensagem",
+    "summary": "Solicitar localização do usuário",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/request-payment",
+    "category": "Enviar Mensagem",
+    "summary": "Solicitar pagamento",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /send/pix-button",
+    "category": "Enviar Mensagem",
+    "summary": "Enviar botão PIX",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /message/async",
+    "category": "Mensagem Async",
+    "summary": "Consultar fila async de envio direto",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "DELETE /message/async",
+    "category": "Mensagem Async",
+    "summary": "Limpar fila async de envio direto",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /instance/updateDelaySettings",
+    "category": "Mensagem Async",
+    "summary": "Configurar delay entre mensagens async",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /message/download",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Baixar arquivo de uma mensagem",
+    "codeReferences": [
+      "supabase/functions/_shared/whatsapp-media.ts",
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/find",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Buscar mensagens em um chat",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/history-sync",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Solicitar histórico sob demanda de um chat",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/markread",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Marcar mensagens como lidas",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/react",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Enviar reação a uma mensagem",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/delete",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Apagar Mensagem Para Todos",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/edit",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Edita uma mensagem enviada",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /message/pin",
+    "category": "Ações na mensagem e Buscar",
+    "summary": "Fixa ou desafixa uma mensagem",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /group/create",
+    "category": "Grupos e Comunidades",
+    "summary": "Criar um novo grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/info",
+    "category": "Grupos e Comunidades",
+    "summary": "Obter informações detalhadas de um grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/inviteInfo",
+    "category": "Grupos e Comunidades",
+    "summary": "Obter informações de um grupo pelo código de convite",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/join",
+    "category": "Grupos e Comunidades",
+    "summary": "Entrar em um grupo usando código de convite",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/leave",
+    "category": "Grupos e Comunidades",
+    "summary": "Sair de um grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /group/list",
+    "category": "Grupos e Comunidades",
+    "summary": "Listar todos os grupos",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/list",
+    "category": "Grupos e Comunidades",
+    "summary": "Listar todos os grupos com filtros e paginacao",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/resetInviteCode",
+    "category": "Grupos e Comunidades",
+    "summary": "Resetar código de convite do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateAnnounce",
+    "category": "Grupos e Comunidades",
+    "summary": "Configurar permissões de envio de mensagens no grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateJoinApproval",
+    "category": "Grupos e Comunidades",
+    "summary": "Configurar aprovação para entrada no grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateMemberAddMode",
+    "category": "Grupos e Comunidades",
+    "summary": "Configurar quem pode adicionar novos membros ao grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateDescription",
+    "category": "Grupos e Comunidades",
+    "summary": "Atualizar descrição do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/ephemeral",
+    "category": "Grupos e Comunidades",
+    "summary": "Configurar mensagens temporárias em grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateImage",
+    "category": "Grupos e Comunidades",
+    "summary": "Atualizar imagem do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateLocked",
+    "category": "Grupos e Comunidades",
+    "summary": "Configurar permissão de edição do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateName",
+    "category": "Grupos e Comunidades",
+    "summary": "Atualizar nome do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /group/updateParticipants",
+    "category": "Grupos e Comunidades",
+    "summary": "Gerenciar participantes do grupo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /community/create",
+    "category": "Grupos e Comunidades",
+    "summary": "Criar uma comunidade",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /community/editgroups",
+    "category": "Grupos e Comunidades",
+    "summary": "Gerenciar grupos em uma comunidade",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/create",
+    "category": "Newsletters e Canais",
+    "summary": "Criar canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /newsletter/list",
+    "category": "Newsletters e Canais",
+    "summary": "Listar canais inscritos",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/info",
+    "category": "Newsletters e Canais",
+    "summary": "Buscar informações de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/link",
+    "category": "Newsletters e Canais",
+    "summary": "Buscar canal por link-chave de convite",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/subscribe",
+    "category": "Newsletters e Canais",
+    "summary": "Assinar live updates temporários de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/messages",
+    "category": "Newsletters e Canais",
+    "summary": "Buscar mensagens de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/messages/edit",
+    "category": "Newsletters e Canais",
+    "summary": "Editar mensagem recente de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/messages/delete",
+    "category": "Newsletters e Canais",
+    "summary": "Deletar mensagem recente de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/updates",
+    "category": "Newsletters e Canais",
+    "summary": "Buscar updates de mensagens de um canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/viewed",
+    "category": "Newsletters e Canais",
+    "summary": "Marcar posts do canal como visualizados",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/reaction",
+    "category": "Newsletters e Canais",
+    "summary": "Reagir a um post do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/follow",
+    "category": "Newsletters e Canais",
+    "summary": "Seguir canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/unfollow",
+    "category": "Newsletters e Canais",
+    "summary": "Deixar de seguir canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/mute",
+    "category": "Newsletters e Canais",
+    "summary": "Silenciar canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/unmute",
+    "category": "Newsletters e Canais",
+    "summary": "Remover mute do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/delete",
+    "category": "Newsletters e Canais",
+    "summary": "Deletar canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/picture",
+    "category": "Newsletters e Canais",
+    "summary": "Atualizar foto do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/name",
+    "category": "Newsletters e Canais",
+    "summary": "Atualizar nome do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/description",
+    "category": "Newsletters e Canais",
+    "summary": "Atualizar descrição do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/settings",
+    "category": "Newsletters e Canais",
+    "summary": "Atualizar configurações do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/search",
+    "category": "Newsletters e Canais",
+    "summary": "Pesquisar canais públicos",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/admin/invite",
+    "category": "Newsletters e Canais",
+    "summary": "Convidar admin do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/admin/accept",
+    "category": "Newsletters e Canais",
+    "summary": "Aceitar convite de admin do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/admin/remove",
+    "category": "Newsletters e Canais",
+    "summary": "Remover admin do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/admin/revoke",
+    "category": "Newsletters e Canais",
+    "summary": "Revogar convite de admin do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /newsletter/owner/transfer",
+    "category": "Newsletters e Canais",
+    "summary": "Transferir dono do canal",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /webhook",
+    "category": "Webhooks e SSE",
+    "summary": "Ver Webhook da Instância",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /webhook",
+    "category": "Webhooks e SSE",
+    "summary": "Configurar Webhook da Instância",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /webhook/errors",
+    "category": "Webhooks e SSE",
+    "summary": "Ver últimos erros do webhook local",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /globalwebhook",
+    "category": "Admininstração",
+    "summary": "Ver Webhook Global",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /globalwebhook",
+    "category": "Admininstração",
+    "summary": "Configurar Webhook Global",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /globalwebhook/errors",
+    "category": "Admininstração",
+    "summary": "Ver últimos erros do webhook global",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /sse",
+    "category": "Webhooks e SSE",
+    "summary": "Server-Sent Events (SSE)",
+    "codeReferences": [],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /sender/simple",
+    "category": "Mensagem em massa",
+    "summary": "Criar nova campanha (Simples)",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /sender/advanced",
+    "category": "Mensagem em massa",
+    "summary": "Criar envio em massa avançado",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /sender/edit",
+    "category": "Mensagem em massa",
+    "summary": "Controlar campanha de envio em massa",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /sender/cleardone",
+    "category": "Mensagem em massa",
+    "summary": "Limpar mensagens enviadas",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "DELETE /sender/clearall",
+    "category": "Mensagem em massa",
+    "summary": "Limpar toda fila de mensagens",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /sender/listfolders",
+    "category": "Mensagem em massa",
+    "summary": "Listar campanhas de envio",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /sender/listmessages",
+    "category": "Mensagem em massa",
+    "summary": "Listar mensagens de uma campanha",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts",
+      "supabase/functions/_shared/quick-blast/failure-sync.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /chat/block",
+    "category": "Bloqueios",
+    "summary": "Bloqueia ou desbloqueia contato do WhatsApp",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /chat/blocklist",
+    "category": "Bloqueios",
+    "summary": "Lista contatos bloqueados",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/labels",
+    "category": "Etiquetas",
+    "summary": "Gerencia labels de um chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/delete",
+    "category": "Chats",
+    "summary": "Deleta chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/archive",
+    "category": "Chats",
+    "summary": "Arquivar/desarquivar chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/ephemeral",
+    "category": "Chats",
+    "summary": "Configurar mensagens temporárias em chat privado",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/read",
+    "category": "Chats",
+    "summary": "Marcar chat como lido/não lido",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/mute",
+    "category": "Chats",
+    "summary": "Silenciar chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/pin",
+    "category": "Chats",
+    "summary": "Fixar/desafixar chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/find",
+    "category": "Chats",
+    "summary": "Busca chats com filtros",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /chat/notes",
+    "category": "Chats",
+    "summary": "Consultar notas internas do chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/notes/refresh",
+    "category": "Chats",
+    "summary": "Recarregar notas internas do chat no WhatsApp",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/notes/edit",
+    "category": "Chats",
+    "summary": "Editar notas internas do chat",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/editLead",
+    "category": "CRM",
+    "summary": "Edita informações de lead",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /contacts",
+    "category": "Contatos",
+    "summary": "Retorna lista de contatos do WhatsApp",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /contacts/list",
+    "category": "Contatos",
+    "summary": "Listar todos os contatos com paginacao",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /contact/add",
+    "category": "Contatos",
+    "summary": "Adiciona um contato à agenda",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /contact/remove",
+    "category": "Contatos",
+    "summary": "Remove um contato da agenda",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/details",
+    "category": "Contatos",
+    "summary": "Obter Detalhes Completos",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /chat/check",
+    "category": "Contatos",
+    "summary": "Verificar Números no WhatsApp",
+    "codeReferences": [
+      "supabase/functions/_shared/uazapi-client.ts"
+    ],
+    "liveProbe": true
+  },
+  {
+    "operation": "POST /label/edit",
+    "category": "Etiquetas",
+    "summary": "Criar, editar ou deletar etiqueta",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /labels",
+    "category": "Etiquetas",
+    "summary": "Buscar todas as etiquetas",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /labels/refresh",
+    "category": "Etiquetas",
+    "summary": "Iniciar recarga de etiquetas do WhatsApp",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /quickreply/edit",
+    "category": "Respostas Rápidas",
+    "summary": "Criar, atualizar ou excluir resposta rápida",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /quickreply/showall",
+    "category": "Respostas Rápidas",
+    "summary": "Listar todas as respostas rápidas",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /call/make",
+    "category": "Chamadas",
+    "summary": "Iniciar chamada de voz",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /call/reject",
+    "category": "Chamadas",
+    "summary": "Rejeitar chamada recebida",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /chatwoot/config",
+    "category": "Integração Chatwoot",
+    "summary": "Obter configuração do Chatwoot",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "PUT /chatwoot/config",
+    "category": "Integração Chatwoot",
+    "summary": "Atualizar configuração do Chatwoot",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/get/profile",
+    "category": "Business",
+    "summary": "Obter o perfil comercial",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "GET /business/get/categories",
+    "category": "Business",
+    "summary": "Obter as categorias de negócios",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/update/profile",
+    "category": "Business",
+    "summary": "Atualizar o perfil comercial",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/catalog/list",
+    "category": "Business",
+    "summary": "Listar os produtos do catálogo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/catalog/info",
+    "category": "Business",
+    "summary": "Obter informações de um produto do catálogo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/catalog/delete",
+    "category": "Business",
+    "summary": "Deletar um produto do catálogo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/catalog/show",
+    "category": "Business",
+    "summary": "Mostrar um produto do catálogo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /business/catalog/hide",
+    "category": "Business",
+    "summary": "Ocultar um produto do catálogo",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /admin/restart",
+    "category": "Admininstração",
+    "summary": "Reiniciar a aplicação",
+    "codeReferences": [],
+    "liveProbe": false
+  },
+  {
+    "operation": "POST /admin/token/rotate",
+    "category": "Admininstração",
+    "summary": "Rotacionar admin token",
+    "codeReferences": [],
+    "liveProbe": false
+  }
+]

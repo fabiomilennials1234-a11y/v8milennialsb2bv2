@@ -270,3 +270,13 @@ describe("sendWhatsAppPixButton", () => {
     expect(result.message).toContain("PIX");
   });
 });
+
+
+describe("rich message retry policy", () => {
+  it.each(["Uazapi server error 503", "request timeout", "network failure"])("does not resend an ambiguous menu failure: %s", async error => {
+    const { sendMenuViaInstance } = await import("../../../supabase/functions/_shared/whatsapp-dispatch");
+    vi.mocked(sendMenuViaInstance).mockResolvedValueOnce({ success: false, error });
+    const result = await sendWhatsAppMenu(makeInput({ menuType: "list", menuText: "Teste", menuChoices: ["Sim|yes"] }).input);
+    expect(result.retryable).toBe(false);
+  });
+});

@@ -20,7 +20,7 @@ import { unconfirmedFailures } from "../../../hooks/chat/shared/optimistic-messa
  * - FAB visível quando !isAtBottom
  * - <ChatEmptyState> quando messages.length === 0
  */
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -55,6 +55,10 @@ export interface MessageListProps {
    */
   calls?: ConversationCall[];
   isLoading: boolean;
+  hasOlderMessages?: boolean;
+  isLoadingOlder?: boolean;
+  olderError?: unknown;
+  onLoadOlder?: () => Promise<unknown>;
   contactName: string;
   instanceName: string;
   /** Timestamp da última leitura (epoch ms). 0 = nunca lido. Passado pelo pai via localStorage ou RPC. */
@@ -206,6 +210,7 @@ export function MessageList({
   failedMessages,
   calls,
   isLoading,
+  hasOlderMessages, isLoadingOlder, olderError, onLoadOlder,
   contactName,
   instanceName,
   lastReadAt,
@@ -234,7 +239,7 @@ export function MessageList({
 
   // Virtualiza tanto mobile quanto desktop acima do threshold.
   // Mobile ganha overscan maior para momentum scroll suave.
-  const shouldVirtualize = timeline.length > VIRTUALIZE_THRESHOLD;
+  const shouldVirtualize = timeline.length >= VIRTUALIZE_THRESHOLD;
   const overscan = isMobile ? MOBILE_OVERSCAN : DESKTOP_OVERSCAN;
 
   // Pré-computa unread divider position
@@ -265,9 +270,30 @@ export function MessageList({
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? timeline.length : 0,
     getScrollElement,
+    getItemKey: index => { const item = timeline[index]; return item._type === "call" ? `call:${item.call.id}` : `${item._type}:${item.id}`; },
     estimateSize: () => estimateDensitySize(density),
     overscan,
   });
+
+  const olderAnchor = useRef<{ key: string | number; length: number } | null>(null);
+  const loadOlder = async () => {
+    if (!onLoadOlder || isLoadingOlder) return;
+    const first = virtualizer.getVirtualItems().find(item => item.end >= (getScrollElement()?.scrollTop ?? 0));
+    const item = timeline[first?.index ?? 0];
+    if (item) olderAnchor.current = { key: item._type === "call" ? `call:${item.call.id}` : `${item._type}:${item.id}`, length: timeline.length };
+    try { await onLoadOlder(); } catch { olderAnchor.current = null; }
+  };
+  useLayoutEffect(() => {
+    const anchor = olderAnchor.current;
+    if (!anchor || timeline.length <= anchor.length) return;
+    const index = timeline.findIndex(item => (item._type === "call" ? `call:${item.call.id}` : `${item._type}:${item.id}`) === anchor.key);
+    if (shouldVirtualize && index >= 0) virtualizer.scrollToIndex(index, { align: "start" });
+    olderAnchor.current = null;
+  }, [timeline, shouldVirtualize, virtualizer]);
+
+  useEffect(() => {
+    if (!isLoadingOlder && olderAnchor.current && timeline.length <= olderAnchor.current.length) olderAnchor.current = null;
+  }, [isLoadingOlder, timeline.length]);
 
   // Scroll listener for FAB visibility
   useEffect(() => {
@@ -290,10 +316,14 @@ export function MessageList({
     setNewMessagesCount(0);
   }, [contactName]);
 
+  // Only a new final message should scroll, never a receipt or prepended page.
+  const lastDisplayedMessage = useRef<string | null>(null);
   // Smart auto-scroll
   useEffect(() => {
     if (messages.length === 0) return;
     const lastMsg = messages[messages.length - 1];
+    if (lastDisplayedMessage.current === lastMsg.id) return;
+    lastDisplayedMessage.current = lastMsg.id;
     const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
 
     const scrollToBottom = () => {
@@ -440,6 +470,13 @@ export function MessageList({
         )}
       >
         <div className="p-4 min-h-full">
+          {(hasOlderMessages || !!olderError) && onLoadOlder && <div className="flex flex-col items-center gap-1 pb-3">
+            <button type="button" onClick={loadOlder} disabled={isLoadingOlder}
+              className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+              {isLoadingOlder ? "Carregando anteriores…" : "Carregar mensagens anteriores"}
+            </button>
+            {!!olderError && <p role="alert" className="text-xs text-destructive">Não foi possível carregar. Tente novamente.</p>}
+          </div>}
           <MessagesAreaErrorBoundary>
             {isLoading ? (
               <div className="flex items-center justify-center min-h-[200px]">

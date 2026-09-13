@@ -526,6 +526,7 @@ export interface ActionNodeData {
   menuType?: "button" | "list" | "poll" | "carousel";
   menuText?: string;
   menuFooter?: string;
+  menuListButton?: string;
   menuChoices?: string[];
   menuSelectableCount?: number;
   // Send WhatsApp PIX Button (Uazapi-only)

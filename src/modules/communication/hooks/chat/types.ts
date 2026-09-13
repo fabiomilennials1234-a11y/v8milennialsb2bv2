@@ -9,7 +9,13 @@ import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
 
 export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
 
-export interface WhatsAppMessage {
+import type { UazapiMenuFields } from "../../lib/uazapiMenuDisplay";
+
+import type { UazapiPixFields } from "../../lib/uazapiPixDisplay";
+export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
+  transcription_text?: string | null;
+  transcription_provider?: string | null;
+  transcription_created_at?: string | null;
   reply_context?: ReplyContext | null;
   retry_attempt?: number;
   id: string;
