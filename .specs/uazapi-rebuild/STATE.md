@@ -256,3 +256,9 @@ Capturas do CTO mostraram emoji minúsculo e sem contraste na bolha amarela. Rea
 Dois corações antigos estavam ausentes do banco. Histórico UAZAPI da conversa controlada confirmou os ReactionMessage e seus alvos; registros recuperados com filtro de organização, instância, IDs exatos e compare-and-swap de reactions vazio. Nenhuma mensagem enviada para efetuar a recuperação. Não é backfill geral de todas as conversas.
 
 18 testes de ações/apresentação e build passaram. Publicação/inspeção visual serão registradas no PR.
+
+## 2026-09-14 — pressão de importação de histórico
+
+Auditoria encontrou alertas de pressão com fila vazia; métrica inclui conexões ociosas. Worker passa a consultar IDs existentes e gravar apenas ausentes em lotes sequenciais de 25. Falhas transitórias preservam cursor para retomada; primeira página parcialmente gravada não dispara atalho de conversa recente. Migração exclui history_sync de quatro gatilhos de efeitos ao vivo (avisos, webhooks externos, pausa IA, resposta de campanhas/pipelines), preservando projeções de histórico e conversa.
+
+11 testes Vitest, 12 Deno e check do worker passaram. Guardas SQL positivas/negativas e rollback executados em transação revertida no prod, sem linhas de cliente. Amostra real: 100 mensagens UAZAPI, 94 IDs existentes, simulação de 1 consulta + 1 lote. Sem benchmark de CPU ou homologação de carga total. Detalhes: `history-pressure-audit-2026-09-14.md`. Publicação será registrada no PR.
