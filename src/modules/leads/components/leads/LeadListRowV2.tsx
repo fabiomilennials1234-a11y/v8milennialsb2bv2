@@ -38,9 +38,8 @@ const GRID_COLS =
   // fr com truncate. Pra isso a coluna Relação saiu da grade — vira selo junto
   // ao nome (só quando é Cliente/Perdido; "Lead" era coluna gasta em 97% das
   // linhas) — e a Recompra encolheu pra 52px (traço quando não há compra).
-  // Sem coluna de ações ("···"): a linha inteira já abre o lead, e Editar/
-  // Excluir vivem no painel. O espaço volta pras colunas de conteúdo.
-  "grid items-center gap-x-3 grid-cols-[30px_minmax(170px,1.5fr)_minmax(120px,0.9fr)_minmax(96px,0.8fr)_minmax(120px,1fr)_minmax(140px,1.1fr)_92px_minmax(84px,0.6fr)_minmax(72px,0.5fr)]";
+  // A última coluna mantém o menu de ações sempre acessível na listagem.
+  "grid items-center gap-x-3 grid-cols-[30px_minmax(170px,1.5fr)_minmax(120px,0.9fr)_minmax(96px,0.8fr)_minmax(120px,1fr)_minmax(140px,1.1fr)_92px_minmax(84px,0.6fr)_minmax(72px,0.5fr)_32px]";
 
 /** Acima disso a coluna Negócios vira lista e a linha deixa de ser linha. */
 const MAX_DEALS_VISIVEIS = 2;
@@ -105,6 +104,7 @@ export function LeadListHeaderV2({
       <span className="text-center">Recompra</span>
       <span>Dono</span>
       {sortable("Criado", "created_at")}
+      <span aria-hidden="true" />
     </div>
   );
 }
@@ -124,6 +124,8 @@ interface LeadListRowV2Props {
   createdLabel: string;
   originLabel: string;
   originClassName: string;
+  /** Menu contextual da linha (Editar, Classificação e Excluir). */
+  actions?: ReactNode;
 }
 
 export function LeadListRowV2({
@@ -139,6 +141,7 @@ export function LeadListRowV2({
   createdLabel,
   originLabel,
   originClassName,
+  actions,
 }: LeadListRowV2Props) {
   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
   const owner =
@@ -387,6 +390,14 @@ export function LeadListRowV2({
       <span className="text-[12.5px] tabular-nums text-muted-foreground" title={`Criado em ${createdLabel}`}>
         {relativeDay(lead.created_at) ?? createdLabel}
       </span>
+
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="opacity-70 transition-opacity duration-100 group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {actions}
+      </div>
     </div>
   );
 }
