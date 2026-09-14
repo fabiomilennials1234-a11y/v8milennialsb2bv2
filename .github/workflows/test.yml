@@ -124,6 +124,8 @@ jobs:
       # decoração. Mesma forma de `lint:ratchet` e `typecheck:ratchet`.
       - name: Vitest ratchet (no newly broken tests vs baseline)
         run: npm run test:ratchet
+      - name: Ajustes de pedidos ganhos (Postgres isolado)
+        run: npm run test:won-order
       # Os thresholds de coverage em vitest.config.ts SERIAM o portão de
       # regressão — mas hoje não são: `vitest run --coverage` sai != 0 por
       # teste vermelho antes de chegar a avaliar cobertura, e são 137 dos 178

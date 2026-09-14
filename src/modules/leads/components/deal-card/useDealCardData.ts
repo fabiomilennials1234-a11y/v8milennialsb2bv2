@@ -191,7 +191,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         ? await Promise.all([
             supabase
               .from("deals")
-              .select("id, value, currency, probability, expected_close_date, closed_at, won, loss_reason, created_at")
+              .select("id, value, currency, probability, expected_close_date, closed_at, won, loss_reason, created_at, updated_at")
               .eq("id", dealId)
               .maybeSingle(),
             supabase
@@ -422,6 +422,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         return {
           dealId: extras.data?.dealId ?? null,
           valorDoNegocio: num(n?.value),
+          pedidoAtualizadoEm: str(n?.updated_at),
           probabilidade: num(n?.probability),
           previsaoFechamento: str(n?.expected_close_date),
           fechadoEm: str(n?.closed_at),

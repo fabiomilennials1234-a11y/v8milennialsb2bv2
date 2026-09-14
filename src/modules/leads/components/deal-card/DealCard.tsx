@@ -15,6 +15,7 @@ import { DealCardComments } from "./DealCardComments";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
+import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
@@ -275,6 +276,8 @@ export function DealCard({
   onNewDeal,
   onAdicionarProduto,
   onEditarItem,
+  onAjustarPedido,
+  ajustesPedido = [],
   onRemoverItem,
   movendo,
   comentarios = [],
@@ -314,6 +317,14 @@ export function DealCard({
    * pode alcançar o banco (inv:H5-17). Quem escreve é o `DealCardPanel`.
    */
   onEditarItem?: (edicao: ItemEditado) => Promise<void>;
+  onAjustarPedido?: (ajuste: AjustePedidoGanho) => Promise<void>;
+  ajustesPedido?: Array<{
+    id: string;
+    reason: string;
+    before_value: number;
+    after_value: number;
+    created_at: string;
+  }>;
   onRemoverItem?: (itemId: string) => Promise<void>;
   movendo?: string | null;
   /**
@@ -424,6 +435,8 @@ export function DealCard({
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
+  const [ajustandoPedido, setAjustandoPedido] = useState(false);
+  useEffect(() => setAjustandoPedido(false), [negocio.id, negocio.estado]);
   const estagnado =
     aberto &&
     negocio.diasNaEtapa !== null &&
@@ -765,14 +778,51 @@ export function DealCard({
                 ]}
               />
               {abaDinheiro === "produtos" ? (
-                <DealCardMoney
-                  itens={negocio.itens}
-                  valorDoNegocio={negocio.valorDoNegocio}
-                  valorDoFunil={negocio.valor}
-                  onAdicionarProduto={onAdicionarProduto}
-                  onEditarItem={onEditarItem}
-                  onRemoverItem={onRemoverItem}
-                />
+                <div className="space-y-3">
+                  {negocio.estado === "ganho" && onAjustarPedido && (ajustandoPedido ? (
+                    <AjustarPedidoGanho
+                      key={negocio.id}
+                      itens={negocio.itens}
+                      valor={negocio.valorDoNegocio ?? negocio.valor ?? 0}
+                      onSalvar={onAjustarPedido}
+                      onCancelar={() => setAjustandoPedido(false)}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="rounded-md border border-primary/40 px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                      onClick={() => setAjustandoPedido(true)}
+                    >
+                      Ajustar pedido ganho
+                    </button>
+                  ))}
+                  {!ajustandoPedido && (
+                    <DealCardMoney
+                      itens={negocio.itens}
+                      valorDoNegocio={negocio.valorDoNegocio}
+                      valorDoFunil={negocio.valor}
+                      onAdicionarProduto={negocio.estado === "ganho" ? undefined : onAdicionarProduto}
+                      onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
+                      onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
+                    />
+                  )}
+                  {ajustesPedido.length > 0 && (
+                    <section className="space-y-2 rounded-xl border border-border p-4">
+                      <h3 className="text-sm font-semibold">Histórico de ajustes</h3>
+                      {ajustesPedido.map(ajuste => (
+                        <div key={ajuste.id} className="text-sm border-b border-border pb-2 last:border-0">
+                          <p className="tabular-nums">
+                            {formatBRL(Number(ajuste.before_value), 2)} → {formatBRL(Number(ajuste.after_value), 2)}
+                          </p>
+                          <p className="whitespace-pre-wrap break-words text-muted-foreground">{ajuste.reason}</p>
+                          <time className="text-xs text-muted-foreground" dateTime={ajuste.created_at}>
+                            {new Date(ajuste.created_at).toLocaleString("pt-BR")}
+                          </time>
+                        </div>
+                      ))}
+                    </section>
+                  )}
+                </div>
               ) : (
                 <textarea
                   value={nota}
