@@ -1,6 +1,7 @@
 ---
 title: Reuniões canônicas e presença na agenda
-date: 2026-09-14
+created: 2026-09-14
+status: draft
 type: changelog
 ---
 
