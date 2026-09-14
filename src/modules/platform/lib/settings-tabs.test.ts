@@ -84,10 +84,12 @@ describe("registro das abas de Configurações", () => {
     const membro = visibleSettingsTabs(MEMBRO_INBOUND).map((t) => t.value);
     expect(membro).not.toContain("marcos");
     expect(membro).not.toContain("ajuda");
+    expect(membro).not.toContain("billing");
 
     const admin = visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value);
     expect(admin).toContain("marcos");
     expect(admin).toContain("ajuda");
+    expect(admin).toContain("billing");
   });
 
   it("o gating não alcança as primárias — elas valem para todo mundo", () => {

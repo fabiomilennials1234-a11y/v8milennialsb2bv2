@@ -73,6 +73,9 @@ import {
   visibleSettingsTabs,
 } from "@/modules/platform/lib/settings-tabs";
 import { toast } from "sonner";
+import { useSupportPanel } from "../components/support/SupportPanelContext";
+
+const BillingSettings = lazy(() => import("@/modules/billing").then(m => ({ default: m.BillingSettings })));
 
 // Lazy imports — cada tab carrega só quando ativada.
 // Bundle inicial cai de ~948KB pra ~150KB.
@@ -666,6 +669,7 @@ function PillTab({ value, label, icon }: { value: string; label: string; icon: R
 }
 
 export default function Configuracoes() {
+  const { openNewTicket } = useSupportPanel();
   const { orgType } = useOrganization();
   const { isAdmin } = useIdentity();
   const { tab: tabParam } = useParams<{ tab?: string }>();
@@ -851,6 +855,12 @@ export default function Configuracoes() {
               </Card>
             </Suspense>
           </TabsContent>
+
+          {isAdmin && <TabsContent value="billing">
+            <Suspense fallback={<TabFallback label="assinatura e cobrança" />}>
+              <BillingSettings onContactSupport={openNewTicket} />
+            </Suspense>
+          </TabsContent>}
 
           <TabsContent value="general">
             <Card className="glass-card">

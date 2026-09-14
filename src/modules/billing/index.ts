@@ -45,3 +45,4 @@ export * from "./hooks/usePaymentLinks";
 export * from "./lib/package-diff";
 export * from "./lib/seats";
 export * from "./lib/buyer-input";
+export { BillingSettings } from "./components/BillingSettings";
