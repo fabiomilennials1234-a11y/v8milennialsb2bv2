@@ -149,4 +149,4 @@ owner: claude-agent
 - [[2026-09-10|Documentos nos comentários do negócio]]
 - [[2026-09-11-uazapi-rebuild|Reconstrução UAZAPI — início isolado]] 🟡 draft
 - [[2026-09-11|2026-09-11 — Reconciliação de navegação dos funis]]
-- [[2026-09-14-agenda-reunioes-canonicas|Reuniões canônicas e presença na agenda]] 🟡 draft
+- [[2026-09-14-agenda-reunioes-canonicas|Reuniões canônicas e presença na agenda]]
