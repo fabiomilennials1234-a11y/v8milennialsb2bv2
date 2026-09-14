@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import { invalidateAfterMove } from "../../lib/moverNegocio";
 
 export interface Pipeline {
   id: string;
@@ -39,8 +40,8 @@ export interface PipelineEntry {
 
 type PipelineEntryInsert = Omit<
   PipelineEntry,
-  "id" | "organization_id" | "created_at" | "updated_at" | "entered_at" | "stage_changed_at"
->;
+  "id" | "organization_id" | "created_at" | "updated_at" | "entered_at" | "stage_changed_at" | "stage_key"
+> & ({ stage_id: string; stage_key?: never } | { stage_key: string; stage_id?: never });
 
 const STALE_TIME = 2 * 60_000;
 
@@ -156,8 +157,8 @@ export function useCreatePipelineEntry() {
       if (error) throw error;
       return data as PipelineEntry;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+    onSuccess: (data) => {
+      invalidateAfterMove(queryClient, data.lead_id ?? undefined);
       queryClient.invalidateQueries({ queryKey: ["pipelines"] });
     },
   });
@@ -188,9 +189,14 @@ export function useMovePipelineEntry() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, stageKey }: { id: string; stageKey: string }) => {
+    mutationFn: async ({ id, ...stage }: { id: string } & (
+      { stageId: string; stageKey?: never } | { stageKey: string; stageId?: never }
+    )) => {
       const { data, error } = await (supabase.from as any)("pipeline_entries")
-        .update({ stage_key: stageKey, stage_changed_at: new Date().toISOString() })
+        .update({
+          ...(stage.stageId ? { stage_id: stage.stageId } : { stage_key: stage.stageKey }),
+          stage_changed_at: new Date().toISOString(),
+        })
         .eq("id", id)
         .select()
         .single();
@@ -198,8 +204,8 @@ export function useMovePipelineEntry() {
       if (error) throw error;
       return data as PipelineEntry;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+    onSuccess: (data) => {
+      invalidateAfterMove(queryClient, data.lead_id ?? undefined);
       queryClient.invalidateQueries({ queryKey: ["pipelines"] });
     },
   });

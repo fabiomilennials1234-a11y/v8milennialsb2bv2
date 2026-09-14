@@ -88,10 +88,10 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
     });
   }, [rows]);
 
-  const doMove = (entryId: string, stageKey: string) => {
-    setPending((p) => ({ ...p, [entryId]: stageKey }));
+  const doMove = (entryId: string, stage: FunnelStageView) => {
+    setPending((p) => ({ ...p, [entryId]: stage.key }));
     moveEntry.mutate(
-      { id: entryId, stageKey },
+      { id: entryId, ...(stage.stageId ? { stageId: stage.stageId } : { stageKey: stage.key }) },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
@@ -116,7 +116,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
       setConfirm({ entryId: row.entryId, stage, funnelLabel: row.label });
       return;
     }
-    doMove(row.entryId, stage.key);
+    doMove(row.entryId, stage);
   };
 
   const doAdd = (funnel: AddableFunnel) => {
@@ -128,13 +128,13 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
       {
         pipeline_id: funnel.pipelineId,
         lead_id: leadId,
-        stage_key: funnel.firstStageKey,
+        ...(funnel.firstStageId ? { stage_id: funnel.firstStageId } : { stage_key: funnel.firstStageKey }),
         deal_id: null,
         assigned_to: null,
         notes: null,
         metadata: {},
         closed_at: null,
-      } as Parameters<typeof createEntry.mutate>[0],
+      },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
@@ -300,7 +300,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (confirm) doMove(confirm.entryId, confirm.stage.key);
+                if (confirm) doMove(confirm.entryId, confirm.stage);
                 setConfirm(null);
               }}
             >
