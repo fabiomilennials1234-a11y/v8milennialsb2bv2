@@ -10,6 +10,8 @@ import type { PipelineStatus } from "@/modules/leads";
 
 export interface FunnelStageView {
   key: string;
+  /** Custom stages expose UUIDs; never write these into stage_key. */
+  stageId?: string;
   label: string;
   role: string | null;
 }
@@ -49,6 +51,7 @@ export interface AddableFunnel {
   color: string;
   /** primeira etapa do funil (destino do lead ao entrar). */
   firstStageKey: string;
+  firstStageId?: string;
 }
 
 /**
@@ -86,6 +89,7 @@ export function availableFunnelsToAdd(
         label: p.pipelineName,
         color: p.pipelineColor,
         firstStageKey,
+        firstStageId: firstStageKey,
       });
     }
   }
@@ -126,7 +130,7 @@ export function toFunnelRows(
         label: p.pipelineName,
         color: p.pipelineColor,
         currentStageKey: p.currentStageId,
-        stages: p.stages.map((s) => ({ key: s.id, label: s.name, role: s.role ?? null })),
+        stages: p.stages.map((s) => ({ key: s.id, stageId: s.id, label: s.name, role: s.role ?? null })),
       });
     }
   }
