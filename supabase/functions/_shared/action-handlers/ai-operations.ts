@@ -149,6 +149,10 @@ export async function queueScheduleMeeting(input: ActionInput): Promise<ActionRe
     action_type: "schedule_meeting",
     payload: {
       source: "workflow",
+      lead_id: leadId,
+      pipeline_entry_id: input.entryId ?? null,
+      deal_id: input.dealId ?? null,
+      assigned_to: params.meetingCloserId || null,
       preferred_date: params.meetingDate || null,
       closer_id: params.meetingCloserId || null,
     },

@@ -10,12 +10,13 @@
  * Callers: n8n, cal.com, Zapier, Make, or any external system.
  */
 
+import { resolveMeetingReferences, MeetingReferenceError } from './references.ts';
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { withSecurityHeaders } from '../_shared/security-headers.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
 import { logRuntime } from '../_shared/logger.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +43,7 @@ interface ApiKeyRow {
   organization_id: string;
   scopes: string[];
   rate_limit_per_minute: number;
+  expires_at: string | null;
   created_by: string | null;
 }
 
@@ -196,7 +198,7 @@ function validatePayload(body: unknown): { ok: true; data: MeetingWebhookPayload
 
 async function authenticateApiKey(
   authHeader: string | null,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<
   | { ok: true; key: ApiKeyRow }
   | { ok: false; status: number; error: string }
@@ -222,7 +224,7 @@ async function authenticateApiKey(
   // Lookup key
   const { data: apiKey, error: queryErr } = await supabase
     .from('api_keys')
-    .select('id, organization_id, scopes, rate_limit_per_minute, created_by')
+    .select('id, organization_id, scopes, rate_limit_per_minute, created_by, expires_at')
     .eq('key_prefix', keyPrefix)
     .eq('key_hash', keyHash)
     .eq('is_active', true)
@@ -285,8 +287,7 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
     .from('api_keys')
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', apiKey.id)
-    .then(() => {})
-    .catch((e: unknown) => console.warn('[meeting-webhook] Failed to update last_used_at:', e));
+    .then(({ error }) => { if (error) console.warn('[meeting-webhook] Failed to update last_used_at:', error.message); });
 
   try {
     // ── Parse and validate body ──
@@ -314,7 +315,6 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
         .maybeSingle();
 
       if (existing) {
-        console.log(`[meeting-webhook] Idempotent hit: external_ref=${payload.external_ref}, meeting=${existing.id}`);
         return new Response(
           JSON.stringify({ success: true, meeting: existing, idempotent: true }),
           {
@@ -342,7 +342,6 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
 
         if (matchedLead) {
           resolvedLeadId = matchedLead.id;
-          console.log(`[meeting-webhook] Resolved lead by phone: ${resolvedLeadId}`);
         } else {
           console.warn(`[meeting-webhook] No lead found for phone in org ${organizationId}`);
         }
@@ -382,50 +381,22 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
         console.warn('[meeting-webhook] Falha ao resolver deal_id:', entradasErr.message);
       } else if (entradasAbertas?.length === 1) {
         resolvedDealId = entradasAbertas[0].deal_id as string;
-        console.log(`[meeting-webhook] Negócio resolvido pelo lead: ${resolvedDealId}`);
-      } else if ((entradasAbertas?.length ?? 0) > 1) {
-        console.log(
-          `[meeting-webhook] Lead ${resolvedLeadId} tem mais de um negócio aberto — reunião criada sem vínculo.`,
-        );
       }
     }
 
-    // ── Resolve assigned_to (created_by team_member fallback) ──
-    let resolvedAssignedTo = payload.assigned_to ?? null;
-
-    if (!resolvedAssignedTo && apiKey.created_by) {
-      // Find team_member_id for the user who created this API key
-      const { data: tm } = await supabase
-        .from('team_members')
-        .select('id')
-        .eq('user_id', apiKey.created_by)
-        .eq('organization_id', organizationId)
-        .maybeSingle();
-
-      if (tm) {
-        resolvedAssignedTo = tm.id;
-        console.log(`[meeting-webhook] Assigned to key creator's team_member: ${resolvedAssignedTo}`);
-      }
+    let references;
+    try {
+      references = await resolveMeetingReferences(supabase, organizationId, {
+        leadId: resolvedLeadId,
+        assignedTo: payload.assigned_to ?? null,
+        keyCreator: apiKey.created_by,
+        participants: payload.participants ?? [],
+      });
+    } catch (error) {
+      if (!(error instanceof MeetingReferenceError)) throw error;
+      return errorResponse(400, error.message, corsHeaders, { req });
     }
-
-    // ── Validate assigned_to exists in org ──
-    if (resolvedAssignedTo) {
-      const { data: tmCheck } = await supabase
-        .from('team_members')
-        .select('id')
-        .eq('id', resolvedAssignedTo)
-        .eq('organization_id', organizationId)
-        .maybeSingle();
-
-      if (!tmCheck) {
-        return errorResponse(400, `assigned_to team member not found in this organization`, corsHeaders, { req });
-      }
-    }
-
-    // created_by is required by the meetings table — must be a valid team_member_id
-    if (!resolvedAssignedTo) {
-      return errorResponse(400, 'Could not resolve a team member for created_by. Provide assigned_to or ensure the API key creator is a team member in this organization.', corsHeaders, { req });
-    }
+    const resolvedAssignedTo = references.assignedTo;
 
     // ── Insert meeting ──
     const meetingData: Record<string, unknown> = {
@@ -434,7 +405,7 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
       start_at: payload.start_at,
       end_at: payload.end_at,
       event_type: payload.event_type ?? 'meeting',
-      created_by: resolvedAssignedTo,
+      created_by: references.createdBy,
       lead_id: resolvedLeadId,
       deal_id: resolvedDealId,
     };
@@ -480,8 +451,8 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
     // ── Insert participants ──
     let participantsCreated = 0;
 
-    if (payload.participants && payload.participants.length > 0) {
-      const participantRows = payload.participants.map((tmId) => ({
+    if (references.participants.length > 0) {
+      const participantRows = references.participants.map((tmId) => ({
         meeting_id: meeting.id,
         team_member_id: tmId,
         status: 'pending',
@@ -512,8 +483,10 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
           },
           { onConflict: 'meeting_id,team_member_id' },
         )
-        .then(() => { participantsCreated++; })
-        .catch((e: unknown) => console.warn('[meeting-webhook] Failed to add creator as participant:', e));
+        .then(({ error }) => {
+          if (error) console.warn('[meeting-webhook] Failed to add creator as participant:', error.message);
+          else participantsCreated++;
+        });
     }
 
     // ── Runtime log (fire-and-forget) ──
@@ -534,7 +507,6 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
       },
     }).catch((e: unknown) => console.warn('[meeting-webhook] logRuntime failed:', e));
 
-    console.log(`[meeting-webhook] Meeting created: ${meeting.id} for org ${organizationId}`);
 
     return new Response(
       JSON.stringify({

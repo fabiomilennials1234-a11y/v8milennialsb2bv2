@@ -642,26 +642,7 @@ export function statusDoResultado(resultado: AttendanceOutcome): string {
   return STATUS_POR_RESULTADO[resultado];
 }
 
-/**
- * Onde os botões aparecem.
- *
- * Só na fonte `meeting` — que NÃO quer dizer "só reunião". Os cinco tipos do
- * botão "Nova atividade" (reunião, ligação, follow-up, tarefa, outro) são todos
- * linhas de `meetings`, distinguidas por `event_type` (CHECK
- * `meetings_event_type_check`). Uma implementação só cobre os cinco, que é o
- * que o pedido exige.
- *
- * As outras QUATRO fontes da agenda são LEITURA de telas alheias: `follow_ups`
- * pertence a Follow-ups, `pipe_confirmacao` é etapa de kanban (marcar
- * comparecimento ali moveria o card), mensagem agendada não comparece a nada, e
- * `meeting_events` (Source 5, `source = 'meeting_event'`) é o funil mergeado —
- * tabela IMUTÁVEL de eventos, onde não existe UPDATE de status para gravar.
- *
- * ⚠️ Este parágrafo dizia "três" e estava certo em 24/08 pelo repo e errado pelo
- * PROD: a Source 5 já estava viva em produção desde 30/07 e só foi versionada em
- * `20270831000020`. A guarda que vale é o `=== "meeting"` da linha abaixo, que
- * exclui `meeting_event` por construção; a prosa é que precisou correr atrás.
- */
+/** Comparecimento pertence a reuniões reais da agenda, nunca a tarefas ou projeções. */
 /**
  * Reunião cancelada — o QUARTO valor do `meetings_status_check`, que a UI nunca
  * mostrou e ninguém nunca escreveu.
@@ -689,7 +670,7 @@ export function isCancelledEvent(event: UnifiedEvent): boolean {
 }
 
 export function podeRegistrarResultado(event: UnifiedEvent): boolean {
-  return event.source === "meeting" && !isCancelledEvent(event);
+  return event.source === "meeting" && event.eventType === "meeting" && !isCancelledEvent(event);
 }
 
 /**

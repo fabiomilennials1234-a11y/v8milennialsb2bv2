@@ -40,6 +40,9 @@ export function useSetMeetingDate() {
       if (writeErr) throw writeErr;
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meetings"] });
+      qc.invalidateQueries({ queryKey: ["agenda-events"] });
+      qc.invalidateQueries({ queryKey: ["meeting_events"] });
       qc.invalidateQueries({ queryKey: ["pipeline-page"] });
       qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
     },

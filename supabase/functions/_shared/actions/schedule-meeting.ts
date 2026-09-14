@@ -1,7 +1,7 @@
 /**
  * AI Action handlers — agendamento de reuniões.
  *
- *  - executeScheduleMeeting: cria entrada em pipeline_entries (confirmacao) + Google Calendar
+ *  - executeScheduleMeeting: cria reunião em meetings + Google Calendar
  *  - executeConfirmMeeting: marca confirmação (pré ou no-dia)
  *  - executeAdvanceConfirmationStage: move stage no funil de confirmação
  */
@@ -16,8 +16,9 @@ import {
   getValidAccessToken,
   logCalendarOp,
 } from "../google-calendar-utils.ts";
-import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../pipeline-adapter.ts";
+import { getPipeEntry, updatePipeEntryById } from "../pipeline-adapter.ts";
 import { enqueueAiAction } from "../ai-queue.ts";
+import { scheduleMeeting } from "../action-handlers/schedule-meeting.ts";
 import type { ActionResult } from "./types.ts";
 
 export async function executeScheduleMeeting(
@@ -34,9 +35,11 @@ export async function executeScheduleMeeting(
     return { success: false, error: "lead_id e preferred_date são obrigatórios" };
   }
 
+  let meetingTimezone = "America/Sao_Paulo";
   // F5b: Time-Aware validation
   if (conversationId) {
     const ctx = await loadAgentTimeContext(supabase, conversationId);
+    meetingTimezone = ctx?.availability?.timezone || meetingTimezone;
     const windows = ctx?.behavior_windows ?? [];
     const anyWithBehavior = windows.some((w) => (w.behavior || "").trim().length > 0);
     if (anyWithBehavior) {
@@ -57,16 +60,21 @@ export async function executeScheduleMeeting(
     }
   }
 
-  // 1. Atualizar lead e pipeline entry (confirmacao)
-  await supabase.from("leads").update({ compromisso_date: preferred_date }).eq("id", lead_id);
-
-  const pipeId = await upsertPipeEntry(supabase, {
-    leadId: lead_id,
-    orgId: tenantId,
-    slug: "confirmacao",
-    stageKey: "reuniao_marcada",
-    metadata: { meeting_date: preferred_date },
+  const start = preferred_date.includes("T")
+    ? new Date(preferred_date)
+    : buildDateInTimezone(preferred_date, preferred_time || "09:00", meetingTimezone);
+  if (!start || !Number.isFinite(start.getTime())) return { success: false, error: "Data de reunião inválida" };
+  const scheduled = await scheduleMeeting({
+    supabase, organizationId: tenantId, leadId: lead_id,
+    entryId: typeof params.pipeline_entry_id === "string" ? params.pipeline_entry_id : null,
+    dealId: typeof params.deal_id === "string" ? params.deal_id : null,
+    conversationId,
+    params: { date: start.toISOString(), title: params.title, notes: params.notes, assigned_to: params.assigned_to,
+      external_ref: `automation:meeting:${params.pipeline_entry_id ?? lead_id}:${start.toISOString()}` },
   });
+  if (!scheduled.success) return scheduled;
+  const meetingId = scheduled.data?.meeting_id;
+  if (scheduled.data?.idempotent) return { success: true, message: "Reunião já agendada", data: scheduled.data };
 
   // 2. Tentar Google Calendar (graceful degradation)
   let meetLink: string | null = null;
@@ -75,6 +83,7 @@ export async function executeScheduleMeeting(
       .from("leads")
       .select("name, email, responsible_id, sdr_id")
       .eq("id", lead_id)
+      .eq("organization_id", tenantId)
       .maybeSingle();
 
     const responsibleUserId = lead?.responsible_id ?? lead?.sdr_id ?? null;
@@ -83,12 +92,9 @@ export async function executeScheduleMeeting(
       const tokenData = await getValidAccessToken(responsibleUserId, supabase);
 
       if (tokenData) {
-        const time = preferred_time || "09:00";
-        const startIso = `${preferred_date}T${time}:00`;
-        const [h, m] = time.split(":").map(Number);
-        const endHour = String(h + 1).padStart(2, "0");
-        const endIso = `${preferred_date}T${endHour}:${String(m).padStart(2, "0")}:00`;
-        const timezone = "America/Sao_Paulo";
+        const startIso = start.toISOString();
+        const endIso = new Date(start.getTime() + 60 * 60 * 1000).toISOString();
+        const timezone = meetingTimezone;
 
         const googleEvent: Record<string, unknown> = {
           summary: `Reunião com ${lead?.name || "Lead"}`,
@@ -127,10 +133,9 @@ export async function executeScheduleMeeting(
             createdEvent.hangoutLink ??
             null;
 
-          if (pipeId && meetLink) {
-            await updatePipeEntryById(supabase, pipeId, {
-              metadata: { meet_link: meetLink },
-            });
+          if (meetingId && meetLink) {
+            await supabase.from("meetings").update({ meet_link: meetLink, google_event_id: createdEvent.id })
+              .eq("id", meetingId).eq("organization_id", tenantId);
           }
 
           await logCalendarOp(supabase, {
@@ -188,7 +193,7 @@ export async function executeScheduleMeeting(
   return {
     success: true,
     message: meetLink ? "Reunião agendada e evento criado no Google Calendar" : "Reunião agendada",
-    data: { meeting_date: preferred_date, ...(meetLink ? { meet_link: meetLink } : {}) },
+    data: { meeting_id: meetingId, meeting_date: start.toISOString(), ...(meetLink ? { meet_link: meetLink } : {}) },
   };
 }
 

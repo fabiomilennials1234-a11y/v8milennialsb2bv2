@@ -68,7 +68,7 @@ export async function executeAiAction(
 
   switch (action_type) {
     case "schedule_meeting":
-      result = await executeScheduleMeeting(supabase, payload, organization_id, conversation_id);
+      result = await executeScheduleMeeting(supabase, { ...payload, lead_id }, organization_id, conversation_id);
       break;
     case "create_lead":
       result = await executeCreateLead(supabase, payload, organization_id);

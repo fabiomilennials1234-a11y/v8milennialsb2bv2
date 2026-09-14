@@ -263,3 +263,13 @@ Não escopo desta slice. Documentar quando virar projeto.
   - `supabase/functions/_shared/CLAUDE.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md` slice 15
 - Padrão edge function: ver `CLAUDE.md` raiz (Deno.serve + withErrorBoundary + withSecurityHeaders + getCorsHeaders + OPTIONS early return)
+
+## Agendamento canônico — 2026-09-14
+
+`meeting-webhook`, `webhook-calcom` e ações `schedule_meeting` gravam em `meetings`.
+`created_by` recebe `auth.users.id`; `assigned_to` e participantes usam
+`team_members.id`. Nunca copiar um identificador entre esses espaços.
+Cal.com exige `CALCOM_ORGANIZATION_ID` configurado no backend; ausência rejeita a
+requisição. Não selecionar primeira organização ativa nem depender de funil legado.
+Aplicar a migration `20271021000005` antes de publicar funções que passam
+`pipeline_entry_id`. Detalhes e ordem de rollout em `docs/agenda-canonical-meetings.md`.
