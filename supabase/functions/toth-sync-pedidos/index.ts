@@ -52,7 +52,7 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
 import { TothFlowClient } from "../_shared/erp/toth-flow-client.ts";
-import { loadTothFlowCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
+import { loadTothFlowCredentials, storeTothFlowCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import {
   extractHasNext,
   extractRows,
@@ -186,7 +186,7 @@ Deno.serve(
       // supabase-js perde a inferência do select, devolvendo `GenericStringError`
       // no lugar da linha. O erro aparece como "Property 'id' does not exist",
       // que não aponta para a causa.
-      .select("id, erp_sync_mode, status, pedidos_cursor, flow_base_url, pedidos_janela_dias, pedidos_data_inicial")
+      .select("id, erp_sync_mode, status, pedidos_cursor, flow_base_url, pedidos_janela_dias, pedidos_data_inicial, allow_insecure_transport")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -195,6 +195,40 @@ Deno.serve(
     }
     if (conn.erp_sync_mode === "off") {
       return json({ skipped: true, reason: "sync_mode_off" }, cors);
+    }
+
+    const body = await req.clone().json().catch(() => ({}));
+    // Mesma autorização de admin/cron da sincronização. Configura apenas o Flow,
+    // sem exigir nem substituir as credenciais do serviço de clientes.
+    if (body.action === "configure_flow") {
+      if (body.dry_run === true) return json({ error: "Configuração não aceita dry_run" }, cors, 400);
+      const baseUrl = typeof body.flow_base_url === "string" ? body.flow_base_url.trim() : "";
+      const clientId = typeof body.flow_client_id === "string" ? body.flow_client_id.trim() : "";
+      const clientSecret = typeof body.flow_client_secret === "string" ? body.flow_client_secret : "";
+      if (!baseUrl || !clientId || !clientSecret) {
+        return json({ error: "Informe endereço, client_id e client_secret do Flow" }, cors, 400);
+      }
+      let step = "login";
+      try {
+        const flow = new TothFlowClient({ baseUrl, clientId, clientSecret }, {
+          urlPolicy: tothUrlPolicy({ allowInsecureTransport: conn.allow_insecure_transport === true }),
+        });
+        await flow.login();
+        step = "credentials";
+        await storeTothFlowCredentials(admin, { connectionId: conn.id, organizationId, clientId, clientSecret });
+        step = "connection";
+        const { error } = await admin.from("toth_connections")
+          .update({ flow_base_url: flow.baseUrl })
+          .eq("id", conn.id).eq("organization_id", organizationId);
+        if (error) throw error;
+        return json({ success: true, configured: "flow" }, cors);
+      } catch (err) {
+        // Não devolver payloads de autenticação ou credenciais em erros/logs.
+        return json({ error: "Não foi possível validar e salvar o serviço Flow", step,
+          reason: err instanceof TothAuthError ? "authentication" : err instanceof TothRequestError ? "transport" : "configuration",
+          upstream_status: err instanceof TothRequestError ? err.status : null,
+        }, cors, 502);
+      }
     }
 
     // Serviço de pedidos NÃO configurado é o estado normal das outras orgs — a
@@ -212,7 +246,6 @@ Deno.serve(
       );
     }
 
-    const body = await req.clone().json().catch(() => ({}));
     const dryRun = body.dry_run === true;
 
     const window: PedidosWindow = resolvePedidosWindow({
@@ -443,7 +476,7 @@ Deno.serve(
           .from("toth_connections")
           .update({
             last_error: message,
-            ...(err instanceof TothAuthError ? { status: "expired" } : {}),
+            // Flow tem credencial própria: sua falha não desconecta clientes.
             // Cursor congela onde o que está pela metade COMEÇOU, não onde a
             // falha aconteceu: retomar da página do erro deixaria o pedido
             // retido com só a cauda dele.
