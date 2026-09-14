@@ -62,7 +62,9 @@ smoke autenticado em ambiente com dados representativos.
 2. Configurar `CALCOM_ORGANIZATION_ID` para a organização contratante da integração,
    antes de publicar `webhook-calcom`.
 3. Publicar `meeting-webhook`, `webhook-calcom` e consumidores das ações compartilhadas
-   (`process-ai-actions` e executores de workflow, conforme grafo de imports do deploy).
+   (`agent-message`, `process-ai-actions`, `process-copilot-followups` e
+   `process-workflow-executions`, identificados pelo grafo de imports).
+   `test-workflow-system` também depende desses módulos quando esse endpoint estiver habilitado.
 4. Publicar frontend após review/merge. Confirmar James, Alex e Lilian na agenda,
    trocar cards e resultado, conferir contagens; nenhum teste de escrita em clientes
    reais sem autorização.
