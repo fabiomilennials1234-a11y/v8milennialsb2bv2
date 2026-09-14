@@ -1,3 +1,4 @@
+import { persistHistoryBatches } from "./persistence.ts";
 import { historyContactName } from "../_shared/whatsapp-contact-name.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
@@ -147,6 +148,7 @@ type MultiChatCursor = {
   chats: string[];
   chatIdx: number;
   perChat: Record<string, string | null>; // jid → offset cursor (null = not started)
+  retryChats?: string[]; // Partial first pages must bypass recent-message shortcuts.
 };
 
 // ---------------------------------------------------------------------------
@@ -212,9 +214,10 @@ async function upsertMessages(
   messages: unknown[],
   maxDays: number,
   latestSyncedTs?: number | null,
-): Promise<{ fetched: number; hitExisting: boolean; dataLoss: boolean }> {
+): Promise<{ fetched: number; hitExisting: boolean; dataLoss: boolean; retryable: boolean }> {
   let fetched = 0;
   let firstError: string | null = null;
+  let retryable = false;
   let hitExisting = false;
   // Descartes contados, não silenciosos: uma conversa que some do backfill tem
   // de aparecer em algum lugar — senão volta como "sumiu histórico" meses
@@ -224,6 +227,7 @@ async function upsertMessages(
   // Grupo já era descartado antes deste fix, então não entra na conta — o que
   // se quer medir é o que MUDOU: canal (`@newsletter`) e transmissão.
   let skippedNonIndividual = 0;
+  const rows: Array<{ message_id: string; [key: string]: any }> = [];
 
   for (const raw of messages) {
     const msg = raw as Record<string, any>;
@@ -263,7 +267,7 @@ async function upsertMessages(
     const remoteJid = resolution.jid;
     const phoneNumber = remoteJid.split("@")[0] || "unknown";
 
-    const { error: upsertErr } = await supabase.from("whatsapp_messages").upsert(
+    rows.push(
       {
         organization_id: job.organization_id,
         instance_id: job.instance_id,
@@ -288,15 +292,26 @@ async function upsertMessages(
         raw_payload: msg as Record<string, unknown>,
         received_via: "history_sync",
       },
-      { onConflict: "message_id,instance_id", ignoreDuplicates: true }
     );
-    if (upsertErr) {
-      if (!firstError) {
-        firstError = upsertErr.message;
-        console.error("[upsertMessages] first upsert error:", upsertErr.message);
-      }
+  }
+  if (rows.length) {
+    // Skip known IDs before INSERT: even ON CONFLICT runs BEFORE-row triggers.
+    const { data: known, error: lookupError } = await supabase.from("whatsapp_messages")
+      .select("message_id").eq("organization_id", job.organization_id)
+      .eq("instance_id", job.instance_id).in("message_id", rows.map(row => row.message_id));
+    if (lookupError) {
+      firstError = lookupError.message;
+      retryable = true;
     } else {
-      fetched += 1;
+      const result = await persistHistoryBatches(rows, new Set((known ?? []).map(row => row.message_id)),
+        async batch => {
+          const { error } = await supabase.from("whatsapp_messages").upsert(batch,
+            { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+          return { error };
+        });
+      fetched = result.accepted;
+      firstError = result.error;
+      retryable = result.retryable;
     }
   }
   if (firstError) {
@@ -321,7 +336,7 @@ async function upsertMessages(
       },
     });
   }
-  return { fetched, hitExisting, dataLoss: Boolean(firstError || skippedLid || skippedNoJid || skippedNonIndividual) };
+  return { fetched, hitExisting, retryable, dataLoss: Boolean(firstError || skippedLid || skippedNoJid || skippedNonIndividual) };
 }
 
 async function recordConversationCoverage(supabase: Db, job: HistorySyncJob, chatJid: string, providerName: string,
@@ -533,7 +548,13 @@ async function processSingleChat(
       return { fetched: totalThisTick, done: true, error: "historySync fetch failed" };
     }
 
-    const { fetched, dataLoss } = await upsertMessages(supabase, job, chunkResult.messages ?? [], maxDays);
+    const { fetched, dataLoss, retryable } = await upsertMessages(supabase, job, chunkResult.messages ?? [], maxDays);
+    if (retryable) {
+      // Keep the page cursor: successful partial writes are skipped on retry.
+      await consumeWriteBudget(supabase, job.organization_id, fetched);
+      await yieldJob(supabase, job, { cursor: currentCursor, total_fetched: totalFetched }, 'database_write_retry');
+      return { fetched: totalThisTick, done: false };
+    }
     if (dataLoss) await recordConversationCoverage(supabase, job, chatJid, providerName, 'gapped', 'message_persistence_gap');
     totalFetched += fetched;
     totalThisTick += fetched;
@@ -680,7 +701,7 @@ async function processMultiChat(
     const activeBatch: Array<{ jid: string; cursor: string | null; latestSyncedTs: number | null }> = [];
     for (const item of batch) {
       // Only check skip on first fetch for this chat (cursor is null = not started)
-      if (item.cursor === null && !isIncremental) {
+      if (item.cursor === null && !isIncremental && !mc.retryChats?.includes(item.jid)) {
         const latestTs = await getLatestSyncedTimestamp(supabase, job.instance_id, item.jid);
         if (latestTs) {
           const ageMs = Date.now() - latestTs * 1000;
@@ -695,7 +716,7 @@ async function processMultiChat(
           }
         }
         activeBatch.push({ ...item, latestSyncedTs: null });
-      } else if (item.cursor === null && isIncremental) {
+      } else if (item.cursor === null && isIncremental && !mc.retryChats?.includes(item.jid)) {
         const latestTs = await getLatestSyncedTimestamp(supabase, job.instance_id, item.jid);
         if (latestTs) {
           const ageMs = Date.now() - latestTs * 1000;
@@ -744,10 +765,22 @@ async function processMultiChat(
       }
 
       const chunk = result.value;
-      const { fetched, hitExisting, dataLoss } = await upsertMessages(
+      const { fetched, hitExisting, dataLoss, retryable } = await upsertMessages(
         supabase, job, chunk.messages, maxDays,
         isIncremental ? item.latestSyncedTs : undefined,
       );
+      if (retryable) {
+        mc.retryChats = [...new Set([...(mc.retryChats ?? []), item.jid])];
+        await consumeWriteBudget(supabase, job.organization_id, fetched);
+        advanceChatIdx(mc);
+        await yieldJob(supabase, job, {
+          cursor: JSON.stringify(mc), total_fetched: totalFetched,
+          current_chat_index: mc.chatIdx, chats_completed: chatsCompleted,
+          chats_skipped: chatsSkipped, chat_errors: chatErrors,
+        }, 'database_write_retry');
+        return { fetched: totalThisTick, done: false };
+      }
+      mc.retryChats = mc.retryChats?.filter(jid => jid !== item.jid);
       if (dataLoss) await recordConversationCoverage(supabase, job, item.jid, providerName, 'gapped', 'message_persistence_gap');
       totalFetched += fetched;
       totalThisTick += fetched;
@@ -1024,6 +1057,11 @@ Deno.serve(
     const perInstance = new Map<string, HistorySyncJob>();
     for (const j of eligible) {
       if (!perInstance.has(j.instance_id)) perInstance.set(j.instance_id, j);
+    }
+
+    // An empty/deferred queue is not an import blocked by database pressure.
+    if (perInstance.size === 0) {
+      return jsonResponse(200, { ok: true, processed: 0, stale_reset: staleReset, deferred_full: deferredFull });
     }
 
     // Se o banco já está sob pressão quando o tick começa, nem vale abrir

@@ -205,3 +205,9 @@ Capturas do CTO mostraram emoji minúsculo e sem contraste na bolha amarela. Rea
 Dois corações antigos estavam ausentes do banco. Histórico UAZAPI da conversa controlada confirmou os ReactionMessage e seus alvos; registros recuperados com filtro de organização, instância, IDs exatos e compare-and-swap de reactions vazio. Nenhuma mensagem enviada para efetuar a recuperação. Não é backfill geral de todas as conversas.
 
 18 testes de ações/apresentação e build passaram. Publicação/inspeção visual serão registradas no PR.
+
+## 2026-09-14 — importação com menor custo e sem efeitos ao vivo
+
+Alertas recentes de pressão apareciam sem jobs aguardando. Worker agora retorna cedo quando não há trabalho elegível; mantém freio de pressão para importações reais. Deduplicação antes de INSERT e lotes sequenciais de 25 reduzem requisições e execuções desnecessárias de gatilhos. Falhas de recurso/rede cedem a vez sem avançar página; retomada tolera gravação parcial.
+
+Quatro gatilhos passam a ignorar received_via=history_sync: aviso, webhook externo, pausa de IA e progressão por resposta. Normalização, vínculo com lead, timeline e resumo continuam ativos. Testes: 11 Vitest + 12 Deno, check do worker; SQL positivo/negativo e rollback executados em transação revertida em prod. Sem nova branch Supabase, conforme autorização CTO. Amostra real de 100 mensagens tinha 94 IDs existentes; redução calculada para 1 leitura + 1 lote, sem alegação de ganho medido de CPU. Evidência e limites em `.specs/uazapi-rebuild/history-pressure-audit-2026-09-14.md`.
