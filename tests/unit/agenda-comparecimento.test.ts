@@ -1,21 +1,6 @@
 /**
- * Resultado do compromisso: compareceu × não compareceu × sem registro.
- *
- * POR QUE ESTE ARQUIVO EXISTE
- * ---------------------------
- * O pedido tem três regras que só se provam com dado, não com render:
- *
- *   1. vale para TODOS os tipos de agenda, sem implementação por tipo;
- *   2. quem não tem resultado registrado não conta nem de um lado nem do outro;
- *   3. trocar o resultado não pode contar duas vezes.
- *
- * A (1) é a que cala fácil: os cinco tipos do botão "Nova atividade" são todos
- * linhas de `meetings`, distinguidas por `event_type` — se alguém um dia
- * ramificar o resultado por tipo, o teste abaixo quebra.
- *
- * A (3) só é verdade porque a contagem é DERIVADA do estado atual, e não
- * acumulada. O teste percorre uma sequência de trocas e confere que o total
- * fecha em toda parada.
+ * Comparecimento pertence somente a reuniões. Estado sem registro não conta
+ * como presença nem falta; trocar resultado nunca conta duas vezes.
  */
 
 import { describe, expect, it } from "vitest";
@@ -61,18 +46,18 @@ function evento(over: Partial<UnifiedEvent> = {}): UnifiedEvent {
   };
 }
 
-describe("o resultado vale para TODOS os tipos de agenda", () => {
-  it("os cinco tipos do botão 'Nova atividade' aceitam resultado", () => {
+describe("comparecimento pertence somente a reuniões", () => {
+  it("somente o tipo meeting aceita resultado", () => {
     // reunião, ligação, follow-up, tarefa, outro — todos `meetings`.
     for (const eventType of EVENT_TYPE_KEYS) {
-      expect(podeRegistrarResultado(evento({ eventType })), eventType).toBe(true);
+      expect(podeRegistrarResultado(evento({ eventType })), eventType).toBe(eventType === "meeting");
     }
   });
 
-  it("a leitura do resultado não olha o tipo — é uma implementação só", () => {
+  it("outros tipos não entram em comparecimento", () => {
     for (const eventType of EVENT_TYPE_KEYS) {
-      expect(outcomeOf(evento({ eventType, status: "completed" }))).toBe("compareceu");
-      expect(outcomeOf(evento({ eventType, status: "no_show" }))).toBe("nao_compareceu");
+      expect(outcomeOf(evento({ eventType, status: "completed" }))).toBe(eventType === "meeting" ? "compareceu" : null);
+      expect(outcomeOf(evento({ eventType, status: "no_show" }))).toBe(eventType === "meeting" ? "nao_compareceu" : null);
       expect(outcomeOf(evento({ eventType, status: "scheduled" }))).toBeNull();
     }
   });

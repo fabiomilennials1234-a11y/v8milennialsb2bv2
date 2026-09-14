@@ -200,3 +200,13 @@ Backend (próximas slices):
 - ADR: `Obsidian/.../04 — Decisões/ADR-2026-05-26-modularizacao-monolito-modular.md`
 - Slice de referência: slice 10 carteira (commit `c9d5d56e`)
 - Agenda Interna: `Obsidian/.../06 — Features/Vendas/Agenda Interna.md`
+
+## Reuniões canônicas — 2026-09-14
+
+Após `20271021000005_canonical_pipeline_meetings.sql`, a agenda lê reuniões somente
+em `meetings`. `meeting_events` continua como livro histórico de métricas, ligado
+por `meetings.booked_event_id`; não é outra fonte visual de agendamentos.
+Mover etapa não cria agendamento nem desfecho. Edições explícitas da data de um
+negócio são adaptadas para `meetings`, com `pipeline_entry_id` para desambiguar
+múltiplos negócios do mesmo lead. Presença é exclusiva de `event_type=meeting`.
+O frontend tolera fontes antigas durante rollout e invalidação de caches.

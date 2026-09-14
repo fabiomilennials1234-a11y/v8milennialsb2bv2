@@ -343,7 +343,7 @@ function definicaoVigente(): {
   };
 }
 
-describe("get_agenda_events — as 5 fontes estão versionadas", () => {
+describe("get_agenda_events — reuniões canônicas e outras atividades estão versionadas", () => {
   const { arquivo, corpo, indiceDeSource } = definicaoVigente();
   const sql = norm(corpo);
 
@@ -365,55 +365,18 @@ describe("get_agenda_events — as 5 fontes estão versionadas", () => {
     ["Source 1 · meetings", /FROM public\.meetings \w+/i],
     ["Source 2 · follow_ups", /FROM public\.follow_ups \w+/i],
     ["Source 3 · scheduled_user_messages", /FROM public\.scheduled_user_messages \w+/i],
-    ["Source 5 · meeting_events", /FROM public\.meeting_events \w+/i],
   ])("%s continua na definição vigente", (_nome, padrao) => {
     expect(sql).toMatch(padrao);
   });
 
-  // A Source 4 não entra na lista acima porque a relação dela deixou de ser
-  // fixa: pode ser a view de compat OU a projeção canônica. O que NÃO pode
-  // variar é o recorte — ver o bloco `RELACOES_DA_CONFIRMACAO`.
-  it("Source 4 · a confirmação sai de uma relação conhecida", () => {
-    const ramo = ramoQueEmite(sql, "pipe_confirmacao", indiceDeSource);
-    expect(ramo, "nenhum ramo emite 'pipe_confirmacao'").toBeTruthy();
-
-    const entrada = entradaDoRamo(ramo!);
-    expect(entrada, "ramo da Source 4 sem `FROM public.<relação> <alias>`").toBeTruthy();
-    expect(RELACOES_DA_CONFIRMACAO).toContain(entrada!.relacao);
+  it("reuniões não são mais projeções dos funis", () => {
+    expect(ramoQueEmite(sql, "pipe_confirmacao", indiceDeSource)).toBeUndefined();
+    expect(ramoQueEmite(sql, "meeting_event", indiceDeSource)).toBeUndefined();
+  });
+  it("são 3 blocos unidos — 2 UNION ALL", () => {
+    expect(sql.match(/\bUNION ALL\b/g) ?? []).toHaveLength(2);
   });
 
-  it("Source 4 · ler a projeção canônica exige o filtro de funil", () => {
-    // Sem `funil_sistema = 'confirmacao'`, `negocio_projetado` traz proposta e
-    // qualificação junto: a Agenda mostra funil errado como reunião marcada.
-    expect(leiturasDaProjecaoSemFiltroDeFunil(sql)).toEqual([]);
-  });
-
-  it("são 5 blocos unidos — 4 UNION ALL", () => {
-    // Contagem explícita: perder uma fonte pelo caminho é o erro que este
-    // arquivo inteiro existe para impedir, e ele não dá erro em lugar nenhum —
-    // some evento da tela e pronto.
-    const unions = sql.match(/\bUNION ALL\b/g) ?? [];
-    expect(unions).toHaveLength(4);
-  });
-
-  it("a Source 5 mantém o dedup que evita reunião fantasma", () => {
-    // Sem estes três, o funil mergeado duplica o que a Source 4 já mostra —
-    // e mostra a data ANTIGA de uma reunião remarcada, porque meeting_events
-    // é imutável. O alias é LIDO do próprio SQL, não fixado.
-    //
-    // A âncora é o DISTINCT ON, não o `FROM public.meeting_events`: a função
-    // varre `meeting_events` DUAS vezes (a segunda é o EXISTS correlacionado
-    // que decide `held_status`), e casar o primeiro FROM pega a subquery
-    // errada. Partir do dedup garante que é o alias da fonte, e de quebra
-    // prova que o dedup existe antes de usar seu alias.
-    const m = /SELECT DISTINCT ON \((\w+)\.lead_id, \1\.meeting_date\)/i.exec(sql);
-    expect(m, "dedup `DISTINCT ON (<alias>.lead_id, <alias>.meeting_date)` não encontrado").toBeTruthy();
-    const alias = m![1];
-
-    expect(sql).toMatch(new RegExp(`FROM public\\.meeting_events ${alias}\\b`, "i"));
-    expect(sql).toContain(`${alias}.source IS DISTINCT FROM 'pipeline:confirmacao'`);
-    expect(sql).toMatch(/NOT LIKE 'backfill:%'/);
-  });
 });
 
 /**
@@ -658,10 +621,10 @@ describe("as fontes do SQL e as do front dizem a mesma coisa", () => {
     // indexa `SOURCE_LABELS[event.source]`. Sem literal não há rótulo possível.
     // É também o alarme se o parser se perder: 5 ramos, 5 fontes, sempre.
     expect(porRamo.filter((f) => f === null)).toEqual([]);
-    expect(porRamo).toHaveLength(5);
+    expect(porRamo).toHaveLength(3);
   });
 
-  it("a definição vigente emite exatamente as 5 fontes conhecidas", () => {
+  it("a definição vigente emite somente as 3 fontes canônicas", () => {
     // `pipe_confirmacao` continua sendo o LITERAL emitido mesmo agora que o
     // ramo lê `negocio_projetado`: é o valor que o front recebe, tem rótulo e
     // cor próprios, e trocá-lo quebraria a Agenda de quem já está aberto. A
@@ -669,8 +632,6 @@ describe("as fontes do SQL e as do front dizem a mesma coisa", () => {
     expect(fontesDoSql).toEqual([
       "follow_up",
       "meeting",
-      "meeting_event",
-      "pipe_confirmacao",
       "scheduled_message",
     ]);
   });
@@ -706,6 +667,7 @@ describe("as fontes do SQL e as do front dizem a mesma coisa", () => {
     expect(bloco, "declaração de EventSource não encontrada").toBeTruthy();
 
     const daUniao = [...bloco![1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]).sort();
-    expect(daUniao).toEqual([...fontesDoSql, "google"].sort());
+    // Legacy values remain readable during rolling deployment / cached queries.
+    expect(daUniao).toEqual([...fontesDoSql, "google", "meeting_event", "pipe_confirmacao"].sort());
   });
 });

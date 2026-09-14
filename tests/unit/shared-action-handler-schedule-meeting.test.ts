@@ -23,11 +23,12 @@ describe("scheduleMeeting — shared action handler", () => {
     expect(typeof scheduleMeeting).toBe("function");
   });
 
-  it("creates follow_up with source_pipe='meeting', correct due_date, organization_id, lead_id", async () => {
+  it("creates a real meeting, with start, end, organization and lead", async () => {
     const { scheduleMeeting } = await import(
       "../../supabase/functions/_shared/action-handlers/index"
     );
-    const { sb, getInserted } = createMockSupabase();
+    const { sb, getInserted, mockTable } = createMockSupabase();
+    mockTable("team_members", [{id:"user-abc",organization_id:"org-1",user_id:"auth-user-abc"}]);
 
     const result = await scheduleMeeting({
       supabase: sb,
@@ -38,13 +39,15 @@ describe("scheduleMeeting — shared action handler", () => {
     });
 
     expect(result.success).toBe(true);
-    const inserted = getInserted("follow_ups");
+    const inserted = getInserted("meetings");
     expect(inserted.length).toBe(1);
     expect(inserted[0]).toMatchObject({
       lead_id: "lead-1",
       organization_id: "org-1",
-      due_date: "2026-06-01T14:00:00Z",
-      source_pipe: "meeting",
+      start_at: "2026-06-01T14:00:00.000Z",
+      end_at: "2026-06-01T15:00:00.000Z",
+      event_type: "meeting",
+      status: "scheduled",
     });
   });
 
@@ -52,7 +55,8 @@ describe("scheduleMeeting — shared action handler", () => {
     const { scheduleMeeting } = await import(
       "../../supabase/functions/_shared/action-handlers/index"
     );
-    const { sb, getInserted } = createMockSupabase();
+    const { sb, getInserted, mockTable } = createMockSupabase();
+    mockTable("team_members", [{id:"user-abc",organization_id:"org-1",user_id:"auth-user-abc"}]);
 
     await scheduleMeeting({
       supabase: sb,
@@ -62,15 +66,16 @@ describe("scheduleMeeting — shared action handler", () => {
       params: { date: "2026-06-01T14:00:00Z", notes: "Discutir proposta comercial" },
     });
 
-    const inserted = getInserted("follow_ups");
+    const inserted = getInserted("meetings");
     expect(inserted[0].description).toBe("Discutir proposta comercial");
   });
 
-  it("includes assigned_to when provided", async () => {
+  it("resolves team member to auth user for created_by", async () => {
     const { scheduleMeeting } = await import(
       "../../supabase/functions/_shared/action-handlers/index"
     );
-    const { sb, getInserted } = createMockSupabase();
+    const { sb, getInserted, mockTable } = createMockSupabase();
+    mockTable("team_members", [{id:"user-abc",organization_id:"org-1",user_id:"auth-user-abc"}]);
 
     await scheduleMeeting({
       supabase: sb,
@@ -80,8 +85,8 @@ describe("scheduleMeeting — shared action handler", () => {
       params: { date: "2026-06-01T14:00:00Z", assigned_to: "user-abc" },
     });
 
-    const inserted = getInserted("follow_ups");
-    expect(inserted[0].assigned_to).toBe("user-abc");
+    const inserted = getInserted("meetings");
+    expect(inserted[0].created_by).toBe("auth-user-abc");
   });
 
   it("returns { success: true } on successful insert", async () => {
@@ -173,7 +178,8 @@ describe("scheduleMeeting — shared action handler", () => {
     const { scheduleMeeting } = await import(
       "../../supabase/functions/_shared/action-handlers/index"
     );
-    const { sb, getInserted } = createMockSupabase();
+    const { sb, getInserted, mockTable } = createMockSupabase();
+    mockTable("team_members", [{id:"user-abc",organization_id:"org-1",user_id:"auth-user-abc"}]);
 
     await scheduleMeeting({
       supabase: sb,
@@ -183,7 +189,25 @@ describe("scheduleMeeting — shared action handler", () => {
       params: { date: "2026-06-01", time: "14:30" },
     });
 
-    const inserted = getInserted("follow_ups");
-    expect(inserted[0].due_date).toBe("2026-06-01T14:30:00Z");
+    const inserted = getInserted("meetings");
+    expect(inserted[0].start_at).toBe("2026-06-01T14:30:00.000Z");
   });
+});
+
+it("reuses an automation appointment on retry", async () => {
+  const { scheduleMeeting } = await import("../../supabase/functions/_shared/action-handlers/schedule-meeting");
+  const { sb, mockTable, getInserted } = createMockSupabase();
+  mockTable("meetings", [{id:"existing",organization_id:"org-1",external_ref:"automation:1",meet_link:null}]);
+  const result = await scheduleMeeting(makeInput({supabase:sb,params:{date:"2026-06-01T14:00:00Z",external_ref:"automation:1"}}));
+  expect(result.data).toMatchObject({meeting_id:"existing",idempotent:true});
+  expect(getInserted("meetings")).toEqual([]);
+});
+
+it("refuses to attach an appointment to a different tenant's business", async () => {
+  const { scheduleMeeting } = await import("../../supabase/functions/_shared/action-handlers/schedule-meeting");
+  const { sb, mockTable, getInserted } = createMockSupabase();
+  mockTable("pipeline_entries", [{id:"entry",organization_id:"other-org",lead_id:"lead-1",pipeline_id:"pipe",deal_id:null}]);
+  const result = await scheduleMeeting(makeInput({supabase:sb,entryId:"entry"}));
+  expect(result.success).toBe(false);
+  expect(getInserted("meetings")).toEqual([]);
 });

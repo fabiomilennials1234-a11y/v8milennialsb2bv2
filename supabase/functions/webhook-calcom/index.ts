@@ -10,9 +10,7 @@ import {
   rateLimitedResponse
 } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
-import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
-import { resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
+import { scheduleMeeting } from "../_shared/action-handlers/schedule-meeting.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -100,6 +98,18 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       );
     }
 
+    // The webhook secret authenticates the provider, not a tenant. Never guess
+    // a tenant by selecting the first active organization in a multi-tenant DB.
+    const targetOrganizationId = Deno.env.get("CALCOM_ORGANIZATION_ID")?.trim();
+
+    if (!targetOrganizationId) {
+      console.error("[Webhook Cal.com] No active organization found");
+      return new Response(
+        JSON.stringify({ error: "CALCOM_ORGANIZATION_ID is not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Extract data from Cal.com payload
     const attendees = payload.attendees || [];
     const firstAttendee = attendees[0] || {};
@@ -130,6 +140,7 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
         .from("team_members")
         .select("id, name, role")
         .eq("email", organizerEmail)
+        .eq("organization_id", targetOrganizationId)
         .eq("is_active", true)
         .maybeSingle();
       
@@ -222,43 +233,19 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
     let existingLead = null;
     let deduplicationMethod = null;
 
-    // SECURITY: Get default organization for webhook leads
-    // In production, this should come from webhook configuration
-    const { data: defaultOrg } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("subscription_status", "active")
-      .limit(1)
-      .single();
-    
-    const targetOrganizationId = defaultOrg?.id;
-    
-    if (!targetOrganizationId) {
-      console.error("[Webhook Cal.com] No active organization found");
-      return new Response(
-        JSON.stringify({ error: "No organization configured for webhooks" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Merge Agendamentos→Oportunidades (ADR-0004): org com flag ON recebe a reunião
-    // no funil whatsapp em `agendado`; o funil de Oportunidades NÃO é mais removido.
-    //
-    // SCRUM-641: o destino PREFERIDO segue decidido pela flag (org antiga com o
-    // trio se comporta byte a byte como antes). Onde o funil preferido NÃO
-    // existe (org nova pós-funil-único), o fallback é o funil PADRÃO da org
-    // ancorado pela etapa de papel `meeting_booked` — nunca por slug. Sem funil
-    // padrão → lead sem card + log (contrato do lead-webhook desde SCRUM-624).
-    const useMergedFunnel = await isFeatureFlagEnabled(supabase, targetOrganizationId, "merged_opportunity_funnel");
-    const meetingDest = await resolveMeetingDestination(supabase, targetOrganizationId, {
-      ref: useMergedFunnel ? "whatsapp" : "confirmacao",
-      stageKey: useMergedFunnel ? "agendado" : "reuniao_marcada",
-    });
-    const mSlug: string | null = meetingDest?.ref ?? null;
-    const mStage: string | null = meetingDest?.stageKey ?? null;
-    if (!meetingDest) {
-      console.warn(`[Webhook Cal.com] org ${targetOrganizationId} sem destino de reunião (nem funil preferido, nem funil padrão) — lead segue sem card.`);
-    }
+    const saveMeeting = async (leadId: string) => {
+      const result = await scheduleMeeting({
+        supabase, organizationId: targetOrganizationId, leadId,
+        entryId: null, dealId: null, conversationId: null,
+        params: {
+          date: startTime, end_at: payload.endTime,
+          title: payload.title || "Reunião Cal.com", assigned_to: closerId,
+          external_ref: `calcom:${payload.uid || `${leadId}:${startTime}`}`,
+        },
+      });
+      if (!result.success) throw new Error(result.error || "Falha ao registrar reunião Cal.com");
+      return result;
+    };
 
     // 1. First, try to find by email (case-insensitive)
     // SECURITY: Filter by organization_id
@@ -342,15 +329,16 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       } else {
         // Lead already has a meeting scheduled, just log it
         updateData.notes = existingLead.notes 
-          ? `${existingLead.notes}\n\n[Cal.com] Nova reunião tentada: ${startTime} - mantida data original: ${existingCompromissoDate}${organizerName ? ` (Organizador: ${organizerName})` : ''}`
-          : `[Cal.com] Nova reunião tentada: ${startTime} - mantida data original: ${existingCompromissoDate}${organizerName ? ` (Organizador: ${organizerName})` : ''}`;
+          ? `${existingLead.notes}\n\n[Cal.com] Nova reunião agendada: ${startTime}${organizerName ? ` (Organizador: ${organizerName})` : ''}`
+          : `[Cal.com] Nova reunião agendada: ${startTime}${organizerName ? ` (Organizador: ${organizerName})` : ''}`;
       }
 
       // Update the existing lead
       const { error: updateError } = await supabase
         .from("leads")
         .update(updateData)
-        .eq("id", existingLead.id);
+        .eq("id", existingLead.id)
+        .eq("organization_id", targetOrganizationId);
 
       if (updateError) {
         console.error("Error updating lead:", updateError);
@@ -366,74 +354,7 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       // Add "Reunião Marcada" tag
       await addTagToLead(existingLead.id, reuniaoMarcadaTagId);
 
-      // Use effective date - existing or new
-      const effectiveMeetingDate = existingCompromissoDate || startTime;
-
-      // Create or update the meeting entry (destino resolvido acima; null = sem card)
-      const existingConfirmacao = mSlug
-        ? await getPipeEntry(supabase, existingLead.id, targetOrganizationId, mSlug)
-        : null;
-
-      if (!mSlug || !mStage) {
-        // Sem destino: reunião registrada no lead (compromisso_date/notes), sem card.
-      } else if (existingConfirmacao) {
-        const confirmacaoUpdates: { stageKey?: string; metadata?: Record<string, unknown>; assignedTo?: string | null } = {};
-        const metaUpdates: Record<string, unknown> = {};
-
-        if (!(existingConfirmacao.metadata as any)?.meeting_date) {
-          confirmacaoUpdates.stageKey = mStage;
-          metaUpdates.meeting_date = effectiveMeetingDate;
-          if (useMergedFunnel) { metaUpdates.confirmation_status = "pendente"; metaUpdates.is_confirmed = false; }
-        }
-
-        // Assign closer if found and not already set
-        if (closerId && !(existingConfirmacao.metadata as any)?.closer_id) {
-          metaUpdates.closer_id = closerId;
-          console.log("Assigning closer to existing meeting entry:", closerId);
-        }
-
-        if (Object.keys(metaUpdates).length > 0) confirmacaoUpdates.metadata = metaUpdates;
-
-        if (confirmacaoUpdates.stageKey || confirmacaoUpdates.metadata) {
-          await updatePipeEntryById(supabase, existingConfirmacao.id, confirmacaoUpdates);
-        }
-      } else {
-        const metadata: Record<string, unknown> = { meeting_date: effectiveMeetingDate };
-        if (useMergedFunnel) { metadata.confirmation_status = "pendente"; metadata.is_confirmed = false; }
-        if (closerId) {
-          metadata.closer_id = closerId;
-          console.log("Creating meeting entry with closer:", closerId);
-        }
-
-        await upsertPipeEntry(supabase, {
-          leadId: existingLead.id,
-          orgId: targetOrganizationId,
-          slug: mSlug,
-          stageKey: mStage,
-          metadata,
-          assignedTo: closerId,
-        });
-      }
-
-      // Com o merge OFF: o lead sai da qualificação (whatsapp) ao agendar. Com merge
-      // ON, whatsapp É o destino — não remove. SCRUM-641: quando a reunião caiu
-      // no FALLBACK (funil padrão), também não remove — o funil padrão pode SER
-      // o whatsapp da org, e o delete apagaria o card recém-criado.
-      const existingProposta = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "propostas");
-
-      if (!useMergedFunnel && !meetingDest?.usedDefaultPipeline
-          && (!existingProposta || existingProposta.stage_key !== "compromisso_marcado")) {
-        // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
-        const deleted = await deletePipeEntry(supabase, existingLead.id, targetOrganizationId, "whatsapp");
-
-        if (!deleted) {
-          console.log("Note: No pipeline_entries(whatsapp) entry found or error removing");
-        } else {
-          console.log("Removed lead from pipeline_entries(whatsapp) (qualificação)");
-        }
-      } else {
-        console.log("Lead kept in pipeline_entries(whatsapp) (has compromisso_marcado in propostas)");
-      }
+      await saveMeeting(existingLead.id);
 
       // Create history entry with closer info
       await supabase.from("lead_history").insert({
@@ -504,24 +425,7 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       // Add "Cal" tag to new lead
       await addTagToLead(newLead.id, calTagId);
 
-      // Create meeting entry (destino resolvido no topo; null = lead sem card)
-      if (mSlug && mStage) {
-        const confirmacaoMeta: Record<string, unknown> = { meeting_date: startTime };
-        if (useMergedFunnel) { confirmacaoMeta.confirmation_status = "pendente"; confirmacaoMeta.is_confirmed = false; }
-        if (closerId) {
-          confirmacaoMeta.closer_id = closerId;
-          console.log("Creating meeting entry for new lead with closer:", closerId);
-        }
-
-        await upsertPipeEntry(supabase, {
-          leadId: newLead.id,
-          orgId: targetOrganizationId,
-          slug: mSlug,
-          stageKey: mStage,
-          metadata: confirmacaoMeta,
-          assignedTo: closerId,
-        });
-      }
+      await saveMeeting(newLead.id);
 
       // Create history entry with closer info
       await supabase.from("lead_history").insert({

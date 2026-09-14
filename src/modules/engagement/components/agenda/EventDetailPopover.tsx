@@ -100,7 +100,11 @@ function SourceIcon({ source }: { source: EventSource }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function EventDetailPopover({
+export function EventDetailPopover(props: EventDetailPopoverProps) {
+  return <EventDetailPopoverContent key={`${props.state.event.source}:${props.state.event.id}`} {...props} />;
+}
+
+function EventDetailPopoverContent({
   state,
   onClose,
   onDeleteMeeting,
@@ -122,6 +126,11 @@ export function EventDetailPopover({
   const [outcomeLocal, setOutcomeLocal] = useState<AttendanceOutcome | null>(
     () => outcomeOf(event),
   );
+
+  const serverOutcome = outcomeOf(event);
+  useEffect(() => {
+    setOutcomeLocal(serverOutcome);
+  }, [serverOutcome]);
 
   const podeRegistrar = podeRegistrarResultado(event) && !!onSetOutcome;
 
