@@ -2,7 +2,7 @@ CREATE TABLE organizations(id uuid PRIMARY KEY);
 CREATE TABLE leads(id uuid PRIMARY KEY,organization_id uuid,name text,company text,pre_sale_responsible_id uuid);
 CREATE TABLE team_members(id uuid PRIMARY KEY,user_id uuid,organization_id uuid,name text);
 CREATE TABLE pipelines(id uuid PRIMARY KEY,organization_id uuid);
-CREATE TABLE deals(id uuid PRIMARY KEY,organization_id uuid,lead_id uuid);
+CREATE TABLE deals(id uuid PRIMARY KEY,organization_id uuid,source_lead_id uuid);
 CREATE TABLE pipeline_entries(id uuid PRIMARY KEY,organization_id uuid,pipeline_id uuid,lead_id uuid,deal_id uuid,assigned_to uuid,closed_at timestamptz,metadata jsonb DEFAULT '{}',stage_key text);
 CREATE TABLE meeting_events(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,lead_id uuid,event_type text,booked_event_id uuid REFERENCES meeting_events(id),pre_sale_responsible_id uuid,meeting_date timestamptz,occurred_at timestamptz DEFAULT now(),source text,source_entry_id uuid,metadata jsonb DEFAULT '{}');
 CREATE UNIQUE INDEX outcome_unique ON meeting_events(booked_event_id) WHERE event_type IN ('meeting_held','meeting_no_show');

@@ -8,7 +8,7 @@
  *
  * RPC under test:
  *   public.get_ranking_data(p_month INT, p_year INT, p_organization_id UUID)
- *     → meetingsRanking[*].meetings = COUNT of stage_key='compareceu' entries
+ *     → meetingsRanking[*].meetings = COUNT of explicit meeting_held events
  *       attributed to the member via COALESCE(pre_sale_responsible_id, sdr_id).
  *
  * Covered scenarios
@@ -127,6 +127,10 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
         .single();
       expect(entryRes.error).toBeNull();
       const entryId = entryRes.data!.id as string;
+      const attendance = await supabase.from('meetings').update({ status: 'completed' })
+        .eq('organization_id', TEST_ORG_ID).eq('pipeline_entry_id', entryId).select('id');
+      expect(attendance.error).toBeNull();
+      expect(attendance.data).toHaveLength(1);
       return { leadId, entryId };
     };
 
@@ -253,7 +257,7 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
   // We use a dedicated, isolated entry that mimics scenario 10 of the
   // snapshot lifecycle suite — legacy-only metadata, no dual key.
   // ────────────────────────────────────────────────────────────────────────
-  it('snapshots legacy metadata.sdr_id into the canonical meeting event', async () => {
+  it('requires explicit attendance and preserves legacy scheduler attribution', async () => {
     // Locate pipeline once more inside this block — beforeAll already verified
     // its existence, so this is just a re-fetch.
     const { data: pipeline } = await supabase
@@ -319,7 +323,18 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
         meetings: number;
       }>;
       const sdrRow = meetingsRanking.find((r) => r.id === sdrA);
-      expect(sdrRow?.meetings ?? 0).toBe(1);
+      // Stage names alone no longer imply attendance.
+      expect(sdrRow?.meetings ?? 0).toBe(0);
+      const attendance = await supabase.from('meetings').update({ status: 'completed' })
+        .eq('organization_id', TEST_ORG_ID).eq('pipeline_entry_id', isolatedEntryId).select('id');
+      expect(attendance.error).toBeNull();
+      expect(attendance.data).toHaveLength(1);
+      const ranked = await supabase.rpc('get_ranking_data', {
+        p_month: isolatedMonth, p_year: TEST_YEAR, p_organization_id: TEST_ORG_ID,
+      });
+      expect(ranked.error).toBeNull();
+      const ranking = ranked.data as { meetingsRanking: Array<{ id: string; meetings: number }> };
+      expect(ranking.meetingsRanking.find((r) => r.id === sdrA)?.meetings).toBe(1);
     } finally {
       await supabase.from('pipeline_entries').delete().eq('id', isolatedEntryId);
       await supabase.from('leads').delete().eq('id', isolatedLeadId);
