@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { createMockSupabase } from '../helpers/supabase-mock';
-const state = vi.hoisted(() => ({ db: null as any, handler: null as any, org: 'org' as string | undefined }));
+type WebhookHandler = (request: Request) => Promise<Response>;
+const state = vi.hoisted(() => ({
+  db: null as ReturnType<typeof createMockSupabase>['sb'] | null,
+  handler: null as WebhookHandler | null,
+  org: 'org' as string | undefined,
+}));
 vi.mock('https://esm.sh/@supabase/supabase-js@2', () => ({ createClient: () => state.db }));
 vi.mock('../../supabase/functions/_shared/error-boundary.ts', () => ({ withErrorBoundary: (_: string, fn: unknown) => fn }));
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
@@ -11,7 +16,7 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ logRuntime: vi.fn().mockResolvedValue(undefined) }));
 beforeEach(async () => {
   state.org='org';
-  vi.stubGlobal('Deno',{ env:{get:(key:string) => key==='CALCOM_ORGANIZATION_ID'?state.org:'test'},serve:(fn:unknown) => {state.handler=fn;} });
+  vi.stubGlobal('Deno',{ env:{get:(key:string) => key==='CALCOM_ORGANIZATION_ID'?state.org:'test'},serve:(fn:WebhookHandler) => {state.handler=fn;} });
   vi.spyOn(console,'log').mockImplementation(() => {});
   vi.spyOn(console,'error').mockImplementation(() => {});
   await import('../../supabase/functions/webhook-calcom/index.ts');
@@ -21,7 +26,7 @@ const body={triggerEvent:'BOOKING_CREATED',payload:{uid:'booking-1',title:'Disco
 const request=() => new Request('https://test.invalid/calcom',{method:'POST',body:JSON.stringify(body)});
 it('creates canonical meeting without any legacy or default pipeline',async () => {
   const mock=createMockSupabase();state.db=mock.sb;
-  const response=await state.handler(request());
+  const response=await state.handler!(request());
   expect(response.status).toBe(200);
   const meetings=mock.getInserted('meetings');
   expect(meetings).toHaveLength(1);
@@ -32,7 +37,7 @@ it('creates canonical meeting without any legacy or default pipeline',async () =
 it('fails closed when tenant configuration is absent',async () => {
   const mock=createMockSupabase();state.db=mock.sb;state.org=undefined;
   mock.mockTable('organizations',[{id:'first-customer',subscription_status:'active'}]);
-  const response=await state.handler(request());
+  const response=await state.handler!(request());
   expect(response.status).toBe(500);
   expect(mock.getInserted('meetings')).toEqual([]);
   expect(mock.getInserted('leads')).toEqual([]);
