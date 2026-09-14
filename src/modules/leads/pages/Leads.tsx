@@ -624,7 +624,12 @@ function LeadsInner() {
   const leadActionsMenu = (lead: Lead) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={`Ações de ${lead.name}`}
+        >
           <MoreHorizontal className="w-4 h-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -1067,6 +1072,7 @@ function LeadsInner() {
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
                     originLabel={originLabels[lead.origin] || lead.origin}
                     originClassName={originColors[lead.origin] || originColors.outro}
+                    actions={leadActionsMenu(lead)}
                   />
                 ))
               ) : (
