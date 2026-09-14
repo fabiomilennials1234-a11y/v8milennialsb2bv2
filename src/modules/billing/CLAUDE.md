@@ -1,5 +1,13 @@
 # Module — billing
 
+## Atualização — área administrativa (2026-09-14)
+
+`BillingSettings`, exportado pelo barrel, atende Configurações → Outros → Assinatura
+e cobrança. `useBillingAccount` lê a organização selecionada, contrato, histórico e
+quotas; operações financeiras permanecem pendentes de integração. Ver
+`docs/operations/billing-admin-area.md`. O inventário abaixo descreve a modularização
+original e não deve ser interpretado como confirmação de checkout em produção.
+
 **Status:** 🟢 Active — subscription stable, superfície pequena (5 arquivos). Mantido como BC distinto por ser domínio com **alvo de expansão** se Asaas/Stripe ganhar nova superfície (multi-provider, plano custom, métricas de churn, etc.).
 **BC:** billing
 **Entidade primária:** Subscription Plan + Asaas Payment
