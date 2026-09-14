@@ -37,6 +37,7 @@ import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
 import { useDealCardData } from "./useDealCardData";
+import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
 import {
   useAtualizarItemDoNegocio,
@@ -95,6 +96,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `20270904000000`, e o backfill da `20270908005010` já a usa.
    */
   const dealId = data?.dealId ?? null;
+  const ajustePedido = useAjustarPedidoGanho(
+    dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
+  );
   const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
 
   /**
@@ -540,6 +544,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
         /* Sempre — inclusive no card sem negócio, que é materializado no
            clique. Era esta linha que sumia o botão em 19,2% dos cards. */
         onAdicionarProduto={adicionarProduto}
+        onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
+        ajustesPedido={ajustePedido.historico}
         /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
            e a lixeira são de item já lançado, e não há item sem negócio. */
         onEditarItem={dealIdParaProduto ? editarItem : undefined}

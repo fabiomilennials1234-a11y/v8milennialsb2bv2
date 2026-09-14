@@ -89,6 +89,13 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
   };
 }
 
+describe("pedido ganho — corrigir sem reabrir", () => {
+  it("oferece o ajuste no mesmo negócio ganho", () => {
+    render(<DealCard negocio={negocio({ estado: "ganho", valorDoNegocio: 100 })} onAjustarPedido={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Ajustar pedido ganho" })).toBeTruthy();
+  });
+});
+
 describe("DealCard — ganhar e perder são movimentos, não estado", () => {
   it("oferece Ganhou e Perdeu quando o funil tem etapa terminal", () => {
     render(<DealCard negocio={negocio()} />);
