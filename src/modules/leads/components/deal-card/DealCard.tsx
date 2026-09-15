@@ -279,6 +279,7 @@ export function DealCard({
   onAjustarPedido,
   ajustesPedido = [],
   onRemoverItem,
+  onEditarValor,
   movendo,
   comentarios = [],
   onComentar,
@@ -326,6 +327,7 @@ export function DealCard({
     created_at: string;
   }>;
   onRemoverItem?: (itemId: string) => Promise<void>;
+  onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
   movendo?: string | null;
   /**
    * ── Comentários entram por FORA de `negocio` ──────────────────────────
@@ -443,7 +445,7 @@ export function DealCard({
     negocio.medianaDaEtapa !== null &&
     negocio.diasNaEtapa > negocio.medianaDaEtapa * 2;
 
-  const { total } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
+  const { total, temValor } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
 
   return (
     <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -673,7 +675,7 @@ export function DealCard({
               <Ladrilho
                 tom="verde"
                 rotulo="Valor Total"
-                valor={total > 0 ? formatBRL(total, 2) : "—"}
+                valor={temValor ? formatBRL(total, 2) : "—"}
                 nota={negocio.itens.length > 0 ? `${negocio.itens.length} produto(s)` : undefined}
               />
               <Ladrilho
@@ -798,12 +800,15 @@ export function DealCard({
                   ))}
                   {!ajustandoPedido && (
                     <DealCardMoney
+                      key={negocio.id}
                       itens={negocio.itens}
                       valorDoNegocio={negocio.valorDoNegocio}
+                      versaoDoNegocio={negocio.pedidoAtualizadoEm}
                       valorDoFunil={negocio.valor}
                       onAdicionarProduto={negocio.estado === "ganho" ? undefined : onAdicionarProduto}
                       onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
                       onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
+                      onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
                     />
                   )}
                   {ajustesPedido.length > 0 && (

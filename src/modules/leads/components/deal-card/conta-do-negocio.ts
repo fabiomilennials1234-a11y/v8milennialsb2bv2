@@ -29,6 +29,7 @@ export function contaDoNegocio(
   const temItens = itens.length > 0;
   return {
     temItens,
+    temValor: temItens || valorDoNegocio != null || valorDoFunil > 0,
     desconto: Math.max(0, bruto - liquido),
     total: temItens ? liquido : (valorDoNegocio ?? (valorDoFunil > 0 ? valorDoFunil : 0)),
   };

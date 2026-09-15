@@ -76,6 +76,23 @@ function invalidarNegocio(
   queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
   // `deals.value` mudou por trigger; quem lê negócio pela lista precisa saber.
   queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+  queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
+  queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+}
+
+export function useEditarValorProposta(entryId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ valor, expectedUpdatedAt }: { valor: number; expectedUpdatedAt: string | null }) => {
+      if (!entryId) throw new Error("Card não disponível. Atualize a ficha.");
+      const { error } = await supabase.rpc("editar_valor_proposta" as never, {
+        p_entry_id: entryId, p_value: valor, p_expected_updated_at: expectedUpdatedAt,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidarNegocio(queryClient, entryId),
+    onError: (error: Error) => toast.error(`Não foi possível salvar o valor: ${error.message}`),
+  });
 }
 
 export interface ItemNovoDoNegocio {

@@ -28,6 +28,8 @@ import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useCommissions, useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 import { useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 
@@ -54,7 +56,7 @@ interface MemberCommissionCardProps {
 }
 
 function MemberCommissionCard({ memberId, memberName, memberRole, month, year, avatarUrl }: MemberCommissionCardProps) {
-  const { data: summary, isLoading } = useCommissionSummary(memberId, month, year);
+  const { data: summary, isLoading, isError, refetch } = useCommissionSummary(memberId, month, year);
 
   if (isLoading) {
     return (
@@ -68,6 +70,11 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
     );
   }
 
+  if (isError) return <Alert variant="destructive">
+    <AlertTitle>Apuração indisponível</AlertTitle>
+    <AlertDescription>Não foi possível apurar a comissão de {memberName}.</AlertDescription>
+    <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>Tentar novamente</Button>
+  </Alert>;
   if (!summary) return null;
 
   const bonusMultiplier = summary.goalProgress >= 120 ? 1.2 
@@ -99,22 +106,26 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-success">
-                {formatCurrency(summary.totalEarnings)}
+                {summary.totalEarnings == null ? "Apuração pendente" : formatCurrency(summary.totalEarnings)}
               </p>
               <p className="text-xs text-muted-foreground">Total do mês</p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {summary.commissionStatus === "pending" && <Alert role="status">
+            <AlertTitle>Comissão pendente de conferência</AlertTitle>
+            <AlertDescription>{summary.pendingCount} venda(s), total de {formatCurrency(summary.pendingRevenue)}, aguardando conferência da comissão.</AlertDescription>
+          </Alert>}
           {/* Goal Progress */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Progresso da Meta</span>
-              <span className="font-medium">{summary.goalProgress.toFixed(0)}%</span>
+              <span className="font-medium">{summary.goalConfigured ? `${summary.goalProgress.toFixed(0)}%` : "Meta não configurada"}</span>
             </div>
-            <Progress value={Math.min(summary.goalProgress, 100)} className="h-2" />
+            {summary.goalConfigured && <Progress value={Math.min(summary.goalProgress, 100)} className="h-2" />}
             <div className="flex items-center gap-2 text-xs">
-              {summary.goalProgress >= 120 ? (
+              {!summary.goalConfigured ? <span>Realizado no período: {summary.goalCurrent}. Configure a meta para apurar o bônus.</span> : summary.goalProgress >= 120 ? (
                 <Badge className="bg-success/20 text-success border-success/30">
                   <TrendingUp className="w-3 h-3 mr-1" />
                   1.2x Bônus
@@ -147,21 +158,21 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <PiggyBank className="w-3 h-3" /> Bônus ({bonusMultiplier}x)
+                <PiggyBank className="w-3 h-3" /> {summary.goalConfigured ? `Bônus (${bonusMultiplier}x)` : "Bônus por meta"}
               </p>
-              <p className="text-sm font-medium">{formatCurrency(summary.calculatedBonus)}</p>
+              <p className="text-sm font-medium">{!summary.goalConfigured && summary.oteBonus > 0 ? "Pendente de meta" : formatCurrency(summary.calculatedBonus)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Percent className="w-3 h-3" /> Comissão Rec.
               </p>
-              <p className="text-sm font-medium text-chart-3">{formatCurrency(summary.commissionMRR)}</p>
+              <p className="text-sm font-medium text-chart-3">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionMRR)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Percent className="w-3 h-3" /> Comissão Projeto
               </p>
-              <p className="text-sm font-medium text-chart-4">{formatCurrency(summary.commissionProjeto)}</p>
+              <p className="text-sm font-medium text-chart-4">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionProjeto)}</p>
             </div>
           </div>
 
@@ -188,7 +199,7 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
 
           {/* Sales breakdown */}
           <div className="pt-2 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-2">Vendas do Mês</p>
+            <p className="text-xs text-muted-foreground mb-2">Vendas do mês: {formatCurrency(summary.salesRevenue)}</p>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-chart-3">
                 Rec.: {formatCurrency(summary.totalMRR)}
