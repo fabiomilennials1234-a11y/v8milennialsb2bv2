@@ -97,6 +97,23 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
     updatedSince = new Date(t).toISOString();
   }
 
+  const creation: Record<"created_from" | "created_to", string | null> = {
+    created_from: null,
+    created_to: null,
+  };
+  for (const key of ["created_from", "created_to"] as const) {
+    const raw = url.searchParams.get(key);
+    if (raw === null) continue;
+    const timestamp = Date.parse(raw);
+    if (Number.isNaN(timestamp)) {
+      return apiError(422, `invalid_${key}`, `${key} deve ser uma data ISO 8601`, ctx.cors);
+    }
+    creation[key] = new Date(timestamp).toISOString();
+  }
+  if (creation.created_from && creation.created_to && creation.created_from > creation.created_to) {
+    return apiError(422, "invalid_created_range", "created_from deve ser anterior ou igual a created_to", ctx.cors);
+  }
+
   const supabase = ctx.supabase as unknown as RpcClient;
   const { data, error } = await supabase.rpc("api_list_deals", {
     p_org: ctx.organizationId,
@@ -105,6 +122,8 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
     p_owner_id: url.searchParams.get("owner_id"),
     p_status: url.searchParams.get("status"),
     p_updated_since: updatedSince,
+    p_created_from: creation.created_from,
+    p_created_to: creation.created_to,
     p_limit: limit + 1, // +1 para saber se há próxima página
     p_cursor_last_activity: cursor?.created_at ?? null,
     p_cursor_id: cursor?.id ?? null,

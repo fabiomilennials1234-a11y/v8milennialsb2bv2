@@ -5,6 +5,27 @@ import { decodeCursor } from "../cursor.ts";
 
 const cors = { "access-control-allow-origin": "*" };
 
+Deno.test("listDeals — criação aceita limites independentes e preserva updated_since", async () => {
+  for (const query of ["created_from=2026-09-01", "created_to=2026-09-15", "created_from=2026-09-01&created_to=2026-09-15"]) {
+    const calls: RpcCall[] = [];
+    const res = await listDeals(ctx(`https://x/api/v1/deals?${query}&updated_since=2026-08-01`, { data: [] }, calls));
+    assertEquals(res.status, 200);
+    assertEquals(calls[0].args.p_created_from, query.includes("created_from") ? "2026-09-01T00:00:00.000Z" : null);
+    assertEquals(calls[0].args.p_created_to, query.includes("created_to") ? "2026-09-15T00:00:00.000Z" : null);
+    assertEquals(calls[0].args.p_updated_since, "2026-08-01T00:00:00.000Z");
+    assertEquals(calls[0].args.p_org, "org-1");
+  }
+});
+
+Deno.test("listDeals — rejeita criação inválida ou intervalo invertido antes do RPC", async () => {
+  for (const query of ["created_from=invalid", "created_to=", "created_from=2026-09-16&created_to=2026-09-01"]) {
+    const calls: RpcCall[] = [];
+    const res = await listDeals(ctx(`https://x/api/v1/deals?${query}`, { data: [] }, calls));
+    assertEquals(res.status, 422);
+    assertEquals(calls.length, 0);
+  }
+});
+
 interface RpcCall {
   name: string;
   args: Record<string, unknown>;
