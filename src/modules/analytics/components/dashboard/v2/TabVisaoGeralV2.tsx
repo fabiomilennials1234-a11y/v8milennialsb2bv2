@@ -29,6 +29,7 @@ interface TabVisaoGeralV2Props {
   monthlyRange?: PeriodRange;
   isAdmin: boolean;
   onAskOraculo: () => void;
+  filterMemberId?: string | null;
 }
 
 const MONTH_LONG = [
@@ -68,10 +69,10 @@ function businessDaysLeft(month: number, year: number, referenceDay?: number): n
   return Math.max(count, 1);
 }
 
-function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin, onAskOraculo, section }: TabVisaoGeralV2Props) {
+function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin, onAskOraculo, section, filterMemberId }: TabVisaoGeralV2Props) {
   const show = (id: TabVisaoGeralV2Props["section"]) => !section || section === id;
   // KPIs respeitam o filtro automático (membro vê o seu, admin vê total)
-  const { data: metrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end });
+  const { data: metrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end }, filterMemberId);
   // Funil é sempre total da org
   const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
   // Override Milennials: reuniões marcadas do funil seguem a coorte correta da
@@ -80,7 +81,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
   const isMilennials = currentTeamMember?.organization_id === MILENNIALS_ORG_ID;
   const { data: funnelHealth } = useFunnelHealth({ start: range.start, end: range.end });
   // Período anterior pros deltas (mesmo filtro dos KPIs)
-  const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd });
+  const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd }, filterMemberId);
 
   // Gauge é sempre mensal — meta de faturamento é do mês, independente do range selecionado
   const monthRange = useMemo(() => monthlyRange ?? computePeriodRange("month", month, year), [monthlyRange, month, year]);
@@ -207,7 +208,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       {show("kpis") && <>
       <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
-          label="Leads" value={m?.totalLeads ?? 0} format="int"
+          label="Leads novos" value={m?.totalLeads ?? 0} format="int"
           delta={m && p ? deltaBadge(m.totalLeads, p.totalLeads) : undefined}
           caption={`${p?.totalLeads ?? 0} ${range.prevLabel}`}
           quickActionLabel="Ver leads do período →" quickActionTo={leadsPeriodLink} delay={0.14}
@@ -247,10 +248,10 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
-          label="Resposta" value={m?.tempoMedioResposta ?? 0} format="minutes"
-          delta={m && p ? deltaBadge(m.tempoMedioResposta, p.tempoMedioResposta, true) : undefined}
-          caption={`${Math.round(p?.tempoMedioResposta ?? 0)}min ${range.prevLabel}`}
-          quickActionLabel="Por vendedor →" quickActionTo="/performance" delay={0.34}
+          label="Resposta da equipe" value={m?.tempoMedioResposta ?? null} format="minutes"
+          delta={m?.tempoMedioResposta != null && p?.tempoMedioResposta != null ? deltaBadge(m.tempoMedioResposta, p.tempoMedioResposta, true) : undefined}
+          caption={m?.tempoMedioResposta == null ? "Sem respostas medidas no período" : "WhatsApp · recebida até a próxima resposta"}
+          quickActionLabel="Abrir conversas →" quickActionTo="/chat-whatsapp" delay={0.34}
         />
       </div>
       <div className="col-span-1 md:col-span-2">

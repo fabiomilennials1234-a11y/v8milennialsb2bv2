@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useIdentity } from "@/modules/identity";
+import { useIdentity, useOrganization } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { fetchMetricMeasure } from "./useMetricMeasure";
 import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 import {
   zonedDayStart,
@@ -38,7 +38,8 @@ export interface CommandMetrics {
   ticketMedio: number;
   novosClientes: number;
   propostasEnviadas: number;
-  tempoMedioResposta: number;
+  /** Minutos entre uma mensagem recebida e a próxima resposta, na organização. */
+  tempoMedioResposta: number | null;
   vendaPrimeiroPedido: number;
   vendaBaseAtiva: number;
   taxaConversao: number;
@@ -52,7 +53,7 @@ export interface CommandMetrics {
 const EMPTY: CommandMetrics = {
   totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0, noShow: 0,
   taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0, vendaProjeto: 0, ticketMedio: 0,
-  novosClientes: 0, propostasEnviadas: 0, tempoMedioResposta: 0,
+  novosClientes: 0, propostasEnviadas: 0, tempoMedioResposta: null,
   vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
   funnelReunioesMarcadas: 0, funnelCompareceu: 0, funnelPropostas: 0, funnelVendas: 0,
 };
@@ -197,7 +198,8 @@ function mapMetrics(data: unknown): CommandMetrics {
     ticketMedio: d?.ticketMedio ?? 0,
     novosClientes: d?.novosClientes ?? 0,
     propostasEnviadas: d?.propostasEnviadas ?? 0,
-    tempoMedioResposta: d?.tempoMedioResposta ?? 0,
+    // O campo legado mede lead → reunião, em horas. Não é resposta de WhatsApp.
+    tempoMedioResposta: null,
     vendaPrimeiroPedido: d?.vendaPrimeiroPedido ?? 0,
     vendaBaseAtiva: d?.vendaBaseAtiva ?? 0,
     taxaConversao: d?.taxaConversao ?? 0,
@@ -207,6 +209,39 @@ function mapMetrics(data: unknown): CommandMetrics {
     funnelPropostas: d?.funnelPropostas ?? 0,
     funnelVendas: d?.funnelVendas ?? 0,
   };
+}
+
+/** Tela e planilha compartilham as fontes, o período e o tratamento de ausência. */
+export async function fetchCommandMetrics(args: {
+  organizationId: string;
+  start: Date;
+  end: Date;
+  timezone: string;
+  filterMemberId?: string | null;
+}): Promise<CommandMetrics> {
+  const calendarDate = (date: Date) => {
+    const { y, m, d } = zonedDateParts(date, args.timezone);
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  };
+  const [{ data, error }, response] = await Promise.all([
+    supabase.rpc("get_dashboard_metrics", {
+      p_org_id: args.organizationId,
+      p_start_date: args.start.toISOString(),
+      p_end_date: args.end.toISOString(),
+      p_filter_member_id: args.filterMemberId ?? undefined,
+    }),
+    // A medida é da EQUIPE inteira; não aceita filtro de vendedor. A tela a
+    // identifica assim, mesmo quando os demais KPIs têm recorte individual.
+    fetchMetricMeasure({ organizationId: args.organizationId,
+      measureRef: { kind: "leaf", id: "tempo_resposta_equipe" }, recorte: "total",
+      period: "range", start: calendarDate(args.start), end: calendarDate(args.end) }),
+  ]);
+  if (error) throw new Error(`Não foi possível carregar os indicadores: ${error.message}`);
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    throw new Error("O serviço não retornou os indicadores da organização");
+  }
+  return { ...mapMetrics(data), tempoMedioResposta: response?.value == null || response.empty_reason
+    ? null : response.value / 60 };
 }
 
 /**
@@ -223,9 +258,9 @@ export function useCommandMetrics(
   filterMemberId?: string | null,
 ) {
   const { isAdmin } = useIdentity();
+  const { organizationId, timezone, isReady } = useOrganization();
   const { data: currentTeamMember } = useCurrentTeamMember();
-  const organizationId = currentTeamMember?.organization_id ?? null;
-  const myId = currentTeamMember?.id ?? null;
+  const myId = currentTeamMember?.organization_id === organizationId ? currentTeamMember.id : null;
   const filterByMe = !isAdmin && myId;
   const effectiveFilter = filterMemberId !== undefined ? filterMemberId : (filterByMe ? myId : null);
 
@@ -240,25 +275,15 @@ export function useCommandMetrics(
   useRealtimeSubscription("leads", ["command-metrics"]);
 
   return useQuery({
-    queryKey: ["command-metrics", startStr, endStr, effectiveFilter, organizationId],
+    queryKey: ["command-metrics", startStr, endStr, effectiveFilter, organizationId, timezone],
     queryFn: async (): Promise<CommandMetrics> => {
       if (!organizationId) return EMPTY;
-      const { data, error } = await supabase.rpc("get_dashboard_metrics", {
-        p_org_id: organizationId,
-        p_start_date: startStr,
-        p_end_date: endStr,
-        p_filter_member_id: effectiveFilter ?? undefined,
-      });
-      if (error) {
-        if (isMissingSchemaError(error)) {
-          console.warn("[useCommandMetrics] RPC ausente (migration pendente?):", error.message);
-          return EMPTY;
-        }
-        throw new Error(`Command metrics failed: ${error.message}`);
-      }
-      return mapMetrics(data);
+      return fetchCommandMetrics({ organizationId, ...range, timezone: timezone ?? "UTC", filterMemberId: effectiveFilter || null });
     },
-    enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000,
+    enabled: isReady && !!organizationId && (filterMemberId !== undefined || isAdmin || !!myId),
+    staleTime: 30 * 1000,
+    // Cobre respostas e eventos de venda/reunião sem recalcular o painel
+    // inteiro a cada mensagem de WhatsApp da organização.
+    refetchInterval: 60 * 1000,
   });
 }

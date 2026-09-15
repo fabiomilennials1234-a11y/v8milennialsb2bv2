@@ -12,7 +12,7 @@ export interface KpiDelta {
 
 interface KpiCardCompactProps {
   label: string;
-  value: number;
+  value: number | null;
   format: KpiFormat;
   delta?: KpiDelta;
   caption: string;
@@ -21,7 +21,8 @@ interface KpiCardCompactProps {
   delay?: number;
 }
 
-function formatValue(value: number, format: KpiFormat): string {
+function formatValue(value: number | null, format: KpiFormat): string {
+  if (value === null) return "—";
   switch (format) {
     case "currencyK":
       if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1).replace(".", ",")}M`;
@@ -45,7 +46,7 @@ function KpiCardCompactBase({
   label, value, format, delta, caption, quickActionLabel, quickActionTo, delay = 0,
 }: KpiCardCompactProps) {
   const navigate = useNavigate();
-  const animated = useCountUp(value, 1300, true);
+  const animated = useCountUp(value ?? 0, 1300, true);
 
   return (
     <button
@@ -69,7 +70,7 @@ function KpiCardCompactBase({
         )}
       </div>
       <div className="mt-1.5 text-[21px] font-extrabold tracking-[-0.035em] tabular-nums">
-        {formatValue(animated, format)}
+        {formatValue(value === null ? null : animated, format)}
       </div>
       <div className="mt-0.5 text-[10.5px] text-muted-foreground/70">{caption}</div>
       <div
