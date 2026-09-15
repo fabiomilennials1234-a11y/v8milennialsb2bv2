@@ -33,7 +33,9 @@ BEGIN
     ('70b13847-19e9-4271-82c6-53e3b02f5547'::uuid, 3190, '43380940-a044-4809-b264-2fa74530480c'::uuid, 1, 'mrr'::public.product_type)
   ) AS manifest(event_id,expected_value,expected_member,confirmed_rate,confirmed_type)
   LOOP
-    SELECT * INTO v_sale FROM public.sale_events WHERE id=v.event_id FOR UPDATE;
+    -- Eventos são imutáveis. O lock pertence à RPC DEFINER abaixo; o operador
+    -- autenticado tem SELECT, mas não UPDATE no caderno de vendas.
+    SELECT * INTO v_sale FROM public.sale_events WHERE id=v.event_id;
     IF NOT FOUND OR v_sale.organization_id <> '6030520a-2ca7-477d-be89-55758e2cd808'::uuid
       OR v_sale.sale_value IS DISTINCT FROM v.expected_value
       OR v_sale.sale_responsible_id IS DISTINCT FROM v.expected_member THEN

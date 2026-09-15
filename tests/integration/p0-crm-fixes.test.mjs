@@ -119,6 +119,7 @@ async function fixture() {
     "20271021000008_p0_commission_projection.sql",
     "20271021000009_p0_deal_idempotency.sql",
     "20271021000010_p0_proposal_value.sql",
+    "20271021000011_p0_proposal_invoker_access.sql",
   ])
     await db.exec(sql(name));
   return db;
@@ -127,6 +128,11 @@ async function fixture() {
 test("proposta: valor, auditoria, concorrência, itens e desfecho", async () => {
   const db = await fixture();
   try {
+    // Em produção o helper interno não é executável pelo operador. A edição
+    // INVOKER deve usar SELECT com RLS, sem depender desse helper DEFINER.
+    await db.exec(`CREATE OR REPLACE FUNCTION can_link_or_read_lead(uuid,uuid)
+      RETURNS boolean LANGUAGE plpgsql AS $$ BEGIN
+      RAISE EXCEPTION 'permission denied for function can_link_or_read_lead' USING ERRCODE='42501'; END $$;`);
     const save = (value, expected = null) =>
       db.query("select editar_valor_proposta($1,$2,$3) id", [
         entry,

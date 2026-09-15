@@ -55,6 +55,7 @@ const migrations = [
   "20271021000008_p0_commission_projection.sql",
   "20271021000009_p0_deal_idempotency.sql",
   "20271021000010_p0_proposal_value.sql",
+  "20271021000011_p0_proposal_invoker_access.sql",
 ].map((n) => readFileSync(`supabase/migrations/${n}`, "utf8"));
 const rollback = readFileSync(
   "supabase/migrations/rollback/20271021000008_p0_crm_functions.sql",

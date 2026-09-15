@@ -14,7 +14,7 @@ const token = readFileSync(".env.development", "utf8")
       .replace(/^['"]|['"]$/g, ""),
   )
   .find((v) => v.startsWith("sbp_"));
-const files = [
+const files = mode === 'apply-proposal-access' ? ['20271021000011_p0_proposal_invoker_access.sql'] : [
   "20271021000008_p0_commission_projection.sql",
   "20271021000009_p0_deal_idempotency.sql",
   "20271021000010_p0_proposal_value.sql",
@@ -35,7 +35,7 @@ if (mode === "preflight") {
     .replace(/^BEGIN;$/m, "")
     .replace(/^COMMIT;$/m, "");
   query = `BEGIN; SET LOCAL lock_timeout='5s'; ${statements.join("\n")} ${rollback} ${statements[0].replace("CREATE TRIGGER trg_commissions_guard_insert", "DROP TRIGGER IF EXISTS trg_commissions_guard_insert ON public.commissions; CREATE TRIGGER trg_commissions_guard_insert")} ${auth} ${ledger} ROLLBACK;`;
-} else if (mode === "apply") {
+} else if (mode === "apply" || mode === 'apply-proposal-access') {
   const tracking = files
     .map(
       (f, i) =>
@@ -50,7 +50,26 @@ if (mode === "preflight") {
   )
     .replace("BEGIN;", `BEGIN; ${auth}`)
     .replace("COMMIT;", `${ledger} COMMIT;`);
-} else throw new Error("Expected preflight, apply or reconcile");
+} else if (mode === "smoke") {
+  query = `BEGIN; ${auth}
+  DO $$ DECLARE e record; actual numeric; BEGIN
+    SELECT pe.id,d.id deal_id,d.value,d.updated_at INTO e
+    FROM public.pipeline_entries pe JOIN public.deals d ON d.id=pe.deal_id
+    WHERE pe.organization_id='6030520a-2ca7-477d-be89-55758e2cd808'
+      AND d.outcome='open' AND d.deleted_at IS NULL
+      AND NOT EXISTS(SELECT 1 FROM public.deal_items i WHERE i.deal_id=d.id)
+    ORDER BY pe.id LIMIT 1;
+    IF NOT FOUND THEN RAISE EXCEPTION 'No eligible proposal to validate'; END IF;
+    PERFORM public.editar_valor_proposta(e.id,1234.56,e.updated_at);
+    SELECT value INTO actual FROM public.deals WHERE id=e.deal_id;
+    IF actual<>1234.56 THEN RAISE EXCEPTION 'Proposal did not persist'; END IF;
+    BEGIN
+      PERFORM public.editar_valor_proposta(e.id,900,e.updated_at);
+      RAISE EXCEPTION 'Stale write was accepted';
+    EXCEPTION WHEN serialization_failure THEN NULL; END;
+  END $$;
+  ${ledger} ROLLBACK;`;
+} else throw new Error("Expected preflight, apply, reconcile or smoke");
 const r = await fetch(
   `https://api.supabase.com/v1/projects/${ref}/database/query`,
   {
