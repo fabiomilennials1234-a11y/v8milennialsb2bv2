@@ -131,7 +131,7 @@ export default function MetricsStudio() {
         {period === "custom" && <Popover><PopoverTrigger asChild><Button variant="outline" className="min-h-11">
           <CalendarDays className="mr-2 size-4" />{range?.from && range?.to ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}` : "Escolher as duas datas"}
         </Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="range" selected={range} onSelect={setRange} numberOfMonths={1} locale={ptBR} /></PopoverContent></Popover>}
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11" disabled={!podeExportar || !!relatorio.exportando} title="Baixar resumo da organização, negócios por funil e métricas desta aba">
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11" disabled={!podeExportar || !!relatorio.exportando} title="Baixar as métricas da aba no período escolhido">
           {relatorio.exportando ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar métricas
         </Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuGroup>
           <DropdownMenuItem onSelect={() => void relatorio.exportar("selected").catch(showError)}>Período selecionado</DropdownMenuItem>

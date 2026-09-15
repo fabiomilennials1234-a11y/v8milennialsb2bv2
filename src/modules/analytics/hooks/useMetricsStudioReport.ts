@@ -15,6 +15,7 @@ import {
 import { periodoAnterior, periodoAtual, referenciaNaOrg, type StudioPeriod, type StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
 import { studioInterval } from "@/modules/analytics/lib/metrics-studio-interval";
 import { fetchCommandMetrics } from "./useCommandMetrics";
+import { fetchTeamResponseTime } from "./useTeamResponseTime";
 import type { StudioWindow } from "./useMetricsStudio";
 
 /**
@@ -69,11 +70,26 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
         const anterior = periodoAnterior(studioPeriod, hoje, custom);
         const intervalo = studioInterval(studioPeriod, geradoEm, timezone ?? "UTC", custom);
         const common = { organizationId, timezone: timezone ?? "UTC", filterMemberId: null };
-        const [dashboard, previous, pipeline] = await Promise.all([
+        // Abas só com métricas do motor mantêm a exportação independente das
+        // RPCs de dashboard, como antes da inclusão dos cards fixos.
+        const includeDashboard = windows.length === 0 || windows.some((win) => win.fixo);
+        const summary = includeDashboard ? await Promise.all([
           fetchCommandMetrics({ ...common, start: intervalo.start, end: intervalo.end }),
           fetchCommandMetrics({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
-          fetchMetricMeasure({ organizationId, measureRef: { kind: "leaf", id: "negocios_na_etapa" }, recorte: "pipeline", ...atual }),
-        ]);
+          // Falhas nas fontes adicionais ficam explícitas na planilha e não
+          // descartam os indicadores que o dashboard retornou corretamente.
+          Promise.allSettled([
+            fetchTeamResponseTime({ ...common, start: intervalo.start, end: intervalo.end }),
+            fetchTeamResponseTime({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
+            fetchMetricMeasure({ organizationId, measureRef: { kind: "leaf", id: "negocios_na_etapa" }, recorte: "pipeline", ...atual }),
+          ]),
+        ]) : null;
+        const dashboard = summary?.[0];
+        const previous = summary?.[1];
+        const response = summary?.[2][0];
+        const previousResponse = summary?.[2][1];
+        const pipelineResult = summary?.[2][2];
+        const pipeline = pipelineResult?.status === "fulfilled" ? pipelineResult.value : null;
 
         // Uma leitura por janela, atual e anterior. São poucas janelas (teto de
         // 24 no banco) e o clique é deliberado — paralelizar é seguro aqui.
@@ -105,7 +121,7 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
             : rotuloDoPeriodo(scope, hoje),
           geradoEm,
           itens,
-          indicadores: [
+          indicadores: dashboard && previous ? [
             { label: "Leads novos", value: dashboard.totalLeads, previous: previous.totalLeads, note: "Entradas no período; não é o total de negócios do funil" },
             { label: "Reuniões marcadas", value: dashboard.reunioesMarcadas, previous: previous.reunioesMarcadas },
             { label: "Propostas", value: dashboard.propostasEnviadas, previous: previous.propostasEnviadas },
@@ -113,10 +129,13 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
             { label: "Receita (R$)", value: dashboard.vendaTotal, previous: previous.vendaTotal },
             { label: "Ticket médio (R$)", value: dashboard.ticketMedio, previous: previous.ticketMedio },
             { label: "Conversão (%)", value: dashboard.taxaConversao, previous: previous.taxaConversao },
-            { label: "Resposta da equipe (minutos)", value: dashboard.tempoMedioResposta, previous: previous.tempoMedioResposta,
-              note: "WhatsApp: recebida até a próxima resposta, no expediente; até 12h. Ausência não significa zero." },
-          ],
-          detalhes: [
+            { label: "Resposta da equipe (minutos)", value: response?.status === "fulfilled" ? response.value : null,
+              previous: previousResponse?.status === "fulfilled" ? previousResponse.value : null,
+              note: response?.status === "rejected" ? "Medida indisponível; não significa zero."
+                : previousResponse?.status === "rejected" ? "Comparativo indisponível; valor atual em minutos."
+                : "WhatsApp: recebida até a próxima resposta, no expediente; até 12h. Ausência não significa zero." },
+          ] : [],
+          detalhes: dashboard ? [
             { nome: "Negócios por funil", linhas: [
               ["Funil", "Negócios em aberto agora"],
               ...(pipeline?.series ?? []).map((item) => [sanitizarCelula(item.label), item.value]),
@@ -124,7 +143,7 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
             ] },
             { nome: "Receita diária", linhas: [["Data", "Receita (R$)", "Vendas"],
               ...dashboard.dailySales.map((item) => [item.day, item.revenue, item.count]) ] },
-          ],
+          ] : [],
         });
 
         const ExcelJS = await import("exceljs");

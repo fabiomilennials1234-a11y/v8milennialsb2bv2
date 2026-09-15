@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIdentity, useOrganization } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import { fetchMetricMeasure } from "./useMetricMeasure";
 import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 import {
   zonedDayStart,
@@ -38,8 +37,6 @@ export interface CommandMetrics {
   ticketMedio: number;
   novosClientes: number;
   propostasEnviadas: number;
-  /** Minutos entre uma mensagem recebida e a próxima resposta, na organização. */
-  tempoMedioResposta: number | null;
   vendaPrimeiroPedido: number;
   vendaBaseAtiva: number;
   taxaConversao: number;
@@ -53,7 +50,7 @@ export interface CommandMetrics {
 const EMPTY: CommandMetrics = {
   totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0, noShow: 0,
   taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0, vendaProjeto: 0, ticketMedio: 0,
-  novosClientes: 0, propostasEnviadas: 0, tempoMedioResposta: null,
+  novosClientes: 0, propostasEnviadas: 0,
   vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
   funnelReunioesMarcadas: 0, funnelCompareceu: 0, funnelPropostas: 0, funnelVendas: 0,
 };
@@ -198,8 +195,6 @@ function mapMetrics(data: unknown): CommandMetrics {
     ticketMedio: d?.ticketMedio ?? 0,
     novosClientes: d?.novosClientes ?? 0,
     propostasEnviadas: d?.propostasEnviadas ?? 0,
-    // O campo legado mede lead → reunião, em horas. Não é resposta de WhatsApp.
-    tempoMedioResposta: null,
     vendaPrimeiroPedido: d?.vendaPrimeiroPedido ?? 0,
     vendaBaseAtiva: d?.vendaBaseAtiva ?? 0,
     taxaConversao: d?.taxaConversao ?? 0,
@@ -219,29 +214,19 @@ export async function fetchCommandMetrics(args: {
   timezone: string;
   filterMemberId?: string | null;
 }): Promise<CommandMetrics> {
-  const calendarDate = (date: Date) => {
-    const { y, m, d } = zonedDateParts(date, args.timezone);
-    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  };
-  const [{ data, error }, response] = await Promise.all([
-    supabase.rpc("get_dashboard_metrics", {
-      p_org_id: args.organizationId,
-      p_start_date: args.start.toISOString(),
-      p_end_date: args.end.toISOString(),
-      p_filter_member_id: args.filterMemberId ?? undefined,
-    }),
-    // A medida é da EQUIPE inteira; não aceita filtro de vendedor. A tela a
-    // identifica assim, mesmo quando os demais KPIs têm recorte individual.
-    fetchMetricMeasure({ organizationId: args.organizationId,
-      measureRef: { kind: "leaf", id: "tempo_resposta_equipe" }, recorte: "total",
-      period: "range", start: calendarDate(args.start), end: calendarDate(args.end) }),
-  ]);
+  const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+    p_org_id: args.organizationId,
+    p_start_date: args.start.toISOString(),
+    p_end_date: args.end.toISOString(),
+    p_filter_member_id: args.filterMemberId ?? undefined,
+  });
   if (error) throw new Error(`Não foi possível carregar os indicadores: ${error.message}`);
   if (!data || (Array.isArray(data) && data.length === 0)) {
     throw new Error("O serviço não retornou os indicadores da organização");
   }
-  return { ...mapMetrics(data), tempoMedioResposta: response?.value == null || response.empty_reason
-    ? null : response.value / 60 };
+  // Resposta de WhatsApp tem fonte e disponibilidade próprias (useTeamResponseTime).
+  // O campo legado desta RPC mede lead → reunião, em horas, e não é consumido.
+  return mapMetrics(data);
 }
 
 /**
@@ -282,8 +267,7 @@ export function useCommandMetrics(
     },
     enabled: isReady && !!organizationId && (filterMemberId !== undefined || isAdmin || !!myId),
     staleTime: 30 * 1000,
-    // Cobre respostas e eventos de venda/reunião sem recalcular o painel
-    // inteiro a cada mensagem de WhatsApp da organização.
+    // Cobre eventos de venda/reunião sem depender da publicação de Realtime.
     refetchInterval: 60 * 1000,
   });
 }

@@ -9,6 +9,7 @@ import {
   type PeriodRange,
 } from "@/modules/analytics/hooks/useCommandMetrics";
 import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
+import { useTeamResponseTime } from "@/modules/analytics/hooks/useTeamResponseTime";
 import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { ClusterGauge } from "./ClusterGauge";
@@ -82,6 +83,8 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
   const { data: funnelHealth } = useFunnelHealth({ start: range.start, end: range.end });
   // Período anterior pros deltas (mesmo filtro dos KPIs)
   const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd }, filterMemberId);
+  const response = useTeamResponseTime({ start: range.start, end: range.end }, show("kpis"));
+  const prevResponse = useTeamResponseTime({ start: range.prevStart, end: range.prevEnd }, show("kpis"));
 
   // Gauge é sempre mensal — meta de faturamento é do mês, independente do range selecionado
   const monthRange = useMemo(() => monthlyRange ?? computePeriodRange("month", month, year), [monthlyRange, month, year]);
@@ -248,9 +251,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
-          label="Resposta da equipe" value={m?.tempoMedioResposta ?? null} format="minutes"
-          delta={m?.tempoMedioResposta != null && p?.tempoMedioResposta != null ? deltaBadge(m.tempoMedioResposta, p.tempoMedioResposta, true) : undefined}
-          caption={m?.tempoMedioResposta == null ? "Sem respostas medidas no período" : "WhatsApp · recebida até a próxima resposta"}
+          label="Resposta da equipe" value={response.isError ? null : response.data ?? null} format="minutes"
+          delta={!response.isError && !prevResponse.isError && response.data != null && prevResponse.data != null ? deltaBadge(response.data, prevResponse.data, true) : undefined}
+          caption={response.isError ? "Resposta temporariamente indisponível" : response.isPending ? "Carregando respostas…" : response.data == null ? "Sem respostas medidas no período" : "WhatsApp · recebida até a próxima resposta"}
           quickActionLabel="Abrir conversas →" quickActionTo="/chat-whatsapp" delay={0.34}
         />
       </div>
