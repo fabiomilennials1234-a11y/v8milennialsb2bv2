@@ -16,11 +16,12 @@ import { formatMetricValue } from "./tv-metric-format";
 import { headValueFromMeasure } from "./tv-series";
 import { variacaoPct } from "./metrics-studio-period";
 
-export type ReportScope = "month" | "quarter";
+export type ReportScope = "month" | "quarter" | "selected";
 
 export const REPORT_SCOPE_LABEL: Record<ReportScope, string> = {
   month: "Mensal",
   quarter: "Trimestral",
+  selected: "Período selecionado",
 };
 
 export interface ReportItem {
@@ -47,6 +48,8 @@ export interface ReportInput {
   periodoLabel: string;
   geradoEm: Date;
   itens: ReportItem[];
+  indicadores?: { label: string; value: number | null; previous: number | null; note?: string }[];
+  detalhes?: ReportSheet[];
 }
 
 /**
@@ -92,7 +95,7 @@ export function nomeDeAba(bruto: string, usados: Set<string>): string {
  * uma aba de uma célula.
  */
 export function montarRelatorio(input: ReportInput): ReportSheet[] {
-  const { orgNome, scope, periodoLabel, geradoEm, itens } = input;
+  const { orgNome, scope, periodoLabel, geradoEm, itens, indicadores = [] } = input;
 
   const cabecalho: (string | number | null)[][] = [
     ["Relatório de Métricas", null],
@@ -110,8 +113,13 @@ export function montarRelatorio(input: ReportInput): ReportSheet[] {
     ],
   };
 
-  const detalhes: ReportSheet[] = [];
-  const nomesUsados = new Set<string>(["Resumo"]);
+  for (const item of indicadores) {
+    const delta = variacaoPct(item.value, item.previous);
+    resumo.linhas.push([item.label, "Organização", item.value, item.previous,
+      delta === null ? "—" : `${delta.toFixed(1)}%`, item.note ?? ""]);
+  }
+  const detalhes: ReportSheet[] = [...(input.detalhes ?? [])];
+  const nomesUsados = new Set<string>(["Resumo", ...detalhes.map((item) => item.nome)]);
 
   for (const item of itens) {
     const { metric, corte, atual, anterior } = item;
@@ -163,7 +171,7 @@ export function montarRelatorio(input: ReportInput): ReportSheet[] {
     }
   }
 
-  if (itens.length === 0) {
+  if (itens.length === 0 && indicadores.length === 0) {
     resumo.linhas.push(["Painel vazio", "", "", "", "", "Adicione métricas antes de exportar"]);
   }
 
@@ -180,5 +188,5 @@ export function nomeDoArquivo(orgNome: string, scope: ReportScope, quando: Date)
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "org";
   const data = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}-${String(quando.getDate()).padStart(2, "0")}`;
-  return `metricas_${slug}_${scope === "month" ? "mensal" : "trimestral"}_${data}.xlsx`;
+  return `metricas_${slug}_${scope === "month" ? "mensal" : scope === "quarter" ? "trimestral" : "periodo"}_${data}.xlsx`;
 }

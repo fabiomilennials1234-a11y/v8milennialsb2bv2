@@ -15,7 +15,7 @@ type PerformanceSection = ComponentProps<typeof Performance>["section"];
 
 function OverviewCard(props: FixedCardContext & { section: OverviewSection }) {
   const { data: member } = useCurrentTeamMember();
-  return <Suspense fallback={<Skeleton className="h-40 w-full" />}><Overview {...props} isAdmin={member?.role === "admin"} onAskOraculo={() => { /* O briefing tem adaptador próprio abaixo. */ }} /></Suspense>;
+  return <Suspense fallback={<Skeleton className="h-40 w-full" />}><Overview {...props} filterMemberId={null} isAdmin={member?.role === "admin"} onAskOraculo={() => { /* O briefing tem adaptador próprio abaixo. */ }} /></Suspense>;
 }
 function PerformanceCard(props: FixedCardContext & { section: PerformanceSection }) {
   const { allowed, isLoading } = useFeaturePermission("performance.view");

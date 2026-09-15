@@ -20,6 +20,7 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
 }));
 vi.mock("@/modules/identity", () => ({
   useIdentity: () => ({ isAdmin: true }),
+  useOrganization: () => ({ organizationId: "org-1", timezone: "America/Sao_Paulo", isReady: true }),
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-1" } }),
 }));
 vi.mock("@/integrations/supabase/client", () => ({

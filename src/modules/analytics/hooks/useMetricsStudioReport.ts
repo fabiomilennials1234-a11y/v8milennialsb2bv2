@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,8 +10,12 @@ import {
   REPORT_SCOPE_LABEL,
   type ReportItem,
   type ReportScope,
+  sanitizarCelula,
 } from "@/modules/analytics/lib/metrics-studio-report";
-import { periodoAnterior, periodoAtual, referenciaNaOrg } from "@/modules/analytics/lib/metrics-studio-period";
+import { periodoAnterior, periodoAtual, referenciaNaOrg, type StudioPeriod, type StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
+import { studioInterval } from "@/modules/analytics/lib/metrics-studio-interval";
+import { fetchCommandMetrics } from "./useCommandMetrics";
+import { fetchTeamResponseTime } from "./useTeamResponseTime";
 import type { StudioWindow } from "./useMetricsStudio";
 
 /**
@@ -34,13 +38,15 @@ function rotuloDoPeriodo(scope: ReportScope, hoje: Date): string {
   return `${tri}º trimestre de ${hoje.getFullYear()}`;
 }
 
-export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string, EngineMetric>) {
+export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string, EngineMetric>, selection: { period: StudioPeriod; range: StudioRange | null } = { period: "month", range: null }) {
   const { organizationId, timezone } = useOrganization();
   const [exportando, setExportando] = useState<ReportScope | null>(null);
+  const busy = useRef(false);
 
   const exportar = useCallback(
     async (scope: ReportScope) => {
-      if (!organizationId || exportando) return;
+      if (!organizationId || busy.current) return;
+      busy.current = true;
       setExportando(scope);
 
       try {
@@ -50,22 +56,47 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
         // `useOrganization` não expõe o nome da org — expõe id, tipo e fuso.
         // Buscar aqui, no clique, evita alterar um hook de identidade que meio
         // sistema consome só para preencher um cabeçalho de planilha.
-        const { data: org } = await supabase
+        const { data: org, error: orgError } = await supabase
           .from("organizations")
           .select("name")
           .eq("id", organizationId)
           .maybeSingle();
+        if (orgError) throw new Error(orgError.message);
         const orgNome = (org as { name?: string | null } | null)?.name ?? "Organização";
 
-        const studioPeriod = scope === "month" ? "month" : "quarter";
-        const atual = periodoAtual(studioPeriod, hoje);
-        const anterior = periodoAnterior(studioPeriod, hoje);
+        const studioPeriod = scope === "selected" ? selection.period : scope;
+        const custom = scope === "selected" ? selection.range : null;
+        const atual = periodoAtual(studioPeriod, hoje, custom);
+        const anterior = periodoAnterior(studioPeriod, hoje, custom);
+        const intervalo = studioInterval(studioPeriod, geradoEm, timezone ?? "UTC", custom);
+        const common = { organizationId, timezone: timezone ?? "UTC", filterMemberId: null };
+        // Abas só com métricas do motor mantêm a exportação independente das
+        // RPCs de dashboard, como antes da inclusão dos cards fixos.
+        const includeDashboard = windows.length === 0 || windows.some((win) => win.fixo);
+        const summary = includeDashboard ? await Promise.all([
+          fetchCommandMetrics({ ...common, start: intervalo.start, end: intervalo.end }),
+          fetchCommandMetrics({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
+          // Falhas nas fontes adicionais ficam explícitas na planilha e não
+          // descartam os indicadores que o dashboard retornou corretamente.
+          Promise.allSettled([
+            fetchTeamResponseTime({ ...common, start: intervalo.start, end: intervalo.end }),
+            fetchTeamResponseTime({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
+            fetchMetricMeasure({ organizationId, measureRef: { kind: "leaf", id: "negocios_na_etapa" }, recorte: "pipeline", ...atual }),
+          ]),
+        ]) : null;
+        const dashboard = summary?.[0];
+        const previous = summary?.[1];
+        const response = summary?.[2][0];
+        const previousResponse = summary?.[2][1];
+        const pipelineResult = summary?.[2][2];
+        const pipeline = pipelineResult?.status === "fulfilled" ? pipelineResult.value : null;
 
         // Uma leitura por janela, atual e anterior. São poucas janelas (teto de
         // 24 no banco) e o clique é deliberado — paralelizar é seguro aqui.
         const itens: ReportItem[] = [];
         await Promise.all(
           windows.map(async (win) => {
+            if (win.fixo) return;
             const metric = byId.get(win.metricId);
             if (!metric) return;
             const comum = { organizationId, measureRef: metric.measureRef, filters: metric.filtrosFixos };
@@ -85,9 +116,34 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
         const abas = montarRelatorio({
           orgNome,
           scope,
-          periodoLabel: rotuloDoPeriodo(scope, hoje),
+          periodoLabel: scope === "selected"
+            ? `${intervalo.start.toLocaleDateString("pt-BR", { timeZone: timezone ?? "UTC" })} — ${intervalo.end.toLocaleDateString("pt-BR", { timeZone: timezone ?? "UTC" })}`
+            : rotuloDoPeriodo(scope, hoje),
           geradoEm,
           itens,
+          indicadores: dashboard && previous ? [
+            { label: "Leads novos", value: dashboard.totalLeads, previous: previous.totalLeads, note: "Entradas no período; não é o total de negócios do funil" },
+            { label: "Reuniões marcadas", value: dashboard.reunioesMarcadas, previous: previous.reunioesMarcadas },
+            { label: "Propostas", value: dashboard.propostasEnviadas, previous: previous.propostasEnviadas },
+            { label: "Vendas", value: dashboard.novosClientes, previous: previous.novosClientes },
+            { label: "Receita (R$)", value: dashboard.vendaTotal, previous: previous.vendaTotal },
+            { label: "Ticket médio (R$)", value: dashboard.ticketMedio, previous: previous.ticketMedio },
+            { label: "Conversão (%)", value: dashboard.taxaConversao, previous: previous.taxaConversao },
+            { label: "Resposta da equipe (minutos)", value: response?.status === "fulfilled" ? response.value : null,
+              previous: previousResponse?.status === "fulfilled" ? previousResponse.value : null,
+              note: response?.status === "rejected" ? "Medida indisponível; não significa zero."
+                : previousResponse?.status === "rejected" ? "Comparativo indisponível; valor atual em minutos."
+                : "WhatsApp: recebida até a próxima resposta, no expediente; até 12h. Ausência não significa zero." },
+          ] : [],
+          detalhes: dashboard ? [
+            { nome: "Negócios por funil", linhas: [
+              ["Funil", "Negócios em aberto agora"],
+              ...(pipeline?.series ?? []).map((item) => [sanitizarCelula(item.label), item.value]),
+              ["Observação", pipeline === null ? "Contagem indisponível" : "Posição atual; inclui negócios de meses anteriores. Um lead pode ter vários negócios."],
+            ] },
+            { nome: "Receita diária", linhas: [["Data", "Receita (R$)", "Vendas"],
+              ...dashboard.dailySales.map((item) => [item.day, item.revenue, item.count]) ] },
+          ] : [],
         });
 
         const ExcelJS = await import("exceljs");
@@ -117,10 +173,11 @@ export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string
         console.error("[metrics-studio] falha ao exportar", e);
         toast.error("Não foi possível gerar o relatório");
       } finally {
+        busy.current = false;
         setExportando(null);
       }
     },
-    [organizationId, timezone, windows, byId, exportando],
+    [organizationId, timezone, windows, byId, selection.period, selection.range],
   );
 
   return { exportar, exportando };

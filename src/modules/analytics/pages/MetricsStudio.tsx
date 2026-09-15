@@ -39,7 +39,7 @@ const showError = (error: unknown) => toast.error(error instanceof Error ? error
 export default function MetricsStudio() {
   const catalogo = useStudioCatalog();
   const abas = useMetricsStudioPanels();
-  const { timezone } = useOrganization();
+  const { organizationId, timezone } = useOrganization();
   const { isMaster } = useIdentity();
   const { data: membro } = useCurrentTeamMember();
   const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
@@ -51,7 +51,6 @@ export default function MetricsStudio() {
   const ativa = paineisVisiveis.find((p) => p.id === ativaId) ?? paineisVisiveis[0] ?? null;
   const studio = useMetricsStudio(catalogo.byId, ativa?.id ?? null);
   const persistence = studio.persistence;
-  const relatorio = useMetricsStudioReport(studio.windows, catalogo.byId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [novaAba, setNovaAba] = useState(false);
   const [remover, setRemover] = useState<StudioPanel | null>(null);
@@ -66,6 +65,7 @@ export default function MetricsStudio() {
   // Guarda também as pontas: editar um intervalo anterior não pode trocar os números por um preset.
   if (!incompleto) ultimoCompleto.current = { period, range: rangeMotor };
   const efetivo = incompleto ? ultimoCompleto.current : { period, range: rangeMotor };
+  const relatorio = useMetricsStudioReport(studio.windows, catalogo.byId, efetivo);
   const now = useStudioClock();
   const tz = timezone ?? "UTC";
   const { month, year } = mesDeReferencia(now, tz);
@@ -106,7 +106,7 @@ export default function MetricsStudio() {
       if (id) { setAtivaId(id); setSelectedId(null); setNovaAba(false); setModo("editar"); }
     } catch (error) { showError(error); }
   };
-  const podeExportar = studio.windows.some((win) => !win.fixo && catalogo.byId.has(win.metricId));
+  const podeExportar = !!organizationId && !carregando && !erro;
 
 
   return (
@@ -131,15 +131,18 @@ export default function MetricsStudio() {
         {period === "custom" && <Popover><PopoverTrigger asChild><Button variant="outline" className="min-h-11">
           <CalendarDays className="mr-2 size-4" />{range?.from && range?.to ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}` : "Escolher as duas datas"}
         </Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="range" selected={range} onSelect={setRange} numberOfMonths={1} locale={ptBR} /></PopoverContent></Popover>}
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11" disabled={!podeExportar || !!relatorio.exportando} title="Exporta as métricas do motor; cards de dashboard não entram na planilha">
+        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11" disabled={!podeExportar || !!relatorio.exportando} title="Baixar as métricas da aba no período escolhido">
           {relatorio.exportando ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar métricas
         </Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => void relatorio.exportar("selected").catch(showError)}>Período selecionado</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void relatorio.exportar("month").catch(showError)}>Relatório mensal</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void relatorio.exportar("quarter").catch(showError)}>Relatório trimestral</DropdownMenuItem>
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
         {editando && <Button variant="ghost" disabled={!studio.windows.length} className="min-h-11" onClick={() => setLimpar(true)}><Trash2 className="mr-2 size-4" />Limpar aba</Button>}
         <span role="status" className="text-xs text-muted-foreground">{persistence.isSaving ? "Salvando alterações…" : persistence.saveError ? "Há alterações não salvas" : ""}</span>
       </div>
+
+      <p className="text-xs text-muted-foreground">Indicadores da organização no período selecionado. “Leads novos” conta as entradas desse período; os negócios em aberto nos funis incluem períodos anteriores e um lead pode ter mais de um negócio.</p>
 
       {persistence.saveError && <Alert variant="destructive"><AlertTitle>O painel não foi salvo</AlertTitle><AlertDescription>
         {persistence.saveError}. Mantenha esta página aberta. <Button variant="outline" onClick={persistence.retrySave} disabled={persistence.isSaving}>Tentar salvar novamente</Button>
