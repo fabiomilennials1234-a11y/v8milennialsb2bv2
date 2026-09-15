@@ -9,6 +9,7 @@
  * the signal. Everything else stays quiet and scannable.
  */
 import { useMemo, useState } from "react";
+import { blastOutcome } from "@/modules/campaigns/lib/blast-outcome";
 import {
   useBlastPlanProgress,
   useBlastPlanControl,
@@ -61,9 +62,9 @@ const STATUS_META: Record<
     pill: "border-border bg-muted/60 text-muted-foreground",
   },
   completed: {
-    label: "Concluído",
-    dot: "bg-success",
-    pill: "border-success/30 bg-success/10 text-success",
+    label: "Lotes liberados",
+    dot: "bg-muted-foreground",
+    pill: "border-border bg-muted/60 text-muted-foreground",
   },
   cancelled: {
     label: "Cancelado",
@@ -106,7 +107,10 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
   const [editMessage, setEditMessage] = useState(plan.message);
   const [editTime, setEditTime] = useState((plan.release_time ?? "09:00").slice(0, 5));
 
-  const status = STATUS_META[plan.status];
+  const outcome = blastOutcome(plan.status, progress);
+  const status = outcome.failed && plan.status !== "cancelled"
+    ? { label: outcome.title, dot: "bg-destructive", pill: "border-destructive/30 bg-destructive/10 text-destructive" }
+    : STATUS_META[plan.status];
   const isActive = plan.status === "active";
   const isPaused = plan.status === "paused";
   const isTerminal = plan.status === "completed" || plan.status === "cancelled";
@@ -302,14 +306,14 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
           <div
             className={cn(
               "h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
-              isTerminal && plan.status === "completed" ? "bg-success" : "bg-primary",
+              failed > 0 ? "bg-destructive" : "bg-primary",
             )}
             style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
           />
         </div>
         <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
           <span>
-            <span className="text-foreground/80">{sent.toLocaleString("pt-BR")}</span> enviados
+            <span className="text-foreground/80">{sent.toLocaleString("pt-BR")}</span> aceitos para envio
             {failed > 0 && (
               <span className="text-destructive"> · {failed.toLocaleString("pt-BR")} falhas</span>
             )}

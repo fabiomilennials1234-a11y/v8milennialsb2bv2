@@ -169,6 +169,10 @@ export function useBlastPlanProgress(planId: string | null) {
       return p;
     },
     enabled: !!planId,
+    // Provider failures arrive after the plan has finished releasing its lots.
+    // Recipient realtime cannot use the organization_id filter (no such column).
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 

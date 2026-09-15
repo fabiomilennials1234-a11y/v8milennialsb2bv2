@@ -10,9 +10,10 @@
  * own row (status, lots) comes from `useBlastPlans`.
  */
 import { useMemo } from "react";
+import { blastOutcome } from "@/modules/campaigns/lib/blast-outcome";
 import { motion } from "framer-motion";
 import {
-  CheckCircle2,
+  AlertTriangle,
   Pause,
   Play,
   Ban,
@@ -124,17 +125,13 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 text-primary"
         >
-          <CheckCircle2 className="h-7 w-7" strokeWidth={2} />
+          {failed > 0 ? <AlertTriangle className="h-7 w-7 text-destructive" /> : <Clock3 className="h-7 w-7" />}
         </motion.div>
         <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
-          {cancelled ? "Disparo cancelado" : completed ? "Disparo concluído" : "Disparo em andamento"}
+          {blastOutcome(plan?.status ?? "active", progress).title}
         </h2>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-          {cancelled
-            ? "Os contatos já enviados receberam a mensagem. O restante foi interrompido."
-            : completed
-              ? "Todos os lotes foram enviados. Veja o relatório abaixo."
-              : "Sua mensagem está sendo enviada no ritmo escolhido. Pause quando quiser."}
+          {blastOutcome(plan?.status ?? "active", progress).description}
         </p>
       </div>
 
@@ -159,7 +156,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              <span className="font-medium tabular-nums text-foreground">{sent.toLocaleString("pt-BR")}</span> enviados
+              <span className="font-medium tabular-nums text-foreground">{sent.toLocaleString("pt-BR")}</span> aceitos para envio
             </span>
             <span>
               <span className="font-medium tabular-nums text-foreground">{pending.toLocaleString("pt-BR")}</span> na fila
@@ -215,7 +212,8 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
       <div className="rounded-2xl border border-border/70 bg-card p-5">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Relatório</p>
         <ul className="mt-3 space-y-2.5 text-sm">
-          <ReportRow icon={Check} tone="ok" label="Enviados" value={sent} />
+          <ReportRow icon={Clock3} tone="muted" label="Aceitos para envio" value={sent} />
+          <ReportRow icon={AlertTriangle} tone="error" label="Falhas no envio" value={failed} />
           <ReportRow icon={Clock3} tone="muted" label="Na fila" value={pending} />
           <ReportRow icon={ListChecks} tone="muted" label="Ignorados" value={skipped} hint="sem WhatsApp / recência / duplicados" />
           <li className="border-t border-border/60 pt-2.5">
@@ -278,13 +276,13 @@ function ReportRow({
   hint,
 }: {
   icon: typeof Check;
-  tone: "ok" | "muted" | "accent";
+  tone: "ok" | "muted" | "accent" | "error";
   label: string;
   value: number;
   hint?: string;
 }) {
   const toneClass =
-    tone === "ok" ? "text-emerald-500" : tone === "accent" ? "text-primary" : "text-muted-foreground";
+    tone === "error" ? "text-destructive" : tone === "ok" ? "text-emerald-500" : tone === "accent" ? "text-primary" : "text-muted-foreground";
   return (
     <div className="flex items-center gap-2.5">
       <Icon className={cn("h-4 w-4 shrink-0", toneClass)} />
@@ -308,7 +306,7 @@ function estadoDoDestinatario(r: {
 }): string {
   switch (r.status) {
     case "sent":
-      return "Enviado";
+      return "Aceito para envio";
     case "failed":
       return failureReasonLabel(r.reason);
     case "skipped":

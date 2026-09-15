@@ -43,7 +43,7 @@ import {
 const PAGE_SIZE = 50;
 
 const TABS: { key: BlastRecipientStatus; label: string }[] = [
-  { key: "sent", label: "Enviados" },
+  { key: "sent", label: "Aceitos para envio" },
   // "Falha na entrega" logo após Enviados: é de lá que o lead migra quando o
   // sync reclassifica (ADR-0016). Renderizada só com count > 0.
   { key: "failed", label: "Falha na entrega" },
