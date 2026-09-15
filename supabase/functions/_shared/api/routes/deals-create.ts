@@ -61,6 +61,12 @@ interface CreateDealResult {
 function traduzErro(err: unknown): { status: number; code: string; message: string } {
   const e = err as { code?: string; message?: string };
   const msg = e?.message ?? "";
+  if (msg === "idempotency_key_conflict" || msg === "idempotent_resource_unavailable") {
+    return { status: 409, code: msg, message: "Esta chave já identifica outra solicitação ou um negócio indisponível. Não repita com uma chave nova sem conferir o negócio original." };
+  }
+  if (msg === "invalid_idempotency_key") {
+    return { status: 422, code: msg, message: "Idempotency-Key deve conter de 1 a 200 caracteres." };
+  }
 
   if (e?.code === "P0002" || /não encontrado|nao encontrado/i.test(msg)) {
     return { status: 404, code: "lead_not_found", message: "Lead não encontrado nesta organização" };

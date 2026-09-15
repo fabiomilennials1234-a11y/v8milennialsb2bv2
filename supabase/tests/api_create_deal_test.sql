@@ -140,7 +140,15 @@ CREATE TEMP TABLE d3 AS
 SELECT public.api_create_deal(
   'deadbeef-0000-4000-8000-0000000000f1',
   'deadbeef-0000-4000-8000-0000000000fa',
-  'whatsapp', 'novo', NULL, NULL, 'Retentativa', NULL, 'api', 'dk-1') AS j;
+  'whatsapp', 'novo', NULL, 990, 'Primeiro Negócio', NULL, 'api', 'dk-1') AS j;
+
+SELECT throws_ok(
+  $$ SELECT public.api_create_deal(
+    'deadbeef-0000-4000-8000-0000000000f1',
+    'deadbeef-0000-4000-8000-0000000000fa',
+    'whatsapp', 'novo', NULL, NULL, 'Retentativa', NULL, 'api', 'dk-1') $$,
+  '23505', 'idempotency_key_conflict',
+  '(IDEMPOTÊNCIA) mesma chave com payload diferente recusa conflito');
 
 SELECT is((SELECT j->>'status' FROM d3), 'replayed', '(IDEMPOTÊNCIA) mesma chave devolve replayed');
 
