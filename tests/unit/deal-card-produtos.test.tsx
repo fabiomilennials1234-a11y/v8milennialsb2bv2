@@ -51,6 +51,41 @@ const DOIS_PRODUTOS: DealCardItem[] = [
   item({ id: "i2", nome: "Produto B", quantidade: 1, precoUnitario: 250, total: 250, produtoId: "p2", ordem: 1 }),
 ];
 
+describe("valor manual da proposta", () => {
+  it("distingue zero informado de valor não definido", () => {
+    render(<DealCardMoney itens={[]} valorDoNegocio={0} onEditarValor={vi.fn()} />);
+    expect(screen.getByText("R$ 0,00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Editar valor" })).toBeTruthy();
+  });
+  it("salva BRL sem produtos e preserva o rascunho após erro", async () => {
+    const salvar = vi.fn().mockRejectedValueOnce(new Error("concorrência")).mockResolvedValueOnce(undefined);
+    render(<DealCardMoney itens={[]} valorDoNegocio={null} onEditarValor={salvar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Definir valor" }));
+    fireEvent.change(screen.getByLabelText("Valor da proposta"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
+    await waitFor(() => expect(salvar).toHaveBeenCalledWith(1234.56, null));
+    expect(screen.getByLabelText("Valor da proposta")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Salvar valor" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
+    await waitFor(() => expect(screen.queryByLabelText("Valor da proposta")).toBeNull());
+  });
+
+  it("não oferece total independente quando há produtos", () => {
+    render(<DealCardMoney itens={DOIS_PRODUTOS} valorDoNegocio={450} onEditarValor={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Editar valor" })).toBeNull();
+  });
+
+  it("não troca a versão esperada se o cache atualizar durante a edição", async () => {
+    const salvar = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<DealCardMoney itens={[]} valorDoNegocio={100} versaoDoNegocio="v1" onEditarValor={salvar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar valor" }));
+    fireEvent.change(screen.getByLabelText("Valor da proposta"), { target: { value: "15000" } });
+    rerender(<DealCardMoney itens={[]} valorDoNegocio={200} versaoDoNegocio="v2" onEditarValor={salvar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
+    await waitFor(() => expect(salvar).toHaveBeenCalledWith(150, "v1"));
+  });
+});
+
 describe("contaDoNegocio — a conta mora num lugar só", () => {
   it("soma os totais dos itens", () => {
     const { temItens, total, desconto } = contaDoNegocio(DOIS_PRODUTOS, null);

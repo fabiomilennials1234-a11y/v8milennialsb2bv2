@@ -7,7 +7,6 @@ import { useFeatureFlag } from "@/modules/platform";
 // de módulo) — evita puxar o barrel inteiro de analytics (que importa hooks →
 // identity) e formar ciclo de import. Mesma origem que #998 consome internamente.
 import { monthPeriodArgs, type CommissionLedgerResult } from "@/modules/analytics/types/canonical-metrics";
-import { isRpcAbsentError } from "@/lib/rpc-errors";
 import { resolveSalesGoalProgress } from "@/modules/engagement/lib/goal-progress";
 export type Commission = Tables<"commissions">;
 export type CommissionInsert = TablesInsert<"commissions">;
@@ -152,15 +151,7 @@ export function calculateOTEBonus(
   return oteBonus * 1.2;
 }
 
-/**
- * Overlay canônico da comissão de UM membro a partir de get_commission_ledger
- * (#997 / ADR-0017 §6): amount/rate SNAPSHOTADOS no evento, líquido de estorno
- * (anti-join na venda), atribuição por chave única (== pódio). Degrada em
- * PGRST202 (migration pendente) → retorna null e o cálculo legado on-the-fly
- * sobrevive (no-op até os cadernos existirem). `base_revenue` por membro ==
- * receita do pódio daquele membro (invariante #997): a barra da meta, o pódio e
- * o bônus OTE passam a ler o MESMO número (mata o 3º-formula do finding #9 + R5/#3).
- */
+/** Lê valores apurados e pendências do caderno, com taxas preservadas na venda. */
 interface CanonicalCommission {
   totalMRR: number;
   totalProjeto: number;
@@ -169,6 +160,10 @@ interface CanonicalCommission {
   totalCommission: number;
   baseRevenue: number;
   saleCount: number;
+  pendingCount: number;
+  pendingRevenue: number;
+  periodStart: string;
+  periodEnd: string;
 }
 
 async function overlayCommissionLedger(
@@ -176,7 +171,7 @@ async function overlayCommissionLedger(
   teamMemberId: string,
   month: number,
   year: number,
-): Promise<CanonicalCommission | null> {
+): Promise<CanonicalCommission> {
   const period = monthPeriodArgs(month, year);
   const { data, error } = await supabase.rpc("get_commission_ledger", {
     p_org_id: organizationId,
@@ -188,17 +183,17 @@ async function overlayCommissionLedger(
   });
 
   if (error) {
-    // RPC ausente (migration pendente) → mantém o cálculo legado on-the-fly.
-    // Por CÓDIGO apenas (FIX-A): um erro de runtime real da RPC canônica implantada
-    // propaga (throw) em vez de degradar em silêncio pra comissão legada errada.
-    if (isRpcAbsentError(error)) return null;
-    console.error("❌ [overlayCommissionLedger] RPC error:", error.message, error.code);
     throw new Error(`get_commission_ledger failed: ${error.message}`);
   }
 
   const raw = Array.isArray(data) ? (data.length > 0 ? data[0] : null) : data;
-  const ledger = raw as CommissionLedgerResult | null;
-  if (!ledger) return null;
+  const ledger = raw as (Omit<CommissionLedgerResult, "by_member"> & {
+    projection_status: "ready" | "pending";
+    by_member: (CommissionLedgerResult["by_member"][number] & { pending_count?: number; pending_revenue?: number })[];
+  }) | null;
+  if (!ledger || !["ready", "pending"].includes(ledger.projection_status)) {
+    throw new Error("A apuração de comissões ainda não está disponível neste ambiente.");
+  }
 
   // Filtrado por membro → by_member tem 0 ou 1 linha. Sem linha = sem venda
   // canônica no período (comissão 0) — coerente com "membro fora do pódio" (R5).
@@ -206,7 +201,7 @@ async function overlayCommissionLedger(
   if (!m) {
     return {
       totalMRR: 0, totalProjeto: 0, commissionMRR: 0, commissionProjeto: 0,
-      totalCommission: 0, baseRevenue: 0, saleCount: 0,
+      totalCommission: 0, baseRevenue: 0, saleCount: 0, pendingCount: 0, pendingRevenue: 0, periodStart: ledger.period.start, periodEnd: ledger.period.end,
     };
   }
   return {
@@ -217,11 +212,15 @@ async function overlayCommissionLedger(
     totalCommission: m.commission,
     baseRevenue: m.base_revenue,
     saleCount: m.sale_count,
+    periodStart: ledger.period.start, periodEnd: ledger.period.end,
+    pendingCount: m.pending_count ?? 0,
+    pendingRevenue: m.pending_revenue ?? 0,
   };
 }
 
 // Calculate commission summary for a closer
 export interface CommissionSummary {
+  salesRevenue: number;
   totalMRR: number;
   totalProjeto: number;
   commissionMRR: number;
@@ -231,7 +230,12 @@ export interface CommissionSummary {
   oteBonus: number;
   calculatedBonus: number;
   campaignBonuses: number;
-  totalEarnings: number;
+  totalEarnings: number | null;
+  commissionStatus: "ready" | "pending";
+  pendingRevenue: number;
+  pendingCount: number;
+  goalConfigured: boolean;
+  goalCurrent: number;
   goalProgress: number;
   campaignBonusList: { campaignName: string; bonusValue: number }[];
 }
@@ -258,9 +262,13 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
       if (memberError) throw memberError;
 
-      // Intervalo do mês em UTC (alinhado ao dashboard)
-      const startStr = new Date(Date.UTC(year, month - 1, 1)).toISOString();
-      const endStr = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      const canonical = useCanonical
+        ? await overlayCommissionLedger(organizationId, teamMemberId, month, year)
+        : null;
+
+      // A RPC fornece os limites no fuso da organização.
+      const startStr = canonical?.periodStart ?? new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const endStr = canonical?.periodEnd ?? new Date(Date.UTC(year, month, 1)).toISOString();
 
       // Período: COALESCE(metrics_period_at, closed_at) no intervalo do mês.
       // Fase A descomissionamento (PRD #211 / Issue #214): crédito de venda
@@ -268,7 +276,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       // legacy removido — o trigger DB garante snapshot dual no momento da
       // transição para `vendido`, e backfill (`e3ac4599`) já preencheu
       // histórico onde dual era nulo.
-      const [salesQ1, salesQ2] = await Promise.all([
+      const [salesQ1, salesQ2] = useCanonical ? [{ data: [], error: null }, { data: [], error: null }] : await Promise.all([
         supabase
           .from("negocio_projetado")
           .select("sale_value, product_type")
@@ -278,7 +286,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
-          .lte("metrics_period_at", endStr),
+          .lt("metrics_period_at", endStr),
         supabase
           .from("negocio_projetado")
           .select("sale_value, product_type")
@@ -288,7 +296,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", startStr)
-          .lte("closed_at", endStr),
+          .lt("closed_at", endStr),
       ]);
       if (salesQ1.error) throw salesQ1.error;
       if (salesQ2.error) throw salesQ2.error;
@@ -317,15 +325,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       let commissionProjeto = totalProjeto * (commissionProjetoPercent / 100);
       let totalCommission = commissionMRR + commissionProjeto;
 
-      // ── Overlay CANÔNICO (get_commission_ledger, #997/ADR-0017 §6) ──────────
-      // Receita e comissão passam a vir do caderno sale_events (snapshot de taxa,
-      // líquido de estorno, atribuição única) — o MESMO número do pódio. Degrada
-      // pra legado se a migration não aplicou (PGRST202) — no-op nesse caso.
-      // Gate (U3): flag OFF/loading → overlay pulado, get_commission_ledger nunca
-      // chamado; a comissão legada on-the-fly acima permanece a fonte.
-      const canonical = useCanonical
-        ? await overlayCommissionLedger(organizationId, teamMemberId, month, year)
-        : null;
+      // O caminho canônico não depende da view legada nem calcula taxas atuais.
       if (canonical) {
         totalMRR = canonical.totalMRR;
         totalProjeto = canonical.totalProjeto;
@@ -345,7 +345,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
       const fetchGoalTarget = async (type: string) => {
         // 1) individual goal (scoped to organization)
-        const { data: individualGoal } = await supabase
+        const { data: individualGoal, error: individualError } = await supabase
           .from("goals")
           .select("target_value, created_at")
           .eq("organization_id", organizationId)
@@ -357,12 +357,13 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           .limit(1)
           .maybeSingle();
 
+        if (individualError) throw individualError;
         if (individualGoal?.target_value != null) {
           return Number(individualGoal.target_value) || 0;
         }
 
         // 2) team goal (scoped to organization)
-        const { data: teamGoal } = await supabase
+        const { data: teamGoal, error: teamError } = await supabase
           .from("goals")
           .select("target_value, created_at")
           .eq("organization_id", organizationId)
@@ -374,6 +375,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           .limit(1)
           .maybeSingle();
 
+        if (teamError) throw teamError;
         return Number(teamGoal?.target_value) || 0;
       };
 
@@ -384,17 +386,18 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
         // Reuniões realizadas via meeting_events (ADR-0007): evento imutável,
         // conta no período da data da reunião, crédito = snapshot do pré-vendas.
-        const { data: heldEvents } = await supabase
+        const { data: heldEvents, error: heldError } = await supabase
           .from("meeting_events")
           .select("id, meeting_date, occurred_at")
           .eq("organization_id", organizationId)
           .eq("event_type", "meeting_held")
           .eq("pre_sale_responsible_id", teamMemberId);
+        if (heldError) throw heldError;
         const start = new Date(startStr).getTime();
         const end = new Date(endStr).getTime();
         goalCurrent = (heldEvents ?? []).filter((e) => {
           const t = new Date(e.meeting_date ?? e.occurred_at).getTime();
-          return t >= start && t <= end;
+          return t >= start && t < end;
         }).length;
         goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
       } else {
@@ -426,7 +429,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         const sp = resolveSalesGoalProgress({
           goalTarget,
           goalIsRevenue,
-          canonicalRevenue: totalMRR + totalProjeto,
+          canonicalRevenue: canonical?.baseRevenue ?? totalMRR + totalProjeto,
           canonicalSaleCount: salesCount,
         });
         goalTarget = sp.target;
@@ -440,16 +443,19 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       const calculatedBonus = calculateOTEBonus(goalProgress, oteBonus);
 
       // Fetch campaign bonuses earned by this team member for this month
-      const { data: campaignBonuses } = await supabase
+      const { data: campaignBonuses, error: campaignError } = await supabase
         .from("campanha_members")
         .select(`
           bonus_earned,
-          campanha:campanhas(
-            id, name, bonus_value, deadline, is_active
+          campanha:campanhas!inner(
+            id, organization_id, name, bonus_value, deadline, is_active
           )
         `)
         .eq("team_member_id", teamMemberId)
-        .eq("bonus_earned", true);
+        .eq("bonus_earned", true)
+        .eq("campanha.organization_id", organizationId);
+
+      if (campaignError) throw campaignError;
 
       // Filter bonuses for campaigns that ended in the selected month
       const campaignBonusList: { campaignName: string; bonusValue: number }[] = [];
@@ -471,6 +477,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       });
 
       const summary: CommissionSummary = {
+        salesRevenue: canonical?.baseRevenue ?? totalMRR + totalProjeto,
         totalMRR,
         totalProjeto,
         commissionMRR,
@@ -480,7 +487,13 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         oteBonus,
         calculatedBonus,
         campaignBonuses: totalCampaignBonuses,
-        totalEarnings: oteBase + calculatedBonus + totalCommission + totalCampaignBonuses,
+        commissionStatus: (canonical?.pendingCount ?? 0) > 0 ? "pending" : "ready",
+        pendingCount: canonical?.pendingCount ?? 0,
+        pendingRevenue: canonical?.pendingRevenue ?? 0,
+        goalConfigured: goalTarget > 0,
+        goalCurrent,
+        totalEarnings: (canonical?.pendingCount ?? 0) > 0 || (oteBonus > 0 && goalTarget <= 0)
+          ? null : oteBase + calculatedBonus + totalCommission + totalCampaignBonuses,
         goalProgress,
         campaignBonusList,
       };
@@ -488,5 +501,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       return summary;
     },
     enabled: isReady && !!organizationId && !!teamMemberId,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 }

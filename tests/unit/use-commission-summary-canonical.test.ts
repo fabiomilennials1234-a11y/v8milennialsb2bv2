@@ -3,7 +3,7 @@
  * highest-risk money mapping and shipped effectively untested. Mirrors the #998
  * useDashboardMetrics.test.ts style: a realistic get_commission_ledger jsonb mock,
  * asserting the deeply-nested adapter (m.by_type.mrr.base_revenue → totalMRR, etc.)
- * and the PGRST202 degrade-to-legacy path (no throw).
+ * and fail-closed behavior when the ledger/coverage contract is unavailable.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -33,7 +33,7 @@ vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
 import { useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 
 // ── Self-referential chain factory (single / maybeSingle / thenable) ───────────
-const CHAIN_METHODS = ["select", "eq", "is", "not", "gte", "lte", "order", "limit"];
+const CHAIN_METHODS = ["select", "eq", "is", "not", "gte", "lte", "lt", "order", "limit"];
 function chain(payload: { data: unknown; error: unknown }) {
   const c: Record<string, unknown> = {};
   CHAIN_METHODS.forEach((m) => (c[m] = vi.fn(() => c)));
@@ -62,6 +62,7 @@ const LEGACY_SALES = [{ sale_value: 1000, product_type: "mrr" }];
 
 // Realistic canonical ledger for tm1: base_revenue == podium revenue (#997 invariant).
 const LEDGER = {
+  projection_status: "ready",
   period: { name: "month", start: "2026-06-01T00:00:00Z", end: "2026-07-01T00:00:00Z" },
   filter_member_id: "tm1",
   commission_total: 400,
@@ -100,6 +101,35 @@ function routeFrom() {
 }
 
 describe("useCommissionSummary — canonical commission-ledger overlay (#1000)", () => {
+  it("distingue vendas sem projeção de comissão apurada", async () => {
+    mockRpc.mockResolvedValue({ data: { ...LEDGER, projection_status: "pending", pending_count: 4,
+      by_member: [{ ...LEDGER.by_member[0], pending_count: 4, pending_revenue: 14380 }] }, error: null });
+    const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.commissionStatus).toBe("pending");
+    expect(result.current.data!.pendingRevenue).toBe(14380);
+    expect(result.current.data!.totalEarnings).toBeNull();
+  });
+
+  it("expõe reuniões realizadas e meta ausente sem afirmar desempenho zero", async () => {
+    mockRpc.mockResolvedValue({ data: { ...LEDGER, by_member: [] }, error: null });
+    mockFrom.mockImplementation((table: string) => chain({ data:
+      table === "team_members" ? { ...MEMBER, metric_type: "meetings" } :
+      table === "goals" ? null : table === "meeting_events" ? [{ id: "held", meeting_date: "2026-06-10", occurred_at: "2026-06-10" }] : [], error: null }));
+    const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.goalConfigured).toBe(false);
+    expect(result.current.data!.goalCurrent).toBe(1);
+    expect(result.current.data!.totalEarnings).toBeNull();
+  });
+
+  it("propaga erro de metas em vez de transformar falha em bônus zero", async () => {
+    mockRpc.mockResolvedValue({ data: LEDGER, error: null });
+    const base = mockFrom.getMockImplementation()!;
+    mockFrom.mockImplementation((table: string) => table === "goals" ? chain({ data: null, error: new Error("goals unavailable") }) : base(table));
+    const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
   beforeEach(() => {
     mockFrom.mockReset();
     mockRpc.mockReset();
@@ -157,25 +187,16 @@ describe("useCommissionSummary — canonical commission-ledger overlay (#1000)",
     });
   });
 
-  it("degrades to legacy commission (no throw) when the ledger RPC is absent (PGRST202)", async () => {
-    mockRpc.mockImplementation((name: string) =>
-      Promise.resolve(
-        name === "get_commission_ledger"
-          ? { data: null, error: { code: "PGRST202", message: "Could not find the function" } }
-          : { data: null, error: null },
-      ),
-    );
-
+  it("não estima comissão quando a RPC canônica está ausente", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "Could not find function" } });
     const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
 
-    const s = result.current.data!;
-    // Fell back to legacy product_type totals — NOT the canonical 30000/20000.
-    // LEGACY_SALES (1x mrr 1000) counted twice by the two parallel period queries.
-    expect(s.totalMRR).toBe(2000);
-    expect(s.totalProjeto).toBe(0);
-    expect(s.commissionMRR).toBe(20); // 2000 * 1%
-    expect(s.totalCommission).toBe(20);
+  it("recusa leitor antigo que omite a verificação de projeções", async () => {
+    mockRpc.mockResolvedValue({ data: { ...LEDGER, projection_status: undefined, by_member: [] }, error: null });
+    const { result } = renderHook(() => useCommissionSummary("tm1", 6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 
   it("flag OFF → NUNCA chama get_commission_ledger; comissão legada on-the-fly permanece", async () => {

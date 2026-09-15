@@ -340,6 +340,8 @@ export function DealCardMoney({
   onAdicionarProduto,
   onEditarItem,
   onRemoverItem,
+  onEditarValor,
+  versaoDoNegocio = null,
 }: {
   itens: DealCardItem[];
   /** `deals.value` — o valor digitado. Vira o total quando não há itens. */
@@ -351,8 +353,24 @@ export function DealCardMoney({
   onEditarItem?: (edicao: ItemEditado) => Promise<void>;
   /** Idem para a lixeira de cada linha. */
   onRemoverItem?: (itemId: string) => Promise<void>;
+  onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
+  versaoDoNegocio?: string | null;
 }) {
-  const { temItens, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
+  const [editandoValor, setEditandoValor] = useState(false);
+  const [rascunhoValor, setRascunhoValor] = useState("");
+  const [salvandoValor, setSalvandoValor] = useState(false);
+  const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
+  const salvarValor = async () => {
+    if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
+    setSalvandoValor(true);
+    try {
+      await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
+      setEditandoValor(false);
+    } catch {
+      // O chamador informa o erro; preservar a edição para corrigir/tentar novamente.
+    } finally { setSalvandoValor(false); }
+  };
+  const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
 
@@ -461,9 +479,24 @@ export function DealCardMoney({
               "R$ 0,00" afirmaria que o negócio vale zero; "—" diz que não se
               sabe, que é a verdade na maioria dos negócios. */}
           <span className="ml-auto text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
-            {total > 0 ? formatBRL(total, 2) : "—"}
+            {temValor ? formatBRL(total, 2) : "—"}
           </span>
         </div>
+        {!temItens && onEditarValor && (
+          <div className="flex items-center gap-2 pt-2" data-summary-pending={editandoValor || undefined}>
+            {editandoValor ? <>
+              <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}
+                value={rascunhoValor} disabled={salvandoValor} autoFocus
+                onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
+              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
+              <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
+            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
+              setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
+              setVersaoEditada(versaoDoNegocio);
+              setEditandoValor(true);
+            }}>{valorDoNegocio == null ? "Definir valor" : "Editar valor"}</button>}
+          </div>
+        )}
       </div>
     </section>
   );

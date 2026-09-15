@@ -41,6 +41,7 @@ import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
 import {
   useAtualizarItemDoNegocio,
+  useEditarValorProposta,
   useGarantirNegocioDaEntrada,
   useRemoverItemDoNegocio,
 } from "./useItensDoNegocio";
@@ -100,6 +101,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
   );
   const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
+  const editarValorProposta = useEditarValorProposta(entryId);
 
   /**
    * O `deal_id` que a RPC acabou de criar.
@@ -550,6 +552,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
            e a lixeira são de item já lançado, e não há item sem negócio. */
         onEditarItem={dealIdParaProduto ? editarItem : undefined}
         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
+        onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}

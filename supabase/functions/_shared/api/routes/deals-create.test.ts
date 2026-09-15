@@ -36,6 +36,21 @@ function ctx(
 
 const OK = { data: { status: "created", deal: { id: "d-1" } } };
 
+for (const code of ["idempotency_key_conflict", "idempotent_resource_unavailable"]) {
+  Deno.test(`createDeal — ${code} devolve 409 sem recomendar retry cego`, async () => {
+    const res = await createDeal(ctx({ lead_id: "l-1", pipeline: "propostas", stage: "aberto" },
+      { error: { code: "23505", message: code } }));
+    assertEquals(res.status, 409);
+    assertEquals((await res.json()).error.code, code);
+  });
+}
+Deno.test("createDeal — chave vazia inválida devolve 422 específico", async () => {
+  const res = await createDeal(ctx({ lead_id: "l-1", pipeline: "propostas", stage: "aberto" },
+    { error: { code: "22023", message: "invalid_idempotency_key" } }));
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_idempotency_key");
+});
+
 // ── POST /deals — criação estrita ──────────────────────────────────────────
 //
 // Estilo Pipedrive: exige um Lead que JÁ EXISTE. Não aceita Lead embutido.

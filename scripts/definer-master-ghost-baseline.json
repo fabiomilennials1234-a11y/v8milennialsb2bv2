@@ -1,7 +1,7 @@
 {
   "_comment": "Master-ghost guard baseline. Legacy SECURITY DEFINER functions that resolve org via team_members/get_my_*_ids without is_master_user(). Most are member-only RLS-predicate helpers (master has separate policies) and are intentionally here. New entries require review: add is_master_user() branch OR justify membership-only. Regenerate: node scripts/definer-master-ghost-ratchet.cjs --write",
   "generated_from": "scripts/definer-master-ghost-scan.cjs",
-  "count": 54,
+  "count": 56,
   "functions": [
     "admin_reassign_meeting_credit",
     "admin_reassign_sale_credit",
@@ -14,7 +14,9 @@
     "create_org_sandbox",
     "enqueue_acoes_do_dia_webhooks",
     "export_lead_data",
+    "fn_commissions_protect_projection",
     "fn_lead_comment_mentions",
+    "fn_project_commission",
     "get_analytics_commercial_metrics",
     "get_analytics_engagement_metrics",
     "get_analytics_financial_metrics",
