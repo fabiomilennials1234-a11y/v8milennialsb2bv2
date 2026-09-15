@@ -46,6 +46,8 @@ export interface FunilEntry {
     responsible?: { name?: string | null; avatar_url?: string | null } | null;
     sdr?: { name?: string | null } | null;
     closer?: { name?: string | null } | null;
+    pre_sale_responsible?: { name: string | null; avatar_url?: string | null } | null;
+    sale_responsible?: { name: string | null; avatar_url?: string | null } | null;
     lead_tags?: Array<{ tag?: { name?: string; color?: string | null } | null }>;
   } | null;
 }
@@ -180,7 +182,6 @@ export function FunilKanban({
 
   const transformToCard = (entry: FunilEntry): LeadCardData => {
     const lead = entry.lead;
-    const responsibleName = lead?.responsible?.name || lead?.closer?.name || lead?.sdr?.name || null;
     const meetingDate =
       entry.meeting_date ?? (entry.metadata?.meeting_date as string | undefined) ?? null;
     return {
@@ -194,10 +195,9 @@ export function FunilKanban({
       urgency: lead?.urgency || null,
       faturamento: lead?.faturamento ?? null,
       value: projectSaleValue(entry),
-      responsible: responsibleName,
-      preSaleResponsible: responsibleName
-        ? { name: responsibleName, avatar_url: lead?.responsible?.avatar_url ?? null }
-        : null,
+      responsible: lead?.sale_responsible?.name ?? lead?.pre_sale_responsible?.name ?? null,
+      preSaleResponsible: lead?.pre_sale_responsible ?? null,
+      saleResponsible: lead?.sale_responsible ?? null,
       avatarUrl: lead?.avatar_url || null,
       // O RPC devolve o tier como texto livre; o card espera o enum — a RLS do
       // banco já garante o domínio (CHECK), então o cast é seguro.

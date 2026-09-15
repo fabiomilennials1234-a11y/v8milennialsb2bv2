@@ -13,7 +13,7 @@ export function LandingNavbar() {
 
   const smoothScroll = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     setMobileOpen(false);
   };
 
@@ -28,13 +28,12 @@ export function LandingNavbar() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
           <img
-            src="/landing/TORQUE_Logo_Icone.png"
+            src="/landing/TORQUE_Logo_Claro_Horizontal.png"
             alt="Torque"
-            className="h-8 w-8"
+            width={2095}
+            height={331}
+            className="h-auto w-40 sm:w-48"
           />
-          <span className="text-lg font-bold text-white tracking-tight">
-            Torque<span className="text-orange">CRM</span>
-          </span>
         </Link>
 
         {/* Desktop nav links */}
@@ -61,11 +60,11 @@ export function LandingNavbar() {
             Clientes
           </a>
           <a
-            href="#recursos"
-            onClick={(e) => smoothScroll(e, 'recursos')}
+            href="#planos"
+            onClick={(e) => smoothScroll(e, 'planos')}
             className="text-sm font-medium text-white/70 hover:text-white transition-colors"
           >
-            Recursos
+            Planos
           </a>
         </div>
 
@@ -150,11 +149,11 @@ export function LandingNavbar() {
             Clientes
           </a>
           <a
-            href="#recursos"
-            onClick={(e) => smoothScroll(e, 'recursos')}
+            href="#planos"
+            onClick={(e) => smoothScroll(e, 'planos')}
             className="text-base font-medium text-white/80 hover:text-white py-2"
           >
-            Recursos
+            Planos
           </a>
           <div className="flex flex-col gap-3 pt-4 border-t border-white/10">
             <Link
