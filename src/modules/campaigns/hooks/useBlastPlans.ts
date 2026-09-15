@@ -96,6 +96,20 @@ export interface CreateBlastPlanResult {
   breakdown: BlastPlanLotBreakdown[];
 }
 
+async function blastPlanErrorMessage(error: unknown): Promise<string> {
+  const wrapped = error as { context?: { json?: () => Promise<unknown> }; message?: string } | null;
+  if (wrapped?.context && typeof wrapped.context.json === "function") {
+    try {
+      const body = await wrapped.context.json() as { error?: unknown; message?: unknown };
+      if (body?.error) return String(body.error);
+      if (body?.message) return String(body.message);
+    } catch {
+      // Corpo ausente ou inválido: usa a mensagem do cliente Supabase abaixo.
+    }
+  }
+  return wrapped?.message ?? "Não foi possível iniciar o disparo";
+}
+
 /** Create a Blast Plan: freezes the audience snapshot and fires lot 1 today. */
 export function useCreateBlastPlan() {
   const qc = useQueryClient();
@@ -103,7 +117,7 @@ export function useCreateBlastPlan() {
   return useMutation({
     mutationFn: async (input: CreateBlastPlanInput): Promise<CreateBlastPlanResult> => {
       const { data, error } = await supabase.functions.invoke("blast-plan-create", { body: input });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await blastPlanErrorMessage(error));
       if ((data as any)?.error) throw new Error((data as any).error);
       return data as CreateBlastPlanResult;
     },

@@ -28,7 +28,7 @@ import { validatePostSendTarget, buildPostSendMover } from "../_shared/quick-bla
 import { isPipelineResolutionError, resolvePipeline } from "../_shared/pipeline-adapter.ts";
 import { instanceDailyUsageSource, resolveInstanceCap } from "../_shared/quick-blast/instance-budget.ts";
 import { resolveBlastWindow } from "../_shared/quick-blast/blast-plan-distribution.ts";
-import type { BlastLead } from "../_shared/quick-blast/recipients.ts";
+import { loadBlastLeadsByIds } from "../_shared/quick-blast/load-blast-leads.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -247,12 +247,7 @@ Deno.serve(
     const instance = multiNumber ? undefined : instanceById.get(idList[0]);
 
     // Freeze the audience: org-scoped lead fetch — foreign-org ids drop out here.
-    const { data: leadRows } = await supabaseAdmin
-      .from("leads")
-      .select("id, name, company, phone")
-      .eq("organization_id", orgId)
-      .in("id", lead_ids);
-    const leads = (leadRows ?? []) as BlastLead[];
+    const leads = await loadBlastLeadsByIds(supabaseAdmin, orgId, lead_ids);
 
     const dailyBudget = await getDailyBlastBudget(supabaseAdmin, orgId);
 
