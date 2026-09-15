@@ -1,236 +1,77 @@
-import { useState, useRef } from 'react';
+import { ArrowUpRight, Gauge, Settings2, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useInView } from 'framer-motion';
 
-type BillingCycle = 'monthly' | 'semiannual' | 'annual';
-
-interface PricingState {
-  cycle: BillingCycle;
-}
-
-const CYCLES: { key: BillingCycle; label: string; discount?: string }[] = [
-  { key: 'monthly', label: 'Mensal' },
-  { key: 'semiannual', label: 'Semestral', discount: '-10%' },
-  { key: 'annual', label: 'Anual', discount: '-15%' },
-];
-
-const DISCOUNTS: Record<BillingCycle, number> = {
-  monthly: 1,
-  semiannual: 0.9,
-  annual: 0.85,
-};
-
-function formatPrice(basePrice: number, cycle: BillingCycle): string {
-  const value = Math.round(basePrice * DISCOUNTS[cycle]);
-  return value.toLocaleString('pt-BR');
-}
-
-function formatPriceNote(cycle: BillingCycle): string {
-  if (cycle === 'monthly') return 'Cobrado mensalmente';
-  if (cycle === 'semiannual') return 'Cobrado a cada 6 meses';
-  return 'Cobrado anualmente';
-}
-
-const CHECK = <i className="fas fa-check"></i>;
-const CROSS = <span style={{ color: 'var(--gray-200)', fontWeight: 700 }}>✗</span>;
+const PLANS = [
+  {
+    name: 'Basic',
+    stage: '01 / Partida',
+    description: 'O próximo passo da sua operação comercial começa aqui.',
+    price: '297',
+    icon: Gauge,
+    featured: false,
+  },
+  {
+    name: '2.0 Automation',
+    stage: '02 / Aceleração',
+    description: 'Mais ritmo para sua operação. Mais espaço para crescer.',
+    price: '997',
+    icon: Zap,
+    featured: true,
+  },
+  {
+    name: 'V8 Remap',
+    stage: '03 / Performance',
+    description: 'Converse com nosso time e encontre a configuração para sua empresa.',
+    price: null,
+    icon: Settings2,
+    featured: false,
+  },
+] as const;
 
 export function PricingSection() {
-  const [cycle, setCycle] = useState<BillingCycle>('monthly');
-  const ref = useRef<HTMLElement>(null);
-  const inView = useInView(ref, { once: true, margin: '-100px' });
-
   return (
-    <section className={`pricing reveal${inView ? ' visible' : ''}`} id="pricing" ref={ref}>
-      <div className="container">
-        <div style={{ textAlign: 'center' }}>
-          <span className="label">Planos e preços</span>
-          <h2 className="title">Escolha o plano ideal<br />para sua operação</h2>
+    <section id="planos" aria-labelledby="plans-title" className="relative z-10 scroll-mt-24 py-24 lg:py-32">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-3xl mb-12 lg:mb-16">
+          <p className="text-orange text-xs font-semibold uppercase tracking-[0.2em] mb-5">Planos</p>
+          <h2 id="plans-title" className="font-display text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.08] tracking-tight">
+            Seu próximo nível.<br />
+            <span className="gradient-text-orange">Seu Torque.</span>
+          </h2>
+          <p className="text-cream/70 text-lg mt-6">Três planos para escolher como sua operação vai acelerar.</p>
         </div>
 
-        {/* Segmented cycle selector */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '36px 0 56px',
-        }}>
-          <div style={{
-            display: 'inline-flex',
-            background: 'var(--gray-100)',
-            borderRadius: 50,
-            padding: 4,
-            gap: 2,
-          }}>
-            {CYCLES.map(({ key, label, discount }) => (
-              <button
-                key={key}
-                onClick={() => setCycle(key)}
-                style={{
-                  padding: '8px 20px',
-                  borderRadius: 50,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
-                  fontWeight: cycle === key ? 700 : 500,
-                  color: cycle === key ? 'var(--white)' : 'var(--gray-600)',
-                  background: cycle === key ? 'var(--black)' : 'transparent',
-                  transition: 'all 0.25s cubic-bezier(.22,1,.36,1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {label}
-                {discount && (
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: 50,
-                    background: cycle === key ? 'var(--grad)' : 'var(--gray-200)',
-                    color: cycle === key ? 'var(--white)' : 'var(--gray-600)',
-                    letterSpacing: '0.3px',
-                  }}>
-                    {discount}
-                  </span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
+          {PLANS.map(({ name, stage, description, price, icon: Icon, featured }) => (
+            <article key={name} className={`plan-card flex flex-col rounded-3xl p-7 sm:p-9 ${featured ? 'plan-card-featured' : ''}`}>
+              <div className="flex items-center justify-between gap-4 mb-10">
+                <span className="text-xs font-medium uppercase tracking-[0.14em] text-cream/60">{stage}</span>
+                <Icon aria-hidden="true" className="h-6 w-6 text-orange" strokeWidth={1.5} />
+              </div>
+              <h3 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">{name}</h3>
+              <p className="text-sm leading-relaxed text-cream/70 mt-4 lg:min-h-[4.5rem]">{description}</p>
+              <div className="mt-10 mb-10 border-t border-white/10 pt-8">
+                {price ? (
+                  <p className="flex items-baseline gap-2">
+                    <span className="text-lg text-cream/70">R$</span>
+                    <span className="font-display text-6xl font-semibold tracking-tight tabular-nums">{price}</span>
+                  </p>
+                ) : (
+                  <p className="font-display text-5xl font-semibold tracking-tight leading-[1.2]">Consultar</p>
                 )}
-              </button>
-            ))}
-          </div>
+              </div>
+              {price ? (
+                <Link to="/auth" aria-label={`Começar com ${name}`} className={`plan-action mt-auto rounded-full py-4 px-5 inline-flex items-center justify-between gap-3 font-semibold ${featured ? 'btn-primary' : 'btn-ghost'}`}>
+                  Começar agora <ArrowUpRight aria-hidden="true" className="h-5 w-5" />
+                </Link>
+              ) : (
+                <a href={`mailto:contato@torquecrm.com.br?subject=${encodeURIComponent('Quero conhecer o plano V8 Remap')}`} className="plan-action btn-ghost mt-auto rounded-full py-4 px-5 inline-flex items-center justify-between gap-3 font-semibold">
+                  Consultar plano <ArrowUpRight aria-hidden="true" className="h-5 w-5" />
+                </a>
+              )}
+            </article>
+          ))}
         </div>
-
-        {/* Plan Cards — 3 cards */}
-        <div className="price-cards" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-
-          {/* Card 1: Torque Base */}
-          <div className="price-card">
-            <h3>Torque Base</h3>
-            <p className="desc">Para quem quer métricas e gestão manual</p>
-            <div className="amount">
-              R$ <span className="pv">{formatPrice(297, cycle)}</span>
-              <small>/mês por usuário</small>
-            </div>
-            <p className="note">{formatPriceNote(cycle)}</p>
-            <p className="min">Mínimo 2 usuários</p>
-            <ul className="price-feats">
-              <li>{CHECK} CRM completo</li>
-              <li>{CHECK} Funis de vendas</li>
-              <li>{CHECK} Pódio e ranking</li>
-              <li>{CHECK} Metas e métricas</li>
-              <li>{CHECK} Gestão de leads</li>
-              <li>{CHECK} Produtos</li>
-            </ul>
-            <Link to="/signup?plan=torque-1.0" className="btn btn-outline">
-              Começar agora <i className="fas fa-arrow-right" style={{ fontSize: 12 }}></i>
-            </Link>
-          </div>
-
-          {/* Card 2: Torque Automation — featured */}
-          <div className="price-card featured">
-            <div className="price-badge">Mais popular</div>
-            <h3>Torque Automation</h3>
-            <p className="desc">CRM completo com chat, automações e carteira</p>
-            <div className="amount">
-              R$ <span className="pv">{formatPrice(697, cycle)}</span>
-              <small>/mês por usuário</small>
-            </div>
-            <p className="note">{formatPriceNote(cycle)}</p>
-            <p className="min">Mínimo 3 usuários</p>
-            <ul className="price-feats">
-              <li>{CHECK} Tudo do Base +</li>
-              <li>{CHECK} Chat WhatsApp</li>
-              <li>{CHECK} Gestão de carteira</li>
-              <li>{CHECK} Mensagens agendadas</li>
-              <li>{CHECK} Automações de fluxo</li>
-              <li>{CHECK} Disparo em massa</li>
-            </ul>
-            <Link to="/signup?plan=torque-2.0" className="btn btn-grad">
-              Começar agora <i className="fas fa-arrow-right" style={{ fontSize: 12 }}></i>
-            </Link>
-          </div>
-
-          {/* Card 3: Torque Copilot */}
-          <div className="price-card">
-            <h3>Torque Copilot</h3>
-            <p className="desc">Tudo incluso: CRM, automações, IA e Copilot</p>
-            <div className="amount">
-              R$ <span className="pv">{formatPrice(1997, cycle)}</span>
-              <small>/mês fixo</small>
-            </div>
-            <p className="note">{formatPriceNote(cycle)}</p>
-            <p className="min">3 usuários + 1 copilot inclusos | R$120/usuário extra</p>
-            <ul className="price-feats">
-              <li>{CHECK} Tudo do Automation +</li>
-              <li>{CHECK} Copilot (agentes IA)</li>
-              <li>{CHECK} Oráculo Comercial</li>
-            </ul>
-            <Link to="/signup?plan=torque-v8" className="btn btn-outline">
-              Começar agora <i className="fas fa-arrow-right" style={{ fontSize: 12 }}></i>
-            </Link>
-          </div>
-        </div>
-
-        {/* Comparison Table */}
-        <table className="cmp-table">
-          <thead>
-            <tr>
-              <th>Recursos</th>
-              <th>Base</th>
-              <th>Automation</th>
-              <th>Copilot</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="cat"><td colSpan={4}>Gestão e CRM</td></tr>
-            <tr><td>Gestão de leads</td><td className="chk">✓</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Funis de vendas</td><td className="chk">✓</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Pódio e ranking</td><td className="chk">✓</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Metas e métricas</td><td className="chk">✓</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Produtos</td><td className="chk">✓</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-
-            <tr className="cat"><td colSpan={4}>Comunicação</td></tr>
-            <tr><td>Chat WhatsApp</td><td className="no">✗</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Mensagens agendadas</td><td className="no">✗</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Disparo em massa</td><td className="no">✗</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-
-            <tr className="cat"><td colSpan={4}>Automação</td></tr>
-            <tr><td>Automações de fluxo</td><td className="no">✗</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-            <tr><td>Gestão de carteira</td><td className="no">✗</td><td className="chk">✓</td><td className="chk">✓</td></tr>
-
-            <tr className="cat"><td colSpan={4}>Inteligência Artificial</td></tr>
-            <tr><td>Copilot (agentes IA)</td><td className="no">✗</td><td className="no">✗</td><td className="chk">✓</td></tr>
-            <tr><td>Oráculo Comercial</td><td className="no">✗</td><td className="no">✗</td><td className="chk">✓</td></tr>
-
-            <tr className="prc">
-              <td>Valor mensal</td>
-              <td>R$ {formatPrice(297, cycle)}/mês/user</td>
-              <td>R$ {formatPrice(697, cycle)}/mês/user</td>
-              <td>R$ {formatPrice(1997, cycle)}/mês fixo</td>
-            </tr>
-          </tbody>
-        </table>
-
-        {/* Serviços adicionais */}
-        <h3 className="addons-title">Serviços adicionais</h3>
-        <table className="addons">
-          <thead>
-            <tr>
-              <th>Serviço</th>
-              <th>Preço</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Add-on Turbo (Copilot IA)</td>
-              <td>R$ 1.427/copiloto</td>
-            </tr>
-          </tbody>
-        </table>
-        <p style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 8 }}>
-          * Disponível para planos 1.0 e 2.0
-        </p>
       </div>
     </section>
   );

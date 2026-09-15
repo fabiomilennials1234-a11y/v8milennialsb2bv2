@@ -9,8 +9,7 @@ export function LandingFooter() {
           {/* Brand (2 cols) */}
           <div className="col-span-2">
             <a href="#" className="flex items-center gap-2.5">
-              <img src="/landing/TORQUE_Logo_Icone.png" alt="TorqueCRM" className="h-8 w-8" />
-              <span className="font-display text-xl font-semibold">Torque<span className="text-orange">CRM</span></span>
+              <img src="/landing/TORQUE_Logo_Claro_Horizontal.png" alt="Torque" width={2095} height={331} className="h-auto w-48" loading="lazy" />
             </a>
             <p className="text-mute text-sm mt-4 max-w-xs leading-relaxed">
               O CRM premium para times comerciais que querem dominar o mercado.

@@ -1198,3 +1198,17 @@
   .landing-page .bg-glow-orange { width: 600px; height: 600px; }
   .landing-page .float-card { display: none; }
 }
+
+/* Plans reuse the landing palette; the middle tier gets the brand accent. */
+.landing-page .plan-card {
+  background: var(--lp-bg-2);
+  border: 1px solid var(--lp-line);
+}
+.landing-page .plan-card-featured {
+  border-color: var(--lp-orange);
+  background: linear-gradient(155deg, var(--lp-brown), var(--lp-bg-2) 65%);
+}
+.landing-page .plan-action:focus-visible {
+  outline: 2px solid var(--lp-orange);
+  outline-offset: 5px;
+}

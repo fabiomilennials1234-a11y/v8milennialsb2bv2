@@ -8,6 +8,7 @@ import { BrandsMarquee } from '@/modules/marketing/components/landing/BrandsMarq
 import { BenefitsGrid } from '@/modules/marketing/components/landing/BenefitsGrid';
 import { ShowcaseSection } from '@/modules/marketing/components/landing/ShowcaseSection';
 import { SocialProof } from '@/modules/marketing/components/landing/SocialProof';
+import { PricingSection } from '@/modules/marketing/components/landing/PricingSection';
 import { FinalCTA } from '@/modules/marketing/components/landing/FinalCTA';
 import { LandingFooter } from '@/modules/marketing/components/landing/LandingFooter';
 import { useLandingAnimations } from '@/modules/marketing/hooks/useLandingAnimations';
@@ -28,6 +29,7 @@ export default function Landing() {
       <ShowcaseSection />
       <SocialProof />
       <div className="divider-line max-w-7xl mx-auto" />
+      <PricingSection />
       <FinalCTA />
       <LandingFooter />
     </div>
