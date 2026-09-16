@@ -353,7 +353,13 @@ export function FunilKanban({
         selectedIds={bulk.selectedIds}
         onClear={bulk.clearSelection}
         leadIds={allLeadIds}
-        escopoFunil={{ pipelineId }}
+        escopoFunil={{
+          pipelineId,
+          entryIds: stages.flatMap((s) =>
+            ((stageData[s.stage_key]?.items ?? []) as FunilEntry[])
+              .filter((entry) => !!entry.lead_id && bulk.selectedIds.has(entry.lead_id))
+              .map((entry) => entry.id)),
+        }}
         onDisparar={
           onDisparar
             ? (leadIds) => {
