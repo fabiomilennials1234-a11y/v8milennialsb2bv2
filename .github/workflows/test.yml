@@ -91,8 +91,8 @@ jobs:
         run: bash scripts/test-voip-choke.sh
       - name: TSC ratchet (no new type errors vs baseline)
         run: npm run typecheck:ratchet
-      - name: P0 SQL regressions (proposal, idempotency and commissions)
-        run: node --test tests/integration/p0-crm-fixes.test.mjs
+      - name: SQL regressions (proposal, idempotency, commissions and lead tags)
+        run: node --test tests/integration/p0-crm-fixes.test.mjs tests/integration/lead-tags-point-lookup.test.mjs
       - name: Build (prod)
         run: npm run build
         env:
