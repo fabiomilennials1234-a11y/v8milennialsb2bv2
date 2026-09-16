@@ -73,6 +73,15 @@ describe("área de assinatura", () => {
       screen.queryByText(/Sem limite de quantidade/),
     ).not.toBeInTheDocument();
   });
+  it("mantém os dados de admin sem exibir ações de suporte quando indisponíveis", async () => {
+    render(<BillingSettings />);
+    expect(screen.getByText(/não representa confirmação de pagamento/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Falar sobre minha assinatura" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Plano e limites" }));
+    expect(screen.queryByRole("button", { name: "Solicitar alteração de plano" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Histórico de cobranças" }));
+    expect(screen.queryByRole("button", { name: "Preciso de ajuda com um pagamento" })).not.toBeInTheDocument();
+  });
   it("mostra falha de histórico em vez de dizer que não há cobranças", async () => {
     const data = result();
     fixture.query.mockReturnValue({

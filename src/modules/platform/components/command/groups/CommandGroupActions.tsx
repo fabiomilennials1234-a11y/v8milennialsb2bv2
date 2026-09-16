@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
 import { pushRecent } from "../recentCommands";
 import { useSupportPanel } from "@/modules/platform/components/support/SupportPanelContext";
+import { SupportAccess } from "../../support/SupportAccess";
 
 interface CommandGroupActionsProps {
   onClose: () => void;
@@ -36,22 +37,24 @@ export function CommandGroupActions({ onClose }: CommandGroupActionsProps) {
       heading="Ações"
       className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
-      <CommandItem
-        value="action-abrir-chamado chamado suporte ajuda bug problema erro help"
-        onSelect={() => handleSelect("action-abrir-chamado", openNewTicket)}
-        className={cn(
-          "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
-          "cursor-default select-none",
-          "aria-selected:bg-muted/60",
-          "hover:bg-muted/40",
-          "transition-colors duration-75"
-        )}
-      >
-        <LifeBuoy className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-sm font-medium leading-tight truncate text-foreground">
-          Abrir chamado
-        </span>
-      </CommandItem>
+      <SupportAccess>
+        <CommandItem
+          value="action-abrir-chamado chamado suporte ajuda bug problema erro help"
+          onSelect={() => handleSelect("action-abrir-chamado", openNewTicket)}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
+            "cursor-default select-none",
+            "aria-selected:bg-muted/60",
+            "hover:bg-muted/40",
+            "transition-colors duration-75"
+          )}
+        >
+          <LifeBuoy className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-sm font-medium leading-tight truncate text-foreground">
+            Abrir chamado
+          </span>
+        </CommandItem>
+      </SupportAccess>
 
       <CommandItem
         value="action-toggle-theme toggle dark light mode tema"

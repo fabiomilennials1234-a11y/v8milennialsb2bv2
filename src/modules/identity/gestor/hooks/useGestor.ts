@@ -32,8 +32,7 @@ export function useGestor() {
       if (error) {
         // PGRST116 = not found, esperado para não-gestores.
         if (error.code === "PGRST116") return null;
-        console.error("Error checking gestor status:", error);
-        return null;
+        throw error;
       }
 
       return (data as unknown as GestorRow) ?? null;
