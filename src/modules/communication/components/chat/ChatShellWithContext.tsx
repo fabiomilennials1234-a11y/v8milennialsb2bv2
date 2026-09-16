@@ -440,11 +440,10 @@ function ChatView({
           do lead: quem abria a conversa não tinha como saber que havia um envio
           a caminho, e mandava a mesma coisa de novo na mão.
 
-          Depende de lead: a fila é indexada por `lead_id`, então conversa de
-          número sem lead vinculado não tem o que listar. */}
-      {effectiveLeadId && (
+          A consulta por telefone e instância inclui conversas ainda sem lead. */}
+      {(effectiveLeadId || (phoneNumber && instanceId)) && (
         <ScheduledMessagesBanner
-          leadId={effectiveLeadId}
+          leadId={effectiveLeadId || null}
           leadName={contactName}
           phoneNumber={phoneNumber ?? ""}
           instanceId={instanceId ?? undefined}

@@ -22,7 +22,7 @@ import { useCreateScheduledMessage, useUpdateScheduledMessage } from "@/modules/
 interface ScheduleMessageModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  leadId: string;
+  leadId: string | null;
   leadName: string;
   phoneNumber: string;
   instanceId?: string;
