@@ -73,14 +73,14 @@ export function useAgentMetrics(agentId: string | undefined, period: '7d' | '30d
       // 1. Total de conversas (período atual)
       const { count: totalConversations } = await supabase
         .from('conversations')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('agent_id', agentId)
         .gte('created_at', startDate.toISOString());
 
       // Conversas período anterior
       const { count: prevConversations } = await supabase
         .from('conversations')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('agent_id', agentId)
         .gte('created_at', previousStartDate.toISOString())
         .lt('created_at', startDate.toISOString());
@@ -88,7 +88,7 @@ export function useAgentMetrics(agentId: string | undefined, period: '7d' | '30d
       // 2. Mensagens enviadas (outgoing)
       const { count: messagesSent } = await supabase
         .from('whatsapp_messages')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('organization_id', agent.organization_id)
         .eq('direction', 'outgoing')
         .eq('is_from_agent', true)
@@ -97,7 +97,7 @@ export function useAgentMetrics(agentId: string | undefined, period: '7d' | '30d
       // 3. Mensagens recebidas (incoming)
       const { count: messagesReceived } = await supabase
         .from('whatsapp_messages')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('organization_id', agent.organization_id)
         .eq('direction', 'incoming')
         .gte('created_at', startDate.toISOString());
@@ -135,7 +135,7 @@ export function useAgentMetrics(agentId: string | undefined, period: '7d' | '30d
       // 6. Follow-ups enviados (baseado em contexto de follow-up)
       const { count: followupsSent } = await supabase
         .from('conversation_context_summary')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('organization_id', agent.organization_id)
         .gt('followup_count', 0)
         .gte('updated_at', startDate.toISOString());

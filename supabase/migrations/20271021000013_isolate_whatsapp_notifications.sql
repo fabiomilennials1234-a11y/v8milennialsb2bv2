@@ -1,3 +1,97 @@
+CREATE OR REPLACE FUNCTION private.chat_scope_for_recipient(
+  p_user_id uuid,
+  p_org_id           uuid,
+  p_lead_id          uuid,
+  p_normalized_phone text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_team_member_id uuid;
+  v_restricted     boolean;
+BEGIN
+  IF public.is_master_user(p_user_id) THEN RETURN true; END IF;
+  IF p_org_id IS NULL THEN RETURN false; END IF;
+
+  SELECT id INTO v_team_member_id
+  FROM public.team_members
+  WHERE user_id = p_user_id
+    AND organization_id = p_org_id
+    AND is_active = true
+  LIMIT 1;
+
+  IF v_team_member_id IS NULL THEN RETURN false; END IF;
+
+  IF EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = p_user_id AND role = 'admin') OR EXISTS (SELECT 1 FROM public.team_members WHERE user_id = p_user_id AND role = 'admin' AND is_active) THEN RETURN true; END IF;
+
+  SELECT chat_restrict_to_owner INTO v_restricted
+  FROM public.organizations WHERE id = p_org_id;
+
+  -- Politica desligada: comportamento identico ao de antes.
+  IF COALESCE(v_restricted, false) = false THEN RETURN true; END IF;
+
+  -- Excecao nominal: com a politica ligada o default_value do catalogo GLOBAL
+  -- deixa de valer, so override EXPLICITO abre.
+  IF EXISTS (
+    SELECT 1 FROM public.member_feature_permissions
+    WHERE team_member_id = v_team_member_id
+      AND feature_key = 'leads.view_all'
+      AND enabled
+  ) THEN
+    RETURN true;
+  END IF;
+
+  IF p_lead_id IS NULL AND p_normalized_phone IS NULL THEN RETURN false; END IF;
+
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.leads l
+    WHERE l.organization_id = p_org_id
+      AND l.deleted_at IS NULL
+      AND (
+        (p_lead_id IS NOT NULL AND l.id = p_lead_id)
+        OR (p_lead_id IS NULL AND l.normalized_phone = p_normalized_phone)
+      )
+      AND (
+        COALESCE(
+          v_team_member_id IN (
+            l.pre_sale_responsible_id,
+            l.sale_responsible_id,
+            l.sdr_id,
+            l.closer_id
+          ), false)
+        OR (
+          COALESCE(
+            l.pre_sale_responsible_id,
+            l.sale_responsible_id,
+            l.sdr_id,
+            l.closer_id
+          ) IS NULL
+          AND EXISTS (
+            SELECT 1 FROM public.member_feature_permissions
+            WHERE team_member_id = v_team_member_id
+              AND feature_key = 'leads.view_unassigned'
+              AND enabled
+          )
+        )
+      )
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.chat_scope_for_recipient(uuid,uuid,uuid,text) FROM PUBLIC, anon, authenticated, service_role;
+-- Only trusted definers below can evaluate another recipient's scope.
+CREATE OR REPLACE FUNCTION public.can_see_chat_scope(p_org_id uuid,p_lead_id uuid,p_normalized_phone text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+ SELECT private.chat_scope_for_recipient(auth.uid(),p_org_id,p_lead_id,p_normalized_phone);
+$$;
+REVOKE ALL ON FUNCTION public.can_see_chat_scope(uuid,uuid,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.can_see_chat_scope(uuid,uuid,text) TO authenticated,service_role;
+
 -- Members require an explicit number assignment. Lead ownership never grants
 -- access to another seller's WhatsApp previews. Existing admin/master management
 -- access remains; notifications are delivered only to explicitly linked users.
@@ -42,7 +136,7 @@ AS RESTRICTIVE FOR SELECT TO authenticated USING (
 
 -- Historical notifications lack trustworthy instance provenance (one lead could
 -- coalesce messages from several numbers). Keep them stored, but fail closed.
-ALTER TABLE public.notifications ADD COLUMN whatsapp_instance_id uuid;
+ALTER TABLE public.notifications ADD COLUMN whatsapp_instance_id uuid, ADD COLUMN whatsapp_phone text;
 COMMENT ON COLUMN public.notifications.whatsapp_instance_id IS
   'Originating WhatsApp number for message notifications. NULL legacy previews are not exposed.';
 
@@ -62,7 +156,8 @@ AS RESTRICTIVE FOR SELECT TO authenticated USING (
   type <> 'lead_message'
   OR (SELECT public.is_master_user())
   OR (organization_id IN (SELECT public.get_my_organization_ids())
-      AND whatsapp_instance_id = ANY((SELECT private.whatsapp_notification_instance_ids())::uuid[]))
+      AND whatsapp_instance_id = ANY((SELECT private.whatsapp_notification_instance_ids())::uuid[])
+      AND public.can_see_chat_scope(organization_id,lead_id,whatsapp_phone))
 );
 
 CREATE OR REPLACE FUNCTION public.fn_aviso_de_mensagem()
@@ -87,10 +182,11 @@ BEGIN
     JOIN public.team_members tm ON tm.id = a.team_member_id
     WHERE wi.id = NEW.instance_id AND wi.organization_id = NEW.organization_id
       AND tm.organization_id = NEW.organization_id AND tm.is_active AND tm.user_id IS NOT NULL
+      AND private.chat_scope_for_recipient(tm.user_id,NEW.organization_id,NEW.lead_id,public.normalize_brazilian_phone(v_phone))
   LOOP
     INSERT INTO public.notifications AS n (
       organization_id, user_id, type, title, description, link, lead_id,
-      entity_id, group_key, event_count, last_event_at, whatsapp_instance_id
+      entity_id, group_key, event_count, last_event_at, whatsapp_instance_id, whatsapp_phone
     ) VALUES (
       NEW.organization_id, v_user, 'lead_message',
       COALESCE(NULLIF(v_name, ''), NULLIF(NEW.push_name, ''), v_phone),
@@ -98,12 +194,12 @@ BEGIN
       '/chat-whatsapp?instance=' || NEW.instance_id::text || '&phone=' || v_phone,
       NEW.lead_id, NEW.lead_id,
       'msg:' || NEW.organization_id::text || ':' || NEW.instance_id::text || ':' || v_phone,
-      1, COALESCE(NEW.timestamp, now()), NEW.instance_id
+      1, COALESCE(NEW.timestamp, now()), NEW.instance_id, public.normalize_brazilian_phone(v_phone)
     ) ON CONFLICT (user_id, group_key) WHERE read_at IS NULL AND group_key IS NOT NULL
     DO UPDATE SET event_count = n.event_count + 1,
       last_event_at = GREATEST(n.last_event_at, EXCLUDED.last_event_at),
       title = EXCLUDED.title, description = EXCLUDED.description, link = EXCLUDED.link,
-      lead_id = EXCLUDED.lead_id, entity_id = EXCLUDED.entity_id;
+      lead_id = EXCLUDED.lead_id, entity_id = EXCLUDED.entity_id, whatsapp_phone = EXCLUDED.whatsapp_phone;
   END LOOP;
   RETURN NEW;
 END;
@@ -144,6 +240,7 @@ AS $$
        JOIN public.team_members tm ON tm.id = a.team_member_id
        WHERE wi.id = n.whatsapp_instance_id AND wi.organization_id = n.organization_id
          AND tm.organization_id = n.organization_id AND tm.user_id = n.user_id AND tm.is_active
+         AND private.chat_scope_for_recipient(n.user_id,n.organization_id,n.lead_id,n.whatsapp_phone)
      ))
      -- Só o canal quente. Agenda e sistema ficam no sino.
      AND n.type IN ('lead_message', 'transfer_to_human', 'lead_new', 'workflow_alert', 'cron_drift')
@@ -227,3 +324,50 @@ BEGIN
 END;
 $$;
 
+
+-- Copilot sessions are keyed by lead/agent, not number, and can mix origins.
+-- Do not infer provenance from the agent's current number or the lead owner.
+-- Members use the original, instance-scoped WhatsApp history instead.
+CREATE OR REPLACE FUNCTION private.can_read_aggregate_conversation(p_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+ SELECT EXISTS (
+   SELECT 1 FROM public.conversations c
+   WHERE c.id=p_id AND (public.is_master_user() OR (
+     c.organization_id IN (SELECT public.get_my_organization_ids())
+     AND public.is_org_admin(c.organization_id)
+   ))
+ );
+$$;
+REVOKE ALL ON FUNCTION private.can_read_aggregate_conversation(uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION private.can_read_aggregate_conversation(uuid) TO authenticated;
+-- Operational state remains available, but JSON memories have mixed origins.
+-- Column grants preserve the existing state readers and FSM updates without
+-- permitting SELECT * (or a direct REST request for memories) to leak content.
+REVOKE SELECT ON public.conversations FROM PUBLIC,anon,authenticated;
+REVOKE SELECT (context,short_term_memory,long_term_memory) ON public.conversations FROM PUBLIC,anon,authenticated;
+GRANT SELECT (id,lead_id,organization_id,agent_id,state,turn_count,last_message_at,
+ created_at,updated_at,assigned_to,ai_state,ai_state_resume_mode,ai_state_updated_at,
+ ai_state_updated_by,human_paused_until) ON public.conversations TO authenticated;
+CREATE OR REPLACE FUNCTION private.can_read_conversation_state(p_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+ SELECT EXISTS (
+   SELECT 1 FROM public.conversations c
+   WHERE c.id=p_id AND (public.is_master_user() OR (
+     c.organization_id IN (SELECT public.get_my_organization_ids())
+     AND public.can_see_chat_scope(c.organization_id,c.lead_id,NULL)
+     AND (public.is_org_admin(c.organization_id) OR EXISTS (
+       SELECT 1 FROM public.whatsapp_messages m
+       WHERE m.organization_id=c.organization_id AND m.lead_id=c.lead_id
+         AND m.instance_id=ANY(private.whatsapp_readable_message_instance_ids())
+     ))
+   ))
+ );
+$$;
+REVOKE ALL ON FUNCTION private.can_read_conversation_state(uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION private.can_read_conversation_state(uuid) TO authenticated;
+CREATE POLICY conversations_number_provenance ON public.conversations
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (private.can_read_conversation_state(id));
+CREATE POLICY conversation_messages_number_provenance ON public.conversation_messages
+AS RESTRICTIVE FOR SELECT TO authenticated
+USING (private.can_read_aggregate_conversation(conversation_id));

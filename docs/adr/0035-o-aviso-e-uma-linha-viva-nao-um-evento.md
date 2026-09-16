@@ -91,3 +91,8 @@ incluindo conversas sem lead. Admin/master preservam gestão, sem broadcast de
 notificações. A chave inclui organização, instância e telefone. RLS e push conferem
 o vínculo atual; avisos legados sem origem comprovada ficam ocultos, pois podem
 agrupar vários números. Os demais tipos de aviso mantêm suas atribuições.
+
+A revisão do PR #2125 preserva também a restrição opcional por responsável:
+produtor, sino e push intersectam o vínculo ao número com o mesmo predicado de
+acesso usado pelo chat. Sem lead, a entrega depende de esse predicado permitir
+o telefone. Preferências de entrega continuam sem alterar o registro elegível.
