@@ -1,0 +1,5 @@
+PASS PostgREST: auth, anonymous denial, tenant isolation, assignment, cycle, tier.
+Initial dialogs: [
+  'Novo?Precisou de ajuda? Agora é aqui dentro.Chegou a Central de Suporte do Torque. Abra chamados, acompanhe respostas e resolva tudo sem sair do CRM.✓Abra um chamado em segundos, com print e tudo✓Acompanhe a resposta em tempo real, no mesmo lugar✓Aviso no ? dourado quando a gente responderConhecer o SuporteAgora não'
+]
+PASS UI: carteira, 360, histórico e reload após restauração.
