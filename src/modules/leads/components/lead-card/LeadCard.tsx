@@ -4,7 +4,6 @@ import {
   CalendarPlus,
   Mail,
   MapPin,
-  MessageCircle,
   Trash2,
   Phone,
 } from "lucide-react";
@@ -107,6 +106,7 @@ export function LeadCard({
   comentando,
   editorDeEtiquetas,
   acaoLigar,
+  acaoConversa,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -155,6 +155,8 @@ export function LeadCard({
    * de voz ao alcance — a mesma regra do chat.
    */
   acaoLigar?: React.ReactNode;
+  /** Ação real fornecida pela raiz; sem ela não mostra um botão inerte. */
+  acaoConversa?: React.ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -280,7 +282,7 @@ export function LeadCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" />
+            {acaoConversa}
             {acaoLigar}
             <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
             <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />

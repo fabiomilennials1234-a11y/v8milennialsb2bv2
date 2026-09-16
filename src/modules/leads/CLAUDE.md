@@ -59,6 +59,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 - **Slice 16 longtail**: `useTags` (CRUD tags org-scoped), `useImportBatches` (rastreio import jobs), `useEnrichment` (Apollo/dadosify enrichment), `useBulkActions` + `useBulkSelection` (bulk ops em leads table/kanban)
 
 ### Components
+- A ação "Abrir conversa" do cabeçalho de `LeadCard` vem de `LeadConversationActionSlot`, injetado por `App.tsx` com `AbrirConversaButton`. Preserva a escolha da caixa e evita dependência circular com `communication`; sem telefone o componente não oferece a ação.
 - Lead detail modal: `LeadDetailDialog` (+ V1/V2 explícitos), `LeadDetailSheet` (alias), `LeadPanelProvider`, `useLeadSheet`, `LeadDetailMobileTabs`
 - Card/modal/score: `LeadCard`, `LeadModal`, `LeadScoreBadge`, `TimelineItem`
 - Form internals consumidos cross-module: `LeadDetailContent`, `LeadCustomFields`, `AddCustomFieldPopover`, `LeadTabHistory`

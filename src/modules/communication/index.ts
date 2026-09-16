@@ -339,6 +339,7 @@ export { useVoiceCall } from "./hooks/useVoiceCall";
 export type { CallPhase, VoiceCallState } from "./hooks/useVoiceCall";
 export { CALL_DENY_MESSAGES, CallDeniedError } from "./lib/torquecallsApi";
 export { VoicePairingDialog } from "./components/voice/VoicePairingDialog";
+export { AbrirConversaButton } from "./components/chat/AbrirConversaButton";
 export {
   createVoiceSession,
   logoutVoiceSession,

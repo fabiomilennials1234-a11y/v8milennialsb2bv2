@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
+import { useLeadConversationAction } from "@/shared/components/LeadConversationActionSlot";
 
 import { RegisterHistoricalSalesDialog } from "../lead-detail/modal/pipes/RegisterHistoricalSalesDialog";
 import { LeadCard } from "./LeadCard";
@@ -75,6 +76,7 @@ export function LeadCardContainer({
 }) {
   const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
   const renderLigar = useLeadCallAction();
+  const renderConversa = useLeadConversationAction();
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
   const toggleAI = useToggleLeadAI();
@@ -283,6 +285,7 @@ export function LeadCardContainer({
       // Vê o lead → pode ligar. Quem desenha o botão é a raiz (App.tsx), via
       // LeadCallActionSlot; ele some sozinho sem número de voz ao alcance.
       acaoLigar={leadId && renderLigar ? renderLigar({ id: leadId, nome: data.nome }) : undefined}
+      acaoConversa={renderConversa ? renderConversa({ id: data.id, telefone: data.telefone }) : undefined}
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })
       }
