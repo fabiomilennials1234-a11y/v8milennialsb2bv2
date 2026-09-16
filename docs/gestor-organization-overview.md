@@ -52,6 +52,17 @@ acesso negado. A revogação de vínculo é efetiva na próxima consulta.
   ratchet de TypeScript aprovados (nenhum erro de tipo introduzido).
 - Renderização Playwright em desktop e celular com dados fictícios; busca,
   expansão de usuários e ausência de overflow horizontal da página conferidas.
+- A suíte completa executou 13.194 testes (12.879 aprovados, 160 falhas).
+  As 24 falhas determinísticas fora do baseline foram reproduzidas, com nomes
+  idênticos, no commit base `cb797d5c0`; a falha intermitente adicional passou
+  na repetição. Dez falhas de shell desapareceram ao usar Git Bash em vez de
+  WSL sem `/bin/bash`. A suíte global não está verde; o baseline não foi alterado.
+- A atualização de Clientes 360 da main (`3b717d3c5`) foi integrada sem
+  conflitos. Os 51 testes focados e os 20 testes SQL passaram novamente.
+- Revisões independentes de requisitos e padrões concluídas, sem pendências
+  após a correção de acesso às métricas de organizações bloqueadas.
+- Os jobs do GitHub Actions não iniciaram por cobrança/limite da conta,
+  conforme anotação do serviço. Nenhum check foi desativado.
 - O guard geral `guard:master-ghost` tem 25 ocorrências fora do baseline e 42
   entradas antigas na base. O scanner retorna resultados idênticos com e sem
   esta migration. Essa dívida não foi alterada.
