@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -50,10 +50,15 @@ const funnels = [
   { id: "pipe-cus-1", name: "Indicações", slug: "indicacoes", type: "custom", is_active: true },
 ];
 const useFunnelStages = vi.fn();
+// jsdom does not implement the scrolling API used by the real Radix Select.
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+});
+afterAll(() => { Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
 
 function renderBar(
   selected = new Set(["l-1", "l-2"]),
-  escopoFunil?: { pipelineId: string; nomeDoFunil?: string; podeExcluir?: boolean },
+  escopoFunil?: { pipelineId: string; entryIds?: string[]; nomeDoFunil?: string; podeExcluir?: boolean },
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
@@ -90,9 +95,22 @@ beforeEach(() => {
 });
 
 describe("BulkActionBar — paridade por pipeline_id (SCRUM-633)", () => {
+  it("submete o diálogo do kanban com os IDs dos negócios e o funil de origem", async () => {
+    renderBar(new Set(["l-1"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1"] });
+    fireEvent.click(screen.getByRole("button", { name: /^mover$/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Novo" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^mover$/i }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledWith("bulk_move_pipeline_entries", {
+      p_entry_ids: ["entry-1"], p_source_pipeline_id: "pipe-cus-1",
+      p_target_pipeline_id: "pipe-sys-1", p_target_stage_id: "st-1",
+    }));
+  });
+
   it("Mover abre o diálogo unificado: etapas resolvidas pelo ID do funil default (nada de PipelineType nem sentinela custom:)", async () => {
     renderBar();
-    fireEvent.click(screen.getByRole("button", { name: /mover/i }));
+    fireEvent.click(screen.getByRole("button", { name: /adicionar ao funil/i }));
 
     await waitFor(() => expect(screen.getByText("Funil")).toBeInTheDocument());
     // O hack `(isCustom ? "whatsapp" : pipe)` morreu: o dropdown de etapas é
@@ -127,6 +145,28 @@ describe("useBulkMoveToPipeline — motor único bulk_add_to_pipeline", () => {
       p_pipeline_id: "pipe-sys-1",
       p_stage_id: "st-2",
     });
+  });
+
+  it("moves selected entry identities from the source funnel without adding another deal", async () => {
+    const { result } = renderHook(() => useBulkMoveToPipeline(), { wrapper });
+    await result.current.mutateAsync({
+      lead_ids: ["l-1"], pipeline_id: "pipe-cus-1", stage_id: "st-1",
+      source_pipeline_id: "pipe-sys-1", entry_ids: ["entry-original"],
+    });
+    expect(rpc).toHaveBeenCalledWith("bulk_move_pipeline_entries", {
+      p_entry_ids: ["entry-original"], p_source_pipeline_id: "pipe-sys-1",
+      p_target_pipeline_id: "pipe-cus-1", p_target_stage_id: "st-1",
+    });
+    expect(rpc.mock.calls.some(([name]) => name === "bulk_add_to_pipeline")).toBe(false);
+  });
+
+  it("recusa seleção sem entradas de origem em vez de criar cópias", async () => {
+    const { result } = renderHook(() => useBulkMoveToPipeline(), { wrapper });
+    await expect(result.current.mutateAsync({
+      lead_ids: ["l-1"], pipeline_id: "pipe-cus-1", stage_id: "st-1",
+      source_pipeline_id: "pipe-sys-1", entry_ids: [],
+    })).rejects.toThrow("Nenhum negócio de origem selecionado");
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("alias de compat useBulkMoveToCustomPipe aponta para o mesmo motor", () => {
