@@ -70,6 +70,7 @@ interface BulkActionBarProps {
    */
   escopoFunil?: {
     pipelineId: string;
+    entryIds?: string[];
     /** Nome do funil como a org o chama — entra no texto de confirmação. */
     nomeDoFunil?: string;
     /** Portão de exclusão da página. `false` esconde o botão destrutivo. */
@@ -105,7 +106,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
 
           <Button size="sm" variant="outline" onClick={() => setMoveOpen(true)}>
             <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-            Mover
+            {escopoFunil ? "Mover" : "Adicionar ao funil"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
             <UserPlus className="mr-1.5 h-3.5 w-3.5" />
@@ -150,7 +151,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
         </motion.div>
       </AnimatePresence>
 
-      <BulkMoveDialog open={moveOpen} onOpenChange={setMoveOpen} leadIds={ids} onSuccess={onClear} />
+      <BulkMoveDialog open={moveOpen} onOpenChange={setMoveOpen} leadIds={ids} sourcePipelineId={escopoFunil?.pipelineId} entryIds={escopoFunil?.entryIds} onSuccess={onClear} />
       <BulkAssignDialog open={assignOpen} onOpenChange={setAssignOpen} leadIds={ids} onSuccess={onClear} />
       <BulkTagDialog open={tagOpen} onOpenChange={setTagOpen} leadIds={ids} onSuccess={onClear} />
       {escopoFunil ? (
@@ -179,18 +180,22 @@ function BulkMoveDialog({
   open,
   onOpenChange,
   leadIds,
+  sourcePipelineId,
+  entryIds,
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   leadIds: string[];
+  sourcePipelineId?: string;
+  entryIds?: string[];
   onSuccess: () => void;
 }) {
   // SCRUM-633: um funil, um id. O sentinela `custom:<id>` e o hack
   // `(isCustom ? "whatsapp" : pipe)` morreram — o seletor lista TODOS os funis
   // da org (sistema + custom) por `pipelines.id`, as etapas vêm da fonte única
-  // `pipeline_stages` e o submit é sempre `bulk_add_to_pipeline` (motor único
-  // da 20270908003000, SCRUM-626).
+  // `pipeline_stages`. No kanban movemos as entradas; na lista de leads,
+  // adicionamos ao funil quando ainda não existe negócio aberto no destino.
   const { useFunnels, useFunnelStages } = usePipeOps();
 
   const [pipelineId, setPipelineId] = useState<string>("");
@@ -222,12 +227,14 @@ function BulkMoveDialog({
         lead_ids: leadIds,
         pipeline_id: effectivePipelineId,
         stage_id: stageId,
+        source_pipeline_id: sourcePipelineId,
+        entry_ids: entryIds,
       });
-      toast.success(`${leadIds.length} leads movidos`);
+      toast.success(sourcePipelineId ? `${entryIds?.length ?? 0} negócios movidos` : `${leadIds.length} leads adicionados ao funil`);
       onOpenChange(false);
       onSuccess();
     } catch {
-      toast.error("Erro ao mover leads");
+      toast.error(sourcePipelineId ? "Erro ao mover negócios" : "Erro ao adicionar ao funil");
     }
   };
 
@@ -235,7 +242,7 @@ function BulkMoveDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Mover {leadIds.length} leads</DialogTitle>
+          <DialogTitle>{sourcePipelineId ? "Mover negócios" : "Adicionar ao funil"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -285,7 +292,7 @@ function BulkMoveDialog({
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={!stageId || move.isPending}>
             {move.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Mover
+            {sourcePipelineId ? "Mover" : "Adicionar ao funil"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -31,11 +31,12 @@ export function useBulkMoveStage() {
 }
 
 /**
- * Mover/adicionar leads em massa a QUALQUER funil por `pipeline_id` + etapa
+ * Com origem explícita, move as entradas selecionadas de forma atômica.
+ * Sem origem (lista de leads), adiciona ao funil por `pipeline_id` + etapa
  * (uuid de `pipeline_stages`) — o motor único `bulk_add_to_pipeline` da
  * migration 20270908003000 (SCRUM-626): move os negócios ABERTOS do lead no
  * funil alvo (won/lost intocados) ou abre um novo quando não há aberto.
- * Autorização server-side (SECURITY DEFINER: org do membro / master).
+ * Movimentação respeita RLS como invoker; adição mantém a autorização do RPC legado.
  */
 export function useBulkMoveToPipeline() {
   const qc = useQueryClient();
@@ -44,11 +45,24 @@ export function useBulkMoveToPipeline() {
       lead_ids,
       pipeline_id,
       stage_id,
+      source_pipeline_id,
+      entry_ids,
     }: {
       lead_ids: string[];
       pipeline_id: string;
       stage_id: string;
+      source_pipeline_id?: string;
+      entry_ids?: string[];
     }) => {
+      if (source_pipeline_id) {
+        if (!entry_ids?.length) throw new Error("Nenhum negócio de origem selecionado");
+        const { data, error } = await supabase.rpc("bulk_move_pipeline_entries" as never, {
+          p_entry_ids: entry_ids, p_source_pipeline_id: source_pipeline_id,
+          p_target_pipeline_id: pipeline_id, p_target_stage_id: stage_id,
+        } as never);
+        if (error) throw error;
+        return data;
+      }
       const { data, error } = await supabase.rpc("bulk_add_to_pipeline" as any, {
         p_lead_ids: lead_ids,
         p_pipeline_id: pipeline_id,
@@ -64,6 +78,9 @@ export function useBulkMoveToPipeline() {
       qc.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["lead-timeline"] });
+      qc.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+      qc.invalidateQueries({ queryKey: ["leads-deals"] });
     },
   });
 }
