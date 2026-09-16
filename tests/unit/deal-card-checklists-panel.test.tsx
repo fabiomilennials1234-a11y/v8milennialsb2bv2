@@ -36,7 +36,7 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: () => undefined,
 }));
 
-vi.mock("@/modules/engagement", () => ({
+vi.mock("@/modules/engagement/checklists", () => ({
   useLeadChecklists: (...args: unknown[]) => checklistsDoLead(...(args as [])),
   useChecklistItems: () => ({
     data: [
