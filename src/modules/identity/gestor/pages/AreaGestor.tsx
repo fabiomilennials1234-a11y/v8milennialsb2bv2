@@ -56,7 +56,7 @@ export default function AreaGestor() {
       const fresh = await refetch();
       if (
         fresh.error ||
-        !fresh.data?.some((org) => org.organization_id === orgId)
+        !fresh.data?.some((org) => org.organization_id === orgId && !org.access_blocked)
       ) {
         throw new Error(
           "Não foi possível confirmar seu acesso a esta organização. Atualize a lista e tente novamente.",
@@ -81,8 +81,9 @@ export default function AreaGestor() {
   const filtered = orgs.filter((org) =>
     `${org.name} ${org.slug}`.toLocaleLowerCase("pt-BR").includes(term),
   );
-  const leads = orgs.reduce((sum, org) => sum + org.leads_last_7_days, 0);
-  const sales = orgs.reduce((sum, org) => sum + org.sales_last_7_days, 0);
+  const leads = orgs.reduce((sum, org) => sum + (org.leads_last_7_days ?? 0), 0);
+  const sales = orgs.reduce((sum, org) => sum + (org.sales_last_7_days ?? 0), 0);
+  const hasBlockedOrgs = orgs.some((org) => org.access_blocked);
 
   return (
     <div className="min-h-screen bg-background md:flex">
@@ -216,6 +217,12 @@ export default function AreaGestor() {
                 ))}
               </div>
 
+              {hasBlockedOrgs && (
+                <p className="text-sm text-muted-foreground">
+                  Os indicadores incluem apenas organizações com acesso liberado.
+                  Organizações com acesso restrito permanecem na lista.
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="relative w-full sm:max-w-sm">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -287,13 +294,15 @@ export default function AreaGestor() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">
-                            {number.format(org.leads_last_7_days)}
+                            {org.leads_last_7_days === null ? "—" : number.format(org.leads_last_7_days)}
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">
-                            {number.format(org.sales_last_7_days)}
+                            {org.sales_last_7_days === null ? "—" : number.format(org.sales_last_7_days)}
                           </TableCell>
                           <TableCell>
-                            <details className="max-w-56">
+                            {org.access_blocked ? (
+                              <span className="text-sm text-muted-foreground">Acesso restrito</span>
+                            ) : <details className="max-w-56">
                               <summary className="flex cursor-pointer items-center gap-2 text-sm">
                                 <span
                                   className={`h-2 w-2 rounded-full ${org.online_users.length ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
@@ -317,13 +326,13 @@ export default function AreaGestor() {
                                   Nenhum usuário online no momento.
                                 </p>
                               )}
-                            </details>
+                            </details>}
                           </TableCell>
                           <TableCell className="pr-5 text-right">
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={!!enteringId}
+                              disabled={!!enteringId || org.access_blocked}
                               aria-label={`Entrar em ${org.name}`}
                               onClick={() => void enterOrg(org.organization_id)}
                             >

@@ -113,6 +113,16 @@ describe("Área do gestor", () => {
       screen.queryByText("Nenhuma organização vinculada"),
     ).not.toBeInTheDocument();
   });
+  it("mantém org restrita na lista sem métricas, presença ou entrada", () => {
+    setup({ data: [{ ...organizations[0], access_blocked: true, leads_last_7_days: null, sales_last_7_days: null, online_users: [] }] });
+    render(<AreaGestor />);
+    const row = screen.getByRole("row", { name: /Org Alpha/ });
+    expect(within(row).getByText("Acesso restrito")).toBeInTheDocument();
+    expect(within(row).getAllByText("—")).toHaveLength(2);
+    expect(within(row).queryByText(/online/)).not.toBeInTheDocument();
+    expect(within(row).getByRole("button")).toBeDisabled();
+    expect(screen.getByText(/indicadores incluem apenas organizações com acesso liberado/)).toBeInTheDocument();
+  });
   it("não apresenta erro de consulta como lista vazia nem mostra dados antigos", () => {
     setup({ isError: true });
     render(<AreaGestor />);
@@ -146,6 +156,7 @@ describe("Área do gestor", () => {
   it.each([
     { data: organizations.slice(1), error: null },
     { data: organizations, error: new Error("Sem acesso") },
+    { data: [{ ...organizations[0], access_blocked: true }], error: null },
   ])(
     "não entra quando o vínculo foi revogado ou a revalidação falha",
     async (result) => {

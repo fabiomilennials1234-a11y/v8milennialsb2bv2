@@ -26,7 +26,7 @@ before(async () => {
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS
       $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     GRANT USAGE ON SCHEMA auth TO authenticated;
-    CREATE TABLE organizations(id uuid PRIMARY KEY, name text, slug text);
+    CREATE TABLE organizations(id uuid PRIMARY KEY, name text, slug text, subscription_status text DEFAULT 'active', billing_override boolean DEFAULT false);
     CREATE TABLE gestores(id uuid PRIMARY KEY, user_id uuid UNIQUE, is_active boolean);
     CREATE TABLE gestor_organizations(gestor_id uuid, organization_id uuid, PRIMARY KEY(gestor_id, organization_id));
     CREATE TABLE leads(id uuid PRIMARY KEY, organization_id uuid, created_at timestamptz, deleted_at timestamptz, is_shadow boolean);
@@ -38,6 +38,11 @@ before(async () => {
     CREATE POLICY own_presence ON user_presence TO authenticated USING(user_id=auth.uid());
     GRANT SELECT ON user_presence TO authenticated;
   `);
+  // Usa o predicado real de bloqueio; não duplica sua regra no fixture.
+  const blockingMigration = sqlFile("20270826000000_org_suspensa_corta_acesso.sql");
+  const helperStart = blockingMigration.indexOf("CREATE OR REPLACE FUNCTION public.org_access_blocked(");
+  const helperEnd = blockingMigration.indexOf("$function$;", helperStart) + "$function$;".length;
+  await db.exec(blockingMigration.slice(helperStart, helperEnd));
   await db.exec(sqlFile("20260916181815_gestor_organization_overview.sql"));
   // Executa o gate master real: o novo hub não deve liberar sua RPC.
   await db.exec(sqlFile("20270807120000_master_org_user_activity.sql"));
@@ -48,7 +53,7 @@ after(async () => {
 });
 beforeEach(async () => {
   await db.exec(`BEGIN;
-    INSERT INTO organizations VALUES ('${id(10)}','Alpha','alpha'),('${id(20)}','Beta','beta'),('${id(30)}','Sem movimento','vazia');
+    INSERT INTO organizations(id,name,slug) VALUES ('${id(10)}','Alpha','alpha'),('${id(20)}','Beta','beta'),('${id(30)}','Sem movimento','vazia');
     INSERT INTO gestores VALUES ('${id(101)}','${id(1)}',true),('${id(102)}','${id(2)}',true),('${id(103)}','${id(3)}',false),('${id(104)}','${id(4)}',true);
     INSERT INTO gestor_organizations VALUES ('${id(101)}','${id(10)}'),('${id(101)}','${id(30)}'),('${id(102)}','${id(20)}'),('${id(103)}','${id(10)}');
     INSERT INTO master_users VALUES ('${id(99)}',true,'{"all":true}');
@@ -107,6 +112,28 @@ test("conta 168 horas por criação/venda; ignora futuro, leads excluídos/sombr
   assert.equal(Number(row.leads_last_7_days), 2);
   assert.equal(Number(row.sales_last_7_days), 2);
 });
+
+for (const status of ["suspended", "cancelled", "expired"]) {
+  test(`org ${status} permanece listada sem expor indicadores ou presença`, async () => {
+    await db.exec(`UPDATE organizations SET subscription_status='${status}' WHERE id='${id(10)}'`);
+    await asUser(1);
+    const [row] = await overview();
+    assert.equal(row.name, "Alpha");
+    assert.equal(row.access_blocked, true);
+    assert.equal(row.leads_last_7_days, null);
+    assert.equal(row.sales_last_7_days, null);
+    assert.deepEqual(row.online_users, []);
+  });
+  test(`override de org ${status} respeita a liberação existente`, async () => {
+    await db.exec(`UPDATE organizations SET subscription_status='${status}',billing_override=true WHERE id='${id(10)}'`);
+    await asUser(1);
+    const [row] = await overview();
+    assert.equal(row.access_blocked, false);
+    assert.equal(Number(row.leads_last_7_days), 2);
+    assert.equal(Number(row.sales_last_7_days), 2);
+    assert.equal(row.online_users.length, 2);
+  });
+}
 
 test("presença considera membros ativos da org, deduplica e expira em 2 minutos", async () => {
   await asUser(1);

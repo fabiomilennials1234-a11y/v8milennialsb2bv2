@@ -7,8 +7,9 @@ export interface GestorOrganizationOverview {
   organization_id: string;
   name: string;
   slug: string;
-  leads_last_7_days: number;
-  sales_last_7_days: number;
+  leads_last_7_days: number | null;
+  sales_last_7_days: number | null;
+  access_blocked: boolean;
   online_users: { user_id: string; name: string | null }[];
   measured_at: string;
 }
