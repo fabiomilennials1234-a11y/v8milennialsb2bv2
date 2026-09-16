@@ -70,3 +70,8 @@ e as contagens agora selecionam colunas explícitas, preservando esses controles
 O predicado de responsável foi extraído sem mudar suas regras para um helper
 privado sem EXECUTE para clientes ou service_role. Produtor/push usam esse helper
 por dentro de seus definers; o predicado público continua derivando auth.uid().
+
+Resumos por instância e o gate usado pelo Oráculo/summarize-conversation também
+exigem vínculo explícito: remover o último vínculo não abre o número. O contexto
+agregado sem instância fica restrito a admin/master, como o transcript agregado.
+Os testes exercitam push e Oráculo sob SET ROLE service_role.

@@ -371,3 +371,59 @@ USING (private.can_read_conversation_state(id));
 CREATE POLICY conversation_messages_number_provenance ON public.conversation_messages
 AS RESTRICTIVE FOR SELECT TO authenticated
 USING (private.can_read_aggregate_conversation(conversation_id));
+
+CREATE OR REPLACE FUNCTION public.oraculo_chat_scope_allows(
+  p_organization_id uuid,
+  p_team_member_id uuid,
+  p_lead_id uuid,
+  p_instance_id uuid
+)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.leads l
+    JOIN public.whatsapp_instances wi
+      ON wi.id = p_instance_id AND wi.organization_id = p_organization_id
+    WHERE l.id = p_lead_id
+      AND l.organization_id = p_organization_id
+      AND (
+        p_team_member_id IS NULL
+        OR (
+          p_team_member_id IN (l.sdr_id, l.closer_id, l.pre_sale_responsible_id, l.sale_responsible_id)
+          AND (
+            EXISTS (
+              SELECT 1 FROM public.whatsapp_instance_allowed_members a
+              WHERE a.whatsapp_instance_id = p_instance_id
+                AND a.team_member_id = p_team_member_id
+                AND EXISTS (SELECT 1 FROM public.team_members tm WHERE tm.id=p_team_member_id AND tm.organization_id=p_organization_id AND tm.is_active)
+            )
+          )
+        )
+      )
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.oraculo_chat_scope_allows(uuid,uuid,uuid,uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.oraculo_chat_scope_allows(uuid,uuid,uuid,uuid) TO service_role;
+
+-- Additional restrictions intersect the existing summary/owner policies.
+CREATE POLICY conversation_summaries_number_assignment ON public.conversation_summaries
+AS RESTRICTIVE FOR SELECT TO authenticated USING (
+ (SELECT public.is_master_user()) OR (
+   organization_id IN (SELECT public.get_my_organization_ids()) AND (
+     public.is_org_admin(organization_id)
+     OR instance_id=ANY((SELECT private.whatsapp_visible_instance_ids())::uuid[])
+   )
+ )
+);
+-- This aggregate has no number provenance; backend generation is unchanged.
+CREATE POLICY conversation_context_summary_aggregate_read ON public.conversation_context_summary
+AS RESTRICTIVE FOR SELECT TO authenticated USING (
+ (SELECT public.is_master_user()) OR (
+   organization_id IN (SELECT public.get_my_organization_ids())
+   AND public.is_org_admin(organization_id)
+ )
+);

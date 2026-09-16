@@ -1,10 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const sql = (name) => readFileSync(new URL(`../../supabase/migrations/${name}.sql`, import.meta.url), 'utf8');
 const id = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+
+test('isolation migration follows its dependencies and is not overwritten during replay', () => {
+  const target = '20271021000013_isolate_whatsapp_notifications.sql';
+  const names = readdirSync(new URL('../../supabase/migrations/', import.meta.url))
+    .filter(name => name.endsWith('.sql')).sort();
+  assert.ok(names.indexOf('20271019000003_enforce_whatsapp_instance_read_access.sql') < names.indexOf(target));
+  for (const fn of ['whatsapp_readable_instance_ids', 'can_see_chat_scope', 'can_see_chat_target', 'fn_aviso_de_mensagem', 'fn_avisos_pendentes_de_push', 'oraculo_chat_scope_allows']) {
+    const definition = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`, 'i');
+    assert.equal(names.filter(name => definition.test(sql(name.slice(0, -4)))).at(-1), target, fn);
+  }
+});
 
 test('WhatsApp previews follow number assignments, not shared lead ownership', async () => {
   const db = new PGlite();
@@ -23,6 +34,12 @@ test('WhatsApp previews follow number assignments, not shared lead ownership', a
         assigned_to uuid,ai_state text DEFAULT 'WAITING_HUMAN',ai_state_resume_mode text,ai_state_updated_at timestamptz,
         ai_state_updated_by uuid,human_paused_until timestamptz);
       CREATE TABLE conversation_messages(id uuid PRIMARY KEY,conversation_id uuid,content text);
+      CREATE TABLE conversation_summaries(id uuid,organization_id uuid,lead_id uuid,instance_id uuid,summary text);
+      CREATE TABLE conversation_context_summary(id uuid,organization_id uuid,key_points jsonb);
+      ALTER TABLE conversation_summaries ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE conversation_context_summary ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY summaries_base ON conversation_summaries TO authenticated USING(true);
+      CREATE POLICY context_base ON conversation_context_summary TO authenticated USING(true);
       CREATE TABLE team_members(id uuid PRIMARY KEY, user_id uuid, organization_id uuid, is_active boolean, role text);
       CREATE TABLE whatsapp_instances(id uuid PRIMARY KEY, organization_id uuid);
       CREATE TABLE whatsapp_instance_allowed_members(whatsapp_instance_id uuid, team_member_id uuid);
@@ -112,6 +129,10 @@ test('WhatsApp previews follow number assignments, not shared lead ownership', a
     }
     assert.equal((await db.query(`SELECT event_count FROM notifications WHERE user_id='${id(11)}'`)).rows[0].event_count,3);
 
+    const asWorker = async (query) => {
+      await db.exec('SET ROLE service_role');
+      try { return (await db.query(query)).rows; } finally { await db.exec('RESET ROLE'); }
+    };
     const asUser = async (user, query) => {
       await db.exec(`SET ROLE authenticated; SET test.user_id='${id(user)}'`);
       try { return (await db.query(query)).rows; } finally { await db.exec('RESET ROLE'); }
@@ -127,13 +148,13 @@ test('WhatsApp previews follow number assignments, not shared lead ownership', a
     assert.equal((await asUser(11,`SELECT can_see_chat_target('${id(100)}',NULL,'5548999999999',NULL,'${id(22)}') AS allowed`))[0].allowed,false);
     assert.equal((await asUser(11,`SELECT can_see_chat_target('${id(100)}',NULL,'5548999999999') AS allowed`))[0].allowed,false);
     await assert.rejects(asUser(11,`SELECT whatsapp_readable_instance_ids('${id(200)}')`),/forbidden/);
-    assert.equal((await db.query('SELECT * FROM fn_avisos_pendentes_de_push()')).rows.length,2);
+    assert.equal((await asWorker('SELECT * FROM fn_avisos_pendentes_de_push()')).length,2);
     // Real owner policy: producer, existing bell previews, push and proxy agree.
     await db.exec(`UPDATE organizations SET chat_restrict_to_owner=true WHERE id='${id(100)}';
       UPDATE leads SET normalized_phone='5548999999999' WHERE id='${id(31)}';`);
     assert.equal((await asUser(11,'SELECT * FROM notifications')).length,0);
     assert.equal((await asUser(12,'SELECT * FROM notifications')).length,1);
-    assert.equal((await db.query('SELECT * FROM fn_avisos_pendentes_de_push()')).rows.length,1);
+    assert.equal((await asWorker('SELECT * FROM fn_avisos_pendentes_de_push()')).length,1);
     assert.equal((await asUser(11,`SELECT can_see_chat_target('${id(100)}',NULL,'5548999999999',NULL,'${id(21)}') AS allowed`))[0].allowed,false);
     const before = (await db.query(`SELECT sum(event_count)::int AS n FROM notifications`)).rows[0].n;
     await incoming(21); await incoming(21,null);
@@ -157,14 +178,25 @@ test('WhatsApp previews follow number assignments, not shared lead ownership', a
     }
     assert.equal((await asUser(11,`UPDATE conversations SET ai_state='HUMAN_ACTIVE' WHERE id='${id(41)}' RETURNING ai_state`))[0].ai_state,'HUMAN_ACTIVE');
     assert.equal((await asUser(14,`UPDATE conversations SET ai_state='HUMAN_ACTIVE' WHERE id='${id(41)}' RETURNING ai_state`)).length,0);
+    await db.exec(`INSERT INTO conversation_summaries VALUES('${id(61)}','${id(100)}','${id(31)}','${id(22)}','number summary');
+      INSERT INTO conversation_context_summary VALUES('${id(62)}','${id(100)}','["private detail"]')`);
+    assert.equal((await asUser(11,'SELECT * FROM conversation_summaries')).length,0);
+    assert.equal((await asUser(12,'SELECT * FROM conversation_summaries')).length,1);
+    assert.equal((await asUser(12,'SELECT * FROM conversation_context_summary')).length,0);
+    assert.equal((await asUser(13,'SELECT * FROM conversation_context_summary')).length,1);
+    assert.equal((await asWorker(`SELECT oraculo_chat_scope_allows('${id(100)}','${id(2)}','${id(31)}','${id(22)}') AS allowed`))[0].allowed,true);
+    await db.exec(`DELETE FROM whatsapp_instance_allowed_members WHERE whatsapp_instance_id='${id(22)}'`);
+    assert.equal((await asUser(12,'SELECT * FROM conversation_summaries')).length,0);
+    assert.equal((await asWorker(`SELECT oraculo_chat_scope_allows('${id(100)}','${id(2)}','${id(31)}','${id(22)}') AS allowed`))[0].allowed,false);
+    await db.exec(`INSERT INTO whatsapp_instance_allowed_members VALUES('${id(22)}','${id(2)}')`);
     assert.equal((await db.query(`SELECT has_function_privilege('authenticated','private.chat_scope_for_recipient(uuid,uuid,uuid,text)','EXECUTE') AS allowed`)).rows[0].allowed,false);
     await db.exec(`DELETE FROM whatsapp_instance_allowed_members WHERE team_member_id='${id(1)}'`);
     assert.equal((await asUser(11,'SELECT * FROM notifications')).length,0);
     assert.equal((await asUser(11,'SELECT * FROM whatsapp_instances')).length,0);
     assert.equal((await asUser(11,'SELECT id FROM conversations')).length,0);
-    assert.equal((await db.query('SELECT * FROM fn_avisos_pendentes_de_push()')).rows.length,1);
+    assert.equal((await asWorker('SELECT * FROM fn_avisos_pendentes_de_push()')).length,1);
     await db.exec(`UPDATE team_members SET is_active=false WHERE id='${id(2)}'`);
-    assert.equal((await db.query('SELECT * FROM fn_avisos_pendentes_de_push()')).rows.length,0);
+    assert.equal((await asWorker('SELECT * FROM fn_avisos_pendentes_de_push()')).length,0);
     await db.exec(`INSERT INTO notifications(user_id,organization_id,type,title)
       VALUES('${id(11)}','${id(100)}','meeting_soon','Own meeting')`);
     assert.equal((await asUser(11,'SELECT * FROM notifications')).length,1);
