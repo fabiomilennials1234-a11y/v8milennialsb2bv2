@@ -41,6 +41,7 @@ vi.mock("@/lib/realtimeStatusStore", () => ({
 
 // ─── Import after mock ────────────────────────────────────────────────────────
 
+import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -274,4 +275,17 @@ describe("useRealtimeChannel", () => {
     expect(mockRemoveChannel).toHaveBeenCalledTimes(1);
     expect(mockChannel.subscribe).toHaveBeenCalledTimes(2);
   });
+  it("keeps simultaneous subscriptions and immediate remounts distinct", () => {
+    vi.setSystemTime(new Date("2026-09-16T12:00:00Z"));
+    const { rerender } = renderHook(({ enabled }) => {
+      useRealtimeChannel({ table: "pipeline_stages", filter: "organization_id=eq.qa", onEvent: vi.fn(), enabled });
+      useRealtimeChannel({ table: "pipeline_stages", filter: "organization_id=eq.qa", onEvent: vi.fn(), enabled });
+    }, { initialProps: { enabled: true } });
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    const names = vi.mocked(supabase.channel).mock.calls.map(([name]) => name);
+    expect(names).toHaveLength(4);
+    expect(new Set(names).size).toBe(4);
+  });
+
 });

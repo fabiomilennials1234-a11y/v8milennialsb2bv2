@@ -213,3 +213,14 @@ banco por `classificacao_cafe_jurere`, incluindo contagem/exportação. Não alt
 importação, classificação persistida ou as regras das outras organizações.
 Migration antes da ativação da flag; roteiro em
 `.specs/features/leads-cafe-jurere-cadastro-erp.md`.
+
+## Clientes 360 em Leads (2026-09-16)
+
+A aba Clientes monta `ClientPortfolioSection` com a RPC `client_portfolio_page`.
+Faixa, recompra, receita mensal e contagem são globais ao recorte, antes do LIMIT.
+RPC INVOKER preserva RLS e regras canônicas de classificação; recebe organização
+apenas de `useOrganization`. Cliente sem segmento não vira Bronze.
+`ClientPortfolio` é apresentação; `LeadCardNewDeal` mantém criação oficial.
+`useClientPortfolioPurchases` resolve estornos e precedência CRM/Carteira.
+Migration `20271021000014` antes do frontend; contrato e testes em
+`.specs/clientes-360.md`. Tipos gerados não foram editados manualmente.
