@@ -201,3 +201,14 @@ test("privilégios e search_path da função privada estão restritos", async ()
   assert.equal(fn.anon_access, false);
   assert.deepEqual(fn.proconfig, ['search_path=""']);
 });
+
+test("rollback remove apenas a consulta e permite reaplicar sem perder vínculos", async () => {
+  const rollback = readFileSync(new URL("../../supabase/ops/rollback-gestor-organization-overview.sql", import.meta.url), "utf8");
+  await db.exec(rollback.replace(/^BEGIN;$/m, "").replace(/^COMMIT;$/m, ""));
+  const { rows: [objects] } = await db.query("SELECT to_regprocedure('public.gestor_organization_overview()') AS public_fn, to_regprocedure('private.gestor_organization_overview()') AS private_fn");
+  assert.deepEqual(objects, { public_fn: null, private_fn: null });
+  await db.exec(sqlFile("20260916181815_gestor_organization_overview.sql"));
+  await asUser(1);
+  assert.equal((await overview()).length, 2);
+  assert.equal(Number((await overview())[0].sales_last_7_days), 2);
+});
