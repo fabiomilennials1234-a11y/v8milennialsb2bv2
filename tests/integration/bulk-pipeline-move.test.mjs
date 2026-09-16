@@ -34,8 +34,11 @@ test('bulk moves keep entry/deal identity and history; retries and failures are 
     `);
     await db.exec(read('../../supabase/migrations/20260916163244_bulk_move_existing_pipeline_entries.sql'));
     const move = (ids, target = 2, stage = 12) => db.query(`SELECT bulk_move_pipeline_entries(
-      ARRAY[${ids.map(n=>`'${id(n)}'::uuid`).join(',')}],'${id(1)}','${id(target)}','${id(stage)}') AS moved`);
+      ARRAY[${ids.map(n=>`'${id(n)}'::uuid`).join(',')}]::uuid[],'${id(1)}','${id(target)}','${id(stage)}') AS moved`);
     await db.exec('SET ROLE authenticated');
+    await assert.rejects(move([]), /Selecione de 1 a 1000/);
+    await assert.rejects(move([33],2,11), /indisponível/);
+    await assert.rejects(db.query(`SELECT bulk_move_pipeline_entries(ARRAY['${id(33)}'::uuid], '${id(2)}', '${id(2)}', '${id(12)}')`), /mudou de funil/);
     assert.equal((await move([31,31])).rows[0].moved,1);
     assert.equal((await db.query(`SELECT count(*)::int n FROM pipeline_entries`)).rows[0].n,3);
     let original=(await db.query(`SELECT * FROM pipeline_entries WHERE id='${id(31)}'`)).rows[0];
@@ -54,6 +57,18 @@ test('bulk moves keep entry/deal identity and history; retries and failures are 
     assert.equal((await db.query(`SELECT count(*)::int n FROM pipeline_stage_events WHERE entry_id='${id(31)}'`)).rows[0].n,historyBefore);
     assert.equal((await db.query(`SELECT deal_id FROM pipeline_entries WHERE id='${id(32)}'`)).rows[0].deal_id,id(22));
     assert.equal((await db.query(`SELECT has_function_privilege('anon','bulk_move_pipeline_entries(uuid[],uuid,uuid,uuid)','EXECUTE') AS allowed`)).rows[0].allowed,false);
+    // Read access alone must never turn a denied UPDATE into a success.
+    await db.exec(`DROP POLICY org_entries ON pipeline_entries;
+      CREATE POLICY read_entries ON pipeline_entries FOR SELECT TO authenticated USING (true);
+      CREATE POLICY deny_updates ON pipeline_entries FOR UPDATE TO authenticated USING (false);
+      SET test.org='${id(100)}'; SET ROLE authenticated;`);
+    await assert.rejects(move([33]), /não encontrado|sem acesso|não autorizada/);
+    await db.exec('RESET ROLE');
+    assert.equal((await db.query(`SELECT pipeline_id FROM pipeline_entries WHERE id='${id(33)}'`)).rows[0].pipeline_id,id(1));
+    await db.exec(`UPDATE pipelines SET is_active=false WHERE id='${id(2)}'`);
+    await assert.rejects(move([33]), /indisponível/);
+    await db.exec(`UPDATE pipelines SET is_active=true WHERE id='${id(2)}'; UPDATE pipeline_stages SET is_active=false WHERE id='${id(12)}'`);
+    await assert.rejects(move([33]), /indisponível/);
     await db.exec(read('../../scripts/ops/rollback-bulk-pipeline-move.sql'));
     assert.equal((await db.query(`SELECT to_regprocedure('bulk_move_pipeline_entries(uuid[],uuid,uuid,uuid)') AS fn`)).rows[0].fn,null);
     assert.equal((await db.query(`SELECT count(*)::int n FROM pipeline_stage_events WHERE entry_id='${id(31)}'`)).rows[0].n,historyBefore);

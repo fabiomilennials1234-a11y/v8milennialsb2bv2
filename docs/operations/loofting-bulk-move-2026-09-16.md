@@ -71,3 +71,17 @@ Revisão conforme `.claude/skills/security-rubric/SKILL.md`: sem bloqueios novos
 Não muda policies de leitura/escrita das entradas; usa RLS existente e validação
 de organização de `mover_negocio`. Dados do reparo ficam fora da migration de
 schema e o backup não é acessível pela API do cliente.
+
+## QA antes do merge
+
+Revisão solicitada e merge autorizado pelo usuário em 2026-09-16, condicionado
+à aprovação do QA. Revisados o encaminhamento de IDs do kanban ao RPC, a
+separação da ação da lista de leads e os controles server-side. Sem bloqueios
+encontrados no diff. Ampliado o teste SQL com seleção vazia, etapa de outro
+funil, origem desatualizada, funil/etapa inativos e leitura permitida com UPDATE
+negado. Todos passaram, assim como os 13 testes Vitest. Build, lint e tipos
+da implementação já validados; esta rodada acrescentou apenas testes e registro.
+
+GitHub Actions não iniciou por bloqueio de pagamento/limite de gastos da conta;
+isso não é resultado de execução dos testes. QA local e ensaio/validação de banco
+descritos acima constituem as evidências disponíveis.
