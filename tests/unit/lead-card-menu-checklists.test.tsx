@@ -27,6 +27,7 @@ const { toggle, apply, load } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: () => undefined }));
+vi.mock("@/modules/engagement/checklists", async () => await import("@/modules/engagement"));
 vi.mock("@/modules/engagement", () => ({
   CreateMeetingDialog: () => null,
   useLeadChecklists: load,

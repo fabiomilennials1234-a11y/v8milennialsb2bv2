@@ -7,6 +7,11 @@
 
 ## Escopo
 
+API pública de checklists: `@/modules/engagement/checklists` exporta apenas os
+hooks e tipos de checklists e modelos. Cards devem usar essa entrada para não
+importar de volta as telas da Agenda pelo barrel geral. Os mesmos exports
+continuam disponíveis em `@/modules/engagement` para os consumidores existentes.
+
 Engajamento dos vendedores com o sistema. Inclui:
 
 - **Checklists** — itens repetitivos por vendedor (ex. revisar leads abandonados)

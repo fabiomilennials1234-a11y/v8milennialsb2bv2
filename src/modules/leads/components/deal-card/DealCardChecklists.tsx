@@ -34,7 +34,7 @@ import {
   useLeadChecklists,
   useToggleChecklistItem,
   type ChecklistWithCounts,
-} from "@/modules/engagement";
+} from "@/modules/engagement/checklists";
 import { cn } from "@/lib/utils";
 
 /**
