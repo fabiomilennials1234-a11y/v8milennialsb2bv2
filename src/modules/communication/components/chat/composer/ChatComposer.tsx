@@ -699,7 +699,7 @@ export function ChatComposer({
             setScheduleModalOpen(v);
             if (!v) setMessage("");
           }}
-          leadId={selectedContact.lead_id || ""}
+          leadId={selectedContact.lead_id || null}
           leadName={selectedContact.lead_name || selectedContact.push_name || selectedContact.phone_number}
           phoneNumber={selectedContact.phone_number}
           instanceId={instanceId}

@@ -4,13 +4,14 @@ import { ptBR } from "date-fns/locale";
 import { Clock, ChevronDown, ChevronUp, X, Pencil } from "lucide-react";
 import {
   useScheduledMessagesForLead,
+  useScheduledMessagesForConversation,
   useCancelScheduledMessage,
   type ScheduledMessage,
 } from "@/modules/communication/hooks/useScheduledMessages";
 import { ScheduleMessageModal } from "./ScheduleMessageModal";
 
 interface ScheduledMessagesBannerProps {
-  leadId: string;
+  leadId: string | null;
   leadName: string;
   phoneNumber: string;
   instanceId?: string;
@@ -22,7 +23,10 @@ export function ScheduledMessagesBanner({
   phoneNumber,
   instanceId,
 }: ScheduledMessagesBannerProps) {
-  const { data: scheduled = [] } = useScheduledMessagesForLead(leadId);
+  const { data: leadMessages = [] } = useScheduledMessagesForLead(leadId);
+  const { data: conversationMessages = [] } = useScheduledMessagesForConversation(phoneNumber, instanceId);
+  const scheduled = [...new Map([...leadMessages, ...conversationMessages].map(msg => [msg.id, msg])).values()]
+    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
   const cancelMutation = useCancelScheduledMessage();
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState<ScheduledMessage | null>(null);

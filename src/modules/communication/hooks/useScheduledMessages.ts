@@ -4,11 +4,12 @@ import { useOrganization } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { toast } from "sonner";
+import type { TablesInsert } from "@/integrations/supabase/types";
 
 export interface ScheduledMessage {
   id: string;
   organization_id: string;
-  lead_id: string;
+  lead_id: string | null;
   phone_number: string;
   created_by: string;
   assigned_to: string | null;
@@ -46,6 +47,30 @@ export function useScheduledMessagesForLead(leadId: string | null) {
   });
 }
 
+/** Conversation lookup also survives linking a lead after scheduling. */
+export function useScheduledMessagesForConversation(phoneNumber: string, instanceId?: string) {
+  const { organizationId } = useOrganization();
+  const phone = phoneNumber.replace(/\D/g, "");
+  return useQuery({
+    queryKey: ["scheduled-messages", "conversation", organizationId, instanceId, phone],
+    enabled: !!organizationId && !!instanceId && !!phone,
+    queryFn: async (): Promise<ScheduledMessage[]> => {
+      if (!organizationId || !instanceId || !phone) return [];
+      const { data, error } = await supabase.from("scheduled_user_messages")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("whatsapp_instance_id", instanceId)
+        .eq("phone_number", phone)
+        .eq("status", "scheduled")
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as ScheduledMessage[];
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
+
 /** Set de lead_ids com agendamentos pendentes (para filtro nos pipes) */
 export function useLeadsWithScheduledMessages() {
   const { organizationId } = useOrganization();
@@ -59,7 +84,7 @@ export function useLeadsWithScheduledMessages() {
         .eq("organization_id", organizationId)
         .eq("status", "scheduled");
       if (error) return new Set<string>();
-      return new Set((data ?? []).map((r) => r.lead_id));
+      return new Set((data ?? []).map((r) => r.lead_id).filter((id): id is string => !!id));
     },
     enabled: !!organizationId,
     retry: false,
@@ -76,7 +101,7 @@ export function useCreateScheduledMessage() {
 
   return useMutation({
     mutationFn: async (input: {
-      leadId: string;
+      leadId: string | null;
       phoneNumber: string;
       messageContent?: string;
       mediaFile?: File;
@@ -84,6 +109,10 @@ export function useCreateScheduledMessage() {
       instanceId?: string;
     }) => {
       if (!organizationId || !member) throw new Error("Contexto não disponível");
+      const leadId = input.leadId?.trim() || null;
+      if (!leadId && !input.instanceId?.trim()) {
+        throw new Error("Selecione uma instância de WhatsApp para agendar nesta conversa.");
+      }
 
       let mediaUrl: string | null = null;
       let mediaType: string | null = null;
@@ -112,8 +141,8 @@ export function useCreateScheduledMessage() {
         .from("scheduled_user_messages")
         .insert({
           organization_id: organizationId,
-          lead_id: input.leadId,
-          phone_number: input.phoneNumber,
+          lead_id: leadId,
+          phone_number: input.phoneNumber.replace(/\D/g, ""),
           created_by: member.id,
           assigned_to: member.id,
           whatsapp_instance_id: input.instanceId || null,
@@ -122,14 +151,15 @@ export function useCreateScheduledMessage() {
           media_type: mediaType,
           media_filename: mediaFilename,
           scheduled_at: input.scheduledAt.toISOString(),
-        })
+        // Compatibility until generated types include the nullable lead migration.
+        } as TablesInsert<"scheduled_user_messages">)
         .select()
         .single();
 
       if (error) throw error;
 
-      logAction({
-        leadId: input.leadId,
+      if (leadId) logAction({
+        leadId,
         action: "scheduled_message_created",
         description: `Mensagem agendada para ${input.scheduledAt.toLocaleString("pt-BR")}`,
       });
