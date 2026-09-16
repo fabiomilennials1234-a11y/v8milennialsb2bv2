@@ -77,7 +77,7 @@ export function useConversationHistory(leadId: string | null, page: number = 0) 
       const { data: conversation, error: convError } = await supabase
         .from("conversations")
         .select(`
-          *,
+          id, lead_id, organization_id, agent_id, state, turn_count, last_message_at, created_at,
           copilot_agents(id, name)
         `)
         .eq("lead_id", leadId)

@@ -9,8 +9,8 @@ import type { WhatsAppInstanceForUser } from "./types";
 
 /**
  * Lista instâncias (exceto com status "error") às quais o usuário está vinculado.
- * Se a instância não tiver vendedores em whatsapp_instance_allowed_members, todos da org podem.
- * Caso contrário, só retorna instâncias em que o team_member do usuário está na lista.
+ * Membros só veem números explicitamente vinculados ao seu team_member.
+ * Sem vínculo, o número fica disponível apenas para gestão (admin/master).
  *
  * `options.enabled` existe para quem monta este hook FORA das rotas e não sabe
  * de antemão se vai precisar da lista — hoje só o `VoiceCallProvider`, que vive
@@ -46,39 +46,14 @@ export function useWhatsAppInstancesForUser(options?: { enabled?: boolean }) {
         return instances as WhatsAppInstanceForUser[];
       }
 
-      const { data: allowedRows, error: allowedError } = await supabase
+      const { data: memberRows, error: memberError } = await supabase
         .from("whatsapp_instance_allowed_members")
         .select("whatsapp_instance_id")
-        .in("whatsapp_instance_id", instances.map((i) => i.id));
-
-      if (allowedError) throw allowedError;
-
-      const instanceIdsWithRestriction = new Set(
-        (allowedRows ?? []).map((r) => r.whatsapp_instance_id)
-      );
-      const allowedMemberByInstance: Record<string, boolean> = {};
-      if (allowedRows?.length) {
-        const { data: memberRows, error: memberError } = await supabase
-          .from("whatsapp_instance_allowed_members")
-          .select("whatsapp_instance_id, team_member_id")
-          .in("whatsapp_instance_id", instances.map((i) => i.id))
-          .eq("team_member_id", teamMemberId);
-        if (memberError) throw memberError;
-        for (const row of memberRows ?? []) {
-          allowedMemberByInstance[row.whatsapp_instance_id] = true;
-        }
-      }
-
-      const result: WhatsAppInstanceForUser[] = [];
-      for (const inst of instances) {
-        const hasRestriction = instanceIdsWithRestriction.has(inst.id);
-        if (!hasRestriction) {
-          result.push(inst as WhatsAppInstanceForUser);
-        } else if (allowedMemberByInstance[inst.id]) {
-          result.push(inst as WhatsAppInstanceForUser);
-        }
-      }
-      return result;
+        .in("whatsapp_instance_id", instances.map((i) => i.id))
+        .eq("team_member_id", teamMemberId);
+      if (memberError) throw memberError;
+      const linkedIds = new Set((memberRows ?? []).map((r) => r.whatsapp_instance_id));
+      return instances.filter((instance) => linkedIds.has(instance.id)) as WhatsAppInstanceForUser[];
     },
     enabled: (options?.enabled ?? true) && !!organizationId && !!teamMemberId,
   });

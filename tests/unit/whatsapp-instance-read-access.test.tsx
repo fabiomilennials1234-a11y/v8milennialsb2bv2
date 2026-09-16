@@ -3,28 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const state = vi.hoisted(() => ({ role: "member", failAt: 0, calls: 0 }));
+import { createMockSupabase } from "../helpers/supabase-mock";
+const state = vi.hoisted(() => ({ role: "member", virtual: false, mock: null as ReturnType<typeof createMockSupabase> | null }));
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { id: "member-a", organization_id: "org-a", role: state.role } }),
-  isVirtualTeamMember: () => false,
+  isVirtualTeamMember: () => state.virtual,
 }));
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: (table: string) => {
-    const call = table === "whatsapp_instance_allowed_members" ? ++state.calls : 0;
-    const response = table === "whatsapp_instances"
-      ? { data: [{ id: "own" }, { id: "other" }], error: null }
-      : call === state.failAt
-        ? { data: null, error: new Error("permission lookup unavailable") }
-        : { data: call === 1
-          ? [{ whatsapp_instance_id: "own" }, { whatsapp_instance_id: "other" }]
-          : [{ whatsapp_instance_id: "own", team_member_id: "member-a" }], error: null };
-    const chain = {
-      select: () => chain, eq: () => chain, neq: () => chain,
-      order: () => chain, in: () => chain,
-      then: (resolve: (value: typeof response) => unknown) => Promise.resolve(response).then(resolve),
-    };
-    return chain;
-  } },
+  supabase: { from: (table: string) => state.mock!.sb.from(table) },
 }));
 
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
@@ -37,23 +23,36 @@ function renderInstances() {
 }
 
 describe("instance visibility", () => {
-  beforeEach(() => { state.role = "member"; state.failAt = 0; state.calls = 0; });
-  it("only returns the instance linked to the member", async () => {
+  beforeEach(() => {
+    state.role = "member"; state.virtual = false;
+    state.mock = createMockSupabase();
+    state.mock.mockTable("whatsapp_instances", ["own", "other", "unassigned"].map(id => ({id, instance_name: id, organization_id: "org-a", status: "connected"})));
+    state.mock.mockTable("whatsapp_instance_allowed_members", [
+      {whatsapp_instance_id: "own", team_member_id: "member-a"},
+      {whatsapp_instance_id: "other", team_member_id: "member-b"},
+    ]);
+  });
+  it("only returns the linked number, excluding other users and unassigned numbers", async () => {
     const { result } = renderInstances();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([{ id: "own" }]);
+    expect(result.current.data?.map(i => i.id)).toEqual(["own"]);
   });
-  it("lets organization admins select all instances", async () => {
-    state.role = "admin";
+  it.each(["admin", "master"])("preserves %s management access", async (role) => {
+    state.role = role === "admin" ? "admin" : "member"; state.virtual = role === "master";
     const { result } = renderInstances();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([{ id: "own" }, { id: "other" }]);
+    expect(result.current.data?.map(i => i.id)).toEqual(["other", "own", "unassigned"]);
   });
-  it.each([1, 2])("fails closed when permission lookup %s fails", async (failAt) => {
-    state.failAt = failAt;
+  it("returns no numbers when the user has no links", async () => {
+    state.mock!.mockTable("whatsapp_instance_allowed_members", []);
     const { result } = renderInstances();
-    await waitFor(() => expect(result.current.isFetching).toBe(false));
-    expect(result.current.isError).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+  });
+  it("fails closed when permission lookup fails", async () => {
+    state.mock!.mockSelectError("whatsapp_instance_allowed_members", {code: "42501", message: "denied"});
+    const { result } = renderInstances();
+    await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.data).toBeUndefined();
   });
 });

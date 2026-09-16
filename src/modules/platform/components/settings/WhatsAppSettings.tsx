@@ -1194,7 +1194,7 @@ export function WhatsAppSettings() {
               Quem pode responder neste número?
             </DialogTitle>
             <DialogDescription>
-              Somente os vendedores selecionados poderão responder no chat deste número. Deixe nenhum selecionado para todos da organização poderem responder.
+              Os usuários selecionados terão acesso às conversas e notificações deste número. Sem seleção, apenas administradores e master poderão acessá-lo.
             </DialogDescription>
           </DialogHeader>
           {vendedoresInstance && (
