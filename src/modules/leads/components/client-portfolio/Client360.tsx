@@ -85,6 +85,8 @@ interface Props {
   onOpenLead: (id: string) => void;
   onOpenDeal: (deal: LeadDeal) => void;
   onClose?: () => void;
+  historyOpen?: boolean;
+  onHistoryOpenChange?: (open: boolean) => void;
 }
 export function Client360({
   client,
@@ -98,6 +100,8 @@ export function Client360({
   onOpenLead,
   onOpenDeal,
   onClose,
+  historyOpen,
+  onHistoryOpenChange,
 }: Props) {
   const cycle = client.cycle;
   const last =
@@ -301,7 +305,7 @@ export function Client360({
             <ShoppingCart className="size-4 text-muted-foreground" />
             Últimas compras
           </h4>
-          {!!purchases?.length && !purchasesLoading && !purchasesError && <ClientPurchaseHistory name={client.company || client.name} purchases={purchases} />}
+          {!!purchases?.length && !purchasesLoading && !purchasesError && <ClientPurchaseHistory open={historyOpen} onOpenChange={onHistoryOpenChange} name={client.company || client.name} purchases={purchases} />}
         </div>
         {purchasesLoading ? (
           <Skeleton className="h-20 w-full" />

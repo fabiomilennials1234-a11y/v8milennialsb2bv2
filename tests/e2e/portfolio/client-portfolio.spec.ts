@@ -57,5 +57,6 @@ test('360 completo mostra origem, etapas reais e todas as compras', async ({ pag
   await page.getByRole('button', { name: 'Ver todas' }).click();
   await expect(page.getByRole('dialog', { name: 'Compras de Aurora Distribuidora' })).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Compras de Aurora Distribuidora' })).not.toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Cliente 360', exact: true })).toBeVisible();
 });

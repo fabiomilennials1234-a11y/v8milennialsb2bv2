@@ -106,12 +106,15 @@ export function ClientPortfolio({
   const compact = (width ?? 1024) < 1024;
   const [showFilters, setShowFilters] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const visible = clients;
   const selected = clients.find((c) => c.id === selectedId);
   const detail = selected ? (
     <Client360
       key={selected.id}
       client={selected}
+      historyOpen={historyOpen}
+      onHistoryOpenChange={setHistoryOpen}
       now={now}
       canCreate={canCreate}
       purchases={purchases}
@@ -439,7 +442,7 @@ export function ClientPortfolio({
         </section>
       </div>
       <div className="hidden lg:block">
-        {!loading && !error && detail ? (
+        {!compact && !loading && !error && detail ? (
           detail
         ) : (
           <div className="rounded-xl border border-border bg-card p-6">
@@ -456,14 +459,18 @@ export function ClientPortfolio({
         open={compact && mobileDetail && !!selected && !loading && !error}
         onOpenChange={setMobileDetail}
       >
-        <SheetContent className="w-full overflow-y-auto p-3 sm:max-w-md lg:hidden motion-reduce:animate-none motion-reduce:transition-none">
+        <SheetContent onEscapeKeyDown={event => {
+          // Before Radix registers the nested layer, Escape can still reach
+          // this sheet. Close only history even during that first frame.
+          if (historyOpen) { event.preventDefault(); setHistoryOpen(false); }
+        }} className="w-full overflow-y-auto p-3 sm:max-w-md lg:hidden motion-reduce:animate-none motion-reduce:transition-none">
           <SheetHeader className="sr-only">
             <SheetTitle>Cliente 360</SheetTitle>
             <SheetDescription>
               Histórico de compras, recompra e negócios do cliente selecionado.
             </SheetDescription>
           </SheetHeader>
-          {detail}
+          {compact ? detail : null}
         </SheetContent>
       </Sheet>
     </div>

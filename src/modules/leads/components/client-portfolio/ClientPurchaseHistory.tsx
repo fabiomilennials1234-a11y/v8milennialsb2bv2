@@ -3,8 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { formatBRL } from "@/lib/format";
 import { portfolioDate, type PortfolioPurchase } from "./portfolio-model";
-export function ClientPurchaseHistory({ name, purchases }: { name: string; purchases: PortfolioPurchase[] }) {
-  const [open, setOpen] = useState(false);
+export function ClientPurchaseHistory({ name, purchases, open: controlledOpen, onOpenChange }: { name: string; purchases: PortfolioPurchase[]; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); setPage(0); };
   const [page, setPage] = useState(0);
   const pageSize = 20;
   return <Dialog open={open} onOpenChange={value => { setOpen(value); setPage(0); }}>

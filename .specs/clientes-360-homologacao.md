@@ -71,3 +71,13 @@ Script `scripts/verify-client-portfolio-preview.mjs` exige fixture temporária e
 ## Preparação para produção
 
 Main incorporou `20271021000013_isolate_whatsapp_notifications` após a homologação. Migration da carteira renumerada de `20271021000013` para `20271021000014`, sem alterar SQL. A branch descartável usou o número anterior. Revalidação local inclui apply e rollback com o novo nome.
+
+## Publicação autorizada — PR #2128
+
+Usuário solicitou explicitamente abrir PR e fazer merge para main em 16/09. Migration aplicada antes do frontend, em produção `jsjsmuncfkbsbzqzqhfq`, às 19:21:59 UTC. SHA-256: `00b7d0a8cd6138b0966eec5cefe573356bddf44a3f299ad77432152c0e3eccf4`. Sem alterações em registros de clientes.
+
+Conector gravou inicialmente versão `20260916192159`. Ledger normalizado para `20271021000014`, condicionado ao nome e hash do corpo da função, e conferido novamente. Sem reaplicar SQL. Grants verificados no alvo: anon=false, authenticated=true, service_role=true; SECURITY INVOKER e search_path vazio. Smoke com papel authenticated sem vínculo retornou zero clientes.
+
+GitHub Actions não iniciou jobs por cobrança/limite da conta (anotação do check Lint & Build). Validação local substitui execução remota nesta publicação; nenhuma configuração de proteção foi alterada. Ratchet de testes reproduziu exatamente as mesmas 167 falhas fora do baseline na main limpa `cb797d5c0`; os logs completos dos dois ratchets são idênticos. Gitleaks no intervalo de commits: nenhum segredo. Self-test detecta achado herdado em `scripts/ops/repair-loofting-bulk-pipeline-move.sql:18`, arquivo sem alteração neste PR; não foi incluído segredo nos relatórios.
+
+Review final: ratchet de TypeScript lista as mesmas 65 assinaturas fora do baseline na branch e main limpa, nenhuma adicionada. Lint e dependências passaram. Transição mobile corrigida: histórico controlado pelo painel e somente uma instância do 360 montada; Escape rápido fecha só histórico, inclusive antes do registro da camada Radix. Cinco execuções consecutivas desse cenário passaram; teste agora exige histórico fechado e 360 preservado.
