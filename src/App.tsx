@@ -141,6 +141,7 @@ import { GlobalShortcutsProvider } from "@/modules/platform/components/command/G
 import { SupportPanelProvider } from "@/modules/platform/components/support/SupportPanelProvider";
 import { FloatingDockProvider } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
+import { SupportAccess } from "@/modules/platform/components/support/SupportAccess";
 import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
 
 const queryClient = new QueryClient({
@@ -912,8 +913,10 @@ const App = () => {
                                 <LeadCallActionProvider value={renderLeadCallAction}>
                                   <AppRoutes />
                                   <CommandPaletteComponent />
-                                  <SupportPanel />
-                                  <SupportAnnouncement />
+                                  <SupportAccess>
+                                    <SupportPanel />
+                                    <SupportAnnouncement />
+                                  </SupportAccess>
                                 </LeadCallActionProvider>
                               </VoiceCallProvider>
                             </GlobalShortcutsProvider>

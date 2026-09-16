@@ -74,6 +74,7 @@ import {
 } from "@/modules/platform/lib/settings-tabs";
 import { toast } from "sonner";
 import { useSupportPanel } from "../components/support/SupportPanelContext";
+import { useSupportAvailable } from "../components/support/useSupportAvailable";
 
 const BillingSettings = lazy(() => import("@/modules/billing").then(m => ({ default: m.BillingSettings })));
 
@@ -670,6 +671,7 @@ function PillTab({ value, label, icon }: { value: string; label: string; icon: R
 
 export default function Configuracoes() {
   const { openNewTicket } = useSupportPanel();
+  const supportAvailable = useSupportAvailable();
   const { orgType } = useOrganization();
   const { isAdmin } = useIdentity();
   const { tab: tabParam } = useParams<{ tab?: string }>();
@@ -858,7 +860,7 @@ export default function Configuracoes() {
 
           {isAdmin && <TabsContent value="billing">
             <Suspense fallback={<TabFallback label="assinatura e cobrança" />}>
-              <BillingSettings onContactSupport={openNewTicket} />
+              <BillingSettings onContactSupport={supportAvailable ? openNewTicket : undefined} />
             </Suspense>
           </TabsContent>}
 

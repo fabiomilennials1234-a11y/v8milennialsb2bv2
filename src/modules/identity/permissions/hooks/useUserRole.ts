@@ -62,9 +62,10 @@ export function useIsAdmin() {
 
 export function useJobTitle() {
   const { data: currentTeamMember, isLoading } = useCurrentTeamMember();
+  const { isGestor, isLoading: gestorLoading } = useGestor();
   return {
-    jobTitle: (currentTeamMember as any)?.job_title || "",
-    isLoading,
+    jobTitle: isGestor ? "Gestor" : (currentTeamMember as any)?.job_title || "",
+    isLoading: isLoading || gestorLoading,
   };
 }
 
@@ -215,4 +216,3 @@ export function useFeaturePermission(
     hasError: isError,
   };
 }
-

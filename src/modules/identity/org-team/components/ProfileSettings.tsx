@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { useUserRole } from "../../permissions/hooks/useUserRole";
+import { useGestor } from "../../gestor/hooks/useGestor";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import { toast } from "sonner";
 export function ProfileSettings() {
   const { user } = useAuth();
   const { data: userRole } = useUserRole();
+  const { isGestor } = useGestor();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,7 +40,9 @@ export function ProfileSettings() {
     member: { label: "Membro", color: "bg-muted text-muted-foreground border-border" },
   };
 
-  const roleConfig = roleLabels[userRole?.role || ""] || { label: "Usuário", color: "" };
+  const roleConfig = isGestor
+    ? { label: "Gestor", color: roleLabels.admin.color }
+    : roleLabels[userRole?.role || ""] || { label: "Usuário", color: "" };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

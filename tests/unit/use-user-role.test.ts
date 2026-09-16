@@ -6,8 +6,13 @@ import { createElement, type ReactNode } from 'react';
 // ─── Shared mock state ──────────────────────────────────
 const mockUser = { id: 'user-1', email: 'test@example.com' };
 const mockSession = { access_token: 'jwt-token-abc' };
-let mockTeamMember: { id?: string; role?: string; organization_id?: string } | null = null;
+let mockTeamMember: { id?: string; role?: string; organization_id?: string; job_title?: string } | null = null;
 let mockIsMaster = false;
+let mockIsGestor = false;
+
+vi.mock('@/modules/identity/gestor/hooks/useGestor', () => ({
+  useGestor: () => ({ isGestor: mockIsGestor, isLoading: false }),
+}));
 
 // ─── Mock Supabase client ───────────────────────────────
 const mockSelect = vi.fn();
@@ -84,6 +89,7 @@ import {
   useFeaturePermission,
   useCanManageCopilot,
   useHasRole,
+  useJobTitle,
 } from '@/modules/identity/permissions/hooks/useUserRole';
 
 // ─── Helper: QueryClient wrapper ────────────────────────
@@ -108,10 +114,36 @@ describe('useUserRole hooks', () => {
     vi.clearAllMocks();
     mockTeamMember = null;
     mockIsMaster = false;
+    mockIsGestor = false;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('exibe Gestor mantendo a permissão admin nas organizações vinculadas', async () => {
+    mockIsGestor = true;
+    mockTeamMember = { id: 'virtual-gestor', role: 'admin', organization_id: 'org-1' };
+    const { result } = renderHook(() => ({ title: useJobTitle(), admin: useIsAdmin() }), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.admin.isLoading).toBe(false));
+    expect(result.current.title.jobTitle).toBe('Gestor');
+    expect(result.current.admin.isAdmin).toBe(true);
+    expect(mockIsMaster).toBe(false);
+  });
+
+  it('prioriza o cargo Gestor para gestores com vínculo real e rótulo antigo', () => {
+    mockIsGestor = true;
+    mockTeamMember = { role: 'admin', job_title: 'Agency' };
+    const { result } = renderHook(() => useJobTitle(), { wrapper: createWrapper() });
+    expect(result.current.jobTitle).toBe('Gestor');
+  });
+
+  it('preserva o cargo de quem não é gestor', () => {
+    mockTeamMember = { role: 'member', job_title: 'Comercial' };
+    const { result } = renderHook(() => useJobTitle(), { wrapper: createWrapper() });
+    expect(result.current.jobTitle).toBe('Comercial');
   });
 
   // ── 1. useUserRole returns role from currentTeamMember.role (primary source)
