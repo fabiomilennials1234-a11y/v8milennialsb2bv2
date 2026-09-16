@@ -160,7 +160,9 @@ export function useRealtimeChannel(
       return;
     }
 
-    const channelName = `rt_${table}_${filter ?? "all"}_${Date.now()}`;
+    // Multiple consumers and StrictMode can subscribe within one millisecond.
+    // Supabase reuses channels by name; each setup needs a distinct identity.
+    const channelName = `rt_${table}_${filter ?? "all"}_${crypto.randomUUID()}`;
     channelNameRef.current = channelName;
     statusKeyRef.current = statusKey;
     const storeKey = statusKey ?? channelName;

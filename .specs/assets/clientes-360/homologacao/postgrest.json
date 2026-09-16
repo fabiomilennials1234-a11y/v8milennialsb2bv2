@@ -1,0 +1,32 @@
+{
+  "ref": "wlmpcwzurgvrttelcvyt",
+  "checks": [
+    "real-auth",
+    "anonymous-denied",
+    "tenant-isolation",
+    "assignment-isolation",
+    "cycle-28-days",
+    "overdue-5-days",
+    "gold-tier",
+    "global-filter",
+    "pagination-50-plus-5",
+    "stable-global-summary",
+    "member-revenue-isolation"
+  ],
+  "clientCount": 55,
+  "cycle": {
+    "estado": "com-ciclo",
+    "rotulo": "28D",
+    "compras": 2,
+    "emEpoca": true,
+    "mediaDias": 28,
+    "progresso": 1,
+    "diasRestantes": -5,
+    "diasDesdeUltima": 33
+  },
+  "summary": {
+    "overdueCount": 2,
+    "expectedCount": 0,
+    "monthlyRevenue": 530
+  }
+}

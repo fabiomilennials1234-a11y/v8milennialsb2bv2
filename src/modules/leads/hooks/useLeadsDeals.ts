@@ -58,6 +58,7 @@ export interface LeadDeal {
    */
   stageIndex: number | null;
   stageCount: number;
+  stages?: { id: string; name: string }[];
   outcome: DealOutcome;
   won: boolean;
   /** `metadata.sale_value` — só propostas costuma ter. 0 = sem valor. */
@@ -313,6 +314,7 @@ export function useLeadsDeals(leadIds: string[]) {
           stagePosition: stage?.position ?? null,
           stageIndex: posicaoNaTrilha >= 0 ? posicaoNaTrilha : null,
           stageCount: trilha.length,
+          stages: trilha.map(id => ({ id, name: stageInfo.get(`${raw.pipeline_id}::${id}`)?.name ?? "Etapa" })),
           // 🔴 A ORDEM IMPORTA. O desfecho é do NEGÓCIO (ADR-0023 Emenda 1), e a
           // etapa é só queda para quem ainda não tem linha em `deals` — 26,6%
           // das entradas — e para o intervalo entre este merge e o apply.

@@ -1,0 +1,11 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:7:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.10 /Users/gabrielaureliogipp/Dev/torque-leads-clientes-360
+
+
+ Test Files  12 passed (12)
+      Tests  79 passed (79)
+   Start at  16:15:05
+   Duration  1.84s (transform 1.00s, setup 1.01s, import 2.23s, tests 2.59s, environment 6.94s)
