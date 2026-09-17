@@ -8,6 +8,17 @@
 
 ## Escopo
 
+### Rascunhos Toth — 2026-09-17
+
+`TothOrderDraftPanel` é a superfície pública de preparação local de pedidos por
+negócio, usada via slot no Card do Negócio. Piloto restrito à Café Jurerê e flag
+`organizations.feature_flags.toth_order_drafts` estritamente booleana. Sem
+adaptador de escrita: nem revisão local nem flag habilitam envio ao ERP.
+Persistência por RPC, acesso ao lead e concessão específica para preparadores;
+admin da organização confere a versão. Contrato e limitações em
+`.specs/features/toth-order-drafts.md`. Não reutilizar o retry HTTP da integração
+de leitura para envio futuro sem idempotência validada com o fornecedor.
+
 Adapters para provedores externos. Cada integração isolada em subpasta. Outros módulos consomem via API pública (port-and-adapter).
 
 Providers ativos:

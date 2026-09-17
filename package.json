@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:won-order": "node --test tests/integration/won-order-adjustment.test.mjs",
+    "test:toth-drafts": "node --test tests/integration/toth-order-drafts.test.mjs",
     "predev": "node scripts/assert-dev-not-prod.mjs",
     "dev": "vite",
     "dev:branch": "node scripts/dev-target-branch.mjs",
