@@ -175,7 +175,7 @@ export function Preview() {
           </span>
         </div>
         <div className="mb-5 mt-7 flex gap-8 border-b border-border text-sm">
-          {["Todos", "Leads", "Clientes", "Perdidos"].map((label) => (
+          {["Todos", "Leads", "Clientes", "Inativos"].map((label) => (
             <span
               key={label}
               className={`pb-3 ${label === "Clientes" ? "border-b-2 border-primary font-semibold text-primary" : "text-muted-foreground"}`}
