@@ -13,6 +13,9 @@ export interface LeadContactFormData {
   company: string;
   email: string;
   notes: string;
+  phone?: string;
+  segment?: string;
+  interest?: string;
 }
 
 interface LeadContactInfoProps {
