@@ -48,3 +48,17 @@ Modulo de pos-venda e gestao de carteira de clientes. Permite acompanhar cliente
 
 ## Historico
 - 2026-05-06 — Fix delete de leads com upsell entries (FK violation). Extraida `cleanupLeadDependencies`. Adicionado error tracking por linha no import. Fix fallback stage key.
+
+## Clientes 360 dentro de Leads — 2026-09-16
+
+Implementação local em `codex/leads-clientes-360`: aba Clientes dentro de Leads
+com carteira tabular e painel 360, conforme mockup aprovado. Mostra segmento,
+ciclo de recompra, previsão/atraso, compras e negócios abertos. Novo negócio usa a
+mesma porta oficial do card de lead, mantendo identidade do cliente.
+
+A RPC `client_portfolio_page` pagina clientes após aplicar filtros globais de
+faixa/recompra e agrega receita mensal exclusivamente do ledger sem estornos.
+Total comprado mantém precedência CRM/Carteira; ciclo une datas de compra sem
+duplicá-las. RLS permanece ativa, inclusive atribuição. Sem deploy remoto.
+Migration `20271021000013` deve preceder frontend.
+Contrato e validação: `.specs/clientes-360.md`.

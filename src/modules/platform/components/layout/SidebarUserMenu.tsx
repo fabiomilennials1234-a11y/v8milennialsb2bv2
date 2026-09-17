@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
-import { useAuth, useIdentity, useJobTitle, useMasterAuth, useUserRole } from "@/modules/identity";
+import { useAuth, useGestor, useIdentity, useJobTitle, useMasterAuth, useUserRole } from "@/modules/identity";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -39,6 +39,7 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
   const { data: userRole } = useUserRole();
   const { jobTitle } = useJobTitle();
   const { isMaster } = useIdentity();
+  const { isGestor } = useGestor();
   const { isOutbounder } = useMasterAuth();
   const { resolvedTheme } = useTheme();
   const themeTransition = useThemeTransition();
@@ -162,6 +163,18 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
             </>
           )}
 
+          {isGestor && !isMaster && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => navigate("/gestor")}
+                className="cursor-pointer gap-2.5 rounded-lg px-3 py-2"
+              >
+                <LineChart className="h-4 w-4 opacity-60" />
+                <span>Área do Gestor</span>
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setAvatarModalOpen(true)}

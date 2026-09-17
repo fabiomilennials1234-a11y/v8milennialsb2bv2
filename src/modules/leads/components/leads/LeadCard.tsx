@@ -32,7 +32,6 @@ import { DealLostMenuItem } from "./card/DealLostMenuItem";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
-import { useDealSheetOpcional } from "../deal-detail/deal-sheet-context";
 import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
 
 // ─── Origin Colors (unified across all funnels) ──────────
@@ -360,11 +359,10 @@ export const LeadCard = memo(function LeadCard({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [reuniaoOpen, setReuniaoOpen] = useState(false);
   const [addFunilOpen, setAddFunilOpen] = useState(false);
+  const [checklistsOpen, setChecklistsOpen] = useState(false);
   // Resiliente: `null` quando o card monta fora de um PipeOpsProvider — nesse
   // caso o item "Adicionar a funil" e o dialog simplesmente não aparecem.
   const pipeOps = usePipeOpsOptional();
-  // `null` fora dos funis — ver `abrirChecklists` abaixo.
-  const dealSheet = useDealSheetOpcional();
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
@@ -458,22 +456,6 @@ export const LeadCard = memo(function LeadCard({
   );
   const abrirFicha = (e: React.MouseEvent) => { e.stopPropagation(); onClick?.(); };
 
-  /**
-   * "Checklists" abre o card do negócio JÁ na aba de checklists.
-   *
-   * Antes chamava `abrirFicha` e nada mais — o painel abria na primeira aba, que
-   * nem sequer tinha checklist nenhum. Item que promete um assunto e entrega
-   * outro é o que faz o menu inteiro perder a confiança.
-   *
-   * `onClick` continua sendo quem ABRE: cada superfície sabe quais ids passar
-   * (a entrada do funil, o lead). Aqui só se diz o assunto, depois — a ordem
-   * importa, porque abrir zera o pedido.
-   */
-  const abrirChecklists = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClick?.();
-    dealSheet?.pedirAba("checklists");
-  };
   const telefoneNu = (lead.phone ?? "").replace(/\D/g, "");
 
   const itensDoMenuAdicionar = (
@@ -520,7 +502,7 @@ export const LeadCard = memo(function LeadCard({
       </DropdownMenuItem>
       {/* Checklists não leva selo: o slot da direita é do CONTADOR, como no
           protótipo (app.js:546). Verde quando tudo está feito. */}
-      <DropdownMenuItem onClick={abrirChecklists}>
+      <DropdownMenuItem onSelect={() => setChecklistsOpen(true)}>
         <CheckSquare className="w-4 h-4 mr-2" /> Checklists
         {(lead.metrics?.checklistsTotal ?? 0) > 0 && (
           <span
@@ -667,6 +649,8 @@ export const LeadCard = memo(function LeadCard({
           onClick={onClick}
           menuItems={itensDoMenu}
           menuAdicionar={itensDoMenuAdicionar}
+          checklistsOpen={checklistsOpen}
+          onChecklistsOpenChange={setChecklistsOpen}
           extraActions={extraActions}
         />
         {modais}

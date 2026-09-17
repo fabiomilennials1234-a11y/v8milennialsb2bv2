@@ -59,7 +59,7 @@ import {
 } from "../lib/billing-display";
 import type { Json } from "@/integrations/supabase/types";
 
-type Props = { onContactSupport: () => void };
+type Props = { onContactSupport?: () => void };
 
 function ReadError({ retry }: { retry: () => void }) {
   return (
@@ -344,11 +344,13 @@ function BillingAccount({
                     />
                   </dl>
                 </CardContent>
-                <CardFooter>
-                  <Button variant="outline" onClick={onContactSupport}>
-                    Falar sobre minha assinatura
-                  </Button>
-                </CardFooter>
+                {onContactSupport && (
+                  <CardFooter>
+                    <Button variant="outline" onClick={onContactSupport}>
+                      Falar sobre minha assinatura
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
               <Alert>
                 <CreditCard className="size-4" />
@@ -385,11 +387,13 @@ function BillingAccount({
                   tela não altera seu plano nem gera cobranças.
                 </p>
               </CardContent>
-              <CardFooter>
-                <Button variant="outline" onClick={onContactSupport}>
-                  Solicitar alteração de plano
-                </Button>
-              </CardFooter>
+              {onContactSupport && (
+                <CardFooter>
+                  <Button variant="outline" onClick={onContactSupport}>
+                    Solicitar alteração de plano
+                  </Button>
+                </CardFooter>
+              )}
             </Card>
           </div>
         </TabsContent>
@@ -517,11 +521,13 @@ function BillingAccount({
                   aqui.
                 </p>
               </CardContent>
-              <CardFooter>
-                <Button variant="outline" onClick={onContactSupport}>
-                  Preciso de ajuda com um pagamento
-                </Button>
-              </CardFooter>
+              {onContactSupport && (
+                <CardFooter>
+                  <Button variant="outline" onClick={onContactSupport}>
+                    Preciso de ajuda com um pagamento
+                  </Button>
+                </CardFooter>
+              )}
             </Card>
             <Accordion type="single" collapsible>
               <AccordionItem value="change">

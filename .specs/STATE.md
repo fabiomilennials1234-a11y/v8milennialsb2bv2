@@ -103,3 +103,15 @@ significa visível. `pipelines.display_order` é fonte única de ordem.
 `is_active` segue operacional. Importação histórica limitada ao pré-#2092;
 leitura permanente agnóstica a tipo/slug. Detalhes e limitações de validação:
 [correção de navegação](features/funis-unificacao/correcao-navegacao-2026-09-11.md).
+
+## Clientes 360 dentro de Leads — 2026-09-16
+
+`ClientPortfolio` apresenta o mockup aprovado; `ClientPortfolioSection` coordena
+paginação, seleção e filtros. `client_portfolio_page` calcula o recorte inteiro
+no banco sob RLS, antes da paginação: receita mensal do ledger, faixa e recompra.
+Histórico usa `useClientPortfolioPurchases`; ações usam `LeadCardNewDeal` e
+`useDealSheet` existentes. Migration `20271021000014` deve preceder frontend.
+Contrato, rollout, testes e limitações de ambiente: `.specs/clientes-360.md`.
+
+
+Homologação remota concluída em 16/09: carteira/360, RLS, paginação, criação de negócio e rollback aprovados em branch Supabase descartável, já excluída. Corrigidas colisão de canais Realtime e data prevista na lista. Evidências e limites: `.specs/clientes-360-homologacao.md`. Produção não alterada.

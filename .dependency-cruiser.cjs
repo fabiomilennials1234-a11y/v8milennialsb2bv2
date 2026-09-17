@@ -57,7 +57,9 @@ module.exports = {
         path: "^src/modules/([^/]+)/",
       },
       to: {
-        path: "^src/modules/(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
+        // Checklists oferece uma API pública estreita para não carregar os
+        // diálogos da Agenda de volta nos cards que a Agenda pode abrir.
+        path: "^src/modules/(?!engagement/checklists\\.ts$)(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
       },
     },
     {

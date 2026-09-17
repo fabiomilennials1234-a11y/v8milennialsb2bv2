@@ -34,7 +34,7 @@ import {
   useLeadChecklists,
   useToggleChecklistItem,
   type ChecklistWithCounts,
-} from "@/modules/engagement";
+} from "@/modules/engagement/checklists";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,10 +73,12 @@ import { cn } from "@/lib/utils";
 export function DealCardChecklists({
   leadId,
   entryId,
+  compact = false,
 }: {
   leadId: string | null;
   /** `pipeline_entries.id` — o negócio aberto no painel. */
   entryId?: string | null;
+  compact?: boolean;
 }) {
   useRealtimeSubscription("checklists", ["checklists", "checklist_templates"]);
   useRealtimeSubscription("checklist_items", ["checklist_items", "checklists"]);
@@ -138,8 +140,8 @@ export function DealCardChecklists({
       {/* Barra: progresso à esquerda, as duas portas de criação à direita. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <ClipboardList className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="text-[12.5px] font-medium">Checklists</span>
+          {!compact && <ClipboardList className="size-3.5 shrink-0 text-muted-foreground" />}
+          <span className="text-[12.5px] font-medium">{compact ? "Progresso" : "Checklists"}</span>
           {itens > 0 && (
             <>
               <span
@@ -160,7 +162,7 @@ export function DealCardChecklists({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className={cn("flex shrink-0 items-center gap-1.5", compact && "w-full")}>
           <AplicarTemplate leadId={leadId} entryId={entryId ?? null} />
           <button
             type="button"
@@ -198,7 +200,7 @@ export function DealCardChecklists({
           ))}
         </div>
       ) : checklists.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border py-8 text-center text-[12.5px] text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-[12.5px] text-muted-foreground">
           Nenhum checklist neste negócio.
           <br />
           <span className="text-[11.5px] text-muted-foreground/75">
