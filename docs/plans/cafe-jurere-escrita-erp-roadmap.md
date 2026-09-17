@@ -1,7 +1,7 @@
 # Café Jurerê — planejamento de escrita no ERP Toth
 
 Data: 2026-09-17.
-Estado: decisões de produto consolidadas em 30 respostas do CTO. Etapa 0 autorizada na sessão em 2026-09-17; levantamento local registrado em [cafe-jurere-etapa-0/README.md](cafe-jurere-etapa-0/README.md). Posteriormente, o CTO autorizou construir o lado do CRM. A fundação de rascunhos está em implementação conforme [escopo técnico](../../.specs/features/toth-order-drafts.md). Contrato técnico e homologação do ERP ainda não confirmados; envio real e publicação em produção continuam pendentes.
+Estado: decisões de produto consolidadas em 30 respostas do CTO. Etapa 0 autorizada na sessão em 2026-09-17; levantamento local registrado em [cafe-jurere-etapa-0/README.md](cafe-jurere-etapa-0/README.md). Posteriormente, o CTO autorizou construir o lado do CRM. A fundação local de rascunhos foi implementada e está em revisão, conforme [escopo técnico e evidências de validação](../../.specs/features/toth-order-drafts.md). A etapa 1 completa ainda depende do catálogo e do contrato do fornecedor. Contrato técnico e homologação do ERP ainda não confirmados; envio real e publicação em produção continuam pendentes.
 
 ## Objetivo e limites
 

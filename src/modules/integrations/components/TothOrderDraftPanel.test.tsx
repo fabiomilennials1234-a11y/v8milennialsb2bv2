@@ -111,7 +111,7 @@ describe("TothOrderDraftPanel — preparação local segura", () => {
       p_deal_id: "deal-1", p_expected_revision: 0, p_items: [], p_notes: "Entregar pela manhã",
     }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled());
-    expect(server.draft?.revision).toBe(1);
+    expect(server.draft).toMatchObject({ revision: 1 });
   });
 
   it("membro autorizado prepara mas não revisa nem gerencia permissões", async () => {
