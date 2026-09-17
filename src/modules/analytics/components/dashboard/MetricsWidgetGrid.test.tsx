@@ -31,6 +31,8 @@ describe("MetricsWidgetGrid", () => {
     expect(saved).toHaveLength(6);
     expect(saved[0]).not.toBe("revenue");
     expect(saved).toContain("revenue");
+    expect(screen.getAllByRole("listitem").map(item => item.getAttribute("data-widget-id"))).toEqual(saved);
+    expect(revenue).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
     expect(JSON.parse(localStorage.getItem("org-a:user-a")!)[0]).toBe("revenue");
   });

@@ -866,15 +866,11 @@ export function DraggableWidgetGrid({
 		[items],
 	)
 
-	/*
-	 * DOM order stays fixed; only grid placement changes. Moving elements in
-	 * the DOM restarts Motion's mount animation in some React versions, which
-	 * made rearranged widgets fade out and back in. The visual position is
-	 * exposed through aria-posinset instead.
-	 */
-	const domOrder = useRef(items.map((item) => item.id))
-	for (const item of items)
-		if (!domOrder.current.includes(item.id)) domOrder.current.push(item.id)
+	// Keep DOM, screen-reader and keyboard traversal aligned with visual order.
+	// Stable widget keys preserve component state during a reorder.
+	const readingOrder = [...placements]
+		.sort((a, b) => a.row - b.row || a.col - b.col)
+		.map((placement) => placement.id)
 	const placementById = new Map(placements.map((p) => [p.id, p]))
 	const visualIndex = new Map(
 		[...placements]
@@ -906,7 +902,7 @@ export function DraggableWidgetGrid({
 							? `${Math.round(metrics.unit)}px`
 							: `minmax(${cellSize * 0.75}px, auto)`,
 					}}>
-					{domOrder.current.map((id) => {
+					{readingOrder.map((id) => {
 						const item = byId.get(id)
 						const p = placementById.get(id)
 						if (!item || !p) return null
