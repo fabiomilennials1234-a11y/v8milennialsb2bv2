@@ -752,7 +752,7 @@ function LeadsInner() {
           <button key={option.value} type="button" aria-pressed={filterClassificacao === option.value}
             onClick={() => setFilterClassificacao(option.value)}
             className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {{ lead: "Leads", cliente: "Clientes", perdido: "Perdidos" }[option.value] ?? option.label}
+            {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
             <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
           </button>
         ))}
