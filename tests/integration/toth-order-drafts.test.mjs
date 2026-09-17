@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 const org = "4922638c-4909-494e-ba10-12282ec0b161";
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const migration = readFileSync(new URL("../../supabase/migrations/20271021000013_toth_order_drafts.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../../supabase/migrations/20271021000016_toth_order_drafts.sql", import.meta.url), "utf8");
 let db;
 const value = async (sql, params = []) => (await db.query(sql, params)).rows[0]?.result;
 const workspace = () => value("select public.toth_order_workspace($1) result", [id(40)]);
