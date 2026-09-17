@@ -4,6 +4,27 @@ import { useInlineEdit } from "../hooks/useInlineEdit";
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 describe("useInlineEdit", () => {
+  it("keeps the second saved name when the first refetch arrives during that save", async () => {
+    let finish!: () => void;
+    const onSave = vi.fn().mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const { result, rerender } = renderHook(
+      ({ value }) => useInlineEdit({ value, onSave }),
+      { initialProps: { value: "Ana" } },
+    );
+    act(() => result.current.startEditing());
+    act(() => result.current.setLocalValue("Ana Silva"));
+    await act(async () => result.current.commit());
+    act(() => result.current.startEditing());
+    act(() => result.current.setLocalValue("Ana Souza"));
+    act(() => { void result.current.commit(); });
+    rerender({ value: "Ana Silva" });
+    await act(async () => finish());
+    expect(result.current.localValue).toBe("Ana Souza");
+    act(() => result.current.startEditing());
+    expect(result.current.localValue).toBe("Ana Souza");
+  });
+
   it("ignores duplicate commits while saving and allows the next edit", async () => {
     let finish!: () => void;
     const onSave = vi.fn().mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }))
@@ -19,6 +40,21 @@ describe("useInlineEdit", () => {
     act(() => result.current.setLocalValue("Ana"));
     await act(async () => result.current.commit());
     expect(onSave).toHaveBeenNthCalledWith(2, "Ana");
+  });
+
+  it("adopts a normalized server value received during saving", async () => {
+    let finish!: () => void;
+    const onSave = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const { result, rerender } = renderHook(
+      ({ value }) => useInlineEdit({ value, onSave }),
+      { initialProps: { value: "Ana" } },
+    );
+    act(() => result.current.startEditing());
+    act(() => result.current.setLocalValue(" Ana Silva "));
+    act(() => { void result.current.commit(); });
+    rerender({ value: "Ana Silva" });
+    await act(async () => finish());
+    expect(result.current.localValue).toBe("Ana Silva");
   });
 
   it("allows retry after a failed save without losing the last saved name", async () => {

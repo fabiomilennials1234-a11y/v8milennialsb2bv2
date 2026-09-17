@@ -16,6 +16,11 @@ export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
   const savingRef = useRef(false);
 
   useEffect(() => {
+    // A refetch confirming the previous saved value may arrive during the next
+    // edit. Consume that confirmation now so closing cannot replay it later.
+    if (isEditing && value === originalRef.current) {
+      externalRef.current = value;
+    }
     // Closing the editor must not restore a stale prop while refetch is pending.
     // Only a new server value replaces the last successfully saved value.
     if (!isEditing && value !== externalRef.current) {
