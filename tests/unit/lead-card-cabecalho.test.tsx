@@ -80,6 +80,32 @@ vi.mock("sonner", () => ({
 import { LeadCardContainer } from "@/modules/leads/components/lead-card/LeadCardContainer";
 import { LeadCallActionProvider } from "@/shared/components/LeadCallActionSlot";
 
+describe("Abrir conversa — lead selecionado", () => {
+  it("navega com o id atual, inclusive após trocar de lead", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    try {
+      cardDataRef.value = lead({ id: "l1", telefone: "11999999999" });
+      const view = render(<LeadCardContainer leadId="l1" isOpen />);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir conversa" }));
+      expect(assign).toHaveBeenLastCalledWith("/chat-whatsapp?lead=l1");
+      cardDataRef.value = lead({ id: "l2", telefone: "21999999999" });
+      view.rerender(<LeadCardContainer leadId="l2" isOpen />);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir conversa" }));
+      expect(assign).toHaveBeenLastCalledWith("/chat-whatsapp?lead=l2");
+      expect(assign).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("não oferece navegação para lead sem telefone", () => {
+    cardDataRef.value = lead({ id: "l1", telefone: null });
+    render(<LeadCardContainer leadId="l1" isOpen />);
+    expect(screen.getByRole("button", { name: "Abrir conversa" })).toBeDisabled();
+  });
+});
+
 function lead(over: Partial<LeadCardData> = {}): LeadCardData {
   return { ...LEAD_EXEMPLO, ...over };
 }

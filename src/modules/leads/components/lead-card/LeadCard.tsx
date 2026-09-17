@@ -107,6 +107,7 @@ export function LeadCard({
   comentando,
   editorDeEtiquetas,
   acaoLigar,
+  onOpenChat,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -155,6 +156,7 @@ export function LeadCard({
    * de voz ao alcance — a mesma regra do chat.
    */
   acaoLigar?: React.ReactNode;
+  onOpenChat?: () => void;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -280,7 +282,7 @@ export function LeadCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" />
+            <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" onClick={onOpenChat} desabilitado={!onOpenChat || !lead.telefone?.trim()} />
             {acaoLigar}
             <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
             <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />
