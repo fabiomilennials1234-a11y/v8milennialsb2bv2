@@ -52,6 +52,8 @@ export type ActionResult = {
   error?: string;
   data?: Record<string, unknown>;
   retryable?: boolean;
+  /** Governor deferred without sending. Resume this node at the supplied instant. */
+  retryAt?: string;
 };
 
 interface ActionContext {

@@ -21,7 +21,7 @@ import { resolveVariables } from "./whatsapp-helpers.ts";
 export type ResultadoDeTemplate =
   | { ok: true; nome: string }
   /** `retryable` ausente = o executor decide (o default dele é retentar). */
-  | { ok: false; erro: string; retryable?: boolean };
+  | { ok: false; erro: string; retryable?: boolean; retryAt?: string };
 
 export async function enviarTemplateAprovado(params: {
   supabase: SupabaseClient;
@@ -93,11 +93,9 @@ export async function enviarTemplateAprovado(params: {
   );
 
   if (!sendResult.success) {
-    // Sem `retryable`: preserva byte-a-byte o que o nó de template já fazia —
-    // falha de envio volta ao executor sem veredito, e ele retenta. Fixar `false`
-    // aqui seria mudar, de carona numa extração, o comportamento de um nó que
-    // não é o assunto desta issue.
-    return { ok: false, erro: `Template send failed: ${sendResult.error}` };
+    // A deferral means no provider send happened; preserve its scheduling instant.
+    // Other transport failures retain the existing executor retry policy.
+    return { ok: false, erro: `Template send failed: ${sendResult.error}`, ...(sendResult.retryAt ? { retryAt: sendResult.retryAt } : {}) };
   }
 
   // ⚠️ NÃO grava a linha. O provider do canal oficial já a escreve, no mesmo

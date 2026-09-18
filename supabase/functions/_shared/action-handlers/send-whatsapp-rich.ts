@@ -83,7 +83,7 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   });
 
   if (!envio.ok) {
-    return { success: false, error: envio.erro, retryable: envio.retryable };
+    return { success: false, error: envio.erro, retryable: envio.retryable, ...(envio.retryAt ? { retryAt: envio.retryAt } : {}) };
   }
 
   // ⚠️ NÃO grava a linha. O provider do canal oficial já a escreve, no mesmo
