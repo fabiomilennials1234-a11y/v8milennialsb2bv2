@@ -114,6 +114,13 @@ beforeEach(() => {
 });
 
 describe("modo Template Meta", () => {
+  it("preserves governor deferral through the real template action", async () => {
+    const retryAt = '2026-09-19T00:00:00.000Z';
+    sendTemplateMock.mockResolvedValue({ success: false, error: 'governor_defer:per_number_cap', retryAt });
+    const result = await rodar(cenario(), { templateMode: 'meta_template', ...TEMPLATE });
+    expect(result).toMatchObject({ success: false, retryAt });
+    expect(sendTemplateMock).toHaveBeenCalledTimes(1);
+  });
   it("manda o template, sem tocar no caminho de texto", async () => {
     const r = await rodar(cenario(), { templateMode: "meta_template", ...TEMPLATE });
 

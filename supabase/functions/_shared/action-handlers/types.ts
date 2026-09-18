@@ -35,6 +35,8 @@ export interface ActionResult {
   error?: string;
   data?: Record<string, unknown>;
   retryable?: boolean;
+  /** Governor deferred without sending. Resume this node at the supplied instant. */
+  retryAt?: string;
 }
 
 export type ActionHandler = (input: ActionInput) => Promise<ActionResult>;
