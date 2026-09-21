@@ -36,6 +36,7 @@ import { LeadCardEtiquetas } from "../lead-card/LeadCardEtiquetas";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
+import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
@@ -565,6 +566,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
         /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
            Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
         painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
+        painelPedidoErp={dealId ? (
+          <TothOrderDraftSlot key={dealId} dealId={dealId} organizationId={organizacaoId} />
+        ) : undefined}
         onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
         excluindo={excluindo}
       />

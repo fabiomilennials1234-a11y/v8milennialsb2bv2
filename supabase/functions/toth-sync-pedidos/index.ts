@@ -71,6 +71,7 @@ import {
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseOrderStore } from "../_shared/erp/sync/order-store.ts";
 import { upsertCanonicalOrder } from "../_shared/erp/sync/upsert-order.ts";
+import { createTothPreorderOwnershipGuard, importTothOrderUnlessOwned } from "../_shared/erp/toth-preorders/legacy-ownership.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -254,6 +255,7 @@ Deno.serve(
       { urlPolicy: tothUrlPolicy(creds) },
     );
     const store = supabaseOrderStore(admin);
+    const preorderOwnership = createTothPreorderOwnershipGuard(admin, organizationId);
 
     let page =
       typeof body.page === "number" && body.page > 0
@@ -347,11 +349,11 @@ Deno.serve(
           return;
         }
 
-        const result = await upsertCanonicalOrder(store, {
+        const result = await importTothOrderUnlessOwned(preorderOwnership, canonical.externalId, () => upsertCanonicalOrder(store, {
           organizationId,
           source: TOTH_PROVIDER_ID,
           order: canonical,
-        });
+        }));
         if (result.action === "created") stats.created++;
         else if (result.action === "updated") stats.updated++;
         else {

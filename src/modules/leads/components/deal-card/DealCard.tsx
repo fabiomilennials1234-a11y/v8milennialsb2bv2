@@ -290,6 +290,7 @@ export function DealCard({
   abaInicial,
   resumoChecklists,
   painelChecklists,
+  painelPedidoErp,
   onExcluir,
   excluindo,
   etiquetas,
@@ -367,6 +368,8 @@ export function DealCard({
    * aba que abre num "nada aqui" ensina a não clicar em nenhuma.
    */
   painelChecklists?: ReactNode;
+  /** Conteúdo conectado fornecido pelo painel; mantém a prévia sem acesso ao banco. */
+  painelPedidoErp?: ReactNode;
   /**
    * ── Excluir o negócio ──────────────────────────────────────────────────
    * Só ABRE a confirmação; quem confirma e quem apaga é o `DealCardPanel`.
@@ -827,6 +830,7 @@ export function DealCard({
                       ))}
                     </section>
                   )}
+                  {painelPedidoErp}
                 </div>
               ) : (
                 <textarea
