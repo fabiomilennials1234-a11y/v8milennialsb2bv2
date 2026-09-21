@@ -52,6 +52,29 @@ const names = (cs: ChatContact[]) => cs.map((c) => c.lead_name);
 // ─── Escopo básico ──────────────────────────────────────────────────────────
 
 describe("applyInboxFilters — escopo", () => {
+  it("busca pelo nome salvo exibido, pelo nome do CRM e pelo perfil", () => {
+    const c = contact({ saved_contact_name: "10910 Manhatthan Cafeteria Vera", lead_name: "Razão Social", push_name: "Vera" });
+    for (const searchQuery of ["Manh", "razão", "Vera"]) {
+      expect(applyInboxFilters([c], state(), ctx(), { searchQuery })).toEqual([c]);
+    }
+  });
+
+  it("inclui grupos junto das conversas quando habilitado, respeitando arquivamento", () => {
+    const person = contact();
+    const group = contact({ is_group: true, saved_contact_name: "Pedidos Café" });
+    const archived = contact({ is_group: true, archived_at: "2026-09-01" });
+    const cs = [person, group, archived];
+    expect(applyInboxFilters(cs, state(), ctx(), { includeGroups: true })).toEqual([person, group]);
+    expect(applyInboxFilters(cs, state(), ctx(), { includeGroups: true, tab: "archived" })).toEqual([archived]);
+    expect(applyInboxFilters(cs, state(), ctx(), { includeGroups: true, tab: "grupos" })).toEqual([group]);
+    expect(applyInboxFilters(cs, state(), ctx(), { includeGroups: true, searchQuery: "Pedidos" })).toEqual([group]);
+  });
+
+  it("grupo na lista principal respeita filtros de não lidas e vendedor", () => {
+    const c = contact({ is_group: true, unread_count: 2, lead_id: null });
+    expect(applyInboxFilters([c], state({ unread: true }), ctx(), { includeGroups: true })).toEqual([c]);
+    expect(applyInboxFilters([c], state({ vendor: "mine" }), ctx(), { includeGroups: true })).toEqual([]);
+  });
   it("remove grupos por padrão (org sem a aba nunca passa tab)", () => {
     const cs = [contact({ lead_name: "individual" }), contact({ is_group: true, lead_name: "grupo" })];
     const out = applyInboxFilters(cs, state(), ctx());

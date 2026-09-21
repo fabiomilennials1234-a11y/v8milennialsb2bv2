@@ -353,14 +353,14 @@ export default function MessageTemplates() {
 
       {/* Create/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden sm:max-w-lg max-sm:overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {editing ? "Editar Template" : "Novo Template"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 flex flex-col gap-4">
             {/* Command */}
             <div className="space-y-2">
               <Label htmlFor="tpl-command">Comando</Label>
@@ -523,14 +523,14 @@ export default function MessageTemplates() {
                   <Eye className="h-3.5 w-3.5" />
                   <span>Preview</span>
                 </div>
-                <div className="rounded-md border bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+                <div className="rounded-md border bg-muted/50 p-3 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {preview}
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button
               variant="outline"
               onClick={() => handleClose(false)}

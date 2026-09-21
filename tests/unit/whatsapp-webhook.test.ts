@@ -236,6 +236,30 @@ describe("normalizeMessage", () => {
     expect(normalizeMessage(data, instance).raw_payload).toEqual(data);
   });
 
+  it.each([false, true])("captures the group subject instead of the participant (fromMe=%s)", (fromMe) => {
+    const data = { id: "group-msg", chatid: "120363024880200433@g.us", fromMe,
+      groupName: "  Grupo Envase Jurerê  ", senderName: "Carolini", text: "Olá" };
+    const n = normalizeMessage(data, instance);
+    expect(n.is_group).toBe(true);
+    expect(n.push_name).toBe("Carolini");
+    expect(n.raw_payload).toEqual({ ...data, wa_contactName: "Grupo Envase Jurerê" });
+    expect(data).not.toHaveProperty("wa_contactName");
+    expect(n.organization_id).toBe(instance.organization_id);
+    expect(n.instance_id).toBe(instance.id);
+  });
+
+  it.each([undefined, null, "   ", 123])("does not turn a participant into a group name when subject is %s", (groupName) => {
+    const data = { id: "g", chatid: "120363024880200433@g.us", groupName,
+      senderName: "Participante", wa_contactName: "Grupo salvo" };
+    expect(normalizeMessage(data, instance).raw_payload).toEqual(data);
+  });
+
+  it("preserves individual address-book names even if a groupName field is present", () => {
+    const data = { id: "m", chatid: "5547999999999@s.whatsapp.net",
+      groupName: "Não é grupo", wa_contactName: "Cliente salvo", senderName: "Cliente" };
+    expect(normalizeMessage(data, instance).raw_payload).toEqual(data);
+  });
+
   // Regression: a reply ("esse é o valor" quoting "500k") used to reach the
   // copilot stripped of the quoted content, so the agent answered "o valor não
   // carregou". Fold the quoted text into content.

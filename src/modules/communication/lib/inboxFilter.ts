@@ -6,7 +6,7 @@
  *
  *   - **AND entre dimensões, OR dentro da dimensão.** Etapa=Novo|Abordado é OR;
  *     (Etapa AND Vendedor) é AND.
- *   - Grupos nunca aparecem — só conversas individuais.
+ *   - Grupos entram na lista principal apenas quando habilitados pela org.
  *   - "Aguardando resposta" = última mensagem foi do lead (incoming).
  *   - "Pediu atendente" = lead na fila de handoff da IA (waitingHumanLeadIds).
  *   - "Fonte" = quem mandou a última mensagem: IA (copilot/workflow) vs humano (manual).
@@ -26,11 +26,8 @@ export type LeadPresenceFilter = "com" | "sem";
  * Recorte de escopo da lista — as abas do topo do inbox.
  *
  * `"grupos"` só existe para org com a flag `chat_abas_de_grupos`: sem ela a aba
- * não é renderizada e o valor nunca chega aqui. Ele é um TERCEIRO escopo, e não
- * um filtro somado aos outros, porque grupo não tem lead — funil, etapa,
- * vendedor e qualificação não têm o que recortar, e misturá-lo em "Ativas"
- * empurraria conversa individual para fora da página (grupo é ~40% das
- * mensagens).
+ * não é renderizada e o valor nunca chega aqui. Com a flag, Ativas e Arquivadas
+ * incluem grupos; a aba Grupos é um atalho para mostrar apenas grupos ativos.
  */
 export type InboxTab = "active" | "archived" | "grupos";
 
@@ -151,34 +148,27 @@ function matchesLeadPresence(c: ChatContact, lead: LeadPresenceFilter | null): b
  * Aplica o estado de filtro + a busca textual + a tab de escopo a uma lista de
  * contatos. Retorna nova lista (não muta).
  *
- * Grupo só aparece na aba `"grupos"`, que por sua vez só existe na org flagada.
- * Nas outras duas abas a recusa continua sendo a de #1632.
+ * A org habilitada inclui grupos nas abas ativas/arquivadas. A aba `"grupos"`
+ * continua como atalho para ver apenas grupos ativos.
  */
 export function applyInboxFilters(
   contacts: ChatContact[],
   state: InboxFilterState,
   ctx: InboxFilterContext,
-  opts: { searchQuery?: string; tab?: InboxTab } = {},
+  opts: { searchQuery?: string; tab?: InboxTab; includeGroups?: boolean } = {},
 ): ChatContact[] {
   const search = (opts.searchQuery ?? "").trim().toLowerCase();
   const tab = opts.tab ?? "active";
 
   return contacts.filter((c) => {
-    // GRUPO É ESCOPO PRÓPRIO, e o default continua sendo escondê-lo.
-    //
-    // Histórico: em 23/07/2026 (6356ef92) o desktop passou a esconder grupo por
-    // acidente; um toggle "Grupos" foi reposto para desfazer isso; em #1632 a
-    // exclusão virou incondicional em toda camada. O que volta agora NÃO é
-    // aquele toggle — é uma aba, ligada por org (`chat_abas_de_grupos`), sem
-    // estado persistido por membro. Org sem a flag nunca passa `tab: "grupos"`,
-    // e para ela esta função devolve exatamente o que devolvia antes.
+    // O opt-in vem da configuração da org, não de filtros salvos pelo membro.
     if (tab === "grupos") {
       if (!c.is_group) return false;
       // Arquivar grupo é possível (a conversa existe em `whatsapp_conversations`),
       // e arquivada não é "ativa" em aba nenhuma — inclusive nesta.
       if (c.archived_at) return false;
     } else {
-      if (c.is_group) return false;
+      if (c.is_group && !opts.includeGroups) return false;
     }
 
     if (tab === "active" && c.archived_at) return false;
@@ -197,8 +187,9 @@ export function applyInboxFilters(
     if (!matchesLeadPresence(c, state.lead)) return false;
 
     if (search) {
-      const name = (c.lead_name ?? c.push_name ?? "").toLowerCase();
-      if (!c.phone_number.includes(search) && !name.includes(search)) return false;
+      const matchesName = [c.saved_contact_name, c.lead_name, c.push_name]
+        .some(name => name?.toLowerCase().includes(search));
+      if (!c.phone_number.includes(search) && !matchesName) return false;
     }
     return true;
   });
