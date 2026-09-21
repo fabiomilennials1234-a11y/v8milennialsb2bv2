@@ -40,6 +40,7 @@ import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
+import { useRenomearNegocio } from "./useRenomearNegocio";
 import {
   useAtualizarItemDoNegocio,
   useEditarValorProposta,
@@ -98,6 +99,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `20270904000000`, e o backfill da `20270908005010` já a usa.
    */
   const dealId = data?.dealId ?? null;
+  const renomearNegocio = useRenomearNegocio({ entryId, dealId, leadId, organizacaoId });
   const ajustePedido = useAjustarPedidoGanho(
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
   );
@@ -539,6 +541,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           leadId && renderLigar ? renderLigar({ id: leadId, nome: data.lead.nome }) : undefined
         }
         onSaveNote={salvarNota}
+        onRenomear={(nome, alterarLead) => renomearNegocio.mutateAsync({ nome, alterarLead })}
         onMoverEtapa={moverEtapa}
         onDefinirDesfecho={definirDesfecho}
         decidindo={decidindo}

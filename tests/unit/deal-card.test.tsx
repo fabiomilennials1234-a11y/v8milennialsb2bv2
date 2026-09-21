@@ -19,7 +19,7 @@
  */
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { DealCard } from "@/modules/leads/components/deal-card/DealCard";
 import type { DealCardData, DealCardStage } from "@/modules/leads/components/deal-card/types";
@@ -88,6 +88,89 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
     ...over,
   };
 }
+
+describe("nome do negócio independente do lead", () => {
+  function editarNome() {
+    fireEvent.click(screen.getByRole("button", { name: "Editar nome do negócio" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome do negócio" }), {
+      target: { value: "  Pedido de setembro  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
+  }
+
+  it("pergunta antes de gravar e permite alterar só o negócio", async () => {
+    const salvar = vi.fn().mockResolvedValue(undefined);
+    render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    expect(screen.getByText("Deseja alterar também o nome do lead?")).toBeInTheDocument();
+    expect(salvar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Só o negócio" }));
+    await waitFor(() => expect(salvar).toHaveBeenCalledWith("Pedido de setembro", false));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Nome do negócio" })).not.toBeInTheDocument());
+  });
+
+  it("só inclui o lead quando a pessoa escolhe explicitamente", async () => {
+    const salvar = vi.fn().mockResolvedValue(undefined);
+    render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    fireEvent.click(screen.getByRole("button", { name: "Negócio e lead" }));
+    await waitFor(() => expect(salvar).toHaveBeenCalledWith("Pedido de setembro", true));
+  });
+
+  it("cancelar a pergunta não grava nenhum dos nomes", () => {
+    const salvar = vi.fn();
+    render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar alteração do nome" }));
+    expect(salvar).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Reposição trimestral" })).toBeInTheDocument();
+  });
+
+  it("não aceita nome vazio nem abre a pergunta para nome inalterado", () => {
+    render(<DealCard negocio={negocio()} onRenomear={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar nome do negócio" }));
+    const input = screen.getByRole("textbox", { name: "Nome do negócio" });
+    expect(screen.getByRole("button", { name: "Salvar nome" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Salvar nome" })).toBeDisabled();
+  });
+
+  it("preserva o rascunho e permite repetir após falha", async () => {
+    const salvar = vi.fn().mockRejectedValueOnce(new Error("Falha ao salvar")).mockResolvedValue(undefined);
+    render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    fireEvent.click(screen.getByRole("button", { name: "Só o negócio" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao salvar");
+    expect(screen.getByRole("textbox", { name: "Nome do negócio" })).toHaveValue("  Pedido de setembro  ");
+    fireEvent.click(screen.getByRole("button", { name: "Só o negócio" }));
+    await waitFor(() => expect(salvar).toHaveBeenCalledTimes(2));
+  });
+
+  it("descarta a edição ao navegar para outro negócio", () => {
+    const salvar = vi.fn();
+    const { rerender } = render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    rerender(<DealCard negocio={negocio({ id: "e2", titulo: "Outro pedido" })} onRenomear={salvar} />);
+    expect(screen.queryByText("Deseja alterar também o nome do lead?")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Outro pedido" })).toBeInTheDocument();
+    expect(salvar).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia cliques repetidos e a outra escolha durante a gravação", async () => {
+    let concluir!: () => void;
+    const salvar = vi.fn(() => new Promise<void>((resolve) => { concluir = resolve; }));
+    render(<DealCard negocio={negocio()} onRenomear={salvar} />);
+    editarNome();
+    const somenteNegocio = screen.getByRole("button", { name: "Só o negócio" });
+    fireEvent.click(somenteNegocio);
+    fireEvent.click(somenteNegocio);
+    expect(salvar).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Negócio e lead" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar alteração do nome" })).toBeDisabled();
+    concluir();
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+});
 
 describe("pedido ganho — corrigir sem reabrir", () => {
   it("oferece o ajuste no mesmo negócio ganho", () => {
