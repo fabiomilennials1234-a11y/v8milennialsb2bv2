@@ -8,6 +8,9 @@ const { rpc, session } = vi.hoisted(() => ({ rpc: vi.fn(), session: { organizati
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
 vi.mock("@/modules/identity", () => ({ useOrganization: () => session }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
+// The separate read-only status query is covered, including its integration
+// with a dirty draft, by TothPreorderStatusPanel.test.tsx.
+vi.mock("./TothPreorderStatusPanel", () => ({ TothPreorderStatusPanel: () => null }));
 
 let server: TothOrderWorkspace;
 let queryClient: QueryClient;

@@ -1,6 +1,6 @@
-# Rascunhos de pedidos Toth — fundação local
+# Pré-pedidos Toth — preparação e processamento local
 
-Data: 2026-09-17. Escopo autorizado: construir o lado do CRM preservando os dados e fluxos atuais. Base de decisões: [roadmap](../../docs/plans/cafe-jurere-escrita-erp-roadmap.md).
+Fundação: 2026-09-17. Ampliação autorizada pelo usuário em 2026-09-21: implementar o lado do CRM para pré-pedidos e ganho somente após aprovação confirmada no ERP. Base de decisões: [roadmap](../../docs/plans/cafe-jurere-escrita-erp-roadmap.md). O contrato HTTP da Toth e a homologação continuam pendentes; esta entrega não ativa escrita real. Operação e critérios de liberação: [runbook](../../docs/operations/toth-preorder-processing.md).
 
 ## Comportamento
 
@@ -15,11 +15,25 @@ Na ficha do negócio, em Produtos e Valores, a Café Jurerê poderá preparar um
 - Alterações locais não são descartadas automaticamente após conflito ou atualização de dados em segundo plano. Recarregar a versão atual exige ação do usuário.
 - Histórico registra operações locais. Não há transmissão real, sucesso simulado ou mudança em pedido histórico.
 
+## Processamento implementado em 21/09/2026
+
+Uma operação persistente por negócio congela a revisão conferida, cliente, itens e situação original. A admissão requer administrador ativo, acesso ao negócio, revisão atual, catálogo válido e capacidade de execução verificada. A operação registra separadamente entrega (`queued`, `sending`, `awaiting_confirmation`, `received`, `failed`, `blocked`), decisão comercial (`unknown`, `pending`, `approved`, `rejected`) e conciliação (`not_due`, `pending`, `complete`, `blocked`).
+
+O processador interno `toth-process-preorder` recebe somente o ID da operação, exige `x-cron-secret` e usa RPCs exclusivas de serviço. Reserva temporária com token, transição persistida antes da chamada e validação do retorno impedem dois processadores de enviarem o mesmo comando. Recuperar uma operação em envio ou com resultado incerto permite apenas consultar; não cria novamente, mesmo se a consulta ainda não encontrar resultado. A resposta de criação nunca concede aprovação comercial.
+
+Uma consulta autoritativa deve confirmar identidade, estado conhecido, total aprovado e ordem confiável da observação. Observações antigas são ignoradas; conflitos bloqueiam. Essa ordenação é um requisito ainda não demonstrado pela Toth, não uma versão remota presumida nem o horário local da consulta.
+
+Aprovação registrada concilia o ganho pelo caminho canônico de `deals.outcome` e seus triggers existentes. Venda e espelho na Carteira não são inseridos por um segundo caminho. Falha local preserva a aprovação e permite recuperar somente a conciliação. Um negócio já ganho não gera outra venda; identidade ou total divergentes bloqueiam. Transições novas para ganho de negócios com operação exigem aprovação e total compatível, incluindo chamadas manuais e automações. Após aprovação, ajuste manual de valor/composição, reversão ou reabertura são recusados para os registros vinculados; a proteção alcança os caminhos canônicos de etapa e ajuste sem ampliar a restrição aos históricos sem operação.
+
+A importação existente consulta a propriedade do ID antes de gravar. Um trigger com lock por organização/ID fecha a corrida entre vinculação e importação. Pedidos históricos sem operação mantêm seu comportamento; se um pedido importado já existir antes do vínculo, ele é preservado e a operação bloqueada para conferência. O importador legado nunca fornece aprovação à nova integração.
+
+O painel distingue recebimento, análise, rejeição, aprovação e atualização local pendente. A atualização manual consulta apenas o estado local; não chama o ERP nem descarta edição não salva do rascunho. Dados antigos são ocultados quando uma consulta perde autorização ou falha.
+
 ## Limite mecânico de escrita
 
-Não existe adaptador de escrita nem chamada HTTP ao ERP nesta fundação. O frontend não possui mutation de envio. A RPC `toth_request_order_send` verifica acesso e sempre recusa com `toth_write_contract_unverified`, inclusive para administrador com revisão válida. Alterar a flag ou manipular o botão não habilita escrita.
+O frontend não possui mutation de envio. A função privada `preorder_runtime_ready()` retorna sempre `false` nesta entrega, portanto `toth_request_order_send` continua recusando com `toth_write_contract_unverified`. Nenhuma operação é criada pelo usuário enquanto esse limite permanecer fechado. O adaptador padrão declara criação e consulta indisponíveis e não contém URLs ou chamadas HTTP ao ERP. Alterar a flag ou `TOTH_PREORDER_SEND_ENABLED` não configura esse adaptador nem abre a admissão SQL.
 
-Não há fila de envios ou worker nesta entrega: persistir um comando que ninguém pode executar passaria uma falsa impressão de envio pendente. Registro de operação de saída, confirmação remota, idempotência do fornecedor e conciliação de efeitos comerciais serão implementados quando o contrato permitir testá-los.
+Há processador e persistência implementados e testados localmente, mas nenhum agendamento ou webhook instalado. Completar o adaptador real, o snapshot comercial e a homologação é necessário antes de habilitar envio. Não há sucesso simulado em produção.
 
 ## Persistência e autorização
 
@@ -29,7 +43,10 @@ RPCs da fundação:
 - `toth_save_order_draft(p_deal_id, p_expected_revision, p_items, p_notes)` — criação ou mudança com controle de versão e invalidação da revisão.
 - `toth_review_order_draft(p_deal_id, p_expected_revision)` — conferência local da versão salva.
 - `toth_order_preparer_access(p_deal_id)` e `toth_set_order_preparer(p_deal_id, p_team_member_id, p_enabled)` — concessões explícitas, controladas por administrador.
-- `toth_request_order_send(p_deal_id, p_expected_revision)` — bloqueio permanente desta entrega.
+- `toth_request_order_send(p_deal_id, p_expected_revision)` — admissão persistente com barreira fechada nesta entrega.
+- `toth_preorder_workspace(p_deal_id)` — estado público da operação e impedimentos; não expõe snapshot, credencial ou reserva do processador.
+
+As RPCs de reserva, transição para envio, registro de observação, conciliação, liberação e consulta de propriedade são exclusivas de `service_role`. As novas tabelas de operações/auditoria têm RLS e nenhuma permissão de acesso direto para navegador ou serviço; o processador passa pelas RPCs restritas. A origem e o snapshot da operação são imutáveis. O navegador nunca transmite estado de aprovação.
 
 Organização derivada do negócio e verificada no servidor contra usuário autenticado, vínculo ativo e acesso ao lead. Nenhuma RPC aceita `organization_id` do navegador. `master` não é role e não ganha permissão implícita para este piloto. Tabelas novas com RLS, sem permissão de escrita direta para `authenticated`/`anon`; mudanças passam por RPCs com `search_path` fixo e grants explícitos.
 
@@ -38,7 +55,7 @@ Os tipos gerados do Supabase não são editados. Uma ponte tipada e restrita às
 ## Implantação futura
 
 1. Validar a migration isoladamente e revisar grants, RLS e acessos positivos/negativos no alvo de homologação; o harness local não substitui essa validação.
-2. Aplicar somente a migration nova, após autorização do ambiente. Não executar `db push` indiscriminadamente sobre a cadeia do repositório.
+2. Aplicar as migrations novas `20271021000016_toth_order_drafts.sql` e `20271021000021_toth_preorder_operations.sql` na ordem das dependências, após autorização do ambiente. Não executar `db push` indiscriminadamente sobre a cadeia do repositório.
 3. Publicar frontend com flag desligada; função ausente gera mensagem de indisponibilidade, não tentativa de escrita por outro caminho.
 4. Habilitar a flag exclusivamente na organização piloto após autorização. A migration não altera flags, cadastros, pedidos, credenciais ou cron existente.
 5. Alimentar catálogo apenas por um adaptador validado ou fixtures em ambiente isolado. Não transformar itens históricos, preços digitados ou uma lista manual de produção em catálogo autorizado do Toth.
@@ -46,13 +63,15 @@ Os tipos gerados do Supabase não são editados. Uma ponte tipada e restrita às
 
 ## Pendências para as próximas entregas
 
-Atualização documental de 21/09/2026: a [resposta encaminhada da Toth](../../docs/plans/cafe-jurere-etapa-0/resposta-fornecedor-2026-09-21.md) informa que a API recebe pré-pedidos sujeitos à análise na empresa. O usuário confirmou ganho somente após aprovação no ERP, com status confirmado pela integração; recebimento técnico não aprova comercialmente. O piloto de criação/acompanhamento foi proposto para confirmação. Alteração/cancelamento não foram oferecidos por API, controle remoto de versão foi declarado ausente e homologação precisa ser criada. A fundação local permanece compatível e sem mudança de código: conferência, gravação local e barreira de envio não geram venda. As regras atuais de importação e os pedidos históricos não foram alterados.
+Atualização de 21/09/2026: a [resposta encaminhada da Toth](../../docs/plans/cafe-jurere-etapa-0/resposta-fornecedor-2026-09-21.md) informa que a API recebe pré-pedidos sujeitos à análise na empresa. O usuário confirmou ganho somente após aprovação no ERP e solicitou a implementação. Alteração/cancelamento não foram oferecidos por API, controle remoto de versão foi declarado ausente e homologação precisa ser criada. A implementação avança em criação/acompanhamento sem liberar comandos ausentes no contrato.
 
 Contrato de catálogo comercial e escrita; homologação isolada do ERP; vínculo inequívoco de empresa/filial/representante; validação de preço/crédito/estoque; identificação estável de operação e consulta de resultado; concorrência remota; confirmação, recuperação e conciliação sem dupla venda; alteração/cancelamento com motivo e estados operacionais. Essas dependências não são consideradas resolvidas pela revisão local do rascunho.
 
-Os três estados futuros — situação do pedido, execução da operação e conciliação no CRM — serão definidos com o contrato. A fundação mantém apenas versão e conferência do rascunho, evitando gravar estados operacionais fictícios.
+Os três eixos internos já estão implementados; o mapeamento dos estados reais da Toth permanece pendente. Rejeição não marca perda nem permite novo pedido no mesmo negócio automaticamente. Divergências de total/estado após aprovação bloqueiam para conferência, preservando a última venda reconhecida. Ajustes pela diferença, reversões, resolução administrativa dessas pendências e alertas automáticos continuam entregas futuras; as decisões 15–17 do roadmap não foram consideradas cumpridas por esse bloqueio.
 
-## Revisão de segurança e validação local
+## Validação da fundação de 17/09/2026
+
+Os resultados abaixo se referem à fundação anterior. A validação da ampliação de 21/09 está registrada no [runbook](../../docs/operations/toth-preorder-processing.md).
 
 Aplicada a `.claude/skills/security-rubric/SKILL.md` ao diff. Revisão independente identificou e corrigiu contagem de vínculos ambíguos, proteção de snapshots quando o lead do negócio muda, autorização anterior ao lock e revisão após exclusão do usuário revisor. Testes exercitam papéis PostgreSQL reais no harness, inclusive os grants explícitos padrão do projeto.
 

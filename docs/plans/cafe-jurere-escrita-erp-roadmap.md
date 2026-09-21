@@ -25,6 +25,10 @@ Fonte e limites: [resposta encaminhada do fornecedor](cafe-jurere-etapa-0/respos
 
 A base local de rascunhos permanece compatível: conferência local não aprova comercialmente, não escreve no ERP e não altera o desfecho. A decisão atual sobre ganho substitui a regra original de ganho na criação; demais pontos de produto não confirmados permanecem propostas ou pendências.
 
+Após a solicitação “Faça a implementação”, foi construída a persistência de operações, o processador interno, o acompanhamento no painel e a conciliação do ganho confirmado pelo caminho canônico do CRM. A importação legada possui proteção específica para IDs dessas operações novas. Testes locais exercitam o fluxo com fornecedor fictício; a admissão SQL e o adaptador real permanecem fechados. Não há homologação nem envio real liberado. Detalhes e limites: [runbook de implementação](../operations/toth-preorder-processing.md).
+
+Esta entrega não encerra as decisões 15–17: divergências posteriores à aprovação exigem conferência, sem ajuste automático, estorno ou nova venda. Rejeição antes de aprovar também não marca perda automaticamente. A liberação desses comportamentos depende do contrato real e das decisões ainda pendentes.
+
 ## Decisões de 17/09/2026 — registro histórico
 
 A tabela preserva as respostas originais. Para execução, considerar as atualizações de 21/09 acima; em particular, a decisão 14 original foi substituída e a hipótese de pedido definitivo da decisão 3 não corresponde à capacidade informada pelo fornecedor.

@@ -124,6 +124,10 @@ jobs:
       # O ratchet reprova só o que ESTA branch quebrou, e avisa quando um teste
       # do baseline volta a passar — para o teto encolher em vez de virar
       # decoração. Mesma forma de `lint:ratchet` e `typecheck:ratchet`.
+      - name: Rascunhos e pré-pedidos Toth (Postgres isolado)
+        run: |
+          npm run test:toth-drafts
+          npm run test:toth-preorders
       - name: Vitest ratchet (no newly broken tests vs baseline)
         run: npm run test:ratchet
       - name: Ajustes de pedidos ganhos (Postgres isolado)

@@ -211,6 +211,15 @@ Funções declaradas em `config.toml` mas SEM código local — deployadas diret
 | `meta-oauth-callback` | OAuth redirect | code + state |
 | `refresh-meta-tokens` | pg_cron | x-cron-secret |
 
+Pré-pedidos Toth (2026-09-21): `toth-process-preorder` é um processador interno
+autenticado exclusivamente por `x-cron-secret`, sem agendamento instalado.
+Recebe somente `operation_id`; `_shared/erp/toth-preorders` contém contrato
+interno, engine, repositório RPC e adaptador indisponível. Não há transporte de
+escrita real nesta entrega. A RPC de admissão também permanece fechada.
+`toth-sync-pedidos` consulta propriedade dos IDs antes da importação para não
+duplicar pedidos/vendas das novas operações. Histórico sem vínculo mantém seu
+fluxo. Ver `docs/operations/toth-preorder-processing.md` antes de ativar.
+
 ### platform (9) — observability, dead letter, infra
 
 > `webhook-validate-url` deletada em 2026-07-02 (plan-tiers-cleanup) — zero call-sites (UI validava URL só client-side).

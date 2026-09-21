@@ -603,3 +603,6 @@ verify_jwt = false
 # draft before a service-only finalizer rechecks current authority and grants.
 [functions.publish-guided-workflow]
 verify_jwt = false
+# Internal worker authenticates x-cron-secret before parsing requests or using service_role.
+[functions.toth-process-preorder]
+verify_jwt = false

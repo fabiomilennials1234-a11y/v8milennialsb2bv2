@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { TothOrderDraftError, useTothOrderDraft } from "../hooks/useTothOrderDraft";
+import { TothPreorderStatusPanel } from "./TothPreorderStatusPanel";
 import {
   getTothOrderBlockerLabel, getTothOrderReviewAvailability, getTothOrderSendAvailability,
   isTothOrderReviewCurrent, TOTH_ORDER_DRAFT_LIMITS, validateTothOrderDraftInput,
@@ -62,7 +63,7 @@ function PreparerAccess({ controller }: { controller: DraftController }) {
   );
 }
 
-function DraftEditor({ controller, workspace }: { controller: DraftController; workspace: TothOrderWorkspace }) {
+function DraftEditor({ controller, workspace, dealId }: { controller: DraftController; workspace: TothOrderWorkspace; dealId: string }) {
   const { save, review } = controller;
   const form = useForm<TothOrderDraftInput>({ defaultValues: formValues(workspace) });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
@@ -137,6 +138,7 @@ function DraftEditor({ controller, workspace }: { controller: DraftController; w
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <TothPreorderStatusPanel dealId={dealId} />
         <Alert>
           <LockKeyhole aria-hidden="true" />
           <AlertTitle>Envio ao ERP indisponível</AlertTitle>
@@ -269,5 +271,5 @@ export function TothOrderDraftPanel({ dealId }: { dealId: string }) {
     if (workspace.isLoading) return <Skeleton className="h-32 w-full" aria-label="Carregando rascunho do pedido" />;
     return null;
   }
-  return <DraftEditor key={controller.scopeKey} controller={controller} workspace={workspace.data} />;
+  return <DraftEditor key={controller.scopeKey} controller={controller} workspace={workspace.data} dealId={dealId} />;
 }

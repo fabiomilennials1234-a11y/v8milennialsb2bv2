@@ -19,6 +19,15 @@ admin da organização confere a versão. Contrato e limitações em
 `.specs/features/toth-order-drafts.md`. Não reutilizar o retry HTTP da integração
 de leitura para envio futuro sem idempotência validada com o fornecedor.
 
+Em 21/09, `TothPreorderStatusPanel` acrescenta acompanhamento local separado do
+rascunho: recebimento, decisão comercial e conciliação. `useTothPreorder` consulta
+somente `toth_preorder_workspace`, com cache por organização/membro/negócio,
+sem polling nem chamada ao ERP. Falha de acesso oculta dados anteriores.
+`toth-process-preorder` e as operações persistentes estão implementados no
+backend, mas o adaptador real e a admissão SQL continuam fechados. Ganho exige
+aprovação autoritativa; importação de IDs pertencentes às novas operações é
+protegida contra segunda venda. Runbook: `docs/operations/toth-preorder-processing.md`.
+
 Adapters para provedores externos. Cada integração isolada em subpasta. Outros módulos consomem via API pública (port-and-adapter).
 
 Providers ativos:

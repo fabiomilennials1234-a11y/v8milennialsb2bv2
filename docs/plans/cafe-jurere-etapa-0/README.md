@@ -1,5 +1,7 @@
 # Etapa 0 — escrita no Toth / Café Jurerê
 
+Atualização de implementação em 21/09/2026: o levantamento abaixo preserva as evidências da etapa 0. Operações persistentes, processador e acompanhamento local de pré-pedidos foram acrescentados depois, conforme [runbook](../../operations/toth-preorder-processing.md). A Toth ainda precisa fornecer contrato técnico e homologação; nenhum envio real foi liberado.
+
 Levantamento em 2026-09-17. Base examinada: `c99515b5072407c938d174853e7219b43b13c717`.
 
 **Estado: levantamento local realizado; etapa 0 aberta por dependências externas.** Nenhum endpoint do ERP foi chamado, nenhuma credencial foi acessada, nenhuma sincronização, migration ou escrita em produção foi executada. Existência de código não comprova implantação. Comentários com medições antigas são contexto histórico, não nova medição.

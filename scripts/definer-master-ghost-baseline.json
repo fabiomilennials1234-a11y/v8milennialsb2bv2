@@ -57,6 +57,7 @@
     "seed_demo_data",
     "toggle_lead_ai",
     "toggle_phone_ai",
+    "toth_mark_preorder_sending",
     "toth_order_can_read",
     "toth_order_preparer_access",
     "toth_order_workspace",
