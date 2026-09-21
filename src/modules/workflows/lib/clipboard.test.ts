@@ -236,3 +236,16 @@ describe("cloneSelection", () => {
     ] });
   });
 });
+
+it("duplica pergunta e saídas sem compartilhar opções nem imagem mutáveis", () => {
+  const nodes: WorkflowNode[] = [{id:"ask",type:"question_buttons",position:{x:0,y:0},data:{type:"question_buttons",text:"Escolha",buttons:[{id:"a",label:"A"}],timeoutHours:24,image:{bucket:"workflow-question-images",path:"org/image.png",mimeType:"image/png",sizeBytes:10}}},{id:"end",type:"end",position:{x:0,y:1},data:{type:"end",label:"Fim"}}];
+  const edges: WorkflowEdge[] = ["button:a","other_response","timeout","send_failure"].map(sourceHandle=>({id:sourceHandle,source:"ask",target:"end",sourceHandle}));
+  const copy=cloneSelection({nodes,edges}, type => `copy-${type}`);
+  expect(copy.edges.map(edge=>edge.sourceHandle)).toEqual(["button:a","other_response","timeout","send_failure"]);
+  expect(copy.edges.every(edge=>edge.source===copy.nodes[0].id && edge.target===copy.nodes[1].id)).toBe(true);
+  const data=copy.nodes[0].data;
+  if(data.type!=="question_buttons")throw new Error("Expected question");
+  data.buttons[0].label="Renamed";
+  if(data.image)data.image.path="changed";
+  expect(nodes[0].data).toMatchObject({buttons:[{id:"a",label:"A"}],image:{path:"org/image.png"}});
+});

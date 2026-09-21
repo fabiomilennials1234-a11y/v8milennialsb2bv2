@@ -1,0 +1,29 @@
+{
+  "tested_at": "2026-09-21T19:06:58.893Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "failure",
+  "transaction": "rollback",
+  "before": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS failure routing, recovery claims, acceptance clock, replay, late failure and grants"
+    }
+  ],
+  "after": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

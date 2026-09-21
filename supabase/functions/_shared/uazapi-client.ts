@@ -694,6 +694,11 @@ export class UazapiClient {
     })).filter(c => type === "all" || c.isGroup === (type === "group"));
   }
 
+  /** Bounded read: two rows suffice to detect an ambiguous duplicated tracking key. */
+  async findTrackedMessages(input: { chatid: string; track_id: string; track_source: string }): Promise<unknown> {
+    return this.request<unknown>("POST", "/message/find", { ...input, limit: 2, offset: 0 }, { noRetry: true, timeoutMs: 10_000 });
+  }
+
   async historySync(input: {
     number: string;
     limit?: number;

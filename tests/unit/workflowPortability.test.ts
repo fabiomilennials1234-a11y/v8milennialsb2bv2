@@ -551,3 +551,17 @@ describe("round-trip: export → import", () => {
     expect(report.unresolvedCount).toBe(2); // trigger pipeline and stage from the base fixture
   });
 });
+
+
+describe("Pergunta com botões portátil", () => {
+  it("importa como rascunho, mantém opções e exige nova instância e imagem", () => {
+    const workflow=createMockWorkflow();
+    workflow.definition={nodes:[{id:"ask",type:"question_buttons",position:{x:0,y:0},data:{type:"question_buttons",text:"Escolha",buttons:[{id:"a",label:"A"}],timeoutHours:24,instanceId:"source-instance",image:{bucket:"workflow-question-images",path:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png",mimeType:"image/png",sizeBytes:512}}},{id:"end",type:"end",position:{x:0,y:1},data:{type:"end",label:"Fim"}}],edges:["button:a","other_response","timeout","send_failure"].map(sourceHandle=>({id:sourceHandle,source:"ask",target:"end",sourceHandle}))};
+    const {workflowInsert}=prepareImport(exportWorkflow(workflow));
+    const question=workflowInsert.definition.nodes.find(node=>node.type==="question_buttons")!;
+    expect(question.data).toMatchObject({buttons:[{id:"a",label:"A"}],instanceId:null,image:null});
+    expect(workflowInsert.is_active).toBe(false);
+    expect(workflowInsert.definition.edges.map(edge=>edge.sourceHandle)).toEqual(["button:a","other_response","timeout","send_failure"]);
+    expect(workflow.definition.nodes[0].data).toMatchObject({instanceId:"source-instance"});
+  });
+});

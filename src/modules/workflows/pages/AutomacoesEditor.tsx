@@ -13,7 +13,7 @@ import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessa
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
-import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { QUESTION_BUTTONS_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrganization, useAuth } from "@/modules/identity";
 
@@ -97,6 +97,8 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
       return { type: "copilot", label: "Copilot", agentId: "", agentName: "" } as CopilotNodeData;
     case "end":
       return { type: "end", label: "Fim" } as EndNodeData;
+    case "question_buttons":
+      return { type: "question_buttons", text: "", buttons: [{ id: crypto.randomUUID(), label: "Opção 1" }], timeoutHours: 24 };
     case "wait_response":
       return { type: "wait_response", label: "Esperar Resposta", timeoutHours: 24, timeoutMinutes: 0, channel: "any" } as WaitResponseNodeData;
     case "split_ab":
@@ -224,6 +226,8 @@ function AutomacoesEditorContent() {
   const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
     useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
 
+  const { enabled: questionButtonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
+
   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
   const clipboardRef = useRef<WorkflowSelection | null>(null);
 
@@ -347,6 +351,7 @@ function AutomacoesEditorContent() {
 
   const handleAddNode = useCallback(
     (type: WorkflowNodeType) => {
+      if (type === "question_buttons" && !questionButtonsEnabled) return;
       takeSnapshot();
       const newId = genNodeId(type);
       // Place below the last node
@@ -360,7 +365,7 @@ function AutomacoesEditorContent() {
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(newId);
     },
-    [nodes, setNodes, genNodeId, takeSnapshot]
+    [nodes, setNodes, genNodeId, takeSnapshot, questionButtonsEnabled]
   );
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -385,6 +390,11 @@ function AutomacoesEditorContent() {
             : n
         )
       );
+
+      if ("buttons" in dataUpdates && Array.isArray(dataUpdates.buttons)) {
+        const handles = new Set(dataUpdates.buttons.map((button: { id: string }) => `button:${button.id}`));
+        setEdges((current) => current.filter((edge) => edge.source !== nodeId || !edge.sourceHandle?.startsWith("button:") || handles.has(edge.sourceHandle)));
+      }
 
       // Clean up orphaned edges when split_ab variants change
       if ("variants" in dataUpdates && Array.isArray((dataUpdates as any).variants)) {
@@ -636,6 +646,18 @@ function AutomacoesEditorContent() {
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
   const handleToggleActive = useCallback(async () => {
+    if (!isActive && !questionButtonsEnabled && nodes.some(node => node.type === "question_buttons")) {
+      toast.error("Pergunta com botões ainda não está liberada nesta organização.");
+      return;
+    }
+    if (!isActive) {
+      const issue = findNodeConfigIssues(nodes, edges).find(item => item.actionType === "question_buttons");
+      if (issue) {
+        setSelectedNodeId(issue.nodeId);
+        toast.error(`Complete Pergunta com botões: ${issue.missing}.`);
+        return;
+      }
+    }
     if (!isNew && guidedDraft.data && (isActive || guidedDraft.publication.data)) {
       try {
         const result = await guidedDraft.setActive.mutateAsync(!isActive);
@@ -647,7 +669,7 @@ function AutomacoesEditorContent() {
       return;
     }
     setIsActive(!isActive);
-  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive]);
+  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, questionButtonsEnabled, nodes, edges]);
 
   const handlePublish = useCallback(async () => {
     setPublicationIssues([]);
@@ -732,6 +754,7 @@ function AutomacoesEditorContent() {
     <div className="flex flex-col h-full">
       <WorkflowToolbar
         name={name}
+        questionButtonsEnabled={questionButtonsEnabled}
         onNameChange={setName}
         isActive={isActive}
         onToggleActive={handleToggleActive}

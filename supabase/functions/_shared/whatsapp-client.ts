@@ -106,6 +106,16 @@ export type SendResult = {
   timestamp: number;
 };
 
+export interface TrackedMenuQuery { number: string; trackId: string; trackSource: string; }
+export type TrackedMenuResult = { state: "not_found" | "uncertain" }
+  | { state: "accepted" | "failed"; whatsappMessageId: string; acceptedAt: string };
+
+export type SendMenuResult = SendResult & {
+  accepted_at?: string;
+  /** Original WhatsApp ID used by quoted replies; distinct from provider storage ID. */
+  whatsapp_message_id?: string;
+};
+
 export type SendTemplateOptions = {
   number: string;
   templateName: string;
@@ -145,6 +155,8 @@ export type SendMenuOptions = {
   /** Só em `cta`: o endereço que o botão abre. */
   ctaUrl?: string;
   footer?: string;
+  /** Fixed image URL or base64 for Uazapi reply buttons. */
+  imageButton?: string;
   selectableCount?: number;
   delay?: number;
   trackSource?: string;
@@ -233,7 +245,9 @@ export interface WhatsAppProvider {
   ): Promise<Array<{ number: string; isInWhatsapp: boolean }>>;
 
   // Uazapi-only (Evolution throws NotSupportedError)
-  sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
+  sendMenu?(opts: SendMenuOptions): Promise<SendMenuResult>;
+  /** Read-only reconciliation. Absence/uncertainty never authorizes a resend. */
+  findTrackedMenu?(opts: TrackedMenuQuery): Promise<TrackedMenuResult>;
   /** Canal oficial (Meta) — ponto no mapa. */
   sendLocation?(opts: {
     number: string;

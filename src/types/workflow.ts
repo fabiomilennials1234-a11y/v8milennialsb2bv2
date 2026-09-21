@@ -1,6 +1,7 @@
 import type { GuidedDateComparison } from '@/contracts/workflows/guided-dates';
 import type { GuidedResponsibleField, GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
+import type { QuestionImageAsset } from "@/contracts/workflows/question-image";
 
 /**
  * A forma de um componente de template aprovado, como a listagem da Meta a
@@ -77,6 +78,7 @@ export type WorkflowNodeType =
   | "end"
   // Novos nós de controle de fluxo
   | "wait_response"
+  | "question_buttons"
   | "split_ab"
   | "webhook_call"
   | "goto"
@@ -991,7 +993,21 @@ export interface CodeHttpsNodeData {
   [key: string]: unknown;
 }
 
+export interface QuestionButtonsNodeData {
+  type: "question_buttons";
+  label?: string;
+  text: string;
+  buttons: { id: string; label: string }[];
+  timeoutHours: number;
+  instanceId?: string | null;
+  image?: QuestionImageAsset | null;
+  [key: string]: unknown;
+}
+
+export const QUESTION_BUTTONS_FLAG = "workflow_question_buttons";
+
 export type WorkflowNodeData =
+  | QuestionButtonsNodeData
   | TriggerNodeData
   | ActionNodeData
   | ConditionNodeData
@@ -1134,6 +1150,7 @@ export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: st
   delay:          { border: "border-purple-500",  bgLight: "bg-purple-50",  bgDark: "dark:bg-purple-950" },
   copilot:        { border: "border-cyan-500",    bgLight: "bg-cyan-50",    bgDark: "dark:bg-cyan-950" },
   end:            { border: "border-border",      bgLight: "bg-muted",      bgDark: "dark:bg-muted" },
+  question_buttons: { border: "border-primary", bgLight: "bg-card", bgDark: "dark:bg-card" },
   wait_response:  { border: "border-orange-500",  bgLight: "bg-orange-50",  bgDark: "dark:bg-orange-950" },
   split_ab:       { border: "border-pink-500",    bgLight: "bg-pink-50",    bgDark: "dark:bg-pink-950" },
   webhook_call:   { border: "border-indigo-500",  bgLight: "bg-indigo-50",  bgDark: "dark:bg-indigo-950" },
@@ -1152,6 +1169,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   delay: "Delay",
   copilot: "Copilot",
   end: "Fim",
+  question_buttons: "Pergunta com botões",
   wait_response: "Esperar Resposta",
   split_ab: "Split A/B",
   webhook_call: "Webhook",

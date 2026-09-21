@@ -54,6 +54,7 @@ interface WorkflowToolbarProps {
   onOpenSettings?: () => void;
   /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
   hiddenNodeTypes?: WorkflowNodeType[];
+  questionButtonsEnabled?: boolean;
 }
 
 interface NodeOption {
@@ -82,6 +83,7 @@ const ADD_NODE_GROUPS: NodeOptionGroup[] = [
     label: "Controle de Fluxo",
     options: [
       { type: "wait_response", label: "Esperar Resposta", icon: MessageCircle, color: "text-orange-500" },
+      { type: "question_buttons", label: "Pergunta com botões", icon: MessageCircle, color: "text-primary" },
       { type: "wait_business_window", label: "Janela Comercial", icon: CalendarClock, color: "text-amber-500" },
       { type: "split_ab", label: "Split A/B", icon: Split, color: "text-pink-500" },
       { type: "goto", label: "Ir Para (Jump)", icon: CornerDownRight, color: "text-teal-500" },
@@ -127,6 +129,7 @@ export function WorkflowToolbar({
   onExport,
   onOpenSettings,
   hiddenNodeTypes = [],
+  questionButtonsEnabled = false,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
@@ -135,7 +138,7 @@ export function WorkflowToolbar({
   const visibleGroups = ADD_NODE_GROUPS
     .map((group) => ({
       ...group,
-      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type)),
+      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
     }))
     .filter((group) => group.options.length > 0);
 

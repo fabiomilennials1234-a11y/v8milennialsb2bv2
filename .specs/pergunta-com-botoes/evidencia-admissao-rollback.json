@@ -1,0 +1,33 @@
+{
+  "tested_at": "2026-09-21T20:05:22.317Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "admission",
+  "transaction": "rollback",
+  "before": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS admission failure routing, replay, tenant isolation and reserved-send protection"
+    }
+  ],
+  "after": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

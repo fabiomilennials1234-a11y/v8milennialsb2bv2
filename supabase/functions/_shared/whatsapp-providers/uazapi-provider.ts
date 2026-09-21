@@ -24,6 +24,9 @@ import type {
   InstanceStatus,
   SendMediaOptions,
   SendMenuOptions,
+  SendMenuResult,
+  TrackedMenuQuery,
+  TrackedMenuResult,
   SendPixButtonOptions,
   SendResult,
   SendTextOptions,
@@ -385,7 +388,7 @@ export class UazapiProvider implements WhatsAppProvider {
   // Uazapi-only methods (fully implemented)
   // =========================================================================
 
-  async sendMenu(opts: SendMenuOptions): Promise<SendResult> {
+  async sendMenu(opts: SendMenuOptions): Promise<SendMenuResult> {
     // `cta` é da Meta — um botão que abre link, sem resposta de volta. A Uazapi
     // não o tem, e mapeá-lo para `button` entregaria ao cliente um botão que
     // devolve texto no lugar de um que abre o navegador.
@@ -401,11 +404,37 @@ export class UazapiProvider implements WhatsAppProvider {
       footer: opts.footer,
       selectableCount: opts.selectableCount,
       listButton: opts.listButtonLabel,
+      imageButton: opts.imageButton,
       delay: opts.delay,
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
-    return normalizeUazapiMessageResult(resp);
+    const normalized = normalizeUazapiMessageResult(resp);
+    const timestamp = resp.messageTimestamp ?? resp.timestamp!;
+    return { ...normalized, whatsapp_message_id: resp.messageid,
+      accepted_at: new Date(timestamp >= 1e12 ? timestamp : timestamp * 1000).toISOString() };
+  }
+
+  async findTrackedMenu(opts: TrackedMenuQuery): Promise<TrackedMenuResult> {
+    const chatid = `${opts.number}@s.whatsapp.net`;
+    const raw = await this.client.findTrackedMessages({ chatid, track_id: opts.trackId, track_source: opts.trackSource });
+    const page = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+    const rows = Array.isArray(raw) ? raw : page?.messages;
+    if (!Array.isArray(rows) || page?.hasMore === true || rows.length > 1) return { state: "uncertain" };
+    if (!rows.length) return { state: "not_found" };
+    const message = rows[0];
+    if (!message || typeof message !== "object" || message.track_id !== opts.trackId
+      || message.track_source !== opts.trackSource || message.chatid !== chatid || message.fromMe !== true
+      || typeof message.messageid !== "string" || !message.messageid.trim()
+      || typeof message.messageTimestamp !== "number" || !Number.isFinite(message.messageTimestamp)
+      || message.messageTimestamp <= 0) return { state: "uncertain" };
+    const milliseconds = message.messageTimestamp >= 1e12 ? message.messageTimestamp : message.messageTimestamp * 1000;
+    const acceptedAt = new Date(milliseconds);
+    if (!Number.isFinite(acceptedAt.getTime())) return { state: "uncertain" };
+    const state = String(message.status).toLowerCase();
+    if (!["pending", "queued", "sent", "delivered", "read", "played", "server_ack", "delivery_ack", "read_ack", "failed", "error", "canceled", "cancelled"].includes(state)) return { state: "uncertain" };
+    return { state: ["failed", "error", "canceled", "cancelled"].includes(state) ? "failed" : "accepted",
+      whatsappMessageId: message.messageid, acceptedAt: acceptedAt.toISOString() };
   }
 
   async sendPixButton(opts: SendPixButtonOptions): Promise<SendResult> {

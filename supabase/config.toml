@@ -606,3 +606,7 @@ verify_jwt = false
 # Internal worker authenticates x-cron-secret before parsing requests or using service_role.
 [functions.toth-process-preorder]
 verify_jwt = false
+
+# Validates caller JWT, workflow RLS, org admin permission and feature gate itself.
+[functions.workflow-question-image]
+verify_jwt = false

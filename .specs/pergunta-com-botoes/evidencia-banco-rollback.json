@@ -1,0 +1,26 @@
+{
+  "tested_at": "2026-09-21T18:18:35.424Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "transaction": "rollback",
+  "before": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS: grants, snapshot, tenant isolation, reservation, early reply, persisted order, duplicate, deadline, cancellation, flag-off, duplicate edge"
+    }
+  ],
+  "after": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

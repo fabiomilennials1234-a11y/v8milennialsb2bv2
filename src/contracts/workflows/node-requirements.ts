@@ -21,6 +21,7 @@
  */
 
 import { ehModoTemplateMeta } from "./modo-de-mensagem.ts";
+import { isQuestionImageAsset } from "./question-image.ts";
 import { businessWindowConfigErrors, businessWindowConnectionIssues } from "./business-window.ts";
 
 export type NodeConfig = Record<string, unknown>;
@@ -185,6 +186,28 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[], edges?: { source
 
   for (const node of nodes ?? []) {
     const config = node.data ?? {};
+    if (node.type === "question_buttons" || config.type === "question_buttons") {
+      const rawButtons = Array.isArray(config.buttons) ? config.buttons : [];
+      const buttons = rawButtons.filter((button): button is { id: string; label: string } => Boolean(button && typeof button === "object" && typeof button.id === "string" && typeof button.label === "string"));
+      const errors: string[] = [];
+      if (config.instanceId === null) errors.push("instância WhatsApp após importação");
+      if (config.image !== undefined && !isQuestionImageAsset(config.image)) errors.push("imagem privada válida");
+      if (typeof config.text !== "string" || !config.text.trim()) errors.push("mensagem");
+      if (rawButtons.length < 1 || rawButtons.length > 3) errors.push("um a três botões");
+      if (buttons.length !== rawButtons.length || buttons.some(button => !button.id.trim() || !button.label.trim())) errors.push("botões com identidade e rótulo");
+      if (buttons.some(button => !/^[A-Za-z0-9_-]+$/.test(button.id) || /[|\r\n]/.test(button.label))) errors.push("botões sem separadores reservados");
+      if (new Set(buttons.map(button => button.id)).size !== buttons.length) errors.push("identidades únicas dos botões");
+      if (new Set(buttons.map(button => button.label.trim().toLocaleLowerCase())).size !== buttons.length) errors.push("rótulos únicos dos botões");
+      const timeout = config.timeoutHours ?? 24;
+      if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0) errors.push("prazo de resposta positivo e finito");
+      issues.push(...errors.map(missing => ({ nodeId: node.id, nodeLabel: String(config.label || "Pergunta com botões"), actionType: "question_buttons", missing })));
+      const outputs = [...buttons.map(button => ({ id: `button:${button.id}`, label: button.label })),
+        { id: "other_response", label: "Outra resposta" }, { id: "timeout", label: "Sem resposta" }, { id: "send_failure", label: "Falha no envio" }];
+      for (const output of outputs) {
+        const matches = (edges ?? []).filter(edge => edge.source === node.id && edge.sourceHandle === output.id);
+        if (matches.length !== 1 || !nodes.some(target => target.id === matches[0]?.target)) issues.push({ nodeId: node.id, nodeLabel: String(config.label || "Pergunta com botões"), actionType: "question_buttons", missing: `destino da saída ${output.label}` });
+      }
+    }
     // Both editor and list activation must preserve guided conditions as
     // drafts until the organization-authorized publication path is available.
     if (node.type === "condition" && Object.prototype.hasOwnProperty.call(config, "guidedCondition")) {

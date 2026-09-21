@@ -1,0 +1,74 @@
+{
+  "base": "0d20ce8b8",
+  "node": "24.21.0",
+  "base_failures": 11,
+  "matched_feature_failures": 11,
+  "tests": [
+    {
+      "file": "tests/unit/agenda-page-escopo.test.tsx",
+      "name": "Agenda — registrar o resultado do compromisso funciona para os cinco tipos, com uma implementação só",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/ai-action-executor-time-aware.test.ts",
+      "name": "schedule_meeting — F5b time-aware blocking permite slot segunda 14h quando agente tem janela Comercial seg-sex",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/ai-action-executor-time-aware.test.ts",
+      "name": "schedule_meeting — F5b time-aware blocking passa-through quando agente sem behavior_windows (legacy)",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/ai-action-executor-time-aware.test.ts",
+      "name": "schedule_meeting — F5b time-aware blocking passa-through quando todas janelas com behavior vazio (backfill default)",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/automacao-tarefa-do-negocio.test.ts",
+      "name": "schedule_meeting — a reunião é do Negócio carimba o negócio na tarefa da reunião",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/automacao-tarefa-do-negocio.test.ts",
+      "name": "schedule_meeting — a reunião é do Negócio sem negócio declarado, a reunião fica da pessoa",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/card-mostra-a-reuniao.test.ts",
+      "name": "O board do funil leva a reunião ao card a data espelhada no metadata vira a data do card",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/card-mostra-a-reuniao.test.ts",
+      "name": "O board do funil leva a reunião ao card entrada sem reunião não inventa data",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/card-mostra-a-reuniao.test.ts",
+      "name": "O board do funil leva a reunião ao card a coluna achatada por get_pipeline_page vale tanto quanto o metadata",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/card-mostra-a-reuniao.test.ts",
+      "name": "O board do funil leva a reunião ao card o card carrega o funil e o PAPEL da etapa, resolvidos no cliente",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    },
+    {
+      "file": "tests/unit/card-mostra-a-reuniao.test.ts",
+      "name": "O board do funil leva a reunião ao card etapa sem papel governado chega como null, não como 'open' inventado",
+      "reproduced_on_base": true,
+      "matches_feature_run": true
+    }
+  ]
+}

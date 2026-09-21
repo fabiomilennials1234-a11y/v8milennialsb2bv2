@@ -37,6 +37,8 @@ import { validateExternalUrl } from "./url-validator.ts";
 import { fetchWithTimeout } from "./fetch-utils.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
 import { personalizationName, personalizationFirstName } from "./lead-name.ts";
+import { sendWorkflowButtonQuestion } from "./workflow-buttons/runtime.ts";
+import { findNodeConfigIssues } from "../../../src/contracts/workflows/node-requirements.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ interface ExecuteWorkflowParams {
   /** Immutable pin supplied by the claimed execution row. Verified before reading rules. */
   guidedVersionId?: string | null;
   definition: WorkflowDefinition;
+  questionButtonsDefinition?: WorkflowDefinition | null;
   loopLimit: number;
   context: Record<string, unknown>;
   currentNodeId?: string | null;
@@ -205,6 +208,29 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     }
     definition = version.data.definition as WorkflowDefinition;
     loopLimit = typeof version.data.settings?.loop_limit === 'number' ? version.data.settings.loop_limit : 100;
+  }
+
+  if (params.questionButtonsDefinition) definition = params.questionButtonsDefinition;
+  if (definition.nodes.some(node => node.type === "question_buttons")) {
+    const feature = params.questionButtonsDefinition ? null : await supabase.from("organizations")
+      .select("feature_flags").eq("id", organizationId).maybeSingle();
+    if (!params.questionButtonsDefinition && (feature?.error || feature?.data?.feature_flags?.workflow_question_buttons !== true)) {
+      const error = "Pergunta com botões não habilitada para organização";
+      await updateExecution(supabase, executionId, "failed", params.currentNodeId ?? null, params.loopCounters ?? {}, error);
+      return { success: false, status: "failed", error, stepsExecuted: 0 };
+    }
+    const frozen = await supabase.rpc("freeze_workflow_button_definition", {
+      p_execution_id: executionId, p_organization_id: organizationId,
+    });
+    if (frozen.error || !Array.isArray(frozen.data?.nodes) || !Array.isArray(frozen.data?.edges)) {
+      await updateExecution(supabase, executionId, "failed", params.currentNodeId ?? null, params.loopCounters ?? {}, "question_buttons_snapshot_unavailable");
+      return { success: false, status: "failed", error: "question_buttons_snapshot_unavailable", stepsExecuted: 0 };
+    }
+    definition = frozen.data as WorkflowDefinition;
+    if (findNodeConfigIssues(definition.nodes, definition.edges).some(issue => issue.actionType === "question_buttons")) {
+      await updateExecution(supabase, executionId, "failed", params.currentNodeId ?? null, params.loopCounters ?? {}, "question_buttons_invalid_configuration");
+      return { success: false, status: "failed", error: "question_buttons_invalid_configuration", stepsExecuted: 0 };
+    }
   }
 
   // Guided drafts cannot run through the legacy evaluator. The published,
@@ -351,6 +377,11 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
     try {
       switch (node.type) {
+        case "question_buttons": {
+          await sendWorkflowButtonQuestion({ supabase, organizationId, executionId, leadId,
+            nodeId, data: node.data, visit: loopCounters[nodeId], context });
+          return { success: true, status: "paused", stepsExecuted };
+        }
         case "trigger":
           // Already processed at start — just skip
           await recordStep(supabase, executionId, node, "skipped");

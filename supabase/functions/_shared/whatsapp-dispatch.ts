@@ -305,9 +305,12 @@ export async function resolveDispatchContext(
 // ============================================================================
 
 export type SendResultSimple = {
+  acceptedAt?: string;
+  deliveryState?: "not_sent" | "rejected" | "uncertain" | "accepted";
   retryAt?: string;
   success: boolean;
   messageId?: string;
+  whatsappMessageId?: string;
   status?: SendResult["status"];
   error?: string;
 };
@@ -527,17 +530,19 @@ export async function sendMenuViaInstance(
     choices: string[];
     footer?: string;
     listButtonLabel?: string;
+    imageButton?: string;
     selectableCount?: number;
   },
-  opts: { trackSource?: string; trackId?: string; delay?: number; idempotencyKey?: string } = {}
+  opts: { trackSource?: string; trackId?: string; delay?: number; idempotencyKey?: string; requiredProvider?: "uazapi" } = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
-  if (!phone) return { success: false, error: "Invalid phone" };
+  if (!phone) return { success: false, deliveryState: "not_sent", error: "Invalid phone" };
+  let attempted = false;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
-    if (!provider.sendMenu) {
+    if ((opts.requiredProvider && provider.provider !== opts.requiredProvider) || !provider.sendMenu) {
       return {
-        success: false,
+        success: false, deliveryState: "not_sent",
         error: `${provider.provider} does not support interactive menus`,
       };
     }
@@ -554,27 +559,30 @@ export async function sendMenuViaInstance(
         content: menu.text,
         idempotencyKey: opts.idempotencyKey,
       },
-      () =>
-        sendMenu({
+      () => {
+        attempted = true;
+        return sendMenu({
           number: phone,
           type: menu.type,
           text: menu.text,
           choices: menu.choices,
           footer: menu.footer,
           listButtonLabel: menu.listButtonLabel,
+          imageButton: menu.imageButton,
           selectableCount: menu.selectableCount,
           delay: opts.delay,
           trackSource: opts.trackSource,
           trackId: opts.trackId,
-        }),
+        });
+      },
     );
     if (isSkippedSend(governed)) {
-      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+      return { success: false, deliveryState: "not_sent", error: `governor_${governed.action}:${governed.reason}` };
     }
-    return dispatchSendResult(governed);
+    return { ...dispatchSendResult(governed), whatsappMessageId: governed.whatsapp_message_id, acceptedAt: governed.accepted_at, deliveryState: governed.status === "failed" ? "rejected" : "accepted" };
   } catch (error) {
     return {
-      success: false,
+      success: false, deliveryState: attempted ? "uncertain" : "not_sent",
       error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }

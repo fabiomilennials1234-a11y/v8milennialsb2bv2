@@ -91,7 +91,7 @@ function extractRefsFromData(
         nodeId,
         field,
         type: spec.type,
-        originalValue: isList ? JSON.stringify(value) : String(value),
+        originalValue: isList || typeof value === "object" ? JSON.stringify(value) : String(value),
         hint,
       });
       cleaned[field] = isList ? [] : null;
@@ -106,6 +106,8 @@ function extractRefsFromData(
 
 function getOrgFieldsForNode(nodeType: string): Record<string, OrgFieldSpec> {
   switch (nodeType) {
+    case "question_buttons":
+      return { instanceId: { type: "whatsapp_instance" }, image: { type: "image_media" } };
     case "action":
       return ACTION_ORG_FIELDS;
     case "copilot":
@@ -201,7 +203,7 @@ export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWo
   // 1. Clean nodes
   const cleanedNodes: WorkflowNode[] = workflow.definition.nodes.map((node) => {
     const nodeData = cloneJson(node.data) as Record<string, unknown>;
-    const registry = getOrgFieldsForNode(String(nodeData.type));
+    const registry = getOrgFieldsForNode(String(nodeData.type ?? node.type));
     const { cleaned, refs } = extractRefsFromData(node.id, nodeData, registry);
     allRefs.push(...refs);
 

@@ -1,0 +1,33 @@
+{
+  "tested_at": "2026-09-21T19:56:48.947Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "activation",
+  "transaction": "rollback",
+  "before": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS activation validation"
+    }
+  ],
+  "after": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

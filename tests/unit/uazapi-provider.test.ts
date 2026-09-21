@@ -86,6 +86,59 @@ async function withTimers<T>(promise: Promise<T>): Promise<T> {
 // sendText — camelCase → snake_case translation
 // ---------------------------------------------------------------------------
 
+describe("UazapiProvider.sendMenu — Pergunta com botões", () => {
+  it("não reenvia pergunta após HTTP 500 de resultado incerto", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonRes(500, { message: "ambiguous send" }));
+    await expect(withTimers(makeProvider().sendMenu({
+      number: "5511999999999", type: "button", text: "Escolha",
+      choices: ["A|question-1:a"],
+    }))).rejects.toMatchObject({ status: 500 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("não reenvia pergunta quando envio expira sem resposta HTTP", async () => {
+    vi.mocked(fetch).mockImplementation((_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    await expect(withTimers(makeProvider().sendMenu({
+      number: "5511999999999", type: "button", text: "Escolha",
+      choices: ["A|question-1:a"],
+    }))).rejects.toMatchObject({ status: 504, provider_code: "timeout" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("envia imagem fixa preservando opções, rodapé e rastreamento", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, {
+      id: "internal-question-1", status: "Pending", messageTimestamp: 1700000000123,
+    }));
+    await makeProvider().sendMenu({
+      number: "5511999999999", type: "button", text: "Escolha",
+      choices: ["A|question-1:a"], footer: "Selecione",
+      imageButton: "https://assets.example.test/catalog.jpg",
+      trackSource: "workflow", trackId: "question-1",
+    });
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({
+      number: "5511999999999", type: "button", text: "Escolha",
+      choices: ["A|question-1:a"], footerText: "Selecione",
+      imageButton: "https://assets.example.test/catalog.jpg",
+      track_source: "workflow", track_id: "question-1",
+    });
+  });
+
+  it("preserva ID original do WhatsApp separado do ID interno", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonRes(200, {
+      id: "internal-question-1", messageid: "whatsapp-question-1",
+      status: "Pending", messageTimestamp: 1700000000123,
+    }));
+    const result = await makeProvider().sendMenu({
+      number: "5511999999999", type: "button", text: "Escolha",
+      choices: ["A|question-1:a"],
+    });
+    expect(result).toEqual({ accepted_at: "2023-11-14T22:13:20.123Z", message_id: "internal-question-1",
+      whatsapp_message_id: "whatsapp-question-1", status: "queued", timestamp: 1700000000 });
+  });
+});
+
 describe("UazapiProvider.sendText — option translation", () => {
   it("maps trackSource → track_source", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
