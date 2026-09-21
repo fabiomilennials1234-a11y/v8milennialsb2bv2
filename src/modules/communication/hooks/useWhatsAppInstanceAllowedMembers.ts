@@ -12,7 +12,7 @@ export interface WhatsAppInstanceAllowedMember {
 
 /**
  * Lista de vendedores (team_member_id) autorizados a responder neste número.
- * Se vazio = todos da organização podem responder.
+ * Sem vínculos, somente admin/master podem acessar o número.
  * SECURITY: Só retorna dados se a instância pertencer à organização atual.
  */
 export function useAllowedMembersForInstance(whatsappInstanceId: string | null) {

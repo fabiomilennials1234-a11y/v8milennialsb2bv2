@@ -81,3 +81,18 @@ dia — e 70–86% do inbound entra sem `lead_id`, ou seja, sem ninguém a quem 
   eventos de realtime.
 - Notificação deixa de ser efêmera de tela e vira dado consultável: "quantos avisos por vendedor por
   dia" passa a ser uma pergunta respondível, e é a medida que diz se o recorte de ruído está certo.
+
+## Emenda — 2026-09-16: destinatário de mensagem por número
+
+A solicitação de isolamento entre membros altera o item 4 para mensagens de
+WhatsApp: o dono do lead não concede acesso à conversa de outro número. O produtor
+endereça somente usuários ativos explicitamente vinculados à instância de origem,
+incluindo conversas sem lead. Admin/master preservam gestão, sem broadcast de
+notificações. A chave inclui organização, instância e telefone. RLS e push conferem
+o vínculo atual; avisos legados sem origem comprovada ficam ocultos, pois podem
+agrupar vários números. Os demais tipos de aviso mantêm suas atribuições.
+
+A revisão do PR #2125 preserva também a restrição opcional por responsável:
+produtor, sino e push intersectam o vínculo ao número com o mesmo predicado de
+acesso usado pelo chat. Sem lead, a entrega depende de esse predicado permitir
+o telefone. Preferências de entrega continuam sem alterar o registro elegível.

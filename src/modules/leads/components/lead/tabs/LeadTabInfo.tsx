@@ -74,6 +74,9 @@ export function LeadTabInfo({
     name:    formData.name,
     company: formData.company,
     email:   formData.email,
+    phone: formData.phone,
+    segment: formData.segment,
+    interest: formData.interest,
   };
 
   return (
@@ -116,9 +119,10 @@ export function LeadTabInfo({
       {/* Grid unificada — campos padrão + personalizados juntos */}
       <div className="border-t border-border/40 pt-4 mt-4 space-y-1">
         <LeadFieldGrid
+          key={leadId}
           leadId={leadId}
           lead={leadData}
-          onLeadUpdate={onLeadFieldUpdate}
+          onLeadUpdate={onLeadFieldUpdate ?? ((field, value) => onChange({ ...formData, [field]: value }))}
         />
         {/* Adicionar campo personalizado inline */}
         <AddCustomFieldPopover />

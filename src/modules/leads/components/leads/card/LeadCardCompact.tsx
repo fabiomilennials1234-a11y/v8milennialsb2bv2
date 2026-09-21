@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo, useRef, type ReactNode } from "react";
 import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
@@ -14,6 +14,7 @@ import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
 import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
+import { LeadCardChecklistsPanel } from "./LeadCardChecklistsPanel";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
@@ -138,6 +139,8 @@ interface LeadCardCompactProps {
    * diferentes.
    */
   menuAdicionar?: ReactNode;
+  checklistsOpen?: boolean;
+  onChecklistsOpenChange?: (open: boolean) => void;
   /**
    * Slot de domínio (ex.: confirmar reunião no funil mergeado).
    */
@@ -220,7 +223,10 @@ function Linha({ icone, children, vazio }: {
 export const LeadCardCompact = memo(function LeadCardCompact({
   lead, config, origin, urgency, dateIndicator, parsedDate, acaoWhatsapp, menuAdicionar,
   selected, onSelect, onClick, menuItems, extraActions,
+  checklistsOpen = false, onChecklistsOpenChange,
 }: LeadCardCompactProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const preVenda = lead.preSaleResponsible?.name ?? null;
   const venda = lead.saleResponsible?.name ?? null;
 
@@ -260,6 +266,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
   return (
     <TooltipProvider delayDuration={200}>
       <div
+        ref={cardRef}
         data-lead-id={lead.id}
         onClick={onClick}
         className={cn(
@@ -459,9 +466,10 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             <div className="flex shrink-0 flex-col items-center justify-center gap-1">
               {temZap && acaoWhatsapp}
 
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <button
+                    ref={menuTriggerRef}
                     type="button"
                     // dnd-kit: abrir o menu não pode iniciar arrasto.
                     onPointerDown={(e) => e.stopPropagation()}
@@ -481,6 +489,10 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                   align="end"
                   className="max-h-[min(420px,70vh)] w-56 overflow-y-auto"
                   onClick={(e) => e.stopPropagation()}
+                  onCloseAutoFocus={(e) => {
+                    // O foco passa para o checklist, sem voltar ao menu que fechou.
+                    if (checklistsOpen) e.preventDefault();
+                  }}
                 >
                   {menuAdicionar ?? menuItems}
                 </DropdownMenuContent>
@@ -580,6 +592,17 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           )}
         </div>
       </div>
+      {checklistsOpen && onChecklistsOpenChange && (
+        <LeadCardChecklistsPanel
+          open={checklistsOpen}
+          onOpenChange={onChecklistsOpenChange}
+          cardRef={cardRef}
+          returnFocusRef={menuTriggerRef}
+          leadId={lead.leadId ?? lead.id}
+          entryId={lead.leadId ? lead.id : null}
+          leadName={lead.name}
+        />
+      )}
     </TooltipProvider>
   );
 });

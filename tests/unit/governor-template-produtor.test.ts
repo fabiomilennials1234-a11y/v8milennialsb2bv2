@@ -26,15 +26,17 @@ import { clearDenoEnv } from "../../tests/helpers/deno-mock";
 
 /** O contexto que o choke entregou ao governor, no envio mais recente. */
 const ctxRecebido: Record<string, unknown>[] = [];
+let deferred = false;
 
 vi.mock("../../supabase/functions/_shared/send-governor/gate.ts", () => ({
   // Dublê do choke: registra o contexto e deixa o envio seguir. O veredito da
   // P5 é assunto do núcleo, testado lá com a função real.
   governSend: async (_sb: unknown, ctx: Record<string, unknown>, doSend: () => Promise<unknown>) => {
     ctxRecebido.push(ctx);
+    if (deferred) return { __governorSkipped: true, action: 'defer', reason: 'per_number_cap', retryAt: '2099-09-19T00:00:00.000Z' };
     return await doSend();
   },
-  isSkippedSend: () => false,
+  isSkippedSend: (value: { __governorSkipped?: boolean }) => value.__governorSkipped === true,
 }));
 
 const sendTemplateSpy = vi.fn(async () => ({ success: true, messageId: "hsm-1" }));
@@ -68,12 +70,19 @@ const TEMPLATE = {
 };
 
 beforeEach(() => {
+  deferred = false;
   clearDenoEnv();
   ctxRecebido.length = 0;
   vi.clearAllMocks();
 });
 
 describe("o choke de template marca o envio para o governor", () => {
+  it('preserves the governor resume timestamp without calling the provider', async () => {
+    deferred = true;
+    const result = await sendTemplateViaInstance({} as never, INSTANCIA, '5511999999999', TEMPLATE);
+    expect(result).toEqual({ success: false, error: 'governor_defer:per_number_cap', retryAt: '2099-09-19T00:00:00.000Z' });
+    expect(sendTemplateSpy).not.toHaveBeenCalled();
+  });
   it("`isApprovedTemplate` chega ao governor como true", async () => {
     const r = await sendTemplateViaInstance(
       {} as never, INSTANCIA, "5511999999999", TEMPLATE,

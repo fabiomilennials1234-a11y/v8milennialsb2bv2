@@ -78,6 +78,14 @@ describe('useGestor', () => {
     expect(result.current.gestorId).toBeNull();
   });
 
+  it('expõe falha de identidade para manter o suporte oculto enquanto não há confirmação', async () => {
+    const error = { code: '503', message: 'temporarily unavailable' };
+    setupSupabaseMock({ data: null, error });
+    const { result } = renderHook(() => useGestor(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.error).toEqual(error));
+    expect(result.current.isGestor).toBe(false);
+  });
+
   it('isGestor=false and no console.error on PGRST116', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     setupSupabaseMock({ data: null, error: { code: 'PGRST116', message: 'not found' } });

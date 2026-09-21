@@ -67,8 +67,7 @@ export * from "./hooks/useCallLogs";
 // Hooks — Checklists & Templates
 // ────────────────────────────────────────────────────────────────────────
 
-export * from "./hooks/useChecklists";
-export * from "./hooks/useChecklistTemplates";
+export * from "./checklists";
 
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Approvals (gates de aprovação)

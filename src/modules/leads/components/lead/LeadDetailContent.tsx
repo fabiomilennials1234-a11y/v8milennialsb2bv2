@@ -92,7 +92,9 @@ export function LeadDetailContent({
                 leadId={lead.id}
                 formData={formData}
                 onChange={onChange}
-                onSave={saveForm}
+                onSave={async () => {
+                  if (await saveForm()) await refetchLead();
+                }}
                 isSaving={isSaving}
                 qualificationScore={lead.qualification_score}
                 origin={lead.origin}

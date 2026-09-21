@@ -374,6 +374,25 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             retryAttempt: currentRetry,
           });
 
+          // A deferred send has not reached the provider. Preserve this node and
+          // both budgets; do not follow an error edge or mark a message as sent.
+          if (!result.success && result.retryAt && Date.parse(result.retryAt) > Date.now()) {
+            loopCounters[nodeId] = Math.max(0, (loopCounters[nodeId] || 1) - 1);
+            const scheduled = await supabase.from("workflow_executions").update({
+              status: "running", current_node_id: nodeId, next_run_at: result.retryAt,
+              loop_counters: loopCounters, context: { ...context }, error: null,
+            }).eq("id", executionId).eq("organization_id", organizationId);
+            if (scheduled.error) {
+              const error = "governor_defer_persist_failed";
+              await recordStep(supabase, executionId, node, "failed", node.data, undefined, error);
+              await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, error);
+              return { success: false, status: "failed", error, stepsExecuted };
+            }
+            await recordStep(supabase, executionId, node, "skipped", node.data,
+              { deferred: true, next_run_at: result.retryAt, reason: result.error });
+            return { success: true, status: "paused", stepsExecuted };
+          }
+
           await recordStep(supabase, executionId, node, result.success ? "success" : "failed",
             node.data,
             { ...result, ...(currentRetry > 0 ? { retry_attempt: currentRetry } : {}) },

@@ -305,6 +305,7 @@ export async function resolveDispatchContext(
 // ============================================================================
 
 export type SendResultSimple = {
+  retryAt?: string;
   success: boolean;
   messageId?: string;
   status?: SendResult["status"];
@@ -461,7 +462,7 @@ export async function sendTemplateViaInstance(
     );
 
     if (isSkippedSend(governed)) {
-      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+      return { success: false, error: `governor_${governed.action}:${governed.reason}`, ...(governed.action === "defer" && governed.retryAt ? { retryAt: governed.retryAt } : {}) };
     }
     return dispatchSendResult(governed);
   } catch (error) {

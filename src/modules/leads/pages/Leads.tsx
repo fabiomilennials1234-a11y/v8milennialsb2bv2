@@ -98,7 +98,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { ClientPortfolioSection } from "../components/client-portfolio/ClientPortfolioSection";
+import { LeadCardNewDeal } from "../components/lead-card/LeadCardNewDeal";
+import { useDealSheet } from "../components/deal-detail/deal-sheet-context";
 import {
   CLASSIFICACAO_TODAS,
   leadClassificacaoOptions,
@@ -111,7 +113,7 @@ import { useClassificacaoCafeJurere } from "../hooks/useClassificacaoCafeJurere"
 import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
 import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
-import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
+import { useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
 import { destinosDeSistema } from "@/contracts/pipe";
 import { toast } from "sonner";
@@ -225,6 +227,8 @@ function formatDayInTz(value: string | Date, timeZone?: string | null): string {
 
 function LeadsInner() {
   const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
+  const [newDealLeadId, setNewDealLeadId] = useState<string | null>(null);
   const [filterState, setFilterState] = usePersistedState(
     "leads",
     DEFAULT_LEADS_FILTERS
@@ -240,6 +244,7 @@ function LeadsInner() {
   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
   const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
   const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
+  const portfolioActive = filterClassificacao === "cliente";
   const setFilterClassificacao = (v: string) =>
     setFilterState((f) => ({ ...f, filterClassificacao: v }));
   // De onde vem a verdade sobre "é cliente?" nesta org: cadastro no ERP, para
@@ -280,6 +285,7 @@ function LeadsInner() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
   const { organizationId, timezone: orgTimezone } = useOrganization();
+  useEffect(() => { setNewDealLeadId(null); }, [organizationId]);
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
   // #313 — deep link via mention notification:
@@ -343,9 +349,17 @@ function LeadsInner() {
   }, [setSearchParams]);
 
   const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
-  const { data: leads = [], isLoading } = useLeads(filterParams);
+  const leadsQuery = useLeads(filterParams, { enabled: !portfolioActive });
+  const { data: loadedLeads = [], isLoading } = leadsQuery;
+  const leads = useMemo(() => portfolioActive ? [] : loadedLeads, [portfolioActive, loadedLeads]);
   const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
-  const { data: teamMembers = [] } = useTeamMembers();
+  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible };
+  const { data: allTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "all" });
+  const { data: leadTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "lead" });
+  const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
+  const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
+  const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
+  const tabCounts: Record<string, number | undefined> = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
@@ -360,18 +374,22 @@ function LeadsInner() {
   const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
 
   // Cluster "Dados" da lista — números de carteira (upsell_clients) em lote.
-  const { data: carteiraMetrics } = useLeadsCarteiraMetrics(allLeadIds);
+  const carteiraMetricsQuery = useLeadsCarteiraMetrics(allLeadIds);
+  const { data: carteiraMetrics } = carteiraMetricsQuery;
   // Vendas ganhas no funil, de `sale_events` (ADR-0017). Ver `useLeadsSalesMetrics`.
-  const { data: salesMetrics } = useLeadsSalesMetrics(allLeadIds);
+  const salesMetricsQuery = useLeadsSalesMetrics(allLeadIds);
+  const { data: salesMetrics } = salesMetricsQuery;
   // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
-  const { data: leadDeals } = useLeadsDeals(allLeadIds);
+  const leadDealsQuery = useLeadsDeals(allLeadIds);
+  const { data: leadDeals } = leadDealsQuery;
   /**
    * Coluna "Recompra" — média de dias entre compras, unindo as DATAS de
    * `sale_events` e dos pedidos aprovados da carteira. Consulta própria porque
    * `salesMetrics.cycleDays` e `carteiraMetrics.reorderCycleDays` são médias já
    * agregadas, cada uma sobre metade do histórico. Ver `useLeadsReorderCycle`.
    */
-  const { data: reorderCycles } = useLeadsReorderCycle(allLeadIds);
+  const reorderCyclesQuery = useLeadsReorderCycle(allLeadIds);
+  const { data: reorderCycles } = reorderCyclesQuery;
 
   /**
    * Cluster "Dados" — a regra de precedência mora em `lib/data-metrics.ts`.
@@ -698,12 +716,12 @@ function LeadsInner() {
             Leads
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            Todas as pessoas e empresas da sua operação — e os negócios de cada uma.
+            Da primeira conversa à próxima compra.
           </p>
         </div>
 
-        {/* Grupo de ações alinhado à direita. */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Ações da lista de leads; carteira tem suas próprias ações. */}
+        {!portfolioActive && <div className="flex flex-wrap items-center gap-2">
           {isV2 ? (
             <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)} className="gap-2">
               <History className="w-4 h-4" />
@@ -726,9 +744,20 @@ function LeadsInner() {
             <Plus className="w-4 h-4" />
             Novo Lead
           </Button>
-        </div>
+        </div>}
       </div>
 
+      <div className="flex gap-6 overflow-x-auto border-b border-border" role="group" aria-label="Classificação dos leads">
+        {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
+          <button key={option.value} type="button" aria-pressed={filterClassificacao === option.value}
+            onClick={() => setFilterClassificacao(option.value)}
+            className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
+            <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
+          </button>
+        ))}
+      </div>
+      {!portfolioActive && <>
       {/* Stats */}
       {isV2 ? (
         <LeadsStatsV2
@@ -862,34 +891,6 @@ function LeadsInner() {
             ))}
           </SelectContent>
         </Select>
-        {/* Gaveta do lead — segmented, não Select, e empurrada para a borda
-            direita pelo `ml-auto`.
-
-            Segmented porque são três opções fixas e saber QUAIS são as outras
-            faz parte da decisão: um Select esconderia "Indefinido" atrás de um
-            clique, e é justamente a gaveta que o usuário não sabe que existe.
-            O `ml-auto` separa "o que recorta a busca" (esquerda) de "em que
-            lista eu estou" (direita). */}
-        {/* A DIVISÃO LEAD × CLIENTE — este seletor, e só ele.
-
-            Piloto Café Jurerê: cadastro ERP = Cliente; sem cadastro, perda
-            sem ganho = Perdido (mesmo com aberto); demais = Lead.
-            A fonte da verdade muda por organização; o controle, não:
-              • org COM integração de ERP → a gaveta `leads.classificacao`,
-                onde `indefinido` faz sentido;
-              • org SEM integração → a lei da RELAÇÃO: ganho prevalece; somente
-                perdas = Perdido; demais = Lead.
-
-            `Indefinido` só aparece no primeiro caso: numa org sem ERP a gaveta
-            não existe, e oferecer um filtro que sempre devolve lista vazia é
-            pior do que não oferecer. */}
-        <SegmentedControl
-          label="Classificação dos leads"
-          className="sm:ml-auto"
-          value={filterClassificacao}
-          onValueChange={setFilterClassificacao}
-          options={leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere)}
-        />
         <SavedViewsDropdown
           entityType="leads"
           currentFilters={filterState}
@@ -918,6 +919,8 @@ function LeadsInner() {
 
       {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
           lista silenciosamente e o usuário lê "sumiram leads". */}
+      </>}
+
       {hasCreatedRange && (
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
@@ -960,6 +963,29 @@ function LeadsInner() {
         </div>
       )}
 
+      {portfolioActive ? <ClientPortfolioSection
+        key={organizationId}
+        filters={filterParams} onSearch={setSearchQuery}
+        canCreate={canCreateLead} onNewDeal={setNewDealLeadId} onOpenLead={openLead}
+        onOpenDeal={deal => openDeal(deal.id, deal.leadId)}
+        filterControls={clearPortfolio => <div className="flex flex-wrap gap-2">
+          <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+            <SelectTrigger className="w-40" aria-label="Origem dos clientes"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{Object.entries(originLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterQualification} onValueChange={setFilterQualification}>
+            <SelectTrigger className="w-44" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Todas as qualificações</SelectItem><SelectItem value="none">Sem qualificação</SelectItem>{QUALIFICATION_TIERS.map(tier => <SelectItem key={tier} value={tier}>{QUALIFICATION_TIER_CONFIG[tier].label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+            <SelectTrigger className="w-48" aria-label="Dono da conta"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Todos os donos</SelectItem><SelectItem value="none">Sem dono</SelectItem>
+              {responsibleMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => { clearPortfolio(); setFilterState(f => ({ ...DEFAULT_LEADS_FILTERS, filterClassificacao: f.filterClassificacao })); }}>Limpar filtros</Button>
+        </div>}
+      /> : <>
       {/* Table (desktop) / Card list (mobile) */}
       <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
         {isMobile ? (
@@ -1070,8 +1096,8 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin] || lead.origin}
-                    originClassName={originColors[lead.origin] || originColors.outro}
+                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
                 ))
@@ -1089,8 +1115,8 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin] || lead.origin}
-                    originClassName={originColors[lead.origin] || originColors.outro}
+                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
                 ))
@@ -1126,6 +1152,9 @@ function LeadsInner() {
           </div>
         )}
       </div>
+
+      </>}
+      {newDealLeadId && <LeadCardNewDeal leadId={newDealLeadId} open onOpenChange={open => { if (!open) setNewDealLeadId(null); }} />}
 
       <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
@@ -1353,7 +1382,7 @@ function LeadsInner() {
       </Dialog>
 
       {/* Bulk Action Bar */}
-      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
+      {!portfolioActive && <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

@@ -12,7 +12,7 @@
  * Props: { leadId, lead, onLeadUpdate }
  */
 
-import { useState, useCallback, useId, memo } from "react";
+import { useState, useCallback, useId, useRef, memo } from "react";
 import {
   User,
   Building2,
@@ -66,7 +66,7 @@ export interface LeadFieldGridProps {
   leadId: string;
   lead: LeadStandardData;
   /** Called when a standard field is saved. Caller updates optimistically or refetches. */
-  onLeadUpdate?: (field: keyof LeadStandardData, value: string) => void;
+  onLeadUpdate?: (field: keyof LeadStandardData, value: string) => void | Promise<void>;
 }
 
 // ─── Standard field definitions ────────────────────────────────────────────────
@@ -148,7 +148,7 @@ function FieldInput({ uid, inputType = "text", fieldType, options, value, placeh
 interface StandardFieldRowProps {
   def: StandardFieldDef;
   currentValue: string;
-  onSave: (key: keyof LeadStandardData, value: string) => void;
+  onSave: (key: keyof LeadStandardData, value: string) => void | Promise<void>;
 }
 
 const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onSave }: StandardFieldRowProps) {
@@ -156,35 +156,40 @@ const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onS
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentValue);
   const [saving, setSaving] = useState(false);
+  const editingRef = useRef(false);
+  const savingRef = useRef(false);
 
   const { Icon } = def;
 
   const handleEdit = useCallback(() => {
+    editingRef.current = true;
     setDraft(currentValue);
     setEditing(true);
   }, [currentValue]);
 
   const handleCancel = useCallback(() => {
+    if (savingRef.current) return;
+    editingRef.current = false;
     setDraft(currentValue);
     setEditing(false);
   }, [currentValue]);
 
   const handleSave = useCallback(async () => {
-    if (draft === currentValue) { setEditing(false); return; }
+    if (!editingRef.current || savingRef.current) return;
+    if (draft === currentValue) { editingRef.current = false; setEditing(false); return; }
+    savingRef.current = true;
     setSaving(true);
     try {
       await Promise.resolve(onSave(def.key, draft));
+      editingRef.current = false;
       setEditing(false);
     } catch {
       toast.error(`Erro ao salvar ${def.label.toLowerCase()}`);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, [draft, currentValue, onSave, def.key, def.label]);
-
-  const handleBlur = useCallback(() => {
-    handleSave();
-  }, [handleSave]);
 
   const displayValue = currentValue || "—";
 
@@ -196,7 +201,19 @@ const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onS
       </Label>
 
       {editing ? (
-        <div className="flex items-center gap-1.5">
+        <div
+          className="flex items-center gap-1.5"
+          onBlur={(event) => {
+            // Confirm before the outer Save button reads the form; moving to
+            // the inline confirm/cancel buttons must leave that choice intact.
+            if (!event.currentTarget.contains(event.relatedTarget)) void handleSave();
+          }}
+          onKeyDown={(event) => {
+            if (!(event.target instanceof HTMLInputElement)) return;
+            if (event.key === "Enter") { event.preventDefault(); void handleSave(); }
+            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); handleCancel(); }
+          }}
+        >
           <div className="flex-1">
             <FieldInput
               uid={uid}
@@ -213,7 +230,6 @@ const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onS
             onClick={handleSave}
             disabled={saving}
             aria-label="Salvar"
-            onBlur={handleBlur}
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
           </Button>
@@ -453,7 +469,7 @@ export const LeadFieldGrid = memo(function LeadFieldGrid({
 
   const handleStandardSave = useCallback(
     (key: keyof LeadStandardData, value: string) => {
-      onLeadUpdate?.(key, value);
+      return onLeadUpdate?.(key, value);
     },
     [onLeadUpdate]
   );

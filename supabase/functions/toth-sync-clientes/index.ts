@@ -78,8 +78,10 @@ const MAX_PAGES_PER_RUN = 20;
  * a execução seguinte atravessa de graça o que a anterior gravou e ataca o
  * resto. A retomada é consequência da idempotência, não de estado guardado.
  */
-const MAX_ENRICH_PER_RUN = 3000;
-const ENRICH_FLUSH_EVERY = 500;
+// Reserva recursos para o flush, propagação de donos e classificação ao final.
+// Com 3.000 gravações o worker atingia 546 antes de registrar a conclusão.
+const MAX_ENRICH_PER_RUN = 500;
+const ENRICH_FLUSH_EVERY = 100;
 /** Pausa entre páginas: o alvo é o servidor de UM cliente, não uma nuvem. */
 const PAGE_DELAY_MS = 300;
 
@@ -371,8 +373,8 @@ Deno.serve(
         : conn.clientes_somente_com_compra === true;
 
     const maxEnrich =
-      typeof body.max_enrich === "number" && body.max_enrich > 0
-        ? Math.floor(body.max_enrich)
+      typeof body.max_enrich === "number" && Number.isFinite(body.max_enrich) && body.max_enrich >= 1
+        ? Math.min(Math.floor(body.max_enrich), MAX_ENRICH_PER_RUN)
         : MAX_ENRICH_PER_RUN;
 
     const seenIds = new Set<string>();

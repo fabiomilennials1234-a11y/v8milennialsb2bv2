@@ -286,6 +286,13 @@ function SortableCard<T extends DraggableItem>({
       style={style}
       {...attributes}
       {...listeners}
+      onPointerDown={(event) => {
+        // Portais pertencem à árvore React do card, mas ficam fora dele no DOM.
+        // Deixar o evento chegar ao documento preserva o clique-fora do Radix.
+        if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
+          listeners?.onPointerDown?.(event);
+        }
+      }}
       className={cn(
         "relative group/card cursor-grab active:cursor-grabbing touch-none",
         isDragging && "opacity-50 z-50"

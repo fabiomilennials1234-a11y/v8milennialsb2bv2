@@ -263,7 +263,7 @@ export function ApiKeysPanel() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={handleCloseCreate}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="w-4 h-4 text-primary" />

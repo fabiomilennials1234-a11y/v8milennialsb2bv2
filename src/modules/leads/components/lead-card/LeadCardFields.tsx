@@ -39,7 +39,6 @@ function Linha({
   onSave?: (chave: string, valor: string) => Promise<void>;
 }) {
   const [erro, setErro] = useState(false);
-  const vazio = campo.valor === null || campo.valor === "";
 
   // `somenteLeitura` marca o campo que ainda não tem coluna em `leads` (CNPJ,
   // site, nascimento, endereço). Ele APARECE, por decisão do CTO — sumir é o
@@ -59,6 +58,8 @@ function Linha({
         }
       },
     });
+  const valorExibido = editavel ? localValue : campo.valor;
+  const vazio = valorExibido === null || valorExibido === "";
 
   return (
     <div
@@ -85,6 +86,7 @@ function Linha({
           autoFocus
           type={INPUT_TYPE[campo.tipo ?? "texto"] ?? "text"}
           value={localValue}
+          disabled={isSaving}
           onChange={(e) => setLocalValue(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -113,7 +115,7 @@ function Linha({
           )}
         >
           <span className="min-w-0 break-words">
-            {vazio ? (campo.vazio ?? "—") : campo.valor}
+            {vazio ? (campo.vazio ?? "—") : valorExibido}
           </span>
           {isSaving && <Loader2 className="size-3 shrink-0 animate-spin opacity-60" />}
         </button>

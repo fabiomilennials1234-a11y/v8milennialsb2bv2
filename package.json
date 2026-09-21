@@ -49,7 +49,9 @@
     "lint:ratchet": "node scripts/lint-ratchet.cjs",
     "lint:baseline": "node scripts/lint-ratchet.cjs --write",
     "lint:pending": "node scripts/lint-ratchet.cjs --write-pending",
-    "test:remote": "vitest run tests/remote/ --reporter=verbose"
+    "test:remote": "vitest run tests/remote/ --reporter=verbose",
+    "test:client-portfolio:db": "node scripts/test-client-portfolio-db.mjs",
+    "test:client-portfolio:e2e": "playwright test --config playwright.portfolio.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

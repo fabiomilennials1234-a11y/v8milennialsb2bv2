@@ -229,7 +229,7 @@ export function LeadCardAside({
               })}
             </nav>
             <div className="px-5 py-4">
-              {grupoAtivo && <LeadCardFields grupos={[grupoAtivo]} onSave={onSaveField} />}
+              {grupoAtivo && <LeadCardFields key={lead.id} grupos={[grupoAtivo]} onSave={onSaveField} />}
             </div>
           </div>
         )}

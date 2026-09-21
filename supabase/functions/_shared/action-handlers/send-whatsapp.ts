@@ -81,7 +81,7 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     // executor no default dele (retentar). Divergir aqui daria dois destinos
     // diferentes para a mesma recusa da Meta.
     if (!envio.ok) {
-      return { success: false, error: envio.erro, retryable: envio.retryable };
+      return { success: false, error: envio.erro, retryable: envio.retryable, ...(envio.retryAt ? { retryAt: envio.retryAt } : {}) };
     }
 
     return {
@@ -204,6 +204,7 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
       error: `Janela de 24h fechada e o template de escape não saiu: ${envio.erro}`,
       retryable: false,
       data: { motivo: "janela_fechada_escape_falhou" },
+      ...(envio.retryAt ? { retryAt: envio.retryAt } : {}),
     };
   }
 

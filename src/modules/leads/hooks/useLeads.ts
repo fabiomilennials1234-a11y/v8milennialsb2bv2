@@ -76,7 +76,7 @@ function applyLeadsFilters(
  * SECURITY: Always filters by organization_id to ensure data isolation
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
-export function useLeads(params: LeadsFilterParams = {}) {
+export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
   const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
@@ -140,7 +140,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
       }
       return data.map((lead) => ({ ...lead, relacao_negocios: relacoes.get(lead.id) }));
     },
-    enabled: isReady,
+    enabled: isReady && options.enabled !== false,
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }

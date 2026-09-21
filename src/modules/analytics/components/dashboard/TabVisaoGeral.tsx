@@ -9,6 +9,9 @@ import {
   Clock,
 } from "lucide-react";
 import { KPICard } from "./KPICard";
+import { useFeatureFlag } from "@/modules/platform";
+import { MetricsWidgetGrid } from "./MetricsWidgetGrid";
+import { useAuth, useOrganization } from "@/modules/identity";
 import { SpeedometerGauge } from "./SpeedometerGauge";
 import { FunnelChart } from "./FunnelChart";
 import { TopPerformers } from "./TopPerformers";
@@ -30,6 +33,9 @@ function formatCurrency(value: number): string {
 }
 
 function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
+  const { enabled: draggableWidgets } = useFeatureFlag("dashboard_draggable_widgets");
+  const { user } = useAuth();
+  const { organizationId } = useOrganization();
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(month, year);
   const { data: totalMetrics } = useDashboardMetrics(month, year, null);
   const { data: teamGoals } = useTeamGoals(month, year);
@@ -75,8 +81,6 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
     ];
   }, [totalMetrics]);
 
-  const taxaConversao = displayMetrics?.taxaConversao ?? 0;
-
   if (metricsLoading) {
     return (
       <div className="space-y-6">
@@ -90,51 +94,64 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
 
   return (
     <div className="space-y-6">
-      {/* Row 1: KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KPICard
-          title="Receita do Mês"
-          value={displayMetrics?.vendaTotal || 0}
-          format="currency"
-          icon={DollarSign}
-          delay={0}
+      {draggableWidgets ? (
+        <MetricsWidgetGrid
+          storageKey={organizationId && user ? `torque:metrics-widgets:v1:${organizationId}:${user.id}` : undefined}
+          values={{
+            revenue: displayMetrics?.vendaTotal ?? 0,
+            leads: displayMetrics?.totalLeads ?? 0,
+            ticket: displayMetrics?.ticketMedio ?? 0,
+            proposals: displayMetrics?.propostasEnviadas ?? 0,
+            conversion: displayMetrics?.taxaConversao ?? 0,
+            response: displayMetrics?.tempoMedioResposta ?? 0,
+          }}
         />
-        <KPICard
-          title="Leads Captados"
-          value={displayMetrics?.totalLeads || 0}
-          format="number"
-          icon={Users}
-          delay={0.05}
-        />
-        <KPICard
-          title="Ticket Médio"
-          value={displayMetrics?.ticketMedio || 0}
-          format="currency"
-          icon={Receipt}
-          delay={0.1}
-        />
-        <KPICard
-          title="Propostas Enviadas"
-          value={displayMetrics?.propostasEnviadas || 0}
-          format="number"
-          icon={FileText}
-          delay={0.15}
-        />
-        <KPICard
-          title="Taxa de Conversão"
-          value={displayMetrics?.taxaConversao ?? taxaConversao}
-          format="percent"
-          icon={TrendingUp}
-          delay={0.2}
-        />
-        <KPICard
-          title="Tempo de Resposta"
-          value={displayMetrics?.tempoMedioResposta || 0}
-          format="minutes"
-          icon={Clock}
-          delay={0.25}
-        />
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <KPICard
+            title="Receita do Mês"
+            value={displayMetrics?.vendaTotal || 0}
+            format="currency"
+            icon={DollarSign}
+            delay={0}
+          />
+          <KPICard
+            title="Leads Captados"
+            value={displayMetrics?.totalLeads || 0}
+            format="number"
+            icon={Users}
+            delay={0.05}
+          />
+          <KPICard
+            title="Ticket Médio"
+            value={displayMetrics?.ticketMedio || 0}
+            format="currency"
+            icon={Receipt}
+            delay={0.1}
+          />
+          <KPICard
+            title="Propostas Enviadas"
+            value={displayMetrics?.propostasEnviadas || 0}
+            format="number"
+            icon={FileText}
+            delay={0.15}
+          />
+          <KPICard
+            title="Taxa de Conversão"
+            value={displayMetrics?.taxaConversao ?? 0}
+            format="percent"
+            icon={TrendingUp}
+            delay={0.2}
+          />
+          <KPICard
+            title="Tempo de Resposta"
+            value={displayMetrics?.tempoMedioResposta || 0}
+            format="minutes"
+            icon={Clock}
+            delay={0.25}
+          />
+        </div>
+      )}
 
       {/* Row 2: Speedometer + Funnel */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

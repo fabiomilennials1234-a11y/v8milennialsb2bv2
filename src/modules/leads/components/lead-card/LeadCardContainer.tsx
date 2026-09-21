@@ -264,6 +264,12 @@ export function LeadCardContainer({
   return (
     <LeadCard
       lead={data}
+      onOpenChat={data.telefone?.trim() ? () => {
+        // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
+        // Navegação de documento reinicia essa resolução mesmo quando a ficha
+        // foi aberta dentro do próprio chat, que guarda o link inicial em ref.
+        window.location.assign(`/chat-whatsapp?lead=${encodeURIComponent(data.id)}`);
+      } : undefined}
       onSaveNote={salvarNota}
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}

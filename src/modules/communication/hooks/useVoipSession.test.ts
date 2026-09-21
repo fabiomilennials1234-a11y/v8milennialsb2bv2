@@ -164,11 +164,14 @@ beforeEach(() => {
   podeAtender = true;
   consultas = [];
   tables.whatsapp_instances = [];
-  tables.whatsapp_instance_allowed_members = [];
+  tables.whatsapp_instance_allowed_members = [
+    { whatsapp_instance_id: "i-1", team_member_id: "tm-1" },
+    { whatsapp_instance_id: "i-2", team_member_id: "tm-1" },
+  ];
   tables.voip_sessions = [];
 });
 
-/** Um número perfeito: ao alcance de todos, com voz e com sessão aberta. */
+/** Um número vinculado ao membro, com voz e com sessão aberta. */
 function umNumeroPronto() {
   tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
   tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
@@ -184,13 +187,12 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
     expect(result.current.numbers).toEqual([]);
   });
 
-  it("instância SEM allowed_members aparece para membro comum — é o caso de toda a base hoje", async () => {
+  it("instância SEM allowed_members não aparece para membro comum", async () => {
+    tables.whatsapp_instance_allowed_members = [];
     tables.whatsapp_instances = [instancia({ id: "i-1", instance_name: "Comercial" })];
     tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
     const result = await listar();
-    expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
-    ]);
+    expect(result.current.numbers).toEqual([]);
   });
 
   // O telefone da instância é o que o cliente vê tocar; o menu de escolha do
@@ -244,6 +246,7 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
       sessao({ tc_session_id: "tc-2", whatsapp_instance_id: "i-2" }),
     ];
     tables.whatsapp_instance_allowed_members = [
+      { whatsapp_instance_id: "i-1", team_member_id: "tm-1" },
       { whatsapp_instance_id: "i-2", team_member_id: "tm-outro" },
     ];
     const result = await listar();
@@ -408,12 +411,11 @@ describe("useAnswerableVoiceNumbers — quem DEVE ser chamado", () => {
   // pergunta "este vendedor pode usar este número?"; na entrada responde "quem
   // deve ser chamado?" — e é essa inversão que faz o gate funcionar quando ainda
   // NÃO HÁ OPERADOR, que era a pergunta em aberto do desenho.
-  it("lista vazia toca para toda a organização — a mesma regra das mensagens", async () => {
+  it("lista vazia não toca para membros — a mesma regra das mensagens", async () => {
     umNumeroPronto();
+    tables.whatsapp_instance_allowed_members = [];
     const result = await listarParaReceber();
-    expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
-    ]);
+    expect(result.current.numbers).toEqual([]);
   });
 
   it("quem está NA lista do número recebe", async () => {
@@ -447,6 +449,7 @@ describe("useAnswerableVoiceNumbers — quem DEVE ser chamado", () => {
       sessao({ tc_session_id: "tc-2", whatsapp_instance_id: "i-2" }),
     ];
     tables.whatsapp_instance_allowed_members = [
+      { whatsapp_instance_id: "i-1", team_member_id: "tm-1" },
       { whatsapp_instance_id: "i-2", team_member_id: "tm-outro" },
     ];
     const result = await listarParaReceber();
