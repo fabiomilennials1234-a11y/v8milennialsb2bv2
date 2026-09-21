@@ -15,6 +15,7 @@ import { DealCardComments } from "./DealCardComments";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
+import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
@@ -268,6 +269,7 @@ function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reunia
 
 export function DealCard({
   negocio,
+  onRenomear,
   onSaveNote,
   onMoverEtapa,
   onDefinirDesfecho,
@@ -298,6 +300,7 @@ export function DealCard({
   acaoCopiar,
 }: {
   negocio: DealCardData;
+  onRenomear?: (nome: string, alterarLead: boolean) => Promise<void>;
   onSaveNote?: (texto: string) => void;
   /** Move o negócio entre etapas. NÃO decide desfecho — ver `onDefinirDesfecho`. */
   onMoverEtapa?: (chave: string) => void;
@@ -456,12 +459,10 @@ export function DealCard({
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
           negócio e os dois únicos botões que o encerram. Fica em uma linha. */}
-      <header className="flex shrink-0 items-start gap-3 px-6 pb-3 pt-5">
-        <div className="min-w-0 flex-1">
+      <header className="flex shrink-0 flex-col items-start gap-3 px-6 pb-3 pt-5 sm:flex-row">
+        <div className="w-full min-w-0 flex-1 sm:w-auto">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <h1 className="truncate text-[18px] font-semibold tracking-[-0.02em]">
-              {negocio.titulo}
-            </h1>
+            <NomeDoNegocio key={negocio.id} titulo={negocio.titulo} nomeLead={negocio.lead.nome} onRenomear={onRenomear} />
             {negocio.estado === "ganho" && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 text-[12px] font-semibold text-success">
                 <button
