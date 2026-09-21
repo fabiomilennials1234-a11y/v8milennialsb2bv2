@@ -7,7 +7,7 @@ type SavedName = { phone_number: string; saved_contact_name: string | null };
 export async function enrichSavedContactNames(contacts: ChatContact[], organizationId: string, defaultInstance?: string) {
   const instances = new Set(contacts.filter(c => c.channel === "whatsapp").map(c => c.instance_id ?? defaultInstance).filter((id): id is string => !!id));
   await Promise.all([...instances].map(async instanceId => {
-    const targets = contacts.filter(c => c.channel === "whatsapp" && (c.instance_id ?? defaultInstance) === instanceId && !c.is_group);
+    const targets = contacts.filter(c => c.channel === "whatsapp" && (c.instance_id ?? defaultInstance) === instanceId);
     try {
       const rows = await selectInChunks<SavedName>([...new Set(targets.map(c => c.phone_number))], chunk =>
         supabase.from("whatsapp_conversation_summary").select("phone_number, saved_contact_name")
@@ -19,4 +19,3 @@ export async function enrichSavedContactNames(contacts: ChatContact[], organizat
     }
   }));
 }
-

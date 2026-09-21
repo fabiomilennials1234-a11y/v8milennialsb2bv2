@@ -37,6 +37,7 @@ import { InboxEnrichmentNotice } from "./InboxEnrichmentNotice";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import {
   applyInboxFilters,
+  DEFAULT_INBOX_FILTER,
   type InboxFilterState,
   type InboxFilterContext,
   type InboxTab,
@@ -277,29 +278,18 @@ export function ConversationList({
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
     if (!isMobile) {
-      return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: activeTab });
+      return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: activeTab, includeGroups: abasDeGrupos });
     }
-    const search = searchQuery.toLowerCase();
-    return whatsappContacts.filter((c) => {
-      if (filter.vendor !== "all") {
-        const vendorId = resolveContactVendorId(c);
-        if (filter.vendor === "mine") { if (vendorId !== currentTeamMemberId) return false; }
-        else if (filter.vendor === "unassigned") { if (vendorId) return false; }
-        else if (vendorId !== filter.vendor) return false;
-      }
-      // Grupo só no chip "Grupos", que só existe na org flagada. Nos outros dois
-      // chips a recusa é a de #1632.
-      if (mobileFilter === "grupos") {
-        if (!c.is_group) return false;
-      } else if (c.is_group) {
-        return false;
-      }
-      if (mobileFilter === "unread" && c.unread_count <= 0) return false;
-      if (c.archived_at) return false;
-      const name = contactDisplayName(c).toLowerCase();
-      return c.phone_number.includes(searchQuery) || name.includes(search);
+    return applyInboxFilters(whatsappContacts, {
+      ...DEFAULT_INBOX_FILTER,
+      vendor: filter.vendor,
+      unread: mobileFilter === "unread",
+    }, filterCtx, {
+      searchQuery,
+      tab: mobileFilter === "grupos" ? "grupos" : "active",
+      includeGroups: abasDeGrupos,
     });
-  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
+  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, abasDeGrupos]);
 
   /**
    * A lista final.
@@ -320,12 +310,12 @@ export function ConversationList({
 
   // Contagens reagem ao filtro aplicado (menos a própria tab).
   const activeCount = useMemo(
-    () => (isMobile ? whatsappFiltered.length : applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "active" }).length),
-    [isMobile, whatsappFiltered.length, whatsappContacts, filter, filterCtx, searchQuery],
+    () => (isMobile ? whatsappFiltered.length : applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "active", includeGroups: abasDeGrupos }).length),
+    [isMobile, whatsappFiltered.length, whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos],
   );
   const archivedCount = useMemo(
-    () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived" }).length,
-    [whatsappContacts, filter, filterCtx, searchQuery],
+    () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived", includeGroups: abasDeGrupos }).length,
+    [whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos],
   );
   /**
    * Org sem a flag não paga nem a varredura: a lista dela não tem grupo nenhum e
@@ -338,12 +328,12 @@ export function ConversationList({
    */
   const gruposCount = useMemo(() => {
     if (!abasDeGrupos) return 0;
-    if (isMobile) return whatsappContacts.filter((c) => c.is_group && !c.archived_at).length;
+    if (isMobile) return applyInboxFilters(whatsappContacts, { ...DEFAULT_INBOX_FILTER, vendor: filter.vendor }, filterCtx, { searchQuery, tab: "grupos" }).length;
     return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "grupos" }).length;
   }, [abasDeGrupos, isMobile, whatsappContacts, filter, filterCtx, searchQuery]);
   const unreadCount = useMemo(() => {
     const doWhatsApp = whatsappContacts.filter(
-      (c) => !c.is_group && !c.archived_at && c.unread_count > 0,
+      (c) => (abasDeGrupos || !c.is_group) && !c.archived_at && c.unread_count > 0,
     ).length;
     if (isSocialBox) return socialContacts.filter((c) => c.unread_count > 0).length;
     // No modo unificado o número soma as duas metades: ele conta o que está NA
@@ -351,7 +341,7 @@ export function ConversationList({
     // a seleção, é outro — vive no seletor de caixas.)
     if (!modoUnificado) return doWhatsApp;
     return doWhatsApp + socialContacts.filter((c) => c.unread_count > 0).length;
-  }, [isSocialBox, modoUnificado, socialContacts, whatsappContacts]);
+  }, [isSocialBox, modoUnificado, socialContacts, whatsappContacts, abasDeGrupos]);
 
   // Com o gate fechado o recorte não é confiável — número exibido seria invenção.
   const fmtCount = useCallback(
@@ -504,9 +494,7 @@ export function ConversationList({
             >
               Arquivadas ({fmtCount(archivedCount)})
             </button>
-            {/* Terceira aba, e não um chip no "+ Filtro": grupo não se soma às
-                dimensões, ele TROCA o universo da lista. Nasce só na org com a
-                flag — para as outras o topo continua com duas abas. */}
+            {/* Atalho para filtrar apenas grupos; eles também aparecem em Ativas. */}
             {abasDeGrupos && (
               <button
                 type="button"

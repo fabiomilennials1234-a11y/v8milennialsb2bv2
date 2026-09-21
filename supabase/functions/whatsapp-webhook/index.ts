@@ -564,7 +564,11 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     push_name: data.pushName ?? data.senderName ?? null,
     status: echoStatus(direction, data.status),
     timestamp: new Date(tsSeconds * 1000).toISOString(),
-    raw_payload: data as Record<string, unknown>,
+    // The saved-name trigger reads wa_contactName. On live group messages,
+    // Uazapi sends the subject in groupName; senderName identifies a participant.
+    raw_payload: isGroup && typeof data.groupName === "string" && data.groupName.trim()
+      ? { ...data, wa_contactName: data.groupName.trim() }
+      : data as Record<string, unknown>,
     is_group: isGroup,
     // Autoria (SCRUM-593): quem enviou pela caixa de entrada volta no eco do
     // `track_id`. Robô e envio espelhado do aparelho continuam sem autor.
