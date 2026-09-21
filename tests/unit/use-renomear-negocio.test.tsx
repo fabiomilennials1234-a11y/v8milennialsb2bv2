@@ -12,6 +12,7 @@ function consulta(error: { message: string } | null = null) {
   return {
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    match: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: error ? null : { id: "id" }, error }),
   };
@@ -39,7 +40,7 @@ describe("renomear negócio — escrita independente do lead", () => {
     expect(mocks.from).toHaveBeenCalledTimes(1);
     expect(mocks.from).toHaveBeenCalledWith("deals");
     expect(negocio.update).toHaveBeenCalledWith({ title: "Pedido setembro" });
-    expect(negocio.eq.mock.calls).toEqual([["id", "negocio-1"], ["lead_id", "lead-1"], ["organization_id", "org-1"]]);
+    expect(negocio.match).toHaveBeenCalledWith({ id: "negocio-1", source_lead_id: "lead-1", organization_id: "org-1" });
     expect(negocio.single).toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ["leads-deals"] });
@@ -67,7 +68,7 @@ describe("renomear negócio — escrita independente do lead", () => {
     const { result } = montar({ dealId: null });
     await act(() => result.current.mutateAsync({ nome: "Pedido setembro", alterarLead: false }));
     expect(mocks.rpc).toHaveBeenCalledWith("garantir_negocio_da_entrada", { p_entry_id: "entrada-1" });
-    expect(negocio.eq).toHaveBeenCalledWith("id", "negocio-criado");
+    expect(negocio.match).toHaveBeenCalledWith({ id: "negocio-criado", source_lead_id: "lead-1", organization_id: "org-1" });
     expect(mocks.from).toHaveBeenCalledTimes(1);
   });
 

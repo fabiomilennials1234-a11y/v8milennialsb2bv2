@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
 export function useRenomearNegocio({
   entryId,
@@ -33,11 +34,15 @@ export function useRenomearNegocio({
         if (!id) throw new Error("Negócio indisponível. Atualize a ficha.");
       }
 
+      // Tipar as chaves evita usar `lead_id`: em deals, o vínculo é source_lead_id.
+      const filtros = {
+        id,
+        source_lead_id: leadId,
+        organization_id: organizacaoId,
+      } satisfies Partial<Tables<"deals">>;
       const { error } = await supabase.from("deals")
         .update({ title: titulo })
-        .eq("id", id)
-        .eq("lead_id", leadId)
-        .eq("organization_id", organizacaoId)
+        .match(filtros)
         .select("id")
         .single();
       if (error) throw new Error("Não foi possível salvar o nome do negócio. Tente novamente.");
