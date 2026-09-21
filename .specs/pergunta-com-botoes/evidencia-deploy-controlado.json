@@ -1,0 +1,165 @@
+{
+  "at": "2026-09-21T20:18:09.236Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "commit": "8f732f6b9fbd97dfd06843bbb42c83bac680fb7b",
+  "before": [
+    {
+      "candidate_absent": true,
+      "candidate_versions": 0
+    }
+  ],
+  "applied": [
+    {
+      "version": "20271020000060",
+      "name": "workflow_button_questions"
+    },
+    {
+      "version": "20271020000061",
+      "name": "workflow_question_images"
+    },
+    {
+      "version": "20271020000062",
+      "name": "workflow_button_inbox"
+    },
+    {
+      "version": "20271020000063",
+      "name": "workflow_button_send_recovery"
+    },
+    {
+      "version": "20271020000064",
+      "name": "workflow_button_queue"
+    },
+    {
+      "version": "20271020000065",
+      "name": "workflow_button_activation"
+    },
+    {
+      "version": "20271020000066",
+      "name": "workflow_button_history"
+    },
+    {
+      "version": "20271020000067",
+      "name": "workflow_button_admission_failure"
+    },
+    {
+      "version": "20271020000068",
+      "name": "workflow_button_instance_retention"
+    }
+  ],
+  "flags_changed": false,
+  "functions_deployed": [
+    {
+      "slug": "process-workflow-executions",
+      "version": 163,
+      "status": "ACTIVE",
+      "verify_jwt": false
+    },
+    {
+      "slug": "whatsapp-webhook",
+      "version": 107,
+      "status": "ACTIVE",
+      "verify_jwt": false
+    },
+    {
+      "slug": "workflow-question-image",
+      "version": 1,
+      "status": "ACTIVE",
+      "verify_jwt": false
+    }
+  ],
+  "ci": "not_started_billing_limit",
+  "functions_deployed_at": "2026-09-21T20:18:44.901Z",
+  "grants_after_commit": [
+    {
+      "proname": "accept_workflow_button_question",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "cancel_workflow_button_questions",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "claim_workflow_button_queue",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "claim_workflow_button_send_checks",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "fail_workflow_button_admission",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "fail_workflow_button_question",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "freeze_workflow_button_definition",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "get_workflow_button_history",
+      "anon": false,
+      "authenticated": true,
+      "service_role": false
+    },
+    {
+      "proname": "guard_workflow_button_activation",
+      "anon": false,
+      "authenticated": false,
+      "service_role": false
+    },
+    {
+      "proname": "guard_workflow_button_snapshot",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "prepare_workflow_button_question",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "receive_workflow_button_reply",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "reconcile_workflow_button_questions",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "register_workflow_button_ingress",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "proname": "resolve_workflow_button_question",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    }
+  ],
+  "image_endpoint_unauthenticated_http": 401
+}

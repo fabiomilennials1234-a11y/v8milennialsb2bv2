@@ -1,0 +1,33 @@
+{
+  "tested_at": "2026-09-21T20:09:39.102Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "lifecycle",
+  "transaction": "rollback",
+  "before": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS instance deletion preserves audit and timeout routing"
+    }
+  ],
+  "after": [
+    {
+      "test_users_absent": true,
+      "bucket_absent": true,
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

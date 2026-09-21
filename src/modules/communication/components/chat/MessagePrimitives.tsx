@@ -417,7 +417,7 @@ export function MessageBubble({
             {pix ? <PixMessage pix={pix} /> : usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
             ) : uazapiButtons ? (
-              <UazapiButtonsBubble text={uazapiButtons.text || message.content || ''} options={uazapiButtons.options} />
+              <UazapiButtonsBubble text={uazapiButtons.text || message.content || ''} options={uazapiButtons.options} imageMessageId={uazapiButtons.hasImage ? message.id : undefined} organizationId={isWhatsAppMsg ? (message as WhatsAppMessage).organization_id : undefined} />
             ) : uazapiMenu ? (
               <UazapiMenuBubble menu={uazapiMenu} fallbackText={message.content} />
             ) : isLocation || isContact ? (

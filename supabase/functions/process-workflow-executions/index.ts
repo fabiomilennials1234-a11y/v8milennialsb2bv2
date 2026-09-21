@@ -18,6 +18,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
+import { sendQueuedWorkflowQuestions } from "../_shared/workflow-buttons/runtime.ts";
+import { reconcileWorkflowButtonSends } from "../_shared/workflow-buttons/recovery.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
@@ -112,6 +114,15 @@ Deno.serve(
       }
 
       // ── Mode: default — process pending executions ──
+      // Recover admitted replies even when message persistence/reactions crashed, and
+      // expire only questions whose serialized inbox has no eligible prior receipt.
+      const sendRecovery = await reconcileWorkflowButtonSends(supabase);
+      const reconciliation = await supabase.rpc("reconcile_workflow_button_questions", { p_limit: 20 });
+      if (reconciliation.error) {
+        await logRuntime({ module: "workflow", action: "question_buttons_reconcile_failed", status: "error",
+          errorMessage: reconciliation.error.message });
+      }
+      const queuedQuestions = await sendQueuedWorkflowQuestions(supabase);
       //
       // Carga I/O-bound (medido: 4,88s por execução, ~94% espera). O loop sequencial
       // que existia aqui dava vazão de ~12/min por invocação, e nenhum batch_size
@@ -219,7 +230,9 @@ Deno.serve(
         },
       });
 
-      return new Response(JSON.stringify({ success: true, stats }), { headers });
+      return new Response(JSON.stringify({ success: !reconciliation.error && sendRecovery.errors === 0 && queuedQuestions.errors === 0, stats, sendRecovery, queuedQuestions,
+        ...(reconciliation.error ? { error: "question_buttons_reconcile_failed" } : {}) }),
+        { status: reconciliation.error || sendRecovery.errors > 0 || queuedQuestions.errors > 0 ? 503 : 200, headers });
     } catch (err) {
       console.error("[process-workflow-executions] Unexpected error:", err);
       await logRuntime({
@@ -394,6 +407,7 @@ async function processExecution(
       // e não toca next_run_at). O nó de janela usa isto para saber se o resume
       // está vencido e expirar em vez de enviar fora de contexto.
       nextRunAt: execution.next_run_at as string | null,
+      questionButtonsDefinition: execution.question_buttons_definition as Parameters<typeof executeWorkflow>[0]["questionButtonsDefinition"],
     });
 
     if (result.success) {

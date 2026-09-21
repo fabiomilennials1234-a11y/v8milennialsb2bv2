@@ -1,0 +1,29 @@
+{
+  "environment": "production",
+  "instance": "TorqueSDR",
+  "recipient_suffix": "5289",
+  "track_id": "torque-button-image-test-5fe4661d-fde9-462c-958a-d5eb2d23e0be",
+  "path": "local UazapiProvider -> local UazapiClient -> production Uazapi HTTP",
+  "image_source": "public/landing/TORQUE_Logo_Icone.png",
+  "image_transport": "data:image/png;base64",
+  "send_http_requests": 1,
+  "http_status": 200,
+  "acceptance_status": "Pending",
+  "response_has_internal_id": true,
+  "response_has_whatsapp_id": true,
+  "response_messageTimestamp_unit": "milliseconds",
+  "visual_confirmation": "Usuário respondeu Imagem OK pelo botão e confirmou nesta conversa",
+  "reply": {
+    "choice": "ok",
+    "received_at_database": "2026-09-21T17:39:57.21213Z",
+    "direction": "incoming",
+    "message_type_in_database": "text",
+    "provider_message_type": "TemplateButtonReplyMessage",
+    "has_quoted_reference": true,
+    "buttonOrListid": "torque-button-image-test-5fe4661d-fde9-462c-958a-d5eb2d23e0be:ok"
+  },
+  "whatsapp_client_platform": "not_reported",
+  "workflow_branching_exercised_live": false,
+  "deployment_performed": false,
+  "limitation": "Valida envio e retorno nesta instância/conversa. Não comprova matriz Android/iOS/Web/Desktop nem concorrência do futuro node."
+}

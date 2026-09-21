@@ -6,11 +6,14 @@ const state = vi.hoisted(() => ({
   workflow: { id: "wf-1", name: "Qualificação guiada" } as Record<string, unknown> | null,
   executions: [] as Array<Record<string, unknown>>,
   steps: [] as Array<Record<string, unknown>>,
+  questions: [] as Array<Record<string, unknown>>,
+  historyError: false,
 }));
 
 vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({
   useWorkflow: () => ({ data: state.workflow, isLoading: false }),
   useWorkflowExecutions: () => ({ data: state.executions, isLoading: false }),
+  useWorkflowButtonHistory: () => ({ data: state.questions, isLoading: false, isError: state.historyError }),
   useWorkflowExecutionSteps: () => ({ data: state.steps, isLoading: false }),
   useRetryWorkflowExecution: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -46,6 +49,8 @@ describe("workflow execution history UI", () => {
     state.workflow = { id: "wf-1", name: "Qualificação guiada" };
     state.executions = [];
     state.steps = [];
+    state.questions = [];
+    state.historyError = false;
   });
 
   it("does not render execution data when the workflow belongs to another organization", () => {
@@ -69,6 +74,25 @@ describe("workflow execution history UI", () => {
     fireEvent.click(screen.getByText("v7").closest("tr")!);
     expect(screen.getByRole("status")).toHaveTextContent("Detalhes protegidos");
     expect(screen.queryByRole("button", { name: "Repetir a partir da falha" })).not.toBeInTheDocument();
+  });
+
+  it("mostra fila e verificação esgotada sem sugerir reenvio", () => {
+    state.executions = [{...baseExecution,status:"paused",data_visible:true,lead_name:"José",lead_id:"lead",can_retry:false}];
+    state.questions = [{id:"q1",node_id:"ask",state:"queued",send_check_count:0},{id:"q2",node_id:"ask2",state:"uncertain",send_check_count:12},{id:"q3",node_id:"ask3",state:"resolved",selected_handle:"button:a",selected_label:"Vendas",send_check_count:0}];
+    renderPage();
+    fireEvent.click(screen.getByText("José").closest("tr")!);
+    expect(screen.getByText("Botão escolhido: Vendas")).toBeInTheDocument();
+    expect(screen.getByText("Aguardando vez na conversa")).toBeInTheDocument();
+    expect(screen.getByText("Envio incerto — verificações automáticas esgotadas")).toBeInTheDocument();
+    expect(screen.queryByText("Repetir a partir da falha")).not.toBeInTheDocument();
+  });
+
+  it("esconde resultado em cache quando permissão do histórico foi revogada", () => {
+    state.executions=[{...baseExecution,data_visible:false,can_retry:false}];
+    state.questions=[{id:"q",node_id:"ask",state:"uncertain",send_check_count:12}];
+    state.historyError=true;
+    renderPage(); fireEvent.click(screen.getByText("v7").closest("tr")!);
+    expect(screen.queryByText("Envio incerto — verificações automáticas esgotadas")).not.toBeInTheDocument();
   });
 
   it("renders only the safe result returned for an authorized reader", () => {

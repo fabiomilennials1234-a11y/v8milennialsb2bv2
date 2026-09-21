@@ -28,3 +28,18 @@ describe('Uazapi button display', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 });
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { vi } from 'vitest';
+import { supabase } from '../../src/integrations/supabase/client';
+vi.mock('../../src/integrations/supabase/client', () => ({ supabase: { functions: { invoke: vi.fn() } } }));
+it('chat mostra imagem privada junto ao texto e botões por prévia autenticada', async () => {
+  vi.mocked(supabase.functions.invoke).mockResolvedValue({ data: { previewUrl: 'https://storage.test/signed-image' }, error: null });
+  const display = readUazapiButtons({ uazapi_interactive_display: { type: 'button', text: 'Pergunta com imagem', options: ['Caminho A'], hasImage: true } });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <UazapiButtonsBubble text={display!.text} options={display!.options} imageMessageId={display?.hasImage ? 'message-row' : undefined} organizationId="org" />
+  </QueryClientProvider>);
+  expect((await screen.findByAltText('Imagem da pergunta')).getAttribute('src')).toBe('https://storage.test/signed-image');
+  expect(screen.getByText('Caminho A')).toBeTruthy();
+  expect(supabase.functions.invoke).toHaveBeenCalledWith('workflow-question-image', { body: { action: 'chat_preview', messageId: 'message-row' } });
+});

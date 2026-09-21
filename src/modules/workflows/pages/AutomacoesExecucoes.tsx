@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
+import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useWorkflowButtonHistory, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -328,6 +328,7 @@ function StepsDialog({
   onClose: () => void;
   onRetry: (executionId: string) => void;
 }) {
+  const questions = useWorkflowButtonHistory(executionId ?? undefined);
   const { data: steps, isLoading } = useWorkflowExecutionSteps(dataVisible ? executionId || undefined : undefined);
 
   return (
@@ -350,6 +351,28 @@ function StepsDialog({
           </div>
         </DialogHeader>
 
+        {questions.isError && <p className="text-sm text-muted-foreground">Histórico das perguntas indisponível ou protegido pelas suas permissões.</p>}
+        {!questions.isError && questions.data?.map(question => (
+          <div key={question.id} className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
+            <p className="font-medium">Pergunta com botões</p>
+            <p className="mt-1 text-muted-foreground">{
+              question.state === "queued" ? "Aguardando vez na conversa" :
+              question.state === "sending" ? "Envio em andamento" :
+              question.state === "waiting" ? "Aguardando resposta" :
+              question.state === "uncertain" ? (question.send_check_count >= 12 ? "Envio incerto — verificações automáticas esgotadas" : "Verificando resultado do envio") :
+              question.state === "cancelled" ? "Pergunta cancelada" :
+              question.selected_handle === "send_failure" ? "Falha no envio" :
+              question.selected_handle === "timeout" ? "Sem resposta" :
+              question.selected_handle === "other_response" ? "Outra resposta recebida" : question.selected_label ? `Botão escolhido: ${question.selected_label}` : "Botão escolhido"
+            }</p>
+            {question.failure_reason && <p className="mt-2 text-xs text-muted-foreground">{
+              question.failure_reason === "provider_rejected" ? "O provedor recusou o envio." :
+              question.failure_reason === "image_unavailable" ? "A imagem não estava disponível para envio." : "Não foi possível preparar o envio nesta instância."
+            }</p>}
+            {question.state === "uncertain" && <p className="mt-2 text-xs text-muted-foreground">A conversa permanece reservada. Nenhum reenvio automático será feito.</p>}
+            {question.deadline_at && question.state === "waiting" && <p className="mt-2 text-xs text-muted-foreground">Prazo: {format(new Date(question.deadline_at), "dd/MM HH:mm", {locale:ptBR})}</p>}
+          </div>
+        ))}
         {!dataVisible ? (
           <div role="status" className="rounded-lg border border-border bg-muted/40 p-5 text-sm text-muted-foreground">
             <div className="mb-2 flex items-center gap-2 font-medium text-foreground">

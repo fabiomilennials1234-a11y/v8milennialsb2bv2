@@ -1,0 +1,25 @@
+{
+  "tested_at": "2026-09-21T18:41:54.274Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "images",
+  "transaction": "rollback",
+  "before": [
+    {
+      "bucket_absent": true,
+      "policy_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "private_images_api_only_rollback_ok"
+    }
+  ],
+  "after": [
+    {
+      "bucket_absent": true,
+      "policy_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "tested_at": "2026-09-21T19:08:56.194Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "results": [
+    {
+      "firstKind": "button",
+      "distinct_sessions": 3,
+      "check": {
+        "selected_handle": "button:a",
+        "current_node_id": "a",
+        "steps": 1,
+        "first_before_deadline": true,
+        "resolved_after_deadline": true
+      }
+    },
+    {
+      "queue_fifo": true,
+      "concurrent_claims": [
+        1,
+        0
+      ],
+      "distinct_sessions": 2
+    },
+    {
+      "firstKind": "other",
+      "distinct_sessions": 3,
+      "check": {
+        "selected_handle": "other_response",
+        "current_node_id": "other",
+        "steps": 1,
+        "first_before_deadline": true,
+        "resolved_after_deadline": true
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "schema_absent": true
+    }
+  ],
+  "limitations": "Empty LIKE clones omit existing dependency triggers and foreign keys; candidate migrations and candidate locks unchanged except namespace. No real workflow, send or activation."
+}

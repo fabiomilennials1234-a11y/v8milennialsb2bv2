@@ -97,6 +97,7 @@ export type UazapiSendMenuInput = {
   type: "button" | "list" | "poll" | "carousel";
   text: string;
   footer?: string;
+  imageButton?: string;
   listButton?: string;
   /** Button/list/poll choices */
   choices?: string[];

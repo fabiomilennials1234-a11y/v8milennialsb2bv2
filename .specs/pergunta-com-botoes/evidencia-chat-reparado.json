@@ -1,0 +1,28 @@
+{
+  "at": "2026-09-21T20:38:16.460Z",
+  "migration": "20271020000069",
+  "repaired_without_resend": true,
+  "chat_rows": [
+    {
+      "id": "812b25d5-6126-4cd0-81c7-c205cf201837",
+      "message_type": "button",
+      "sent_source": "workflow",
+      "timestamp": "2026-09-21 20:24:05.971+00",
+      "display": {
+        "text": "Teste integrado Torque: imagem privada + caminhos da automação. Toque em A para validar o caminho A.",
+        "type": "button",
+        "options": [
+          "Opção A",
+          "Opção B",
+          "Opção C"
+        ],
+        "hasImage": true
+      }
+    }
+  ],
+  "image_endpoint": {
+    "version": 3,
+    "status": "ACTIVE"
+  },
+  "frontend_published": false
+}

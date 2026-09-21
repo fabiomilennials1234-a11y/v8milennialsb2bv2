@@ -10,6 +10,7 @@ import { GuidedConditionPanel } from "./sidebar-panels/GuidedConditionPanel";
 import { WorkflowDataGrantPanel } from "./sidebar-panels/WorkflowDataGrantPanel";
 import { DelayPanel } from "./sidebar-panels/DelayPanel";
 import { CopilotPanel } from "./sidebar-panels/CopilotPanel";
+import { QuestionButtonsPanel } from "./sidebar-panels/QuestionButtonsPanel";
 import { WaitResponsePanel } from "./sidebar-panels/WaitResponsePanel";
 import { SplitAbPanel } from "./sidebar-panels/SplitAbPanel";
 import { WebhookCallPanel } from "./sidebar-panels/WebhookCallPanel";
@@ -20,7 +21,7 @@ import { CodeJsonPanel } from "./sidebar-panels/CodeJsonPanel";
 import { CodeJavascriptPanel } from "./sidebar-panels/CodeJavascriptPanel";
 import { CodeHttpsPanel } from "./sidebar-panels/CodeHttpsPanel";
 import { NODE_LABELS } from "@/types/workflow";
-import type { WorkflowNode, WorkflowNodeData, ConditionNodeData } from "@/types/workflow";
+import type { WorkflowNode, WorkflowNodeData, QuestionButtonsNodeData, ConditionNodeData } from "@/types/workflow";
 
 /**
  * Fields that reference org-specific resources.
@@ -136,6 +137,8 @@ export function WorkflowSidebar({
         return <DelayPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "copilot":
         return <CopilotPanel data={nodeData as any} onUpdate={handleUpdate} />;
+      case "question_buttons":
+        return <QuestionButtonsPanel key={selectedNode.id} workflowId={workflowId} data={nodeData as QuestionButtonsNodeData} onUpdate={handleUpdate} />;
       case "wait_response":
         return <WaitResponsePanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "split_ab":

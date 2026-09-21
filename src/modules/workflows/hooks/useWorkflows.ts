@@ -284,3 +284,29 @@ export function useWorkflowStats(workflowId: string | undefined) {
     enabled: !!workflowId && !!organizationId,
   });
 }
+
+
+export interface WorkflowButtonHistoryItem {
+  id: string;
+  node_id: string;
+  state: "queued" | "sending" | "waiting" | "uncertain" | "resolved" | "cancelled";
+  selected_handle: string | null;
+  selected_label: string | null;
+  failure_reason: string | null;
+  send_check_count: number;
+  deadline_at: string | null;
+}
+
+export function useWorkflowButtonHistory(executionId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+  return useQuery({
+    queryKey: ["workflow-button-history", organizationId, executionId],
+    enabled: isReady && !!organizationId && !!executionId,
+    queryFn: async (): Promise<WorkflowButtonHistoryItem[]> => {
+      const { data, error } = await supabase.rpc("get_workflow_button_history" as never, { p_execution_id: executionId } as never);
+      if (error) throw error;
+      return (data ?? []) as unknown as WorkflowButtonHistoryItem[];
+    },
+    refetchInterval: query => query.state.data?.some(item => !["resolved", "cancelled"].includes(item.state)) ? 5000 : false,
+  });
+}

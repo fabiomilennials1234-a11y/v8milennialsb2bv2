@@ -145,6 +145,7 @@ export interface NormalizedMessage {
 }
 
 export interface PersistedMessage {
+  button_reply_recognized?: boolean;
   row_id: string;
   organization_id: string;
   instance_id: string;
@@ -597,7 +598,7 @@ export async function triggerReactions(
   if (context.isGroup) return;
 
   // 1. Resolve waiting workflow executions (fire-and-forget)
-  if (context.shouldResolveWaitResponse) {
+  if (context.shouldResolveWaitResponse && !persisted.button_reply_recognized) {
     supabase
       .rpc("resolve_wait_response_by_phone", {
         p_phone: persisted.phone_number,
@@ -1012,6 +1013,17 @@ export async function persistMessage(
     .eq("instance_id", normalized.instance_id).maybeSingle();
   if (!stored?.id) return null;
 
+  let buttonReplyRecognized = false;
+  // Resolve only through the earlier durable admission. Text/media and structured
+  // selections share arbitration; receipts without an admission cannot invent one.
+  if (normalized.direction === "incoming" && !normalized.is_group) {
+    const received = await supabase.rpc("receive_workflow_button_reply", {
+      p_message_row_id: stored.id, p_organization_id: normalized.organization_id,
+    });
+    if (received.error) throw new Error("question_button_reply_persistence_failed");
+    buttonReplyRecognized = received.data?.recognized === true;
+  }
+
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
   // Ver shouldPersistMedia — grupo não desce mídia.
   if (shouldPersistMedia(normalized)) {
@@ -1042,6 +1054,7 @@ export async function persistMessage(
 
   return {
     row_id: stored.id,
+    button_reply_recognized: buttonReplyRecognized,
     organization_id: normalized.organization_id,
     instance_id: normalized.instance_id,
     message_id: normalized.message_id!,
@@ -1085,6 +1098,13 @@ async function handleMessagesEvent(
     }
     throw new Error("Reaction update contention");
   }
+  // Authoritative receipt is committed before normalization/persistence/media work.
+  // SQL serializes admission with timeout using the same execution/question locks.
+  const admission = await supabase.rpc("register_workflow_button_ingress", {
+    p_organization_id: instance.organization_id, p_instance_id: instance.id,
+    p_payload: data, p_source: receivedVia,
+  });
+  if (admission.error) throw new Error("question_buttons_ingress_unavailable");
   const normalized = normalizeMessage(data, instance) as NormalizedMessage;
   normalized.received_via = receivedVia;
 
@@ -1707,6 +1727,9 @@ Deno.serve(
           error: (e as Error).message,
         },
       });
+      if ((e as Error).message === "question_buttons_ingress_unavailable") {
+        return genericResponse(503, { error: "question_buttons_ingress_unavailable" });
+      }
       return genericResponse(500, { error: "internal" });
     }
   })

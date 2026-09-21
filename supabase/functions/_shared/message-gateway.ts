@@ -70,6 +70,7 @@ export interface GatewaySendRequest {
     choices: string[];
     footer?: string;
     listButtonLabel?: string;
+    imageButton?: string;
     selectableCount?: number;
   };
   pix_payload?: {
@@ -91,6 +92,8 @@ export interface GatewaySendResult {
   delegated: boolean;
   message_id?: string;
   provider_message_id?: string;
+  /** Original WhatsApp ID for quoted replies; legacy IDs keep their meaning. */
+  whatsapp_message_id?: string;
   parts_sent?: number;
   error?: string;
   error_code?: string;
@@ -292,7 +295,7 @@ async function dispatchToProvider(
   instance: WhatsAppInstance,
   normalizedPhone: string,
   req: GatewaySendRequest,
-): Promise<{ success: boolean; messageId?: string; error?: string; status?: "queued" | "sent" | "failed" }> {
+): Promise<{ success: boolean; messageId?: string; whatsappMessageId?: string; error?: string; status?: "queued" | "sent" | "failed" }> {
   switch (req.message_type) {
     case "text":
       return sendTextViaInstance(supabase, instance, normalizedPhone, req.content ?? "", {
@@ -316,6 +319,7 @@ async function dispatchToProvider(
         choices: req.menu_options.choices,
         footer: req.menu_options.footer,
         listButtonLabel: req.menu_options.listButtonLabel,
+        imageButton: req.menu_options.imageButton,
         selectableCount: req.menu_options.selectableCount,
       }, {
         trackSource: req.source,
@@ -512,6 +516,7 @@ export async function sendMessage(
       message_id: messageId,
       provider_message_id: sendResult.messageId,
       error: `Message sent but persist failed: ${persistResult}`,
+      whatsapp_message_id: sendResult.whatsappMessageId,
       error_code: "persist_failed",
       duration_ms: Date.now() - startMs,
     };
@@ -543,6 +548,7 @@ export async function sendMessage(
     message_id: messageId,
     provider_message_id: sendResult.messageId,
     parts_sent: 1,
+    whatsapp_message_id: sendResult.whatsappMessageId,
     duration_ms: Date.now() - startMs,
   };
 

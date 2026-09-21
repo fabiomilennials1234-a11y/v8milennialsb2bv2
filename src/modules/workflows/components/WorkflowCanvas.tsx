@@ -21,6 +21,7 @@ import { ConditionNode } from "./nodes/ConditionNode";
 import { DelayNode } from "./nodes/DelayNode";
 import { CopilotNode } from "./nodes/CopilotNode";
 import { EndNode } from "./nodes/EndNode";
+import { QuestionButtonsNode } from "./nodes/QuestionButtonsNode";
 import { WaitResponseNode } from "./nodes/WaitResponseNode";
 import { SplitAbNode } from "./nodes/SplitAbNode";
 import { WebhookCallNode } from "./nodes/WebhookCallNode";
@@ -41,6 +42,7 @@ const nodeTypes: NodeTypes = {
   delay: DelayNode,
   copilot: CopilotNode,
   end: EndNode,
+  question_buttons: QuestionButtonsNode,
   wait_response: WaitResponseNode,
   split_ab: SplitAbNode,
   webhook_call: WebhookCallNode,

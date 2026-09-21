@@ -1,0 +1,29 @@
+{
+  "tested_at": "2026-09-21T19:06:54.489Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "suite": "inbox",
+  "transaction": "rollback",
+  "before": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ],
+  "result": [
+    {
+      "result": "PASS ingress ordering, replay, media, timeout, restart recovery and isolation; concurrency not proven"
+    }
+  ],
+  "after": [
+    {
+      "table_absent": true,
+      "replies_absent": true,
+      "ingress_absent": true,
+      "column_absent": true,
+      "fixtures_absent": true
+    }
+  ]
+}

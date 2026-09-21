@@ -1,0 +1,111 @@
+{
+  "state": "published",
+  "approved": true,
+  "tracker": "github",
+  "repository": "fabiomilennials1234-a11y/v8milennialsb2bv2",
+  "spec": {
+    "title": "PRD: Pergunta com botões no WhatsApp",
+    "file": "prd.md",
+    "labels": [
+      "prd",
+      "ready-for-agent"
+    ],
+    "issue_number": 2141,
+    "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2141"
+  },
+  "ticket_labels": [
+    "Feature",
+    "ready-for-agent"
+  ],
+  "tickets": [
+    {
+      "id": "01",
+      "file": "tickets/01-comprovar-envio-e-resposta-uazapi.md",
+      "blocked_by": [],
+      "issue_number": 2142,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2142",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "02",
+      "file": "tickets/02-pergunta-simples-com-escolha-unica.md",
+      "blocked_by": [
+        "01"
+      ],
+      "issue_number": 2143,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2143",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "03",
+      "file": "tickets/03-configurar-tres-botoes-e-saidas.md",
+      "blocked_by": [
+        "02"
+      ],
+      "issue_number": 2144,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2144",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "04",
+      "file": "tickets/04-outra-resposta-e-vencimento.md",
+      "blocked_by": [
+        "03"
+      ],
+      "issue_number": 2145,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2145",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "05",
+      "file": "tickets/05-imagem-fixa-no-node.md",
+      "blocked_by": [
+        "03"
+      ],
+      "issue_number": 2146,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2146",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "06",
+      "file": "tickets/06-falha-e-envio-incerto.md",
+      "blocked_by": [
+        "04"
+      ],
+      "issue_number": 2147,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2147",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "07",
+      "file": "tickets/07-fila-limitada-ao-node.md",
+      "blocked_by": [
+        "06"
+      ],
+      "issue_number": 2148,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2148",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "08",
+      "file": "tickets/08-portabilidade-e-edicao-segura.md",
+      "blocked_by": [
+        "05"
+      ],
+      "issue_number": 2149,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2149",
+      "native_dependencies_published": true
+    },
+    {
+      "id": "09",
+      "file": "tickets/09-validar-jornada-completa.md",
+      "blocked_by": [
+        "07",
+        "08"
+      ],
+      "issue_number": 2150,
+      "url": "https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2150",
+      "native_dependencies_published": true
+    }
+  ]
+}
