@@ -186,3 +186,9 @@ Backend (próximas slices):
 - Runbook cron+webhooks: `Obsidian/.../06 — Features/Infra/Runbook — Cron e Webhooks.md`
 - Event-bus piloto: `Obsidian/.../10 — Remodelagem/02-solucao/event-bus.md`
 - Slice de referência: slice 7 copilot (commit cf8c2163)
+
+## Reinscrição sem limites
+
+Quando re_enrollment_enabled=true, novas participações não têm máximo histórico nem intervalo de dias. Desativado, permite apenas a primeira participação do negócio. As colunas re_enrollment_max_times e re_enrollment_cooldown_days permanecem por compatibilidade e rollback, mas não limitam o guard. A UI oferece somente o toggle.
+
+O guard continua serializando a admissão por organização/workflow/lead e bloqueia nova inscrição enquanto há execução running, processing, waiting_response ou paused para o mesmo sujeito. Deduplicação e limites de encadeamento continuam vigentes. Salvar rascunho não publica configurações; essa mudança não ativa workflows nem reinscreve históricos automaticamente.
