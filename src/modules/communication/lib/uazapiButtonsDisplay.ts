@@ -12,7 +12,7 @@ export function readUazapiButtons(fields: UazapiButtonsFields) {
   const display = object(fields.uazapi_interactive_display ?? raw.torqueInteractive);
   if (display.type === 'button' && Array.isArray(display.options)) {
     const options = display.options.slice(0, 10).map(value => text(value, 256)).filter(Boolean);
-    if (options.length) return { text: text(display.text), options };
+    if (options.length) return { text: text(display.text), options, ...(display.hasImage === true ? { hasImage: true } : {}) };
   }
   const content = object(raw.content);
   const native = object(object(content.InteractiveMessage).NativeFlowMessage);

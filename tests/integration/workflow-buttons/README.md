@@ -41,3 +41,7 @@ Limit: `LIKE` does not copy existing dependency triggers or foreign keys. Candid
 
 Additional suites: `activation`, `history`, `admission`, `lifecycle`, `release`.
 `release` applies all candidate migrations 60–68 together and runs activation, history authorization, pre-reservation failure and instance deletion contracts in one rolled-back transaction. `history` creates a synthetic auth user inside the same transaction; independent cleanup also verifies that user is absent. The final SQL result only reports the last fixture; any earlier failed assertion aborts the request.
+
+## Chat projection regression
+
+`node tests/integration/workflow-buttons/run-chat-rollback.mjs` exercises acceptance-to-chat persistence against an authorized target that already has migrations 60–68. If migration 69 is absent it is applied only inside the rolled-back transaction; if present the installed trigger is exercised. The fixture verifies original timestamp, labels, sender attribution, idempotency and preservation of read receipts. Independent cleanup confirms synthetic organizations and candidate deployment state are unchanged.

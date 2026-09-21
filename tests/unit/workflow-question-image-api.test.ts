@@ -7,7 +7,7 @@ const workflowId = "22222222-2222-4222-8222-222222222222";
 const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6ZmcAAAAASUVORK5CYII=", "base64"));
 afterEach(() => vi.unstubAllGlobals());
 
-function storageApi(options: { allowed?: boolean; enabled?: boolean; visible?: boolean } = {}) {
+function storageApi(options: { allowed?: boolean; enabled?: boolean; visible?: boolean; incoming?: boolean } = {}) {
   const requests: Array<{ path: string; method: string; headers: Headers }> = [];
   const env: Record<string, string> = { SUPABASE_URL: "https://db.test", SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service" };
   vi.stubGlobal("Deno", { env: { get: (key: string) => env[key] } });
@@ -18,6 +18,8 @@ function storageApi(options: { allowed?: boolean; enabled?: boolean; visible?: b
     if (path.startsWith("/storage/v1/object/")) return Response.json({ Key: path.replace("/storage/v1/object/", "") });
     const data: Record<string, unknown> = {
       "/auth/v1/user": { id: "user", aud: "authenticated", app_metadata: {}, user_metadata: {} },
+      "/rest/v1/whatsapp_messages": options.visible === false ? null : { id: workflowId, organization_id: org, instance_id: "instance", lead_id: "lead", direction: options.incoming ? "incoming" : "outgoing", raw_payload: { workflowQuestionId: workflowId } },
+      "/rest/v1/workflow_button_questions": { content: { image: { bucket: "workflow-question-images", path: `${org}/33333333-3333-4333-8333-333333333333.png`, mimeType: "image/png", sizeBytes: 68 } } },
       "/rest/v1/workflows": options.visible === false ? null : { id: workflowId, organization_id: org },
       "/rest/v1/master_users": null,
       "/rest/v1/team_members": { id: "member", organization_id: org, role: "admin" },
@@ -89,4 +91,34 @@ describe("Upload privado de imagem da pergunta", () => {
     expect(write?.headers.get("x-upsert")).toBe("false");
     expect(requests.find(item => item.path === "/rest/v1/workflows")?.headers.get("authorization")).toBe("Bearer caller");
   });
+});
+
+
+it("prévia do chat autoriza pela mensagem visível mesmo com gate desligado", async () => {
+  storageApi({ enabled: false, allowed: false });
+  const response = await handleWorkflowQuestionImage(new Request("https://edge.test/workflow-question-image", {
+    method: "POST", headers: { Authorization: "Bearer caller", "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "chat_preview", messageId: workflowId }),
+  }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toHaveProperty("previewUrl");
+});
+it("prévia do chat nega mensagem fora do acesso sem assinar imagem", async () => {
+  const calls = storageApi({ visible: false });
+  const response = await handleWorkflowQuestionImage(new Request("https://edge.test/workflow-question-image", {
+    method: "POST", headers: { Authorization: "Bearer caller", "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "chat_preview", messageId: workflowId }),
+  }));
+  expect(response.status).toBe(403);
+  expect(calls.some(c => c.path.startsWith("/storage/"))).toBe(false);
+});
+
+it("prévia não aceita referência de pergunta em mensagem recebida", async () => {
+  const calls = storageApi({ incoming: true });
+  const response = await handleWorkflowQuestionImage(new Request("https://edge.test/workflow-question-image", {
+    method: "POST", headers: { Authorization: "Bearer caller", "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "chat_preview", messageId: workflowId }),
+  }));
+  expect(response.status).toBe(403);
+  expect(calls.some(c => c.path.startsWith("/storage/"))).toBe(false);
 });

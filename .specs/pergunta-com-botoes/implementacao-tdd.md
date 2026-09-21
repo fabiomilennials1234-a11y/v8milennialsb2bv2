@@ -104,3 +104,17 @@ Worker aceitou a mensagem em `2026-09-21T20:24:05.971Z`; ocorrência `waiting`, 
 PR draft #2153. GitHub Actions não iniciou jobs por cobrança/limite de gastos da conta; nenhum teste CI chegou a executar. Validações locais descritas acima permanecem a evidência de código. Sem merge e sem conclusão do ticket 09.
 
 Evidências correntes: `evidencia-deploy-controlado.json` e `evidencia-piloto-integrado.json`. Após confirmar resultado, desativar o workflow exclusivo de teste e preservar evidência sanitizada; imagem deve permanecer enquanto houver referência no snapshot.
+
+## Correção: envio ausente no chat — 2026-09-21
+
+CTO comprovou em capturas: mensagem de 17:24 com imagem/botões no WhatsApp Web, ausente no Torque. Consulta confirmou zero `whatsapp_messages` para a ocorrência aceita. Causa: runtime enviava e aceitava a pergunta sem persistir a projeção usada pelo chat; eco do provedor não chegou para cobrir essa ausência.
+
+Migration 69 adiciona projeção transacional no aceite. Texto/rótulos vêm do snapshot, timestamp é o aceite original, `sent_source=workflow`; ID usa contrato composto do webhook, preservando eco existente e status de leitura. Erro de escrita aborta aceite e permite reconciliação sem reenvio. Referência da imagem fica privada, sem URL assinada duradoura em banco.
+
+Contrato SQL red→green verificado em produção com rollback, antes e depois do apply. Migration 69 registrada no ledger; ocorrência piloto reparada disparando projeção do aceite existente, sem nova requisição de envio. Exatamente uma mensagem recuperada, horário 17:24:05.971. Evidências: `evidencia-chat-rollback.json`, `evidencia-chat-reparado.json`.
+
+Segundo gap: componente visual dos botões não renderizava imagem. Frontend corrigido com prévia autenticada renovável; endpoint assina por cinco minutos somente após leitura autorizada da mensagem e correspondência organização/instância/lead da ocorrência. Rejeita referência em mensagem recebida; não exige flag ligada para ler envio já existente. A imagem permanece privada.
+
+Validação: 40 testes em sete arquivos antes do reforço de direção/lead; depois, 16 testes de API/bolha passaram, incluindo caso negativo adicional. Build, Deno check, lint e typecheck ratchets sem erro novo. Mensagem recuperada no banco do chat; conferência visual no navegador não concluída porque ferramenta recusou ações enquanto usuário alterava a janela. Não alegar observação da tela corrigida.
+
+Estado de publicação: migration 69 e endpoint de prévia publicados; texto e botões são compatíveis com frontend atual. **Renderização da imagem no chat ainda depende de publicar frontend do PR #2153.** Não houve merge/deploy do frontend. CI continua bloqueado por cobrança/limite da conta; PR segue draft.

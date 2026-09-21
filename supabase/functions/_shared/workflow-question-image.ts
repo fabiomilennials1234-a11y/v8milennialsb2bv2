@@ -3,7 +3,7 @@ import { requireAuth, AuthError } from "./user-auth.ts";
 import { createAdminClient } from "./supabase-admin.ts";
 import { getCorsHeaders } from "./cors.ts";
 import { withSecurityHeaders } from "./security-headers.ts";
-import { QUESTION_IMAGE_BUCKET, QUESTION_IMAGE_MAX_BYTES, inspectQuestionImage, isQuestionImagePath, type QuestionImageAsset } from "../../../src/contracts/workflows/question-image.ts";
+import { QUESTION_IMAGE_BUCKET, QUESTION_IMAGE_MAX_BYTES, inspectQuestionImage, isQuestionImagePath, isQuestionImageAsset, type QuestionImageAsset } from "../../../src/contracts/workflows/question-image.ts";
 
 async function boundedBody(req: Request): Promise<Blob> {
   const maximum = QUESTION_IMAGE_MAX_BYTES + 64 * 1024;
@@ -35,6 +35,29 @@ export async function handleWorkflowQuestionImage(req: Request): Promise<Respons
     const isPreview = req.headers.get("content-type")?.startsWith("application/json");
     const previewRequest = isPreview ? await body.json() : null;
     const form = isPreview ? null : await body.formData();
+    if (previewRequest?.action === "chat_preview") {
+      if (typeof previewRequest.messageId !== "string" || !/^[a-f0-9-]{36}$/i.test(previewRequest.messageId)) return json({ error: "Mensagem inválida." }, 400);
+      const reader = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: req.headers.get("authorization")! } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      // Same message/lead/inbox RLS as the chat. No workflow edit privilege or
+      // rollout flag is required to read an already-sent message.
+      const message = await reader.from("whatsapp_messages").select("organization_id,instance_id,lead_id,direction,raw_payload").eq("id", previewRequest.messageId).maybeSingle();
+      if (message.error || !message.data?.organization_id || message.data.direction !== "outgoing" || !message.data.lead_id) return json({ error: "Mensagem indisponível para seu acesso." }, 403);
+      const organizationId = message.data.organization_id;
+      await requireAuth(req, { organizationId, requireOrganization: true });
+      const questionId = message.data.raw_payload?.workflowQuestionId;
+      if (typeof questionId !== "string" || !/^[a-f0-9-]{36}$/i.test(questionId)) return json({ error: "Imagem indisponível." }, 404);
+      const admin = createAdminClient("workflow-question-image");
+      const question = await admin.from("workflow_button_questions").select("content")
+        .eq("id", questionId).eq("organization_id", organizationId).eq("instance_id", message.data.instance_id).eq("lead_id", message.data.lead_id).maybeSingle();
+      const asset = question.data?.content?.image;
+      if (question.error || !isQuestionImageAsset(asset, organizationId)) return json({ error: "Imagem indisponível." }, 404);
+      const preview = await admin.storage.from(QUESTION_IMAGE_BUCKET).createSignedUrl(asset.path, 300);
+      if (preview.error || !preview.data?.signedUrl) return json({ error: "Imagem indisponível." }, 404);
+      return json({ previewUrl: preview.data.signedUrl });
+    }
     const workflowId = isPreview ? previewRequest?.workflowId : form?.get("workflowId");
     if (typeof workflowId !== "string" || !/^[a-f0-9-]{36}$/i.test(workflowId)) return json({ error: "Salve o rascunho antes de adicionar uma imagem." }, 400);
     const caller = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
