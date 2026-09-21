@@ -1,16 +1,21 @@
 import { z } from "zod";
 
+const approvedTotalSchema = z.number().finite().positive().max(9999999999.99)
+  .refine((value) => Math.round(value * 100) / 100 === value);
 const operationSchema = z.object({
   id: z.string().trim().min(1),
   draft_revision: z.number().int().positive(),
   delivery_state: z.enum(["queued", "sending", "awaiting_confirmation", "received", "failed", "blocked", "unknown"]).catch("unknown"),
   commercial_state: z.enum(["pending", "approved", "rejected", "unknown"]).catch("unknown"),
   reconciliation_state: z.enum(["not_due", "pending", "complete", "blocked", "unknown"]).catch("unknown"),
-  external_id: z.string().trim().min(1).nullable(),
-  approved_total: z.number().finite().nonnegative().nullable(),
+  external_id: z.string().min(1).refine((value) => !value.startsWith(" ") && !value.endsWith(" ")
+    && Array.from(value).length <= 128 && !/\p{Cc}/u.test(value)).nullable(),
+  approved_total: approvedTotalSchema.nullable(),
   updated_at: z.string().datetime({ offset: true }),
   last_error_code: z.string().nullable(),
-});
+}).refine((operation) => operation.commercial_state !== "approved"
+  || (operation.external_id !== null && operation.approved_total !== null
+    && ["pending", "complete", "blocked"].includes(operation.reconciliation_state)));
 
 const workspaceSchema = z.object({
   can_send: z.boolean(),
@@ -36,6 +41,12 @@ export interface TothPreorderStatus {
   destructive: boolean;
 }
 
+const commercialConflictCodes = new Set([
+  "toth_approved_order_changed", "toth_rejected_order_changed", "toth_unknown_commercial_status",
+  "toth_observation_version_conflict", "toth_external_identity_changed", "external_identity_changed",
+  "toth_external_identity_owned", "toth_existing_erp_order_conflict",
+]);
+
 /** Receipt, business approval and local bookkeeping are separate facts. */
 export function getTothPreorderStatus(operation: TothPreorderOperation): TothPreorderStatus {
   const base = { approvalConfirmed: false, destructive: false };
@@ -54,7 +65,19 @@ export function getTothPreorderStatus(operation: TothPreorderOperation): TothPre
       return { ...base, label: "Situação não confirmada", description: "Não há confirmação suficiente para informar o resultado desta operação." };
   }
 
+  // SQL preserves the previous commercial facts when a later observation
+  // conflicts. They remain useful for audit, but are no longer current status.
+  if (operation.reconciliation_state === "blocked" && commercialConflictCodes.has(operation.last_error_code ?? "")) {
+    return { ...base, destructive: true, label: "Conferência necessária",
+      description: "Uma divergência impede confirmar a situação atual no ERP. Solicite a conferência de um administrador.",
+      localNotice: "A operação permanece bloqueada. Não reenvie o pré-pedido." };
+  }
+
   if (operation.commercial_state === "approved") {
+    if (!operation.external_id || !approvedTotalSchema.safeParse(operation.approved_total).success
+      || !["pending", "complete", "blocked"].includes(operation.reconciliation_state)) {
+      return { ...base, label: "Situação não confirmada", description: "Os dados recebidos não confirmam a aprovação deste pré-pedido." };
+    }
     const localComplete = operation.reconciliation_state === "complete";
     return {
       ...base,

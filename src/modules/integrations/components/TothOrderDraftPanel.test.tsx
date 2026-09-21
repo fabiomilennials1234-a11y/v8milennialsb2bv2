@@ -185,6 +185,62 @@ describe("TothOrderDraftPanel — preparação local segura", () => {
     expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled();
   });
 
+  it("oculta rascunho, histórico e permissões quando o acesso é revogado", async () => {
+    show();
+    fireEvent.change(await notes(), { target: { value: "Anotação restrita" } });
+    rpc.mockResolvedValue({ data: null, error: { code: "42501", message: "toth_access_denied" } });
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ["toth-order-workspace", "org-1", "admin-1", "deal-1"] }); });
+    expect(screen.queryByRole("textbox", { name: "Observações do rascunho" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Quem pode preparar rascunhos")).not.toBeInTheDocument();
+    expect(screen.getByText("Você não tem permissão para realizar esta ação.")).toBeInTheDocument();
+  });
+
+  it("não apresenta cache da sessão enquanto a identidade ainda não está pronta", async () => {
+    const view = show();
+    await notes();
+    session.isReady = false;
+    view.rerender(<QueryClientProvider client={queryClient}><TothOrderDraftPanel dealId="deal-1" /></QueryClientProvider>);
+    expect(view.container).toBeEmptyDOMElement();
+  });
+
+  it("preserva códigos literais do SQL e notas Unicode válidas ao carregar e salvar", async () => {
+    const code = "\u00a0" + "😀".repeat(126) + "\u00a0";
+    const savedNotes = "😀".repeat(600);
+    server.catalog = [{ product_external_id: code, description: "Café" }];
+    server.draft = { ...server.draft!, items: [{ product_external_id: code, quantity: 2 }], notes: savedNotes };
+    show();
+    expect(await notes()).toHaveValue(savedNotes);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Quantidade 1" }), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledWith("toth_save_order_draft", {
+      p_deal_id: "deal-1", p_expected_revision: 1, p_items: [{ product_external_id: code, quantity: 3 }], p_notes: savedNotes,
+    }));
+  });
+
+  it("não reutiliza a lista de preparadores quando essa leitura perde acesso", async () => {
+    show();
+    await notes();
+    fireEvent.click(screen.getByText("Quem pode preparar rascunhos"));
+    await screen.findByRole("switch", { name: "Vendedora" });
+    const original = rpc.getMockImplementation()!;
+    rpc.mockImplementation((name: string, args: Record<string, unknown>) => name === "toth_order_preparer_access"
+      ? { data: null, error: { code: "42501", message: "toth_access_denied" } } : original(name, args));
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ["toth-order-preparers", "org-1", "admin-1", "deal-1"] }); });
+    await waitFor(() => expect(screen.queryByRole("switch", { name: "Vendedora" })).not.toBeInTheDocument());
+    expect(await notes()).toHaveValue("Observação salva");
+  });
+
+  it.each([
+    { can_prepare: "true" }, { can_review: "false" }, { catalog: null },
+    { draft: { ...workspace().draft!, deal_id: "outro-negocio" } },
+  ])("recusa resposta malformada sem habilitar preparação ou revisão: %j", async (change) => {
+    rpc.mockResolvedValue({ data: { ...workspace(), ...change }, error: null });
+    show();
+    expect(await screen.findByText("O servidor retornou dados inválidos para o rascunho. Atualize os dados antes de continuar.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Observações do rascunho" })).not.toBeInTheDocument();
+    expect(mutationCalls("toth_order_preparer_access")).toHaveLength(0);
+  });
+
   it("mantém envio desabilitado mesmo revisado e sem bloqueios retornados pelo servidor", async () => {
     server.blockers = [];
     server.draft = { ...server.draft!, reviewed_revision: 1, reviewed_at: date, reviewed_by: "admin-1" };

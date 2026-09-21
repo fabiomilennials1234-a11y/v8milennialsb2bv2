@@ -86,6 +86,29 @@ describe("TothPreorderStatusPanel — recebimento e decisão comercial", () => {
     expect(screen.queryByText(/Atualização do CRM pendente/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    { approved_total: null }, { approved_total: 0 }, { approved_total: 100.001 },
+    { approved_total: 10000000000 }, { external_id: null }, { reconciliation_state: "unknown" },
+  ])("não anuncia aprovação com evidência inconsistente: %j", async (change) => {
+    rpc.mockResolvedValue({ data: { ...server, operation: {
+      ...operation({ commercial_state: "approved", reconciliation_state: "pending", approved_total: 200 }), ...change,
+    } }, error: null });
+    show();
+    expect(await screen.findByText("Não foi possível confirmar a situação atual do pré-pedido.")).toBeInTheDocument();
+    expect(screen.queryByText("Aprovado no ERP")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total aprovado no ERP")).not.toBeInTheDocument();
+  });
+
+  it.each(["toth_approved_order_changed", "toth_observation_version_conflict", "external_identity_changed", "toth_unknown_commercial_status"])(
+    "não apresenta aprovação anterior como atual após divergência (%s)", async (last_error_code) => {
+      server.operation = operation({ commercial_state: "approved", reconciliation_state: "blocked", approved_total: 200, last_error_code });
+      show();
+      expect(await screen.findByText("Conferência necessária")).toBeInTheDocument();
+      expect(screen.queryByText("Aprovado no ERP")).not.toBeInTheDocument();
+      expect(screen.queryByText("Total aprovado no ERP")).not.toBeInTheDocument();
+    },
+  );
+
   it("mostra rejeição do ERP sem convertê-la em falha de transporte", async () => {
     server.operation = operation({ commercial_state: "rejected" });
     show();
@@ -205,8 +228,13 @@ describe("toth-preorder-status — validação defensiva", () => {
   it("recusa operação incompleta em vez de fabricar estado", () => {
     expect(parseTothPreorderWorkspace({ can_send: false, blockers: [], operation: {} })).toBeNull();
   });
+  it("preserva identificadores literais Unicode aceitos pelo SQL", () => {
+    const external_id = "\u00a0" + "😀".repeat(126) + "\u00a0";
+    expect(parseTothPreorderWorkspace({ ...server, operation: operation({ external_id }) })?.operation?.external_id).toBe(external_id);
+    expect(parseTothPreorderWorkspace({ ...server, operation: operation({ external_id: "😀".repeat(129) }) })).toBeNull();
+  });
   it("sinaliza aprovação com atualização local bloqueada", () => {
-    const result = getTothPreorderStatus(operation({ commercial_state: "approved", reconciliation_state: "blocked" }));
+    const result = getTothPreorderStatus(operation({ commercial_state: "approved", reconciliation_state: "blocked", approved_total: 200 }));
     expect(result.label).toBe("Aprovado no ERP");
     expect(result.localNotice).toContain("Atualização do CRM bloqueada");
   });

@@ -36,6 +36,7 @@ function errorMessage(error: unknown) {
 
 function PreparerAccess({ controller }: { controller: DraftController }) {
   const { preparers, setPreparer } = controller;
+  const members = preparers.error ? undefined : preparers.data;
   return (
     <details>
       <summary className="cursor-pointer text-sm font-medium">Quem pode preparar rascunhos</summary>
@@ -46,14 +47,14 @@ function PreparerAccess({ controller }: { controller: DraftController }) {
         {preparers.isLoading && <Skeleton className="h-10 w-full" />}
         {preparers.error && <Alert variant="destructive"><AlertDescription>{errorMessage(preparers.error)}</AlertDescription></Alert>}
         {setPreparer.error && <Alert variant="destructive"><AlertDescription>{errorMessage(setPreparer.error)}</AlertDescription></Alert>}
-        {preparers.data?.length === 0 && <p className="text-sm text-muted-foreground">Nenhum membro disponível.</p>}
-        {preparers.data?.map((member) => (
+        {members?.length === 0 && <p className="text-sm text-muted-foreground">Nenhum membro disponível.</p>}
+        {members?.map((member) => (
           <div key={member.team_member_id} className="flex items-center justify-between gap-3">
             <Label htmlFor={`toth-preparer-${member.team_member_id}`}>{member.name}</Label>
             <Switch
               id={`toth-preparer-${member.team_member_id}`}
               checked={member.can_prepare}
-              disabled={setPreparer.isPending}
+              disabled={setPreparer.isPending || controller.workspace.isError}
               onCheckedChange={(enabled) => setPreparer.mutate({ teamMemberId: member.team_member_id, enabled })}
             />
           </div>
@@ -265,6 +266,10 @@ function DraftEditor({ controller, workspace, dealId }: { controller: DraftContr
 export function TothOrderDraftPanel({ dealId }: { dealId: string }) {
   const controller = useTothOrderDraft(dealId);
   const { workspace } = controller;
+  if (!controller.enabled) return null;
+  if (workspace.error instanceof TothOrderDraftError && workspace.error.kind === "access_denied") {
+    return <Alert><AlertTitle>Pedido Toth</AlertTitle><AlertDescription>{workspace.error.message}</AlertDescription></Alert>;
+  }
   if (workspace.data?.enabled === false) return null;
   if (!workspace.data) {
     if (workspace.error) return <Alert><AlertTitle>Pedido Toth</AlertTitle><AlertDescription>{errorMessage(workspace.error)}</AlertDescription></Alert>;

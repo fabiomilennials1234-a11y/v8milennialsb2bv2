@@ -57,9 +57,9 @@ module.exports = {
         path: "^src/modules/([^/]+)/",
       },
       to: {
-        // Checklists oferece uma API pública estreita para não carregar os
-        // diálogos da Agenda de volta nos cards que a Agenda pode abrir.
-        path: "^src/modules/(?!engagement/checklists\\.ts$)(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
+        // APIs públicas estreitas evitam carregar diálogos e adaptadores de
+        // volta nos cards que esses módulos também podem abrir.
+        path: "^src/modules/(?!engagement/checklists\\.ts$|platform/feature-flags\\.ts$|integrations/toth-order-drafts\\.ts$)(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
       },
     },
     {

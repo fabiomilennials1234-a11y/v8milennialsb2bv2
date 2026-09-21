@@ -304,6 +304,16 @@ test("a malformed second ERP link cannot disappear before ambiguity is counted",
   assert.equal((await workspace()).can_prepare, false);
 });
 
+test("ERP customer identifiers obey the preorder decoder bounds before a draft is saved", async () => {
+  for (const externalId of ["x".repeat(129), "CLIENT\t01"]) {
+    await db.exec("RESET ROLE");
+    await db.query("UPDATE upsell_clients SET external_id=$1", [externalId]);
+    await login();
+    assert.equal((await workspace()).can_prepare, false);
+    await assert.rejects(save(0, catalog), /toth_client_link_unavailable/);
+  }
+});
+
 test("lead reassignment hides original draft and snapshots from the newly authorized viewer", async () => {
   await save(0, catalog, "Informação do primeiro cliente");
   await grant(true, id(13));

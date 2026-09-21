@@ -128,6 +128,27 @@ test("inactive catalog after local review blocks workspace and queue",async()=>{
   const w=await workspace();assert.equal(w.can_send,false);assert.ok(w.blockers.includes("catalog_item_unavailable"));
   await assert.rejects(request(),/toth_catalog_item_unavailable/);
 });
+
+test("queue refuses a missing pipeline or incompatible Carteira revenue mode",async()=>{
+  await ready();await owner("DELETE FROM pipeline_entries");
+  assert.ok((await workspace()).blockers.includes("local_projection_unavailable"));
+  await assert.rejects(request(),/toth_local_projection_unavailable/);
+  await owner(`INSERT INTO pipeline_entries(id,organization_id,deal_id,lead_id,pipeline_id,stage_key)
+    VALUES('${id(41)}','${org}','${id(40)}','${id(30)}','${id(42)}','proposta');
+    UPDATE organizations SET carteira_emits_revenue_enabled=true WHERE id='${org}';`);
+  assert.equal((await workspace()).can_send,false);
+  await assert.rejects(request(),/toth_local_projection_unavailable/);
+  await db.exec("RESET ROLE");assert.equal(await result("SELECT count(*)::int result FROM toth_preorder_operations"),0);
+});
+
+for(const [condition,change] of [["missing pipeline","DELETE FROM pipeline_entries"],["Carteira revenue mode",`UPDATE organizations SET carteira_emits_revenue_enabled=true WHERE id='${org}'`]]) {
+  test(`first send revalidates projection after ${condition} changes`,async()=>{
+    await ready();const queued=await request();await owner(change);await as("service_role","");
+    const blocked=await sending(await claim(queued.operation));
+    assert.equal(blocked.delivery_state,"blocked");assert.equal(blocked.last_error_code,"toth_local_projection_unavailable");
+    assert.equal((await business()).sales.length,0);
+  });
+}
 test("deal changed after queue is blocked before first remote send",async()=>{
   await ready();const w=await request();await owner("UPDATE deals SET outcome='lost',currency='USD',value=120");await as("service_role","");
   const blocked=await sending(await claim(w.operation));assert.equal(blocked.delivery_state,"blocked");assert.equal(blocked.last_error_code,"toth_deal_changed");
@@ -168,6 +189,24 @@ test("approved owned deal requires exact total and lead for gain from any path",
   await assert.rejects(db.exec("UPDATE deals SET outcome='won',value=150,currency='USD'"),/toth_approval_required_for_gain/);
   await db.exec("UPDATE deals SET outcome='won',value=150,outcome_source='ui'");
   await as("service_role","");assert.equal((await reconcile(op)).reconciliation_state,"complete");assert.equal((await business()).sales.length,1);
+});
+
+test("approved owned deal cannot change its customer or currency after reconciliation",async()=>{
+  const op=await setup();await gain(op);await reconcile(op);await db.exec("RESET ROLE");
+  await db.exec(`INSERT INTO leads(id,organization_id,name) VALUES('${id(31)}','${org}','Outro cliente');`);
+  const before=await business();
+  await assert.rejects(db.exec("UPDATE deals SET currency='USD'"),/toth_owned_order_manual_change_blocked/);
+  await assert.rejects(db.exec(`UPDATE deals SET source_lead_id='${id(31)}'`),/toth_owned_order_manual_change_blocked/);
+  assert.deepEqual(await business(),before);
+});
+
+test("ordinary won deal without preorder preserves customer and currency editing",async()=>{
+  await db.exec("RESET ROLE");
+  await db.exec(`INSERT INTO leads(id,organization_id,name) VALUES('${id(31)}','${org}','Outro cliente');
+    UPDATE deals SET outcome='won',value=150,outcome_source='ui';
+    UPDATE deals SET currency='USD',source_lead_id='${id(31)}';`);
+  const b=await business();
+  assert.equal(b.deal.currency,"USD");assert.equal(b.deal.source_lead_id,id(31));
 });
 
 test("real stage capture cannot create a sale before approval and accepts exact approved gain",async()=>{
@@ -212,6 +251,28 @@ test("canonical reversal writer cannot reverse an approved owned sale",async()=>
   const op=await setup();await gain(op);await reconcile(op);const before=await business();
   await assert.rejects(db.query("SELECT public._registrar_desfecho_no_caderno($1,$2,$3,'proposta',NULL,$4,'won','open',$5,'ui')",[org,id(30),id(42),id(40),id(1)]),/toth_owned_order_manual_change_blocked/);
   assert.deepEqual(await business(),before);
+});
+
+test("canonical legacy writer cannot recognize an owned approval a second time",async()=>{
+  const op=await setup();await gain(op);await reconcile(op);const before=await business();
+  await assert.rejects(db.query("SELECT public._registrar_desfecho_no_caderno($1,$2,$3,'proposta',NULL,$4,'open','won',$5,'ui')",[org,id(30),id(42),id(40),id(1)]),/toth_existing_sale_conflict/);
+  assert.deepEqual(await business(),before);
+});
+
+test("owned sale guards preserve ordinary approved sales in another organization",async()=>{
+  const op=await setup();await gain(op);await reconcile(op);const before=await business();
+  await db.exec(`INSERT INTO leads(id,organization_id,name) VALUES('${id(31)}','${id(20)}','Outro cliente');
+    INSERT INTO upsell_clients(id,organization_id,lead_id,name) VALUES('${id(51)}','${id(20)}','${id(31)}','Outro cliente');
+    INSERT INTO deals(id,organization_id,title,value,source_lead_id,source,created_by,currency)
+      VALUES('${id(43)}','${id(20)}','Outro negócio',150,'${id(31)}','human','${id(3)}','BRL');
+    INSERT INTO pipeline_entries(id,organization_id,deal_id,lead_id,pipeline_id,stage_key)
+      VALUES('${id(44)}','${id(20)}','${id(43)}','${id(31)}','${id(45)}','proposta');
+    UPDATE deals SET outcome='won',outcome_source='ui' WHERE id='${id(43)}';`);
+  const after=await business();
+  assert.deepEqual(after.sales.filter(s=>s.organization_id===org),before.sales);
+  assert.deepEqual(after.orders.filter(o=>o.organization_id===org),before.orders);
+  assert.equal(after.sales.filter(s=>s.organization_id===id(20)).length,1);
+  assert.equal(after.orders.filter(o=>o.organization_id===id(20)).length,1);
 });
 
 test("ordinary won order without an operation keeps real adjustment and reopening behavior",async()=>{
@@ -275,6 +336,31 @@ test("already-won matching sale is reused; diverging totals never overwrite hist
   await db.exec("RESET ROLE");await db.exec("UPDATE deals SET outcome='won',value=150,outcome_source='ui'");await as();const op=await setup();await gain(op);const done=await reconcile(op);
   assert.equal(done.reconciliation_state,"complete");assert.equal((await business()).sales.length,1);
 });
+
+test("missing canonical Carteira projection cannot be reported as reconciled",async()=>{
+  const op=await setup();await db.exec("RESET ROLE; DELETE FROM pipeline_entries;");
+  await as("service_role","");await gain(op);
+  const reconciled=await reconcile(op);
+  assert.notEqual(reconciled.reconciliation_state,"complete");
+  const b=await business();assert.equal(b.deal.outcome,"open");assert.equal(b.sales.length,0);assert.equal(b.orders.length,0);
+});
+
+test("Carteira mode changed after send cannot complete a gain without its order",async()=>{
+  const op=await setup();await owner(`UPDATE organizations SET carteira_emits_revenue_enabled=true WHERE id='${org}'`);
+  await as("service_role","");await gain(op);const reconciled=await reconcile(op);
+  assert.equal(reconciled.reconciliation_state,"pending");
+  const b=await business();assert.equal(b.deal.outcome,"open");assert.equal(b.sales.length,0);assert.equal(b.orders.length,0);
+});
+
+for(const [condition,change] of [["missing","DELETE FROM upsell_orders"],["different amount","UPDATE upsell_orders SET sale_value=99"]]) {
+  test(`already-won sale with ${condition} Carteira projection is preserved and not reconciled`,async()=>{
+    await owner("UPDATE deals SET outcome='won',value=150,outcome_source='ui'");
+    await owner(change);const before=await business();await as();
+    const op=await setup();await gain(op);const pending=await reconcile(op);
+    assert.equal(pending.reconciliation_state,"pending");assert.equal(pending.last_error_code,"toth_local_projection_failed");
+    assert.deepEqual(await business(),before);
+  });
+}
 test("already-won different total becomes conflict without another sale",async()=>{
   await db.exec("RESET ROLE");await db.exec("UPDATE deals SET outcome='won',value=100,outcome_source='ui'");await as();const op=await setup();await gain(op);
   assert.equal((await reconcile(op)).last_error_code,"toth_existing_sale_conflict");const b=await business();assert.equal(Number(b.deal.value),100);assert.equal(b.sales.length,1);
@@ -328,6 +414,41 @@ const engineObservation = (operation, source, approved = false) => ({
   source_marker: approved ? "supplier-version-2" : "supplier-version-1",
   source_order: approved ? 2 : 1,
   approved_total: approved ? 150 : null,
+});
+
+test("SQL and real engine preserve Unicode identifier and notes boundaries without normalization", async () => {
+  const customer = `\u00a0${"😀".repeat(126)}\u00a0`;
+  const product = "😀".repeat(128);
+  const notes = "😀".repeat(1000);
+  const marker = "😀".repeat(256);
+  await db.exec("RESET ROLE; TRUNCATE toth_order_draft_audit,toth_order_drafts CASCADE;");
+  await db.query("UPDATE upsell_clients SET external_id=$1", [customer]);
+  await db.query("UPDATE toth_order_catalog_items SET product_external_id=$1", [product]);
+  await as();
+  await rpc("toth_save_order_draft", [id(40), 0, JSON.stringify([{product_external_id:product,quantity:1}]), notes]);
+  await rpc("toth_review_order_draft", [id(40), 1]);
+  await ready();
+  const queued = await request();
+  await as("service_role", "");
+  let creates = 0;
+  const outcome = await processTothPreorder(queued.operation.id, {
+    store: engineStore(), send_enabled: true,
+    adapter: {
+      can_create: true, can_lookup: true,
+      async create(operation) {
+        creates++;
+        assert.equal(operation.request_snapshot.customer_external_id, customer);
+        assert.equal(operation.request_snapshot.notes, notes);
+        assert.deepEqual(operation.request_snapshot.items, [{product_external_id:product,quantity:1}]);
+        return {...engineObservation(operation,"authoritative_create"), external_id:product, source_marker:marker};
+      },
+      async lookup() { throw new Error("A first submission must create once"); },
+    },
+  });
+  assert.equal(outcome.disposition,"received");
+  assert.equal(creates,1);
+  await as();
+  assert.equal((await workspace()).operation.external_id,product);
 });
 
 test("real engine and repository accept SQL snapshot; only authoritative lookup creates one canonical sale", async () => {

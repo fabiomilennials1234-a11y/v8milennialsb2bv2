@@ -10,9 +10,10 @@ Data: 2026-09-21. Escopo: Café Jurerê, organização piloto já definida na fu
 - Recuperação de resposta perdida exclusivamente por consulta. Não há repetição automática da criação.
 - Separação entre entrega, decisão comercial e conciliação. Somente consulta autoritativa aprova comercialmente.
 - Ganho e valor aprovado pelo caminho canônico já usado pelo CRM, preservando uma venda e um espelho na Carteira. Falha local preserva aprovação para recuperar a conciliação.
-- Travas dedicadas a negócios com operação nova, impedindo ganho prematuro, moeda divergente, ajuste local de valor/composição e reversão/reabertura após aprovação. Incluem os caminhos existentes de etapa e `ajustar_pedido_ganho`; pedidos sem operação conservam seu comportamento.
+- Travas dedicadas a negócios com operação nova, impedindo ganho prematuro, mudança de organização/cliente/moeda, ajuste local de valor/composição e reversão/reabertura após aprovação. Incluem os caminhos existentes de etapa e `ajustar_pedido_ganho`, além de recusar uma segunda venda ativa pelo escritor legado; pedidos sem operação conservam seu comportamento.
+- Admissão e primeiro envio verificam se o caminho canônico até a Carteira está disponível. A conciliação só termina quando o espelho pertence ao cliente correto, está aprovado e tem o total confirmado. Ausência ou divergência do espelho desfaz os efeitos locais da tentativa e conserva a aprovação para recuperação.
 - Proteção de identidade na importação: IDs de operações novas não passam pelo gravador legado; a verificação em TypeScript e o trigger SQL compartilham a mesma regra. Pedido histórico existente antes da vinculação permanece intacto e bloqueia a operação para conferência.
-- Painel de situação separado do formulário. Atualizar a situação lê apenas o banco local, sem chamar o ERP ou descartar rascunho não salvo.
+- Painel de situação separado do formulário. Atualizar a situação lê apenas o banco local, sem chamar o ERP ou descartar rascunho não salvo. Perda de acesso oculta dados em cache; respostas inválidas ou de outro negócio não são aceitas. Divergência comercial posterior aparece como conferência necessária, sem apresentar a aprovação antiga como atual.
 
 ## O que continua fechado
 
@@ -66,19 +67,19 @@ Após revisão e autorização do ambiente, aplicar migrations na ordem correta 
 
 | Verificação | Resultado |
 |---|---|
-| Vitest: pré-pedidos, rascunhos, interface, prévia e importação Toth | **547 testes passaram em 23 arquivos** |
-| SQL de pré-pedidos, incluindo engine → repository → RPC real | **35 testes passaram** |
-| SQL da fundação de rascunhos | **24 testes passaram** |
+| Vitest: pré-pedidos, rascunhos, interface, prévia e importação Toth | **561 testes passaram em 22 arquivos** |
+| SQL de pré-pedidos, incluindo engine → repository → RPC real | **47 testes passaram** |
+| SQL da fundação de rascunhos | **25 testes passaram** |
 | `typecheck:ratchet` e `lint:ratchet` | Passaram, zero erros/problemas introduzidos; baselines não alterados |
 | `deno check --no-lock` das funções `toth-process-preorder` e `toth-sync-pedidos` | Passou |
 | Build do frontend e service worker | Passou |
 | YAML do workflow de CI | Válido; as duas suítes SQL Toth foram incluídas antes do ratchet de testes |
 
-Os 35 testes SQL usam as funções reais do caderno, captura de etapa e ajuste de pedido do repositório, com schema/identidade de teste e dados fictícios. Incluem papéis reais, isolamento, grants, snapshot imutável, reserva vencida, perda de resposta, aprovação seguida de falha local, conflito com importação histórica e regressões dos caminhos comerciais existentes. As definições canônicas de produção foram consultadas apenas como metadados para conferir as fixtures, sem escrita remota.
+Os 47 testes SQL de operações usam as funções reais do caderno, captura de etapa e ajuste de pedido do repositório, com schema/identidade de teste e dados fictícios. Incluem papéis reais, isolamento, grants, snapshot imutável, reserva vencida, perda de resposta, aprovação seguida de falha local, conflito com importação histórica e regressões dos caminhos comerciais existentes. As definições canônicas de produção foram consultadas apenas como metadados para conferir as fixtures, sem escrita remota.
 
 Não há validação de escrita em ERP real, QA visual autenticado ou homologação do schema completo nesta entrega. PGlite não comprova corrida entre sessões PostgreSQL independentes; lease/CAS, interleavings determinísticos e locks SQL foram testados/revisados, mas a concorrência real permanece caso obrigatório de homologação.
 
-`lint:deps:check` ainda reporta o ciclo herdado `DisparoWizard → carteira → pipelines`, já comprovado no commit-base da fundação; não há alteração nesses arquivos ou no baseline. O build também relata esse ciclo e outros avisos preexistentes, mas conclui. A suíte geral do repositório não foi apresentada como verde: suas falhas herdadas e limitações Windows continuam registradas na spec. A nova rodada foi a regressão focada de 547 testes acima.
+Após integrar a `main` em `33f1424d` e corrigir os ciclos novos com APIs públicas estreitas, `lint:deps:check` passou com zero violações novas e baseline intacta. A suíte geral não ficou verde: as mesmas 15 falhas em 70 casos foram reproduzidas na `main` isolada e no PR, sem diferenças de nome ou primeira mensagem. O [relatório de QA](qa-toth-pr-2133-2026-09-21.md) registra as correções, evidências e limites da validação final.
 
 A revisão independente confirmou a exceção de `toth_mark_preorder_sending` no guard master-ghost: execução exclusiva de serviço e consulta a `team_members` para revalidar o autor original, não para resolver a organização do chamador. Um bypass master permitiria envio após perda de autorização do autor. Apenas esse nome foi acrescentado ao baseline; os 24 achados e 42 entradas obsoletas herdados permanecem reportados.
 

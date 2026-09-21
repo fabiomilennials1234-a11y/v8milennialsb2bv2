@@ -29,6 +29,12 @@ A importação existente consulta a propriedade do ID antes de gravar. Um trigge
 
 O painel distingue recebimento, análise, rejeição, aprovação e atualização local pendente. A atualização manual consulta apenas o estado local; não chama o ERP nem descarta edição não salva do rascunho. Dados antigos são ocultados quando uma consulta perde autorização ou falha.
 
+## Proteções confirmadas no QA do PR #2133
+
+O QA fechou caminhos alternativos de segunda venda pelo escritor legado e mudanças de organização/cliente/moeda após a aprovação. O primeiro envio exige um caminho válido de projeção na Carteira, e a conciliação exige o espelho aprovado, com cliente e total corretos. Falha nessa projeção desfaz os efeitos locais da tentativa e mantém a aprovação para recuperação. Essas proteções se restringem aos negócios vinculados às novas operações.
+
+No navegador, permissões e respostas das RPCs são validadas em runtime. Perda de acesso oculta o rascunho e a lista de preparadores em cache; falha transitória conserva a edição não salva. Uma divergência comercial posterior exige conferência, sem exibir a aprovação anterior como atual. Limites de identificadores e observações usam pontos Unicode, como o PostgreSQL, preservando a identidade literal fornecida.
+
 ## Limite mecânico de escrita
 
 O frontend não possui mutation de envio. A função privada `preorder_runtime_ready()` retorna sempre `false` nesta entrega, portanto `toth_request_order_send` continua recusando com `toth_write_contract_unverified`. Nenhuma operação é criada pelo usuário enquanto esse limite permanecer fechado. O adaptador padrão declara criação e consulta indisponíveis e não contém URLs ou chamadas HTTP ao ERP. Alterar a flag ou `TOTH_PREORDER_SEND_ENABLED` não configura esse adaptador nem abre a admissão SQL.

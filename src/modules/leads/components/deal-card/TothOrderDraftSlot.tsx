@@ -1,10 +1,10 @@
-import { useFeatureFlag } from "@/modules/platform";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import {
   TothOrderDraftPanel,
   TOTH_ORDER_DRAFTS_FLAG,
   TOTH_ORDER_PILOT_ORG_ID,
   isTothOrderDraftPilot,
-} from "@/modules/integrations";
+} from "@/modules/integrations/toth-order-drafts";
 
 /** A autorização efetiva continua no servidor; o recorte evita consultas fora do piloto. */
 export function TothOrderDraftSlot({ dealId, organizationId }: {

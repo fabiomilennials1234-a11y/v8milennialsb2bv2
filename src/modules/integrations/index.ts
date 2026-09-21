@@ -54,12 +54,6 @@ export {
 } from "./lib/toth-endpoint";
 
 export { useErpProvider, type UseErpProviderResult } from "./hooks/useErpProvider";
-export { TothOrderDraftPanel } from "./components/TothOrderDraftPanel";
-export {
-  TOTH_ORDER_DRAFTS_FLAG,
-  TOTH_ORDER_PILOT_ORG_ID,
-  isTothOrderDraftPilot,
-} from "./lib/toth-order-domain";
 export {
   resolveErpProvider,
   TINY_CAPABILITIES,

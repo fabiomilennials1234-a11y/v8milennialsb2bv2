@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import type { TothOrderDraftInput, TothOrderWorkspace } from "../lib/toth-order-domain";
+import { parseTothOrderWorkspace, type TothOrderDraftInput, type TothOrderWorkspace } from "../lib/toth-order-domain";
 
 export interface TothOrderPreparer {
   team_member_id: string;
@@ -31,19 +32,22 @@ type RpcContracts = {
 // Deliberately exposes only local draft RPCs: no ERP dispatch function.
 const draftClient = supabase as unknown as {
   rpc<K extends keyof RpcContracts>(name: K, args: RpcContracts[K]["args"]): PromiseLike<{
-    data: RpcContracts[K]["result"] | null;
+    data: unknown;
     error: RpcError | null;
   }>;
 };
 
 export class TothOrderDraftError extends Error {
-  constructor(message: string, readonly kind: "conflict" | "unavailable" | "failure" = "failure") {
+  constructor(message: string, readonly kind: "conflict" | "unavailable" | "access_denied" | "failure" = "failure") {
     super(message);
     this.name = "TothOrderDraftError";
   }
 }
 
 function translateError(error: RpcError): TothOrderDraftError {
+  if (["42501", "PGRST301", "PGRST302"].includes(error.code ?? "") || error.message?.includes("toth_access_denied")) {
+    return new TothOrderDraftError("Você não tem permissão para realizar esta ação.", "access_denied");
+  }
   if (error.code === "PGRST202" || error.code === "42883") {
     return new TothOrderDraftError("A preparação de pedidos ainda não está disponível neste ambiente.", "unavailable");
   }
@@ -65,16 +69,27 @@ function translateError(error: RpcError): TothOrderDraftError {
     toth_draft_unavailable: "Salve o rascunho antes de registrar a revisão.",
     toth_invalid_preparer: "Este usuário não está disponível para receber a permissão.",
     toth_write_contract_unverified: "O envio aguarda a validação do contrato de escrita com a Toth.",
+    toth_local_projection_unavailable: "Não foi possível validar o registro deste pedido na Carteira. Solicite a conferência de um administrador.",
   };
   const key = Object.keys(messages).find((name) => error.message?.includes(name));
   return new TothOrderDraftError(key ? messages[key] : "Não foi possível concluir a ação. Tente novamente.");
 }
 
+const preparersSchema = z.array(z.object({
+  team_member_id: z.string().trim().min(1), name: z.string(), can_prepare: z.boolean(),
+}));
+
 async function callDraftRpc<K extends keyof RpcContracts>(name: K, args: RpcContracts[K]["args"]) {
   const { data, error } = await draftClient.rpc(name, args);
   if (error) throw translateError(error);
   if (data == null) throw new TothOrderDraftError("O servidor não confirmou a operação. Atualize o rascunho para conferir.");
-  return data;
+  const parsed = name === "toth_order_preparer_access" || name === "toth_set_order_preparer"
+    ? preparersSchema.safeParse(data)
+    : { success: true, data: parseTothOrderWorkspace(data, args.p_deal_id) };
+  if (!parsed.success || !parsed.data) {
+    throw new TothOrderDraftError("O servidor retornou dados inválidos para o rascunho. Atualize os dados antes de continuar.");
+  }
+  return parsed.data as RpcContracts[K]["result"];
 }
 
 export function useTothOrderDraft(dealId: string) {
@@ -82,10 +97,11 @@ export function useTothOrderDraft(dealId: string) {
   const queryClient = useQueryClient();
   const queryKey = ["toth-order-workspace", organizationId, teamMemberId, dealId] as const;
   const preparersKey = ["toth-order-preparers", organizationId, teamMemberId, dealId] as const;
+  const enabled = isReady && !!organizationId && !!teamMemberId && !!dealId;
   const workspace = useQuery({
     queryKey,
     queryFn: () => callDraftRpc("toth_order_workspace", { p_deal_id: dealId }),
-    enabled: isReady && !!organizationId && !!teamMemberId && !!dealId,
+    enabled,
     retry: false,
     staleTime: 15_000,
   });
@@ -124,7 +140,7 @@ export function useTothOrderDraft(dealId: string) {
   const preparers = useQuery({
     queryKey: preparersKey,
     queryFn: () => callDraftRpc("toth_order_preparer_access", { p_deal_id: dealId }),
-    enabled: isReady && !!organizationId && !!teamMemberId && workspace.data?.enabled === true && workspace.data.can_review,
+    enabled: enabled && !workspace.isError && workspace.data?.enabled === true && workspace.data.can_review === true,
     retry: false,
   });
   const setPreparer = useMutation({
@@ -139,8 +155,13 @@ export function useTothOrderDraft(dealId: string) {
       void queryClient.invalidateQueries({ queryKey: keys.preparersKey, exact: true });
       void queryClient.invalidateQueries({ queryKey: keys.queryKey, exact: true });
     },
+    onError: (_error, _variables, keys) => {
+      if (!keys) return;
+      void queryClient.invalidateQueries({ queryKey: keys.preparersKey, exact: true });
+      void queryClient.invalidateQueries({ queryKey: keys.queryKey, exact: true });
+    },
     retry: false,
   });
 
-  return { workspace, save, review, preparers, setPreparer, scopeKey: `${organizationId ?? ""}:${teamMemberId ?? ""}:${dealId}` };
+  return { workspace, save, review, preparers, setPreparer, enabled, scopeKey: `${organizationId ?? ""}:${teamMemberId ?? ""}:${dealId}` };
 }

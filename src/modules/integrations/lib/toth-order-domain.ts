@@ -64,8 +64,8 @@ export const TOTH_ORDER_DRAFT_LIMITS = Object.freeze({
 const itemSchema = z.object({
   product_external_id: z.string()
     .min(1, "Selecione um produto do catálogo do ERP.")
-    .max(TOTH_ORDER_DRAFT_LIMITS.productExternalId, "Código de produto inválido.")
-    .refine((value) => value.trim() === value && value.trim().length > 0,
+    .refine((value) => Array.from(value).length <= TOTH_ORDER_DRAFT_LIMITS.productExternalId, "Código de produto inválido.")
+    .refine((value) => !value.startsWith(" ") && !value.endsWith(" "),
       "Código de produto inválido.")
     .refine((value) => !/\p{Cc}/u.test(value), "Código de produto inválido."),
   quantity: z.number()
@@ -78,7 +78,8 @@ const draftInputSchema = z.object({
   // Empty drafts are useful before the supplier catalog is available. They
   // cannot be reviewed or sent; no local placeholder becomes an ERP product.
   items: z.array(itemSchema).max(TOTH_ORDER_DRAFT_LIMITS.items, "Limite de itens excedido."),
-  notes: z.string().max(TOTH_ORDER_DRAFT_LIMITS.notes, "Use no máximo 1.000 caracteres.").default(""),
+  notes: z.string().refine((value) => Array.from(value).length <= TOTH_ORDER_DRAFT_LIMITS.notes,
+    "Use no máximo 1.000 caracteres.").default(""),
 }).strict().superRefine((draft, context) => {
   const seen = new Set<string>();
   draft.items.forEach((item, index) => {
@@ -110,6 +111,40 @@ export function validateTothOrderDraftInput(input: unknown): TothOrderDraftValid
   };
 }
 
+const localId = z.string().min(1).refine((value) => value === value.trim() && !/\p{Cc}/u.test(value));
+const timestamp = z.string().datetime({ offset: true });
+const workspaceSchema = z.object({
+  enabled: z.boolean(), can_prepare: z.boolean(), can_review: z.boolean(),
+  draft: z.object({
+    id: localId, deal_id: localId, revision: z.number().int().positive().max(2147483647),
+    items: z.array(itemSchema).max(TOTH_ORDER_DRAFT_LIMITS.items), notes: z.string(),
+    reviewed_revision: z.number().int().positive().nullable(), reviewed_at: timestamp.nullable(), reviewed_by: localId.nullable(),
+    created_at: timestamp, updated_at: timestamp,
+  }).refine((draft) => validateTothOrderDraftInput({ items: draft.items, notes: draft.notes }).success)
+    .refine((draft) => draft.reviewed_revision === null
+      ? draft.reviewed_at === null
+      : draft.reviewed_revision === draft.revision && draft.reviewed_at !== null).nullable(),
+  catalog: z.array(z.object({
+    product_external_id: itemSchema.shape.product_external_id,
+    description: z.string().refine((value) => {
+      const length = Array.from(value.replace(/^ +| +$/g, "")).length;
+      return length >= 1 && length <= 500;
+    }),
+  })).refine((catalog) => new Set(catalog.map((item) => item.product_external_id)).size === catalog.length),
+  audit: z.array(z.object({
+    id: localId, action: z.enum(["draft_created", "draft_saved", "draft_reviewed_locally"]),
+    revision: z.number().int().positive(), actor_id: localId.nullable(), actor_name: z.string().nullable().optional(), created_at: timestamp,
+  })),
+  blockers: z.array(z.string()),
+});
+
+/** Runtime boundary for local RPC reads and mutation responses; never trust a cast as permission. */
+export function parseTothOrderWorkspace(value: unknown, expectedDealId: string): TothOrderWorkspace | null {
+  const result = workspaceSchema.safeParse(value);
+  if (!result.success || (result.data.draft !== null && result.data.draft.deal_id !== expectedDealId)) return null;
+  return result.data;
+}
+
 export function isTothOrderReviewCurrent(draft: TothOrderDraft | null): boolean {
   return !!draft
     && Number.isSafeInteger(draft.revision)
@@ -124,6 +159,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   supplier_contract_unverified: "Contrato de escrita do Toth ainda não validado.",
   homologation_unverified: "Homologação da escrita no ERP ainda não concluída.",
   commercial_validation_unavailable: "Validação de preços e regras comerciais do ERP indisponível.",
+  local_projection_unavailable: "Não foi possível validar o registro deste pedido na Carteira. Solicite a conferência de um administrador.",
   writes_disabled: "Envio ao ERP indisponível nesta etapa.",
   catalog_unavailable: "Catálogo de produtos do ERP ainda indisponível.",
   catalog_item_unavailable: "Há produtos que não estão disponíveis no catálogo do ERP.",

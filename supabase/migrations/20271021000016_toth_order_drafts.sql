@@ -130,8 +130,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     AND c.external_source = 'toth' AND c.is_active
     AND (SELECT count(*) FROM public.upsell_clients links WHERE links.organization_id=p_org
       AND links.lead_id=p_lead AND links.external_source='toth' AND links.is_active)=1
-    AND length(btrim(c.external_id)) > 0
+    AND length(c.external_id) BETWEEN 1 AND 128
     AND c.external_id = btrim(c.external_id)
+    AND c.external_id !~ '[[:cntrl:]]'
     AND NOT EXISTS (SELECT 1 FROM public.upsell_clients other
       WHERE other.organization_id = c.organization_id AND other.external_source = 'toth'
         AND other.external_id = c.external_id AND other.id <> c.id);

@@ -96,8 +96,12 @@ export const TOTH_PREORDER_PILOT_ORG_ID = "4922638c-4909-494e-ba10-12282ec0b161"
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (value: unknown): value is string => typeof value === "string" && uuidPattern.test(value);
+/** Match PostgreSQL length(text), not JavaScript's UTF-16 code-unit count. */
+export const tothPreorderTextLength = (value: string): number => Array.from(value).length;
 const isIdentifier = (value: unknown): value is string => typeof value === "string"
-  && value.length > 0 && value.length <= 256 && value === value.trim() && !/\p{Cc}/u.test(value);
+  && value.length > 0 && tothPreorderTextLength(value) <= 256
+  // SQL btrim(text) trims ASCII spaces; preserve every other canonical character.
+  && !value.startsWith(" ") && !value.endsWith(" ") && !/\p{Cc}/u.test(value);
 const isObject = (value: unknown): value is Record<string, unknown> => !!value
   && typeof value === "object" && !Array.isArray(value);
 
@@ -110,15 +114,15 @@ export function isTothPreorderApprovedTotal(value: unknown): value is number {
 function isReviewedSnapshot(value: Record<string, unknown>, deal_id: string, revision: number): boolean {
   if (value.schema_version !== 1 || !isUuid(value.id) || value.deal_id !== deal_id
     || value.revision !== revision || !isUuid(value.lead_id) || !isUuid(value.client_id)
-    || !isIdentifier(value.customer_external_id) || value.customer_external_id.length > 128
+    || !isIdentifier(value.customer_external_id) || tothPreorderTextLength(value.customer_external_id) > 128
     || value.currency !== "BRL" || !["open", "won"].includes(value.deal_outcome as string)
     || (value.deal_value !== null && (typeof value.deal_value !== "number" || !Number.isFinite(value.deal_value) || value.deal_value < 0))
-    || typeof value.notes !== "string" || value.notes.length > 1000
+    || typeof value.notes !== "string" || tothPreorderTextLength(value.notes) > 1000
     || !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 200) return false;
   const products = new Set<string>();
   for (const item of value.items) {
     if (!isObject(item) || Object.keys(item).length !== 2
-      || !isIdentifier(item.product_external_id) || item.product_external_id.length > 128
+      || !isIdentifier(item.product_external_id) || tothPreorderTextLength(item.product_external_id) > 128
       || products.has(item.product_external_id) || typeof item.quantity !== "number"
       || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 1e9) return false;
     products.add(item.product_external_id);
@@ -147,7 +151,7 @@ export function parseTothPreorderOperation(raw: unknown): TothPreorderOperation 
     || typeof raw.delivery_state !== "string" || !["queued", "sending", "awaiting_confirmation", "received", "failed", "blocked"].includes(raw.delivery_state)
     || typeof raw.commercial_state !== "string" || !["pending", "approved", "rejected", "unknown"].includes(raw.commercial_state)
     || typeof raw.reconciliation_state !== "string" || !["not_due", "pending", "complete", "blocked"].includes(raw.reconciliation_state)
-    || (raw.external_id !== null && (!isIdentifier(raw.external_id) || raw.external_id.length > 128))
+    || (raw.external_id !== null && (!isIdentifier(raw.external_id) || tothPreorderTextLength(raw.external_id) > 128))
     || (raw.source_marker !== null && !isIdentifier(raw.source_marker))
     || (raw.source_order !== null && (typeof raw.source_order !== "number" || !Number.isSafeInteger(raw.source_order) || raw.source_order < 0))
     || (raw.approved_total !== null && !isTothPreorderApprovedTotal(raw.approved_total))

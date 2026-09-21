@@ -45,6 +45,26 @@ const approved = (changes: Partial<TothPreorderObservation> = {}) => observation
   status: "approved", source_order: 2, source_marker: "supplier-event-2", approved_total: 250, ...changes,
 });
 
+describe("PostgreSQL Unicode character limits", () => {
+  it("accepts a valid reviewed snapshot measured in characters rather than UTF-16 units", () => {
+    const row = operation();
+    row.request_snapshot.notes = "☕😀".repeat(500);
+    row.request_snapshot.customer_external_id = "\u00a0" + "😀".repeat(126) + "\u00a0";
+    row.request_snapshot.items = [{ product_external_id: "😀".repeat(128), quantity: 1 }];
+    expect(parseTothPreorderOperation(row)).not.toBeNull();
+    row.request_snapshot.notes += "x";
+    expect(parseTothPreorderOperation(row)).toBeNull();
+  });
+
+  it("uses the same character limit for persisted and incoming supplier identities", () => {
+    const value = observation({ external_id: "😀".repeat(128), source_marker: "😀".repeat(256) });
+    expect(readTothPreorderObservation(value, operationId, "authoritative_lookup")).toEqual(value);
+    expect(parseTothPreorderOperation(operation({ external_id: value.external_id, source_marker: value.source_marker, source_order: 1 }))).not.toBeNull();
+    expect(readTothPreorderObservation({ ...value, external_id: value.external_id + "x" }, operationId, "authoritative_lookup")).toBeNull();
+    expect(readTothPreorderObservation({ ...value, source_marker: value.source_marker + "x" }, operationId, "authoritative_lookup")).toBeNull();
+  });
+});
+
 /** Test double only. Production uses service-only SQL CAS/transactions. */
 class MemoryStore implements TothPreorderStore {
   row: TothPreorderOperation;
@@ -246,6 +266,48 @@ describe("durable create and recovery", () => {
     vi.spyOn(store, "record_observation").mockRejectedValueOnce(new Error("database disconnected"));
     expect((await run()).reason_code).toBe("observation_persistence_failed");
     await run();
+    expect(adapter.create).toHaveBeenCalledTimes(1);
+    expect(adapter.lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it("lost mark_sending response after commit recovers through lookup without creating", async () => {
+    const { store, adapter, run } = setup();
+    const markSending = store.mark_sending.bind(store);
+    vi.spyOn(store, "mark_sending").mockImplementationOnce(async (id, token) => {
+      await markSending(id, token);
+      throw new Error("response lost after sending commit");
+    });
+    await expect(run()).rejects.toThrow("response lost after sending commit");
+    expect(store.row.delivery_state).toBe("sending");
+    expect(adapter.create).not.toHaveBeenCalled();
+    expect((await run()).disposition).toBe("received");
+    expect(adapter.create).not.toHaveBeenCalled();
+    expect(adapter.lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it("late create receipt cannot overwrite approval recorded by a replacement lease", async () => {
+    const { store, adapter, run } = setup();
+    let resolveCreate!: (value: unknown) => void;
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    adapter.create.mockImplementationOnce(() => {
+      signalStarted();
+      return new Promise((resolve) => { resolveCreate = resolve; });
+    });
+    const first = run();
+    await started;
+    // Simulate expiration while the supplier is still finishing the first call.
+    // A replacement worker sees durable `sending`, so only lookup is allowed.
+    store.row.lease_token = null;
+    store.row.lease_expires_at = null;
+    adapter.lookup.mockResolvedValueOnce(approved());
+    expect((await run()).disposition).toBe("reconciled");
+    resolveCreate(observation({ source: "authoritative_create" }));
+    expect((await first).disposition).toBe("lease_lost");
+    expect(store.row.commercial_state).toBe("approved");
+    expect(store.row.reconciliation_state).toBe("complete");
+    expect(store.sales.get(operationId)).toBe(250);
+    expect(store.reconcile_attempts).toBe(1);
     expect(adapter.create).toHaveBeenCalledTimes(1);
     expect(adapter.lookup).toHaveBeenCalledTimes(1);
   });

@@ -4,14 +4,15 @@ import type {
   TothPreorderOperation,
   TothPreorderProcessResult,
 } from "./contracts.ts";
-import { isTothPreorderApprovedTotal, parseTothPreorderOperation } from "./contracts.ts";
+import { isTothPreorderApprovedTotal, parseTothPreorderOperation, tothPreorderTextLength } from "./contracts.ts";
 
 const observationKeys = new Set([
   "operation_id", "external_id", "status", "source", "source_marker", "source_order", "approved_total",
 ]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const identifier = (value: unknown): value is string => typeof value === "string"
-  && value.length > 0 && value.length <= 256 && value === value.trim() && !/\p{Cc}/u.test(value);
+  && value.length > 0 && tothPreorderTextLength(value) <= 256
+  && !value.startsWith(" ") && !value.endsWith(" ") && !/\p{Cc}/u.test(value);
 
 /** Fail closed on malformed/error JSON and unrecognized supplier statuses. */
 export function readTothPreorderObservation(
@@ -23,7 +24,7 @@ export function readTothPreorderObservation(
   const value = raw as Record<string, unknown>;
   if (Object.keys(value).some((key) => !observationKeys.has(key))) return null;
   if (!uuid.test(operation_id) || value.operation_id !== operation_id || value.source !== source
-    || !identifier(value.external_id) || value.external_id.length > 128 || !identifier(value.source_marker)
+    || !identifier(value.external_id) || tothPreorderTextLength(value.external_id) > 128 || !identifier(value.source_marker)
     || typeof value.source_order !== "number" || !Number.isSafeInteger(value.source_order) || value.source_order < 0
     || typeof value.status !== "string" || !["pending", "approved", "rejected", "unknown"].includes(value.status)) return null;
   if (value.status === "approved") {

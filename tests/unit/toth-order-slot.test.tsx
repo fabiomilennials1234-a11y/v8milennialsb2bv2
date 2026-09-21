@@ -4,8 +4,8 @@ import { TothOrderDraftSlot } from "@/modules/leads/components/deal-card/TothOrd
 
 const pilot = "4922638c-4909-494e-ba10-12282ec0b161";
 const flag = vi.hoisted(() => vi.fn());
-vi.mock("@/modules/platform", () => ({ useFeatureFlag: flag }));
-vi.mock("@/modules/integrations", () => ({
+vi.mock("@/modules/platform/feature-flags", () => ({ useFeatureFlag: flag }));
+vi.mock("@/modules/integrations/toth-order-drafts", () => ({
   TOTH_ORDER_DRAFTS_FLAG: "toth_order_drafts",
   TOTH_ORDER_PILOT_ORG_ID: "4922638c-4909-494e-ba10-12282ec0b161",
   isTothOrderDraftPilot: (org: string, value: unknown) =>

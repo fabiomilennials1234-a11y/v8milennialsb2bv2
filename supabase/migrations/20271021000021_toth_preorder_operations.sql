@@ -135,6 +135,23 @@ $$;
 CREATE TRIGGER toth_preorder_freeze_draft BEFORE UPDATE ON public.toth_order_drafts
   FOR EACH ROW EXECUTE FUNCTION toth_order_private.preorder_freeze_draft();
 
+-- The existing Carteira projector admits funnel sales only, with its revenue
+-- producer disabled. Do not send an order whose canonical local projection is
+-- already known to be unavailable, or change that global historical behavior.
+CREATE FUNCTION toth_order_private.preorder_projection_ready(p_org uuid,p_deal uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
+  SELECT EXISTS(SELECT 1 FROM public.organizations o WHERE o.id=p_org AND NOT COALESCE(o.carteira_emits_revenue_enabled,false))
+    AND EXISTS(SELECT 1 FROM (
+      SELECT organization_id,pipeline_id,stage_key,lead_id FROM public.pipeline_entries
+      WHERE deal_id=p_deal ORDER BY closed_at NULLS FIRST,entered_at DESC LIMIT 1
+    ) pe JOIN public.deals d ON d.id=p_deal AND d.organization_id=p_org
+      WHERE pe.organization_id=p_org AND pe.lead_id=d.source_lead_id
+        AND pe.pipeline_id IS NOT NULL AND NULLIF(btrim(pe.stage_key),'') IS NOT NULL)
+    AND NOT EXISTS(SELECT 1 FROM public.pipeline_entries pe WHERE pe.deal_id=p_deal AND pe.organization_id IS DISTINCT FROM p_org)
+    AND EXISTS(SELECT 1 FROM pg_catalog.pg_trigger t WHERE t.tgrelid='public.sale_events'::regclass
+      AND t.tgname='trg_carteira_admite_venda' AND t.tgenabled IN('O','A'));
+$$;
+
 -- Closing an owned deal manually, through a stage or through a workflow must
 -- obey the same approval boundary. Read without another row lock: canonical
 -- reconciliation already locks operation -> deal, while UI holds the deal.
@@ -142,19 +159,24 @@ CREATE FUNCTION public.toth_preorder_gain_guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE v_op public.toth_preorder_operations%ROWTYPE;
 BEGIN
-  IF OLD.outcome IS NOT DISTINCT FROM NEW.outcome AND OLD.value IS NOT DISTINCT FROM NEW.value THEN RETURN NEW; END IF;
+  IF (OLD.outcome,OLD.value,OLD.organization_id,OLD.source_lead_id,OLD.currency)
+    IS NOT DISTINCT FROM (NEW.outcome,NEW.value,NEW.organization_id,NEW.source_lead_id,NEW.currency) THEN RETURN NEW; END IF;
   SELECT * INTO v_op FROM public.toth_preorder_operations WHERE deal_id=OLD.id AND organization_id=OLD.organization_id;
   IF NOT FOUND THEN RETURN NEW; END IF;
   -- This phase recognizes the first approved order only. Local changes to an
   -- already recognized order need a future ERP adjustment/reversal contract;
-  -- never let the generic won-order editor rewrite its amount or reopen it.
+  -- never let generic editors rewrite its amount, approved identity/currency,
+  -- or reopen it while the immutable operation and sale remain approved.
   IF OLD.outcome='won' AND v_op.commercial_state='approved'
-    AND (NEW.outcome IS DISTINCT FROM 'won' OR NEW.value IS DISTINCT FROM OLD.value) THEN
+    AND (NEW.outcome IS DISTINCT FROM 'won' OR NEW.value IS DISTINCT FROM OLD.value
+      OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+      OR NEW.source_lead_id IS DISTINCT FROM OLD.source_lead_id OR NEW.currency IS DISTINCT FROM OLD.currency) THEN
     RAISE EXCEPTION 'toth_owned_order_manual_change_blocked' USING ERRCODE='55000';
   END IF;
   IF OLD.outcome IS NOT DISTINCT FROM NEW.outcome OR NEW.outcome<>'won' THEN RETURN NEW; END IF;
   IF v_op.delivery_state<>'received' OR v_op.commercial_state<>'approved'
     OR v_op.observation_source<>'authoritative_lookup' OR v_op.reconciliation_state='blocked'
+    OR NOT toth_order_private.preorder_projection_ready(v_op.organization_id,v_op.deal_id)
     OR NEW.organization_id IS DISTINCT FROM v_op.organization_id OR NEW.source_lead_id IS DISTINCT FROM v_op.lead_id
     OR NEW.currency IS DISTINCT FROM 'BRL' OR NEW.value IS DISTINCT FROM v_op.approved_total THEN
     RAISE EXCEPTION 'toth_approval_required_for_gain' USING ERRCODE='55000';
@@ -162,7 +184,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER toth_preorder_gain_guard BEFORE UPDATE OF outcome,value ON public.deals
+CREATE TRIGGER toth_preorder_gain_guard BEFORE UPDATE OF outcome,value,organization_id,source_lead_id,currency ON public.deals
   FOR EACH ROW EXECUTE FUNCTION public.toth_preorder_gain_guard();
 
 -- The generic adjustment RPC can change composition without changing the total.
@@ -205,6 +227,15 @@ BEGIN
     OR NEW.sale_value IS DISTINCT FROM v_op.approved_total OR NEW.producer NOT IN('funnel','deal')
     OR NEW.origin_record_id IS NOT NULL THEN
     RAISE EXCEPTION 'toth_approval_required_for_gain' USING ERRCODE='55000';
+  END IF;
+  -- A legacy caller can invoke the canonical writer without changing outcome.
+  -- Serialize on the deal (never acquire the operation after it) so the owned
+  -- approval cannot become a second live sale through that alternate path.
+  PERFORM 1 FROM public.deals WHERE id=v_op.deal_id AND organization_id=v_op.organization_id FOR UPDATE;
+  IF EXISTS(SELECT 1 FROM public.sale_events s WHERE s.organization_id=v_op.organization_id AND s.deal_id=v_op.deal_id
+    AND s.event_type='sale' AND NOT EXISTS(SELECT 1 FROM public.sale_events r
+      WHERE r.organization_id=s.organization_id AND r.reversed_event_id=s.id AND r.event_type='sale_reversed')) THEN
+    RAISE EXCEPTION 'toth_existing_sale_conflict' USING ERRCODE='55000';
   END IF;
   RETURN NEW;
 END;
@@ -250,6 +281,9 @@ BEGIN
   END IF;
   IF NOT (v_base->>'enabled')::boolean THEN v_blockers:=v_blockers||'["drafts_disabled"]'; END IF;
   IF NOT (v_base->>'can_review')::boolean THEN v_blockers:=v_blockers||'["admin_required"]'; END IF;
+  IF NOT toth_order_private.preorder_projection_ready('4922638c-4909-494e-ba10-12282ec0b161'::uuid,p_deal_id) THEN
+    v_blockers:=v_blockers||'["local_projection_unavailable"]';
+  END IF;
   IF v_base->'draft' IS NULL OR v_base->'draft'='null'::jsonb THEN v_blockers:=v_blockers||'["draft_required"]';
   ELSIF v_base#>>'{draft,reviewed_revision}' IS DISTINCT FROM v_base#>>'{draft,revision}'
     OR v_base#>>'{draft,reviewed_by}' IS NULL THEN v_blockers:=v_blockers||'["current_review_required"]'; END IF;
@@ -295,6 +329,9 @@ BEGIN
   PERFORM toth_order_private.validate_items(v_draft.organization_id,v_draft.items);
   SELECT * INTO v_deal FROM public.deals WHERE id=p_deal_id AND organization_id=v_draft.organization_id;
   IF v_deal.outcome NOT IN ('open','won') OR v_deal.currency IS DISTINCT FROM 'BRL' OR v_deal.value<0 THEN RAISE EXCEPTION 'toth_deal_not_eligible' USING ERRCODE='22023'; END IF;
+  IF NOT toth_order_private.preorder_projection_ready(v_draft.organization_id,p_deal_id) THEN
+    RAISE EXCEPTION 'toth_local_projection_unavailable' USING ERRCODE='55000';
+  END IF;
   INSERT INTO public.toth_preorder_operations(organization_id,deal_id,draft_id,draft_revision,lead_id,client_id,requested_by,request_snapshot)
     VALUES(v_draft.organization_id,p_deal_id,v_draft.id,v_draft.revision,v_draft.lead_id,v_draft.client_id,auth.uid(),
       jsonb_build_object('schema_version',1,'id',v_draft.id,'deal_id',p_deal_id,'revision',v_draft.revision,
@@ -338,6 +375,9 @@ BEGIN
     OR v_deal.outcome IS DISTINCT FROM v_op.request_snapshot->>'deal_outcome'
     OR v_deal.currency IS DISTINCT FROM 'BRL' OR v_deal.value IS DISTINCT FROM (v_op.request_snapshot->>'deal_value')::numeric THEN
     RETURN toth_order_private.preorder_block(v_op.id,'toth_deal_changed');
+  END IF;
+  IF NOT toth_order_private.preorder_projection_ready(v_op.organization_id,v_op.deal_id) THEN
+    RETURN toth_order_private.preorder_block(v_op.id,'toth_local_projection_unavailable');
   END IF;
   v_customer:=toth_order_private.customer(v_op.organization_id,v_op.lead_id);
   IF v_customer IS NULL OR (v_customer->>'client_id')::uuid IS DISTINCT FROM v_op.client_id
@@ -437,7 +477,7 @@ $$;
 
 CREATE FUNCTION public.toth_reconcile_preorder_operation(p_operation_id uuid,p_lease_token uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE v_op public.toth_preorder_operations%ROWTYPE; v_deal public.deals%ROWTYPE; v_count integer; v_sale public.sale_events%ROWTYPE; v_customer jsonb;
+DECLARE v_op public.toth_preorder_operations%ROWTYPE; v_deal public.deals%ROWTYPE; v_count integer; v_sale public.sale_events%ROWTYPE; v_customer jsonb; v_order public.upsell_orders%ROWTYPE;
 BEGIN
   v_op:=toth_order_private.preorder_lease(p_operation_id,p_lease_token);
   IF v_op.reconciliation_state IN ('complete','blocked') THEN RETURN toth_order_private.preorder_item(v_op.id); END IF;
@@ -481,6 +521,10 @@ BEGIN
       AND s.event_type='sale' AND NOT EXISTS(SELECT 1 FROM public.sale_events r WHERE r.organization_id=s.organization_id AND r.reversed_event_id=s.id AND r.event_type='sale_reversed');
     IF v_sale.sale_value IS DISTINCT FROM v_op.approved_total OR v_sale.lead_id IS DISTINCT FROM v_op.lead_id
       OR v_sale.currency<>'BRL' OR v_sale.producer NOT IN ('funnel','deal') THEN RAISE EXCEPTION 'toth_canonical_sale_conflict'; END IF;
+    SELECT * INTO v_order FROM public.upsell_orders WHERE organization_id=v_op.organization_id
+      AND external_source='funnel_sale_event' AND external_id=v_sale.id::text FOR SHARE;
+    IF NOT FOUND OR v_order.client_id IS DISTINCT FROM v_op.client_id OR v_order.sale_value IS DISTINCT FROM v_op.approved_total
+      OR v_order.approval_status IS DISTINCT FROM 'approved' THEN RAISE EXCEPTION 'toth_canonical_order_projection_missing'; END IF;
     UPDATE public.toth_preorder_operations SET reconciliation_state='complete',local_sale_event_id=v_sale.id,last_error_code=NULL,updated_at=clock_timestamp()
       WHERE id=v_op.id AND organization_id=v_op.organization_id;
     PERFORM toth_order_private.preorder_audit(v_op.id,'reconciled');
