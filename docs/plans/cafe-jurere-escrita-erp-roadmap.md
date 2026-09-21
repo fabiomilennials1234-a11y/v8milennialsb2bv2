@@ -1,15 +1,33 @@
 # Café Jurerê — planejamento de escrita no ERP Toth
 
-Data: 2026-09-17.
-Estado: decisões de produto consolidadas em 30 respostas do CTO. Etapa 0 autorizada na sessão em 2026-09-17; levantamento local registrado em [cafe-jurere-etapa-0/README.md](cafe-jurere-etapa-0/README.md). Posteriormente, o CTO autorizou construir o lado do CRM. A fundação local de rascunhos foi implementada e está em revisão, conforme [escopo técnico e evidências de validação](../../.specs/features/toth-order-drafts.md). A etapa 1 completa ainda depende do catálogo e do contrato do fornecedor. Contrato técnico e homologação do ERP ainda não confirmados; envio real e publicação em produção continuam pendentes.
+Planejamento inicial: 2026-09-17. Atualização com resposta do fornecedor: 2026-09-21.
+Estado: 30 decisões iniciais registradas abaixo, com revisão explícita nesta atualização. O levantamento local e a fundação de rascunhos foram autorizados e implementados, conforme [inventário](cafe-jurere-etapa-0/README.md) e [escopo técnico](../../.specs/features/toth-order-drafts.md). O fornecedor informou criação de pré-pedidos sujeitos à análise e inexistência de homologação na Café. Contrato técnico, catálogo, ambiente isolado e envio real continuam pendentes. A nova informação não autoriza merge, deploy, aplicação de migration ou ativação da funcionalidade.
 
 ## Objetivo e limites
 
-Criar pedidos a partir de negócios do Torque, preservando cadastros e pedidos existentes. Evoluir em três entregas: criação, alteração e cancelamento. Toda liberação de escrita depende das proteções comprovadas no Toth e de autorização explícita de produção.
+Criar pedidos a partir de negócios do Torque, preservando cadastros e pedidos existentes. O plano inicial previa criação, alteração e cancelamento pelo CRM. A resposta de 21/09 limita a capacidade declarada à criação de pré-pedidos; o piloto de inclusão e acompanhamento é a revisão proposta. Alterações/cancelamentos remotos dependem de capacidade futura e não são liberados pela informação de que os bloqueios internos são mais leves. Toda liberação de escrita depende de contrato, homologação e autorização explícita de produção.
 
 Documentos de contexto: `.specs/project/integracao-erp-cafe-jurere-pedido-formal.md`, `.specs/project/toth-plano-sync-cafe-jurere.md` e `.specs/project/toth-o-que-falta.md`. São registros históricos, não comprovação do estado atual do fornecedor ou da implantação.
 
-## Decisões confirmadas
+## Atualização de 21/09/2026
+
+Fonte e limites: [resposta encaminhada do fornecedor](cafe-jurere-etapa-0/resposta-fornecedor-2026-09-21.md). O técnico ressalvou que a configuração exata da Café ainda precisa ser confirmada.
+
+| Ponto | Estado atual | Efeito no planejamento |
+|---|---|---|
+| Gatilho de ganho — revisão da decisão 14 | **Confirmado pelo usuário em 21/09: após aprovação no ERP, com status confirmado pela integração.** | Recebimento do pré-pedido não gera ganho; faturamento é evento distinto. Consulta/status ausente ou desconhecido não confirma aprovação. |
+| Objeto da escrita — decisão 3 | Fornecedor declara pré-pedido sujeito à análise; pedido definitivo na inclusão não foi oferecido | Adaptar a primeira escrita para pré-pedido, preservando a decisão inicial como histórico e confirmando o escopo do piloto com o usuário. |
+| Primeiro piloto — decisões 8, 19 e 23 | **Proposta submetida ao usuário:** inclusão de pré-pedido e acompanhamento; comandos de alteração/cancelamento/rejeição fora da primeira liberação | Não implementar esses comandos enquanto não houver capacidade e contrato seguro. A resposta não declara endpoint para pedir rejeição. |
+| Homologação — atualização factual da decisão 24 | Não existe na Café; fornecedor instala se houver VM | Solicitar requisitos, responsabilidades, licenças, custo, prazo e isolamento antes de contratar/provisionar. |
+| Duplicidade e consulta — decisões 12 e 22 | “Sim” informado, sem mecanismo, rota ou exemplos | Continuam pendentes até contrato e teste de concorrência/resposta perdida. |
+| Rejeição antes da aprovação — decisões 13 e 15 | Fluxo novo ainda não decidido | Não confundir rejeição com cancelamento de venda; não assumir perda automática, estorno ou permissão para reenviar no mesmo negócio. |
+| Mudanças pela empresa — decisões 16 e 17 | Necessárias ao processo informado | Acompanhar total aprovado, ajustes e cancelamentos dos pedidos originados pela integração, sem alterar regras históricas nem duplicar efeitos. |
+
+A base local de rascunhos permanece compatível: conferência local não aprova comercialmente, não escreve no ERP e não altera o desfecho. A decisão atual sobre ganho substitui a regra original de ganho na criação; demais pontos de produto não confirmados permanecem propostas ou pendências.
+
+## Decisões de 17/09/2026 — registro histórico
+
+A tabela preserva as respostas originais. Para execução, considerar as atualizações de 21/09 acima; em particular, a decisão 14 original foi substituída e a hipótese de pedido definitivo da decisão 3 não corresponde à capacidade informada pelo fornecedor.
 
 | # | Decisão |
 |---|---|
@@ -46,13 +64,15 @@ Documentos de contexto: `.specs/project/integracao-erp-cafe-jurere-pedido-formal
 
 ## Roadmap de implementação proposto
 
+Revisão após a resposta de 21/09. O formato do primeiro piloto foi submetido ao usuário e permanece proposta até confirmação; o gatilho de ganho após aprovação já está confirmado.
+
 ### Etapa 0 — contrato, ambiente e levantamento do estado existente
 
 - Inventariar código, sincronizações e regras atuais do CRM em leitura; identificar como negócios ganhos, ajustes de valor e reversões afetam os indicadores. Reaproveitar as regras existentes sem criar uma segunda fonte de venda.
-- Obter contrato de criação, alteração, cancelamento e consulta, incluindo códigos estáveis, erros e exemplos sem credenciais ou dados pessoais desnecessários.
-- Confirmar homologação isolada do ERP, credenciais próprias e dados de teste. Um ambiente isolado do CRM não isola o Toth.
+- Priorizar contrato de criação de pré-pedido, consulta de resultado e acompanhamento da análise; separar serviços disponíveis dos que precisam ser desenvolvidos no Flow. Registrar ausência atual de alteração/cancelamento e requisitos futuros, sem tratá-los como endpoints existentes.
+- Especificar e preparar homologação isolada do ERP com fornecedor e responsável pela infraestrutura, credenciais próprias e dados de teste. Não há ambiente da Café hoje; uma VM ou um ambiente isolado do CRM não garantem isolamento dos efeitos do Toth.
 - Confirmar produtos, preços, descontos, condições, endereço, frete, empresa, representante e validações comerciais.
-- Mapear efeitos da inclusão definitiva, estados impeditivos e operações que afetam estoque, cobrança, faturamento e expedição.
+- Mapear separadamente os efeitos de recepção, análise, aprovação e rejeição, além de posteriores ajustes/cancelamentos, sobre estoque, cobrança, faturamento e expedição.
 - Validar identificação única de operações, consulta de resultados após timeout e proteção contra mudanças simultâneas. Ler antes de gravar, sozinho, não elimina a corrida entre leitura e gravação.
 - Reavaliar transporte e credenciais para escrita: os documentos históricos registram HTTP aceito para leitura. Isso não confirma a configuração atual nem estende automaticamente aquela decisão ao novo poder de escrita. Definir canal protegido e permissões mínimas para o novo escopo.
 - Confirmar como detectar mudanças diretas no ERP e escolher frequência de reconciliação conforme limites e necessidade operacional.
@@ -70,18 +90,21 @@ Saída: matriz de capacidades com evidências, campos e regras definidos, ambien
 
 Saída: rascunhos e proteções validados, sem escrita real. Testes positivos e negativos de autorização e isolamento entre organizações.
 
-### Etapa 2 — criação e primeiro piloto
+### Etapa 2 — pré-pedido, acompanhamento e primeiro piloto proposto
 
-- Implementar criação manual do pedido definitivo com valores e referências válidos no ERP.
-- Persistir identificação da operação antes de enviar; vincular o pedido confirmado sem permitir um segundo pedido para o negócio.
-- Marcar o negócio como ganho uma única vez e recuperar falhas locais sem reenviar ao Toth.
+- Implementar envio manual de pré-pedido com valores e referências válidos no ERP, após confirmação do escopo do piloto.
+- Persistir identificação da operação antes de enviar; vincular o pré-pedido recebido e sua relação com eventual pedido aprovado. Resolver previamente a regra de correção/substituição após rejeição; não presumir autorização para uma segunda submissão no mesmo negócio.
+- Separar recebimento técnico de análise comercial. Marcar o negócio como ganho somente após aprovação confirmada no ERP, uma única vez, com total autorizado; recuperar falhas locais sem reenviar ao Toth.
+- Exibir rejeição e motivo confirmado, sem presumir perda ou cancelamento de venda. Estado ausente/desconhecido e análise pendente não permitem contabilizar venda. Os efeitos de rejeição sobre o negócio e a política de substituição ainda precisam de decisão.
 - Tratar resposta perdida, clique duplo, concorrência e indisponibilidade com confirmação e reconciliação.
 - Implementar já nesta etapa a leitura de alterações/cancelamentos feitos diretamente no Toth para esses pedidos, pois a equipe poderá corrigi-los no ERP durante o piloto.
 - Homologar e, após autorização explícita, iniciar piloto com um administrador e conferência individual.
 
-Saída: pedido e negócio conciliados, valores e indicadores corretos, nenhuma modificação em cadastros ou pedidos preexistentes. Criação não depende da liberação das interfaces de alteração e cancelamento, mas depende de acompanhar seus efeitos quando realizados diretamente no ERP.
+Saída: pré-pedido, aprovação comercial e negócio conciliados, valores e indicadores corretos, nenhuma modificação em cadastros ou pedidos preexistentes. A proposta de criação não depende da liberação dos comandos de alteração/cancelamento, mas depende de acompanhar decisões e mudanças realizadas pela empresa no ERP.
 
-### Etapa 3 — alteração
+### Etapa 3 — alteração remota, condicionada a capacidade futura
+
+Não oferecida na resposta atual. Somente retomar desenvolvimento/liberação após confirmação de API e proteção atômica contra sobrescrita. Edição pela empresa e eventual pedido humano de rejeição não são equivalentes a uma API de alteração.
 
 - Permitir somente o escopo confirmado: itens, quantidades e condições válidas.
 - Exigir motivo, origem comprovada, estado elegível e proteção de concorrência no momento da gravação.
@@ -90,7 +113,9 @@ Saída: pedido e negócio conciliados, valores e indicadores corretos, nenhuma m
 
 Saída: alteração homologada, inclusive disputa com edição direta no ERP, sem sobrescrita e sem duplicação de venda.
 
-### Etapa 4 — cancelamento
+### Etapa 4 — cancelamento remoto, condicionado a capacidade futura
+
+Não oferecido na resposta atual. Somente retomar após contrato e garantias suficientes. Rejeição comercial de pré-pedido e cancelamento de pedido/venda precisam de estados e efeitos distintos.
 
 - Exigir motivo, origem comprovada, estado elegível e confirmação explícita da ação na interface.
 - Aguardar confirmação do Toth antes de reabrir negócio e reverter indicadores.
@@ -110,6 +135,8 @@ Saída: cancelamento e efeitos locais homologados; repetição e resposta perdid
 
 - Pedidos históricos, cadastros e pedidos de outra origem recusam alteração e cancelamento mesmo por chamada direta ao servidor.
 - Membro sem autorização, usuário sem acesso ao negócio e usuário de outra organização não conseguem executar ações indevidas.
+- Recebimento confirmado de pré-pedido não marca ganho. Só a aprovação comercial confirmada usa o total autorizado e concilia a venda uma vez.
+- Análise pendente, rejeição e status ausente/desconhecido não criam venda. Rejeição anterior à aprovação não dispara a regra de estorno de cancelamento.
 - Clique duplo, envio concorrente, repetição de eventos e reinício do processo não criam pedidos ou efeitos comerciais duplicados.
 - ERP grava e perde resposta: confirmar o resultado antes de qualquer nova tentativa.
 - ERP confirma e CRM falha: recuperar apenas a atualização local.
@@ -121,7 +148,9 @@ Saída: cancelamento e efeitos locais homologados; repetição e resposta perdid
 
 ## Pendências para fechar o desenho técnico
 
-Do fornecedor: contrato, homologação, garantias de concorrência e duplicidade, consultas de resultado, regras e efeitos operacionais, transporte e permissões.
+Do fornecedor: disponibilidade versus desenvolvimento de APIs no Flow; contrato de criação/consulta, estados/IDs de pré-pedido e pedido aprovado; garantia de duplicidade; catálogo e configuração efetiva da Café; efeitos por fase; especificação da VM, transporte e permissões. Ver [complemento pronto para encaminhamento](cafe-jurere-etapa-0/complemento-fornecedor-2026-09-21.md). Garantias de atualização concorrente seguem pendentes para comandos remotos futuros.
+
+Do usuário/operação: confirmar o piloto de pré-pedidos e acompanhamento; definir tratamento da rejeição, correção/substituição e vínculo exclusivo por negócio; indicar quem aprova/confere na empresa e quem responde pela infraestrutura. O gatilho de ganho após aprovação já foi confirmado e não precisa ser perguntado novamente.
 
 Da Café Jurerê/CTO: nome do administrador do piloto, amostra e duração, critérios quantitativos de aceite, responsáveis por conferência/incidentes e autorização de produção. Confirmar explicitamente a aplicação da restrição a administradores também às ações de alteração e cancelamento, cuja pergunta original tratou do envio de pedidos.
 

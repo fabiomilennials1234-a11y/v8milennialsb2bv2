@@ -2,6 +2,8 @@
 
 **Rascunho pronto para encaminhamento pelo responsável. Não enviado pelo agente.**
 
+Solicitação inicial de 17/09, preservada como histórico. Após a resposta encaminhada em 21/09, usar o [complemento sobre pré-pedidos e homologação](complemento-fornecedor-2026-09-21.md); a hipótese de pedido definitivo abaixo foi confrontada pela informação do fornecedor.
+
 Olá, equipe Toth e TI Café Jurerê.
 
 Estamos especificando a evolução da integração Torque CRM para criar pedidos definitivos e, em etapas posteriores, alterar e cancelar exclusivamente os pedidos criados por essa nova integração. Cadastros existentes e pedidos anteriores permanecerão preservados. Clientes, produtos, preços e condições devem obedecer às regras do ERP.

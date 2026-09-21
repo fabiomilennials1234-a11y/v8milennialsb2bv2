@@ -46,6 +46,8 @@ Os tipos gerados do Supabase não são editados. Uma ponte tipada e restrita às
 
 ## Pendências para as próximas entregas
 
+Atualização documental de 21/09/2026: a [resposta encaminhada da Toth](../../docs/plans/cafe-jurere-etapa-0/resposta-fornecedor-2026-09-21.md) informa que a API recebe pré-pedidos sujeitos à análise na empresa. O usuário confirmou ganho somente após aprovação no ERP, com status confirmado pela integração; recebimento técnico não aprova comercialmente. O piloto de criação/acompanhamento foi proposto para confirmação. Alteração/cancelamento não foram oferecidos por API, controle remoto de versão foi declarado ausente e homologação precisa ser criada. A fundação local permanece compatível e sem mudança de código: conferência, gravação local e barreira de envio não geram venda. As regras atuais de importação e os pedidos históricos não foram alterados.
+
 Contrato de catálogo comercial e escrita; homologação isolada do ERP; vínculo inequívoco de empresa/filial/representante; validação de preço/crédito/estoque; identificação estável de operação e consulta de resultado; concorrência remota; confirmação, recuperação e conciliação sem dupla venda; alteração/cancelamento com motivo e estados operacionais. Essas dependências não são consideradas resolvidas pela revisão local do rascunho.
 
 Os três estados futuros — situação do pedido, execução da operação e conciliação no CRM — serão definidos com o contrato. A fundação mantém apenas versão e conferência do rascunho, evitando gravar estados operacionais fictícios.

@@ -8,6 +8,16 @@ Levantamento em 2026-09-17. Base examinada: `c99515b5072407c938d174853e7219b43b1
 - [Solicitação pronta para o fornecedor — não enviada](solicitacao-fornecedor.md)
 - [Roadmap e decisões do CTO](../cafe-jurere-escrita-erp-roadmap.md)
 
+## Atualização do fornecedor em 21/09/2026
+
+[Resposta encaminhada pelo usuário e análise de impacto](resposta-fornecedor-2026-09-21.md). A Toth informou que a API recebe **pré-pedidos**, aprovados ou rejeitados na empresa; não ofereceu comandos de alteração/cancelamento. Não existe homologação na Café, e o fornecedor propõe instalação se uma VM for disponibilizada. Os serviços disponíveis versus os que precisam ser criados no padrão Flow ainda devem ser distinguidos. O próprio fornecedor ressalvou a falta de confirmação da configuração exata da Café.
+
+O usuário confirmou nesta conversa: **ganho no CRM somente após aprovação no ERP, com status confirmado pela integração**. Recebimento técnico não representa aprovação. A fundação local não precisa mudar seu comportamento para manter essa separação: ela não envia pedidos nem marca ganho.
+
+A matriz foi atualizada com capacidade declarada, ausência declarada e lacunas de contrato. Duplicidade/consulta receberam apenas um “Sim”, sem mecanismo comprovado; catálogo, permissões e efeitos por fase continuam pendentes. A etapa 0 permanece aberta. [Complemento ao fornecedor, pronto para revisão e encaminhamento pelo responsável](complemento-fornecedor-2026-09-21.md).
+
+Esta atualização altera apenas documentação. Não envolve provisionamento de VM, contato com o fornecedor, merge, deploy, aplicação de migration ou ativação de flag. O inventário e os resultados locais abaixo são evidências de 17/09, não novas verificações do ambiente real.
+
 ## Inventário comprovado no checkout
 
 | Evidência | Comportamento observado | Consequência para escrita |
@@ -48,13 +58,14 @@ Precisamos firmar: unicidade do número do pedido entre empresas/filiais, IDs es
 
 | Pendência | Responsável proposto | Evidência exigida |
 |---|---|---|
-| API e garantias de escrita | Fornecedor Toth/gateway | Contrato versionado, respostas e casos da matriz |
-| Homologação isolada | Fornecedor + TI Café Jurerê | Identificação do ambiente, credenciais próprias por canal seguro, dados de teste e efeitos isolados |
+| API e garantias de escrita | Fornecedor Toth/gateway | Distinguir APIs existentes/a desenvolver; contrato de pré-pedido, consulta, aprovação, catálogo e casos da matriz |
+| Homologação isolada | Fornecedor + TI Café Jurerê | Requisitos/licenças/custo/prazo da VM a disponibilizar, responsabilidades, credenciais próprias por canal seguro, dados e efeitos isolados |
 | Transporte e permissões | TI Café Jurerê + fornecedor | Configuração atual confirmada e canal protegido para escrita; credencial de escopo mínimo |
-| Estados e regras comerciais | Operação Café Jurerê + fornecedor | Tabela de estados, ações permitidas e efeitos de estoque/financeiro/fiscal |
+| Estados e regras comerciais | Operação Café Jurerê + fornecedor | Configuração efetiva da Café: recepção/análise/aprovação/rejeição, identidade pré-pedido/pedido, totais e efeitos de estoque/financeiro/fiscal |
 | Reconciliação e venda única | Engenharia | Desenho de identidade negócio/pedido/Carteira/caderno, inclusive negócio já ganho e eventos fora de ordem |
 | Frequência e atendimento de pendências | CTO/Operação + fornecedor | Limites da API, prazo de atualização aceito e responsável pelas pendências |
 | Administração de alterações/cancelamentos | CTO | Confirmar que a regra de admin da organização abrange ambas as ações |
+| Escopo do piloto e rejeição comercial | Usuário/operação + engenharia | Confirmar primeira liberação de pré-pedidos/acompanhamento; definir efeito da rejeição, correção/substituição e vínculo exclusivo por negócio |
 
 Critério: cada capacidade essencial deve ter contrato e evidência suficientes para desenhar e testar a solução. Contrato acordado não equivale à homologação das etapas posteriores. Lacuna essencial mantém a operação afetada bloqueada. Não há prazo firme de implementação enquanto as dependências do fornecedor estiverem abertas.
 
