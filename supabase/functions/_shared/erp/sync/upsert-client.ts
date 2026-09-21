@@ -48,6 +48,7 @@ export interface ExistingClient {
   erp_company?: string | null;
   erp_owner_name?: string | null;
   erp_owner_external_id?: string | null;
+  responsible_id?: string | null;
   erp_status?: string | null;
   erp_segment?: string | null;
   erp_registered_at?: string | null;
