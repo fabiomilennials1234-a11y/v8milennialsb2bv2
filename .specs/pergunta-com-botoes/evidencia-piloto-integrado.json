@@ -1,0 +1,38 @@
+{
+  "created_at": "2026-09-21T20:20:48.528Z",
+  "project": "jsjsmuncfkbsbzqzqhfq",
+  "organization_id": "b2ad1ffb-e136-4356-846b-9f210f902573",
+  "instance_id": "3ea9d185-62bb-4efd-a9b4-b557938ba9e6",
+  "recipient_suffix": "5289",
+  "workflow_id": "03275240-5073-4294-901c-9fc3adbbd6d6",
+  "lead_id": "280f5375-ad7e-46ee-9437-c65f60be97a0",
+  "execution_id": "cf13c12e-be34-46ba-bc85-d9c9c8750fce",
+  "asset": {
+    "bucket": "workflow-question-images",
+    "path": "b2ad1ffb-e136-4356-846b-9f210f902573/e151a25d-4c13-4e80-9c09-a71b5f74f61a.png",
+    "mimeType": "image/png",
+    "sizeBytes": 68119
+  },
+  "phase": "enrolled",
+  "flag_persistently_enabled": false,
+  "upload_path": "service storage API; user-auth upload endpoint covered separately",
+  "last_checked_at": "2026-09-21T20:24:17.976Z",
+  "observed": {
+    "gate": null,
+    "steps": null,
+    "question": {
+      "id": "ba7a6685-2901-4506-92b2-2d739e5d61fe",
+      "state": "waiting",
+      "accepted_at": "2026-09-21T20:24:05.971+00:00",
+      "deadline_at": "2026-09-22T20:24:05.971+00:00",
+      "failure_reason": null,
+      "selected_handle": null,
+      "send_check_count": 0
+    },
+    "execution": {
+      "node": "ask",
+      "error": null,
+      "status": "paused"
+    }
+  }
+}

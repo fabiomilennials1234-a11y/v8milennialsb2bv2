@@ -90,3 +90,17 @@ Backend implementado e validado com 265 testes, rollback em produção e disputa
 - Migrations 60–68 exercitadas juntas no alvo de produção em transação revertida: ativação, permissões do histórico, falha de admissão e exclusão de instância. Antes/depois confirmam ausência de todos os fixtures e schema candidato. Evidências: `evidencia-release-rollback.json`, `evidencia-admissao-rollback.json`, `evidencia-historico-rollback.json`, `evidencia-ciclo-instancia-rollback.json`.
 
 Estado deste registro: preparação para teste integrado; nenhuma migration permanente ou função candidata publicada. Não equivale à liberação geral nem à conclusão do ticket 09.
+
+## Piloto implantado — 2026-09-21
+
+Após autorização explícita do CTO para testar em produção, migrations 60–68 aplicadas permanentemente e registradas com nomes/versões correspondentes no ledger. Grants das 15 funções candidatas conferidos novamente após COMMIT: nenhuma execução anônima; somente histórico acessível a authenticated, com autorização interna.
+
+Publicadas `whatsapp-webhook` v107, `process-workflow-executions` v163 e `workflow-question-image` v1. Fontes/bundles anteriores arquivados fora do repositório. Todos os 93 arquivos do worker anterior coincidiam com a base revisada; webhook anterior diferia apenas em mudança de retryAt já presente na main.
+
+Piloto único na TorqueSDR, destinatário autorizado terminado em 5289, imagem privada e três saídas para Fim. A flag foi ligada somente dentro da transação de criação/congelamento desse piloto e restaurada antes do COMMIT; permanece ausente/desligada externamente. Não houve habilitação de organização ou rollout do frontend.
+
+Worker aceitou a mensagem em `2026-09-21T20:24:05.971Z`; ocorrência `waiting`, execução `paused`, deadline 24h depois. Aguardando clique para comprovar ramificação e término. Upload deste fixture usou Storage API service_role; autorização do endpoint de upload possui testes separados, não alegar jornada completa pelo editor.
+
+PR draft #2153. GitHub Actions não iniciou jobs por cobrança/limite de gastos da conta; nenhum teste CI chegou a executar. Validações locais descritas acima permanecem a evidência de código. Sem merge e sem conclusão do ticket 09.
+
+Evidências correntes: `evidencia-deploy-controlado.json` e `evidencia-piloto-integrado.json`. Após confirmar resultado, desativar o workflow exclusivo de teste e preservar evidência sanitizada; imagem deve permanecer enquanto houver referência no snapshot.

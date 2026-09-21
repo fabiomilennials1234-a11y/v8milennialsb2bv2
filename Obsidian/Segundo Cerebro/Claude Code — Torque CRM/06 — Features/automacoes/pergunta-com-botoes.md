@@ -11,3 +11,8 @@ Gate: `organizations.feature_flags.workflow_question_buttons`, desligado por pad
 Estado em 2026-09-21: candidato local, testes unitários e contratos transacionais no banco de produção com rollback. Texto/imagem reais confirmados pelo CTO em TorqueSDR; ainda não comprovam jornada implantada completa. Não habilitar para todas as organizações com base nesses testes. Matriz Android/iOS/Web/Desktop permanece sem cobertura completa.
 
 Fontes: `.specs/pergunta-com-botoes/` e `tests/integration/workflow-buttons/README.md`. PRD #2141; tickets #2142–#2150. Nenhum ticket encerrado por esta nota.
+
+
+## Atualização do piloto
+
+Backend implantado em produção sob autorização do CTO: migrations 60–68, webhook v107, worker v163, imagem v1. Um snapshot de teste autorizado na TorqueSDR recebeu aceite com imagem privada; aguardando resposta. Gate geral permanece desligado; frontend não publicado. PR #2153 em draft. Actions bloqueado por cobrança/limite antes de iniciar jobs. Detalhes e estado atual em `.specs/pergunta-com-botoes/implementacao-tdd.md` e evidências de deploy/piloto.
