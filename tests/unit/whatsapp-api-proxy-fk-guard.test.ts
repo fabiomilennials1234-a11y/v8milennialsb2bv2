@@ -381,6 +381,33 @@ function requisicaoDeExclusao(): Request {
   });
 }
 
+describe('createInstance management permission', () => {
+  for (const mode of ['denied', 'error', 'allowed'] as const) {
+    it(`checks authenticated permission before provisioning: ${mode}`, async () => {
+      const rpc = vi.fn().mockResolvedValue({
+        data: mode === 'allowed', error: mode === 'error' ? { message: 'unavailable' } : null,
+      });
+      const createInstance = vi.fn().mockResolvedValue({ provider_instance_id: 'remote', status: { connected: false } });
+      mockGetWhatsAppProvider.mockResolvedValue({ createInstance });
+      mockCreateClient.mockImplementation((_url: string, key: string) => key === 'service-role-key'
+        ? { from: (table: string) => builder(table) }
+        : { auth: { getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }) }, rpc });
+      const handler = await carregarProxyNovo();
+      const response = await handler(new Request('http://localhost/whatsapp-api-proxy', {
+        method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'createInstance', payload: { instance_name: 'new-box' } }),
+      }));
+      expect(rpc).toHaveBeenCalledWith('can_manage_whatsapp_instances', { p_org_id: ORG_ID });
+      expect(response.status).toBe(mode === 'allowed' ? 200 : mode === 'error' ? 503 : 403);
+      if (mode === 'allowed') expect(createInstance).toHaveBeenCalledTimes(1);
+      else {
+        expect(createInstance).not.toHaveBeenCalled();
+        expect(queries.filter(q => q.table === 'whatsapp_instances')).toHaveLength(0);
+      }
+    });
+  }
+});
+
 async function excluirInstancia(
   handler: (req: Request) => Promise<Response>
 ): Promise<Response> {

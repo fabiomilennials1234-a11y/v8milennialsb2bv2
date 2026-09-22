@@ -404,6 +404,17 @@ Deno.serve(
       // createInstance — does not require existing instance_id
       // -----------------------------------------------------------------------
       if (action === "createInstance") {
+        // Use the caller JWT: the service-role client must not decide the
+        // caller's feature permission. Check before any DB/provider side effect.
+        const { data: canManage, error: permissionError } = await supabaseUser.rpc(
+          "can_manage_whatsapp_instances", { p_org_id: callerOrgId }
+        );
+        if (permissionError) {
+          return jsonResponse(503, { error: "Não foi possível verificar sua permissão para criar instâncias. Tente novamente." }, corsHeaders);
+        }
+        if (canManage !== true) {
+          return jsonResponse(403, { error: "Você não tem permissão para gerenciar instâncias de WhatsApp." }, corsHeaders);
+        }
         const instanceName = payload.instance_name as string | undefined;
         if (!instanceName) {
           return jsonResponse(
