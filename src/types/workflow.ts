@@ -1191,7 +1191,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_sticker: "Enviar WhatsApp (Figurinha)",
   send_whatsapp_document: "Enviar WhatsApp (Documento)",
   send_whatsapp_template: "Enviar Template WhatsApp",
-  send_whatsapp_menu: "Enviar Menu Interativo (Uazapi)",
+  send_whatsapp_menu: "WhatsApp Menu",
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
   send_meta_message: "Enviar Mensagem no Instagram",
   send_semi_automatic: "Envio Semi-Automático",

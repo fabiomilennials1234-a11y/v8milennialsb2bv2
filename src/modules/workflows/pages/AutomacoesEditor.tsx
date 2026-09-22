@@ -382,14 +382,18 @@ function AutomacoesEditorContent() {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId
-            ? { ...n, data: (() => {
-              const merged = { ...n.data, ...dataUpdates } as Record<string, unknown>;
+            ? { ...n, type: dataUpdates.type ?? n.type, data: (() => {
+              const merged = { ...(dataUpdates.type && dataUpdates.type !== n.data.type ? {} : n.data), ...dataUpdates } as Record<string, unknown>;
               for (const [key, value] of Object.entries(dataUpdates)) if (value === undefined) delete merged[key];
               return merged as typeof n.data;
             })() }
             : n
         )
       );
+
+      if (dataUpdates.type && nodes.some(node => node.id === nodeId && node.data.type !== dataUpdates.type)) {
+        setEdges(current => current.filter(edge => edge.source !== nodeId));
+      }
 
       if ("buttons" in dataUpdates && Array.isArray(dataUpdates.buttons)) {
         const handles = new Set(dataUpdates.buttons.map((button: { id: string }) => `button:${button.id}`));
@@ -412,7 +416,7 @@ function AutomacoesEditorContent() {
         );
       }
     },
-    [setNodes, setEdges, takeSnapshot]
+    [nodes, setNodes, setEdges, takeSnapshot]
   );
 
   const handleDeleteNode = useCallback(
