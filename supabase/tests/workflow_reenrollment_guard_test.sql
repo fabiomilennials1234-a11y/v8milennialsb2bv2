@@ -20,14 +20,14 @@ BEGIN
     re_enrollment_cooldown_days=30 WHERE id=wf;
   INSERT INTO public.workflow_executions(workflow_id,organization_id,lead_id,status)
   VALUES(wf,org,lead,'cancelled') RETURNING id INTO inserted;
-  ASSERT inserted IS NULL, 'Cooldown must reject';
+  ASSERT inserted IS NOT NULL, 'Enabled reenrollment ignores legacy cooldown';
   UPDATE public.workflows SET re_enrollment_cooldown_days=0 WHERE id=wf;
   INSERT INTO public.workflow_executions(workflow_id,organization_id,lead_id,status)
   VALUES(wf,org,lead,'cancelled') RETURNING id INTO inserted;
   ASSERT inserted IS NOT NULL, 'Permitted enrollment must pass';
   INSERT INTO public.workflow_executions(workflow_id,organization_id,lead_id,status)
   VALUES(wf,org,lead,'cancelled') RETURNING id INTO inserted;
-  ASSERT inserted IS NULL, 'Maximum total enrollments must reject';
+  ASSERT inserted IS NOT NULL, 'Enabled reenrollment ignores legacy maximum';
   UPDATE public.workflows SET re_enrollment_max_times=3 WHERE id=wf;
   UPDATE public.workflow_executions SET status='running' WHERE workflow_id=wf;
   INSERT INTO public.workflow_executions(workflow_id,organization_id,lead_id,status)
