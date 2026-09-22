@@ -51,6 +51,12 @@ async function callProxy<T = unknown>(
 // Instance lifecycle
 // ============================================================================
 
+export function forwardMessage(instanceId: string, rowId: string, number: string) {
+  return callProxy<{ message_id: string; status: "sent" | "queued" }>("forwardMessage", {
+    instance_id: instanceId, payload: { row_id: rowId, number },
+  });
+}
+
 export type CreateInstanceResult = {
   provider_instance_id: string;
   provider_token?: string;

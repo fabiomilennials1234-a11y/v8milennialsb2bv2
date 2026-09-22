@@ -33,6 +33,7 @@ import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDiv
 import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";
 import { MessagesAreaErrorBoundary } from "@/modules/communication/components/chat/MessagePrimitives";
 import { MessageBubble } from "@/modules/communication/components/chat/MessagePrimitives";
+import { groupSender } from "../../../lib/groupSender";
 import { CallMarker } from "@/modules/communication/components/chat/view/CallMarker";
 import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
 import type { ConversationCall } from "@/modules/communication/lib/conversationCallsQuery";
@@ -420,9 +421,9 @@ export function MessageList({
       (m as any).sent_source ?? (m.sent_by_ai ? "copilot" : "manual");
     const msgSource = getSource(message);
     const sameAuthorPrev =
-      prevMsg && prevMsg.direction === message.direction && getSource(prevMsg) === msgSource;
+      prevMsg && prevMsg.direction === message.direction && getSource(prevMsg) === msgSource && groupSender(prevMsg)?.key === groupSender(message)?.key;
     const sameAuthorNext =
-      nextMsg && nextMsg.direction === message.direction && getSource(nextMsg) === msgSource;
+      nextMsg && nextMsg.direction === message.direction && getSource(nextMsg) === msgSource && groupSender(nextMsg)?.key === groupSender(message)?.key;
     const deltaPrev = prevMsg
       ? Math.abs(new Date(message.timestamp).getTime() - new Date(prevMsg.timestamp).getTime())
       : Infinity;

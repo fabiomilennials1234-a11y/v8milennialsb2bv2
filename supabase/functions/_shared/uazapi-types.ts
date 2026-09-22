@@ -79,6 +79,7 @@ export type UazapiSendMediaInput = {
   file: string;
   filename?: string;
   caption?: string;
+  forward?: boolean;
   delay?: number;
   replyid?: string;
   readchat?: boolean;

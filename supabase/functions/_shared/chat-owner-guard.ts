@@ -25,6 +25,7 @@
  * getStatus, connectQR, reconfigureWebhook, logoutInstance, getMessageLimits.
  */
 const TARGETED_ACTIONS = new Set([
+  "forwardMessage",
   "sendText",
   "sendMedia",
   "sendAudio",

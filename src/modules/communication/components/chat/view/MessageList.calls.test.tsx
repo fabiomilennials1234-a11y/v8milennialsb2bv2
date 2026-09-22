@@ -110,6 +110,17 @@ function baseProps(over: Partial<MessageListProps> = {}): MessageListProps {
   };
 }
 
+it("identifies each group participant above their message, without labeling direct chats", () => {
+  const time = "2026-09-22T12:00:00Z";
+  const a = { ...msg("group-a", time, "Olá da Ana"), is_group: true, remote_jid: "12000000000@g.us", push_name: "Ana", group_sender_phone: "5511000000000@s.whatsapp.net" };
+  const b = { ...msg("group-b", time, "Olá da Bia"), is_group: true, remote_jid: "12000000000@g.us", push_name: "Bia", group_sender_phone: "5511999999999@s.whatsapp.net" };
+  const { container } = render(<MessageList {...baseProps({ messages: [a, b, msg("direct", time, "Conversa direta")] })} />);
+  const labels = Array.from(container.querySelectorAll('[data-testid="group-sender"]'));
+  expect(labels.map(label => label.textContent)).toEqual(["Ana", "Bia"]);
+  expect(labels[0].compareDocumentPosition(screen.getByText("Olá da Ana")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(labels[1].compareDocumentPosition(screen.getByText("Olá da Bia")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 /** `true` quando `a` aparece antes de `b` na ordem real do documento. */
 function vemAntes(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
