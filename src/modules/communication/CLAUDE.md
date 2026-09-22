@@ -7,6 +7,10 @@
 
 ## Escopo
 
+### Gerenciamento de conexões versus leitura de chats
+
+`can_manage_whatsapp_instances(org)` autoriza ler as configurações de instâncias da organização, inclusive uma conexão nova ainda sem membros vinculados. Isso não concede acesso às mensagens: `whatsapp_readable_instance_ids` e as policies das conversas continuam exigindo vínculo/admin/master. A API verifica a permissão com o JWT do usuário antes de criar registros ou provisionar a instância no provedor. Falha de leitura após provisionamento é apresentada como criação concluída com dados indisponíveis, e invalida a lista para evitar tentativas duplicadas.
+
 Multi-canal de mensagens. Canais ativos:
 - **WhatsApp** (Uazapi — migração de Evolution concluída)
 - **Meta** (Messenger + Instagram Direct)

@@ -124,19 +124,24 @@ export function useCreateWhatsAppInstance() {
             ? new Date(Date.now() + QR_CODE_TTL_MS).toISOString()
             : null,
         })
-        .eq("id", instance_id);
+        .eq("id", instance_id)
+        .eq("organization_id", teamMember.organization_id);
 
       const { data: instance, error } = await supabase
         .from("whatsapp_instances")
         .select("*")
         .eq("id", instance_id)
-        .single();
+        .eq("organization_id", teamMember.organization_id)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error || !instance) {
+        throw new Error("A instância foi criada, mas não foi possível carregar seus dados. Atualize a lista e confira sua permissão de acesso antes de tentar criar novamente.");
+      }
       return { ...(instance as WhatsAppInstance), paircode: result.status.paircode };
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_instances_with_agent"] });
     },
   });
 }
