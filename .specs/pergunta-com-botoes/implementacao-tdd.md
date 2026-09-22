@@ -118,3 +118,13 @@ Segundo gap: componente visual dos botões não renderizava imagem. Frontend cor
 Validação: 40 testes em sete arquivos antes do reforço de direção/lead; depois, 16 testes de API/bolha passaram, incluindo caso negativo adicional. Build, Deno check, lint e typecheck ratchets sem erro novo. Mensagem recuperada no banco do chat; conferência visual no navegador não concluída porque ferramenta recusou ações enquanto usuário alterava a janela. Não alegar observação da tela corrigida.
 
 Estado de publicação: migration 69 e endpoint de prévia publicados; texto e botões são compatíveis com frontend atual. **Renderização da imagem no chat ainda depende de publicar frontend do PR #2153.** Não houve merge/deploy do frontend. CI continua bloqueado por cobrança/limite da conta; PR segue draft.
+
+## WhatsApp Menu dentro de Ação — 2026-09-22
+
+Correção de produto solicitada pelo CTO: entrada em **Adicionar Nó → Ação → Tipo de Ação → WhatsApp Menu**, sem item próprio em Controle de Fluxo. Canvas e painel identificam a configuração como Ação/WhatsApp Menu. Seletor compartilhado mantém as permissões de categorias e permite acessar Menu também com `unified_message_node` ligado.
+
+Contrato interno `question_buttons` permanece como representação da execução com espera, sem modificar snapshots, RPCs ou migrations já publicadas. A seleção de WhatsApp Menu cria essa representação; alterar para outra ação remove apenas conexões de saída incompatíveis e mantém conexões de entrada. Menus legados `send_whatsapp_menu` não são convertidos automaticamente ao abrir ou salvar: listas e envios antigos mantêm semântica.
+
+TDD: teste da entrada separada falhou antes da remoção; teste da seleção pela Ação falhou antes da integração. Cobertura do editor exercita seleção com mensagem unificada ligada/desligada, salvamento, troca de ação, conexões, imagem privada e preservação de menu legado. Mudança somente frontend; requer publicação para aparecer em produção. Validação ponta a ponta do piloto original continua pendente.
+
+Verificação desta alteração: 93 testes em oito arquivos passaram (Node 24); build concluído; lint/typecheck ratchets com zero problemas introduzidos. Revisão do diff conferiu gates de organização, compatibilidade dos snapshots e limpeza limitada às saídas quando tipo muda. Nenhuma migration ou edge function alterada.

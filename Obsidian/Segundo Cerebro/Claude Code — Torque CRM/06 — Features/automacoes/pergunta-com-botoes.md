@@ -20,3 +20,7 @@ Backend implantado em produção sob autorização do CTO: migrations 60–68, w
 ### Correção de projeção no chat
 
 Piloto revelou envio aceito sem registro em `whatsapp_messages`. Migration 69 agora grava projeção na transação de aceite, preservando eco/status e evitando depender de callback para aparecer no chat. Piloto recuperado sem reenvio. Imagem privada recebe prévia autenticada por mensagem; componente de botões atualizado no PR, ainda sem publicação do frontend. Ver evidências de chat e limites de validação na spec.
+
+## Acesso pelo editor — 2026-09-22
+
+Por decisão do CTO, configuração passa a **Adicionar Nó → Ação → WhatsApp Menu**. A entrada independente em Controle de Fluxo é removida; painel e canvas usam identificação de Ação. Imagem, botões, prazo e saídas permanecem. Contrato interno `question_buttons` é preservado para compatibilidade com snapshots/executor. Menus legados não são migrados automaticamente. Esta alteração depende da publicação do frontend.

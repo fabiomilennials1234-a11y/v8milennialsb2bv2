@@ -14,10 +14,11 @@ function QuestionButtonsNodeComponent({ id, data, selected }: NodeProps) {
     { id: "timeout", label: "Sem resposta" },
     { id: "send_failure", label: "Falha no envio" },
   ];
-  return <div className={cn("w-[280px] rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-md", selected && "ring-2 ring-primary ring-offset-2 ring-offset-background")}>
+  return <div className={cn("w-[280px] rounded-xl border border-border border-l-4 border-l-green-500 bg-card shadow-md", selected && "ring-2 ring-primary ring-offset-2 ring-offset-background")}>
     <Handle type="target" position={Position.Top} />
     <div className="space-y-2 p-4">
-      <div className="flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4 text-primary" />Pergunta com botões</div>
+      <div className="flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4 text-green-500" />{question.label || "Ação"}</div>
+      <p className="text-xs font-medium">WhatsApp Menu</p>
       <p className="line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">{question.text || "Escreva sua pergunta"}</p>
       <p className="text-xs text-muted-foreground">Prazo: {question.timeoutHours}h</p>
       {typeof question.__configIssue === "string" && <p role="alert" className="text-xs text-destructive">{question.__configIssue}</p>}

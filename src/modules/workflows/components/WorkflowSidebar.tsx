@@ -1,3 +1,8 @@
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useFeatureFlag } from "@/modules/platform";
+import { QUESTION_BUTTONS_FLAG, type ActionNodeData } from "@/types/workflow";
+import { ActionTypeSelector } from "./sidebar-panels/ActionTypeSelector";
 import { getGuidedConditionFields } from '../lib/guided-condition-summary';
 import { useState } from 'react';
 import { X, Trash2, AlertTriangle, Copy, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -89,6 +94,7 @@ export function WorkflowSidebar({
   onDuplicateNode,
   allNodes = [],
 }: WorkflowSidebarProps) {
+  const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
   const [expanded, setExpanded] = useState(false);
   if (!selectedNode) return null;
 
@@ -97,10 +103,23 @@ export function WorkflowSidebar({
   // Trigger is singular per workflow — never duplicable.
   const canDuplicate = nodeType !== "trigger";
   const guided = nodeType === 'condition' && Boolean((nodeData as ConditionNodeData).guidedCondition);
-  const title = NODE_LABELS[nodeType] || "Configuração";
+  const title = nodeType === "question_buttons" ? "Ação" : NODE_LABELS[nodeType] || "Configuração";
 
   const handleUpdate = (updates: Partial<WorkflowNodeData>) => {
     onUpdateNode(selectedNode.id, updates);
+  };
+
+  const handleActionUpdate = (updates: Partial<ActionNodeData>) => {
+    if (updates.actionType === "send_whatsapp_menu" && buttonsEnabled && nodeType !== "question_buttons") {
+      const action = nodeData as ActionNodeData;
+      handleUpdate({ type: "question_buttons", label: action.label, text: action.messageTemplate ?? "",
+        instanceId: action.whatsappInstanceId || undefined,
+        buttons: [{ id: crypto.randomUUID(), label: "Opção 1" }], timeoutHours: 24 });
+    } else if (nodeType === "question_buttons" && updates.actionType && updates.actionType !== "send_whatsapp_menu") {
+      handleUpdate({ type: "action", label: nodeData.label, ...updates });
+    } else {
+      handleUpdate(updates);
+    }
   };
 
   const renderPanel = () => {
@@ -108,7 +127,7 @@ export function WorkflowSidebar({
       case "trigger":
         return <TriggerPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "action":
-        return <ActionPanel data={nodeData as any} onUpdate={handleUpdate} />;
+        return <ActionPanel data={nodeData as ActionNodeData} onUpdate={handleActionUpdate} />;
       case "condition":
         if ((nodeData as ConditionNodeData).guidedCondition) {
           const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);
@@ -138,7 +157,11 @@ export function WorkflowSidebar({
       case "copilot":
         return <CopilotPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "question_buttons":
-        return <QuestionButtonsPanel key={selectedNode.id} workflowId={workflowId} data={nodeData as QuestionButtonsNodeData} onUpdate={handleUpdate} />;
+        return <>
+          <div className="space-y-2"><Label htmlFor="menu-action-name">Nome</Label><Input id="menu-action-name" value={nodeData.label ?? ""} onChange={event => handleUpdate({ label: event.target.value })} /></div>
+          <ActionTypeSelector value="send_whatsapp_menu" onChange={actionType => handleActionUpdate({ actionType })} />
+          <QuestionButtonsPanel key={selectedNode.id} workflowId={workflowId} data={nodeData as QuestionButtonsNodeData} onUpdate={handleUpdate} />
+        </>;
       case "wait_response":
         return <WaitResponsePanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "split_ab":

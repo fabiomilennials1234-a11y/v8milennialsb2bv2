@@ -1,3 +1,4 @@
+import { ActionTypeSelector } from "./ActionTypeSelector";
 import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
@@ -19,8 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Mic, MicOff, Upload, Trash2, Play, Square, Plus, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
-import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
+import type { ActionNodeData, MessageType } from "@/types/workflow";
 import {
   CAMPOS_DO_NO_DE_TEMPLATE,
   EscapeDeJanelaConfig,
@@ -29,8 +29,6 @@ import {
   TemplateNodeConfig,
 } from "@/modules/workflows/components/action-configs";
 import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
-import { useFeatureFlag } from "@/modules/platform";
-import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
@@ -632,14 +630,6 @@ function FunnelLegacyActionFields({
 
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
-  // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
-  // se a org não tem a flag, o picker mostra os envios legados, como antes.
-  const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
-  const { hasFeature } = useOrgFeatures();
-  // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
-  const actionCategories = getActionCategories(unifiedEnabled).filter(
-    (c) => c.label !== "Negócios" || hasFeature("deals"),
-  );
 
   return (
     <div className="space-y-4">
@@ -653,32 +643,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         />
       </div>
 
-      {/* Tipo de Ação (agrupado por categoria) */}
-      <div className="space-y-2">
-        <Label>Tipo de Ação</Label>
-        <Select
-          value={at}
-          onValueChange={(v) => onUpdate({ actionType: v as WorkflowActionType })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione a ação" />
-          </SelectTrigger>
-          <SelectContent className="max-h-80">
-            {actionCategories.map((cat) => (
-              <SelectGroup key={cat.label}>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  {cat.label}
-                </SelectLabel>
-                {cat.actions.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {ACTION_LABELS[a]}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ActionTypeSelector value={at} onChange={actionType => onUpdate({ actionType })} />
 
       {/* ═══════ COMUNICAÇÃO ═══════ */}
 
