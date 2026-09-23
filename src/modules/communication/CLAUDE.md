@@ -7,6 +7,12 @@
 
 ## Escopo
 
+### Participantes de grupos e encaminhamento
+
+`groupSender` identifica o participante pelas informações da própria mensagem (`push_name`, `sender_pn`, `sender`), tanto nas projeções do histórico quanto no realtime. O nome do grupo não é nome do remetente; LID não deve ser apresentado como telefone. O agrupamento de bolhas respeita a identidade do participante.
+
+`ForwardMessageDialog` seleciona uma conversa recente da mesma instância e exige confirmação. `forwardMessage` no proxy lê origem e destino com o JWT do usuário/RLS, deriva lead e JID no servidor e passa pelos gates de escrita existentes. O cliente não fornece texto nem URL de mídia. Uazapi recebe `forward: true`; respostas citadas não carregam a citação original. Não há retry automático e falha de persistência após aceite não transforma envio aceito em erro. Tipos suportados: texto, imagem, vídeo, áudio, documento e figurinha; mídia expirada é recusada. Exige deploy do `whatsapp-api-proxy` além do frontend; não precisa de migration.
+
 ### Gerenciamento de conexões versus leitura de chats
 
 `can_manage_whatsapp_instances(org)` autoriza ler as configurações de instâncias da organização, inclusive uma conexão nova ainda sem membros vinculados. Isso não concede acesso às mensagens: `whatsapp_readable_instance_ids` e as policies das conversas continuam exigindo vínculo/admin/master. A API verifica a permissão com o JWT do usuário antes de criar registros ou provisionar a instância no provedor. Falha de leitura após provisionamento é apresentada como criação concluída com dados indisponíveis, e invalida a lista para evitar tentativas duplicadas.

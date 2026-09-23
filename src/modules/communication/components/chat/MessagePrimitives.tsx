@@ -1,4 +1,6 @@
 import { RichContactBubble } from "./bubbles/RichContactBubble";
+import { groupSender } from "../../lib/groupSender";
+import { ForwardMessageDialog } from "./actions/ForwardMessageDialog";
 import { readUazapiPix, type UazapiPixFields } from "../../lib/uazapiPixDisplay";
 import { PixMessage } from "./media/PixMessage";
 import { AudioTranscription } from "./media/AudioTranscription";
@@ -164,6 +166,7 @@ export function MessageBubble({
   textoCitado?: (providerMessageId: string) => string | null;
 }) {
   const isOutgoing = message.direction === "outgoing";
+  const sender = groupSender(message);
   const isFailed = message.status === "failed";
   const sentSource: "manual" | "copilot" | "workflow" =
     isOutgoing
@@ -240,6 +243,9 @@ export function MessageBubble({
   const idEstavel = alvoDaAcao.provider_message_id ?? null;
   const mostrarBarraOficial = (!!onReagir || !!onResponder) && !isDeleted && !!idEstavel;
   const [isEditing, setIsEditing] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const canForward = isWhatsAppMsg && !isDeleted && !['pending', 'failed'].includes(message.status)
+    && ['text', 'conversation', 'extendedTextMessage', 'image', 'video', 'audio', 'ptt', 'document', 'sticker'].includes((message as WhatsAppMessage).message_type);
   const editMut = useEditMessage();
 
   const showActions =
@@ -362,6 +368,7 @@ export function MessageBubble({
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
             onRequestEdit={() => setIsEditing(true)}
+            onForward={canForward ? () => setForwardOpen(true) : undefined}
           />
         </div>
       )}
@@ -375,6 +382,7 @@ export function MessageBubble({
           !!meta.pinned_at && "ring-1 ring-primary/30"
         )}
       >
+        {sender && <p className="mb-1 text-xs font-semibold text-primary break-words" data-testid="group-sender">{sender.name}</p>}
         {/* Sender label for AI messages — only on first in group */}
         {isFirstInGroup && sentSource !== "manual" && (
           <div className="flex items-center gap-1 mb-1">
@@ -665,9 +673,12 @@ export function MessageBubble({
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
             onRequestEdit={() => {}}
+            onForward={canForward ? () => setForwardOpen(true) : undefined}
           />
         </div>
       )}
+      {forwardOpen && instanceId && <ForwardMessageDialog instanceId={instanceId} rowId={message.id}
+        preview={message.content || "Mensagem com mídia"} onClose={() => setForwardOpen(false)} />}
     </motion.div>
   );
 }

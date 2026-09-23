@@ -1,4 +1,5 @@
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
+import { resolveForward, sendForward, ForwardError } from "../_shared/whatsapp-forward.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -554,6 +555,14 @@ Deno.serve(
       }
 
       // -----------------------------------------------------------------------
+      let forwarding: Awaited<ReturnType<typeof resolveForward>> | null = null;
+      if (action === "forwardMessage") {
+        forwarding = await resolveForward(supabaseUser, callerOrgId, instanceId, payload.row_id, payload.number);
+        // Destination ownership comes from the database, never from the browser.
+        payload.lead_id = forwarding.leadId;
+        payload.number = forwarding.number;
+      }
+
       // 4.7 Gate de escrita por responsável (#1635)
       //
       // A checagem acima é de ORG. Esta é de RESPONSÁVEL: com a política
@@ -821,6 +830,7 @@ Deno.serve(
       // Frontend (Etapa C) passa a anexar lead_id no composer humano.
       // -----------------------------------------------------------------------
       const SEND_ACTIONS = new Set([
+        "forwardMessage",
         "sendText",
         "sendMedia",
         "sendAudio",
@@ -970,6 +980,29 @@ Deno.serve(
       let result: unknown;
 
       switch (action) {
+        case "forwardMessage": {
+          if (!forwarding) throw new ForwardError(400, "Encaminhamento inválido");
+          const sent = await sendForward(provider, forwarding);
+          result = sent;
+          // Provider already accepted. A persistence error must never invite a resend.
+          try {
+            const content = forwarding.content;
+            const saved = await supabaseAdmin.from("whatsapp_messages").upsert({
+              organization_id: callerOrgId, instance_id: instanceId, message_id: sent.message_id,
+              remote_jid: forwarding.number, phone_number: forwarding.number.split("@")[0],
+              is_group: forwarding.number.endsWith("@g.us"), lead_id: forwarding.leadId,
+              direction: "outgoing", sent_source: "manual",
+              message_type: content.kind === "text" ? "text" : content.type,
+              content: content.kind === "text" ? content.text : content.caption ?? null,
+              condition_text: content.kind === "text" ? content.text : content.caption ?? null,
+              media_url: content.kind === "media" ? content.file : null,
+              status: sent.status === "queued" ? "pending" : "sent", timestamp: new Date().toISOString(),
+              raw_payload: { torqueForwarded: true },
+            }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+            if (saved.error) throw saved.error;
+          } catch { console.warn("[whatsapp-api-proxy] forward persistence failed after accepted send"); }
+          break;
+        }
         case "transcribeAudio": {
           try { result = await transcribeChatAudio(supabaseUser, supabaseAdmin, provider, callerOrgId, instanceId, payload.row_id); }
           catch (error) { if (error instanceof TranscriptionError) return jsonResponse(error.status, { error: error.message }, corsHeaders); throw error; }
@@ -1563,6 +1596,7 @@ Deno.serve(
       }
       return jsonResponse(200, { ok: true, result }, corsHeaders);
     } catch (e) {
+      if (e instanceof ForwardError) return jsonResponse(e.status, { error: e.message }, corsHeaders);
       const msg = (e as Error).message ?? "Internal error";
       console.error(`[whatsapp-api-proxy] action=${action} UNHANDLED ERROR: ${msg}`, (e as Error).stack ?? e);
 

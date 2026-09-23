@@ -13,6 +13,9 @@ import type { UazapiMenuFields } from "../../lib/uazapiMenuDisplay";
 
 import type { UazapiPixFields } from "../../lib/uazapiPixDisplay";
 export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
+  is_group?: boolean | null;
+  group_sender?: unknown;
+  group_sender_phone?: unknown;
   transcription_text?: string | null;
   transcription_provider?: string | null;
   transcription_created_at?: string | null;

@@ -33,6 +33,16 @@ beforeEach(() => { UazapiClient._resetCircuitState(); vi.stubGlobal("fetch", vi.
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("UAZAPI 2.1.1 request contracts", () => {
+  it("forwards text and media using the documented flag and keeps full group JIDs", async () => {
+    vi.mocked(fetch).mockImplementation(async () => response(message));
+    const provider = new UazapiProvider({ ...config, instanceId: "instance", organizationId: "org", supabaseAdmin: { rpc: vi.fn() } as never });
+    await provider.sendText({ number: "12000000000@g.us", text: "hello", forward: true });
+    await provider.sendMedia({ number: "12000000000@g.us", type: "image", file: "https://media.test/image", caption: "caption", forward: true });
+    assertRequestContract();
+    for (const [, init] of vi.mocked(fetch).mock.calls) {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ number: "12000000000@g.us", forward: true });
+    }
+  });
   it("uses documented contact, location, block and recovery payloads", async () => {
     vi.mocked(fetch).mockImplementation(async url => response(String(url).includes('history-sync') ? { success: true, mode: 'history' } : message));
     const client = new UazapiClient(config);

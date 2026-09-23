@@ -53,6 +53,7 @@ export type WhatsAppInstance = {
 };
 
 export type SendTextOptions = {
+  forward?: boolean;
   number: string;
   text: string;
   delay?: number;
@@ -63,6 +64,7 @@ export type SendTextOptions = {
 };
 
 export type SendMediaOptions = {
+  forward?: boolean;
   replyid?: string;
   number: string;
   type: "image" | "video" | "audio" | "document" | "ptt" | "sticker";

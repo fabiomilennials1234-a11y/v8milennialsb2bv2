@@ -265,6 +265,7 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async sendText(opts: SendTextOptions): Promise<SendResult> {
     const resp = await this.client.sendText({
+      forward: opts.forward,
       number: opts.number,
       text: opts.text,
       delay: opts.delay,
@@ -296,6 +297,7 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async sendMedia(opts: SendMediaOptions): Promise<SendResult> {
     const resp = await this.client.sendMedia({
+      forward: opts.forward,
       number: opts.number,
       replyid: opts.replyid,
       type: opts.type as any,

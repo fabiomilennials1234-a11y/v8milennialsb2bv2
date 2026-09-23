@@ -10,7 +10,7 @@
  */
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useState } from "react";
-import { Reply, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
+import { Forward, Reply, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -44,6 +44,7 @@ export interface MessageBubbleActionsProps {
   hasMedia?: boolean;
   /** Fired when user clicks the edit pencil — parent swaps to EditMessageInline */
   onRequestEdit: () => void;
+  onForward?: () => void;
   className?: string;
 }
 
@@ -57,6 +58,7 @@ export function MessageBubbleActions({
   isPinned,
   hasMedia,
   onRequestEdit,
+  onForward,
   className,
 }: MessageBubbleActionsProps) {
   const reply = useChatReply();
@@ -143,6 +145,7 @@ export function MessageBubbleActions({
       >
         {reply && <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Responder mensagem" title="Responder" onClick={() => reply.select(messageId)}><Reply className="h-3.5 w-3.5" /></Button>}
         <EmojiPickerPopover onSelect={handleReact} disabled={reactMut.isPending} />
+        {onForward && <Button type="button" variant="ghost" size="icon" className="size-7" aria-label="Encaminhar mensagem" title="Encaminhar" onClick={onForward}><Forward /></Button>}
 
         {canEdit && (
           <Tooltip>
