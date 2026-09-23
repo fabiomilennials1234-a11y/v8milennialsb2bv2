@@ -12,6 +12,13 @@ import {
 } from "../../supabase/functions/_shared/copilot-batch-maturity.ts";
 import { montarPayloadDoAgente } from "../../supabase/functions/_shared/copilot-batch-payload.ts";
 
+it('preserves every original message identity when forwarding a combined confirmation',()=>{
+  const context={storage:'whatsapp_messages' as const,messageId:'b',messageIds:['a','b'],boxId:'box',provider:'uazapi',participantId:'phone'};
+  const payload=montarPayloadDoAgente({phone:'phone',orgId:'org',content:'sim\npode enviar',instanceId:'box',messageContext:context});
+  expect(payload.message_context?.messageIds).toEqual(['a','b']);
+  expect(payload.message).toBe('sim\npode enviar');
+});
+
 describe("checkBatchMaturity", () => {
   const now = new Date("2026-05-18T12:00:00Z");
 

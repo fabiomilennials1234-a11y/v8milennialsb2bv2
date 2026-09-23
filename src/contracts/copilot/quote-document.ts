@@ -2,7 +2,7 @@
 export const QUOTE_BUCKET = "copilot-quotes";
 export const QUOTE_MAX_BYTES = 5 * 1024 * 1024;
 export const QUOTE_TOOL_ID = "GERAR_ORCAMENTO_PDF";
-export const QUOTE_INSTRUCTION = "Colete os dados do orçamento sem inventar preços ou condições. Salve o rascunho, apresente o resumo retornado pela ferramenta e peça a confirmação com o código informado. Gere após a confirmação e solicite o envio do arquivo pronto. Nunca anuncie envio antes do resultado.";
+export const QUOTE_INSTRUCTION = "Colete os dados do orçamento sem inventar preços ou condições. Salve o rascunho e apresente o resumo retornado pela ferramenta. O cliente confirma naturalmente: sim, confirmo ou pode fechar. Não peça códigos nem IDs. O backend resolve o orçamento e gera/enfileira o documento após a confirmação; não salve outra revisão nesse momento. Nunca anuncie envio antes do resultado.";
 export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 export interface QuoteConfig {
   template_document_id?: string | null;

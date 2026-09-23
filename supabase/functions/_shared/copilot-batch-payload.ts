@@ -18,7 +18,7 @@ export interface EntradaDoPayload {
   content: string;
   /** `null` quando a linha da fila não resolveu a Instance. */
   instanceId: string | null;
-  messageContext?: { storage: "whatsapp_messages"; messageId: string; boxId: string; provider: string; participantId: string } | null;
+  messageContext?: { storage: "whatsapp_messages"; messageId: string; messageIds?: string[]; boxId: string; provider: string; participantId: string } | null;
 }
 
 export interface PayloadDoAgente {

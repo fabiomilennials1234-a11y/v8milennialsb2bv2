@@ -1,5 +1,7 @@
 import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
+import { messageTimestamp } from "./message-timestamp.ts";
+import { recordQuotePresentation, completeQuotePresentations } from "../_shared/quotes/presentation.ts";
 // deno-lint-ignore-file no-explicit-any
 /**
  * whatsapp-webhook — Uazapi provider webhook ingress.
@@ -541,12 +543,10 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     data.message?.documentMessage?.url ??
     null;
 
-  let tsRaw =
+  const tsRaw =
     data.timestamp ??
     data.messageTimestamp ??
-    Math.floor(Date.now() / 1000);
-  // Uazapi V2 sends messageTimestamp in milliseconds; detect and convert
-  const tsSeconds = Number(tsRaw) > 1e12 ? Math.floor(Number(tsRaw) / 1000) : Number(tsRaw);
+    Date.now();
 
   const isGroup = jidStr.endsWith("@g.us") || resolvedJid.endsWith("@g.us");
 
@@ -564,7 +564,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     media_url: mediaUrl,
     push_name: data.pushName ?? data.senderName ?? null,
     status: echoStatus(direction, data.status),
-    timestamp: new Date(tsSeconds * 1000).toISOString(),
+    timestamp: messageTimestamp(tsRaw),
     // The saved-name trigger reads wa_contactName. On live group messages,
     // Uazapi sends the subject in groupName; senderName identifies a participant.
     raw_payload: isGroup && typeof data.groupName === "string" && data.groupName.trim()
@@ -787,6 +787,8 @@ export async function triggerReactions(
         }
 
         let chunksSent = 0;
+        let summaryAccepted = true;
+        const summaryMessageIds: string[] = [];
         let canceledMidDelivery = false;
         // #1156 — id da INBOUND (estável entre retries). NÃO crypto.randomUUID: nonce
         // por-chamada re-gerava a cada retry → idk novo → reply inteira reenviada e o
@@ -827,12 +829,14 @@ export async function triggerReactions(
               trackSource: "copilot",
               // idk só multi-chunk: chunks distintos da MESMA reply não colidem
               // no dedup por conteúdo. Single-chunk sem idk → pega loop. #1156.
-              idempotencyKey: parts.length > 1 ? `wh:${dedupNonce}:${i}` : undefined,
+              idempotencyKey: agentData.quote_presentation ? `quote-summary:${agentData.quote_presentation.message_id}:${i}` : parts.length > 1 ? `wh:${dedupNonce}:${i}` : undefined,
             },
           );
 
           const msgId = sendResult.messageId
             ?? `agent_wh_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          summaryAccepted &&= sendResult.success && Boolean(sendResult.messageId);
+          if (sendResult.messageId) summaryMessageIds.push(sendResult.messageId);
 
           await supabase.from("whatsapp_messages").upsert({
             organization_id: persisted.organization_id,
@@ -843,7 +847,7 @@ export async function triggerReactions(
             direction: "outgoing",
             message_type: "text",
             content: text,
-            status: sendResult.success ? "sent" : "failed",
+            status: sendResult.success ? (sendResult.status === "queued" ? "pending" : "sent") : "failed",
             timestamp: new Date().toISOString(),
             sent_by_ai: true,
             sent_source: "copilot",
@@ -866,6 +870,9 @@ export async function triggerReactions(
           } else {
             chunksSent++;
           }
+        }
+        if (summaryAccepted && chunksSent === parts.length && !canceledMidDelivery) {
+          await recordQuotePresentation(supabase, persisted.organization_id, persisted.instance_id, agentData.quote_presentation, summaryMessageIds);
         }
 
         if (canceledMidDelivery) {
@@ -1007,6 +1014,7 @@ export async function persistMessage(
       .eq("message_id", normalized.message_id!).eq("direction", "outgoing")
       .in("status", earlierStatuses);
     if (statusError) throw new Error("message_echo_status_update_failed");
+    await completeQuotePresentations(supabase, normalized.organization_id, normalized.instance_id, [normalized.message_id!]);
   }
   const { data: stored } = await supabase.from("whatsapp_messages").select("id")
     .eq("organization_id", normalized.organization_id).eq("message_id", normalized.message_id!)
@@ -1261,6 +1269,7 @@ async function handleMessagesUpdateEvent(
         },
       });
     }
+    if (!error && touched?.length) await completeQuotePresentations(supabase, instance.organization_id, instance.id, messageIds);
   }
 
   const update: Record<string, unknown> = {};

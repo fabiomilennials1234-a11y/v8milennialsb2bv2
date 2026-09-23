@@ -32,7 +32,7 @@ const RETRY_BACKOFF_MINUTES = [1, 5, 15]; // escalada de retry
 // abaixo precisa ser MAIOR que 60s, senão a race externa dispara primeiro,
 // o cron re-claim reenvia, e o fetch interno ainda em voo ENTREGA — duplicando
 // a mídia (incidente 2026-06-02: mesmo vídeo entregue 3×).
-const MEDIA_ACTION_TYPES = new Set(["send_document"]);
+const MEDIA_ACTION_TYPES = new Set(["send_document", "send_quote_document"]);
 const MEDIA_ACTION_TIMEOUT_MS = 90_000;
 const DEFAULT_ACTION_TIMEOUT_MS = 30_000;
 

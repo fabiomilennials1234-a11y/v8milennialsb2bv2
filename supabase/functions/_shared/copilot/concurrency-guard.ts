@@ -23,7 +23,7 @@
  * O texto "vou te enviar a foto" sai na hora e a foto cai minutos depois, quando
  * o assunto já é outro.
  */
-export const CONCURRENCY_GUARD_EXEMPT_ACTIONS = new Set(["send_document"]);
+export const CONCURRENCY_GUARD_EXEMPT_ACTIONS = new Set(["send_document", "send_quote_document"]);
 
 export function needsConcurrencyGuard(actionType: string): boolean {
   return !CONCURRENCY_GUARD_EXEMPT_ACTIONS.has(actionType);
