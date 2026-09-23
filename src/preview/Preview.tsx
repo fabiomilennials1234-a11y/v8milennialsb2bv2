@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { useViewport } from "@/shared/hooks/use-viewport";
 
 import { LeadCard } from "@/modules/leads/components/lead-card/LeadCard";
@@ -33,6 +34,41 @@ const EXEMPLOS = [
   { chave: "neg-magro", grupo: "Negócio", rotulo: "Sem valor (98,9%)", dado: NEGOCIO_MAGRO },
   { chave: "neg-ganho", grupo: "Negócio", rotulo: "Ganho", dado: NEGOCIO_GANHO },
 ] as const;
+
+/**
+ * Espelha as duas faixas de LeadCardControles com os campos vazios.
+ * Os controles reais dependem da sessão; a prévia usa apenas a representação
+ * visual para medir o layout com o mesmo espaço ocupado no aplicativo.
+ */
+function ControlesDeExemplo() {
+  return (
+    <div className="flex w-full flex-col gap-2.5">
+      {[
+        { rotulo: "Responsáveis", campos: ["Pré-Venda", "Venda"] },
+        { rotulo: "Qualificação", campos: ["Pré-Qualificação", "Qualificação"] },
+      ].map(({ rotulo, campos }) => (
+        <div key={rotulo} className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            {rotulo}
+          </span>
+          <div className="flex items-center gap-2">
+            {campos.map((campo) => (
+              <span
+                key={campo}
+                role="img"
+                aria-label={`${campo} — sem preenchimento`}
+                title={`${campo} — exemplo visual`}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border/60"
+              >
+                <Plus className="size-4 text-muted-foreground/70" aria-hidden="true" />
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function Preview() {
   const { isMobile } = useViewport();
@@ -100,6 +136,7 @@ export function Preview() {
                       : LEAD_EXEMPLO) as Parameters<typeof LeadCardAside>[0]["lead"]
                   }
                   onAbrirFicha={() => undefined}
+                  controles={<ControlesDeExemplo />}
                 />
               )}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
