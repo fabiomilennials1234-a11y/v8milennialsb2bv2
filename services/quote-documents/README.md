@@ -33,9 +33,9 @@ Estados `sending` ou `reconcile` não permitem reenvio automático. Verificar o 
 - Implementar/homologar recuperação assistida de geração interrompida e reconciliação de envio, política de retenção e limpeza de modelos órfãos.
 - Homologar conversa completa, acesso de dois tenants, mudanças de configuração durante geração, destinatário e anexo real.
 - Reconectar e vincular a instância WhatsApp da Hoppe, hoje desconectada e sem agente associado na consulta desta tarefa.
-- Runtime v2 e simulador de conversa ainda não usam esta tool; piloto restrito ao v1 confirmado da Hoppe.
+- Runtime v2 ainda não usa esta tool; runtime real v1 e preview explícito de simulação possuem integração. O preview não gera arquivos.
 
-Rollback inicial: desligar a flag da tool no agente e bloquear novos jobs. Não apagar tabelas, auditoria nem documentos enviados. Manter worker capaz de identificar jobs já aceitos/ambíguos até concluir reconciliação. Deploy não foi executado nesta implementação.
+Rollback inicial: desligar a flag da tool no agente e bloquear novos jobs. Não apagar tabelas, auditoria nem documentos enviados. Manter worker capaz de identificar jobs já aceitos/ambíguos até concluir reconciliação. Excluir um agente remove metadados dos modelos sem orçamento; agentes com orçamentos permanecem protegidos pelas FKs para preservar histórico. Limpeza de arquivos órfãos do Storage continua pendente.
 # Liberação global em modo de testes
 
 A ferramenta não tem allowlist de organizações. O catálogo é global e cada agente nasce com `can_generate_order_request=false`; importar um modelo não ativa outros agentes.

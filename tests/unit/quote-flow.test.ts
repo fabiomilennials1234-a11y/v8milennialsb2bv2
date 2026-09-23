@@ -22,14 +22,15 @@ function database(results: unknown[]) {
   const from = vi.fn((table: string) => {
     const entry = { table, operations: [] as [string, ...unknown[]][] }; calls.push(entry);
     if (!results.length) throw new Error(`Unexpected DB call ${table}`);
-    const next: any = results.shift();
-    const response = next?.error ? next : { data: next, error: null };
-    const chain: any = { then: (resolve: any, reject: any) => Promise.resolve(response).then(resolve,reject) };
+    const next = results.shift();
+    const response = next && typeof next === 'object' && 'error' in next ? next : { data: next, error: null };
+    const pending = Promise.resolve(response);
+    const chain: Record<string, unknown> = { then: pending.then.bind(pending) };
     for (const method of ['select','eq','in','gte','order','limit','single','maybeSingle','update','insert','upsert']) chain[method] = (...args: unknown[]) => { entry.operations.push([method,...args]); return chain; };
     return chain;
   });
   const storage = { download: vi.fn(async () => ({ data: new Blob(['word']), error: null })), upload: vi.fn(async () => ({ error: null })), createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://private.example/signed' }, error: null })) };
-  return { db: { from, storage: { from: () => storage } } as any, calls, storage };
+  return { db: { from, storage: { from: () => storage } } as unknown as Parameters<typeof runQuoteTool>[0], calls, storage };
 }
 beforeEach(() => { vi.stubGlobal('Deno', { env: { get: () => 'true' } }); vi.clearAllMocks(); mocks.queue.mockResolvedValue({ queued: true }); mocks.dispatch.mockResolvedValue({ instance: { id: 'instance' }, normalizedPhone: '5541999999999' }); });
 describe('quote generation workflow', () => {

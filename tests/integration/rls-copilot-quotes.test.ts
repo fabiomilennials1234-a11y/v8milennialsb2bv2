@@ -39,6 +39,13 @@ async function asRole(role:string,sql:string){
 }
 const insert=(n:number,org=1,agent=11,lead=21,conv=31,template=41)=>`INSERT INTO copilot_quotes(id,organization_id,agent_id,lead_id,conversation_id,template_id) VALUES('${id(n)}','${id(org)}','${id(agent)}','${id(lead)}','${id(conv)}','${id(template)}')`;
 describe('private quote schema',()=>{
+  it('allows deleting an agent with an unused template without deleting quote history',async()=>{
+    await db.exec(`INSERT INTO copilot_agents(id,organization_id) VALUES('${id(13)}','${id(1)}');
+      INSERT INTO copilot_quote_templates(id,organization_id,agent_id,name,file_path,sha256,fields)
+      VALUES('${id(43)}','${id(1)}','${id(13)}','unused.docx','unused.docx',repeat('a',64),'["customer"]');
+      DELETE FROM copilot_agents WHERE id='${id(13)}';`);
+    expect((await db.query(`SELECT id FROM copilot_quote_templates WHERE id='${id(43)}'`)).rows).toEqual([]);
+  });
   it('defaults agents in every organization to disabled',async()=>{
     expect((await db.query('SELECT can_generate_order_request FROM copilot_agents')).rows).toEqual([
       {can_generate_order_request:false}, {can_generate_order_request:false},
@@ -67,6 +74,7 @@ describe('private quote schema',()=>{
     await expect(asRole('service_role',`UPDATE copilot_quotes SET data='{}' WHERE id='${id(100)}'`)).rejects.toThrow(/immutable/);
     await asRole('service_role',insert(103));
     expect((await db.query(`SELECT count(*)::int AS n FROM copilot_quote_events WHERE quote_id='${id(100)}'`)).rows).toEqual([{n:3}]);
+    await expect(db.exec(`DELETE FROM copilot_agents WHERE id='${id(11)}'`)).rejects.toThrow(/foreign key/);
   });
   it('enables RLS on all three tables and keeps the bucket private',async()=>{
     const rows=await db.query(`SELECT relrowsecurity FROM pg_class WHERE relname IN ('copilot_quote_templates','copilot_quotes','copilot_quote_events')`);

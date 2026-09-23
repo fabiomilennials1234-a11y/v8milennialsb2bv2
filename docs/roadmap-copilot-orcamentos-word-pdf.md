@@ -176,4 +176,6 @@ Disponibilidade global, sem ativação em massa. A migration define `can_generat
 
 Testes adicionados para default em organizações diferentes, bloqueio de envio e privilégios herdados das funções SQL. O preview reconhece a tool, mas não declara geração/entrega fictícias. A geração no botão de teste usa dados fictícios; não equivale a homologação ponta a ponta pela conversa.
 
-Estado: alterações locais, publicação em produção pendente de revisão/PR e provisionamento/verificação do renderer. Não anunciar como disponível em produção antes desses gates.
+Publicação: ramo `codex/copilot-quote-global`, baseado na main sem o commit de chat da branch anterior. Schema deve ser aplicado ANTES do merge (o frontend grava as novas colunas ao salvar agentes). Renderer, download do artefato real sem WhatsApp e homologação ponta a ponta permanecem pendentes; publicar desabilitado não significa geração PDF operacional.
+
+Pré-flight 2026-09-23: prod com 53 agentes, nenhuma coluna/tabela/bucket da feature. Migration ensaiada com baseline em `juecukwajosxgqrjvvhz`; preview excluída e ausência confirmada automaticamente. Ajuste posterior de FK para excluir apenas templates sem orçamento coberto no teste SQL local, preservando os eventos de orçamentos existentes. Revisões independentes de padrões/segurança e spec apontaram esse ciclo de exclusão e a ordem banco/frontend, tratados antes da publicação.

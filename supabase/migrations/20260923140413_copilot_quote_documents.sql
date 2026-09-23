@@ -6,7 +6,7 @@ ALTER TABLE public.copilot_agents
 CREATE TABLE public.copilot_quote_templates (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  organization_id uuid NOT NULL REFERENCES public.organizations(id),
- agent_id uuid NOT NULL REFERENCES public.copilot_agents(id),
+ agent_id uuid NOT NULL REFERENCES public.copilot_agents(id) ON DELETE CASCADE,
  name text NOT NULL,
  file_path text NOT NULL UNIQUE,
  sha256 text NOT NULL CHECK (length(sha256)=64),
