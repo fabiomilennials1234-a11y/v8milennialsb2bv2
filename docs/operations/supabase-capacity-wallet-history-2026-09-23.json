@@ -1,0 +1,69 @@
+{
+  "measurement": "function_edge_logs; OPTIONS excluded. No rows counted is not proof of zero billed usage; reconcile with organization Usage.",
+  "project": "torque-wallet-motor100",
+  "days": [
+    {
+      "start": "2026-09-16T22:00:00Z",
+      "end": "2026-09-17T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-17T22:00:00Z",
+      "end": "2026-09-18T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-18T22:00:00Z",
+      "end": "2026-09-19T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-19T22:00:00Z",
+      "end": "2026-09-20T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-20T22:00:00Z",
+      "end": "2026-09-21T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-21T22:00:00Z",
+      "end": "2026-09-22T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    },
+    {
+      "start": "2026-09-22T22:00:00Z",
+      "end": "2026-09-23T22:00:00Z",
+      "result": [
+        {
+          "requests": 0
+        }
+      ]
+    }
+  ]
+}

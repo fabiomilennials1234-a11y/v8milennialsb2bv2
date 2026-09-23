@@ -12,6 +12,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { extractEdgeFunctionError } from "./edgeFunctionError";
+import { sharePendingRead } from "./sharePendingRead";
 
 type ProxyResponse<T> = {
   ok?: boolean;
@@ -34,17 +35,31 @@ async function callProxy<T = unknown>(
     const storedOrg = localStorage.getItem("selected_org_id");
     if (storedOrg) resolvedBody.organization_id = storedOrg;
   }
-  const { data, error } = await supabase.functions.invoke<ProxyResponse<T>>(
-    "whatsapp-api-proxy",
-    { body: resolvedBody }
-  );
-  if (error) {
-    const msg = await extractFunctionError(error);
-    throw new Error(`whatsapp-api-proxy: ${msg}`);
-  }
-  if (!data?.ok) throw new Error(data?.error ?? "Unknown proxy error");
-  // createInstance puts instance_id at top level and result inside
-  return (data.result ?? (data as unknown as T)) as T;
+  const invoke = async (accessToken?: string): Promise<T> => {
+    const { data, error } = await supabase.functions.invoke<ProxyResponse<T>>(
+      "whatsapp-api-proxy",
+      {
+        body: resolvedBody,
+        ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
+      }
+    );
+    if (error) {
+      const msg = await extractFunctionError(error);
+      throw new Error(`whatsapp-api-proxy: ${msg}`);
+    }
+    if (!data?.ok) throw new Error(data?.error ?? "Unknown proxy error");
+    return (data.result ?? (data as unknown as T)) as T;
+  };
+  // Only these read operations may share transport. Sends/lifecycle mutations
+  // always run independently. No settled response is cached here.
+  if (action !== "getStatus" && action !== "getMessageLimits") return invoke();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!session?.user.id || !resolvedBody.organization_id) return invoke(session?.access_token);
+  // Include the credential, not just the user ID: a refreshed/new session must
+  // never join an earlier session's pending request. Pin that same JWT on HTTP.
+  const key = JSON.stringify([session.user.id, session.access_token, resolvedBody]);
+  return sharePendingRead(key, () => invoke(session.access_token));
 }
 
 // ============================================================================

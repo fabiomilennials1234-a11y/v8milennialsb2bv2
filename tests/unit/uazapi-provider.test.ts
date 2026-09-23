@@ -321,7 +321,7 @@ describe("UazapiProvider.createInstance", () => {
 
     await provider.createInstance(makeCreateInput());
 
-    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledTimes(2);
     const [rpcName, rpcParams] = rpc.mock.calls[0];
     expect(rpcName).toBe("set_uazapi_credentials");
     expect(rpcParams).toEqual({
@@ -694,5 +694,37 @@ describe('transcription response contract', () => {
     vi.mocked(fetch).mockResolvedValue(jsonRes(200, { cached: true, fileURL: 'https://example.invalid/audio.mp3', mimetype: 'audio/mpeg' }));
     await expect(makeProvider().transcribeAudio('real-id')).rejects.toMatchObject({ status: 502, provider_code: 'transcription_missing' });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('managed creation retains recoverable provisioning state', () => {
+  it('never deletes instance or cascades lease/credentials after failed readback', async () => {
+    const { provisionWhatsAppInstance, InstanceProvisioningUncertainError } = await import('../../supabase/functions/_shared/instance-provisioning');
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { token:'lease',revision:1,exclude_groups:true }, error:null });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonRes(200,{ id:'remote',token:'remote-token',status:'created' }))
+      .mockResolvedValueOnce(jsonRes(200,{success:true}))
+      .mockResolvedValueOnce(jsonRes(200,{url:'https://wrong.invalid',enabled:true}));
+    const admin={from:vi.fn(),rpc};
+    await expect(provisionWhatsAppInstance(makeProvider({rpc}), {
+      instance_id:'inst-uuid-123',organization_id:'org-uuid-456',instance_name:'fixture',
+      webhook_url:'https://fixture.invalid/webhook',webhook_secret:'fixture',
+    },admin as never)).rejects.toBeInstanceOf(InstanceProvisioningUncertainError);
+    expect(admin.from).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[0][0]).toBe('set_uazapi_credentials');
+    expect(rpc.mock.calls[1][0]).toBe('prepare_uazapi_group_webhook');
+  });
+  it('cleans a scoped placeholder only for known pre-provisioning failure',async()=>{
+    const {provisionWhatsAppInstance}=await import('../../supabase/functions/_shared/instance-provisioning');
+    const chain={delete:vi.fn(),eq:vi.fn()};chain.delete.mockReturnValue(chain);chain.eq.mockReturnValue(chain);
+    const admin={from:vi.fn().mockReturnValue(chain)};
+    await expect(provisionWhatsAppInstance(makeProvider(), {
+      instance_id:'i',organization_id:'org',instance_name:'fixture',webhook_url:'https://fixture.invalid',webhook_secret:'',
+    },admin as never)).rejects.toThrow('webhook_secret required');
+    expect(chain.eq.mock.calls).toEqual([['id','i'],['organization_id','org']]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

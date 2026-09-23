@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 
 const WEBHOOK_PATH = resolve(
   __dirname,
-  "../../supabase/functions/whatsapp-webhook/index.ts"
+  "../../supabase/functions/whatsapp-webhook/handler.ts"
 );
 
 const source = readFileSync(WEBHOOK_PATH, "utf8");

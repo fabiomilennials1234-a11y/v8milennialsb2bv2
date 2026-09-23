@@ -1,3 +1,5 @@
+import { InstanceProvisioningUncertainError, provisionWhatsAppInstance } from "../_shared/instance-provisioning.ts";
+import { requestGroupCapture } from "../_shared/uazapi-webhook-policy.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 // deno-lint-ignore-file no-explicit-any
 
@@ -403,6 +405,11 @@ Deno.serve(
       // -----------------------------------------------------------------------
       // createInstance — does not require existing instance_id
       // -----------------------------------------------------------------------
+      if (action === "requestGroupCapture") {
+        const response = await requestGroupCapture(supabaseAdmin, user.id, callerOrgId, isMaster, payload.capture_groups);
+        return jsonResponse(response.status, response, corsHeaders);
+      }
+
       if (action === "createInstance") {
         // Use the caller JWT: the service-role client must not decide the
         // caller's feature permission. Check before any DB/provider side effect.
@@ -480,22 +487,24 @@ Deno.serve(
 
         let result;
         try {
-          result = await provider.createInstance({
+          result = await provisionWhatsAppInstance(provider, {
             instance_id: instance.id,
             organization_id: callerOrgId,
             instance_name: instanceName,
             webhook_url: `${webhookBaseUrl}/functions/v1/whatsapp-webhook`,
             webhook_secret: webhookSecret,
-          });
+          }, supabaseAdmin);
           console.log(`[createInstance] provider.createInstance OK: status=${JSON.stringify(result.status)}`);
         } catch (initErr) {
           console.error(`[createInstance] provider.createInstance FAILED: ${(initErr as Error).message}`);
-          // Roll back the placeholder row so the unique
-          // (organization_id, instance_name) constraint does not block retries.
-          await supabaseAdmin
-            .from("whatsapp_instances")
-            .delete()
-            .eq("id", instance.id);
+          if (initErr instanceof InstanceProvisioningUncertainError) {
+            return jsonResponse(409, {
+              error: "instance_provisioning_uncertain",
+              instance_id: instance.id,
+              reconciliation_required: true,
+              message: "Instância preservada. Verifique o provisionamento antes de tentar criar novamente.",
+            }, corsHeaders);
+          }
           throw initErr;
         }
 

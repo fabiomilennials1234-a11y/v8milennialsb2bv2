@@ -1,0 +1,10 @@
+{
+  "lock": "deno.lock",
+  "imports": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.105.4"
+  },
+  "tasks": {
+    "cache": "deno cache --frozen main.ts",
+    "check:runtime": "deno check config.ts runtime.ts"
+  }
+}

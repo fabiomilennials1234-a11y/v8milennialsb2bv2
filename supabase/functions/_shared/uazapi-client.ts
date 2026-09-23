@@ -286,13 +286,13 @@ export class UazapiClient {
     enabled?: boolean;
     id?: string;
     action?: "add" | "update" | "delete";
-  }): Promise<void> {
+  }, options?: { noRetry?: boolean }): Promise<void> {
     const body = { enabled: true, ...config };
     await this.request<unknown>(
       "POST",
       "/webhook",
       body,
-      { useAdminToken: false }
+      { useAdminToken: false, noRetry: options?.noRetry }
     );
   }
 

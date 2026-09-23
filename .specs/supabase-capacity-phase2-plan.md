@@ -1,6 +1,6 @@
 # Capacidade Supabase — plano para 1,4 milhão por ciclo
 
-Data: 23/09/2026. Estado: proposta técnica, sem alteração de produto, fornecedor ou produção nesta fase. O pacote inicial de correções tem validação própria; este documento não afirma que aquele pacote entrega sozinho 1,4 milhão.
+Data: 23/09/2026. Estado: execução autorizada pelo CTO; implementação e validação em andamento na branch `codex/supabase-capacity-phase2`. Nenhuma rota do fornecedor ou configuração de produção alterada nesta fase. O pacote inicial de correções tem validação própria; este documento não afirma que aquele pacote entrega sozinho 1,4 milhão.
 
 ## Conclusão
 
@@ -86,7 +86,7 @@ Processamento usa lote apenas de itens já disponíveis; eventos chegam ao naveg
 
 ### Aceite obrigatório antes do canário
 
-Auditoria do handler `handleMessagesUpdateEvent`, em `whatsapp-webhook/index.ts:1248`, encontrou dois pontos que precisam de correção/teste antes da migração: update de recibo pode regredir `read` para `delivered`, e merge de reação pode incrementar contador em evento repetido. Não transportar esses defeitos supondo idempotência inexistente. A rota também chama `completeQuotePresentations`; preservar esse efeito comercial, não apenas atualizar bolhas do chat. Os contratos de edição, exclusão, pin, reação e confirmação precisam de replay/shadow comparativo sem efeitos duplicados. “UX intacta” é critério a provar, não conclusão da proposta.
+Auditoria do handler `handleMessagesUpdateEvent`, no handler original de `whatsapp-webhook`, encontrou dois pontos que precisam de correção/teste antes da migração: update de recibo pode regredir `read` para `delivered`, e merge de reação pode incrementar contador em evento repetido. Não transportar esses defeitos supondo idempotência inexistente. A rota também chama `completeQuotePresentations`; preservar esse efeito comercial, não apenas atualizar bolhas do chat. Os contratos de edição, exclusão, pin, reação e confirmação precisam de replay/shadow comparativo sem efeitos duplicados. “UX intacta” é critério a provar, não conclusão da proposta.
 
 - Mensagens diretas, mídias, grupos habilitados, desconexão e reconexão continuam no comportamento atual.
 - Status repetido, fora de ordem e anterior à mensagem não regride confirmação nem perde atualização.
@@ -115,7 +115,7 @@ Equação sem dupla contagem: `total restante = B − C − G − M + E + O`, em
 | Guardas 80% + 75% do webhook processado fora da Edge, sem crédito de grupos | 1.174.638 | 1.252.403 |
 | Guardas 80% + todo ingresso WhatsApp processado fora da Edge, sem crédito de grupos | 824.721 | 843.095 |
 
-Os percentuais são **sensibilidades**, não economia provável. Cenário de 75% exigiria mais que a rota de atualizações: incluir parte do processamento de mensagens no serviço externo, reaproveitando núcleo existente e mantendo Supabase como persistência/Auth/Realtime. Não está aprovado nem implementado. A rota de atualizações sozinha, com os 25.085 requests do último dia, pouparia 777.635 em 31 dias e deixaria **1.702.694** após hipótese de 80% de guardas, antes de outros projetos. Portanto, não promete 1,4 milhão sozinho.
+Os percentuais são **sensibilidades**, não economia provável. Cenário de 75% exigiria mais que a rota de atualizações: incluir parte do processamento de mensagens no serviço externo, reaproveitando núcleo existente e mantendo Supabase como persistência/Auth/Realtime. A execução progressiva foi aprovada pelo CTO; o ingresso completo continua condicionado aos gates abaixo, ainda sem ativação. A rota de atualizações sozinha, com os 25.085 requests do último dia, pouparia 777.635 em 31 dias e deixaria **1.702.694** após hipótese de 80% de guardas, antes de outros projetos. Portanto, não promete 1,4 milhão sozinho.
 
 Pelo histórico de sete dias, retirar somente a rota de atualizações deixa **1.585.943** após hipótese de 80% de guardas, antes dos outros projetos. O déficit até a meta é 185.943. Filtro de grupos poderia fechar parte ou todo esse déficit, mas só contaremos requests medidas e não pertencentes à parcela de atualizações já retirada. Não reduzir a precisão de recibos de leitura, a frequência visual ou a captura de grupos habilitados para fechar a conta.
 
@@ -134,3 +134,19 @@ Para o cenário de 75% e último dia, sobra cerca de 147.597 até 1,4 milhão pa
 5. Declarar meta alcançada somente com projeção de ciclo incluindo todos os projetos <= 1,4 milhão, margem nos dias úteis de pico, equivalência funcional/latência comprovada e todas as demais franquias verificadas.
 
 Não há pergunta de produto bloqueando esta análise. Antes de execução da arquitetura externa, precisam estar concretos infraestrutura disponível, comportamento do fornecedor, orçamento técnico e desenho de rollback. Não é publicação autorizada por este documento.
+
+
+## Evidência complementar durante implementação
+
+- Picos observados nos sete dias: **45 requests/s e 317 requests/min** de `whatsapp-webhook` (máximos de janelas diferentes). Piso do teste de capacidade: rajada de 90/s e carga de 634/min, mantendo os demais serviços. Arquivo `docs/operations/supabase-capacity-webhook-peaks-2026-09-23.json`. Ainda não é resultado de teste no VPS.
+- Projeto wallet: zero entradas `function_edge_logs` não-OPTIONS contadas nas mesmas sete janelas; evidência em `docs/operations/supabase-capacity-wallet-history-2026-09-23.json`. Isso não substitui Usage nem prova ausência de outras categorias faturadas.
+- Deduplicação frontend compartilha apenas chamadas simultâneas de `getStatus` e `getMessageLimits`, com chave por usuário, sessão, organização, instância e ação. Não mantém resultado em cache após conclusão nem altera intervalo do chat/QR.
+- Atualizações WhatsApp passaram a usar predicados atômicos contra regressão de entrega/leitura, CAS para reação legada e repetição segura dos efeitos de proposta comercial após falha de banco. Eventos com múltiplos IDs precisam de todos os alvos antes de concluir no novo serviço.
+- Política de grupos tem flag desligada por padrão, trava por instância e confirmação remota exata. Timeout ambíguo conserva trava; recuperar exige encerrar escritor anterior e reconciliar. Aplicar SQL antes de publicar adaptadores; depois drenar todos os escritores antigos antes de ativar filtro.
+- Núcleo do webhook foi extraído para `handler.ts`; Edge e serviço usam a mesma implementação. Serviço segue desligado por padrão e restrito por instância. A primeira ativação será apenas de atualizações, após validar inbox durável, contrato do fornecedor, carga, reinício e rollback. Implementação de fila não autoriza contar economia antes do tráfego migrar.
+
+### Crescimento: limite matemático, não promessa de capacidade
+
+Com ingresso completo fora das Edge e hipótese de 80% dos ticks evitados, restam 824.721/ciclo na média histórica. Se **todo esse restante** crescer proporcionalmente, sem novos fanouts, projeções são 989.665 (+20%), 1.237.081 (+50%) e 1.649.442 (+100%). Portanto, dobrar volume ainda não cabe no orçamento de 1,4M nesse cenário conservador. Margem matemática até 1,4M: cerca de 69,8%; não equivale a 69,8% mais clientes, pois consumo por organização varia.
+
+Para sustentar crescimento real, registrar chamadas por evento útil (mensagem, turno de IA, execução de workflow), filas pendentes, p95/p99 e uso de DB/Realtime/tráfego. Admissão de Copilot antes do HTTP e redução de fanout dos workflows são próximas investigações; não receberam crédito no orçamento atual. Nenhum intervalo visível ao usuário deve ser sacrificado para acomodar volume.
