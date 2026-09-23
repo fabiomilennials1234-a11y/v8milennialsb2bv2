@@ -24,17 +24,24 @@ export async function quoteContext(db: SupabaseClient, ctx: QuoteContext) {
 export async function runQuoteTool(db: SupabaseClient, ctx: QuoteContext, args: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (args.operation === "send" && !quoteLiveSendEnabled()) return { success: false, error: "quote_live_send_disabled", instruction: "Envios reais estão bloqueados nesta fase de testes. Não afirme envio ou entrega." };
   try {
+    const operation = args.operation;
+    // Models may serialize an optional ID as null/blank before a draft exists.
+    // Never discard a nonempty malformed ID or broaden a generation/send target.
+    const missingId = args.quote_id == null || (typeof args.quote_id === "string" && !args.quote_id.trim());
+    const quoteId = missingId && (operation === "status" || operation === "save") ? undefined : args.quote_id;
+    if (quoteId !== undefined && (typeof quoteId !== "string" || !UUID.test(quoteId))) {
+      return { success: false, error_code: "invalid_quote_id", error: "quote_id inválido: este campo identifica o orçamento, não o produto.",
+        instruction: "Consulte status sem quote_id. No primeiro save, omita quote_id; nas operações seguintes use somente o UUID retornado pela ferramenta. Não atribua este erro ao SKU e não repita a chamada com o mesmo ID inválido." };
+    }
     const { template, config, lead } = await quoteContext(db, ctx);
     let read = db.from("copilot_quotes").select("*").eq("organization_id", ctx.organizationId).eq("agent_id", ctx.agentId).eq("lead_id", ctx.leadId).eq("conversation_id", ctx.conversationId);
-    if (args.quote_id !== undefined) {
-      if (typeof args.quote_id !== "string" || !UUID.test(args.quote_id)) throw new Error("Orçamento inválido.");
-      read = read.eq("id", args.quote_id);
+    if (quoteId !== undefined) {
+      read = read.eq("id", quoteId);
     }
     const query = await read.order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (query.error) throw new Error("Falha ao consultar orçamento.");
     let quote = query.data;
-    if (args.quote_id && !quote) throw new Error("Orçamento indisponível nesta conversa.");
-    const operation = args.operation;
+    if (quoteId && !quote) throw new Error("Orçamento indisponível nesta conversa.");
     const update = async (patch: Record<string, unknown>, statuses: string[]) => {
       const result = await db.from("copilot_quotes").update(patch).eq("organization_id", ctx.organizationId).eq("id", quote.id).eq("revision", quote.revision).eq("updated_at", quote.updated_at).in("status", statuses).select("*").maybeSingle();
       if (result.error || !result.data) throw new Error("Orçamento alterado em outro turno. Consulte o estado novamente.");
@@ -45,7 +52,7 @@ export async function runQuoteTool(db: SupabaseClient, ctx: QuoteContext, args: 
     if (operation === "save") {
       if (!args.data || typeof args.data !== "object" || Array.isArray(args.data) || JSON.stringify(args.data).length > 60000) throw new Error("Rascunho inválido.");
       // A new order can follow a completed one, without overwriting its audit trail.
-      if (!args.quote_id && quote && ["sent", "canceled"].includes(quote.status)) quote = null;
+      if (!quoteId && quote && ["sent", "canceled"].includes(quote.status)) quote = null;
       if (quote && !["draft", "awaiting_confirmation", "failed", "ready"].includes(quote.status)) throw new Error("Orçamento bloqueado. Consulte o estado antes de continuar.");
       const patch = { data: args.data, status: "draft", template_id: template.id, required_fields: config.required_fields ?? template.fields,
         convert_to_pdf: config.convert_to_pdf === true, confirmation_code: null, confirmed_at: null, file_path: null, file_name: null, error_code: null };
