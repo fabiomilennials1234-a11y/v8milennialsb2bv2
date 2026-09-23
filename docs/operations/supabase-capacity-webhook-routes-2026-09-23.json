@@ -1,0 +1,152 @@
+{
+  "measurement": "function_edge_logs; OPTIONS excluded; only route category, no URLs/secrets",
+  "days": [
+    {
+      "start": "2026-09-16T22:00:00Z",
+      "end": "2026-09-17T22:00:00Z",
+      "result": [
+        {
+          "errors": 1510,
+          "event_route": "messages",
+          "requests": 32862
+        },
+        {
+          "errors": 208,
+          "event_route": "messages_update",
+          "requests": 26452
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 78
+        }
+      ]
+    },
+    {
+      "start": "2026-09-17T22:00:00Z",
+      "end": "2026-09-18T22:00:00Z",
+      "result": [
+        {
+          "errors": 1126,
+          "event_route": "messages",
+          "requests": 30242
+        },
+        {
+          "errors": 1,
+          "event_route": "messages_update",
+          "requests": 25350
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 47
+        }
+      ]
+    },
+    {
+      "start": "2026-09-18T22:00:00Z",
+      "end": "2026-09-19T22:00:00Z",
+      "result": [
+        {
+          "errors": 808,
+          "event_route": "messages",
+          "requests": 12193
+        },
+        {
+          "errors": 0,
+          "event_route": "messages_update",
+          "requests": 5299
+        }
+      ]
+    },
+    {
+      "start": "2026-09-19T22:00:00Z",
+      "end": "2026-09-20T22:00:00Z",
+      "result": [
+        {
+          "errors": 397,
+          "event_route": "messages",
+          "requests": 6897
+        },
+        {
+          "errors": 0,
+          "event_route": "messages_update",
+          "requests": 3956
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-20T22:00:00Z",
+      "end": "2026-09-21T22:00:00Z",
+      "result": [
+        {
+          "errors": 1202,
+          "event_route": "messages",
+          "requests": 31507
+        },
+        {
+          "errors": 39,
+          "event_route": "messages_update",
+          "requests": 30078
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-21T22:00:00Z",
+      "end": "2026-09-22T22:00:00Z",
+      "result": [
+        {
+          "errors": 1365,
+          "event_route": "messages",
+          "requests": 30309
+        },
+        {
+          "errors": 89,
+          "event_route": "messages_update",
+          "requests": 27946
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 23
+        }
+      ]
+    },
+    {
+      "start": "2026-09-22T22:00:00Z",
+      "end": "2026-09-23T22:00:00Z",
+      "result": [
+        {
+          "errors": 1554,
+          "event_route": "messages",
+          "requests": 27713
+        },
+        {
+          "errors": 2,
+          "event_route": "messages_update",
+          "requests": 25085
+        },
+        {
+          "errors": 0,
+          "event_route": "connection",
+          "requests": 16
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "messages": 171723,
+    "messages_update": 144166,
+    "connection": 166
+  }
+}

@@ -82,7 +82,11 @@ O cron `summarize-conversations-batch` falhou 144 vezes no último dia. Erro SQL
 
 ## Validação remota
 
-Branch temporária `swwbzojcsawnexhpmzgl`, criada para teste sem dados, foi excluída e a ausência confirmada pela API em 23/09. Custo informado pelo conector: US$ 0,01344/hora. Tentativa de fixture transacional falhou com SQLSTATE `42501`, `permission denied for schema net`, antes de executar assertions. Portanto **migrations não estão validadas no Supabase remoto**. Testes em PostgreSQL embutido PGlite passaram com HTTP substituído por coletor local; não substituem validação de permissões/pg_net no ambiente final. Nenhuma migration aplicada em produção. Um novo ensaio remoto precisa de ambiente/permissão adequados e autorização para outra branch temporária.
+Ensaio concluído em 23/09 na branch temporária `eeufskctrpfflectdtss`, após autorização do CTO. Migrations originais aplicadas em transação sobre fixtures isoladas; verificados os corpos exatos das 12 funções, SECURITY DEFINER, search_path e grants efetivos. Casos de filas, recuperação, rollback e reaplicação passaram no PostgreSQL remoto. Para testar comportamento sem enviar HTTP, somente o destino `net.http_post` das cópias de teste foi substituído por um coletor em `capacity_test_net`. O schema protegido `net` permaneceu intacto.
+
+Rollback completo confirmado por consulta: mock, fixtures e renomeação temporária do schema removidos. Branch excluída e ausência confirmada pela API. Custo informado: US$ 0,01344/hora. Nenhuma alteração de banco em produção. Este ensaio valida DDL e comportamento contra fixtures, não pg_net real, a cadeia completa de migrations ou carga de produção.
+
+Gerador reproduzível: `node scripts/build-capacity-preview-validation.mjs /tmp/preview.sql`. Teste local: `node --test tests/integration/capacity-preview-harness.test.mjs`. O primeiro ensaio (`swwbzojcsawnexhpmzgl`) havia falhado ao tentar instalar mock no schema protegido; também foi excluído. A segunda versão resolve esse problema usando schema próprio, sem mudar permissões do Supabase.
 
 ## Limites da entrega
 
@@ -110,6 +114,6 @@ Instalação isolada via `npm ci`, respeitando package-lock. Dependências do ch
 - Ratchet de lint retorna cinco avisos de código de propostas comerciais fora do diff, reproduzidos no checkout base. Baselines não foram ampliados.
 - Ratchet unitário amplo retorna 170 falhas além do baseline versionado. Checkout limpo `961c226d3`, com mesmas dependências e retry, reproduziu exatamente as mesmas 170 chaves: **zero regressões novas**. Prova em `docs/operations/supabase-capacity-test-delta.json`. Não equivale a suíte inteira verde.
 - Scanner de secrets: nenhum achado nos arquivos alterados; execução completa acusa um achado herdado em `scripts/ops/repair-loofting-bulk-pipeline-move.sql:18`, arquivo idêntico à base. Sem reproduzir valor no relatório.
-- Sem E2E em produção nem teste de carga; ensaio remoto descrito acima não concluiu.
+- Sem E2E em produção nem teste de carga; ensaio remoto de DDL/guardas concluído com HTTP simulado conforme descrito acima.
 
-Review de segurança independente não encontrou bloqueador novo nos guards, hook, noop_probe, reações ou autenticação. `SECURITY DEFINER` mantém search_path fixo e revoga execução de PUBLIC/anon/authenticated. Conferência de privilégios passou no banco de teste local; obrigatória novamente no alvo real do apply.
+Review de segurança independente não encontrou bloqueador novo nos guards, hook, noop_probe, reações ou autenticação. `SECURITY DEFINER` mantém search_path fixo e revoga execução de PUBLIC/anon/authenticated. Conferência de privilégios passou no teste local e no PostgreSQL remoto da preview; obrigatória novamente no alvo de produção durante o apply.
