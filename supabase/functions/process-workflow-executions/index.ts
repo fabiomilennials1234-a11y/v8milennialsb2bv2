@@ -4,6 +4,7 @@
  * - Called by pg_cron every 1 minute via pg_net
  * - Also callable directly for immediate execution
  * - Modes:
+ *   - noop_probe: verify cron authentication without processing any work
  *   - default: claim batch of pending executions and process them
  *   - cron_triggers: fire cron-type workflow triggers
  *   - fire_trigger: fire a specific trigger (called by other Edge Functions)
@@ -81,6 +82,12 @@ Deno.serve(
       // JWT auth only allowed for fire_trigger mode
       if (!authMode || (authMode === "jwt" && mode !== "fire_trigger")) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
+      }
+
+      // The health checker probes the same authentication path as pg_cron.
+      // It must not claim jobs, recover sends or run workflows as a side effect.
+      if (mode === "noop_probe") {
+        return new Response(JSON.stringify({ mode: "noop_probe", healthy: true }), { headers });
       }
 
       // ── Mode: cron_triggers ──

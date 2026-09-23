@@ -101,6 +101,54 @@ describe("Comando RPC transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current.isDegraded).toBe(false);
   });
+
+  it("skips lead enrichment when the RPC already supplies every displayed field", async () => {
+    fetchMock.mockResolvedValue(json([{
+      lead_id: "lead-1", normalized_phone: "5511999990001", phone_number: "5511999990001",
+      push_name: "Nome WhatsApp", last_client_message_at: inicio.toISOString(),
+      waiting_total: 1, owner_team_member_id: "member-1", owner_name: "Ana",
+    }]));
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.items).toEqual([expect.objectContaining({
+      displayName: "Nome WhatsApp", ownerTeamMemberId: "member-1", ownerName: "Ana",
+    })]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("enriches only incomplete rows, retaining null-owner and legacy-owner fallbacks", async () => {
+    const rows = [
+      { lead_id: "complete", push_name: "Completo", owner_team_member_id: "member-1" },
+      { lead_id: "missing-name", push_name: null, owner_team_member_id: "member-1" },
+      { lead_id: "null-owner", push_name: "Sem dono", owner_team_member_id: null },
+      { lead_id: "legacy-owner", push_name: "Legado" },
+      { lead_id: "empty-name", push_name: "", owner_team_member_id: "member-1" },
+    ];
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/rpc/")) return json(rows.map((r, i) => ({
+        ...r, normalized_phone: `551199999000${i}`, waiting_total: rows.length,
+        last_client_message_at: inicio.toISOString(),
+      })));
+      if (url.includes("/leads?")) {
+        const request = new URL(url);
+        expect(request.searchParams.get("id")).toBe('in.(missing-name,null-owner,legacy-owner)');
+        expect(request.searchParams.get("organization_id")).toBe("eq.org-1");
+        return json(rows.map(r => ({
+          id: r.lead_id, name: "Nome CRM", pre_sale_responsible_id: "member-fallback",
+        })));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isError).toBe(false);
+    const byLead = new Map(result.current.items.map(row => [row.leadId, row]));
+    expect(byLead.get("missing-name")?.displayName).toBe("Nome CRM");
+    expect(byLead.get("null-owner")?.ownerTeamMemberId).toBe("member-fallback");
+    expect(byLead.get("legacy-owner")?.ownerTeamMemberId).toBe("member-fallback");
+    expect(byLead.get("empty-name")?.displayName).toBe("");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it("keeps waiting-queue server errors visible", async () => {
     fetchMock.mockImplementation(async () => json({ code: "42501", message: "Forbidden" }, 403));
     const { result } = renderHook(() => useConversasAguardando(), { wrapper });

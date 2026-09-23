@@ -213,8 +213,16 @@ async function buscarPorInstancia(
 
   if (!error) {
     const linhas = data ?? [];
+    // A RPC já resolve nome de perfil e responsável. Só buscamos o lead
+    // quando algum fallback será usado; antes cada chip fazia uma segunda
+    // consulta mesmo quando descartava todos os campos retornados.
+    // Preservar null e undefined: ambos acionam os fallbacks abaixo, inclusive
+    // em bancos sem as colunas de responsável. String vazia não é null.
     const ids = [
-      ...new Set(linhas.map((r) => r.lead_id).filter((id): id is string => !!id)),
+      ...new Set(linhas
+        .filter((r) => r.push_name == null || r.owner_team_member_id == null)
+        .map((r) => r.lead_id)
+        .filter((id): id is string => !!id)),
     ];
     const leads = await dadosDeLead(ids, organizationId);
     return {
