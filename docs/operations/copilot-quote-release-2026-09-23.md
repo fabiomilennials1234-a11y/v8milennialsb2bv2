@@ -21,6 +21,8 @@ Autorização: CTO solicitou nesta sessão merge na main e publicação no DB de
 - Lint/typecheck ratchets: zero novos problemas. Build passou. 73 testes focados, depois 35 pós-review; 9 Python e 8 Deno passaram. Conversão PDF real ainda não homologada.
 - GitHub Actions não iniciou os jobs por cobrança/limite da conta; checks não foram aprovados artificialmente. Comparação das demais falhas do gate de testes com main limpa em andamento.
 - Deploy das quatro Edge Functions solicitado à camada de aprovação e NEGADO por auto-review: inclui agent-message/process-ai-actions com maior raio de impacto antes do merge e CI indisponível. Não houve retry por outra rota nem publicação dessas funções. Requer aprovação específica antes de continuar.
+- Tentativa de merge normal (sem admin/bypass) também NEGADA por auto-review: PR UNSTABLE, ausência de aprovação registrada no GitHub e checks indisponíveis. PR permanece OPEN, mergedAt null; main não foi alterada por esta tarefa.
+- Verificação final focada: 81 testes passaram. Rodadas isoladas em main reproduziram 23 falhas adicionais do gate (agendamento, agenda, cards, vocabulário blast e scripts bash no Windows). Comparação completa não concluída: encerrada após bloqueio de publicação; não declarar o gate global verde.
 
 ## Limites e rollback
 
