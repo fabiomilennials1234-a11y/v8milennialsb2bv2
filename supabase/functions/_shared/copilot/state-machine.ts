@@ -110,6 +110,7 @@ export function determineNextState(currentState: string, toolName: string): Conv
   if (toolName === "create_custom_field") return currentState as ConversationState;
   if (toolName === "transfer_sz_chat") return "CLOSED_WON";
   if (toolName === "send_document") return currentState as ConversationState;
+  if (toolName === "generate_order_request") return currentState as ConversationState;
   if (toolName === "send_product_material") return currentState as ConversationState;
   if (toolName === "search_knowledge") return currentState as ConversationState;
   if (currentState === "NEW_LEAD") return "QUALIFYING";

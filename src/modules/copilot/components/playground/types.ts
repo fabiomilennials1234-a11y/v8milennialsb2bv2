@@ -5,6 +5,7 @@
 import type { AgentTemplateType, AgentOperationMode, OutboundConfig, ActivationTriggers, AutomationActions } from "@/types/copilot";
 import type { BehaviorEnforcement, BehaviorWindow } from "@/modules/copilot/components/BehaviorWindowsEditor";
 import type { FunisState } from "./funis-mapping";
+import { QUOTE_INSTRUCTION } from "@/contracts/copilot/quote-document";
 
 // =====================================================
 // TOOL DEFINITIONS
@@ -371,6 +372,14 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
       { key: "document_id", label: "Documento", type: "text", placeholder: "ID do documento na base de conhecimento" },
       { key: "caption", label: "Mensagem de acompanhamento", type: "text", placeholder: "Ex: Segue nosso catalogo atualizado" },
     ],
+  },
+  {
+    id: "GERAR_ORCAMENTO_PDF",
+    name: "Gerar Orçamento",
+    description: "Preenche um modelo Word com os dados confirmados e envia o arquivo ao lead",
+    icon: "FileOutput",
+    defaultInstruction: QUOTE_INSTRUCTION,
+    parameters: [],
   },
   {
     id: "CRIAR_CAMPO",

@@ -9,6 +9,8 @@
 
 import type { PlaygroundToolState } from "@/modules/copilot/components/playground/types";
 import { PLAYGROUND_TOOLS } from "@/modules/copilot/components/playground/types";
+import { buildQuoteTool } from "@/contracts/copilot/quote-tool";
+import { quoteConfigFromTool } from "@/contracts/copilot/quote-document";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -81,6 +83,8 @@ function buildHumanDescription(
   params: Record<string, any>,
 ): string {
   switch (name) {
+    case "generate_order_request":
+      return `ORÇAMENTO (simulação) → ${params.operation || "?"}; nenhum arquivo gerado ou enviado`;
     case "advance_stage":
       return `MOVER_CARD → stage ${params.target_stage || "?"}${params.target_pipe ? ` (${params.target_pipe})` : ""}`;
 
@@ -138,6 +142,16 @@ const TOOL_ID_TO_OPENROUTER: Record<
   string,
   (config: Record<string, any>) => OpenRouterToolDef[]
 > = {
+  GERAR_ORCAMENTO_PDF: (config) => {
+    const quote = quoteConfigFromTool(config);
+    if (!quote.template_document_id || !quote.fields?.length) return [];
+    const tool = buildQuoteTool(quote.fields, quote.required_fields || []);
+    return [{ type: "function", function: {
+      name: tool.name,
+      description: `${tool.description} Neste chat as operações são apenas simuladas: não há arquivo nem envio real.`,
+      parameters: { ...tool.input_schema, type: "object" },
+    } }];
+  },
   QUALIFICAR_LEAD: () => [
     {
       type: "function",

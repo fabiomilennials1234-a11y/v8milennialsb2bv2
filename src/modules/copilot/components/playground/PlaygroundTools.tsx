@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { QuoteTemplateConfig } from "./QuoteTemplateConfig";
 import {
   UserCheck,
   Calendar,
@@ -50,13 +51,14 @@ const ICON_MAP: Record<string, any> = {
 };
 
 interface PlaygroundToolsProps {
+  agentId?: string;
   tools: Record<string, PlaygroundToolState>;
   onChange: (tools: Record<string, PlaygroundToolState>) => void;
   /** Active pipes from agent config — drives MOVER_CARD auto-enable */
   activePipes?: string[];
 }
 
-export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundToolsProps) {
+export function PlaygroundTools({ tools, onChange, activePipes, agentId }: PlaygroundToolsProps) {
   const pipeTypeOptions = usePipeTypeOptions({ incluirCampanha: false });
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
 
@@ -193,6 +195,7 @@ export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundTool
                   </div>
 
                   {/* Parameters */}
+                  {def.id === "GERAR_ORCAMENTO_PDF" && <QuoteTemplateConfig agentId={agentId} config={state.config} onChange={patch => onChange({ ...tools, [def.id]: { ...state, config: { ...state.config, ...patch } } })} />}
                   {def.parameters.length > 0 && (
                     <div className="space-y-2 pt-1 border-t border-border/30">
                       <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configuracao</p>

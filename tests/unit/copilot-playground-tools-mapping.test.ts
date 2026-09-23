@@ -11,8 +11,16 @@
 
 import { describe, it, expect } from "vitest";
 import { wizardToolsState } from "@/modules/copilot/components/playground/tools-mapping";
+import { quoteConfigFromTool } from "@/contracts/copilot/quote-document";
 
 describe("wizardToolsState", () => {
+  it.each([false, true])("preserva modelo e toggle PDF=%s ao salvar e reabrir", (pdf) => {
+    const saved = { template_document_id: "template", template_name: "Hoppe.docx", fields: ["customer", "total"], required_fields: ["customer"], convert_to_pdf: pdf };
+    const state = wizardToolsState({ canGenerateOrderRequest: true, orderRequestConfig: saved }).GERAR_ORCAMENTO_PDF;
+    expect(state.enabled).toBe(true);
+    expect(state.instruction).not.toBe("");
+    expect(quoteConfigFromTool(state.config)).toEqual(saved);
+  });
   it("liga ENVIAR_DOCUMENTO quando can_send_document vem true do banco", () => {
     const tools = wizardToolsState({ canSendDocument: true });
 

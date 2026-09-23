@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildQuoteTool } from "../../_shared/quotes/tool-definition.ts";
 
 export interface BuildToolsParams {
   supabase: SupabaseClient;
@@ -364,6 +365,21 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
     }
   } catch (e) {
     console.warn("[engine/build-tools] Failed to load documents for send_document tool:", e);
+  }
+
+  // generate_order_request — global, opt-in order flow. The executor validates the
+  // configured template and required fields again; the LLM only proposes the
+  // collected values and must never invent missing data.
+  if (capabilities.can_generate_order_request === true) {
+    const config = (capabilities.order_request_config ?? {}) as Record<string, unknown>;
+    const requiredFields = Array.isArray(config.required_fields)
+      ? config.required_fields.map(String)
+      : [];
+    const templateId = typeof config.template_document_id === "string" ? config.template_document_id : "";
+    if (templateId) {
+      const template = await supabase.from("copilot_quote_templates").select("fields").eq("id", templateId).eq("organization_id", organizationId).eq("agent_id", capabilities.id).maybeSingle();
+      if (!template.error && Array.isArray(template.data?.fields)) tools.push(buildQuoteTool(template.data.fields, requiredFields));
+    }
   }
 
   // send_product_material tool — material de produto

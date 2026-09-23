@@ -9,6 +9,13 @@ const DEFAULT_SECTIONS = {
   instructions: "",
 };
 
+Deno.test("reconstruct: orçamento usa flag explícita e instrução padrão", () => {
+  const enabled = agentRowToComposeInput({ can_generate_order_request: true }, []);
+  assertEquals(enabled.tools.find(t => t.id === 'GERAR_ORCAMENTO_PDF')?.enabled, true);
+  const disabled = agentRowToComposeInput({}, []);
+  assertEquals(disabled.tools.find(t => t.id === 'GERAR_ORCAMENTO_PDF')?.enabled, false);
+});
+
 Deno.test("mergeSections: merge parcial sobre default + atual", () => {
   const cur = { ...DEFAULT_SECTIONS, personality: "A", objective: "B" };
   assertEquals(mergeSections(cur, { objective: "B2", flow: "F" }), {

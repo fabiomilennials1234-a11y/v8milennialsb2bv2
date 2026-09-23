@@ -610,3 +610,5 @@ verify_jwt = false
 # Validates caller JWT, workflow RLS, org admin permission and feature gate itself.
 [functions.workflow-question-image]
 verify_jwt = false
+[functions.copilot-quote-template]
+verify_jwt = false

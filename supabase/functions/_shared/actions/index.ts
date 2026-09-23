@@ -45,6 +45,7 @@ import {
 import { executeTransferHumanWhatsappNotify } from "./transfer-human-whatsapp-notify.ts";
 import { executeScheduleMeetingWhatsappNotify } from "./schedule-meeting-whatsapp-notify.ts";
 import { executeSendDocument } from "./send-document.ts";
+import { sendQuoteDocument } from "../quotes/send.ts";
 
 export async function executeAiAction(
   supabase: SupabaseClient,
@@ -156,6 +157,13 @@ export async function executeAiAction(
         action.id,
       );
       break;
+    case "generate_order_request":
+      return {
+        success: false,
+        error: "quote_operation_requires_inline_conversation_context",
+      };
+    case "send_quote_document":
+      return await sendQuoteDocument(supabase, action);
     case "generate_message": {
       // workflow-executor.ts case "copilot" enqueues this action_type but no
       // handler exists. Returning success no-op stops infinite retry loop.

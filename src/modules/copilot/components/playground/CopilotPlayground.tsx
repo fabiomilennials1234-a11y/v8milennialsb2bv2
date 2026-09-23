@@ -76,6 +76,7 @@ import {
   useSetDefaultCopilotAgent,
 } from "@/modules/copilot/hooks/useCopilotAgents";
 import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument, useUpdateAgentDocument } from "@/modules/copilot/hooks/useAgentDocuments";
+import { quoteConfigFromTool } from "@/contracts/copilot/quote-document";
 
 import { useCurrentTeamMember } from "@/modules/identity";
 import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
@@ -218,6 +219,8 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
       can_transfer_human: data.tools.TRANSFERIR_HUMANO?.enabled ?? false,
       can_move_cards: data.tools.MOVER_CARD?.enabled ?? false,
       can_send_document: data.tools.ENVIAR_DOCUMENTO?.enabled ?? false,
+      can_generate_order_request: data.tools.GERAR_ORCAMENTO_PDF?.enabled ?? false,
+      order_request_config: quoteConfigFromTool(data.tools.GERAR_ORCAMENTO_PDF?.config ?? {}),
       can_transfer_sz_chat: data.tools.TRANSFERIR_SZ_CHAT?.enabled ?? false,
       human_pause_enabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? true,
       human_pause_duration_minutes: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.config?.durationMinutes
@@ -489,6 +492,10 @@ export function CopilotPlayground() {
 
   // Save
   const handleSave = async () => {
+    const quote = data.tools.GERAR_ORCAMENTO_PDF;
+    if (quote?.enabled && !quote.config.templateDocumentId) {
+      toast.error("Importe um modelo Word ou desative Gerar orçamento para salvar."); return;
+    }
     // Hard validations — block save
     if (!data.name.trim()) {
       toast.error("Nome obrigatorio", { description: "Informe um nome para o agente." });
@@ -740,6 +747,7 @@ export function CopilotPlayground() {
 
             <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundTools
+                agentId={editId}
                 tools={data.tools}
                 onChange={(tools) => updateData({ tools })}
               />
@@ -974,6 +982,8 @@ function createWizardDataFromPlayground(data: PlaygroundData, conexaoState?: Con
     canTransferHuman: data.tools.TRANSFERIR_HUMANO?.enabled ?? false,
     canMoveCards: data.tools.MOVER_CARD?.enabled ?? false,
     canSendDocument: data.tools.ENVIAR_DOCUMENTO?.enabled ?? false,
+    canGenerateOrderRequest: data.tools.GERAR_ORCAMENTO_PDF?.enabled ?? false,
+    orderRequestConfig: quoteConfigFromTool(data.tools.GERAR_ORCAMENTO_PDF?.config ?? {}),
     canTransferSzChat: data.tools.TRANSFERIR_SZ_CHAT?.enabled ?? false,
     humanPauseEnabled: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.enabled ?? true,
     humanPauseDurationMinutes: data.tools.PAUSAR_ATENDIMENTO_HUMANO?.config?.durationMinutes

@@ -1,6 +1,7 @@
 // PORT de src/modules/copilot/components/playground/types.ts PLAYGROUND_TOOLS.
 // Só {id,name,defaultInstruction}. Ordem = ordem dos blocos no prompt. Guard: tools-catalog.test.ts.
 
+import { QUOTE_INSTRUCTION } from "../../../../src/contracts/copilot/quote-document.ts";
 export interface CatalogTool {
   id: string;
   name: string;
@@ -55,6 +56,11 @@ export const TOOLS_CATALOG: readonly CatalogTool[] = [
     name: "Enviar Documento",
     defaultInstruction:
       "Quando o lead pedir catalogo, tabela de precos, proposta ou qualquer material disponivel na base de conhecimento, envie o documento imediatamente. Se o lead demonstrar interesse em produto/servico e houver material relevante, envie proativamente sem esperar pedido explicito.",
+  },
+  {
+    id: "GERAR_ORCAMENTO_PDF",
+    name: "Gerar Orçamento",
+    defaultInstruction: QUOTE_INSTRUCTION,
   },
   {
     id: "CRIAR_CAMPO",

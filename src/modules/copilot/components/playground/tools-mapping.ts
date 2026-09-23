@@ -14,6 +14,7 @@
  * flag do banco; nunca uma constante.
  */
 import { PLAYGROUND_TOOLS, filterLegacyTools, type PlaygroundToolState } from "./types";
+import type { QuoteConfig } from "@/contracts/copilot/quote-document";
 
 /** Recorte de CopilotWizardData que decide o estado das ferramentas. */
 export interface WizardToolFlags {
@@ -23,6 +24,8 @@ export interface WizardToolFlags {
   canTransferHuman?: boolean;
   canCreateLead?: boolean;
   canSendDocument?: boolean;
+  canGenerateOrderRequest?: boolean;
+  orderRequestConfig?: QuoteConfig;
   canTransferSzChat?: boolean;
   humanPauseEnabled?: boolean;
   humanPauseDurationMinutes?: number;
@@ -56,6 +59,13 @@ export function wizardToolsState(
     CRIAR_CAMPO: toolState(false, "CRIAR_CAMPO"),
     TRANSFERIR_SZ_CHAT: toolState(wd.canTransferSzChat ?? false, "TRANSFERIR_SZ_CHAT"),
     ENVIAR_DOCUMENTO: toolState(wd.canSendDocument ?? false, "ENVIAR_DOCUMENTO"),
+    GERAR_ORCAMENTO_PDF: toolState(wd.canGenerateOrderRequest ?? false, "GERAR_ORCAMENTO_PDF", {
+      templateDocumentId: wd.orderRequestConfig?.template_document_id,
+      templateName: wd.orderRequestConfig?.template_name,
+      fields: wd.orderRequestConfig?.fields ?? [],
+      requiredFields: (wd.orderRequestConfig?.required_fields ?? []).join(", "),
+      convertToPdf: wd.orderRequestConfig?.convert_to_pdf === true,
+    }),
     PAUSAR_ATENDIMENTO_HUMANO: {
       enabled: wd.humanPauseEnabled ?? true,
       config: { durationMinutes: wd.humanPauseDurationMinutes ?? 60 },
