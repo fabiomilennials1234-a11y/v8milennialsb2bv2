@@ -1,3 +1,4 @@
+import { InstanceProvisioningUncertainError } from "../instance-provisioning.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -9,6 +10,7 @@
  * createInstance also persists the per-instance token via set_uazapi_credentials RPC.
  */
 
+import { configureUazapiWebhook, normalizeWebhook } from "../uazapi-webhook-policy.ts";
 import { normalizeUazapiMessageResult } from "../uazapi-message-result.ts";
 import { UazapiClient } from "../uazapi-client.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
@@ -126,60 +128,58 @@ export class UazapiProvider implements WhatsAppProvider {
     }
     const webhookUrl = `${input.webhook_url.replace(/\/$/, "")}/${input.webhook_secret}`;
 
-    const resp = await this.client.initInstance({
-      name: input.instance_name,
-      adminField01: input.organization_id,
-      adminField02: input.instance_id,
-    });
+    try {
+      const resp = await this.client.initInstance({
+        name: input.instance_name,
+        adminField01: input.organization_id,
+        adminField02: input.instance_id,
+      });
 
-    // Extract from nested response: instance.id, instance.token, top-level status object
-    const instanceId = resp.instance?.id ?? (resp as any).id;
-    const instanceToken = resp.instance?.token ?? resp.token;
-    if (typeof instanceId !== "string" || !instanceId || typeof instanceToken !== "string" || !instanceToken) {
-      throw new Error("Uazapi creation response is missing instance identity or token");
-    }
-
-    // Persist token via RPC — service_role only
-    const { error: rpcError } = await this.supabaseAdmin.rpc(
-      "set_uazapi_credentials",
-      {
-        p_instance_id: input.instance_id,
-        p_organization_id: input.organization_id,
-        p_uazapi_instance_id: instanceId,
-        p_uazapi_token: instanceToken,
+      // Extract from nested response: instance.id, instance.token, top-level status object
+      const instanceId = resp.instance?.id ?? (resp as any).id;
+      const instanceToken = resp.instance?.token ?? resp.token;
+      if (typeof instanceId !== "string" || !instanceId || typeof instanceToken !== "string" || !instanceToken) {
+        throw new Error("Uazapi creation response is missing instance identity or token");
       }
-    );
 
-    if (rpcError) {
-      throw new Error(
-        `Failed to persist uazapi credentials via RPC: ${rpcError.message}`
+      // Persist token via RPC — service_role only
+      const { error: rpcError } = await this.supabaseAdmin.rpc(
+        "set_uazapi_credentials",
+        {
+          p_instance_id: input.instance_id,
+          p_organization_id: input.organization_id,
+          p_uazapi_instance_id: instanceId,
+          p_uazapi_token: instanceToken,
+        }
       );
+
+      if (rpcError) {
+        throw new Error(
+          `Failed to persist uazapi credentials via RPC: ${rpcError.message}`
+        );
+      }
+
+      // Creation only accepts name/admin metadata. Configure the webhook explicitly
+      // using the newly obtained instance token.
+      const instanceClient = new UazapiClient({
+        baseUrl: this.baseUrl,
+        token: instanceToken,
+      });
+      await configureUazapiWebhook(instanceClient, this.supabaseAdmin, input.instance_id, input.organization_id, webhookUrl);
+
+      return {
+        provider_instance_id: instanceId,
+        provider_token: instanceToken,
+        status: normaliseStatus({
+          status: resp.status ?? resp.instance?.status,
+          qrcode: resp.instance?.qrcode ?? (resp as any).qrcode,
+          paircode: resp.instance?.paircode ?? (resp as any).paircode,
+          owner: extractOwnerNumber(resp),
+        }),
+      };
+    } catch (error) {
+      throw new InstanceProvisioningUncertainError(error);
     }
-
-    // Creation only accepts name/admin metadata. Configure the webhook explicitly
-    // using the newly obtained instance token.
-    const instanceClient = new UazapiClient({
-      baseUrl: this.baseUrl,
-      token: instanceToken,
-    });
-    await instanceClient.updateWebhook({
-      url: webhookUrl,
-      events: ["messages", "messages_update", "connection"],
-      excludeMessages: ["wasSentByApi"],
-      addUrlEvents: true,
-      addUrlTypesMessages: false,
-    });
-
-    return {
-      provider_instance_id: instanceId,
-      provider_token: instanceToken,
-      status: normaliseStatus({
-        status: resp.status ?? resp.instance?.status,
-        qrcode: resp.instance?.qrcode ?? (resp as any).qrcode,
-        paircode: resp.instance?.paircode ?? (resp as any).paircode,
-        owner: extractOwnerNumber(resp),
-      }),
-    };
   }
 
   async getStatus(): Promise<InstanceStatus> {
@@ -503,13 +503,7 @@ export class UazapiProvider implements WhatsAppProvider {
   }
 
   async reconfigureWebhook(webhookUrl: string): Promise<void> {
-    await this.client.updateWebhook({
-      url: webhookUrl,
-      events: ["messages", "messages_update", "connection"],
-      excludeMessages: ["wasSentByApi"],
-      addUrlEvents: true,
-      addUrlTypesMessages: false,
-    });
+    await configureUazapiWebhook(this.client, this.supabaseAdmin, this.instanceId, this.organizationId, webhookUrl);
   }
 
   /**
@@ -519,13 +513,7 @@ export class UazapiProvider implements WhatsAppProvider {
    * nulls when a field is absent so callers can treat "unknown" distinctly from
    * "disabled". Used to verify that reconfigureWebhook actually persisted.
    */
-  async readWebhook(): Promise<{ url: string | null; enabled: boolean | null; raw: unknown }> {
-    const raw = await this.client.getWebhook();
-    const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
-    const nodeRaw = obj.webhook ?? obj.value ?? obj.data ?? obj;
-    const pick = Array.isArray(nodeRaw) ? (nodeRaw[0] ?? {}) : nodeRaw;
-    const url = typeof pick?.url === "string" && pick.url.trim().length > 0 ? pick.url : null;
-    const enabled = typeof pick?.enabled === "boolean" ? pick.enabled : null;
-    return { url, enabled, raw };
+  async readWebhook() {
+    return normalizeWebhook(await this.client.getWebhook());
   }
 }

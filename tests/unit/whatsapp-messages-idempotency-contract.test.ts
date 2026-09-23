@@ -77,7 +77,7 @@ describe("whatsapp_messages global idempotency contract", () => {
     // fazia o filtro achar ZERO arquivos na máquina do dev — e um teste que só
     // passa no runner é um teste que ninguém roda antes de subir.
     const webhookFiles = allTsFiles.filter((f) =>
-      /(whatsapp-webhook|sz-chat-webhook)[\\/]index\.ts$/.test(f),
+      /(?:whatsapp-webhook[\\/]handler|sz-chat-webhook[\\/]index)\.ts$/.test(f),
     );
     expect(webhookFiles.length).toBeGreaterThan(0);
 

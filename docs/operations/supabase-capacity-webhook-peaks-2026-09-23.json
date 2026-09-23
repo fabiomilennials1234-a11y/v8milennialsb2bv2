@@ -1,0 +1,136 @@
+{
+  "measurement": "function_edge_logs, OPTIONS excluded; whatsapp-webhook only; timestamp buckets. p95 applies to nonempty buckets and is approximate.",
+  "days": [
+    {
+      "start": "2026-09-16T22:00:00Z",
+      "end": "2026-09-17T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1245,
+          "granularity": "minute",
+          "p95_active_bucket": 139,
+          "peak_requests": 262
+        },
+        {
+          "active_buckets": 25927,
+          "granularity": "second",
+          "p95_active_bucket": 6,
+          "peak_requests": 45
+        }
+      ]
+    },
+    {
+      "start": "2026-09-17T22:00:00Z",
+      "end": "2026-09-18T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1223,
+          "granularity": "minute",
+          "p95_active_bucket": 125,
+          "peak_requests": 317
+        },
+        {
+          "active_buckets": 25542,
+          "granularity": "second",
+          "p95_active_bucket": 6,
+          "peak_requests": 16
+        }
+      ]
+    },
+    {
+      "start": "2026-09-18T22:00:00Z",
+      "end": "2026-09-19T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1206,
+          "granularity": "minute",
+          "p95_active_bucket": 45,
+          "peak_requests": 166
+        },
+        {
+          "active_buckets": 9529,
+          "granularity": "second",
+          "p95_active_bucket": 5,
+          "peak_requests": 16
+        }
+      ]
+    },
+    {
+      "start": "2026-09-19T22:00:00Z",
+      "end": "2026-09-20T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1110,
+          "granularity": "minute",
+          "p95_active_bucket": 30,
+          "peak_requests": 129
+        },
+        {
+          "active_buckets": 6941,
+          "granularity": "second",
+          "p95_active_bucket": 4,
+          "peak_requests": 16
+        }
+      ]
+    },
+    {
+      "start": "2026-09-20T22:00:00Z",
+      "end": "2026-09-21T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1199,
+          "granularity": "minute",
+          "p95_active_bucket": 143.0999999999999,
+          "peak_requests": 280
+        },
+        {
+          "active_buckets": 27536,
+          "granularity": "second",
+          "p95_active_bucket": 6,
+          "peak_requests": 16
+        }
+      ]
+    },
+    {
+      "start": "2026-09-21T22:00:00Z",
+      "end": "2026-09-22T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1271,
+          "granularity": "minute",
+          "p95_active_bucket": 131,
+          "peak_requests": 317
+        },
+        {
+          "active_buckets": 26911,
+          "granularity": "second",
+          "p95_active_bucket": 5,
+          "peak_requests": 27
+        }
+      ]
+    },
+    {
+      "start": "2026-09-22T22:00:00Z",
+      "end": "2026-09-23T22:00:00Z",
+      "result": [
+        {
+          "active_buckets": 1222,
+          "granularity": "minute",
+          "p95_active_bucket": 129.95000000000005,
+          "peak_requests": 243
+        },
+        {
+          "active_buckets": 24549,
+          "granularity": "second",
+          "p95_active_bucket": 5,
+          "peak_requests": 16
+        }
+      ]
+    }
+  ],
+  "load_test_floor": {
+    "burst_requests_per_second": 90,
+    "sustained_requests_per_minute": 634,
+    "note": "Twice observed seven-day maximum; not yet tested on production VPS."
+  }
+}

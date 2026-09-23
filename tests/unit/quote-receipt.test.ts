@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuotePresentation, recordQuotePresentation, completeQuotePresentations } from '../../supabase/functions/_shared/quotes/presentation';
 
 function database() {
+  let failure: { table: string; write: boolean } | undefined;
   const tables:Record<string,any[]>={
     copilot_quotes:[{id:'q',organization_id:'org',conversation_id:'conv',revision:1,status:'awaiting_confirmation'}],
     conversation_messages:[],
@@ -21,6 +22,7 @@ function database() {
       contains:(key:string,value:any)=>{filters.push(row=>contains(get(row,key),value));return chain;},
       update:(value:any)=>{update=value;return chain;},insert:(value:any)=>{insert=value;return chain;},
       then:(resolve:any)=>Promise.resolve().then(()=>{
+        if (failure?.table === table && failure.write === !!update) return { data: null, error: { message: "injected" } };
         if(insert)tables[table].push({...insert,id:`message-${tables[table].length+1}`});
         const rows=tables[table].filter(row=>filters.every(f=>f(row)));
         if(update)for(const row of rows)Object.assign(row,update);
@@ -29,7 +31,7 @@ function database() {
       }).then(resolve),
     };return chain;
   }};
-  return {db:db as Parameters<typeof recordQuotePresentation>[0],tables};
+  return {db:db as Parameters<typeof recordQuotePresentation>[0],tables, fail(table: string, write = false) { failure = { table, write }; }, recover() { failure = undefined; }};
 }
 const summary={conversation_id:'conv',quote_id:'q',revision:1,summary:'Resumo idêntico'};
 beforeEach(()=>vi.stubGlobal('Deno',{env:{get:()=> 'true'}}));
@@ -100,4 +102,39 @@ describe('durable presentation occurrences and asynchronous receipts',()=>{
     await completeQuotePresentations(db,'org','instance',['chunk']);
     expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
   });
+});
+
+
+describe('strict receipt completion retries database failures', () => {
+  for (const [table, write] of [['copilot_quotes', false], ['conversation_messages', false], ['whatsapp_messages', false], ['conversation_messages', true]] as const) {
+    it(`fails closed on ${table} ${write ? 'write' : 'read'} and completes on retry`, async () => {
+      const fixture = database();
+      const { db, tables } = fixture;
+      const presentation = await createQuotePresentation(db, summary);
+      await recordQuotePresentation(db, 'org', 'instance', presentation, ['chunk']);
+      tables.whatsapp_messages[0].status = 'sent';
+      fixture.fail(table, write);
+      await expect(completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true })).rejects.toThrow('Quote receipt');
+      expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+      fixture.recover();
+      await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
+      expect(tables.conversation_messages[0].metadata.quote_presentation).toBeDefined();
+    });
+  }
+});
+
+
+it('does not backdate completion when an old chunk callback retries after newer chunks arrive', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-23T12:01:00Z'));
+  const { db, tables } = database();
+  tables.whatsapp_messages.push({ ...tables.whatsapp_messages[0], message_id: 'second' });
+  const presentation = await createQuotePresentation(db, summary);
+  await recordQuotePresentation(db, 'org', 'instance', presentation, ['chunk', 'second']);
+  tables.whatsapp_messages[0].status = 'sent';
+  await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
+  expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+  vi.setSystemTime(new Date('2026-09-23T12:05:00Z'));
+  tables.whatsapp_messages[1].status = 'sent';
+  await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
+  expect(tables.conversation_messages[0].metadata.quote_presentation.accepted_at).toBe('2026-09-23T12:05:00.000Z');
 });

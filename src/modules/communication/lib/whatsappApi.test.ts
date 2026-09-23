@@ -8,6 +8,7 @@ const invokeMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    auth: { getSession: async () => ({ data: { session: null }, error: null }) },
     functions: { invoke: (...args: unknown[]) => invokeMock(...args) },
   },
 }));

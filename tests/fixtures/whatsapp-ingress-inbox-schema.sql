@@ -1,0 +1,14 @@
+-- Empty disposable database only. No outbound network operations.
+DO $$ DECLARE r text; BEGIN
+  FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+    IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=r) THEN EXECUTE format('CREATE ROLE %I',r); END IF;
+  END LOOP;
+END $$;
+CREATE TABLE public.organizations(id uuid PRIMARY KEY);
+CREATE TABLE public.whatsapp_instances(id uuid PRIMARY KEY,organization_id uuid NOT NULL);
+INSERT INTO public.organizations VALUES('10000000-0000-0000-0000-000000000001'),('20000000-0000-0000-0000-000000000002');
+INSERT INTO public.whatsapp_instances VALUES
+ ('a0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001'),
+ ('b0000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002');
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;

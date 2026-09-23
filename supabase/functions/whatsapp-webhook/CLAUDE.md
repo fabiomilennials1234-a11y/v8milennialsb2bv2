@@ -28,24 +28,24 @@ Ver [`05 — How-to/debug-whatsapp`](../../../Obsidian/Segundo%20Cerebro/Claude%
 ## Fluxo
 
 1. Recebe POST de Uazapi (secret path)
-2. Valida `UAZAPI_WEBHOOK_SECRET` (header)
+2. Valida `UAZAPI_WEBHOOK_SECRET` pelo caminho/header aceito no handler
 3. Resolve instância via cascata:
    - `payload.instance` (V1) →
    - `payload.token` →
    - hash do número →
-   - DLQ + return 200
+   - DLQ persistida + ACK; falha de persistência não autoriza ACK
 4. Idempotência via `external_message_id` único
 5. INSERT em `whatsapp_messages` + `whatsapp_messages_received_via`
    (o inbound da Uazapi NÃO vai para `channel_messages` — essa é da Meta e do
    quick-blast. Quem quiser reagir a mensagem recebida escuta `whatsapp_messages`.)
 6. Realtime notifica frontend
 7. Dispara workflow/copilot triggers (assíncrono)
-8. Return 200 sempre (mesmo em erro de processing — DLQ pega)
+8. Retorna 200 após processamento; erro retorna 500/503. DLQ de resolução não cobre automaticamente falhas do processamento.
 
 ## Não fazer
 
 - ❌ Confiar 100% em `payload.instance` — schema instável
-- ❌ Retornar 500 em erro — Uazapi retry agressivo, prefere DLQ + 200
+- ❌ Confirmar 2xx após falha sem persistência durável; retry precisa ser idempotente
 - ❌ Bloquear no processing — pesado vai pra cron
 - ❌ Sem idempotência — webhook duplicado é normal
 - ❌ Pular DLQ em caso de erro — perda silenciosa
@@ -98,3 +98,25 @@ supabase functions logs whatsapp-webhook --project-ref jsjsmuncfkbsbzqzqhfq
 - `whatsapp-health-monitor` — drift + health (5min)
 - `whatsapp-rebind-webhook` — reconfigura webhook em Uazapi
 - `history-sync-worker` — backfill
+
+
+## Extração do ingresso — capacidade Supabase (2026-09-23)
+
+`index.ts` registra `Deno.serve`; `handler.ts` contém o núcleo compartilhado.
+`message-update.ts` aplica recibos com progressão atômica, reações legadas com
+CAS e erros de persistência propagados. O helper de propostas comerciais recebe
+modo estrito neste caminho: duplicata também pode terminar efeito interrompido.
+
+`services/whatsapp-ingress/` reutiliza esse núcleo. Serviço desligado por padrão;
+allowlist usa instância resolvida no banco. Primeira migração de tráfego limitada
+a `messages_update`, com admissão durável antes do ACK e retries controlados.
+Não tratar o serviço como ativo em produção: contrato remoto, pico no VPS,
+latência, reinício e rollback são gates independentes do build.
+
+Snapshots de reações e pin/unpin não carregam versão confiável em todos os
+payloads. Serialização da fila evita reordenação criada pelo worker; não prova
+ordem causal do fornecedor. Não ativar dois donos de efeitos para a mesma rota.
+
+Testes adicionais: `whatsapp-message-update.test.ts`, `quote-receipt.test.ts`,
+`whatsapp-ingress-runtime.test.ts`. Plano/evidência histórica em
+`.specs/supabase-capacity-phase2-plan.md` e `docs/operations/supabase-capacity-*`.

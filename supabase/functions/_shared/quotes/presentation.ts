@@ -14,16 +14,19 @@ export async function createQuotePresentation(db: SupabaseClient, presentation: 
   return {...presentation,message_id:result.data.id};
 }
 
-async function sealPresentation(db: SupabaseClient, organizationId: string, message: {id:string; metadata:Record<string,any>}) {
+async function sealPresentation(db: SupabaseClient, organizationId: string, message: {id:string; metadata:Record<string,any>}, strict = false) {
   if (message.metadata.quote_presentation) return;
   const delivery = message.metadata.quote_delivery;
   if (!delivery?.message_ids?.length) return;
   const quote = await db.from("copilot_quotes").select("id").eq("organization_id", organizationId).eq("id", delivery.quote_id).eq("conversation_id", delivery.conversation_id).eq("revision", delivery.revision).eq("status", "awaiting_confirmation").maybeSingle();
+  if (quote.error && strict) throw new Error("Quote receipt lookup failed");
   if (quote.error || !quote.data) return;
   const chunks = await db.from("whatsapp_messages").select("message_id,status").eq("organization_id", organizationId).eq("instance_id", delivery.instance_id).eq("direction","outgoing").in("message_id",delivery.message_ids);
+  if (chunks.error && strict) throw new Error("Quote receipt chunks unavailable");
   if (chunks.error || chunks.data?.length !== delivery.message_ids.length || chunks.data.some(row=>!["sent","delivered","read"].includes(row.status))) return;
   // First completion wins. A duplicated/late callback cannot move consent forward.
   const result = await db.from("conversation_messages").update({metadata:{...message.metadata,quote_presentation:{accepted_at:new Date().toISOString(),instance_id:delivery.instance_id,quote_id:delivery.quote_id,revision:delivery.revision}}}).eq("id", message.id).eq("conversation_id", delivery.conversation_id).is("metadata->quote_presentation",null);
+  if (result.error && strict) throw new Error("Quote receipt persistence failed");
   if (result.error) console.warn("[quote] Failed to record summary acceptance");
 }
 
@@ -41,13 +44,15 @@ export async function recordQuotePresentation(db: SupabaseClient, organizationId
 }
 
 /** Provider receipts/echoes finish queued presentations, never retroactively date them. */
-export async function completeQuotePresentations(db: SupabaseClient, organizationId: string, instanceId: string, providerIds: string[]): Promise<void> {
+export async function completeQuotePresentations(db: SupabaseClient, organizationId: string, instanceId: string, providerIds: string[], options: { strict?: boolean } = {}): Promise<void> {
   if (!quoteLiveSendEnabled(organizationId)) return;
   const quotes = await db.from("copilot_quotes").select("conversation_id").eq("organization_id",organizationId).eq("status","awaiting_confirmation");
+  if (quotes.error && options.strict) throw new Error("Quote receipt candidates unavailable");
   if (quotes.error || !quotes.data?.length) return;
   for (const id of providerIds) {
     const messages = await db.from("conversation_messages").select("id,metadata").in("conversation_id",quotes.data.map(row=>row.conversation_id)).is("metadata->quote_presentation",null).contains("metadata",{quote_delivery:{instance_id:instanceId,message_ids:[id]}});
-    if (!messages.error) for (const message of messages.data ?? []) await sealPresentation(db,organizationId,message);
+    if (messages.error && options.strict) throw new Error("Quote receipt presentations unavailable");
+    if (!messages.error) for (const message of messages.data ?? []) await sealPresentation(db,organizationId,message,options.strict);
   }
 }
 
