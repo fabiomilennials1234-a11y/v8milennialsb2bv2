@@ -64,10 +64,9 @@ function Linha({
   return (
     <div
       className={cn(
-        // Rótulo com teto fixo: em `fr` ele acompanhava a largura do painel e
-        // abria um vão de 250px entre o nome do campo e o valor, quebrando a
-        // leitura em par.
-        "group grid grid-cols-[minmax(104px,180px)_1fr] items-baseline gap-4 rounded-md px-2 py-[7px] -mx-2",
+        // O rótulo cede espaço na coluna do negócio e mantém o teto de 180px
+        // na ficha inteira. O valor pode quebrar linha sem alargar a coluna.
+        "group grid grid-cols-[minmax(104px,min(38%,180px))_minmax(0,1fr)] items-baseline gap-4 rounded-md px-2 py-[7px] -mx-2",
         "transition-colors hover:bg-muted/40",
       )}
     >

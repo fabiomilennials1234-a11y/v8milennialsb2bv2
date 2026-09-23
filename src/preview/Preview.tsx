@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
+import { useViewport } from "@/shared/hooks/use-viewport";
 
 import { LeadCard } from "@/modules/leads/components/lead-card/LeadCard";
 import { LeadCardAside } from "@/modules/leads/components/lead-card/LeadCardAside";
@@ -33,7 +35,43 @@ const EXEMPLOS = [
   { chave: "neg-ganho", grupo: "Negócio", rotulo: "Ganho", dado: NEGOCIO_GANHO },
 ] as const;
 
+/**
+ * Espelha as duas faixas de LeadCardControles com os campos vazios.
+ * Os controles reais dependem da sessão; a prévia usa apenas a representação
+ * visual para medir o layout com o mesmo espaço ocupado no aplicativo.
+ */
+function ControlesDeExemplo() {
+  return (
+    <div className="flex w-full flex-col gap-2.5">
+      {[
+        { rotulo: "Responsáveis", campos: ["Pré-Venda", "Venda"] },
+        { rotulo: "Qualificação", campos: ["Pré-Qualificação", "Qualificação"] },
+      ].map(({ rotulo, campos }) => (
+        <div key={rotulo} className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            {rotulo}
+          </span>
+          <div className="flex items-center gap-2">
+            {campos.map((campo) => (
+              <span
+                key={campo}
+                role="img"
+                aria-label={`${campo} — sem preenchimento`}
+                title={`${campo} — exemplo visual`}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border/60"
+              >
+                <Plus className="size-4 text-muted-foreground/70" aria-hidden="true" />
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Preview() {
+  const { isMobile } = useViewport();
   const [escuro, setEscuro] = useState(true);
   const [qual, setQual] = useState<(typeof EXEMPLOS)[number]["chave"]>("lead-cliente");
 
@@ -44,8 +82,8 @@ export function Preview() {
   const atual = EXEMPLOS.find((e) => e.chave === qual)!;
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6">
-      <div className="mx-auto flex max-w-[1240px] flex-col gap-4">
+    <div className="flex h-dvh flex-col overflow-hidden bg-muted/30 p-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {EXEMPLOS.map((e, i) => (
@@ -85,20 +123,23 @@ export function Preview() {
             Julgar o card do Negócio sozinho aqui esconderia justamente o que
             mudou — e foi assim que a primeira versão passou dias sendo
             aprovada numa bancada que não era a tela real. */}
-        <div className="h-[calc(100vh-124px)] min-h-[620px] overflow-hidden rounded-xl shadow-2xl">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl shadow-2xl">
           {atual.grupo === "Lead" ? (
             <LeadCard lead={atual.dado as Parameters<typeof LeadCard>[0]["lead"]} />
           ) : (
             <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
-              <LeadCardAside
-                lead={
-                  (atual.chave === "neg-magro"
-                    ? LEAD_EXEMPLO_MAGRO
-                    : LEAD_EXEMPLO) as Parameters<typeof LeadCardAside>[0]["lead"]
-                }
-                onAbrirFicha={() => undefined}
-              />
-              <div className="flex min-w-0 flex-1 flex-col">
+              {!isMobile && (
+                <LeadCardAside
+                  lead={
+                    (atual.chave === "neg-magro"
+                      ? LEAD_EXEMPLO_MAGRO
+                      : LEAD_EXEMPLO) as Parameters<typeof LeadCardAside>[0]["lead"]
+                  }
+                  onAbrirFicha={() => undefined}
+                  controles={<ControlesDeExemplo />}
+                />
+              )}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {/* O negócio "magro" abre sem comentário de propósito: é o
                     caso majoritário e é onde o estado vazio precisa ser bom. */}
                 {/* Os três callbacks de produto entram como no-op para a

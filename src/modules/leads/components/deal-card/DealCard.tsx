@@ -124,7 +124,7 @@ function Abas<T extends string>({
   compacta?: boolean;
 }) {
   return (
-    <nav className="flex items-center gap-1 border-b border-border">
+    <nav className="flex flex-wrap items-center gap-x-1 border-b border-border">
       {itens.map((i) => {
         const acesa = i.chave === ativa;
         return (
@@ -458,9 +458,9 @@ export function DealCard({
       {/* ── Cabeçalho ─────────────────────────────────────────────────────
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
-          negócio e os dois únicos botões que o encerram. Fica em uma linha. */}
-      <header className="flex shrink-0 flex-col items-start gap-3 px-6 pb-3 pt-5 sm:flex-row">
-        <div className="w-full min-w-0 flex-1 sm:w-auto">
+          negócio e os dois únicos botões que o encerram. */}
+      <header className="flex shrink-0 flex-col items-start gap-3 px-6 pb-3 pt-5 sm:flex-row sm:flex-wrap">
+        <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-[200px]">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <NomeDoNegocio key={negocio.id} titulo={negocio.titulo} nomeLead={negocio.lead.nome} onRenomear={onRenomear} />
             {negocio.estado === "ganho" && (
@@ -524,7 +524,7 @@ export function DealCard({
             do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
             comum de faxina de funil. */}
         {(aberto || onExcluir || acaoLigar || acaoCopiar) && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 pr-8">
             {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
                 negócio aberto, e o único que não o encerra. */}
             {acaoCopiar}
@@ -634,7 +634,7 @@ export function DealCard({
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
         {aba === "atividades" ? (
           <DealCardActivities atividades={negocio.atividades} />
         ) : aba === "checklists" ? (

@@ -62,7 +62,7 @@ import type { DealCardComentario, ItemEditado } from "./types";
  * está do outro lado da proposta, perdia-se o negócio de vista.
  *
  * O print do DataCrazy resolve sem quebrar a regra: **não empilha, encosta**.
- * A pessoa ocupa uma coluna fixa de 356px à esquerda, o negócio ocupa o resto.
+ * A pessoa ocupa uma coluna proporcional à esquerda, o negócio ocupa o resto.
  * Continua havendo uma ficha de cada assunto; elas só passaram a caber juntas.
  *
  * A ficha INTEIRA do lead não morreu: o lápis e o "Ver ficha completa" da
@@ -584,7 +584,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
   /**
    * `comLead` é o corte de largura, não de importância.
    *
-   * No celular não há 356px de sobra para a coluna da pessoa sem espremer o
+   * No celular não há largura de sobra para a coluna da pessoa sem espremer o
    * negócio a ponto de a régua de etapas virar textura. Lá o painel volta a ser
    * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
    */
@@ -602,7 +602,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           podeCriarEtiqueta={!!souAdmin}
         />
       )}
-      <div className="flex min-w-0 flex-1 flex-col">{negocio(comLead)}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{negocio(comLead)}</div>
     </div>
   );
 
@@ -737,7 +737,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     return (
       <>
         <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-          <SheetContent side="bottom" className="h-[92vh] p-0">
+          <SheetContent side="bottom" className="h-[96dvh] overflow-hidden p-0">
             {conteudo(false)}
           </SheetContent>
         </Sheet>
@@ -758,10 +758,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
           Fica o do primitivo: ele já traz rótulo `sr-only`, fecha no Esc e
           devolve o foco ao gatilho, e é o mesmo de todo diálogo do produto.
 
-          A largura subiu de 900 para 1240: 356 da coluna da pessoa mais os
-          ~880 que o negócio já usava. Abaixo disso a régua de etapas de 7 casas
-          — o funil mais longo em prod — perde o nome embaixo de cada círculo. */}
-      <DialogContent className="h-[88vh] max-w-[1240px] gap-0 overflow-hidden p-0">
+          O painel acompanha a janela com uma margem curta; as duas colunas
+          aproveitam o espaço extra sem criar rolagem na casca do diálogo. */}
+      <DialogContent className="flex h-[96dvh] w-[calc(100%-2rem)] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
         {conteudo(true)}
       </DialogContent>
     </Dialog>
