@@ -3,6 +3,7 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { isDeliveredSend, sentDocumentLabel } from "../_shared/copilot/document-delivery.ts";
+import { runQuoteTool } from "../_shared/quotes/tool.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { funnelRefsFromRules } from "../_shared/copilot/kanban-rules.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
@@ -436,6 +437,25 @@ export class AgentEngine {
           const label = PARALLEL_SAFE_ACTIONS.includes(extra.action) ? 'PARALLEL' : 'DROPPED';
           telemetry.tools_called.push(`${label}:${extra.action}`);
         }
+      }
+
+      // Quote operations return their actual result to the model before it speaks.
+      // Answer every tool_call in this branch, including calls not executed.
+      const quoteCalls = response.choices?.[0]?.message?.tool_calls;
+      if (quoteCalls?.some((call: any) => call.function?.name === 'generate_order_request')) {
+        multiTurnMessages.push({ role: 'assistant', content: null, tool_calls: quoteCalls });
+        for (const call of quoteCalls) {
+          let result: Record<string, unknown> = { success: false, error: 'Execute esta ferramenta separadamente do orçamento.' };
+          if (call.function?.name === 'generate_order_request') {
+            try {
+              if (typeof capabilities.id !== 'string') throw new Error('Agente inválido.');
+              result = await runQuoteTool(this.supabase, { organizationId: this.organizationId, agentId: capabilities.id, leadId, conversationId: conversation.id, userMessage }, JSON.parse(call.function.arguments));
+            } catch { result = { success: false, error: 'Argumentos de orçamento inválidos.' }; }
+          }
+          multiTurnMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+          logRuntime({ organizationId: this.organizationId, module: 'copilot', action: 'quote_tool_result', status: result.success ? 'success' : 'error', entityType: 'lead', entityId: leadId, payloadSnapshot: { quote_id: result.quote_id, revision: result.revision, status: result.status, tool_call_id: call.id } }).catch(() => { /* audit snapshot is also transactional in copilot_quote_events */ });
+        }
+        continue;
       }
 
       // Se o LLM chamou search_knowledge: executar INLINE e fazer outra chamada

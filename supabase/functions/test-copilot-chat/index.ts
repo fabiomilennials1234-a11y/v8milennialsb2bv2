@@ -417,13 +417,18 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
     // If LLM returned tool_calls WITHOUT text, do a second call to get the text
     // response the agent would send after "executing" the tools. We simulate
     // tool results so the LLM generates the natural language response.
-    let finalContent = rawContent;
-    if (toolCalls.length > 0 && !rawContent.trim()) {
+    const hasQuoteSimulation = rawToolCalls.some((tc: any) => tc.function.name === "generate_order_request");
+    const quoteSimulationNotice = "Simulação de orçamento: nenhum rascunho foi salvo e nenhum arquivo foi gerado ou enviado. Use o botão de teste da ferramenta para gerar um arquivo com dados fictícios.";
+    let finalContent = hasQuoteSimulation ? quoteSimulationNotice : rawContent;
+    if (toolCalls.length > 0 && (!rawContent.trim() || hasQuoteSimulation)) {
       try {
         const simulatedToolResults = rawToolCalls.map((tc: any) => ({
           role: "tool",
           tool_call_id: tc.id || `sim_${tc.function.name}`,
-          content: JSON.stringify({ success: true, dry_run: true }),
+          content: JSON.stringify(tc.function.name === "generate_order_request"
+            ? { success: false, dry_run: true, error: "quote_simulation_only", generated: false, sent: false,
+                instruction: "Somente simulação. Nenhum rascunho foi salvo, arquivo gerado ou enviado. Apresente os dados coletados e não afirme sucesso da operação. Para gerar um arquivo de teste use o botão de teste na configuração da ferramenta." }
+            : { success: true, dry_run: true }),
         }));
 
         const followUpMessages = [
@@ -433,7 +438,7 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
         ];
 
         const followUp = await callOpenRouter(OPENROUTER_API_KEY, model, followUpMessages, 500, temperature);
-        finalContent = (followUp as any).choices?.[0]?.message?.content || "";
+        finalContent = hasQuoteSimulation ? quoteSimulationNotice : ((followUp as any).choices?.[0]?.message?.content || "");
       } catch (followUpErr) {
         console.warn("[test-copilot-chat] Follow-up call after tool_calls failed:", followUpErr);
       }

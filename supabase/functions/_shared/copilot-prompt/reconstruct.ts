@@ -30,6 +30,7 @@ export interface AgentRow {
   can_create_lead?: boolean;
   can_update_lead?: boolean;
   can_send_document?: boolean;
+  can_generate_order_request?: boolean;
   can_transfer_sz_chat?: boolean;
   human_pause_enabled?: boolean;
 }
@@ -56,6 +57,7 @@ const FLAG_BY_TOOL: Record<string, (a: AgentRow) => boolean> = {
   PREENCHER_CAMPOS: (a) => a.can_update_lead === true,
   TRANSFERIR_SZ_CHAT: (a) => a.can_transfer_sz_chat === true,
   ENVIAR_DOCUMENTO: (a) => a.can_send_document === true,
+  GERAR_ORCAMENTO_PDF: (a) => a.can_generate_order_request === true,
   CRIAR_CAMPO: () => false,
   PAUSAR_ATENDIMENTO_HUMANO: (a) => a.human_pause_enabled !== false,
 };

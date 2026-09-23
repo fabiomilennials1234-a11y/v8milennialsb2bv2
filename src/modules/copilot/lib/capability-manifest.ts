@@ -48,6 +48,10 @@ export interface CapabilityGuide {
 }
 
 const CAPABILITY_GUIDE: Record<string, CapabilityGuide> = {
+  GERAR_ORCAMENTO_PDF: {
+    whenToUse: "Only enable explicitly for controlled quote tests after an administrator imports a valid Word template in the tool settings. Keep disabled by default for every organization.",
+    notes: "Word/PDF generation needs the document service. Real delivery is blocked by a server release gate. The chat preview does not generate or send files; never claim delivery in a simulation.",
+  },
   QUALIFICAR_LEAD: {
     whenToUse:
       "Enable when the agent must score and qualify inbound leads against an ideal profile. Use as the lead shares info — register progressively, qualify once required fields are complete, disqualify with a reason when clearly out of profile.",

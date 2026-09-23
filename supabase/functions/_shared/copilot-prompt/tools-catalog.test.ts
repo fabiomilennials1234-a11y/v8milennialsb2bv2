@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { CATALOG_BY_ID, TOOLS_CATALOG } from "./tools-catalog.ts";
 
-Deno.test("catalog has the 10 playground tools in order", () => {
+Deno.test("catalog has the 11 playground tools in order", () => {
   assertEquals(TOOLS_CATALOG.map((t) => t.id), [
     "QUALIFICAR_LEAD",
     "AGENDAR_REUNIAO",
@@ -11,6 +11,7 @@ Deno.test("catalog has the 10 playground tools in order", () => {
     "PREENCHER_CAMPOS",
     "TRANSFERIR_SZ_CHAT",
     "ENVIAR_DOCUMENTO",
+    "GERAR_ORCAMENTO_PDF",
     "CRIAR_CAMPO",
     "PAUSAR_ATENDIMENTO_HUMANO",
   ]);
@@ -22,4 +23,4 @@ Deno.test("every tool has non-empty name + defaultInstruction", () => {
   }
 });
 
-Deno.test("CATALOG_BY_ID indexes all", () => assertEquals(Object.keys(CATALOG_BY_ID).length, 10));
+Deno.test("CATALOG_BY_ID indexes all", () => assertEquals(Object.keys(CATALOG_BY_ID).length, 11));

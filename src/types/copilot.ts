@@ -234,6 +234,14 @@ export interface CopilotWizardData {
   // Opcionais: o Playground é a única superfície que edita estas duas. Ausente
   // significa "não mexa na flag do banco" — nunca false.
   canSendDocument?: boolean;
+  canGenerateOrderRequest?: boolean;
+  orderRequestConfig?: {
+    template_document_id?: string | null;
+    required_fields?: string[];
+    convert_to_pdf?: boolean;
+    template_name?: string;
+    fields?: string[];
+  };
   canTransferSzChat?: boolean;
   maxConversationTurns: number;
   responseDelayMs: number;

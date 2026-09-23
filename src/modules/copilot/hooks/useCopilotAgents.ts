@@ -836,6 +836,8 @@ export function useCopilotAgentForEdit(agentId?: string) {
         canTransferHuman: (agent as any).can_transfer_human ?? true,
         canMoveCards: agent.can_move_cards ?? false,
         canSendDocument: (agent as any).can_send_document ?? false,
+        canGenerateOrderRequest: (agent as any).can_generate_order_request ?? false,
+        orderRequestConfig: (agent as any).order_request_config ?? {},
         canTransferSzChat: (agent as any).can_transfer_sz_chat ?? false,
         humanPauseEnabled: (agent as any).human_pause_enabled ?? true,
         humanPauseDurationMinutes: (agent as any).human_pause_duration_minutes ?? 60,
@@ -959,6 +961,10 @@ export function useUpdateCopilotAgentFromWizard() {
       // can_send_document de agente configurado fora da UI (a Loo era um).
       if (data.canSendDocument !== undefined) {
         agentUpdate.can_send_document = data.canSendDocument;
+      }
+      if (data.canGenerateOrderRequest !== undefined) {
+        (agentUpdate as any).can_generate_order_request = data.canGenerateOrderRequest;
+        (agentUpdate as any).order_request_config = data.orderRequestConfig ?? {};
       }
       if (data.canTransferSzChat !== undefined) {
         agentUpdate.can_transfer_sz_chat = data.canTransferSzChat;

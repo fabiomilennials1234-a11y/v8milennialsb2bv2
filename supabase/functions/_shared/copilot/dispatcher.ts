@@ -28,6 +28,7 @@ export const ACTION_MAP: Record<string, string> = {
   UPDATE_PIPELINE_STAGE: "update_pipeline_stage",
   TRANSFER_SZ_CHAT: "transfer_sz_chat",
   SEND_DOCUMENT: "send_document",
+  GENERATE_ORDER_REQUEST: "generate_order_request",
   AUTOMATION_QUALIFY: "automation_qualify",
   AUTOMATION_DISQUALIFY: "automation_disqualify",
   AUTOMATION_NEED_HUMAN: "automation_need_human",
@@ -88,6 +89,8 @@ export function buildIdempotencyKey(
       // `leadId || organizationId` espelha o ramo `default` — sem isso a chave
       // perde o escopo quando a ação chega sem lead.
       return `send_document_${leadId || organizationId}_${params.document_id}_${turnOrTs}`;
+    case "generate_order_request":
+      return `generate_order_request_${leadId || organizationId}_${turnOrTs}`;
     default:
       return `${actionType}_${leadId || organizationId}_${turnOrTs}`;
   }
@@ -212,6 +215,7 @@ const TOOL_TO_ACTION: Record<string, string> = {
   create_custom_field: "CREATE_CUSTOM_FIELD",
   transfer_sz_chat: "TRANSFER_SZ_CHAT",
   send_document: "SEND_DOCUMENT",
+  generate_order_request: "GENERATE_ORDER_REQUEST",
   send_product_material: "SEND_PRODUCT_MATERIAL",
   search_knowledge: "SEARCH_KNOWLEDGE",
 };
