@@ -1,0 +1,8 @@
+{
+  "base_commit": "961c226d3d256acc16ebabd43c3546f8caedd763",
+  "baseline_unstored_failures": 170,
+  "current_unstored_failures": 170,
+  "introduced_by_change": [],
+  "resolved_by_change": [],
+  "validation": "same lockfile dependencies; baseline reran every current failure file with retry=2; current full ratchet with retry=2"
+}

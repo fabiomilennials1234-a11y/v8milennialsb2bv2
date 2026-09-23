@@ -405,10 +405,7 @@ async function persistMediaToStorage(
 }
 
 
-function normalizeMessage(data: any, instance: ResolvedInstance) {
-  const fromMe = data.fromMe === true || data.fromme === true;
-  const direction = fromMe ? "outgoing" : "incoming";
-
+function messageChatIdentity(data: Record<string, unknown>) {
   // Phone resolution: _phone_jid (injected from webhook envelope) is most reliable.
   // Uazapi V2 may send chatid as LID (@lid suffix) instead of phone JID (@s.whatsapp.net).
   const rawJid = data._phone_jid ?? data.chatid ?? data.remoteJid ?? data.from ?? data.to ?? "";
@@ -416,6 +413,13 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   const resolvedJid = jidStr.includes("@lid")
     ? String(data._phone_jid ?? data.sender_pn ?? data.from ?? "")
     : jidStr;
+  return { resolvedJid, isGroup: jidStr.endsWith("@g.us") || resolvedJid.endsWith("@g.us") };
+}
+
+function normalizeMessage(data: any, instance: ResolvedInstance) {
+  const fromMe = data.fromMe === true || data.fromme === true;
+  const direction = fromMe ? "outgoing" : "incoming";
+  const { resolvedJid, isGroup } = messageChatIdentity(data);
   const phoneNumber = resolvedJid.split("@")[0] || null;
   const messageId = data.id ?? data.messageid ?? data.key?.id ?? null;
 
@@ -547,8 +551,6 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     data.timestamp ??
     data.messageTimestamp ??
     Date.now();
-
-  const isGroup = jidStr.endsWith("@g.us") || resolvedJid.endsWith("@g.us");
 
   return {
     organization_id: instance.organization_id,
@@ -1088,9 +1090,32 @@ async function handleMessagesEvent(
 ) {
   const reaction = uazapiMessageReaction(data);
   if (reaction) {
+    // The target of a group reaction was deliberately not captured when this
+    // org opted out of groups. Apply the same explicit policy as persistMessage
+    // before looking for that target; absence alone must never imply a skip.
+    if (messageChatIdentity(data).isGroup) {
+      let captureGroups = true;
+      try {
+        const { data: org, error } = await supabase.from("organizations")
+          .select("capture_groups").eq("id", instance.organization_id).maybeSingle();
+        if (!error && org?.capture_groups === false) captureGroups = false;
+      } catch (_) {
+        // Same fail-open policy as ordinary group messages: try to persist.
+      }
+      if (!captureGroups) {
+        await logRuntime({
+          organizationId: instance.organization_id,
+          module: "webhook",
+          action: "uazapi_group_reaction_skipped",
+          status: "success",
+          payloadSnapshot: { instance_id: instance.id, reason: "capture_groups_off" },
+        });
+        return;
+      }
+    }
     const ids = buildMessageIdCandidates(reaction.messageId, instance.phone_number, data.owner);
     // Compare-and-swap prevents simultaneous reactions from overwriting each other.
-    // Failure goes through the existing DLQ; do not acknowledge lost updates.
+    // Failure remains non-2xx; do not acknowledge an update that was not stored.
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: target, error } = await supabase.from("whatsapp_messages")
         .select("id,reactions").eq("organization_id", instance.organization_id)

@@ -7,7 +7,6 @@
  */
 
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -32,7 +31,7 @@ function jsonResponse(
   });
 }
 
-serve(withErrorBoundary('attach-to-org-by-pending-invite', async (req) => {
+Deno.serve(withErrorBoundary('attach-to-org-by-pending-invite', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
   const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
@@ -66,8 +65,8 @@ serve(withErrorBoundary('attach-to-org-by-pending-invite', async (req) => {
       : null;
     let user: { id: string; email?: string } | null = null;
     if (anonClient) {
-      const { data: u, error: userError } = await anonClient.auth.getUser();
-      if (!userError && u) user = { id: u.id, email: u.email };
+      const { data, error: userError } = await anonClient.auth.getUser();
+      if (!userError && data.user) user = { id: data.user.id, email: data.user.email };
     }
     if (!user?.id || !user?.email) {
       return jsonResponse(

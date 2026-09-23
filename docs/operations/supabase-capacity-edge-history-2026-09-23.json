@@ -1,0 +1,3028 @@
+{
+  "measurement": "function_edge_logs, OPTIONS excluded; not billing ledger",
+  "days": [
+    {
+      "start": "2026-09-16T22:00:00Z",
+      "end": "2026-09-17T22:00:00Z",
+      "requests": 103218,
+      "functions": [
+        {
+          "errors": 1718,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 1956.7,
+          "requests": 59392
+        },
+        {
+          "errors": 33,
+          "function_name": "agent-message",
+          "mean_ms": 1967.1,
+          "requests": 6536
+        },
+        {
+          "errors": 103,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1654.4,
+          "requests": 4836
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 872.9,
+          "requests": 3239
+        },
+        {
+          "errors": 1440,
+          "function_name": "send-push",
+          "mean_ms": 402.3,
+          "requests": 2876
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 453.9,
+          "requests": 1448
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 367.3,
+          "requests": 1438
+        },
+        {
+          "errors": 720,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 378.4,
+          "requests": 1438
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 385.7,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 328.6,
+          "requests": 1437
+        },
+        {
+          "errors": 720,
+          "function_name": "infra-watchdog",
+          "mean_ms": 485.1,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 340,
+          "requests": 1436
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 345.2,
+          "requests": 1436
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 429.2,
+          "requests": 1436
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 361.6,
+          "requests": 1436
+        },
+        {
+          "errors": 719,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 414.3,
+          "requests": 1173
+        },
+        {
+          "errors": 1,
+          "function_name": "get-member-permissions",
+          "mean_ms": 412.8,
+          "requests": 1031
+        },
+        {
+          "errors": 743,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 400.9,
+          "requests": 743
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 406.8,
+          "requests": 717
+        },
+        {
+          "errors": 2,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 4010.1,
+          "requests": 683
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 1961.1,
+          "requests": 644
+        },
+        {
+          "errors": 9,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 515.4,
+          "requests": 574
+        },
+        {
+          "errors": 9,
+          "function_name": "api",
+          "mean_ms": 1200.4,
+          "requests": 528
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 896.8,
+          "requests": 520
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 248.8,
+          "requests": 503
+        },
+        {
+          "errors": 1,
+          "function_name": "partner-webhook",
+          "mean_ms": 1307.9,
+          "requests": 500
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 456.9,
+          "requests": 452
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 298.3,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 693.8,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 601.5,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 706.2,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 683.9,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 643.8,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 709.2,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 1137,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1129.8,
+          "requests": 286
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 687.1,
+          "requests": 286
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 33356.6,
+          "requests": 251
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 363.3,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 664,
+          "requests": 143
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2307.8,
+          "requests": 142
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 249.5,
+          "requests": 91
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 434.6,
+          "requests": 53
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 26261.7,
+          "requests": 44
+        },
+        {
+          "errors": 5,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 17141.2,
+          "requests": 32
+        },
+        {
+          "errors": 7,
+          "function_name": "google-calendar-events",
+          "mean_ms": 639.1,
+          "requests": 24
+        },
+        {
+          "errors": 1,
+          "function_name": "torquecalls-signal",
+          "mean_ms": 405.2,
+          "requests": 22
+        },
+        {
+          "errors": 4,
+          "function_name": "oraculo-feedback",
+          "mean_ms": 363.8,
+          "requests": 17
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 3122.5,
+          "requests": 10
+        },
+        {
+          "errors": 6,
+          "function_name": "classify-followup-stages",
+          "mean_ms": 484.2,
+          "requests": 9
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 151.4,
+          "requests": 5
+        },
+        {
+          "errors": 0,
+          "function_name": "test-copilot-chat",
+          "mean_ms": 3515.5,
+          "requests": 4
+        },
+        {
+          "errors": 0,
+          "function_name": "summarize-conversation",
+          "mean_ms": 3365.8,
+          "requests": 4
+        },
+        {
+          "errors": 0,
+          "function_name": "check-api-health",
+          "mean_ms": 1396.3,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "get-daily-priorities",
+          "mean_ms": 1270,
+          "requests": 3
+        },
+        {
+          "errors": 2,
+          "function_name": "oraculo-profile",
+          "mean_ms": 283,
+          "requests": 3
+        },
+        {
+          "errors": 3,
+          "function_name": "create-org-user",
+          "mean_ms": 443,
+          "requests": 3
+        },
+        {
+          "errors": 1,
+          "function_name": "webhook-new-lead",
+          "mean_ms": 919.3,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1759.5,
+          "requests": 2
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-connect",
+          "mean_ms": 204.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 783,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "list-unassigned-users",
+          "mean_ms": 334,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "meta-asset-admin",
+          "mean_ms": 1081,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 8838,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-disconnect",
+          "mean_ms": 168,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "support-notify-staff",
+          "mean_ms": 3447,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-callback",
+          "mean_ms": 2514,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 290,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-channel-start",
+          "mean_ms": 478,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-17T22:00:00Z",
+      "end": "2026-09-18T22:00:00Z",
+      "requests": 95447,
+      "functions": [
+        {
+          "errors": 1127,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 1825.9,
+          "requests": 55639
+        },
+        {
+          "errors": 18,
+          "function_name": "agent-message",
+          "mean_ms": 1944.7,
+          "requests": 6648
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 840.9,
+          "requests": 3527
+        },
+        {
+          "errors": 45,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1628.3,
+          "requests": 3148
+        },
+        {
+          "errors": 1439,
+          "function_name": "send-push",
+          "mean_ms": 418.8,
+          "requests": 2878
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 492,
+          "requests": 1448
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 364.7,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "infra-watchdog",
+          "mean_ms": 487,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 397.2,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 388.1,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 348.1,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 441.3,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 386,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 351.9,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 367.5,
+          "requests": 1436
+        },
+        {
+          "errors": 631,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 371.2,
+          "requests": 914
+        },
+        {
+          "errors": 0,
+          "function_name": "get-member-permissions",
+          "mean_ms": 367.4,
+          "requests": 730
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 421.8,
+          "requests": 720
+        },
+        {
+          "errors": 2,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 3074.2,
+          "requests": 672
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 481.6,
+          "requests": 512
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1262.9,
+          "requests": 466
+        },
+        {
+          "errors": 447,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 160.5,
+          "requests": 447
+        },
+        {
+          "errors": 8,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 441.2,
+          "requests": 422
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2384.4,
+          "requests": 371
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 606.1,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 670,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 725.5,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 668.8,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 1145.8,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 674.7,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 336.3,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 707.4,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 754.7,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1120.3,
+          "requests": 284
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 34130.6,
+          "requests": 244
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 368.5,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 704,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2392.6,
+          "requests": 142
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 297.9,
+          "requests": 90
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 321.1,
+          "requests": 72
+        },
+        {
+          "errors": 17,
+          "function_name": "google-calendar-events",
+          "mean_ms": 456.6,
+          "requests": 43
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 30552.4,
+          "requests": 43
+        },
+        {
+          "errors": 4,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 19326.1,
+          "requests": 39
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 3804.1,
+          "requests": 34
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 577.9,
+          "requests": 23
+        },
+        {
+          "errors": 2,
+          "function_name": "oraculo-feedback",
+          "mean_ms": 372.5,
+          "requests": 10
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 4969.9,
+          "requests": 8
+        },
+        {
+          "errors": 6,
+          "function_name": "classify-followup-stages",
+          "mean_ms": 500.4,
+          "requests": 8
+        },
+        {
+          "errors": 5,
+          "function_name": "notificame-channel-start",
+          "mean_ms": 718.5,
+          "requests": 6
+        },
+        {
+          "errors": 0,
+          "function_name": "check-api-health",
+          "mean_ms": 1335.2,
+          "requests": 5
+        },
+        {
+          "errors": 0,
+          "function_name": "summarize-conversation",
+          "mean_ms": 3329.5,
+          "requests": 4
+        },
+        {
+          "errors": 0,
+          "function_name": "support-notify-staff",
+          "mean_ms": 2302.7,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-comercial",
+          "mean_ms": 8236.7,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-signal",
+          "mean_ms": 350,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 136.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1753.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "get-daily-priorities",
+          "mean_ms": 1657,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "import-leads",
+          "mean_ms": 36273,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 1057,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-profile",
+          "mean_ms": 337,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "forgot-password",
+          "mean_ms": 430,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 360,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 9012,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-templates",
+          "mean_ms": 1373,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "webhook-new-lead",
+          "mean_ms": 3196,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-18T22:00:00Z",
+      "end": "2026-09-19T22:00:00Z",
+      "requests": 47136,
+      "functions": [
+        {
+          "errors": 808,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 1815.2,
+          "requests": 17492
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 699,
+          "requests": 3177
+        },
+        {
+          "errors": 1439,
+          "function_name": "send-push",
+          "mean_ms": 466.9,
+          "requests": 2878
+        },
+        {
+          "errors": 7,
+          "function_name": "agent-message",
+          "mean_ms": 2105.7,
+          "requests": 1781
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 482.8,
+          "requests": 1445
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 387.3,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 423.5,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 373.4,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 396.6,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "infra-watchdog",
+          "mean_ms": 525.5,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 360.4,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 369.4,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 423.4,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 353.9,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 434,
+          "requests": 720
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 678.8,
+          "requests": 720
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 680.8,
+          "requests": 418
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 216.5,
+          "requests": 400
+        },
+        {
+          "errors": 0,
+          "function_name": "partner-webhook",
+          "mean_ms": 751.6,
+          "requests": 399
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1159.8,
+          "requests": 379
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 305.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 634.4,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 739.4,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 726.2,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 673.6,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 878.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 685.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 725.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1079.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 740.8,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 34218.4,
+          "requests": 281
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2292.4,
+          "requests": 267
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 505.9,
+          "requests": 158
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 366.7,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 736.6,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2442.2,
+          "requests": 144
+        },
+        {
+          "errors": 4,
+          "function_name": "get-member-permissions",
+          "mean_ms": 362.8,
+          "requests": 73
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 43955.7,
+          "requests": 50
+        },
+        {
+          "errors": 5,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 329.1,
+          "requests": 39
+        },
+        {
+          "errors": 7,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 16263.8,
+          "requests": 36
+        },
+        {
+          "errors": 34,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 176,
+          "requests": 34
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 274.9,
+          "requests": 32
+        },
+        {
+          "errors": 4,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 364,
+          "requests": 27
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1791.5,
+          "requests": 23
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 2624,
+          "requests": 20
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 297.7,
+          "requests": 7
+        },
+        {
+          "errors": 0,
+          "function_name": "summarize-conversation",
+          "mean_ms": 3532.5,
+          "requests": 6
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 98,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 509,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1734,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 729,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 9300,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-19T22:00:00Z",
+      "end": "2026-09-20T22:00:00Z",
+      "requests": 38568,
+      "functions": [
+        {
+          "errors": 397,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 1840.4,
+          "requests": 10854
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 742.7,
+          "requests": 3178
+        },
+        {
+          "errors": 1439,
+          "function_name": "send-push",
+          "mean_ms": 538.4,
+          "requests": 2878
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 557.1,
+          "requests": 1447
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 394.3,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 442.1,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 418.8,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 510.8,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 392.5,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "infra-watchdog",
+          "mean_ms": 596.5,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 425.4,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 463.7,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 389,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "agent-message",
+          "mean_ms": 1759.5,
+          "requests": 1217
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 523.8,
+          "requests": 720
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 468.1,
+          "requests": 719
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1131.3,
+          "requests": 452
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1184.4,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 762,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 843,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 858,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 346.4,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 862.6,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 781.3,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 878.9,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 814.9,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 959.8,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 33643.7,
+          "requests": 285
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2268.5,
+          "requests": 265
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 399.1,
+          "requests": 144
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2501.3,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 844.2,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 39240.1,
+          "requests": 72
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 667.8,
+          "requests": 55
+        },
+        {
+          "errors": 8,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 16108.8,
+          "requests": 26
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 253.3,
+          "requests": 26
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 4141.1,
+          "requests": 16
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 578.1,
+          "requests": 14
+        },
+        {
+          "errors": 0,
+          "function_name": "get-member-permissions",
+          "mean_ms": 362.6,
+          "requests": 13
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 365.8,
+          "requests": 13
+        },
+        {
+          "errors": 12,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 154.5,
+          "requests": 12
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1769.5,
+          "requests": 12
+        },
+        {
+          "errors": 2,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 415,
+          "requests": 9
+        },
+        {
+          "errors": 0,
+          "function_name": "summarize-conversation",
+          "mean_ms": 3165.2,
+          "requests": 6
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 281,
+          "requests": 4
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 2935,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 132,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 398,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 2151,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 8467,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 335,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-20T22:00:00Z",
+      "end": "2026-09-21T22:00:00Z",
+      "requests": 106324,
+      "functions": [
+        {
+          "errors": 1241,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 1867.7,
+          "requests": 61586
+        },
+        {
+          "errors": 7,
+          "function_name": "agent-message",
+          "mean_ms": 1737.9,
+          "requests": 7915
+        },
+        {
+          "errors": 74,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1684.7,
+          "requests": 5546
+        },
+        {
+          "errors": 1,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 778.3,
+          "requests": 3498
+        },
+        {
+          "errors": 1440,
+          "function_name": "send-push",
+          "mean_ms": 454.1,
+          "requests": 2879
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 485.7,
+          "requests": 1441
+        },
+        {
+          "errors": 720,
+          "function_name": "infra-watchdog",
+          "mean_ms": 516.6,
+          "requests": 1440
+        },
+        {
+          "errors": 720,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 435,
+          "requests": 1440
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 362.3,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 451.4,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 388.5,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 388.5,
+          "requests": 1439
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 395.2,
+          "requests": 1438
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 380.3,
+          "requests": 1438
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 373.7,
+          "requests": 1436
+        },
+        {
+          "errors": 1006,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 424.2,
+          "requests": 1372
+        },
+        {
+          "errors": 1,
+          "function_name": "get-member-permissions",
+          "mean_ms": 389.2,
+          "requests": 1122
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 419.1,
+          "requests": 720
+        },
+        {
+          "errors": 693,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 318.4,
+          "requests": 693
+        },
+        {
+          "errors": 4,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 3329,
+          "requests": 672
+        },
+        {
+          "errors": 8,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 534.3,
+          "requests": 658
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 425.5,
+          "requests": 637
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2451.6,
+          "requests": 367
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 796.8,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 714.5,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 1283,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 698.9,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1124.2,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 770.3,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 768.6,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 741.2,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 302.7,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 740.2,
+          "requests": 286
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1292.2,
+          "requests": 250
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 33981.4,
+          "requests": 236
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2442.9,
+          "requests": 144
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 397,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 742.1,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 311.4,
+          "requests": 98
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 248.6,
+          "requests": 82
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 26696.7,
+          "requests": 39
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 2344.7,
+          "requests": 39
+        },
+        {
+          "errors": 2,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 19099,
+          "requests": 26
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-events",
+          "mean_ms": 767.7,
+          "requests": 26
+        },
+        {
+          "errors": 9,
+          "function_name": "publish-guided-workflow",
+          "mean_ms": 602.5,
+          "requests": 24
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 505.7,
+          "requests": 24
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1833.4,
+          "requests": 20
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-signal",
+          "mean_ms": 330.6,
+          "requests": 19
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 3753.2,
+          "requests": 16
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback",
+          "mean_ms": 403.7,
+          "requests": 15
+        },
+        {
+          "errors": 0,
+          "function_name": "test-copilot-chat",
+          "mean_ms": 2645.5,
+          "requests": 11
+        },
+        {
+          "errors": 2,
+          "function_name": "toth-sync-clientes",
+          "mean_ms": 16381.3,
+          "requests": 10
+        },
+        {
+          "errors": 0,
+          "function_name": "summarize-conversation",
+          "mean_ms": 2116,
+          "requests": 8
+        },
+        {
+          "errors": 3,
+          "function_name": "classify-followup-stages",
+          "mean_ms": 538.4,
+          "requests": 5
+        },
+        {
+          "errors": 4,
+          "function_name": "oraculo-comercial",
+          "mean_ms": 269.5,
+          "requests": 4
+        },
+        {
+          "errors": 1,
+          "function_name": "create-org-user",
+          "mean_ms": 754.7,
+          "requests": 3
+        },
+        {
+          "errors": 0,
+          "function_name": "list-unassigned-users",
+          "mean_ms": 438.5,
+          "requests": 2
+        },
+        {
+          "errors": 1,
+          "function_name": "oraculo-turno",
+          "mean_ms": 4405.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 1448,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 338,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 462,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "workflow-question-image",
+          "mean_ms": 1282,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 9362,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-connect",
+          "mean_ms": 189,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "google-calendar-disconnect",
+          "mean_ms": 203,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-21T22:00:00Z",
+      "end": "2026-09-22T22:00:00Z",
+      "requests": 102081,
+      "functions": [
+        {
+          "errors": 1454,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 2149.1,
+          "requests": 58278
+        },
+        {
+          "errors": 24,
+          "function_name": "agent-message",
+          "mean_ms": 1881.3,
+          "requests": 7412
+        },
+        {
+          "errors": 69,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1846.6,
+          "requests": 4820
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 808.2,
+          "requests": 3356
+        },
+        {
+          "errors": 1218,
+          "function_name": "send-push",
+          "mean_ms": 430.6,
+          "requests": 2656
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 458.3,
+          "requests": 1443
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 371.9,
+          "requests": 1438
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 382.6,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 339.3,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 376.8,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 374.7,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 635.5,
+          "requests": 1436
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 385.3,
+          "requests": 1436
+        },
+        {
+          "errors": 610,
+          "function_name": "infra-watchdog",
+          "mean_ms": 507.5,
+          "requests": 1329
+        },
+        {
+          "errors": 610,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 402.6,
+          "requests": 1329
+        },
+        {
+          "errors": 727,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 398.4,
+          "requests": 1014
+        },
+        {
+          "errors": 2,
+          "function_name": "get-member-permissions",
+          "mean_ms": 563.6,
+          "requests": 943
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 400.3,
+          "requests": 764
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 409,
+          "requests": 719
+        },
+        {
+          "errors": 20,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 4179.7,
+          "requests": 691
+        },
+        {
+          "errors": 574,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 194.1,
+          "requests": 574
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 775.1,
+          "requests": 535
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 252.6,
+          "requests": 506
+        },
+        {
+          "errors": 0,
+          "function_name": "partner-webhook",
+          "mean_ms": 859.5,
+          "requests": 500
+        },
+        {
+          "errors": 4,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 813,
+          "requests": 470
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1322.1,
+          "requests": 379
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2369.2,
+          "requests": 377
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 609.4,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 705.3,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 1235.2,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 745.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 683.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 737.9,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 722.2,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1235.6,
+          "requests": 288
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 599.8,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 317,
+          "requests": 286
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 32938.1,
+          "requests": 253
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 365.1,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 703.4,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2424.7,
+          "requests": 143
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 235,
+          "requests": 110
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 24272.1,
+          "requests": 62
+        },
+        {
+          "errors": 4,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 19872.5,
+          "requests": 34
+        },
+        {
+          "errors": 8,
+          "function_name": "notificame-channel-start",
+          "mean_ms": 482,
+          "requests": 30
+        },
+        {
+          "errors": 0,
+          "function_name": "toth-sync-clientes",
+          "mean_ms": 15431.2,
+          "requests": 20
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1808.4,
+          "requests": 20
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 319.5,
+          "requests": 15
+        },
+        {
+          "errors": 3,
+          "function_name": "google-calendar-events",
+          "mean_ms": 8155.1,
+          "requests": 14
+        },
+        {
+          "errors": 12,
+          "function_name": "test-copilot-chat",
+          "mean_ms": 578.6,
+          "requests": 14
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 3525.1,
+          "requests": 12
+        },
+        {
+          "errors": 0,
+          "function_name": "toth-sync-cobrancas",
+          "mean_ms": 50309.6,
+          "requests": 9
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-signal",
+          "mean_ms": 310,
+          "requests": 7
+        },
+        {
+          "errors": 2,
+          "function_name": "classify-followup-stages",
+          "mean_ms": 494,
+          "requests": 4
+        },
+        {
+          "errors": 0,
+          "function_name": "check-api-health",
+          "mean_ms": 1452.7,
+          "requests": 3
+        },
+        {
+          "errors": 1,
+          "function_name": "publish-guided-workflow",
+          "mean_ms": 546,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "get-daily-priorities",
+          "mean_ms": 975.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-templates",
+          "mean_ms": 1488,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "workflow-question-image",
+          "mean_ms": 995.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "import-leads",
+          "mean_ms": 11124,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 559,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 334,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "oraculo-feedback",
+          "mean_ms": 271,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 9071,
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "start": "2026-09-22T22:00:00Z",
+      "end": "2026-09-23T22:00:00Z",
+      "requests": 91761,
+      "functions": [
+        {
+          "errors": 1556,
+          "function_name": "whatsapp-webhook",
+          "mean_ms": 2156.7,
+          "requests": 52814
+        },
+        {
+          "errors": 10,
+          "function_name": "agent-message",
+          "mean_ms": 1996.9,
+          "requests": 6392
+        },
+        {
+          "errors": 107,
+          "function_name": "whatsapp-api-proxy",
+          "mean_ms": 1616.8,
+          "requests": 4691
+        },
+        {
+          "errors": 0,
+          "function_name": "process-workflow-executions",
+          "mean_ms": 879.2,
+          "requests": 3419
+        },
+        {
+          "errors": 0,
+          "function_name": "pipe-rule-dispatch",
+          "mean_ms": 504.1,
+          "requests": 1442
+        },
+        {
+          "errors": 0,
+          "function_name": "send-push",
+          "mean_ms": 409.1,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "copilot-v2-worker",
+          "mean_ms": 369.5,
+          "requests": 1437
+        },
+        {
+          "errors": 0,
+          "function_name": "history-sync-worker",
+          "mean_ms": 808.9,
+          "requests": 1436
+        },
+        {
+          "errors": 0,
+          "function_name": "campaign-rule-dispatch",
+          "mean_ms": 405.5,
+          "requests": 1435
+        },
+        {
+          "errors": 0,
+          "function_name": "process-blast-recipients",
+          "mean_ms": 369.6,
+          "requests": 1434
+        },
+        {
+          "errors": 0,
+          "function_name": "oraculo-feedback-worker",
+          "mean_ms": 395.6,
+          "requests": 1434
+        },
+        {
+          "errors": 0,
+          "function_name": "process-ai-actions",
+          "mean_ms": 386.7,
+          "requests": 1434
+        },
+        {
+          "errors": 0,
+          "function_name": "process-scheduled-user-messages",
+          "mean_ms": 363.9,
+          "requests": 1434
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-webhook",
+          "mean_ms": 2061.9,
+          "requests": 968
+        },
+        {
+          "errors": 670,
+          "function_name": "oraculo-briefing",
+          "mean_ms": 470.3,
+          "requests": 954
+        },
+        {
+          "errors": 1,
+          "function_name": "get-member-permissions",
+          "mean_ms": 491.9,
+          "requests": 881
+        },
+        {
+          "errors": 0,
+          "function_name": "infra-watchdog",
+          "mean_ms": 618,
+          "requests": 719
+        },
+        {
+          "errors": 0,
+          "function_name": "mass-send-status",
+          "mean_ms": 439.1,
+          "requests": 718
+        },
+        {
+          "errors": 0,
+          "function_name": "billing-provision-worker",
+          "mean_ms": 434.4,
+          "requests": 718
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-media-retry",
+          "mean_ms": 2373.8,
+          "requests": 698
+        },
+        {
+          "errors": 0,
+          "function_name": "sz-chat-webhook",
+          "mean_ms": 507.7,
+          "requests": 683
+        },
+        {
+          "errors": 477,
+          "function_name": "attach-to-org-by-pending-invite",
+          "mean_ms": 464.7,
+          "requests": 477
+        },
+        {
+          "errors": 10,
+          "function_name": "google-calendar-sharing",
+          "mean_ms": 570,
+          "requests": 468
+        },
+        {
+          "errors": 0,
+          "function_name": "api",
+          "mean_ms": 1357.7,
+          "requests": 291
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-instance-reaper",
+          "mean_ms": 732.6,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-recording-maintenance",
+          "mean_ms": 365.4,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-outbound-dispatches",
+          "mean_ms": 627.7,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-copilot-followups",
+          "mean_ms": 765.6,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-dlq-replay",
+          "mean_ms": 763.1,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "retry-dead-letter-jobs",
+          "mean_ms": 597.4,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-leadgen-poll",
+          "mean_ms": 754.2,
+          "requests": 287
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-automations",
+          "mean_ms": 697.3,
+          "requests": 285
+        },
+        {
+          "errors": 0,
+          "function_name": "cron-health-check",
+          "mean_ms": 1278.7,
+          "requests": 284
+        },
+        {
+          "errors": 0,
+          "function_name": "process-followup-situations",
+          "mean_ms": 1371.7,
+          "requests": 283
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-health-monitor",
+          "mean_ms": 32520.5,
+          "requests": 240
+        },
+        {
+          "errors": 144,
+          "function_name": "summarize-conversations-batch",
+          "mean_ms": 401.5,
+          "requests": 144
+        },
+        {
+          "errors": 0,
+          "function_name": "meta-conversion-dispatch",
+          "mean_ms": 757.4,
+          "requests": 143
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-session-watchdog",
+          "mean_ms": 2570.1,
+          "requests": 143
+        },
+        {
+          "errors": 0,
+          "function_name": "evolution-webhook",
+          "mean_ms": 422.5,
+          "requests": 102
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-webhook",
+          "mean_ms": 317.9,
+          "requests": 49
+        },
+        {
+          "errors": 0,
+          "function_name": "tinyerp-pull-orders",
+          "mean_ms": 39792.1,
+          "requests": 47
+        },
+        {
+          "errors": 7,
+          "function_name": "google-calendar-events",
+          "mean_ms": 511.6,
+          "requests": 33
+        },
+        {
+          "errors": 0,
+          "function_name": "lead-webhook",
+          "mean_ms": 3363,
+          "requests": 30
+        },
+        {
+          "errors": 4,
+          "function_name": "calculate-portfolio-health",
+          "mean_ms": 17565.1,
+          "requests": 28
+        },
+        {
+          "errors": 0,
+          "function_name": "outbound-trigger",
+          "mean_ms": 650.6,
+          "requests": 25
+        },
+        {
+          "errors": 0,
+          "function_name": "toth-sync-clientes",
+          "mean_ms": 14641.4,
+          "requests": 19
+        },
+        {
+          "errors": 0,
+          "function_name": "whatsapp-rebind-webhook",
+          "mean_ms": 1962.4,
+          "requests": 18
+        },
+        {
+          "errors": 10,
+          "function_name": "oraculo-feedback",
+          "mean_ms": 491.4,
+          "requests": 18
+        },
+        {
+          "errors": 0,
+          "function_name": "evaluate-agent-conversation",
+          "mean_ms": 4287.8,
+          "requests": 13
+        },
+        {
+          "errors": 7,
+          "function_name": "copilot-quote-template",
+          "mean_ms": 6530.6,
+          "requests": 10
+        },
+        {
+          "errors": 0,
+          "function_name": "toth-sync-cobrancas",
+          "mean_ms": 51358,
+          "requests": 9
+        },
+        {
+          "errors": 0,
+          "function_name": "google-calendar-webhook",
+          "mean_ms": 114.5,
+          "requests": 2
+        },
+        {
+          "errors": 1,
+          "function_name": "classify-followup-stages",
+          "mean_ms": 1494.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "publish-guided-workflow",
+          "mean_ms": 441.5,
+          "requests": 2
+        },
+        {
+          "errors": 0,
+          "function_name": "import-leads",
+          "mean_ms": 1628,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "refresh-meta-tokens",
+          "mean_ms": 1200,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "whatsapp-media-retention",
+          "mean_ms": 9003,
+          "requests": 1
+        },
+        {
+          "errors": 1,
+          "function_name": "oraculo-turno",
+          "mean_ms": 1559,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "get-daily-priorities",
+          "mean_ms": 7659,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "support-notify-staff",
+          "mean_ms": 3839,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "torquecalls-signal",
+          "mean_ms": 455,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "blast-plan-release",
+          "mean_ms": 352,
+          "requests": 1
+        },
+        {
+          "errors": 0,
+          "function_name": "notificame-channel-start",
+          "mean_ms": 1396,
+          "requests": 1
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "function_name": "whatsapp-webhook",
+      "requests": 316055,
+      "errors": 8301
+    },
+    {
+      "function_name": "agent-message",
+      "requests": 37901,
+      "errors": 99
+    },
+    {
+      "function_name": "process-workflow-executions",
+      "requests": 23394,
+      "errors": 1
+    },
+    {
+      "function_name": "whatsapp-api-proxy",
+      "requests": 23065,
+      "errors": 398
+    },
+    {
+      "function_name": "send-push",
+      "requests": 18482,
+      "errors": 8415
+    },
+    {
+      "function_name": "pipe-rule-dispatch",
+      "requests": 10114,
+      "errors": 0
+    },
+    {
+      "function_name": "oraculo-feedback-worker",
+      "requests": 10067,
+      "errors": 0
+    },
+    {
+      "function_name": "copilot-v2-worker",
+      "requests": 10067,
+      "errors": 0
+    },
+    {
+      "function_name": "campaign-rule-dispatch",
+      "requests": 10065,
+      "errors": 0
+    },
+    {
+      "function_name": "process-blast-recipients",
+      "requests": 10065,
+      "errors": 0
+    },
+    {
+      "function_name": "history-sync-worker",
+      "requests": 10064,
+      "errors": 0
+    },
+    {
+      "function_name": "process-scheduled-user-messages",
+      "requests": 10060,
+      "errors": 0
+    },
+    {
+      "function_name": "process-ai-actions",
+      "requests": 10060,
+      "errors": 0
+    },
+    {
+      "function_name": "billing-provision-worker",
+      "requests": 9245,
+      "errors": 4210
+    },
+    {
+      "function_name": "infra-watchdog",
+      "requests": 9245,
+      "errors": 4210
+    },
+    {
+      "function_name": "oraculo-briefing",
+      "requests": 5463,
+      "errors": 3759
+    },
+    {
+      "function_name": "mass-send-status",
+      "requests": 5033,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-media-retry",
+      "requests": 4856,
+      "errors": 29
+    },
+    {
+      "function_name": "get-member-permissions",
+      "requests": 4793,
+      "errors": 9
+    },
+    {
+      "function_name": "sz-chat-webhook",
+      "requests": 3261,
+      "errors": 0
+    },
+    {
+      "function_name": "notificame-webhook",
+      "requests": 3259,
+      "errors": 0
+    },
+    {
+      "function_name": "attach-to-org-by-pending-invite",
+      "requests": 2980,
+      "errors": 2980
+    },
+    {
+      "function_name": "api",
+      "requests": 2745,
+      "errors": 9
+    },
+    {
+      "function_name": "google-calendar-sharing",
+      "requests": 2644,
+      "errors": 45
+    },
+    {
+      "function_name": "meta-leadgen-poll",
+      "requests": 2014,
+      "errors": 0
+    },
+    {
+      "function_name": "process-outbound-dispatches",
+      "requests": 2013,
+      "errors": 0
+    },
+    {
+      "function_name": "process-copilot-followups",
+      "requests": 2013,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-dlq-replay",
+      "requests": 2013,
+      "errors": 0
+    },
+    {
+      "function_name": "torquecalls-recording-maintenance",
+      "requests": 2012,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-instance-reaper",
+      "requests": 2012,
+      "errors": 0
+    },
+    {
+      "function_name": "process-followup-automations",
+      "requests": 2010,
+      "errors": 0
+    },
+    {
+      "function_name": "process-followup-situations",
+      "requests": 2009,
+      "errors": 0
+    },
+    {
+      "function_name": "retry-dead-letter-jobs",
+      "requests": 2009,
+      "errors": 0
+    },
+    {
+      "function_name": "cron-health-check",
+      "requests": 2005,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-health-monitor",
+      "requests": 1790,
+      "errors": 0
+    },
+    {
+      "function_name": "lead-webhook",
+      "requests": 1592,
+      "errors": 0
+    },
+    {
+      "function_name": "outbound-trigger",
+      "requests": 1495,
+      "errors": 0
+    },
+    {
+      "function_name": "partner-webhook",
+      "requests": 1399,
+      "errors": 1
+    },
+    {
+      "function_name": "summarize-conversations-batch",
+      "requests": 1008,
+      "errors": 1008
+    },
+    {
+      "function_name": "meta-conversion-dispatch",
+      "requests": 1006,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-session-watchdog",
+      "requests": 1002,
+      "errors": 2
+    },
+    {
+      "function_name": "torquecalls-webhook",
+      "requests": 480,
+      "errors": 0
+    },
+    {
+      "function_name": "tinyerp-pull-orders",
+      "requests": 357,
+      "errors": 0
+    },
+    {
+      "function_name": "evolution-webhook",
+      "requests": 351,
+      "errors": 0
+    },
+    {
+      "function_name": "calculate-portfolio-health",
+      "requests": 221,
+      "errors": 34
+    },
+    {
+      "function_name": "google-calendar-events",
+      "requests": 140,
+      "errors": 35
+    },
+    {
+      "function_name": "evaluate-agent-conversation",
+      "requests": 82,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-rebind-webhook",
+      "requests": 75,
+      "errors": 0
+    },
+    {
+      "function_name": "oraculo-feedback",
+      "requests": 61,
+      "errors": 17
+    },
+    {
+      "function_name": "torquecalls-signal",
+      "requests": 52,
+      "errors": 1
+    },
+    {
+      "function_name": "toth-sync-clientes",
+      "requests": 49,
+      "errors": 2
+    },
+    {
+      "function_name": "notificame-channel-start",
+      "requests": 38,
+      "errors": 13
+    },
+    {
+      "function_name": "test-copilot-chat",
+      "requests": 29,
+      "errors": 12
+    },
+    {
+      "function_name": "classify-followup-stages",
+      "requests": 28,
+      "errors": 18
+    },
+    {
+      "function_name": "summarize-conversation",
+      "requests": 28,
+      "errors": 0
+    },
+    {
+      "function_name": "publish-guided-workflow",
+      "requests": 28,
+      "errors": 10
+    },
+    {
+      "function_name": "toth-sync-cobrancas",
+      "requests": 18,
+      "errors": 0
+    },
+    {
+      "function_name": "google-calendar-webhook",
+      "requests": 14,
+      "errors": 0
+    },
+    {
+      "function_name": "check-api-health",
+      "requests": 11,
+      "errors": 0
+    },
+    {
+      "function_name": "copilot-quote-template",
+      "requests": 10,
+      "errors": 7
+    },
+    {
+      "function_name": "get-daily-priorities",
+      "requests": 8,
+      "errors": 0
+    },
+    {
+      "function_name": "refresh-meta-tokens",
+      "requests": 7,
+      "errors": 0
+    },
+    {
+      "function_name": "whatsapp-media-retention",
+      "requests": 7,
+      "errors": 7
+    },
+    {
+      "function_name": "blast-plan-release",
+      "requests": 7,
+      "errors": 0
+    },
+    {
+      "function_name": "oraculo-comercial",
+      "requests": 7,
+      "errors": 4
+    },
+    {
+      "function_name": "create-org-user",
+      "requests": 6,
+      "errors": 4
+    },
+    {
+      "function_name": "support-notify-staff",
+      "requests": 5,
+      "errors": 0
+    },
+    {
+      "function_name": "oraculo-profile",
+      "requests": 4,
+      "errors": 2
+    },
+    {
+      "function_name": "webhook-new-lead",
+      "requests": 4,
+      "errors": 1
+    },
+    {
+      "function_name": "google-calendar-connect",
+      "requests": 3,
+      "errors": 2
+    },
+    {
+      "function_name": "list-unassigned-users",
+      "requests": 3,
+      "errors": 0
+    },
+    {
+      "function_name": "import-leads",
+      "requests": 3,
+      "errors": 0
+    },
+    {
+      "function_name": "notificame-templates",
+      "requests": 3,
+      "errors": 0
+    },
+    {
+      "function_name": "oraculo-turno",
+      "requests": 3,
+      "errors": 2
+    },
+    {
+      "function_name": "workflow-question-image",
+      "requests": 3,
+      "errors": 1
+    },
+    {
+      "function_name": "google-calendar-disconnect",
+      "requests": 2,
+      "errors": 2
+    },
+    {
+      "function_name": "meta-asset-admin",
+      "requests": 1,
+      "errors": 1
+    },
+    {
+      "function_name": "google-calendar-callback",
+      "requests": 1,
+      "errors": 0
+    },
+    {
+      "function_name": "forgot-password",
+      "requests": 1,
+      "errors": 0
+    }
+  ],
+  "total": 584535,
+  "projection30": 2505150,
+  "projection31": 2588655
+}

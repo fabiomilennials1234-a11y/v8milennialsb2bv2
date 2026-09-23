@@ -1,0 +1,76 @@
+{
+  "provider": "Hostinger",
+  "window": {
+    "start": "2026-09-16T22:00:00Z",
+    "end": "2026-09-23T22:00:00Z"
+  },
+  "machine": {
+    "plan": "KVM 4",
+    "cpus": 4,
+    "memoryMiB": 16384,
+    "diskMiB": 204800
+  },
+  "metrics": {
+    "cpu_usage": {
+      "unit": "%",
+      "samples": 336,
+      "min": 54.98,
+      "mean": 60.806815476190465,
+      "p95": 62.65,
+      "max": 65.03,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    },
+    "ram_usage": {
+      "unit": "bytes",
+      "samples": 336,
+      "min": 9742532608,
+      "mean": 10745978246.095238,
+      "p95": 11360419840,
+      "max": 12106649600,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    },
+    "disk_space": {
+      "unit": "bytes",
+      "samples": 336,
+      "min": 30601658368,
+      "mean": 33530614003.809525,
+      "p95": 37820424192,
+      "max": 40714534912,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    },
+    "outgoing_traffic": {
+      "unit": "bytes",
+      "samples": 336,
+      "min": 11945468,
+      "mean": 35855120.84821428,
+      "p95": 134440349,
+      "max": 293105682,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    },
+    "incoming_traffic": {
+      "unit": "bytes",
+      "samples": 336,
+      "min": 15439703,
+      "mean": 32197011.845238097,
+      "p95": 49096185,
+      "max": 522453505,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    },
+    "uptime": {
+      "unit": "seconds",
+      "samples": 336,
+      "min": 5411851,
+      "mean": 5713284.636904762,
+      "p95": 5985859,
+      "max": 6014753,
+      "first": "2026-09-16T22:18:59.000Z",
+      "last": "2026-09-23T21:47:16.000Z"
+    }
+  },
+  "limits": "Provider samples roughly every 30 minutes. Percentiles describe samples, not second-level peaks. No capacity/load or availability guarantee."
+}
