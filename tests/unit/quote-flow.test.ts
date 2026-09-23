@@ -34,6 +34,32 @@ function database(results: unknown[]) {
 }
 beforeEach(() => { vi.stubGlobal('Deno', { env: { get: () => 'true' } }); vi.clearAllMocks(); mocks.queue.mockResolvedValue({ queued: true }); mocks.dispatch.mockResolvedValue({ instance: { id: 'instance' }, normalizedPhone: '5541999999999' }); });
 describe('quote generation workflow', () => {
+  it.each([undefined, null, '', '   '])('accepts absent quote id %s when starting a draft', async quote_id => {
+    const {db,calls} = database([...contextRows(), null, {...quote,status:'draft'}]);
+    const result = await runQuoteTool(db,ctx,{operation:'save',quote_id,data});
+    expect(result).toMatchObject({success:true,status:'draft'});
+    expect(calls.some(c=>c.operations.some(op=>op[0]==='insert'))).toBe(true);
+  });
+  it.each([null, '', '   '])('accepts absent quote id %s for status', async quote_id => {
+    const {db} = database([...contextRows(), null]);
+    expect(await runQuoteTool(db,ctx,{operation:'status',quote_id})).toMatchObject({success:true,quote:null});
+  });
+  it.each(['TESTE-001', 42, {}, 'not-a-uuid'])('rejects malformed nonempty id %s without treating it as a product error', async quote_id => {
+    const {db} = database([...contextRows(), null]);
+    expect(await runQuoteTool(db,ctx,{operation:'save',quote_id,data})).toMatchObject({success:false,error_code:'invalid_quote_id'});
+    expect(mocks.service).not.toHaveBeenCalled();
+    expect(mocks.queue).not.toHaveBeenCalled();
+  });
+  it('does not silently choose a revision for generation with a null id', async () => {
+    const {db} = database([...contextRows(), quote]);
+    expect(await runQuoteTool(db,ctx,{operation:'generate',quote_id:null})).toMatchObject({success:false,error_code:'invalid_quote_id'});
+    expect(mocks.service).not.toHaveBeenCalled();
+  });
+  it('never falls back to the latest quote when an explicit id is not found', async () => {
+    const {db,calls} = database([...contextRows(), null]);
+    expect((await runQuoteTool(db,ctx,{operation:'save',quote_id:quoteId,data})).success).toBe(false);
+    expect(calls.some(c=>c.operations.some(op=>op[0]==='insert'))).toBe(false);
+  });
   it.each([undefined, '', 'false', 'TRUE'])('blocks enqueue and delivery with release gate %s', async value => {
     vi.stubGlobal('Deno', { env: { get: () => value } });
     const {db} = database([]);

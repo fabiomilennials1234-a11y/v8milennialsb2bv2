@@ -450,10 +450,10 @@ export class AgentEngine {
             try {
               if (typeof capabilities.id !== 'string') throw new Error('Agente inválido.');
               result = await runQuoteTool(this.supabase, { organizationId: this.organizationId, agentId: capabilities.id, leadId, conversationId: conversation.id, userMessage }, JSON.parse(call.function.arguments));
-            } catch { result = { success: false, error: 'Argumentos de orçamento inválidos.' }; }
+            } catch { result = { success: false, error_code: 'invalid_quote_arguments', error: 'Argumentos de orçamento inválidos.' }; }
           }
           multiTurnMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
-          logRuntime({ organizationId: this.organizationId, module: 'copilot', action: 'quote_tool_result', status: result.success ? 'success' : 'error', entityType: 'lead', entityId: leadId, payloadSnapshot: { quote_id: result.quote_id, revision: result.revision, status: result.status, tool_call_id: call.id } }).catch(() => { /* audit snapshot is also transactional in copilot_quote_events */ });
+          logRuntime({ organizationId: this.organizationId, module: 'copilot', action: 'quote_tool_result', status: result.success ? 'success' : 'error', entityType: 'lead', entityId: leadId, errorMessage: result.success ? undefined : String(result.error ?? 'Falha na ferramenta de orçamento.').slice(0, 500), payloadSnapshot: { error_code: result.error_code, quote_id: result.quote_id, revision: result.revision, status: result.status, tool_call_id: call.id } }).catch(() => { /* audit snapshot is also transactional in copilot_quote_events */ });
         }
         continue;
       }
