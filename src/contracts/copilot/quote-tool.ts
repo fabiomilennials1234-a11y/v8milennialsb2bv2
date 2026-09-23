@@ -3,10 +3,9 @@ export function buildQuoteTool(fields: string[], required: string[]) {
   const money = { type: "integer", minimum: 0, description: "Valor autorizado em centavos, inclusive zero explícito; não inventar preços/tributos." };
   return {
     name: "generate_order_request",
-    description: `${QUOTE_INSTRUCTION} Primeiro use status para ler o rascunho e dados do lead. save substitui o rascunho completo e invalida a confirmação anterior. prepare valida e retorna resumo/código. generate exige resposta real do cliente com o código. send enfileira o arquivo gerado. Campos obrigatórios: ${required.join(", ")}.`,
+    description: `${QUOTE_INSTRUCTION} Primeiro use status para ler o rascunho e dados do lead. save altera apenas dados novos; mudanças comerciais exigem nova confirmação. prepare valida e retorna o resumo exato a apresentar. generate usa a confirmação real do cliente; send enfileira o arquivo. O orçamento atual é resolvido internamente pela conversa. Campos obrigatórios: ${required.join(", ")}.`,
     input_schema: { type: "object", additionalProperties: false, properties: {
       operation: { type: "string", enum: ["status", "save", "prepare", "generate", "send"] },
-      quote_id: { type: "string", description: "UUID do orçamento retornado por esta ferramenta, NUNCA código/SKU do produto. Omita em status inicial e no primeiro save quando ainda não há orçamento. Não invente este ID. Após salvar, use o quote_id retornado." },
       data: { type: "object", additionalProperties: false, properties: {
         values: { type: "object", additionalProperties: false, properties: Object.fromEntries(fields.filter(f => !DERIVED_FIELDS.includes(f)).map(f => [f, { type: "string" }])) },
         items: { type: "array", maxItems: 100, items: { type: "object", additionalProperties: false, properties: {

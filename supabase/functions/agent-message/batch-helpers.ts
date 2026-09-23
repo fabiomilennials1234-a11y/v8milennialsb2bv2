@@ -6,6 +6,7 @@
  */
 
 import { logEvent } from "../_shared/error-boundary.ts";
+import type { QuoteInbound } from "../_shared/quotes/presentation.ts";
 
 /**
  * Concatenate an array of channel_messages into a single string
@@ -29,7 +30,7 @@ export const MAX_ABSORB_ITERATIONS = 3;
 
 export async function absorbPendingMessages(opts: {
   supabase: any;
-  engine: { processMessage: (leadId: string, content: string, type: string) => Promise<any> };
+  engine: { processMessage: (leadId: string, content: string, type: string, inbound?: QuoteInbound) => Promise<any> };
   leadId: string;
   from: string;
   organizationId: string;
@@ -62,11 +63,11 @@ export async function absorbPendingMessages(opts: {
       .from("channel_messages")
       .select("content")
       .in("id", newMessageIds)
-      .order("created_at", { ascending: true });
+      .order("timestamp", { ascending: true }).order("id", { ascending: true });
 
     if (msgs && msgs.length > 0) {
       const combinedContent = buildBatchContent(msgs);
-      await engine.processMessage(leadId, combinedContent, "text");
+      await engine.processMessage(leadId, combinedContent, "text", { storage: "channel_messages", messageIds: newMessageIds });
       messagesProcessed += msgs.length;
     }
 

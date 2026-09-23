@@ -26,6 +26,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { montarPayloadDoAgente } from "../_shared/copilot-batch-payload.ts";
+import { recordQuotePresentation, type QuotePresentation } from "../_shared/quotes/presentation.ts";
 import {
   checkBatchMaturity,
   type BatchInfo,
@@ -148,7 +149,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       .from("whatsapp_messages")
       .select("id, content, timestamp, instance_id, normalized_phone")
       .in("id", messageIds)
-      .order("timestamp", { ascending: true });
+      .order("timestamp", { ascending: true }).order("id", { ascending: true });
 
     // Concatena o conteúdo das mensagens entrantes do batch (ordem por timestamp).
     const combinedContent = (msgs ?? [])
@@ -170,6 +171,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     // --- Gera resposta via agent-message (normal mode) ---
     const agentMessageUrl = `${supabaseUrl}/functions/v1/agent-message`;
     let parts: string[] = [];
+    let presentation: QuotePresentation | undefined;
     try {
       const resp = await fetch(agentMessageUrl, {
         method: "POST",
@@ -187,7 +189,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
             const latest = (msgs ?? []).at(-1) as { id?: string; instance_id?: string | null; normalized_phone?: string | null } | undefined;
             if (!latest?.id || !latest.instance_id || !latest.normalized_phone) return null;
             const { data: box } = await supabase.from("whatsapp_instances").select("provider").eq("id", latest.instance_id).maybeSingle();
-            return { storage: "whatsapp_messages" as const, messageId: latest.id, boxId: latest.instance_id,
+            return { storage: "whatsapp_messages" as const, messageId: latest.id, messageIds: (msgs ?? []).map((m: {id:string})=>m.id), boxId: latest.instance_id,
               provider: (box as { provider?: string | null } | null)?.provider?.trim() || "uazapi", participantId: latest.normalized_phone };
           })(),
         })),
@@ -203,6 +205,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
         return json({ ok: true, reason: data?.reason ?? "agent_skipped", batch_key: batchKey });
       }
       parts = data.messages ?? (data.message ? [data.message] : []);
+      presentation = data.quote_presentation;
     } catch (e) {
       await applyOutcome({ kind: "transient_error", error: e instanceof Error ? e.message : String(e) });
       return json({ ok: false, reason: "agent_message_exception" }, 200);
@@ -228,6 +231,8 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       return json({ ok: false, reason: "no_active_instance" }, 200);
     }
     let chunksSent = 0;
+    let summaryAccepted = true;
+    const summaryMessageIds: string[] = [];
     let sendFailed = false;
     let canceledMid = false;
 
@@ -239,9 +244,11 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       const recheck = await isCopilotCanceled(supabase, orgId, phone);
       if (recheck.canceled) { canceledMid = true; break; }
 
-      const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot" });
+      const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot", idempotencyKey: presentation ? `quote-summary:${presentation.message_id}:${i}` : undefined });
       const msgId = sendResult.messageId
         ?? `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      summaryAccepted &&= sendResult.success && Boolean(sendResult.messageId);
+      if (sendResult.messageId) summaryMessageIds.push(sendResult.messageId);
 
       await supabase.from("whatsapp_messages").upsert({
         organization_id: orgId,
@@ -252,7 +259,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
         direction: "outgoing",
         message_type: "text",
         content: text,
-        status: sendResult.success ? "sent" : "failed",
+        status: sendResult.success ? (sendResult.status === "queued" ? "pending" : "sent") : "failed",
         timestamp: new Date().toISOString(),
         sent_by_ai: true,
         sent_source: "copilot",
@@ -260,6 +267,9 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
 
       if (sendResult.success) chunksSent++;
       else sendFailed = true;
+    }
+    if (summaryAccepted && chunksSent === parts.length && !canceledMid) {
+      await recordQuotePresentation(supabase, orgId, instance.id, presentation, summaryMessageIds);
     }
 
     // Decisão de outcome:

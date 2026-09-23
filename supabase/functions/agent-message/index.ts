@@ -59,7 +59,7 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
         .from("channel_messages")
         .select("content, message_type, media_url")
         .in("id", body.message_ids)
-        .order("created_at", { ascending: true });
+        .order("timestamp", { ascending: true }).order("id", { ascending: true });
 
       if (batchErr || !batchMsgs || batchMsgs.length === 0) {
         console.warn('[agent-message] Batch mode: failed to load messages', { ids: body.message_ids, error: batchErr });
@@ -497,7 +497,11 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       .catch(e => console.warn('[agent-message] Typing indicator failed (non-fatal):', e));
 
     // 3. PROCESS MESSAGE (toda lógica está aqui)
-    const response = await engine.processMessage(lead.id, message, incoming_message_type);
+    const quoteInbound = isBatchMode
+      ? { storage: "channel_messages" as const, messageIds: body.message_ids.filter((id: unknown): id is string => typeof id === "string") }
+      : message_context?.storage === "whatsapp_messages" && typeof message_context.messageId === "string"
+        ? { storage: "whatsapp_messages" as const, messageIds: Array.isArray(message_context.messageIds) ? message_context.messageIds.filter((id: unknown): id is string => typeof id === "string") : [message_context.messageId] } : undefined;
+    const response = await engine.processMessage(lead.id, message, incoming_message_type, quoteInbound);
 
     // 3.1 CANCELLATION GATE pós-LLM (RC-cancel, 2026-04-26):
     // user pode ter desligado o switch DURANTE a chamada LLM (~5-30s).

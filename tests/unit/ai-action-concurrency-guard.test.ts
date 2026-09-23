@@ -36,7 +36,7 @@ describe("needsConcurrencyGuard", () => {
     expect(needsConcurrencyGuard("acao_que_ainda_nao_existe")).toBe(true);
   });
 
-  it("isenta APENAS o envio de documento", () => {
-    expect([...CONCURRENCY_GUARD_EXEMPT_ACTIONS]).toEqual(["send_document"]);
+  it("isenta somente documentos com proteção própria de envio", () => {
+    expect([...CONCURRENCY_GUARD_EXEMPT_ACTIONS]).toEqual(["send_document", "send_quote_document"]);
   });
 });

@@ -4,6 +4,8 @@ import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { isDeliveredSend, sentDocumentLabel } from "../_shared/copilot/document-delivery.ts";
 import { runQuoteTool } from "../_shared/quotes/tool.ts";
+import { handleConfirmedQuote } from "../_shared/quotes/confirmed-turn.ts";
+import { createQuotePresentation, type QuoteInbound } from "../_shared/quotes/presentation.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { funnelRefsFromRules } from "../_shared/copilot/kanban-rules.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
@@ -167,7 +169,7 @@ export class AgentEngine {
   /**
    * Processa mensagem do lead e retorna resposta
    */
-  async processMessage(leadId: string, userMessage: string, incomingMessageType?: string) {
+  async processMessage(leadId: string, userMessage: string, incomingMessageType?: string, quoteInbound?: QuoteInbound) {
     console.log('[AgentEngine] Processing message:', { leadId, messagePreview: userMessage.substring(0, 50) });
     this.currentLeadId = leadId;
     this.incomingMessageType = incomingMessageType || "text";
@@ -268,6 +270,16 @@ export class AgentEngine {
     // 3. Update Short-Term Memory
     console.log('[AgentEngine] Step 3: Adding message to memory...');
     await this.addMessageToMemory(conversation.id, 'user', userMessage);
+
+    if (capabilities.can_generate_order_request === true && typeof capabilities.id === 'string') {
+      const confirmed = await handleConfirmedQuote(this.supabase, { organizationId: this.organizationId, agentId: capabilities.id, leadId, conversationId: conversation.id, userMessage, inbound: quoteInbound });
+      if (confirmed) {
+        await this.updateConversationState(conversation.id, conversation.state, confirmed.message);
+        await this.logDecision(conversation.id, conversation.state, conversation.state, null, capabilities);
+        await logRuntime({ organizationId: this.organizationId, module: 'copilot', action: 'quote_confirmation_result', status: confirmed.result.success ? 'success' : 'error', entityType: 'lead', entityId: leadId, errorMessage: confirmed.result.success ? undefined : String(confirmed.result.error ?? 'Falha no orçamento.'), payloadSnapshot: { quote_id: confirmed.result.quote_id, status: confirmed.result.status, error_code: confirmed.result.error_code } });
+        return { message: confirmed.message, state: conversation.state, execution_result: confirmed.result };
+      }
+    }
 
     // 4. Build Dynamic Prompt
     console.log('[AgentEngine] Step 4: Building prompt...');
@@ -449,11 +461,19 @@ export class AgentEngine {
           if (call.function?.name === 'generate_order_request') {
             try {
               if (typeof capabilities.id !== 'string') throw new Error('Agente inválido.');
-              result = await runQuoteTool(this.supabase, { organizationId: this.organizationId, agentId: capabilities.id, leadId, conversationId: conversation.id, userMessage }, JSON.parse(call.function.arguments));
+              result = await runQuoteTool(this.supabase, { organizationId: this.organizationId, agentId: capabilities.id, leadId, conversationId: conversation.id, userMessage, inbound: quoteInbound }, JSON.parse(call.function.arguments));
             } catch { result = { success: false, error_code: 'invalid_quote_arguments', error: 'Argumentos de orçamento inválidos.' }; }
           }
           multiTurnMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
           logRuntime({ organizationId: this.organizationId, module: 'copilot', action: 'quote_tool_result', status: result.success ? 'success' : 'error', entityType: 'lead', entityId: leadId, errorMessage: result.success ? undefined : String(result.error ?? 'Falha na ferramenta de orçamento.').slice(0, 500), payloadSnapshot: { error_code: result.error_code, quote_id: result.quote_id, revision: result.revision, status: result.status, tool_call_id: call.id } }).catch(() => { /* audit snapshot is also transactional in copilot_quote_events */ });
+          if (typeof result.customer_message === 'string') {
+            // Preserve the exact backend summary: no paraphrase, split, anti-repeat
+            // regeneration or unrelated commercial action before customer approval.
+            await updateConversationStateExternal(this.supabase, conversation.id, conversation.state);
+            const presentation = await createQuotePresentation(this.supabase, {conversation_id:conversation.id,quote_id:String(result.quote_id),revision:Number(result.revision),summary:result.customer_message});
+            await this.logDecision(conversation.id, conversation.state, conversation.state, null, capabilities);
+            return { message: result.customer_message, state: conversation.state, execution_result: result, quote_presentation: presentation };
+          }
         }
         continue;
       }

@@ -8,7 +8,7 @@ import { resolveDispatchContext, sendMediaViaInstance } from "../whatsapp-dispat
 
 /** CAS is permanent for a revision: ambiguous provider results require reconciliation. */
 export async function sendQuoteDocument(db: SupabaseClient, action: ActionRecord): Promise<ActionResult> {
-  if (!quoteLiveSendEnabled()) return { success: false, error: "quote_live_send_disabled" };
+  if (!quoteLiveSendEnabled(action.organization_id)) return { success: false, error: "quote_live_send_disabled" };
   if (!action.lead_id || !action.conversation_id || typeof action.payload.quote_id !== "string") return { success: false, error: "quote_context_required" };
   const read = await db.from("copilot_quotes").select("*").eq("id", action.payload.quote_id).eq("organization_id", action.organization_id).eq("lead_id", action.lead_id).eq("conversation_id", action.conversation_id).eq("revision", action.payload.revision).maybeSingle();
   if (read.error || !read.data) return { success: false, error: "quote_not_found" };

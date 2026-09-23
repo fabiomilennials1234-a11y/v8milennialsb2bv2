@@ -195,7 +195,7 @@ describe("absorbPendingMessages", () => {
 
     expect(result.iterations).toBe(1);
     expect(result.messagesProcessed).toBe(2);
-    expect(engineMock.processMessage).toHaveBeenCalledWith("lead-1", "Mensagem A\nMensagem B", "text");
+    expect(engineMock.processMessage).toHaveBeenCalledWith("lead-1", "Mensagem A\nMensagem B", "text", {storage:"channel_messages",messageIds:["m1","m2"]});
   });
 
   it("stops at MAX_ABSORB_ITERATIONS even if messages keep arriving", async () => {
