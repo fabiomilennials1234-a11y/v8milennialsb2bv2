@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LeadCardMetrics } from "./LeadCardMetrics";
 import { LeadCardNotes } from "./LeadCardNotes";
 import { LeadCardFields } from "./LeadCardFields";
 import type { LeadCardData } from "./types";
@@ -17,7 +16,7 @@ import type { LeadCardData } from "./types";
  * Lado a lado não há duas verdades, há uma pessoa e um negócio dela, cada um
  * dono do seu assunto e os dois legíveis de uma vez.
  *
- * Nada aqui é desenho novo: métricas, anotação e campos são os mesmos
+ * A anotação e os campos são os mesmos
  * componentes do card do Lead, com os mesmos dados e a mesma gravação. O que
  * muda é a largura e a ordem.
  *
@@ -82,8 +81,8 @@ export function LeadCardAside({
   const grupoAtivo = grupos[Math.min(grupo, Math.max(0, grupos.length - 1))];
 
   return (
-    <aside className="flex h-full min-h-0 w-[356px] shrink-0 flex-col border-r border-border">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+    <aside className="relative flex h-full min-h-0 w-[32%] min-w-[300px] max-w-[480px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-border">
+      <div className="shrink-0">
         {/* Capa + avatar, como no print. A capa não é enfeite gratuito: ela dá
             um chão para o avatar transbordar e é o que separa a coluna da
             pessoa da coluna do negócio sem precisar de mais uma borda. */}
@@ -188,23 +187,18 @@ export function LeadCardAside({
           )}
         </div>
 
-        <div className="flex flex-col gap-5 border-t border-border px-5 py-5">
-          <LeadCardMetrics metricas={lead.metricas} />
-        </div>
-
         {grupos.length > 0 && (
           <div className="flex flex-col border-t border-border">
             {/* As abas Perfil | Endereço | Comercial | Campos a preencher. Os
                 grupos já vêm prontos de `useLeadCardData`; aqui só se escolhe um
-                por vez, porque a coluna tem 356px e a pilha inteira empurrava a
-                anotação para 4 telas abaixo.
+                por vez para manter a coluna legível mesmo com muitos campos.
 
                 A PRIMEIRA aba é a que abre, e é por isso que os campos da
                 organização já RESPONDIDOS vivem dentro do "Perfil" — quem abre o
                 negócio vê o que o formulário trouxe sem clicar em nada. A última
                 aba fica só com o que ninguém preencheu ainda. Ver o bloco de
                 decisão em `useLeadCardData`. */}
-            <nav className="flex items-center gap-1 overflow-x-auto border-b border-border px-3">
+            <nav className="flex shrink-0 flex-wrap items-center gap-x-1 border-b border-border px-3">
               {grupos.map((g, i) => {
                 const acesa = i === Math.min(grupo, grupos.length - 1);
                 return (
@@ -235,9 +229,9 @@ export function LeadCardAside({
         )}
       </div>
 
-      {/* A anotação fica ancorada no pé, como no card do Lead: se ela some
-          abaixo da dobra, "espaço para anotação" vira promessa. */}
-      <div className="shrink-0 border-t border-border px-5 py-4">
+      {/* Perfil e anotações compartilham a rolagem da coluna, sem comprimir os
+          campos numa segunda área rolável em telas de menor altura. */}
+      <div className="mt-auto shrink-0 border-t border-border px-5 py-4">
         <LeadCardNotes
           valor={nota}
           onSave={(texto) => {

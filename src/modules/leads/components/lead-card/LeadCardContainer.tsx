@@ -60,7 +60,7 @@ export function LeadCardContainer({
    */
   podeCriarEtiqueta?: boolean;
   /**
-   * `card` é a ficha inteira; `coluna` é a faixa de 356px que o painel do
+   * `card` é a ficha inteira; `coluna` é a faixa proporcional que o painel do
    * Negócio encosta à esquerda (o print do DataCrazy).
    *
    * As duas formas ficam no MESMO container de propósito: o que muda é o
@@ -179,7 +179,7 @@ export function LeadCardContainer({
   // enquanto carrega, e o painel pisca de duas larguras a cada abertura.
   const molduraAviso =
     forma === "coluna"
-      ? "w-[356px] shrink-0 border-r border-border"
+      ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border"
       : "rounded-xl border border-border";
 
   if (isLoading || visibility === "loading") {
