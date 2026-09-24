@@ -127,3 +127,96 @@ Final SQL readback13:44:54UTC: ingress row_count=0, payload_bytes=0, actual rows
 Authenticated REST returned200 with the same budget. The probe route was already
 removed, original provider configuration verified, and the temporary writer
 guard absent. No regular ingress service was activated during the incident.
+
+
+## Provider redelivery probe and transition audit, 14:04 UTC
+
+A single authorized self-chat message was sent through the TorqueSDR instance.
+Four temporary additional `messages` callbacks returned 408, 429, 500 and 503
+respectively for that tagged event, then would return 200 for its exact retry.
+Unrelated events returned 200 without business processing. The original route
+and its API-send exclusion stayed unchanged throughout the test.
+
+All four receivers saw the same test event once, first arrivals at
+14:04:05 UTC. Each recorded attempts=1, exactRetries=0, variants=0.
+The runner observed for 300 seconds starting at receiver readiness, before the
+message was sent; this is less than five minutes of observation after delivery.
+Result: INCONCLUSIVE. This does not establish that the provider never retries,
+that retries are guaranteed, or that `messages_update` has the same retry policy.
+No second message was sent. Provider error checks did not trigger the primary
+route abort during the test.
+
+Cleanup was confirmed both by the runner and independent readback: provider
+configuration exactly matched the pre-test snapshot, all four temporary routes
+were absent, and the owned receiver, TLS configuration, source and remote
+credential staging directory were removed. Local temporary credential files
+were removed. At 14:11:17 UTC, the actual inbox, budget row count and payload
+bytes were all zero. The temporary `UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS`
+secret was then deleted; the dashboard confirmed deletion and no search result.
+No regular ingress service or provider traffic split was activated.
+
+### Additional activation blocker: incompatible concurrent writers
+
+Inspection of the downloaded live bundle confirmed that its monolithic
+`handleMessagesUpdateEvent` is not the canonical durable handler on main.
+The live receipt UPDATE has no predecessor-status condition; a delayed status
+can overwrite a later status. A repeated single-reaction event increments its
+count, and some failed writes can still lead to a successful callback response.
+The earlier group-policy hotfix did not replace that receipt/update handler.
+
+Adding the new callback before removing the old one therefore permits
+incompatible concurrent writers. Even two copies of the canonical handler do
+not establish event-time ordering for reversible operations such as pin/unpin
+or reaction add/remove. Per-queue ordering and CAS do not solve cross-route
+arrival inversion. Provider configuration readback is not proof of safe handoff.
+
+The next implementation candidate is an instance-scoped Edge bridge, after
+request authentication and instance resolution, committing the complete update
+event into the existing inbox before acknowledging it and bypassing the legacy
+business handler. A single worker would own those business writes. This bridge
+has not been implemented or activated and would still consume an Edge call.
+A later direct callback cutover additionally requires a tested strategy for
+cross-route duplicates, ordering and rollback after draining/reconciliation.
+Provider redelivery or an independently verified recovery path remains required
+for events that fail before the inbox commit. No savings from this prospective
+traffic split may be counted toward the 1.4M target yet.
+
+
+## Edge bridge implementation (default off)
+
+The candidate described above is now implemented in
+`supabase/functions/whatsapp-webhook/edge-inbox-bridge.ts`. It is not deployed or
+activated by this change. Explicit enablement plus a valid database UUID
+allowlist is required; environment configuration is evaluated at module startup.
+Invalid enabled configuration prevents module startup, affecting the whole Edge
+endpoint. Validate configuration before any future deployment/activation.
+
+The Edge composition uses the existing post-authentication, post-resolution
+admission seam. Only `null` selects inline processing; an admission response,
+including 503, is terminal. The worker uses the plain handler factory, so Edge
+flags cannot cause a replay to enqueue itself. The admission helper now lives
+inside `supabase/functions/_shared`, with a compatibility reexport from the
+standalone service. No database schema, grant, provider route or runtime flag was
+changed in production during this implementation.
+
+Validation: 152 focused tests passed across seven suites, including 26 bridge
+cases and canonical SQL replay cases. Two separate PGlite integration tests
+passed, covering access controls/queue bounds and a real worker SIGKILL followed
+by database reopen and lease expiry (~126 seconds). These remain local fixture
+checks, not proof of provider retries, production latency or atomic handoff.
+Deno checks passed for both Edge entrypoint and service; frontend build passed.
+Independent GPT-6 Sol security review approved the default-off code after fixing
+the shared security-header import. No new schema or permissions were introduced.
+
+The single-owner activation and pre-commit recovery gates remain open. Neither
+this bridge nor the inconclusive provider probe is credited as invocation
+savings toward 1.4M.
+
+
+Full unit suite with Node 26 native webstorage disabled:
+13,722 passed, 151 failed, 154 skipped. No new failure heading versus the prior
+runtime validation; the earlier unrelated AST timeout did not recur. The initial
+run without the Node compatibility flag failed additional localStorage-dependent
+UI tests. TypeScript ratchet passed with zero introduced errors. Lint's five
+quote-related warning entries matched the previous run; no baseline was edited.
+These results establish a clean change delta, not a fully green repository.

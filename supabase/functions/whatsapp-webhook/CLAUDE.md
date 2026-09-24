@@ -120,3 +120,18 @@ ordem causal do fornecedor. Não ativar dois donos de efeitos para a mesma rota.
 Testes adicionais: `whatsapp-message-update.test.ts`, `quote-receipt.test.ts`,
 `whatsapp-ingress-runtime.test.ts`. Plano/evidência histórica em
 `.specs/supabase-capacity-phase2-plan.md` e `docs/operations/supabase-capacity-*`.
+
+
+### Ponte Edge → inbox (2026-09-24, desligada)
+
+`index.ts` compõe `createEdgeInboxBridge` apenas na Edge. Flag
+`WHATSAPP_EDGE_INBOX_ENABLED=true` exige allowlist de UUIDs do banco em
+`WHATSAPP_EDGE_INBOX_INSTANCE_IDS`. Depois de autenticar e resolver instância,
+apenas `messages_update` da allowlist segue para admissão durável compartilhada.
+Callback `null` mantém processamento inline; resposta HTTP encerra o caminho,
+inclusive 503 por falha/fila cheia. Nunca fazer fallback inline após erro.
+Worker usa factory sem callback, evitando reenfileirar o próprio replay.
+
+Código preparado não significa ativação segura: isolates antigos e trabalho em
+voo precisam de handoff coordenado; rollback precisa drenar/reconciliar a fila.
+Ponte ainda cobra chamada Edge. Ver README do serviço e relatório operacional.

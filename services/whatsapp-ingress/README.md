@@ -204,3 +204,41 @@ handler is a replay-safe SQL fixture; this does not validate canonical effects,
 provider retries, host failure or peak traffic. Full scope and limitations:
 `tests/fixtures/ingress-restart/README.md`. Production state and activation gates:
 `docs/operations/supabase-capacity-ingress-pilot-2026-09-24.md`.
+
+
+## Edge-to-inbox bridge (implemented, disabled)
+
+`supabase/functions/whatsapp-webhook/edge-inbox-bridge.ts` supplies an Edge-only
+admission callback. `WHATSAPP_EDGE_INBOX_ENABLED` is absent/false by default.
+Explicit `true` requires a nonempty comma-separated list of database instance
+UUIDs in `WHATSAPP_EDGE_INBOX_INSTANCE_IDS`. Invalid enabled configuration throws
+at startup; it must not silently revert a queued instance to inline writes.
+
+After existing authentication, rate checks and database instance resolution,
+only `messages_update` for listed instances goes through the shared admission
+helper in `_shared/whatsapp-ingress-inbox.ts`. That helper uses the resolved
+organization/instance and stores the complete parsed JSON envelope plus the
+optional path instance hint. It acknowledges a committed enqueue (or an explicit
+group-policy exclusion). Database errors, capacity rejection and unknown group
+policy return 503; none falls through to inline business processing. Other
+instances/events and disabled configuration retain inline behavior.
+
+The worker imports the plain handler factory without this callback. Its trusted
+replay therefore applies effects instead of enqueuing itself. The service module
+`inbox.ts` retains its public exports through the shared helper; no schema or
+provider-route change is required for the code itself.
+
+This is **not an activation procedure**. Before enabling, establish one owner of
+business effects, a healthy worker with direct HTTP admission disabled, and a
+handoff that accounts for old Edge isolates and in-flight inline requests.
+Changing an environment flag is not an atomic handoff. Stopping a worker or
+turning the bridge off while accepted events remain can let newer inline work
+overtake the queue. Rollback needs fenced admission, drain/reconciliation and
+confirmed ownership, not merely a flag change. A simple empty-queue observation
+while requests still arrive does not prove the handoff safe.
+
+Provider redelivery before queue commit remains unproven. This bridge improves
+separation of admission and effects; it still consumes an Edge invocation per
+callback. Do not count it as invocation savings, or activate a direct provider
+split based only on these tests. Production activation remains blocked pending
+handoff/recovery evidence recorded in the capacity runtime report.

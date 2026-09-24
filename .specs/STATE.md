@@ -177,3 +177,18 @@ dos writers retirada, rota original conferida. Evidências: `docs/operations/sup
 Conferência final13:44UTC: inbox e contador zerados. Entre13:35–13:42UTC houve
 falha transversal REST/Auth e timeout de funções; banco registra restart13:41:45,
 não iniciado por este trabalho. SQL/REST recuperados, causa não determinada.
+
+
+## Ponte Edge → inbox WhatsApp — 2026-09-24
+
+Implementada, desligada por padrão; não implantada/ativada nesta fatia.
+`WHATSAPP_EDGE_INBOX_ENABLED` e `WHATSAPP_EDGE_INBOX_INSTANCE_IDS` controlam
+somente a composição Edge. `messages_update` de instância resolvida e autorizada
+retorna ACK após admissão durável (ou exclusão explícita de grupo); erro nunca
+retorna ao handler inline. Demais eventos/instâncias preservam caminho atual.
+Worker usa factory sem ponte. Helper compartilhado reside dentro do pacote
+Supabase; reexport do serviço preservado. Nenhuma migration nova.
+
+Gate de ativação pendente: transição com único dono de efeitos, tratamento de
+trabalho em voo/isolates antigos e recuperação antes do commit. Ponte não reduz
+invocações Edge; não incluída como economia na meta 1,4M.
