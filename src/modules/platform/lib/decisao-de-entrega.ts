@@ -32,7 +32,10 @@ const TIMBRE_POR_TIPO: Record<string, Timbre> = {
 const ATRAVESSA_O_SILENCIO = new Set(["workflow_alert", "cron_drift"]);
 
 /** O que exige reação em minutos — o resto conta no sino sem roubar a tela. */
-const CANAL_QUENTE = new Set(["workflow_alert", "cron_drift", "lead_message", "lead_new"]);
+const CANAL_QUENTE = new Set([
+  "workflow_alert", "cron_drift", "lead_message", "lead_new", "transfer_to_human",
+  "meeting_soon", "follow_up_due", "follow_up_overdue",
+]);
 
 /**
  * Rajada: enquanto a conversa está viva, o Aviso engorda em vez de nascer de
@@ -95,6 +98,8 @@ export function decidirEntrega(
   // A conversa que já está na tela não precisa ser anunciada a quem a está lendo.
   if (
     preferencias.mute_active_conversation &&
+    aviso.type === "lead_message" &&
+    contexto.abaVisivel &&
     aviso.lead_id !== null &&
     aviso.lead_id === contexto.conversaAbertaLeadId
   ) {
