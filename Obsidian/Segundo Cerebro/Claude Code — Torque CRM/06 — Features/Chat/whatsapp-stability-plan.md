@@ -365,3 +365,15 @@ aged queues independently of direct admission. Healthy with zero restarts;
 179 focused unit tests and three SQL integrations passed. Provider and Edge v121
 remain unchanged; direct routing remains off. Remaining activation gates:
 `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+
+## Direct HTTPS and incoming download notification — 2026-09-24
+
+Public HTTPS ingress is configured on the existing VPS with admission disabled.
+The optional router keeps messages and connection events on the canonical Edge;
+only updates enter the durable queue directly. A second observed FileDownloaded
+barrier has IsFromMe=false and references incoming audio already stored in the
+CRM. SQL37 and the worker classifier retain the exact envelope and accept only
+boolean directions, preserving notification-only semantics and audited replay.
+See the operational gate report for current deployment and queue evidence;
+preparation alone does not mean direct routing is active.

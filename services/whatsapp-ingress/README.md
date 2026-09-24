@@ -3,8 +3,9 @@
 Candidate runtime, not a production routing change. The service imports the same
 `supabase/functions/whatsapp-webhook/handler.ts` used by the Edge entry point.
 Instance resolution, authentication, tenant scope, message persistence, media,
-triggers and Copilot remain canonical code. No event is forwarded to the Edge
-webhook as an intermediate hop.
+triggers and Copilot remain canonical code. The optional event router can forward
+only legacy `messages` and `connection` to the existing Edge webhook; updates
+still enter the durable inbox locally.
 
 ## Admission and acknowledgment
 
@@ -17,8 +18,9 @@ webhook as an intermediate hop.
 - Requests use the existing `/whatsapp-webhook/<secret>[/instance][/event]` or
   `/functions/v1/whatsapp-webhook/<secret>[/instance][/event]` shape. Keep secrets
   out of access logs; configure the reverse proxy to redact these paths.
-- Initial canary accepts **only `messages_update`**. Messages, connection and
-  other events return 503; provider routing must separate event types first.
+- With `INGRESS_FORWARD_LEGACY_EVENTS=false` (default), initial canary accepts
+  **only `messages_update`**. Other events return 503. Opt-in routing for the
+  existing single provider webhook is described below.
 - Authentication and database tenant resolution precede durable admission.
   The service returns **200 only after the enqueue RPC commits**, preserving
   the existing Edge success status. Failed inbox
@@ -85,6 +87,11 @@ Body read deadline defaults to 10 seconds. Defaults: 32 concurrent requests,
 reject new events with 503 and Retry-After; existing requests and tracked
 background work are drained before shutdown. A drain deadline exits nonzero
 and requires reconciliation; it must not be reported as successful delivery.
+
+Opt-in forwarding to the Edge has a separate 20-second upper deadline (the
+canonical Edge business path can itself take 12 seconds). It is not the 10-second
+request-body read deadline. Forwarding accepts at most 64 KiB of Edge response,
+does not follow redirects and never retries an ambiguous upstream result.
 
 Set the proxy/container stop grace period greater than the configured drain.
 Keep the canary at one worker until effect-level fencing or failure tests prove
@@ -307,15 +314,42 @@ is diagnosis only: at most 20 errors in memory, lost on provider restart. Its
 
 The [configuration API](https://docs.uazapi.com/endpoint/post/webhook)
 supports multiple destinations per instance by `action` and webhook ID, with
-event lists, but that alone does not prove a duplicate-free route handoff.
-Direct VPS ingress remains blocked on a concrete recovery design: either a
-written provider guarantee for 408/429/500/503 and transport timeout on this
-server/version, or a controlled, tested reconciliation process using provider
-state as the authority. Message state can sometimes reconstruct a missing
-receipt; it cannot be assumed to reconstruct each pin, reaction or event order.
-Test each failure mode on a controlled instance and compare authoritative state
-with durable inbox commits. No provider change or test is performed by this
-documentation update.
+event lists, but that alone does not prove a gap-free handoff. A bounded pilot
+may update the URL of the existing webhook ID once after exact route readback,
+preserving events, filters and URL suffix flags. The current Edge route has the
+same pre-commit loss boundary: an impossible zero-loss proof is not an absolute
+veto. Test the VPS/proxy failure surface, confirm committed admissions and
+retain a fast route rollback. Partial provider-state reconciliation can repair
+only confirmed delivered/read progress for known outgoing messages; it cannot
+reconstruct pin, reaction, edit, delete or original operation order. Do not
+describe it as webhook replay or a guarantee of delivery.
+
+## Optional single-webhook event routing (prepared, not deployed)
+
+`INGRESS_FORWARD_LEGACY_EVENTS=true` enables the event router. After the shared
+handler authenticates the secret and resolves the database instance, only
+`messages` and `connection` are forwarded to the fixed HTTPS Supabase Edge
+origin from `SUPABASE_URL`; `messages_update` still commits to the inbox before
+200. Unknown event types return 503. The router carries the original bounded
+JSON body and existing secret path, but does not relay arbitrary request
+headers, follow redirects, or retry a timeout. Add the Edge host to the narrow
+`INGRESS_ALLOWED_NET` list before enabling. Check the public URL's rewrite and
+the unchanged Edge response/status in a controlled rehearsal.
+
+The DNS A record for `ingress.torquecrm.com.br` points to `46.202.148.241`
+(TTL 300s); a real certificate was issued 2026-09-24 and expires 2026-12-23.
+The separate Traefik file-provider config is `deploy/traefik.yaml`. EasyPanel's
+network overlay must keep alias `torque-whatsapp-ingress` after every container
+recreation. Traefik access logs are off for this secret-bearing route. Initial
+public probes returned `/health` 200, `/worker-health` 200 and `/ready` 503 with
+direct admission off. At 20:17 UTC a new `FileDownloaded` dead letter with
+`IsFromMe=false` made `/worker-health` 503; a narrow SQL/TypeScript fix is in
+preparation, not applied. The queue must not be reported drained. The new router
+image and supplier URL change are not deployed. The pilot writer-guard
+environment was saved, but a live rebind returned 401 rather than the expected
+409; verify the guard before changing routes. The VPS becomes an availability
+dependency even for events forwarded to Edge. See the
+[direct-route runbook](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
 
 
 ## Bounded receipt recovery — SQL35

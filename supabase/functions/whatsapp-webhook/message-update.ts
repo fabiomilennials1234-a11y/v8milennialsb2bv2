@@ -22,7 +22,7 @@ export function isFileDownloadedNotification(payload: Record<string, unknown>): 
   const ids = event.MessageIDs;
   const chat = event.chatid;
   const fileUrl = event.FileURL;
-  if (event.Type !== "FileDownloaded" || event.IsFromMe !== true
+  if (event.Type !== "FileDownloaded" || typeof event.IsFromMe !== "boolean"
     || !Array.isArray(ids) || ids.length !== 1 || typeof ids[0] !== "string"
     || !ids[0] || ids[0].trim() !== ids[0]
     || typeof chat !== "string" || !chat || chat.trim() !== chat || event.Chat !== chat

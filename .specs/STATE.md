@@ -333,3 +333,44 @@ aged queues independently of direct admission. Healthy with zero restarts;
 179 focused unit tests and three SQL integrations passed. Provider and Edge v121
 remain unchanged; direct routing remains off. Remaining activation gates:
 `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+
+## HTTPS para rota direta WhatsApp — preparação, 2026-09-24
+
+`ingress.torquecrm.com.br` aponta para `46.202.148.241` (DNS A, TTL 300s).
+Certificado TLS real emitido em 24/09/2026, válido até 23/12/2026. Traefik usa
+configuração separada em `services/whatsapp-ingress/deploy/traefik.yaml`, sem
+editar a configuração principal gerada pelo EasyPanel. O overlay precisa manter
+o alias `torque-whatsapp-ingress` a cada recriação do container; sem ele, o
+upstream do Traefik não resolve. Access logs da rota estão desativados para
+não registrar URLs com segredo.
+
+Sondas públicas iniciais: `/health` 200, `/worker-health` 200, `/ready` 503 com
+admissão direta desligada. Validaram alcance/TLS, não entrega do fornecedor.
+Às20:17UTC, `/worker-health` passou a 503 `dead_letter`: 204 eventos concluídos,
+40 pendentes, um dead letter, nenhum processing/lease vencido, worker não pausado
+na revisão6. Novo head `FileDownloaded` tem `IsFromMe=false`, nenhum campo de
+mutação comercial e mensagem exata com media URL já preenchida. SQL37 e regra
+TypeScript correspondentes estão em preparo, sem aplicação/deploy. Drenagem
+saudável anterior é histórico. `event-router.ts` prepara opção desligada por padrão
+(`INGRESS_FORWARD_LEGACY_EVENTS=false`): `messages` e `connection` seguem para
+origem Edge fixa após autenticação/escopo; `messages_update` entra na inbox
+durável. Imagem nova e mudança da URL Uazapi ainda **não implantadas/ativadas**.
+Ambiente da guarda salvo às20:17:39UTC só com UUID piloto; presença/digest
+verificados. Probe real de rebind retornou401, não demonstra bloqueio409; nenhuma
+alteração do fornecedor foi confirmada. Confirmar guarda live antes do cutover.
+Edge permanece dono da rota do fornecedor.
+
+Plano de cutover: proteger writers, confirmar tickets Edge antigos resolvidos,
+testar roteamento e falhas pelo HTTPS público, atualizar uma vez a URL do mesmo
+webhook ID preservando eventos/filtros/flags e conferir readback+tráfego real.
+Rollback restaura URL original no mesmo ID; worker segue drenando os eventos
+aceitos. VPS vira dependência também para `messages`/`connection` encaminhados.
+Antes do commit, falhas de rede/host/banco podem perder callback porque Uazapi
+não garante retry automático de `messages_update`; risco já existe no Edge e
+deve ser medido/aceito para piloto limitado, sem promessa de perda zero. Esta
+avaliação substitui o veto absoluto de recuperação pré-commit citado nas
+entradas históricas acima; não altera a limitação técnica da recuperação.
+Reconciliação atual cobre só delivered/read de saídas conhecidas, não histórico
+de edição/exclusão/reação/pin. Economia Edge e meta 1,4M não realizadas por esta
+preparação. Procedimento: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
