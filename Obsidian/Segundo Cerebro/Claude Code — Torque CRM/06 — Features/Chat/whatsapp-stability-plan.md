@@ -220,3 +220,17 @@ sobrescrever rotas de instâncias piloto. Criação protegida também para antes
 de criar instância remota ou persistir credenciais. Proxy409; rebind skip,
 sem fingir configuração verificada. Lista vazia mantém comportamento legado.
 Não equivale a migração de tráfego; ativação do serviço continua pendente.
+
+
+## Admissão durável pela Edge — 2026-09-24
+
+Ponte implementada atrás de `WHATSAPP_EDGE_INBOX_ENABLED` (default false) e
+allowlist `WHATSAPP_EDGE_INBOX_INSTANCE_IDS`. Somente `messages_update` de
+instância resolvida no banco entra na inbox, com envelope JSON completo.
+Confirmação depende de admissão durável; falhas não executam handler inline.
+Worker aplica os efeitos via handler canônico sem reenfileirar o próprio evento.
+
+Ativação ainda pendente de handoff com único dono, drenagem/reconciliação no
+rollback e recuperação pré-commit; alternar flag não resolve trabalho em voo.
+Sem mudança ativa de rota ou economia de chamadas nesta etapa. Contratos em
+`services/whatsapp-ingress/README.md` e `.specs/STATE.md`.

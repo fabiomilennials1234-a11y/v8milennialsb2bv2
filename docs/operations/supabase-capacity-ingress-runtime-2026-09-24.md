@@ -180,3 +180,43 @@ cross-route duplicates, ordering and rollback after draining/reconciliation.
 Provider redelivery or an independently verified recovery path remains required
 for events that fail before the inbox commit. No savings from this prospective
 traffic split may be counted toward the 1.4M target yet.
+
+
+## Edge bridge implementation (default off)
+
+The candidate described above is now implemented in
+`supabase/functions/whatsapp-webhook/edge-inbox-bridge.ts`. It is not deployed or
+activated by this change. Explicit enablement plus a valid database UUID
+allowlist is required; environment configuration is evaluated at module startup.
+Invalid enabled configuration prevents module startup, affecting the whole Edge
+endpoint. Validate configuration before any future deployment/activation.
+
+The Edge composition uses the existing post-authentication, post-resolution
+admission seam. Only `null` selects inline processing; an admission response,
+including 503, is terminal. The worker uses the plain handler factory, so Edge
+flags cannot cause a replay to enqueue itself. The admission helper now lives
+inside `supabase/functions/_shared`, with a compatibility reexport from the
+standalone service. No database schema, grant, provider route or runtime flag was
+changed in production during this implementation.
+
+Validation: 152 focused tests passed across seven suites, including 26 bridge
+cases and canonical SQL replay cases. Two separate PGlite integration tests
+passed, covering access controls/queue bounds and a real worker SIGKILL followed
+by database reopen and lease expiry (~126 seconds). These remain local fixture
+checks, not proof of provider retries, production latency or atomic handoff.
+Deno checks passed for both Edge entrypoint and service; frontend build passed.
+Independent GPT-6 Sol security review approved the default-off code after fixing
+the shared security-header import. No new schema or permissions were introduced.
+
+The single-owner activation and pre-commit recovery gates remain open. Neither
+this bridge nor the inconclusive provider probe is credited as invocation
+savings toward 1.4M.
+
+
+Full unit suite with Node 26 native webstorage disabled:
+13,722 passed, 151 failed, 154 skipped. No new failure heading versus the prior
+runtime validation; the earlier unrelated AST timeout did not recur. The initial
+run without the Node compatibility flag failed additional localStorage-dependent
+UI tests. TypeScript ratchet passed with zero introduced errors. Lint's five
+quote-related warning entries matched the previous run; no baseline was edited.
+These results establish a clean change delta, not a fully green repository.

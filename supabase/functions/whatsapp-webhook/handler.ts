@@ -1363,14 +1363,15 @@ export interface WhatsAppWebhookOptions {
   strictUpdateTargets?: boolean;
   /** Internal durable replay only; the original ingress already checked age. */
   trustedQueuedReplay?: boolean;
-  /** Optional durable admission after authentication and database tenant resolution. */
+  /** Optional durable admission after authentication and database tenant resolution.
+   * Only null selects inline handling. An admission error must never fall back. */
   admitEvent?: (context: {
     supabase: SupabaseClient;
     instance: { id: string; organization_id: string };
     event: string;
     payload: Record<string, unknown>;
     pathInstanceId?: string;
-  }) => Promise<Response>;
+  }) => Promise<Response | null>;
 }
 
 export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {}) {
@@ -1609,7 +1610,8 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
     }
 
     if (options.admitEvent) {
-      return await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
+      const admitted = await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
+      if (admitted !== null) return admitted;
     }
 
     try {
