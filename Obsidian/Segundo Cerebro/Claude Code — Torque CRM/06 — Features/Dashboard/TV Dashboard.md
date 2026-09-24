@@ -42,7 +42,7 @@ Linha 1:
 ## Blocos
 
 ### Termômetro Meta (mês civil fixo)
-- Fonte canônica: `useTVDashboardData` → RPC `get_dashboard_metrics` (ADR 2026-04-24)
+- Fonte canônica: `useTVDashboardData` → RPC `get_sales_metrics`, receita líquida de estorno e mês civil resolvido pelo banco.
 - `metaVendasMes`, `vendasRealizadas`, `ondeDeveriamEstar`
 
 ### SDR Performance Block
@@ -103,7 +103,14 @@ Seleção dos 6 KPIs vem de `src/lib/tv-config-from-quiz.ts` (onboarding answers
 
 ## Performance
 
-- Polling 30s (`useTVDashboardData`) + 60s `refetchInterval`
+- Consulta financeira separada dos cálculos locais em `useTVDashboardData`.
+- Cache financeiro por usuário, organização, período/data e escopo do membro;
+  arrays de metas, propostas e conversas não pertencem à chave da consulta.
+- Atualização automática financeira a cada30s, sem o timer duplicado da página.
+  Polling pausa em segundo plano; atualização manual continua disponível.
+- Mudanças nas listas/metas recompõem a tela imediatamente; receita é atualizada
+  pela próxima consulta financeira, em até30s com a TV visível, ou pelo refresh manual.
+- Reuniões mantêm consulta própria de60s via `useSDRPerformance`.
 - Relógio só atualiza 1×/min (não 1×/s)
 - `useMemo` nos cálculos pesados por range
 - Realtime supabase já cuida das atualizações de pipe
@@ -119,6 +126,14 @@ Seleção dos 6 KPIs vem de `src/lib/tv-config-from-quiz.ts` (onboarding answers
 - `tests/unit/tv-config-from-quiz.test.ts` (existente)
 
 Total: 45 testes passando.
+
+## Histórico de otimização
+
+- 2026-09-24: Coach IA passou a cachear análises por cinco minutos entre rotações.
+- 2026-09-24: consulta financeira separada da composição local para evitar que
+  mudanças em arrays refaçam a leitura do livro de vendas. Mantidos filtros de
+  membro, receita líquida, fallback somente para RPC ausente e erros reais.
+  Rotação de12s e relógio visual não foram alterados.
 
 ## ADRs relacionadas
 
