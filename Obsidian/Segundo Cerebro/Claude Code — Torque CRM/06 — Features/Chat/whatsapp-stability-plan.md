@@ -342,3 +342,10 @@ Recuperação ligada só TorqueSDR; primeira página finalizada às16:45:09UTC:5
 verificadas,0 correções confirmadas,9 inconclusivas persistidas,0 erros. Cursor
 avançou/lease liberada; demais páginas pendentes.194 testes direcionados e
 integração SQL aprovados. Provider e Edge v121 inalterados; rota direta OFF.
+
+Ciclo automático confirmado às16:49:34UTC: mais50 mensagens,11 estados de leitura
+recuperados,8 inconclusivas,0 erros.11 eventos completed/processed,1 tentativa;
+11 alvos exatos conferidos. Total parcial:100 verificadas,11 reparadas,17 lacunas.
+PR2178 merge `d28871396`;198 testes direcionados +3 integrações SQL aprovados.
+GitHub Actions não iniciou por cobrança/limite da conta. Rota direta permanece
+OFF; economia de invocações desta recuperação=zero.
