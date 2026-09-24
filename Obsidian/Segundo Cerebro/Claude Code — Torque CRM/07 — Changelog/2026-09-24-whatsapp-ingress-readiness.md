@@ -1,3 +1,13 @@
+---
+type: changelog
+title: WhatsApp ingress — preparação e piloto de fila
+status: active
+created: 2026-09-24
+updated: 2026-09-24
+tags: [whatsapp, performance, supabase, ingress]
+owner: gabriel
+---
+
 # WhatsApp ingress: preparação de ativação — 2026-09-24
 
 ## Mudanças

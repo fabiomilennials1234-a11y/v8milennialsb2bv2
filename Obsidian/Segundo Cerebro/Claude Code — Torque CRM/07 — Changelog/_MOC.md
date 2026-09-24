@@ -152,3 +152,12 @@ owner: claude-agent
 - [[2026-09-14-agenda-reunioes-canonicas|Reuniões canônicas e presença na agenda]] 🟡 draft
 - [[2026-09-16-loofting-bulk-move|2026-09-16-loofting-bulk-move]]
 - [[2026-09-16|Clientes 360 dentro de Leads]]
+- [[2026-09-21-workflow-origin-catalog|2026-09-21-workflow-origin-catalog]]
+- [[2026-09-23-copilot-quote-schema|Schema de orçamentos Copilot — release desabilitada]]
+- [[2026-09-23-supabase-capacity-phase2|Supabase Pro — redução de admissões e ingresso durável de atualizações]]
+- [[2026-09-23-supabase-capacity-prod-wave1|Supabase Pro — primeira ativação econômica em produção]]
+- [[2026-09-23-workflow-chique-reenrollment|Chiquê Distribuidora — correção delimitada de reinscrição]]
+- [[2026-09-24-supabase-capacity-wave2|Supabase Pro — sondagem segura e redução de chamadas ociosas]]
+- [[2026-09-24-tv-query-efficiency|TV — consulta financeira independente da composição local]]
+- [[2026-09-24-whatsapp-ingress-readiness|WhatsApp ingress — preparação e piloto de fila]]
+- [[2026-09-24-whatsapp-ingress-writer-guard|2026-09-24-whatsapp-ingress-writer-guard]]
