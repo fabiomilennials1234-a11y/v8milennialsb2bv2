@@ -57,6 +57,13 @@ O guarda de versões passou sem duplicações ou colisões com `origin/main`.
 Advisors de segurança de produção consultados sem achados relacionados a
 notificações; isso não substitui o check dos grants após o futuro apply.
 
+O lint de métricas geral acusa duas âncoras `updated_at` na migration preexistente
+`20271021000026_cron_skip_idle_dispatch.sql` (commit `dcf942006`), intocada pelo
+diff. O novo SQL não apareceu nos achados. No PR #2176, os checks remotos não
+executaram: as anotações de Lint & Build e gitleaks informaram pagamentos
+recentes falhos ou limite de gastos do GitHub. Isso é bloqueio da conta, não
+resultado de execução dos testes. Nenhuma configuração de cobrança foi alterada.
+
 ## Publicação e limites
 
 Não houve aplicação em produção, mensagens de teste para clientes, nem criação
