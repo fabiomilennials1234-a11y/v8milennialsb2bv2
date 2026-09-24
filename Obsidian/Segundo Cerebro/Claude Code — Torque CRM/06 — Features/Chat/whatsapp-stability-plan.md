@@ -234,3 +234,16 @@ Ativação ainda pendente de handoff com único dono, drenagem/reconciliação n
 rollback e recuperação pré-commit; alternar flag não resolve trabalho em voo.
 Sem mudança ativa de rota ou economia de chamadas nesta etapa. Contratos em
 `services/whatsapp-ingress/README.md` e `.specs/STATE.md`.
+
+
+## Controle de pausa e FIFO — 2026-09-24
+
+SQL32 corrige avanço após dead_letter: eventos posteriores da mesma instância
+ficam bloqueados até reconciliação. Adiciona pausa de novos claims com revisão
+CAS e snapshot privado sem payload. Enqueue e conclusão de trabalho aceito seguem
+funcionando; retomada recusa processamento ativo ou expirado ainda pendente.
+CLI explícito usa arquivo de credencial privado, sem retry cego nem polling.
+
+Não altera rotas/flags Edge, não cancela efeitos antigos em voo e não prova
+recuperação do fornecedor. Operação/rollback:
+`docs/operations/whatsapp-ingress-worker-handoff.md`.

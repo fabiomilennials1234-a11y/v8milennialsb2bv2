@@ -192,3 +192,24 @@ Supabase; reexport do serviço preservado. Nenhuma migration nova.
 Gate de ativação pendente: transição com único dono de efeitos, tratamento de
 trabalho em voo/isolates antigos e recuperação antes do commit. Ponte não reduz
 invocações Edge; não incluída como economia na meta 1,4M.
+
+
+## Pausa de claims e bloqueio FIFO — 2026-09-24
+
+SQL32 adiciona controle privado por instância, revisão CAS, snapshot sem payload
+ou segredo e RPCs exclusivas de service_role. Pausa impede novos claims; enqueue
+e conclusão continuam funcionando. Retomada recusa processing inclusive expirado.
+Head dead_letter bloqueia eventos seguintes da mesma instância. Não há reset,
+descarte ou replay automático. `scripts/whatsapp-ingress-handoff.mjs` faz ações
+explícitas com credencial em arquivo privado e leitura posterior; não retenta
+mutação incerta. Nenhum polling/cron novo. `/ready` não prova drenagem ou dono único.
+
+Contrato operacional e limites: `docs/operations/whatsapp-ingress-worker-handoff.md`.
+Troca com Edge antiga e recuperação pré-commit continuam gates separados; não
+contar esta proteção como economia de invocações.
+
+
+SQL32 aplicada em produção no ledger `20260924143904` (fonte
+`20271021000032_whatsapp_ingress_worker_pause.sql`). Smoke transacional com
+service_role desfeito integralmente: fila/controles/orçamento zerados. ACL e RLS
+conferidos no alvo. Sem ativação de Edge, worker ou rota de fornecedor.
