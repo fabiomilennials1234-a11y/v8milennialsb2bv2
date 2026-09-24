@@ -49,6 +49,19 @@ describe('standalone ingress rollout configuration', () => {
 });
 
 describe('transport preserves canonical responses and applies admission limits', () => {
+  it('admits durable writes while the worker is unhealthy, preserving commit failures', async () => {
+    const canonical = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"error":"inbox_unavailable"}', { status: 503 }));
+    const ingress = createIngress(config(), canonical, new BackgroundTasks(), () => false);
+    expect((await ingress.handle(new Request('https://ingress.test/ready'))).status).toBe(503);
+    expect((await ingress.handle(request())).status).toBe(200);
+    const failedCommit = await ingress.handle(request());
+    expect(failedCommit.status).toBe(503);
+    expect(await failedCommit.text()).toContain('inbox_unavailable');
+    expect(canonical).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['/whatsapp-webhook/fixture-secret', '/functions/v1/whatsapp-webhook/fixture-secret/instance/messages'])('forwards original route/body without proxying to Edge: %s', async path => {
     const canonical = vi.fn(async (req: Request) => {
       expect(new URL(req.url).pathname).toBe(path);

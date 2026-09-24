@@ -17,10 +17,15 @@ export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, s
   try {
     await Promise.race([
       eventTasks.run(tasks, async () => {
-        if (await skipDisabledGroupUpdate(db, event.organization_id, event.payload)) return;
+        // Synthetic recovery targets an existing outgoing row by exact ID/chat.
+        // Group capture policy governs new provider events, not that row's status.
+        if (event.receipt_recovery !== true
+          && await skipDisabledGroupUpdate(db, event.organization_id, event.payload)) return;
         const handler = factory({
           allowInstance: (id, org) => id === event.instance_id && org === event.organization_id,
           strictUpdateTargets: true, trustedQueuedReplay: true,
+          suppressQuotePresentation: event.receipt_recovery === true,
+          exactRecoveryMessageId: event.receipt_recovery === true,
           queuedEventCreatedAt: event.created_at, unmatchedReceiptGraceMs: 300_000,
         });
         const pathHint = event.path_instance_id ? `/${encodeURIComponent(event.path_instance_id)}` : '';

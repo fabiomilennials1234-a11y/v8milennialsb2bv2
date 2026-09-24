@@ -10,8 +10,6 @@ export interface InboxEvent {
   path_instance_id: string | null;
   lease_token: string;
   created_at: string;
-  /** Set only by the recovery SQL, never inferred from provider payload. */
-  receipt_recovery: boolean;
 }
 export async function skipDisabledGroupUpdate(db: SupabaseClient, organizationId: string, payload: Record<string, unknown>): Promise<boolean> {
   const nested = [payload, payload.data, payload.event, payload.message, payload.chat]

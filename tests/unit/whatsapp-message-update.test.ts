@@ -61,6 +61,60 @@ describe("receipt HTTP contract", () => {
     expect(completeQuotePresentations).toHaveBeenLastCalledWith(db, "org-a", "instance-a", ["message-a", "5511888888888:message-a"], { strict: true });
   });
 
+  it("persists synthetic status without quote completion, including duplicate replay", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH" ? [{ id: "row-a" }] : [{ id: "row-a", status: "read" }]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true },
+      { suppressQuotePresentation: true });
+    expect(fetchMock.mock.calls.some((_, index) => methodAt(index) === "PATCH" && bodyAt(index).status === "read")).toBe(true);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true },
+      { suppressQuotePresentation: true });
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("ignores a provider-supplied recovery marker", async () => {
+    fetchMock.mockImplementation(async () => json([]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true });
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("scopes trusted recovery to exact composite ID and chat, while ordinary receipts retain ID expansion", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH"
+      ? [{ id: "composite-row" }]
+      : [{ id: "composite-row", message_id: "owner:ABC", status: "sent", direction: "outgoing", reactions: [] }]));
+    await applyMessageUpdate(db, instance, { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false },
+      { requireTarget: true, exactRecoveryMessageId: true, suppressQuotePresentation: true });
+    const scoped = fetchMock.mock.calls.map((_, index) => urlAt(index));
+    expect(scoped).toHaveLength(2);
+    for (const url of scoped) {
+      expect(url.searchParams.get("message_id")).toBe("in.(owner:ABC)");
+      expect(url.searchParams.get("remote_jid")).toBe("eq.chat-a");
+      expect(url.searchParams.get("direction")).toBe("eq.outgoing");
+    }
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+
+    fetchMock.mockClear();
+    await applyMessageUpdate(db, instance, { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false },
+      { requireTarget: true });
+    const normalWrites = fetchMock.mock.calls.map((_, index) => urlAt(index));
+    expect(normalWrites[0].searchParams.get("message_id")).toBe("in.(owner:ABC,ABC)");
+    expect(normalWrites[1].searchParams.get("message_id")).toBe("in.(owner:ABC,ABC)");
+    expect(normalWrites[1].searchParams.has("remote_jid")).toBe(false);
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("rejects malformed trusted recovery scope before database access", async () => {
+    for (const data of [
+      { id: "owner:ABC", status: "read", fromMe: false },
+      { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false, ids: ["owner:ABC", "ABC"] },
+      { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false, pinned: true },
+    ]) {
+      await expect(applyMessageUpdate(db, instance, data, { requireTarget: true, exactRecoveryMessageId: true }))
+        .rejects.toThrow("Recovery receipt scope unavailable");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("operator reads do not rewrite incoming status or seal outgoing quotes", async () => {
     await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: true });
     expect(fetchMock).not.toHaveBeenCalled();

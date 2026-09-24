@@ -121,7 +121,15 @@ export async function prepareExecutionBridge(inputPath, outputPath) {
   }
   for (const [name, expected] of Object.entries(canonicalHash)) {
     if (content.has(name) && name !== 'whatsapp-webhook/message-update.ts') throw new Error(`Bridge already present in live bundle: ${name}`);
-    const bytes = await readFile(join(root, 'supabase/functions', name));
+    // v121's verified bridge needs its original shared helper bytes. Current
+    // VPS helpers evolve independently and must not rewrite that artifact.
+    const frozen = {
+      'whatsapp-webhook/message-update.ts': 'whatsapp-message-update-v121.ts',
+      '_shared/whatsapp-ingress-inbox.ts': 'whatsapp-ingress-inbox-v121.ts',
+    };
+    const bytes = await readFile(frozen[name]
+      ? join(root, 'scripts/fixtures', frozen[name])
+      : join(root, 'supabase/functions', name));
     if (hash(bytes) !== expected) throw new Error(`Canonical bridge drift: ${name}`);
     content.set(name, name === 'whatsapp-webhook/edge-inbox-bridge.ts'
       ? Buffer.from(transformBridge(bytes.toString('utf8'))) : bytes);

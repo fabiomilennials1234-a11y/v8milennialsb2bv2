@@ -1,9 +1,15 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { WhatsAppWebhookOptions } from '../../supabase/functions/whatsapp-webhook/handler.ts';
+import { processInboxEvent } from '../../services/whatsapp-ingress/worker.ts';
+import type { InboxEvent } from '../../services/whatsapp-ingress/inbox.ts';
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({
   logRuntime: vi.fn(async () => {}), redactSecrets: (value: unknown) => value,
+}));
+const { completeQuotePresentations } = vi.hoisted(() => ({ completeQuotePresentations: vi.fn(async () => {}) }));
+vi.mock('../../supabase/functions/_shared/quotes/presentation.ts', () => ({
+  completeQuotePresentations, recordQuotePresentation: vi.fn(async () => {}),
 }));
 
 const enabledId = '10000000-0000-0000-0000-000000000001';
@@ -49,6 +55,7 @@ beforeAll(async () => {
 });
 afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => {
+  completeQuotePresentations.mockClear();
   delete env.WHATSAPP_EDGE_INBOX_ENABLED;
   delete env.WHATSAPP_EDGE_INBOX_INSTANCE_IDS;
   delete env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS;
@@ -80,6 +87,57 @@ beforeEach(() => {
       : env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS ? json([{ id: 'row-1', message_id: 'existing-message', status: 'sent', direction: 'outgoing', reactions: [] }]) : json([]);
     throw new Error(`Unexpected backend request: ${url}`);
   }));
+});
+
+it('external payload cannot suppress commercial receipt handling through a forged recovery marker', async () => {
+  const payload = { instance: 'provider-instance', event: 'messages_update',
+    data: { id: 'owner:ABC', status: 'read', receipt_recovery: true } };
+  const response = await createHandler({ suppressQuotePresentation: true,
+    exactRecoveryMessageId: true })(webhook(payload));
+  expect(response.status).toBe(200);
+  expect(statusWrites()).toHaveLength(1);
+  expect(new URL(statusWrites()[0].url).searchParams.get('message_id')).toBe('in.(owner:ABC,ABC)');
+  expect(completeQuotePresentations).toHaveBeenCalledOnce();
+});
+
+it('trusted queued recovery suppresses quote completion while still writing receipt status', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  const payload = { instance: 'provider-instance', event: 'messages_update',
+    data: { id: 'existing-message', chatid: 'chat-a', status: 'read', fromMe: false } };
+  const response = await createHandler({ trustedQueuedReplay: true, strictUpdateTargets: true,
+    suppressQuotePresentation: true, exactRecoveryMessageId: true })(webhook(payload));
+  expect(response.status).toBe(200);
+  expect(statusWrites()).toHaveLength(1);
+  expect(new URL(statusWrites()[0].url).searchParams.get('message_id')).toBe('in.(existing-message)');
+  expect(new URL(statusWrites()[0].url).searchParams.get('remote_jid')).toBe('eq.chat-a');
+  expect(completeQuotePresentations).not.toHaveBeenCalled();
+});
+
+it('processes trusted recovery for an existing group message while group capture is disabled', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  const payload = { instance: 'provider-instance', event: 'messages_update',
+    data: { id: 'existing-message', chatid: '12345@g.us', status: 'read', fromMe: false } };
+  const event: InboxEvent = { id: 'event-id', organization_id: organizationId, instance_id: enabledId,
+    event_name: 'messages_update', payload, path_instance_id: null, lease_token: 'lease',
+    created_at: new Date().toISOString(), receipt_recovery: true };
+  const groupSelect = vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({
+    data: { capture_groups: false }, error: null,
+  })) })) }));
+  const workerDb = { from: vi.fn(() => ({ select: groupSelect })),
+    rpc: vi.fn(async () => ({ data: true, error: null })) };
+  await processInboxEvent(workerDb as never, event, 'fixture-secret', createHandler, vi.fn());
+  expect(workerDb.from).not.toHaveBeenCalled();
+  expect(statusWrites()).toHaveLength(1);
+  expect(new URL(statusWrites()[0].url).searchParams.get('remote_jid')).toBe('eq.12345@g.us');
+  expect(completeQuotePresentations).not.toHaveBeenCalled();
+  expect(workerDb.rpc).toHaveBeenCalledWith('finish_whatsapp_ingress_event_with_outcome',
+    expect.objectContaining({ p_error_code: null, p_outcome: 'processed' }));
+
+  databaseCalls = [];
+  await processInboxEvent(workerDb as never, { ...event, receipt_recovery: false },
+    'fixture-secret', createHandler, vi.fn());
+  expect(workerDb.from).toHaveBeenCalledOnce();
+  expect(statusWrites()).toHaveLength(0);
 });
 
 it.each([undefined, 'false'])('keeps canonical handling when flag is %j', async value => {
