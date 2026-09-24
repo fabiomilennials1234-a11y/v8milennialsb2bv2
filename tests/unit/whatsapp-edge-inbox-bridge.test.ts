@@ -321,9 +321,30 @@ it('keeps ticket when actual receipt persistence rejects', async () => {
   expect(completions()).toHaveLength(0);
 });
 
-it('keeps ticket for an invalid update even when caller explicitly disables strict targets', async () => {
+it('keeps a ticket for malformed inline updates even when strict targets are disabled', async () => {
   env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
   const handler = createHandler({ admitEvent: bridge(), strictUpdateTargets: false });
+  const response = await handler(webhook({ instance: 'provider-instance', event: 'messages_update',
+    data: { status: 'read' } }));
+  expect(response.status).toBe(500);
+  expect(begins()).toHaveLength(1);
+  expect(statusWrites()).toHaveLength(0);
+  expect(completions()).toHaveLength(0);
+});
+
+it('completes a well formed pure inline receipt without a matching message', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  const handler = createHandler({ admitEvent: bridge(), strictUpdateTargets: false });
+  const response = await handler(webhook({ instance: 'provider-instance', event: 'messages_update',
+    data: { id: 'outside-crm', status: 'read' } }));
+  expect(response.status).toBe(200);
+  expect(begins()).toHaveLength(1);
+  expect(completions()).toHaveLength(1);
+});
+
+it('retains a ticket for an invalid update when strict targets are enabled', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  const handler = createHandler({ admitEvent: bridge(), strictUpdateTargets: true });
   const response = await handler(webhook({ instance: 'provider-instance', event: 'messages_update',
     data: { status: 'read' } }));
   expect(response.status).toBe(500);

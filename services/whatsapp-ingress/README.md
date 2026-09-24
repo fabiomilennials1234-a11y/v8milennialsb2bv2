@@ -30,19 +30,24 @@ webhook as an intermediate hop.
   are NOT unique because pin → unpin → pin can repeat identical payloads.
   This is at-least-once delivery, not exactly-once execution.
 - A local worker drains durable events, invoking the canonical handler with
-  strict update targets. A receipt preceding its message retries instead of
-  being marked complete. Admission timestamp remains audit evidence only.
+  strict update targets. Pure receipts with missing targets enter a private
+  deferred lane for up to five minutes measured from durable admission. Matched
+  IDs are processed immediately; missing IDs retry separately. After that
+  window, missing IDs receive an explicit `unmatched_receipt` outcome with the
+  original payload retained for the normal two-day completed-event retention.
   Commercial acceptance keeps the existing time-of-verification behavior;
   never backdate from a stale receipt without persisted per-chunk evidence.
   Queue delay can require reconfirmation: validate or exclude organizations
   with live quotes before canary routing.
-- Claims serialize per instance, preserve FIFO (including backoff), and issue
+- Claims serialize normal events per instance, preserve FIFO for their failures,
+  and issue
   fenced lease tokens. One event per instance can be active. A lease expires
   after 120 seconds; failures use exponential backoff, at most eight attempts,
   then remain visible in `dead_letter`. Different instances rotate fairly.
-  A missing target at the head blocks later events for that instance during
-  backoff. Monitor oldest pending age and canary latency; this design does not
-  promise zero delay. Do not bypass FIFO to conceal a stuck receipt.
+  A pure receipt with a missing target moves to the deferred lane with a
+  ten-second retry and does not hold later normal updates behind it. Other
+  malformed or failed operations retain the normal FIFO barrier. Monitor oldest
+  pending age, deferred count and canary latency.
 - Each event waits for its own tracked background promises before completion.
   If the event exceeds 45 seconds the process exits with its lease retained;
   it never releases the lease while its old handler is still running. A lost
@@ -65,10 +70,12 @@ webhook as an intermediate hop.
   Explicit deletion of an instance/organization cascades its technical inbox
   and decrements the counter, preserving the existing deletion flow; this is
   intentional user deletion, not an automatic discard of accepted work.
-- Before enabling traffic, verify provider retry/backoff
-  for 408, 429, 500 and 503, plus replay of out-of-order receipts. Durable inbox
-  protects events **after** successful commit; provider redelivery is still
-  essential before commit, during capacity rejection or database downtime.
+- Before direct provider routing, account for the provider's documented lack
+  of automatic retry on failed webhook HTTP delivery. The durable inbox protects
+  events **after** successful commit; 408, 429, 500, 503, timeout, full inbox
+  and database downtime can all fail before commit. See the direct-route
+  boundary below. The current same-URL Edge pilot does not change this existing
+  precommit risk or save an Edge invocation.
 
 ## Runtime limits
 
@@ -257,3 +264,55 @@ ownership. The operator CLI performs explicit actions without polling, prints
 only redacted counters, and never retries an ambiguous mutation. Full contract,
 permissions, rollback and limits: `docs/operations/whatsapp-ingress-worker-handoff.md`.
 This does not make the old Edge handoff or provider recovery safe automatically.
+
+## Deferred receipt lane — SQL34, 2026-09-24
+
+`20271021000034_whatsapp_ingress_completion_outcome.sql` records `processed`,
+`deferred_receipt` and `unmatched_receipt` outcomes. Only a well-formed pure
+status receipt can enter the deferred lane. A mixed pin, reaction, edit or delete
+remains on the normal strict path. Each retry rechecks the original payload;
+the receipt update is monotonic and repeated writes remain idempotent. A
+deferred result consumes no failure attempt, retains the payload, and releases
+the normal FIFO lane. The worker records the unmatched count, never labels a
+missing target as an externally delivered message. After the five-minute grace
+period, the missing result is terminal and auditable; late target creation does
+not trigger automatic repair. Operators can inspect the retained event before
+normal cleanup removes completed evidence after two days.
+
+The generated live Edge bundle has an offline smoke test using only a local
+loopback backend. Set `TORQUE_LIVE_EXECUTION_ARTIFACT` to the prepared bundle
+directory, then run:
+
+```sh
+deno test --cached-only --no-check --allow-read --allow-env --allow-net=127.0.0.1 tests/integration/whatsapp-live-execution-smoke.test.ts
+```
+
+It checks gate-off behavior, inline and queued paths, and completion after an
+HTTP deadline. It does not deploy or activate an instance.
+
+## Direct provider route: delivery boundary
+
+The official Uazapi [`messages_update` page](https://docs.uazapi.com/webhook/messages_update)
+says its worker does not automatically retry a failed HTTP delivery; the
+[`messages` page](https://docs.uazapi.com/webhook/messages) says the same.
+The [webhook guide](https://docs.uazapi.com/docs/integrations-webhooks) asks
+receivers to return 200 promptly and warns that a slow or unavailable target
+can delay later events and lead to discards at high volume. It does not promise
+recovery by status code. Generic `Retry-After` guidance in
+[errors and reliability](https://docs.uazapi.com/docs/errors-and-retries)
+applies to clients calling the Uazapi API; it is not a webhook sender contract.
+The [`/webhook/errors` endpoint](https://docs.uazapi.com/endpoint/get/webhook~errors)
+is diagnosis only: at most 20 errors in memory, lost on provider restart. Its
+`attempts` field does not establish a durable replay policy.
+
+The [configuration API](https://docs.uazapi.com/endpoint/post/webhook)
+supports multiple destinations per instance by `action` and webhook ID, with
+event lists, but that alone does not prove a duplicate-free route handoff.
+Direct VPS ingress remains blocked on a concrete recovery design: either a
+written provider guarantee for 408/429/500/503 and transport timeout on this
+server/version, or a controlled, tested reconciliation process using provider
+state as the authority. Message state can sometimes reconstruct a missing
+receipt; it cannot be assumed to reconstruct each pin, reaction or event order.
+Test each failure mode on a controlled instance and compare authoritative state
+with durable inbox commits. No provider change or test is performed by this
+documentation update.

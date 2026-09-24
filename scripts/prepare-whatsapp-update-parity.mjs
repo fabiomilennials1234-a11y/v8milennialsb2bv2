@@ -75,7 +75,11 @@ export async function prepareBundle(inputPath, outputPath) {
     assertContentHash(name, content.get(name) ?? '', hash);
   }
   for (const [name, hash] of Object.entries(canonical)) {
-    const path = join(projectRoot, 'supabase/functions', name);
+    // v119 is a frozen deployment baseline. The canonical handler can evolve
+    // after that release without silently changing a reproducible live patch.
+    const path = name === 'whatsapp-webhook/message-update.ts'
+      ? join(projectRoot, 'scripts/fixtures/whatsapp-message-update-v119.ts')
+      : join(projectRoot, 'supabase/functions', name);
     const data = await readFile(path);
     if (sha(data) !== hash) throw new Error(`Canonical source drift: ${name}`);
     content.set(name, data);
