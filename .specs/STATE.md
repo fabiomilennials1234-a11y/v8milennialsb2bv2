@@ -125,9 +125,9 @@ passa a HTTP200 somente após commit da inbox. `INGRESS_ACCEPTING=false` com
 Replay estrito rejeita IDs/operações inválidos antes de escrever. Preflight puro
 verifica todas as rotas locais/globais, sem alterar o fornecedor.
 
-Integração da política com criação/reconfigure/rebind, teste de retry do
-fornecedor, carga e reinício continuam pendentes antes do corte de tráfego.
-Migration29 não aplicada. Economia adicional ativada nesta entrega: nenhuma.
+Estado histórico desta preparação: migration29 ainda não aplicada.
+Atualização de implantação e testes abaixo. Economia adicional de tráfego
+ainda não ativada.
 Ver `services/whatsapp-ingress/README.md` e
 `docs/operations/supabase-capacity-ingress-readiness-2026-09-24.md`.
 
@@ -139,4 +139,21 @@ criação/reconfiguração de instância protegida antes de reserva ou escrita r
 Proxy retorna conflito409; rebind registra skip sem afirmar verificação.
 Env inválido falha fechado503. Não toca envio, leitura ou conexão.
 Integração protege os pontos de escrita; lista não ativada nesta entrega.
-Serviço ingress e SQL29 permanecem pendentes de ativação/testes operacionais.
+Serviço ingress permanece desativado. SQL29 foi aplicada na etapa abaixo.
+
+
+### Inbox em produção e recuperação — 2026-09-24
+
+SQL29 aplicada em produção no ledger `20260924124643_whatsapp_ingress_durable_inbox`.
+Inbox e contador vazios; RLS e RPCs restritas a service_role conferidos. Nenhuma
+rota ou allowlist ativada. Não reaplicar pelo timestamp futuro do arquivo.
+
+Imagem `torque-whatsapp-ingress:1498af879` construída no VPS; container temporário
+desativado respondeu health200/ready503, encerrou com código0 e foi removido.
+Ensaio com worker real, PGlite em disco e SIGKILL passou: recuperação após lease
+real120s, FIFO e rejeição de token antigo. Handler de negócio é fixture; não
+prova todos os efeitos do webhook nem retries/capacidade do fornecedor.
+
+Acesso administrativo para configurar credenciais continua pendente. Piloto
+TorqueSDR ainda sem tráfego. Evidências e próximos gates em
+`docs/operations/supabase-capacity-ingress-pilot-2026-09-24.md`.
