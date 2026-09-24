@@ -147,3 +147,29 @@ passed. The full unit run before the final defensive tests had 13,813 passing,
 151 failing and 154 skipped: the same 158 failure headings as the pre-existing
 baseline. The repository-wide suite is not green. Changed vault documents and
 indexes passed their checks; unrelated global vault debt remains outside scope.
+
+
+### Automatic cycle verified — 2026-09-24 16:49 UTC
+
+The first unattended cycle finished at 16:49:34 UTC: 50 checked, 11 planned and
+11 enqueued read-state repairs, eight inconclusive, zero errors/unscanned. Inbox
+readback confirmed all 11 synthetic events completed/processed in one attempt
+with no errors. An exact organization/instance/message/chat/direction join found
+all 11 targets at the recovered read state. No WhatsApp message was sent.
+
+Across the first two pages: 100 checked, 11 confirmed repairs and 17 retained
+inconclusive cases. This is a partial seven-day scan, not universal replay.
+A bounded read-only diagnosis of the initial nine gaps found seven provider
+statuses outside the accepted contract and two chat mismatches, with no missing
+provider results or HTTP/parse failures. Temporary diagnostic container and files
+were removed. The difference from the earlier seven-case preview has no proven
+cause because identical row/time coverage was not established.
+
+Worker sample: zero restarts, 0.64% CPU and 68.35MiB/512MiB memory. It is not a
+peak test. Gate remains queued, worker unpaused/revision4, provider URL unchanged,
+direct acceptance false. This recovery release saves zero Edge invocations.
+
+Implementation merged via PR #2178 as `d28871396`. Final focused coverage is
+198 tests plus three SQL integrations. GitHub Actions did not start: its current
+check annotation reports failed account payments or spending-limit exhaustion.
+Local results and independent review are evidence; CI is not reported green.
