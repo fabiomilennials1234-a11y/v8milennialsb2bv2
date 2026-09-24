@@ -1371,7 +1371,13 @@ export interface WhatsAppWebhookOptions {
     event: string;
     payload: Record<string, unknown>;
     pathInstanceId?: string;
-  }) => Promise<Response | null>;
+  }) => Promise<Response | null | InlineExecution>;
+}
+
+/** A database ticket stays live until the actual business operation succeeds. */
+export interface InlineExecution {
+  kind: "inline";
+  complete: () => Promise<void>;
 }
 
 export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {}) {
@@ -1609,14 +1615,19 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       return genericResponse(503, { error: "instance_not_enabled" });
     }
 
+    let inlineExecution: InlineExecution | null = null;
     if (options.admitEvent) {
-      const admitted = await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
-      if (admitted !== null) return admitted;
+      try {
+        const admitted = await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
+        if (admitted instanceof Response) return admitted;
+        if (admitted !== null) inlineExecution = admitted;
+      } catch {
+        return genericResponse(503, { error: "admission_unavailable" });
+      }
     }
 
     try {
-      await withTimeout(
-        (async () => {
+      const businessWork = (async () => {
           switch (event) {
             case "messages": {
               const msgData = uazapiEventMessage(payload);
@@ -1643,7 +1654,8 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
                   owner: payload.owner,
                 };
               }
-              await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload, options.strictUpdateTargets ?? false);
+              await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload,
+                inlineExecution !== null || (options.strictUpdateTargets ?? false));
               break;
             }
             case "connection":
@@ -1674,9 +1686,13 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
                 },
               });
           }
-        })(),
-        PROCESSING_TIMEOUT_MS
-      );
+        })();
+      // Attach before the HTTP deadline races. Late success still closes the
+      // ticket; rejected work or failed settlement leaves it for reconciliation.
+      const trackedWork = inlineExecution
+        ? businessWork.then(() => inlineExecution.complete())
+        : businessWork;
+      await withTimeout(trackedWork, PROCESSING_TIMEOUT_MS);
 
       await logRuntime({
         organizationId: instance.organization_id,
@@ -1701,6 +1717,9 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       });
       if ((e as Error).message === "question_buttons_ingress_unavailable") {
         return genericResponse(503, { error: "question_buttons_ingress_unavailable" });
+      }
+      if ((e as Error).message === "execution_settlement_failed") {
+        return genericResponse(503, { error: "execution_settlement_failed" });
       }
       return genericResponse(500, { error: "internal" });
     }

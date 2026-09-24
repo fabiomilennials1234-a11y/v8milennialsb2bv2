@@ -20,6 +20,9 @@ let createHandler: (options?: WhatsAppWebhookOptions) => (req: Request) => Promi
 let resolvedId: string;
 let databaseCalls: Array<{ url: string; method: string; body: unknown }>;
 let enqueue: () => Response | Promise<Response>;
+let beginExecution: () => Response | Promise<Response>;
+let completeExecution: () => Response | Promise<Response>;
+let writeReceipt: () => Response | Promise<Response>;
 let groupPolicy: 'enabled' | 'disabled' | 'missing' | 'error';
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
@@ -33,6 +36,8 @@ const webhook = (payload: unknown, secret = 'fixture-secret', pathHint?: string)
 const run = (payload: unknown, secret?: string, pathHint?: string) =>
   createHandler({ admitEvent: bridge() })(webhook(payload, secret, pathHint));
 const enqueues = () => databaseCalls.filter(call => call.url.includes('/rpc/enqueue_whatsapp_ingress_event'));
+const begins = () => databaseCalls.filter(call => call.url.includes('/rpc/begin_whatsapp_edge_execution'));
+const completions = () => databaseCalls.filter(call => call.url.includes('/rpc/complete_whatsapp_edge_execution'));
 const statusWrites = () => databaseCalls.filter(call => call.url.includes('/whatsapp_messages') && call.method !== 'GET');
 
 beforeAll(async () => {
@@ -46,9 +51,13 @@ afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => {
   delete env.WHATSAPP_EDGE_INBOX_ENABLED;
   delete env.WHATSAPP_EDGE_INBOX_INSTANCE_IDS;
+  delete env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS;
   resolvedId = enabledId;
   databaseCalls = [];
   enqueue = async () => json('durable-event-id');
+  beginExecution = async () => json({ mode: 'inline', ticket_id: enabledId });
+  completeExecution = async () => json(true);
+  writeReceipt = async () => json([]);
   groupPolicy = 'enabled';
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -65,7 +74,10 @@ beforeEach(() => {
       return json({ capture_groups: groupPolicy === 'enabled' });
     }
     if (url.includes('/rpc/enqueue_whatsapp_ingress_event')) return enqueue();
-    if (url.includes('/whatsapp_messages')) return json([]);
+    if (url.includes('/rpc/begin_whatsapp_edge_execution')) return beginExecution();
+    if (url.includes('/rpc/complete_whatsapp_edge_execution')) return completeExecution();
+    if (url.includes('/whatsapp_messages')) return method === 'PATCH' ? writeReceipt()
+      : env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS ? json([{ id: 'row-1', message_id: 'existing-message', status: 'sent', direction: 'outgoing', reactions: [] }]) : json([]);
     throw new Error(`Unexpected backend request: ${url}`);
   }));
 });
@@ -226,4 +238,138 @@ it('registers the bridged Edge entrypoint but leaves the worker factory independ
   expect((await createHandler({ trustedQueuedReplay: true })(webhook(payload))).status).toBe(200);
   expect(enqueues()).toHaveLength(0);
   expect(statusWrites()).toHaveLength(1);
+});
+
+const executionReceipt = { instance: 'provider-instance', event: 'messages_update',
+  data: { id: 'existing-message', status: 'failed' } };
+
+it.each(['', 'bad-id', `${enabledId},`])('rejects invalid execution allowlist %j', value => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = value || ',';
+  expect(bridge).toThrow(/WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS/);
+});
+
+it('gates only the resolved database instance, independent of the legacy bridge flag', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  env.WHATSAPP_EDGE_INBOX_ENABLED = 'true';
+  env.WHATSAPP_EDGE_INBOX_INSTANCE_IDS = enabledId;
+  const response = await run({ ...executionReceipt, organization_id: 'forged' }, undefined, 'url-hint');
+  expect(response.status).toBe(200);
+  expect(begins()).toHaveLength(1);
+  expect(begins()[0].body).toEqual({ p_organization_id: organizationId, p_instance_id: enabledId,
+    p_payload: { ...executionReceipt, organization_id: 'forged' }, p_path_instance_id: 'url-hint' });
+  expect(enqueues()).toHaveLength(0);
+  expect(statusWrites()).toHaveLength(1);
+  expect(completions()).toHaveLength(1);
+  expect(completions()[0].body).toEqual({ p_organization_id: organizationId, p_instance_id: enabledId, p_ticket_id: enabledId });
+  databaseCalls = [];
+  resolvedId = otherId;
+  expect((await run(executionReceipt)).status).toBe(200);
+  expect(begins()).toHaveLength(0);
+});
+
+it('acknowledges queued work without inline effects or completion', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  beginExecution = async () => json({ mode: 'queued', event_id: otherId });
+  const response = await run(executionReceipt);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ accepted: true });
+  expect(statusWrites()).toHaveLength(0);
+  expect(completions()).toHaveLength(0);
+});
+
+it('skips only a confirmed disabled group before beginning execution', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  groupPolicy = 'disabled';
+  expect((await run(groupReceipt)).status).toBe(200);
+  expect(begins()).toHaveLength(0);
+  groupPolicy = 'error';
+  expect((await run(groupReceipt)).status).toBe(503);
+  expect(begins()).toHaveLength(0);
+});
+
+it.each([
+  { name: 'RPC error', result: () => json({ code: 'P0001', message: 'down' }, 503) },
+  { name: 'network error', result: () => Promise.reject(new Error('offline')) },
+  { name: 'bad mode', result: () => json({ mode: 'unknown', ticket_id: enabledId }) },
+  { name: 'bad inline ID', result: () => json({ mode: 'inline', ticket_id: 'bad' }) },
+  { name: 'bad queue ID', result: () => json({ mode: 'queued', event_id: 'bad' }) },
+  { name: 'null', result: () => json(null) },
+])('retains work and returns 503 on begin $name', async ({ result }) => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  beginExecution = result;
+  const response = await run(executionReceipt);
+  expect(response.status).toBe(503);
+  expect(response.headers.get('Retry-After')).toBe('5');
+  expect(statusWrites()).toHaveLength(0);
+  expect(completions()).toHaveLength(0);
+});
+
+it.each(['rpc', 'network'] as const)('retains ticket when completion has %s failure', async mode => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  completeExecution = mode === 'rpc' ? async () => json(false)
+    : async () => { throw new Error('offline'); };
+  const response = await run(executionReceipt);
+  expect(response.status).toBe(503);
+  expect(statusWrites()).toHaveLength(1);
+  expect(completions()).toHaveLength(1);
+});
+
+it('keeps ticket when actual receipt persistence rejects', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  writeReceipt = async () => json({ code: 'P0001', message: 'write failed' }, 503);
+  expect((await run(executionReceipt)).status).toBe(500);
+  expect(completions()).toHaveLength(0);
+});
+
+it('keeps ticket for an invalid update even when caller explicitly disables strict targets', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  const handler = createHandler({ admitEvent: bridge(), strictUpdateTargets: false });
+  const response = await handler(webhook({ instance: 'provider-instance', event: 'messages_update',
+    data: { status: 'read' } }));
+  expect(response.status).toBe(500);
+  expect(begins()).toHaveLength(1);
+  expect(statusWrites()).toHaveLength(0);
+  expect(completions()).toHaveLength(0);
+});
+
+it('returns 503 when admission callback throws', async () => {
+  const handler = createHandler({ admitEvent: async () => { throw new Error('database unavailable'); } });
+  const response = await handler(webhook(executionReceipt));
+  expect(response.status).toBe(503);
+  expect(statusWrites()).toHaveLength(0);
+});
+
+it('settles after HTTP timeout only when deferred business work later succeeds', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  let finish!: (value: Response) => void;
+  writeReceipt = () => new Promise(resolve => { finish = resolve; });
+  vi.useFakeTimers();
+  try {
+    const pending = run(executionReceipt);
+    for (let i = 0; i < 30 && !finish; i++) await vi.advanceTimersByTimeAsync(0);
+    expect(finish).toBeDefined();
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect((await pending).status).toBe(500);
+    expect(completions()).toHaveLength(0);
+    finish(json([{ id: 'row-1' }]));
+    for (let i = 0; i < 30 && completions().length === 0; i++) await Promise.resolve();
+    expect(completions()).toHaveLength(1);
+  } finally { vi.useRealTimers(); }
+});
+
+it('keeps ticket when deferred business work fails after HTTP timeout', async () => {
+  env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
+  let finish!: (value: Response) => void;
+  writeReceipt = () => new Promise(resolve => { finish = resolve; });
+  vi.useFakeTimers();
+  try {
+    const pending = run(executionReceipt);
+    for (let i = 0; i < 30 && !finish; i++) await vi.advanceTimersByTimeAsync(0);
+    expect(finish).toBeDefined();
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect((await pending).status).toBe(500);
+    finish(json({ code: 'P0001', message: 'write failed' }, 503));
+    for (let i = 0; i < 30; i++) await vi.advanceTimersByTimeAsync(0);
+    expect(completions()).toHaveLength(0);
+  } finally { vi.useRealTimers(); }
 });

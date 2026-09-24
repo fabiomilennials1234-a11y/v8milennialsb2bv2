@@ -213,3 +213,33 @@ SQL32 aplicada em produção no ledger `20260924143904` (fonte
 `20271021000032_whatsapp_ingress_worker_pause.sql`). Smoke transacional com
 service_role desfeito integralmente: fila/controles/orçamento zerados. ACL e RLS
 conferidos no alvo. Sem ativação de Edge, worker ou rota de fornecedor.
+
+
+## Tickets de execução Edge — 2026-09-24
+
+SQL33 prepara gate privado inline/queued com revisão CAS e tickets de execução
+sem expiração. Admissão inline registra ticket antes dos efeitos; queued grava
+na inbox antes do ACK. Worker só avança com gate queued e nenhum ticket. Mudar
+para inline exige tickets e trabalho não concluído zerados. Pausa/FIFO continuam.
+Até64 tickets por instância; erro ou resultado incerto exige reconciliação.
+
+`WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS` vazio por padrão. Somente messages_update
+autenticados da instância resolvida entram. Conclusão acompanha a promise real,
+inclusive após timeout HTTP12s. Modo instrumentado exige validação estrita;
+falha não libera ticket nem cai silenciosamente no processamento antigo.
+
+Sem ativação nesta entrega. Gate não cobre isolates antigos não instrumentados.
+A documentação Uazapi não estabelece recuperação completa pré-commit: buffer
+de erros em memória e histórico de mensagens não são diário durável de eventos.
+Ponte Edge ainda consome invocações; nenhuma economia nova contabilizada.
+Contrato: `docs/operations/whatsapp-ingress-worker-handoff.md`.
+
+
+SQL33 aplicada em produção no ledger real `20260924151218`; arquivo-fonte
+`20271021000033_whatsapp_edge_execution_gate.sql`. Smoke com service_role validou
+admissão, revisão, tenant, ticket bloqueando claim, quitação e reabertura; ROLLBACK
+removeu todos os dados de teste. Gates/tickets/fila/controles zerados, grants e
+RLS conferidos. Edge instrumentada não implantada; nenhuma instância habilitada.
+Validação:140 unit direcionados,3 SQL; build/Deno/ratchet TS passaram.151 falhas
+unit herdadas permanecem; regressão strictfalse corrigida e rerodada. Lint mantém
+cinco avisos anteriores de quotes. Revisão independente GPT-6 Sol concluída.

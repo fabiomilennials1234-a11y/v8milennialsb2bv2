@@ -120,3 +120,96 @@ new `00032` prefix; both guards passed in the focused rerun. The remaining 151
 failure headings matched the prior baseline. Lint retained the same five existing
 quote warning entries; no baseline was changed. Independent GPT-6 Sol review
 covered SQL, rollback, CLI, tenant locks and credential handling.
+
+
+## Edge execution gate — staged protocol, 2026-09-24
+
+SQL33 adds an explicit per-instance mode (`inline` or `queued`) and metadata-only
+execution tickets. It does not initialize any instance. The Edge allowlist
+`WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS` is empty by default and independent of the
+older inbox flag. A listed instance requires initialized database state; errors
+must reject admission rather than silently return to inline execution.
+
+`begin_whatsapp_edge_execution` uses the same per-instance advisory lock as
+worker claim and mode changes. In inline mode it registers a ticket before
+business effects; in queued mode it commits the full event to the existing inbox
+before returning success. Existing noncompleted inbox work prevents new inline
+admission. Only authenticated, database-resolved `messages_update` events enter
+this protocol. Explicitly disabled group capture retains the shared exclusion.
+
+Closing inline admission does not wait for existing tickets: it switches to
+queued admission immediately. Claims wait until every ticket settles. Successful
+business processing settles the ticket; HTTP timeout, rejected processing or an
+uncertain completion RPC cannot establish quiescence. There is no TTL that
+silently releases ownership. Tickets carry no payload and are capped per
+instance. Investigate retained tickets; never clear them only to unblock traffic.
+Instrumented inline updates use strict target checks: a missing target (including
+an out-of-order update) returns failure and retains its ticket. This can block
+the pilot indefinitely until reconciled. Do not enable unattended or assume the
+legacy handler's ignored-update behavior persists under instrumentation.
+
+The completion belongs to the actual processing promise, including completion
+that happens after the HTTP timeout. Runtime logging and response delivery do
+not own ticket lifetime. Reopening inline admission requires no tickets and no
+pending, processing or dead-letter inbox work. Existing worker pause and FIFO
+barriers remain independent requirements. Instances without a registered gate
+retain the previous claim contract.
+
+This protocol covers instrumented code only. A zero ticket count cannot prove
+that an older, uninstrumented Edge isolate stopped. Enabling the allowlist,
+changing a secret or reading back a new deployment does not supply that proof.
+Direct enqueue arriving after reopening also blocks new inline admission; this
+is not an automatic cross-route reconciliation mechanism.
+
+The temporary inline stage adds two RPC calls per successful update (begin and
+complete). It is a handoff safeguard, not an invocation saving. The Edge-to-inbox
+stage still invokes Edge for every request. Count savings only after verified
+direct ingress activation and a representative observation window.
+
+## Provider recovery boundary
+
+The reviewed Uazapi 2.4.2 [guides](https://docs.uazapi.com/llms-full.txt) and
+[OpenAPI](https://docs.uazapi.com/openapi-bundled.json) do not define a durable
+failed-webhook replay contract. The error endpoints retain only the latest 20
+failures in memory and lose them on provider restart. Message lookup has a
+seven-day local retention window; it is not a complete event journal.
+
+Inference: error capture and receipt-state reconciliation can reduce gaps, but
+cannot prove recovery of every reaction/pin update lost before our inbox commit.
+The short earlier probe concerned `messages`, not every `messages_update` shape;
+its lack of observed retries is not proof that the provider never retries.
+
+Before claiming full recovery, obtain the provider's delivery contract for this
+server: retryable response codes and network failures, attempt/time limits,
+persistence across restarts, ordered event identity, and replay coverage for
+receipts, reactions and pins. No support message was sent and no automatic replay
+of captured payloads was introduced. Error payloads may contain provider tokens.
+
+
+## SQL33 production readback — 2026-09-24
+
+Applied source `20271021000033_whatsapp_edge_execution_gate.sql` to
+`jsjsmuncfkbsbzqzqhfq`; actual ledger version is
+`20260924151218_whatsapp_edge_execution_gate`. Do not reapply based on the source
+prefix. Baseline: zero inbox/control rows, no gate table or gate ledger entry;
+existing claim body matched SQL32 and the tested rollback restoration.
+
+After apply, a rollback-only transaction as `service_role` exercised inline
+initialization, stale revision and wrong tenant rejection, ticket creation,
+closing admission with a ticket alive, durable queue admission, blocked claim,
+refused early reopening, ticket completion, claim/finish and drained reopening.
+No business handler or external message ran. Readback after rollback: zero gate,
+ticket, inbox and worker-control rows. New tables have RLS, no user SELECT and no
+service-role direct writes. All four RPCs deny anon/authenticated, allow service
+role and have empty search_path. No Edge deployment/allowlist/provider route or
+worker activation occurred; no temporary Supabase branch was created.
+
+Validation: 140 focused unit tests (including migration naming) and three actual
+SQL/PGlite integration tests passed, including guarded rollback execution. Build,
+Deno check and TypeScript ratchet passed. Full unit run reported 152 failures;
+the explicit-false strict-target regression was corrected and passed in the final
+focused run. The remaining 151 failure headings match the prior baseline. Lint
+still reports the same five existing quote warnings, outside this diff. No
+baseline was changed. Independent GPT-6 Sol review approved the final default-off
+scope after fixing rollback locking. PGlite does not prove multi-session lock
+scheduling; production smoke proves transactional behavior, not a live handoff.
