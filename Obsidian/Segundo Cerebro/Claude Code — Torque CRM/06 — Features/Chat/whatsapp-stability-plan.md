@@ -322,3 +322,23 @@ Uazapi declara que messages_update não repete entrega HTTP malsucedida. Falta
 recuperação/reconciliação testada antes da migração direta. Estado anterior de
 piloto desligado registra preparação; esta entrada supersede esse estado.
 Procedimento/readbacks: `docs/operations/whatsapp-edge-to-inbox-pilot.md`.
+
+
+## Recuperação parcial de recibos — 2026-09-24
+
+SQL35 aplicado em produção (ledger `20260924163948`). Estado/cursor e lacunas
+privados, lease de dois minutos, página de 50 mensagens outgoing conhecidas na
+janela fixa de sete dias. RPC admite somente avanço confirmado entregue/lida;
+worker usa origem confiável da fila para impedir efeitos comerciais e limitar
+alvo a ID exato/chat/org/instância. Payload externo não concede esse privilégio.
+
+Recuperação não recompõe eventos de edição/exclusão/reação/pin, nem eventos
+perdidos antes da persistência. Rota direta permanece bloqueada; ponte Edge
+atual não economiza invocações. Flags e evidência operacional atualizada:
+`docs/operations/whatsapp-receipt-recovery-2026-09-24.md`.
+
+Ativação: imagem `recovery-20260924-v3`, worker único, pausa retomada/revision4.
+Recuperação ligada só TorqueSDR; primeira página finalizada às16:45:09UTC:50
+verificadas,0 correções confirmadas,9 inconclusivas persistidas,0 erros. Cursor
+avançou/lease liberada; demais páginas pendentes.194 testes direcionados e
+integração SQL aprovados. Provider e Edge v121 inalterados; rota direta OFF.

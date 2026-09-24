@@ -70,17 +70,9 @@ export function mergeUpdateReaction(current: unknown, value: unknown): Reaction[
 
 export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: {
   requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
-  suppressQuotePresentation?: boolean;
-  exactRecoveryMessageId?: boolean;
 } = {}): Promise<UnmatchedReceiptOutcome | undefined> {
   const rawIds = [...new Set(extractRawMessageIds(data))];
   const receipt = mapReceiptStatus(data.status);
-  if (options.exactRecoveryMessageId && (!options.requireTarget || !isPureReceiptUpdate(data)
-    || !["delivered", "read"].includes(receipt ?? "") || data.fromMe !== false
-    || typeof data.id !== "string" || rawIds.length !== 1 || rawIds[0] !== data.id
-    || data.ids !== undefined || typeof data.chatid !== "string" || !data.chatid.trim())) {
-    throw new Error("Recovery receipt scope unavailable");
-  }
   if (options.requireTarget) {
     // Durable deliveries must retain unknown/malformed targets for investigation,
     // rather than completing after the permissive Edge parser drops bad IDs.
@@ -106,15 +98,9 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     if (data.reaction !== undefined) mergeUpdateReaction([], data.reaction);
   }
   if (!rawIds.length) return;
-  const candidatesFor = (id: string) => options.exactRecoveryMessageId
-    ? [id] : buildMessageIdCandidates(id, instance.phone_number, data.owner);
-  let ids = [...new Set(rawIds.flatMap(candidatesFor))];
-  const scope = () => {
-    let query = db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
-      .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
-    if (options.exactRecoveryMessageId) query = query.eq("remote_jid", data.chatid).eq("direction", "outgoing");
-    return query;
-  };
+  let ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
+  const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
+    .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
   const mutates = (receipt && receipt !== "pending" && data.fromMe !== true) || data.edited || data.deleted
     || typeof data.pinned === "boolean" || data.reactions || data.reaction;
   let scopedTargets: Array<{ id: string; message_id: string; reactions: unknown; status: string; direction: string }> | null = null;
@@ -123,10 +109,9 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     const { data: targets, error } = await scope();
     const found = new Set((targets ?? []).map(target => target.message_id));
     if (error) throw new Error("Message update target unavailable");
-    const matched = rawIds.filter(id => candidatesFor(id).some(candidate => found.has(candidate)));
+    const matched = rawIds.filter(id => buildMessageIdCandidates(id, instance.phone_number, data.owner).some(candidate => found.has(candidate)));
     const missingCount = rawIds.length - matched.length;
     if (missingCount) {
-      if (options.exactRecoveryMessageId) throw new Error("Recovery receipt target unavailable");
       const pureReceipt = isPureReceiptUpdate(data);
       const createdAt = Date.parse(options.queuedEventCreatedAt ?? "");
       const elapsed = Date.now() - createdAt;
@@ -137,7 +122,7 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
         || !Number.isFinite(options.unmatchedReceiptGraceMs) || (options.unmatchedReceiptGraceMs ?? 0) < 0) {
         throw new Error("Message update target unavailable");
       }
-      ids = [...new Set(matched.flatMap(candidatesFor))];
+      ids = [...new Set(matched.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
       outcome = { outcome: pastGrace ? "unmatched_receipt" : "deferred_receipt", unmatchedCount: missingCount };
     }
     scopedTargets = targets ?? [];
@@ -146,11 +131,9 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
     if (predecessors.length) {
-      let statusWrite = db.from("whatsapp_messages").update({ status: receipt })
+      const { data: changed, error } = await db.from("whatsapp_messages").update({ status: receipt })
         .eq("organization_id", instance.organization_id).eq("instance_id", instance.id)
-        .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors);
-      if (options.exactRecoveryMessageId) statusWrite = statusWrite.eq("remote_jid", data.chatid);
-      const { data: changed, error } = await statusWrite.select("id");
+        .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors).select("id");
       if (error) throw new Error("Receipt persistence failed");
       if (!changed?.length) {
         let hasOutgoing = scopedTargets?.some(target => target.direction === "outgoing");
@@ -166,7 +149,7 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     }
     // A duplicate receipt can finish an earlier interrupted commercial side effect.
     // The quote helper checks actual persisted states before sealing acceptance.
-    if (!options.suppressQuotePresentation && ["sent", "delivered", "read"].includes(receipt)) {
+    if (["sent", "delivered", "read"].includes(receipt)) {
       await completeQuotePresentations(db, instance.organization_id, instance.id, ids, { strict: true });
     }
   }

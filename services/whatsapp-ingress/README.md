@@ -316,3 +316,27 @@ receipt; it cannot be assumed to reconstruct each pin, reaction or event order.
 Test each failure mode on a controlled instance and compare authoritative state
 with durable inbox commits. No provider change or test is performed by this
 documentation update.
+
+
+## Bounded receipt recovery — SQL35
+
+Recovery is separately opt-in through `INGRESS_RECEIPT_RECOVERY_ENABLED=true`
+and `INGRESS_RECEIPT_RECOVERY_INSTANCE_IDS`, an explicit subset of the ingress
+allowlist. It shares the sole worker process: at most 50 known outgoing messages
+from seven days per batch, followed by a five-minute wait. Preview CLI
+`recovery-command.ts <instance UUID>` is read-only; `--apply` reserves a durable
+cursor and enqueues confirmed delivered/read progress. It never sends messages.
+
+SQL35 retains inconclusive cases, fences overlapping batches and reserves trusted
+recovery provenance on inbox rows. Recovery receipts cannot complete commercial
+quote presentations or expand a stored compound message ID to a second target.
+Normal provider processing remains unchanged. The historical Edge v121 builder
+uses immutable helper fixtures; these worker changes do not imply an Edge deploy.
+
+Direct HTTP admission now attempts durable enqueue independently of worker
+health. `/ready` still reports worker health; database failure/capacity rejection
+returns 503. This does not recover provider deliveries lost before persistence.
+
+Scope, production evidence, resource budget and rollback:
+[receipt recovery runbook](../../docs/operations/whatsapp-receipt-recovery-2026-09-24.md).
+This is partial current-status repair, not event replay or invocation savings.

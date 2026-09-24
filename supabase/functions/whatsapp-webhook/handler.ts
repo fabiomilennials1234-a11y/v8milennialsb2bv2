@@ -1246,6 +1246,8 @@ async function handlePaymentResponseEvent(
 
 async function handleMessagesUpdateEvent(supabase: SupabaseClient, instance: ResolvedInstance, data: any, options: {
   requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
+  suppressQuotePresentation?: boolean;
+  exactRecoveryMessageId?: boolean;
 } = {}) {
   return await applyMessageUpdate(supabase, instance, data, options);
 }
@@ -1365,6 +1367,10 @@ export interface WhatsAppWebhookOptions {
   strictUpdateTargets?: boolean;
   /** Internal durable replay only; the original ingress already checked age. */
   trustedQueuedReplay?: boolean;
+  /** Worker-only DB provenance. Never derive from request body. */
+  suppressQuotePresentation?: boolean;
+  /** Worker-only recovery scope: exact database message ID and chat. */
+  exactRecoveryMessageId?: boolean;
   /** Durable queue creation time; worker-only bounded grace for pure receipts with absent targets. */
   queuedEventCreatedAt?: string;
   unmatchedReceiptGraceMs?: number;
@@ -1648,6 +1654,8 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
                 ...(options.trustedQueuedReplay ? {
                   queuedEventCreatedAt: options.queuedEventCreatedAt,
                   unmatchedReceiptGraceMs: options.unmatchedReceiptGraceMs,
+                  suppressQuotePresentation: options.suppressQuotePresentation === true,
+                  exactRecoveryMessageId: options.exactRecoveryMessageId === true,
                 } : {}),
               });
               break;

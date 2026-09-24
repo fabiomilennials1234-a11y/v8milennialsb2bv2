@@ -7,7 +7,7 @@ import type { WhatsAppWebhookOptions } from '../../supabase/functions/whatsapp-w
 afterEach(() => vi.useRealTimers());
 const row: InboxEvent = {
   id:'event-id',organization_id:'org',instance_id:'instance',event_name:'messages_update',
-  payload:{id:'receipt',status:'read'},path_instance_id:'provider-instance',lease_token:'lease',created_at:'2026-09-23T10:00:00Z',
+  payload:{id:'receipt',status:'read',receipt_recovery:true},path_instance_id:'provider-instance',lease_token:'lease',created_at:'2026-09-23T10:00:00Z',receipt_recovery:false,
 };
 const context = (rpc: ReturnType<typeof vi.fn>) => ({ supabase: { rpc } as never,
   instance:{id:'instance',organization_id:'org'},event:'messages_update',payload:row.payload });
@@ -46,7 +46,19 @@ it('does not complete durable work before its background task settles', async ()
   expect(options.trustedQueuedReplay).toBe(true);
   expect(options.queuedEventCreatedAt).toBe(row.created_at);
   expect(options.unmatchedReceiptGraceMs).toBe(300_000);
+  expect(options.suppressQuotePresentation).toBe(false);
+  expect(options.exactRecoveryMessageId).toBe(false);
   expect(options.allowInstance!('instance','other-org')).toBe(false);
+});
+
+it('uses only the trusted database row flag for synthetic recovery provenance', async () => {
+  const rpc=vi.fn(async () => ({data:true,error:null}));
+  const factory=vi.fn((_options: WhatsAppWebhookOptions) => async () =>
+    new Response(JSON.stringify({ok:true}),{status:200}));
+  await processInboxEvent({rpc} as never,{...row,receipt_recovery:true},'secret',factory,vi.fn());
+  expect(factory.mock.calls[0][0].suppressQuotePresentation).toBe(true);
+  expect(factory.mock.calls[0][0].exactRecoveryMessageId).toBe(true);
+  expect(row.payload.receipt_recovery).toBe(true); // Body marker cannot set worker flag.
 });
 
 it.each([500,503])('retains HTTP %i as retryable work, not completion', async status => {

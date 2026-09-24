@@ -58,15 +58,18 @@ export function createIngress(config: IngressConfig, canonical: Handler, backgro
   // events already acknowledged by Postgres. Disabling the service stops both.
   let accepting = config.accepting;
   const requests = new Set<Promise<Response>>();
-  const ready = () => accepting && config.enabled && config.instanceIds.size > 0
-    && requests.size < config.maxRequests && background.size < config.maxBackgroundTasks && workerHealthy();
+  // Worker health is an operational readiness signal. Admission can still
+  // commit to the durable inbox while the worker is recovering.
+  const canAdmit = () => accepting && config.enabled && config.instanceIds.size > 0
+    && requests.size < config.maxRequests && background.size < config.maxBackgroundTasks;
+  const ready = () => canAdmit() && workerHealthy();
   const handle = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
     if (request.method === 'GET' && path === '/health') return json(200, { alive: true });
     if (request.method === 'GET' && path === '/ready') return json(ready() ? 200 : 503, { ready: ready() });
     if (!/^\/(?:functions\/v1\/)?whatsapp-webhook\/[^/]+(?:\/[^/]+){0,2}\/?$/.test(path)) return json(404, { error: 'not_found' });
     if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-    if (!ready()) return json(503, { error: 'ingress_unavailable' });
+    if (!canAdmit()) return json(503, { error: 'ingress_unavailable' });
     const work = (async () => {
       try {
         const body = await boundedBody(request, config.bodyTimeoutMs);
