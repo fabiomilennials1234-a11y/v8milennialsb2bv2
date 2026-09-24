@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
@@ -11,7 +11,9 @@ import {
   User,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+import { useIdentity } from "@/modules/identity";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useQuery } from "@tanstack/react-query";
 import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 import { useTeamMembers } from "@/modules/identity";
 import { useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
@@ -37,12 +39,11 @@ interface TVAnalysis {
 // ── Component ──────────────────────────────────────────────
 
 export function AICoachSection() {
-  const [analysis, setAnalysis] = useState<TVAnalysis | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [activeVendorIdx, setActiveVendorIdx] = useState(0);
 
-  const { organizationId } = useOrganization();
+  const identity = useIdentity();
+  const { organizationId } = identity;
+  const features = useOrgFeatures();
   const { data: tvData } = useTVDashboardData();
   const { data: teamMembers } = useTeamMembers();
 
@@ -67,54 +68,57 @@ export function AICoachSection() {
       };
     }), [teamMembers, individualGoals]);
 
-  const fetchAnalysis = useCallback(async () => {
-    if (!organizationId) return;
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "oraculo-comercial",
-        {
-          body: {
-            mode: "tv_analysis",
-            organization_id: organizationId,
-            tv_data: {
-              metaVendasMes: tvData?.metaVendasMes || 0,
-              vendasRealizadas: tvData?.vendasRealizadas || 0,
-              ondeDeveriamEstar: tvData?.ondeDeveriamEstar || 0,
-              propostasQuentes: tvData?.propostasQuentes || [],
+  const enabled = identity.isReady && !!identity.userId && !!organizationId && !!tvData
+    && features.isReady && features.hasFeature("oraculo");
+  const analysisQuery = useQuery({
+    queryKey: ["tv-coach-analysis", organizationId, identity.userId],
+    enabled,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    // Rotation unmounts the panel every 12 seconds. Keep the deadline anchored
+    // to the last result instead of restarting a five-minute timer on each mount.
+    // A stale observer in a hidden tab must not spin a millisecond interval.
+    refetchInterval: (query) => query.state.fetchStatus === "fetching"
+      ? false
+      : Math.max(1_000, 5 * 60_000 - (Date.now() - (query.state.dataUpdatedAt || Date.now()))),
+    queryFn: async (): Promise<{ analysis: TVAnalysis | null; error: string | null }> => {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke(
+          "oraculo-comercial",
+          {
+            body: {
+              mode: "tv_analysis",
+              organization_id: organizationId,
+              tv_data: {
+                metaVendasMes: tvData?.metaVendasMes || 0,
+                vendasRealizadas: tvData?.vendasRealizadas || 0,
+                ondeDeveriamEstar: tvData?.ondeDeveriamEstar || 0,
+                propostasQuentes: tvData?.propostasQuentes || [],
+              },
+              team_members: membersWithGoals,
             },
-            team_members: membersWithGoals,
           },
-        }
-      );
-
-      if (fnError) throw fnError;
-      if (data?.error) throw new Error(data.error);
-      if (!data?.diagnostico) throw new Error("Resposta inválida do Oráculo");
-
-      setAnalysis(data as TVAnalysis);
-    } catch (e: any) {
-      console.error("[AICoach] TV analysis error:", e);
-      setError(e.message || "Erro ao gerar análise");
-      setAnalysis(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId, tvData, membersWithGoals]);
-
-  // Stable ref for fetch to avoid interval recreation
-  const fetchRef = useRef(fetchAnalysis);
-  fetchRef.current = fetchAnalysis;
-
-  // Auto-fetch on mount and every 5 minutes
-  useEffect(() => {
-    if (!organizationId || !tvData) return;
-    fetchRef.current();
-    const interval = setInterval(() => fetchRef.current(), 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [organizationId, tvData]);
+        );
+        if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+        if (!data?.diagnostico) throw new Error("Resposta inválida do Oráculo");
+        return { analysis: data as TVAnalysis, error: null };
+      } catch (cause) {
+        // Cache unsuccessful attempts too: a denied plan or provider failure
+        // must not generate a fresh invocation on every rotation. Manual retry
+        // bypasses this five-minute cooldown through refetch below.
+        return { analysis: null, error: cause instanceof Error ? cause.message : "Erro ao gerar análise" };
+      }
+    },
+  });
+  const analysis = enabled ? analysisQuery.data?.analysis ?? null : null;
+  const error = enabled ? analysisQuery.data?.error ?? null : null;
+  const isLoading = enabled && analysisQuery.isFetching;
+  const fetchAnalysis = () => {
+    if (enabled) void analysisQuery.refetch({ cancelRefetch: false });
+  };
 
   // Auto-rotate vendor actions
   const vendorCount = analysis?.vendor_actions?.length ?? 0;

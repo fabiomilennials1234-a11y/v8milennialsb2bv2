@@ -10,6 +10,11 @@ owner: gabriel
 
 # Primeira ativação econômica em produção
 
+> Correção em 2026-09-24: item 3 abaixo registrou conclusão incorreta sobre
+> frontend. Existe webhook independente GitHub → EasyPanel, ativo e com resposta
+> 200; imagem da VPS foi reconstruída em 2026-09-24T03:03:37Z. Falha do workflow
+> GHCR não prova ausência de deploy. Ver `docs/operations/supabase-capacity-wave2-rollout.md`.
+
 CTO pediu continuidade após entrega e merge dos PRs 2162/2163: “show, pode seguir então”, perguntando sobre ativação. Primeira leva aplicada em produção `jsjsmuncfkbsbzqzqhfq` em **2026-09-23 às 21h03 America/Sao_Paulo** (2026-09-24 00:03 UTC). Escopo: guardas de 12 cron invokers e admissão de workflow de etapa. Nenhuma troca de rota WhatsApp, flag de grupos ou serviço externo foi ativada.
 
 ## Migrations aplicadas
