@@ -81,3 +81,21 @@ RLS conferidos. Edge instrumentada não implantada; nenhuma instância habilitad
 Validação:140 unit direcionados,3 SQL; build/Deno/ratchet TS passaram.151 falhas
 unit herdadas permanecem; regressão strictfalse corrigida e rerodada. Lint mantém
 cinco avisos anteriores de quotes. Revisão independente GPT-6 Sol concluída.
+
+
+## Webhook live atualizado — 2026-09-24
+
+Versão119 implantada com patch mínimo sobre118.53 arquivos anteriores intactos;
+index delega updates ao módulo canônico novo, quotes recebe propagação estrita
+de falhas; V2 preserva campos extras.56 arquivos publicados conferidos byte a byte.
+Status não regride com receipt atrasado; reação repetida não incrementa contagem;
+falhas de persistência não viram sucesso. Alvos ausentes continuam permissivos
+no caminho live. Nenhuma rota/flag/worker ativado; economia Edge adicional zero.
+
+Validação:89 testes direcionados+16 do bundle real, build/TS e Deno do módulo
+passaram.151 falhas unit e5 avisos lint anteriores permanecem. Gate operacional
+refinado: retry Uazapi não bloqueia absolutamente piloto na MESMA URL Edge;
+continua risco preexistente, com novas rejeições da fila a controlar. Próximo
+bloqueio concreto: TorqueSDR teve7 logs de receipts sem alvo em24h; worker estrito
+pode travar FIFO nesses casos. Definir desfecho auditado antes de ativar.
+Evidências e sequência: `docs/operations/whatsapp-live-update-parity-2026-09-24.md`.

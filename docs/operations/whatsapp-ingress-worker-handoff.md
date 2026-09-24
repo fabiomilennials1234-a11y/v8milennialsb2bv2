@@ -213,3 +213,13 @@ still reports the same five existing quote warnings, outside this diff. No
 baseline was changed. Independent GPT-6 Sol review approved the final default-off
 scope after fixing rollback locking. PGlite does not prove multi-session lock
 scheduling; production smoke proves transactional behavior, not a live handoff.
+
+
+## Follow-up: live parity and activation scope
+
+Version119 now uses canonical update processing with permissive missing-target
+policy; execution instrumentation remains unactivated. See
+`whatsapp-live-update-parity-2026-09-24.md` for actual deploy evidence and the
+remaining strict-worker liveness issue. Provider retry uncertainty remains a
+residual risk for a same-URL Edge-to-inbox pilot, not an absolute block on that
+stage; direct VPS routing is a separate cutover with new failure modes.
