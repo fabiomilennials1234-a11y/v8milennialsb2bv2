@@ -1,11 +1,12 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, MessageSquare, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Calendar, Clock, MessageSquare, UserPlus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useAvisos } from "../../hooks/useAvisos";
 
 import {
   assinarCartoes,
@@ -28,9 +29,13 @@ const VISUAL: Record<string, { icone: typeof MessageSquare; classe: string; bord
   lead_new: { icone: UserPlus, classe: "text-success", borda: "border-success/40" },
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
+  meeting_soon: { icone: Calendar, classe: "text-primary", borda: "border-primary/40" },
+  follow_up_due: { icone: Clock, classe: "text-primary", borda: "border-primary/40" },
+  follow_up_overdue: { icone: Clock, classe: "text-warning", borda: "border-warning/40" },
 };
 
 export function PilhaDeCartoes() {
+  useAvisos({ entregar: true });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { pilha, excedente } = useSyncExternalStore(assinarCartoes, estadoDosCartoes, estadoDosCartoes);

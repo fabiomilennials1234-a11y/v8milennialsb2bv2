@@ -49,6 +49,20 @@ function contextoFalso() {
 }
 
 describe("motor de som", () => {
+  it("o gesto de habilitar som retoma o contexto suspenso antes de chegar um aviso", async () => {
+    const falso = contextoFalso();
+    const ctx = falso.ctx as unknown as { state: string; resume: () => Promise<void> };
+    ctx.state = "suspended";
+    ctx.resume = vi.fn(async () => { ctx.state = "running"; });
+    const motor = new MotorDeSom(() => falso.ctx);
+
+    motor.destravar();
+    await Promise.resolve();
+
+    expect(ctx.resume).toHaveBeenCalledOnce();
+    expect(ctx.state).toBe("running");
+  });
+
   it("agenda uma nota por evento do timbre e aplica o volume no ganho mestre", () => {
     const falso = contextoFalso();
     const motor = new MotorDeSom(() => falso.ctx);
@@ -60,13 +74,13 @@ describe("motor de som", () => {
     expect(falso.ganhoMestre.gain.value).toBeCloseTo(0.9, 5);
   });
 
-  it("volume zero não vira ganho zero absoluto — rampa exponencial não aceita zero", () => {
+  it("volume zero não agenda áudio", () => {
     const falso = contextoFalso();
     const motor = new MotorDeSom(() => falso.ctx);
 
     motor.tocar("mensagem", 0);
 
-    expect(falso.ganhoMestre.gain.value).toBeGreaterThan(0);
+    expect(falso.osciladores).toHaveLength(0);
   });
 
   it("sem áudio disponível, cala em vez de derrubar o sino", () => {
@@ -98,13 +112,12 @@ describe("motor de som", () => {
     };
 
     const motor = new MotorDeSom(() => falso.ctx);
-    motor.tocar("mensagem", 55);
+    const tocou = motor.tocar("mensagem", 55);
 
     // Nada é agendado antes da retomada: o navegador ignoraria as notas.
     expect(falso.osciladores).toHaveLength(0);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await tocou;
 
     expect(retomou).toBe(true);
     expect(falso.osciladores).toHaveLength(2);

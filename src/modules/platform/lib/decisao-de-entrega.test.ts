@@ -39,6 +39,11 @@ function contexto(over: Partial<ContextoDeEntrega> = {}): ContextoDeEntrega {
 }
 
 describe("decisão de entrega", () => {
+  it.each(["meeting_soon", "follow_up_due", "follow_up_overdue"])("%s avisa na tela e toca mesmo com o chat do lead aberto", (tipo) => {
+    expect(decidirEntrega(aviso(tipo), "INSERT", contexto({ conversaAbertaLeadId: "lead-1" })))
+      .toMatchObject({ som: "reuniao", cartao: true });
+  });
+
   it("Aviso novo toca o timbre do seu tipo", () => {
     expect(decidirEntrega(aviso("lead_message"), "INSERT", contexto()).som).toBe("mensagem");
     expect(decidirEntrega(aviso("lead_new"), "INSERT", contexto()).som).toBe("lead");
@@ -113,11 +118,11 @@ describe("decisão de entrega", () => {
     expect(decisao.som).toBe("mensagem");
   });
 
-  it("cartão só para o que exige reação em minutos; reunião fica no sino", () => {
+  it("agendamento futuro fica no sino; lembrete que exige ação aparece", () => {
     expect(decidirEntrega(aviso("lead_message"), "INSERT", contexto()).cartao).toBe(true);
     expect(decidirEntrega(aviso("workflow_alert"), "INSERT", contexto()).cartao).toBe(true);
     expect(decidirEntrega(aviso("meeting_booked"), "INSERT", contexto()).cartao).toBe(false);
-    expect(decidirEntrega(aviso("follow_up_overdue"), "INSERT", contexto()).cartao).toBe(false);
+    expect(decidirEntrega(aviso("follow_up_overdue"), "INSERT", contexto()).cartao).toBe(true);
   });
 
   it("tipo silenciado nas preferências não toca, mas ainda pode aparecer", () => {

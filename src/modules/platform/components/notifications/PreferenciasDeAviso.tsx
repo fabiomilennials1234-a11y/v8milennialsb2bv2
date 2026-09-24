@@ -42,7 +42,7 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[] }[] = 
   },
   {
     rotulo: "Agenda",
-    descricao: "Reunião marcada, reunião em uma hora, follow-up do dia",
+    descricao: "Avisos na tela e som 15 minutos antes de reuniões e follow-ups, e lembretes de follow-ups atrasados",
     tipos: ["meeting_booked", "meeting_soon", "follow_up_due", "follow_up_overdue"],
   },
   {
@@ -55,13 +55,15 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[] }[] = 
 const HORAS = Array.from({ length: 24 }, (_, h) => h);
 
 export function PreferenciasDeAviso() {
-  const { preferencias, carregando, salvar } = usePreferenciasDeAviso();
+  const { preferencias, carregando, salvar, salvando } = usePreferenciasDeAviso();
   const { isSupported, permission, requestPermission, unsubscribe } = usePushSubscription();
   const [volumeLocal, setVolumeLocal] = useState<number | null>(null);
 
   const aplicar = async (mudanca: Partial<Preferencias>) => {
+    const teste = mudanca.sound_enabled === true ? motorDeSom.tocar("sistema", preferencias.volume) : null;
     try {
       await salvar(mudanca);
+      if (teste && !(await teste)) toast.info("Som habilitado. Confira o volume e a permissão de áudio do navegador.");
     } catch {
       toast.error("Não deu para salvar. Tente de novo.");
     }
@@ -100,6 +102,8 @@ export function PreferenciasDeAviso() {
             </p>
           </div>
           <Switch
+            aria-label="Som das notificações"
+            disabled={carregando || salvando}
             checked={preferencias.sound_enabled}
             onCheckedChange={(v) => aplicar({ sound_enabled: v })}
           />
