@@ -127,3 +127,56 @@ Final SQL readback13:44:54UTC: ingress row_count=0, payload_bytes=0, actual rows
 Authenticated REST returned200 with the same budget. The probe route was already
 removed, original provider configuration verified, and the temporary writer
 guard absent. No regular ingress service was activated during the incident.
+
+
+## Provider redelivery probe and transition audit, 14:04 UTC
+
+A single authorized self-chat message was sent through the TorqueSDR instance.
+Four temporary additional `messages` callbacks returned 408, 429, 500 and 503
+respectively for that tagged event, then would return 200 for its exact retry.
+Unrelated events returned 200 without business processing. The original route
+and its API-send exclusion stayed unchanged throughout the test.
+
+All four receivers saw the same test event once, first arrivals at
+14:04:05 UTC. Each recorded attempts=1, exactRetries=0, variants=0.
+The runner observed for 300 seconds starting at receiver readiness, before the
+message was sent; this is less than five minutes of observation after delivery.
+Result: INCONCLUSIVE. This does not establish that the provider never retries,
+that retries are guaranteed, or that `messages_update` has the same retry policy.
+No second message was sent. Provider error checks did not trigger the primary
+route abort during the test.
+
+Cleanup was confirmed both by the runner and independent readback: provider
+configuration exactly matched the pre-test snapshot, all four temporary routes
+were absent, and the owned receiver, TLS configuration, source and remote
+credential staging directory were removed. Local temporary credential files
+were removed. At 14:11:17 UTC, the actual inbox, budget row count and payload
+bytes were all zero. The temporary `UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS`
+secret was then deleted; the dashboard confirmed deletion and no search result.
+No regular ingress service or provider traffic split was activated.
+
+### Additional activation blocker: incompatible concurrent writers
+
+Inspection of the downloaded live bundle confirmed that its monolithic
+`handleMessagesUpdateEvent` is not the canonical durable handler on main.
+The live receipt UPDATE has no predecessor-status condition; a delayed status
+can overwrite a later status. A repeated single-reaction event increments its
+count, and some failed writes can still lead to a successful callback response.
+The earlier group-policy hotfix did not replace that receipt/update handler.
+
+Adding the new callback before removing the old one therefore permits
+incompatible concurrent writers. Even two copies of the canonical handler do
+not establish event-time ordering for reversible operations such as pin/unpin
+or reaction add/remove. Per-queue ordering and CAS do not solve cross-route
+arrival inversion. Provider configuration readback is not proof of safe handoff.
+
+The next implementation candidate is an instance-scoped Edge bridge, after
+request authentication and instance resolution, committing the complete update
+event into the existing inbox before acknowledging it and bypassing the legacy
+business handler. A single worker would own those business writes. This bridge
+has not been implemented or activated and would still consume an Edge call.
+A later direct callback cutover additionally requires a tested strategy for
+cross-route duplicates, ordering and rollback after draining/reconciliation.
+Provider redelivery or an independently verified recovery path remains required
+for events that fail before the inbox commit. No savings from this prospective
+traffic split may be counted toward the 1.4M target yet.
