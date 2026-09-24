@@ -324,7 +324,7 @@ only confirmed delivered/read progress for known outgoing messages; it cannot
 reconstruct pin, reaction, edit, delete or original operation order. Do not
 describe it as webhook replay or a guarantee of delivery.
 
-## Optional single-webhook event routing (prepared, not deployed)
+## Optional single-webhook event routing (deployed, disabled)
 
 `INGRESS_FORWARD_LEGACY_EVENTS=true` enables the event router. After the shared
 handler authenticates the secret and resolves the database instance, only
@@ -343,11 +343,13 @@ network overlay must keep alias `torque-whatsapp-ingress` after every container
 recreation. Traefik access logs are off for this secret-bearing route. Initial
 public probes returned `/health` 200, `/worker-health` 200 and `/ready` 503 with
 direct admission off. At 20:17 UTC a new `FileDownloaded` dead letter with
-`IsFromMe=false` made `/worker-health` 503; a narrow SQL/TypeScript fix is in
-preparation, not applied. The queue must not be reported drained. The new router
-image and supplier URL change are not deployed. The pilot writer-guard
-environment was saved, but a live rebind returned 401 rather than the expected
-409; verify the guard before changing routes. The VPS becomes an availability
+`IsFromMe=false` made `/worker-health` 503. SQL37 and image
+`readiness-20260924-v1` repaired and drained that head by the 20:26 UTC
+snapshot: 249 completed, zero pending/dead letters; public worker and Docker
+health returned healthy. Direct admission and legacy forwarding remain off; the
+supplier URL is unchanged. The pilot writer-guard environment was saved, but
+service-key rebind probes returned 401 rather than the expected 409; verify the
+guard before changing routes. The VPS becomes an availability
 dependency even for events forwarded to Edge. See the
 [direct-route runbook](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
 
