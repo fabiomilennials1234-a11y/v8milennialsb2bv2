@@ -20,7 +20,7 @@ it('acknowledges only after successful durable enqueue; failure and unsupported 
   await vi.waitFor(() => expect(rpc).toHaveBeenCalledOnce());
   expect(acknowledged).toBe(false);
   resolve({data:'durable-id',error:null});
-  expect((await pending).status).toBe(202);
+  expect((await pending).status).toBe(200);
   rpc.mockResolvedValue({data:null,error:{message:'database unavailable'}});
   expect((await admitReceipt(context(rpc))).status).toBe(503);
   rpc.mockClear();

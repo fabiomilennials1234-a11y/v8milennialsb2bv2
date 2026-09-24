@@ -197,3 +197,17 @@ QA validou páginas de 100 e histórico com 1.314 registros; 18 itens montados. 
 ## Transcrição e PIX — rodada 9
 
 Transcrição sob demanda com JWT/RLS, gate de responsável, lease e cache persistido com proveniência. Chromium confirmou texto após reload; concorrência 200/409 e tenant externo 403. PIX nativo passou a exibir recebedor/chave e copiar chave, sem inferir pagamento. Corrigido contrato nullable dos limites de alcance; Deno de todo _shared passou. Evidência: `.specs/uazapi-rebuild/live-verification-round9-2026-09-11.json`. Lifecycle adiado por nova orientação: instância alternativa já havia sido desconectada; reconexão não confirmada, nenhuma exclusão, TorqueSDR sem chamadas de lifecycle nesta rodada.
+
+
+## Preparação do ingresso dedicado — 2026-09-24
+
+Validação estrita de recibos enfileirados agora rejeita IDs/operações
+malformados antes de qualquer escrita; fluxo permissivo Edge preservado.
+O serviço confirma HTTP200 somente após commit e oferece modo de drenagem
+sem novas admissões (`INGRESS_ACCEPTING=false`, worker habilitado).
+
+Preflight puro de rotas locais/globais verifica exclusividade dos eventos,
+IDs e configuração integral; não reconfigura fornecedor. Writers de criação,
+reconfigure e rebind ainda precisam coordenar a política dividida. Serviço
+não ativado, migration29 não aplicada e economia ainda não contabilizada.
+Detalhes: `docs/operations/supabase-capacity-ingress-readiness-2026-09-24.md`.

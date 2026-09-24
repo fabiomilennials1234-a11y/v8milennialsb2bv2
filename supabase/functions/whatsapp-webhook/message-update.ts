@@ -41,11 +41,35 @@ export function mergeUpdateReaction(current: unknown, value: unknown): Reaction[
 
 export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: { requireTarget?: boolean } = {}): Promise<void> {
   const rawIds = extractRawMessageIds(data);
+  const receipt = mapReceiptStatus(data.status);
+  if (options.requireTarget) {
+    // Durable deliveries must retain unknown/malformed targets for investigation,
+    // rather than completing after the permissive Edge parser drops bad IDs.
+    const malformedList = data.ids != null && !Array.isArray(data.ids);
+    const partiallyInvalidList = Array.isArray(data.ids) && data.ids.some(
+      id => typeof id !== "string" || id.trim().length === 0,
+    );
+    if (malformedList || partiallyInvalidList || !rawIds.length || rawIds.some(id => !id.trim())) {
+      throw new Error("Message update identifiers unavailable");
+    }
+    // Unknown provider operations must remain retryable evidence. Validate the
+    // complete operation before any write so a valid receipt cannot conceal a
+    // malformed pin/reaction bundled in the same delivery.
+    const flags = [data.edited, data.deleted, data.pinned];
+    const malformedFlag = [...flags, data.fromMe].some(value => value !== undefined && typeof value !== "boolean");
+    const malformedStatus = data.status !== undefined && typeof receipt !== "string";
+    const malformedReactions = data.reactions !== undefined && !Array.isArray(data.reactions);
+    const recognized = receipt || flags.some(value => typeof value === "boolean")
+      || Array.isArray(data.reactions) || data.reaction !== undefined;
+    if (malformedFlag || malformedStatus || malformedReactions || !recognized) {
+      throw new Error("Message update operation unavailable");
+    }
+    if (data.reaction !== undefined) mergeUpdateReaction([], data.reaction);
+  }
   if (!rawIds.length) return;
   const ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
   const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status")
     .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
-  const receipt = mapReceiptStatus(data.status);
   const mutates = (receipt && receipt !== "pending" && data.fromMe !== true) || data.edited || data.deleted
     || typeof data.pinned === "boolean" || data.reactions || data.reaction;
   if (options.requireTarget && mutates) {

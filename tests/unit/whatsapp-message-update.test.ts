@@ -154,6 +154,79 @@ describe("edit, deletion and pin persistence", () => {
 
 
 describe("durable target availability", () => {
+  it.each([
+    {}, { status: "vendor-new-status" }, { status: "constructor" }, { status: "__proto__" },
+    { status: "" }, { status: 3 }, { status: null },
+    { status: "vendor-new-status", pinned: true }, { status: "read", pinned: "false" },
+    { status: "read", edited: 1 }, { status: "read", fromMe: "true" },
+    { status: "read", reactions: {} },
+  ])("retains unknown or partially malformed durable operations before writes: %j", async operation => {
+    await expect(applyMessageUpdate(db, instance, { id: "message-a", ...operation }, { requireTarget: true }))
+      .rejects.toThrow("Message update operation unavailable");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("validates a bundled reaction before persisting its otherwise valid receipt", async () => {
+    await expect(applyMessageUpdate(db, instance, { id: "message-a", status: "read", reaction: {} }, { requireTarget: true }))
+      .rejects.toThrow("Invalid reaction emoji");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([{ status: "pending" }, { status: "read", fromMe: true }, { edited: false }, { deleted: false }])(
+    "preserves recognized durable no-ops: %j", async operation => {
+      await applyMessageUpdate(db, instance, { id: "message-a", ...operation }, { requireTarget: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(completeQuotePresentations).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ pinned: true }, { pinned: false }, { edited: true }, { deleted: true }, { reactions: [] }, { reaction: { emoji: "👍" } }])(
+    "accepts valid durable operations without a receipt status: %j", async operation => {
+      fetchMock.mockImplementation(async () => json([{ id: "row-a", message_id: "message-a", reactions: [] }]));
+      await applyMessageUpdate(db, instance, { id: "message-a", ...operation }, { requireTarget: true });
+      expect(fetchMock.mock.calls.some(([, init]) => init.method === "PATCH")).toBe(true);
+      expect(completeQuotePresentations).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps unknown statuses permissive for the Edge caller", async () => {
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "vendor-new-status" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {}, { ids: [] }, { id: "" }, { id: "   " }, { id: 123 },
+    { ids: ["message-a", null] }, { ids: ["message-a", 123] },
+    { ids: ["message-a", ""] }, { ids: ["message-a", "   "] },
+    { ids: "message-a", id: "message-a" },
+  ])("retains malformed durable identifiers without partial writes: %j", async identifiers => {
+    await expect(applyMessageUpdate(db, instance, { ...identifiers, status: "read" }, { requireTarget: true }))
+      .rejects.toThrow("Message update identifiers unavailable");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Edge caller's permissive parsing of missing and partially invalid IDs", async () => {
+    await applyMessageUpdate(db, instance, { status: "read" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockResolvedValueOnce(json([{ id: "row-a" }]));
+    await applyMessageUpdate(db, instance, { ids: ["message-a", null], status: "read" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(bodyAt(0)).toEqual({ status: "read" });
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it.each([{ id: "message-a" }, { messageid: "message-a" }, { key: { id: "message-a" } }, { ids: [], id: "message-a" }])(
+    "accepts supported durable scalar identifiers: %j", async identifiers => {
+      fetchMock.mockResolvedValueOnce(json([{ id: "row-a", message_id: "message-a" }]))
+        .mockResolvedValueOnce(json([{ id: "row-a" }]));
+      await applyMessageUpdate(db, instance, { ...identifiers, status: "read" }, { requireTarget: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(bodyAt(1)).toEqual({ status: "read" });
+    },
+  );
+
   it.each([{ status: "read" }, { edited: true }, { deleted: true }, { pinned: true }, { reaction: { emoji: "👍", from: "a" } }])("retries an event before its target exists: %j", async event => {
     fetchMock.mockImplementation(async () => json([]));
     await expect(applyMessageUpdate(db, instance, { id: "message-a", ...event }, { requireTarget: true })).rejects.toThrow("Message update target unavailable");

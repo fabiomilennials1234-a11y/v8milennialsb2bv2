@@ -39,6 +39,8 @@ export async function admitReceipt(context: {
       p_event_name: context.event, p_payload: context.payload, p_path_instance_id: context.pathInstanceId ?? null,
     });
     if (error || typeof data !== 'string') return respond(503, 'inbox_unavailable');
-    return respond(202); // Only after Postgres committed the durable event.
+    // Preserve the provider-facing success code already used by Edge. Queue
+    // durability, rather than a different HTTP status, defines acknowledgment.
+    return respond(200); // Only after Postgres committed the durable event.
   } catch { return respond(503, 'inbox_unavailable'); }
 }

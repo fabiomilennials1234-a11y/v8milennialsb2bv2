@@ -115,3 +115,18 @@ Contrato, rollout, testes e limitações de ambiente: `.specs/clientes-360.md`.
 
 
 Homologação remota concluída em 16/09: carteira/360, RLS, paginação, criação de negócio e rollback aprovados em branch Supabase descartável, já excluída. Corrigidas colisão de canais Realtime e data prevista na lista. Evidências e limites: `.specs/clientes-360-homologacao.md`. Produção não alterada.
+
+
+## WhatsApp ingress — preparação de ativação, 2026-09-24
+
+Serviço continua desligado; produção mantém ingresso Edge. O ACK do serviço
+passa a HTTP200 somente após commit da inbox. `INGRESS_ACCEPTING=false` com
+`INGRESS_ENABLED=true` permite drenar trabalho já aceito sem novas admissões.
+Replay estrito rejeita IDs/operações inválidos antes de escrever. Preflight puro
+verifica todas as rotas locais/globais, sem alterar o fornecedor.
+
+Integração da política com criação/reconfigure/rebind, teste de retry do
+fornecedor, carga e reinício continuam pendentes antes do corte de tráfego.
+Migration29 não aplicada. Economia adicional ativada nesta entrega: nenhuma.
+Ver `services/whatsapp-ingress/README.md` e
+`docs/operations/supabase-capacity-ingress-readiness-2026-09-24.md`.

@@ -22,6 +22,20 @@ describe('standalone ingress rollout configuration', () => {
     expect(() => config({ INGRESS_INSTANCE_IDS: 'payload-instance-not-a-database-uuid' })).toThrow();
     expect(() => config({ INGRESS_MAX_REQUESTS: '10000' })).toThrow();
     expect(() => config({ SUPABASE_URL: 'http://fixture.test' })).toThrow();
+    expect(() => config({ INGRESS_ACCEPTING: 'FALSE' })).toThrow();
+  });
+
+  it('drain-only configuration keeps the worker enabled but rejects new admission', async () => {
+    const drainConfig = config({ INGRESS_ACCEPTING: 'false' });
+    const canonical = vi.fn();
+    const ingress = createIngress(drainConfig, canonical, new BackgroundTasks());
+    expect(drainConfig.enabled).toBe(true);
+    expect((await ingress.handle(new Request('https://ingress.test/health'))).status).toBe(200);
+    expect((await ingress.handle(new Request('https://ingress.test/ready'))).status).toBe(503);
+    const rejected = await ingress.handle(request());
+    expect(rejected.status).toBe(503);
+    expect(rejected.headers.get('Retry-After')).toBe('5');
+    expect(canonical).not.toHaveBeenCalled();
   });
 
   it('disabled service is alive but not ready and never invokes canonical handler', async () => {

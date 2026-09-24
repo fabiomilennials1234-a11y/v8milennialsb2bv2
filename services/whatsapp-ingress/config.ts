@@ -1,5 +1,6 @@
 export interface IngressConfig {
   enabled: boolean;
+  accepting: boolean;
   instanceIds: ReadonlySet<string>;
   port: number;
   maxRequests: number;
@@ -10,6 +11,8 @@ export interface IngressConfig {
 
 export function loadConfig(get: (key: string) => string | undefined): IngressConfig {
   const enabled = get('INGRESS_ENABLED') === 'true';
+  const admission = get('INGRESS_ACCEPTING') ?? 'true';
+  if (admission !== 'true' && admission !== 'false') throw new Error('Invalid configuration: INGRESS_ACCEPTING');
   const instanceIds = new Set((get('INGRESS_INSTANCE_IDS') ?? '').split(',').map(s => s.trim()).filter(Boolean));
   for (const id of instanceIds) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
@@ -31,7 +34,7 @@ export function loadConfig(get: (key: string) => string | undefined): IngressCon
     return value;
   };
   return {
-    enabled, instanceIds,
+    enabled, accepting: admission === 'true', instanceIds,
     port: number('PORT', 8080, 65535),
     maxRequests: number('INGRESS_MAX_REQUESTS', 32, 128),
     maxBackgroundTasks: number('INGRESS_MAX_BACKGROUND_TASKS', 128, 1024),
