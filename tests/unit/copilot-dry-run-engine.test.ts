@@ -228,6 +228,9 @@ describe("buildPreviewTools — enabled filtering", () => {
       expect(t.type).toBe("function");
       expect(t.function.name).toBeTruthy();
       expect(t.function.parameters.type).toBe("object");
+      // Some OpenRouter providers inspect this with Array.prototype.some().
+      // An omitted `required` crashes their schema handling before the model runs.
+      expect(t.function.parameters.required).toEqual(expect.any(Array));
     });
   });
 });
