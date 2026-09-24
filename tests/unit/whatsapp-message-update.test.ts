@@ -29,9 +29,12 @@ describe("FileDownloaded provider notification", () => {
   } });
   it("recognizes only the observed non-mutational envelope", () => {
     expect(isFileDownloadedNotification(envelope())).toBe(true);
+    expect(isFileDownloadedNotification({ ...envelope(), event: { ...envelope().event, IsFromMe: false } })).toBe(true);
     for (const changed of [
-      { Type: "Read" }, { IsFromMe: false }, { MessageIDs: [] }, { MessageIDs: ["message-a", "message-b"] },
-      { MessageIDs: [" "] }, { chatid: "other@s.whatsapp.net" }, { FileURL: "http://media.example.com/a" },
+      { Type: "Read" }, { IsFromMe: "false" }, { IsFromMe: null }, { IsFromMe: undefined },
+      { MessageIDs: [] }, { MessageIDs: ["message-a", "message-b"] },
+      { MessageIDs: [" "] }, { chatid: "other@s.whatsapp.net" }, { Chat: 123, chatid: "123" },
+      { FileURL: "http://media.example.com/a" },
       { FileURL: "https://user:pass@media.example.com/a" }, { FileURL: "https://media.example.com/a#fragment" },
       { status: "read" }, { Status: "read" }, { pinned: true }, { Pinned: true },
       { reaction: { emoji: "👍" } }, { Reactions: [] },
@@ -39,6 +42,9 @@ describe("FileDownloaded provider notification", () => {
     ]) {
       expect(isFileDownloadedNotification({ ...envelope(), event: { ...envelope().event, ...changed } })).toBe(false);
     }
+    const missingFlag: Record<string, unknown> = { ...envelope().event };
+    delete missingFlag.IsFromMe;
+    expect(isFileDownloadedNotification({ ...envelope(), event: missingFlag })).toBe(false);
     expect(isFileDownloadedNotification({ ...envelope(), data: { status: "read" } })).toBe(false);
     expect(isFileDownloadedNotification({ ...envelope(), EventType: "messages" })).toBe(false);
     expect(isFileDownloadedNotification({ ...envelope(), type: "ReadReceipt" })).toBe(false);

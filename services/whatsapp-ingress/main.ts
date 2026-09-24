@@ -6,12 +6,14 @@ import { admitReceipt } from './inbox.ts';
 import { createInboxWorker, eventTasks } from './worker.ts';
 import { loadReceiptRecoveryConfig } from './recovery-config.ts';
 import { createReceiptRecoveryLoop } from './recovery-runner.ts';
+import { createIngressEventHandler, createLegacyEventRouter, loadLegacyForwardEnabled } from './event-router.ts';
 
 const config = loadConfig(key => Deno.env.get(key));
 const recoveryConfig = loadReceiptRecoveryConfig(key => Deno.env.get(key), config);
 const background = new BackgroundTasks();
 // Same waitUntil contract used by Supabase Edge, installed before canonical
-// handler modules load. No duplicate business logic or fallback proxy to Edge.
+// handler modules load. The worker retains canonical business processing;
+// opt-in legacy forwarding is limited to messages/connection at admission.
 Object.defineProperty(globalThis, 'EdgeRuntime', {
   value: { waitUntil: (task: Promise<unknown>) => {
     background.waitUntil(task);
@@ -41,15 +43,20 @@ const queueHealth = config.enabled ? createQueueHealth(createClient(Deno.env.get
   auth: { persistSession: false, autoRefreshToken: false },
   global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(10_000) }) },
 }), [...config.instanceIds]) : undefined;
-const ingress = createIngress(config, createWhatsAppWebhookHandler({
+const legacyRouter = createLegacyEventRouter({
+  enabled: loadLegacyForwardEnabled(key => Deno.env.get(key)),
+  supabaseUrl: Deno.env.get('SUPABASE_URL'),
+});
+const canonical = createIngressEventHandler(createWhatsAppWebhookHandler, {
   allowInstance: id => config.instanceIds.has(id),
-  strictUpdateTargets: true,
-  admitEvent: async context => {
+  admitReceipt: async context => {
     const response = await admitReceipt(context);
     if (response.status === 200) worker?.notify();
     return response;
   },
-}), background, () => worker?.healthy() ?? false, queueHealth);
+  router: legacyRouter,
+});
+const ingress = createIngress(config, canonical, background, () => worker?.healthy() ?? false, queueHealth);
 const server = Deno.serve({ hostname: '0.0.0.0', port: config.port }, ingress.handle);
 let stopping = false;
 async function shutdown() {
