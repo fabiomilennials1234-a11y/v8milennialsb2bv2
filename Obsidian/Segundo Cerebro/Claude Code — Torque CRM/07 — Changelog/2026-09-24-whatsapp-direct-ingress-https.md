@@ -10,6 +10,9 @@ owner: gabriel
 
 # HTTPS do ingress WhatsApp preparado
 
+Registro da preparação até20:17UTC; estado de implantação/fila atualizado na
+entrada de20:26UTC abaixo.
+
 DNS A de `ingress.torquecrm.com.br` aponta para `46.202.148.241` com TTL 300s.
 Certificado TLS real foi emitido em 24/09/2026 e vence em 23/12/2026. Rota
 Traefik vive em `services/whatsapp-ingress/deploy/traefik.yaml`, separada da
@@ -47,3 +50,17 @@ parcial só confirma delivered/read para saídas conhecidas e não recompõe ord
 de edições, exclusões, reações ou pins. Meta 1,4M mensal permanece projeção.
 
 Estado detalhado: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+
+## Fila recuperada — 24/09/2026, 20:26 UTC
+
+PR2183 `da906699d`, SQL37 ledger `20260924202412` e imagem
+`readiness-20260924-v1` publicados. Replay auditado concluiu o FileDownloaded
+com uma nova tentativa, preservando oito falhas anteriores. Snapshot: 249
+concluídos (240 `processed`, nove `provider_notification`), nenhum pendente,
+processing ou dead letter. Worker público e Docker saudáveis, zero reinícios.
+Admissão direta/forward OFF; URL Uazapi e Edge v121 intactas. Guard env presente
+só para TorqueSDR, mas dois rebinds com service key retornaram401, sem provar409.
+Economia Edge adicional zero; CodeQL passou. Confirmação da proteção e
+ensaios públicos precedem qualquer cutover. Evidência e limites completos:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.

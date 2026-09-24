@@ -45,14 +45,14 @@ health signal; it is not an external on-call notification service.
 
 ## What still prevents direct activation
 
-1. **Stable queue and operational response.** The earlier FileDownloaded barrier
-   was repaired and drained. A new dead-letter head appeared by 20:17 UTC;
-   resolve it before routing changes. Continue checking natural
-   traffic and queue health rather than only process liveness. Unknown future
-   event shapes remain a compatibility risk.
-2. **Public HTTPS ingress and failure rehearsal.** DNS, certificate and a
-   separate Traefik route are ready, but the new event-router image has not been
-   deployed and direct admission remains off. Validate authenticated requests,
+1. **Stable queue and operational response.** Both observed FileDownloaded
+   barriers were repaired and drained by the 20:26 UTC snapshot. Continue
+   checking natural traffic and queue health before and after a route change;
+   process liveness alone missed the barriers. Unknown future event shapes
+   remain a compatibility risk.
+2. **Public HTTPS ingress and failure rehearsal.** DNS, certificate, Traefik
+   route and event-router image are deployed, with direct admission still off.
+   Validate authenticated requests,
    path rewriting, payload limits, commit before ACK, restart, database outage,
    TLS failure and host/network outage against the public route. Accepted inbox
    work survives a process restart; an event that never reaches the commit may
@@ -82,7 +82,7 @@ outcomes and observed invocation rate, then consider expansion. No fixed
 activation date or 1.4M monthly guarantee is established by this incident fix.
 The same-URL Edge → inbox path still consumes an Edge invocation per callback.
 
-## Public ingress prepared; provider route unchanged
+## Public ingress preparation at 20:17 UTC; provider route unchanged
 
 `ingress.torquecrm.com.br` has DNS A `46.202.148.241` with TTL 300 seconds.
 The real TLS certificate was issued on 2026-09-24 and expires on 2026-12-23.
@@ -102,8 +102,8 @@ TLS and reachability, not supplier delivery or durable admission. The new opt-in
 authentication and tenant resolution, it forwards only `messages` and
 `connection` to the fixed Supabase Edge origin; `messages_update` goes to the
 existing durable inbox. Unknown events fail closed. `INGRESS_FORWARD_LEGACY_EVENTS`
-defaults to false. This new image and the supplier URL change are **not deployed
-or enabled** at this checkpoint. The protected-instance environment was saved at
+defaults to false. At this checkpoint, the new image and supplier URL change
+were **not deployed or enabled**. The protected-instance environment was saved at
 20:17:39 UTC for the pilot UUID only and its presence digest was checked. A real
 rebind probe returned 401, which does **not** demonstrate the expected 409 guard;
 no provider configuration change was confirmed. Verify the live writer guard
@@ -113,8 +113,8 @@ Queue snapshot at 20:17 UTC: 204 completed, 40 pending, one dead letter, zero
 processing, zero expired leases; claim control unpaused at revision 6. The new
 head is an observed `FileDownloaded` envelope with `IsFromMe=false` and no
 business mutation fields; its exact scoped message already has a media URL.
-SQL37 and a matching TypeScript rule are being prepared, not applied or deployed.
-No current drain or green queue may be claimed.
+SQL37 and a matching TypeScript rule were being prepared at this checkpoint.
+The 20:26 UTC completion below supersedes this queue and image status.
 
 Before the one-route cutover, test the event router's exact path/response
 handling and provider readback, confirm old Edge inline tickets have settled,
@@ -157,3 +157,42 @@ do not delete evidence or roll back the enum contract beneath accepted events.
 
 Previous recovery evidence:
 [receipt recovery](whatsapp-receipt-recovery-2026-09-24.md).
+
+
+## Production completion — 2026-09-24 20:26 UTC
+
+PR2183 merged to main as da906699d. SQL37 was applied under production ledger
+20260924202412. Image `torque-whatsapp-ingress:readiness-20260924-v1` replaced
+the sole pilot container with claims paused at revision 7; claims resumed at
+revision 8. Container remains on the EasyPanel overlay with the HTTPS alias.
+Image bytes matched the reviewed router, main entry point and update classifier.
+
+The incoming FileDownloaded dead letter was replayed once through the audited
+RPC. It completed as provider_notification with one new attempt and zero
+unmatched receipts; the audit retains eight previous http_500 attempts. The
+44 following events drained. Snapshot: 249 completed (240 `processed`, nine
+`provider_notification`), zero pending, processing,
+expired leases or dead letters, unpaused revision 8. Public worker health and
+Docker health were healthy, with zero container restarts. These are queue
+observations, not proof of provider delivery before persistence.
+
+Direct admission and legacy forwarding remain OFF. The provider URL and Edge
+v121 are unchanged; this deployment does not yet save Edge invocations. The
+protected-instance environment setting is present for TorqueSDR only, but both
+service-key rebind probes returned 401, so a successful authenticated protection
+test is still required before cutover. Do not interpret those probes as 409 or
+as a verified provider route mutation.
+
+Validation: 208 focused unit tests, two PGlite SQL integrations, frozen Deno main
+check, changed-file ESLint, image build/readback and independent GPT-6 Sol review
+passed. Vault lint/index and changed-code secret scan passed. Full CI remains
+red on existing quote lint warnings, historical from_pipeline_id migration
+bootstrap and secret-scan self-test false positives; full integration/E2E is not
+claimed. CodeQL for PR2183 passed; the other CI failures remain. No preview
+database branch or outbound WhatsApp message was created.
+
+Next: authenticate and prove both route-writer protections; run public ingress
+auth/limit and failure rehearsals with the new runtime; re-inventory global and
+instance webhooks; update the existing webhook URL once, preserving ID/events/
+filters, and read back. Start with TorqueSDR, observe traffic and invocation
+rate, then evaluate expansion. Keep accepted work queued during URL rollback.

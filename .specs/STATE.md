@@ -337,6 +337,9 @@ remain unchanged; direct routing remains off. Remaining activation gates:
 
 ## HTTPS para rota direta WhatsApp — preparação, 2026-09-24
 
+Registro do checkpoint até20:17UTC; estado de implantação/fila supersedido pela
+atualização de20:26UTC abaixo.
+
 `ingress.torquecrm.com.br` aponta para `46.202.148.241` (DNS A, TTL 300s).
 Certificado TLS real emitido em 24/09/2026, válido até 23/12/2026. Traefik usa
 configuração separada em `services/whatsapp-ingress/deploy/traefik.yaml`, sem
@@ -374,3 +377,19 @@ entradas históricas acima; não altera a limitação técnica da recuperação.
 Reconciliação atual cobre só delivered/read de saídas conhecidas, não histórico
 de edição/exclusão/reação/pin. Economia Edge e meta 1,4M não realizadas por esta
 preparação. Procedimento: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+
+## Estado atual do ingress WhatsApp — 2026-09-24 20:26 UTC
+
+PR2183 `da906699d`, SQL37 ledger `20260924202412` e imagem
+`readiness-20260924-v1` publicados. Replay auditado concluiu o segundo
+FileDownloaded com uma nova tentativa; oito falhas anteriores preservadas.
+Snapshot: 249 concluídos (240 `processed`, nove `provider_notification`), zero
+pendentes/processando/dead letter; worker e Docker saudáveis, zero reinícios,
+claims retomados na revisão8. Rota Uazapi/Edge v121 intacta, admissão direta e
+forward OFF: economia Edge adicional zero. Ambiente da guarda presente só no
+piloto; rebind com service key retornou401 duas vezes, sem provar409. Exigir
+proteção autenticada e ensaios públicos antes da mudança única da URL existente.
+Testes focados e CodeQL passaram; CI completo segue vermelho em falhas
+preexistentes. Evidência detalhada e próximos gates:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
