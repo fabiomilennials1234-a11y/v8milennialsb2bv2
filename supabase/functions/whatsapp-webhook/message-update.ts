@@ -68,16 +68,18 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
   }
   if (!rawIds.length) return;
   const ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
-  const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status")
+  const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
     .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
   const mutates = (receipt && receipt !== "pending" && data.fromMe !== true) || data.edited || data.deleted
     || typeof data.pinned === "boolean" || data.reactions || data.reaction;
+  let scopedTargets: Array<{ id: string; message_id: string; reactions: unknown; status: string; direction: string }> | null = null;
   if (options.requireTarget && mutates) {
     const { data: targets, error } = await scope();
     const found = new Set((targets ?? []).map(target => target.message_id));
     if (error || rawIds.some(id => !buildMessageIdCandidates(id, instance.phone_number, data.owner).some(candidate => found.has(candidate)))) {
       throw new Error("Message update target unavailable");
     }
+    scopedTargets = targets ?? [];
   }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
@@ -87,9 +89,13 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
         .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors).select("id");
       if (error) throw new Error("Receipt persistence failed");
       if (!changed?.length) {
-        const { data: matches, error: lookupError } = await scope().eq("direction", "outgoing").limit(1);
-        if (lookupError) throw new Error("Receipt target lookup failed");
-        if (!matches?.length) await logRuntime({ organizationId: instance.organization_id,
+        let hasOutgoing = scopedTargets?.some(target => target.direction === "outgoing");
+        if (hasOutgoing === undefined) {
+          const { data: matches, error: lookupError } = await scope().eq("direction", "outgoing").limit(1);
+          if (lookupError) throw new Error("Receipt target lookup failed");
+          hasOutgoing = !!matches?.length;
+        }
+        if (!hasOutgoing) await logRuntime({ organizationId: instance.organization_id,
           module: "webhook", action: "uazapi_receipt_unmatched", status: "skipped",
           errorMessage: "no_row_matched", payloadSnapshot: { instance_id: instance.id, receipt_status: receipt } });
       }
@@ -123,8 +129,12 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     if (error) throw new Error("Message pin persistence failed");
   }
   if (!Array.isArray(data.reactions) && data.reaction && typeof data.reaction === "object") {
-    const { data: targets, error } = await scope();
-    if (error) throw new Error("Reaction targets unavailable");
+    let targets = scopedTargets;
+    if (targets === null) {
+      const lookup = await scope();
+      if (lookup.error) throw new Error("Reaction targets unavailable");
+      targets = lookup.data ?? [];
+    }
     if (!targets?.length) {
       // Preserve the legacy missing-history policy. A durable pre-message inbox is
       // a separate release gate; never claim that absent targets were updated.
