@@ -113,6 +113,20 @@ it('trusted queued recovery suppresses quote completion while still writing rece
   expect(completeQuotePresentations).not.toHaveBeenCalled();
 });
 
+it('classifies exact FileDownloaded notification without pretending to apply a receipt', async () => {
+  const payload = { owner: '5511999999999', token: 'fixture-token', type: 'FileDownloadedMessage',
+    state: 'FileDownloaded', EventType: 'messages_update',
+    event: { Type: 'FileDownloaded', IsFromMe: true, MessageIDs: ['existing-message'],
+      Chat: '5511@s.whatsapp.net', chatid: '5511@s.whatsapp.net',
+      FileURL: 'https://media.example.com/audio.ogg', MimeType: 'audio/ogg' } };
+  const response = await createHandler({ trustedQueuedReplay: true,
+    strictUpdateTargets: true })(webhook(payload));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, outcome: 'provider_notification', unmatched_count: 0 });
+  expect(statusWrites()).toHaveLength(0);
+  expect(completeQuotePresentations).not.toHaveBeenCalled();
+});
+
 it('processes trusted recovery for an existing group message while group capture is disabled', async () => {
   env.WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS = enabledId;
   const payload = { instance: 'provider-instance', event: 'messages_update',

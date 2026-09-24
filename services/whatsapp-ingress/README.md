@@ -340,3 +340,21 @@ returns 503. This does not recover provider deliveries lost before persistence.
 Scope, production evidence, resource budget and rollback:
 [receipt recovery runbook](../../docs/operations/whatsapp-receipt-recovery-2026-09-24.md).
 This is partial current-status repair, not event replay or invocation savings.
+
+
+## Queue health and observed provider notifications
+
+`/health` remains process liveness. `/worker-health` independently verifies worker
+claims and cached queue metadata; Docker probes it each minute. Dead-letter,
+expired lease, paused worker or regular pending work older than five minutes
+returns503 even when direct admission is disabled. Age includes retry backoff;
+this reports degraded service, not a crash. It does not restart the worker,
+release a FIFO barrier or send external notifications. Admission remains durable
+and independent of this health signal.
+
+SQL36 adds a strict observed FileDownloaded envelope classification with explicit
+`provider_notification` completion and a one-shot, audited replay RPC. This
+notification cannot update delivery/read status or complete quote presentations.
+Unknown/mixed shapes still fail closed. Full incident evidence, operational
+contract, rollback and remaining direct-route gates:
+[direct-route readiness](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).

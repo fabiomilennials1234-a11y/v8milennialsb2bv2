@@ -10,7 +10,7 @@ export const eventTasks = new AsyncLocalStorage<BackgroundTasks>();
 export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, secret: string, factory: HandlerFactory, fatalTimeout: () => void): Promise<void> {
   const tasks = new BackgroundTasks();
   let errorCode: string | null = null;
-  let outcome: 'processed' | 'deferred_receipt' | 'unmatched_receipt' = 'processed';
+  let outcome: 'processed' | 'deferred_receipt' | 'unmatched_receipt' | 'provider_notification' = 'processed';
   let unmatchedCount = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -41,12 +41,14 @@ export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, s
         const result = await response.json() as Record<string, unknown>;
         if (!result || result.ok !== true) throw new Error('invalid_worker_result');
         if (result.outcome !== undefined) {
-          if ((result.outcome !== 'unmatched_receipt' && result.outcome !== 'deferred_receipt')
-            || !Number.isSafeInteger(result.unmatched_count) || (result.unmatched_count as number) < 1) {
+          const notification = result.outcome === 'provider_notification' && result.unmatched_count === 0;
+          const unmatched = (result.outcome === 'unmatched_receipt' || result.outcome === 'deferred_receipt')
+            && Number.isSafeInteger(result.unmatched_count) && (result.unmatched_count as number) >= 1;
+          if (!notification && !unmatched) {
             throw new Error('invalid_worker_result');
           }
-          outcome = result.outcome;
-          unmatchedCount = result.unmatched_count as number;
+          outcome = notification ? 'provider_notification' : result.outcome as 'unmatched_receipt' | 'deferred_receipt';
+          unmatchedCount = notification ? 0 : result.unmatched_count as number;
         }
       }),
       new Promise<never>((_, reject) => { timer = setTimeout(() => {

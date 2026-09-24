@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { applyMessageUpdate, isPureReceiptUpdate, normalizeMessageUpdatePayload } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
+import { applyMessageUpdate, isFileDownloadedNotification, isPureReceiptUpdate, normalizeMessageUpdatePayload } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
 
 const { completeQuotePresentations, logRuntime } = vi.hoisted(() => ({
   completeQuotePresentations: vi.fn(async () => {}), logRuntime: vi.fn(async () => {}),
@@ -20,6 +20,33 @@ const urlAt = (index: number) => new URL(String(fetchMock.mock.calls[index][0]))
 const bodyAt = (index: number) => JSON.parse(fetchMock.mock.calls[index][1].body);
 const methodAt = (index: number) => fetchMock.mock.calls[index][1].method;
 beforeEach(() => { fetchMock.mockReset(); completeQuotePresentations.mockClear(); logRuntime.mockClear(); });
+
+describe("FileDownloaded provider notification", () => {
+  const envelope = () => ({ type: "FileDownloadedMessage", state: "FileDownloaded", EventType: "messages_update", event: {
+    Type: "FileDownloaded", IsFromMe: true, MessageIDs: ["message-a"],
+    Chat: "5511@s.whatsapp.net", chatid: "5511@s.whatsapp.net",
+    FileURL: "https://media.example.com/audio.ogg", MimeType: "audio/ogg",
+  } });
+  it("recognizes only the observed non-mutational envelope", () => {
+    expect(isFileDownloadedNotification(envelope())).toBe(true);
+    for (const changed of [
+      { Type: "Read" }, { IsFromMe: false }, { MessageIDs: [] }, { MessageIDs: ["message-a", "message-b"] },
+      { MessageIDs: [" "] }, { chatid: "other@s.whatsapp.net" }, { FileURL: "http://media.example.com/a" },
+      { FileURL: "https://user:pass@media.example.com/a" }, { FileURL: "https://media.example.com/a#fragment" },
+      { status: "read" }, { Status: "read" }, { pinned: true }, { Pinned: true },
+      { reaction: { emoji: "👍" } }, { Reactions: [] },
+      { action: "delete" }, { message: {} }, { protocolMessage: {} },
+    ]) {
+      expect(isFileDownloadedNotification({ ...envelope(), event: { ...envelope().event, ...changed } })).toBe(false);
+    }
+    expect(isFileDownloadedNotification({ ...envelope(), data: { status: "read" } })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), EventType: "messages" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), type: "ReadReceipt" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), state: "Read" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), action: "delete" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), event: [] })).toBe(false);
+  });
+});
 
 function assertScope(url: URL) {
   expect(url.searchParams.get("organization_id")).toBe("eq.org-a");

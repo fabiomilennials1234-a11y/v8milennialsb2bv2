@@ -6,7 +6,34 @@ import { buildMessageIdCandidates, extractRawMessageIds, mapReceiptStatus } from
 type Instance = { id: string; organization_id: string; phone_number?: string | null };
 type Reaction = Record<string, unknown>;
 type Update = Record<string, unknown> & { ids?: unknown; id?: unknown; messageid?: unknown; key?: { id?: unknown } };
-export interface UnmatchedReceiptOutcome { outcome: "deferred_receipt" | "unmatched_receipt"; unmatchedCount: number }
+export interface UnmatchedReceiptOutcome { outcome: "deferred_receipt" | "unmatched_receipt" | "provider_notification"; unmatchedCount: number }
+
+/** Observed FileDownloaded callback carries no receipt or message mutation. */
+export function isFileDownloadedNotification(payload: Record<string, unknown>): boolean {
+  const envelopeKeys = new Set(["type", "event", "owner", "state", "token", "BaseUrl", "EventType", "instanceName"]);
+  const eventKeys = new Set(["Chat", "Type", "Sender", "chatid", "FileURL", "IsGroup", "chatlid",
+    "IsFromMe", "MimeType", "Timestamp", "sender_pn", "MessageIDs", "sender_lid"]);
+  if (payload.type !== "FileDownloadedMessage" || payload.state !== "FileDownloaded"
+    || payload.EventType !== "messages_update" || Object.keys(payload).some(key => !envelopeKeys.has(key))
+    || !payload.event || typeof payload.event !== "object"
+    || Array.isArray(payload.event)) return false;
+  const event = payload.event as Record<string, unknown>;
+  if (Object.keys(event).some(key => !eventKeys.has(key))) return false;
+  const ids = event.MessageIDs;
+  const chat = event.chatid;
+  const fileUrl = event.FileURL;
+  if (event.Type !== "FileDownloaded" || event.IsFromMe !== true
+    || !Array.isArray(ids) || ids.length !== 1 || typeof ids[0] !== "string"
+    || !ids[0] || ids[0].trim() !== ids[0]
+    || typeof chat !== "string" || !chat || chat.trim() !== chat || event.Chat !== chat
+    || typeof fileUrl !== "string" || !fileUrl || fileUrl.trim() !== fileUrl
+    || !/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?(?:[/?][^#\s]*)?$/.test(fileUrl)) return false;
+  try {
+    const url = new URL(fileUrl);
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) return false;
+  } catch { return false; }
+  return true;
+}
 
 export function normalizeMessageUpdatePayload(payload: Record<string, unknown>): Update {
   if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) return payload.data as Update;

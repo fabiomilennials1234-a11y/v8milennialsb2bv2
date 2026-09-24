@@ -1,4 +1,4 @@
-import { applyMessageUpdate, isPureReceiptUpdate, normalizeMessageUpdatePayload, type UnmatchedReceiptOutcome } from "./message-update.ts";
+import { applyMessageUpdate, isFileDownloadedNotification, isPureReceiptUpdate, normalizeMessageUpdatePayload, type UnmatchedReceiptOutcome } from "./message-update.ts";
 import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
@@ -1647,6 +1647,10 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
               break;
             }
             case "messages_update": {
+              if (options.trustedQueuedReplay && isFileDownloadedNotification(payload)) {
+                updateOutcome = { outcome: "provider_notification", unmatchedCount: 0 };
+                break;
+              }
               const updateData = normalizeMessageUpdatePayload(payload);
               updateOutcome = await handleMessagesUpdateEvent(supabase, instance, updateData, {
                 requireTarget: (options.strictUpdateTargets ?? false)
