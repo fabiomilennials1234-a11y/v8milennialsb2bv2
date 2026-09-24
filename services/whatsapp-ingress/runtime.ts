@@ -1,3 +1,4 @@
+import type { QueueHealth } from './queue-health.ts';
 import type { IngressConfig } from './config.ts';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -53,7 +54,7 @@ async function boundedBody(request: Request, timeoutMs: number): Promise<ArrayBu
   }
 }
 
-export function createIngress(config: IngressConfig, canonical: Handler, background: BackgroundTasks, workerHealthy: () => boolean = () => true) {
+export function createIngress(config: IngressConfig, canonical: Handler, background: BackgroundTasks, workerHealthy: () => boolean = () => true, queueHealth?: () => Promise<QueueHealth>) {
   // Rollback can stop new admission while the enabled worker still drains
   // events already acknowledged by Postgres. Disabling the service stops both.
   let accepting = config.accepting;
@@ -65,6 +66,12 @@ export function createIngress(config: IngressConfig, canonical: Handler, backgro
   const ready = () => canAdmit() && workerHealthy();
   const handle = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    if (request.method === 'GET' && path === '/worker-health') {
+      const result = config.enabled && queueHealth ? await queueHealth().catch((): QueueHealth => ({ healthy: false, reason: 'unavailable' }))
+        : { healthy: false, reason: 'disabled' };
+      const healthy = result.healthy && workerHealthy();
+      return json(healthy ? 200 : 503, { healthy, reason: result.healthy && !healthy ? 'worker_unavailable' : result.reason });
+    }
     if (request.method === 'GET' && path === '/health') return json(200, { alive: true });
     if (request.method === 'GET' && path === '/ready') return json(ready() ? 200 : 503, { ready: ready() });
     if (!/^\/(?:functions\/v1\/)?whatsapp-webhook\/[^/]+(?:\/[^/]+){0,2}\/?$/.test(path)) return json(404, { error: 'not_found' });

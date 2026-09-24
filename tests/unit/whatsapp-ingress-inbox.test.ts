@@ -105,6 +105,23 @@ it('passes deferred receipt outcome for SQL to requeue without holding the FIFO'
   });
 });
 
+it('passes an audited provider notification with zero unmatched targets', async () => {
+  const rpc=vi.fn(async () => ({data:true,error:null}));
+  await processInboxEvent({rpc} as never,row,'secret',() => async () =>
+    new Response(JSON.stringify({ok:true,outcome:'provider_notification',unmatched_count:0}),{status:200}),vi.fn());
+  expect(rpc).toHaveBeenCalledWith('finish_whatsapp_ingress_event_with_outcome',{
+    p_id:'event-id',p_lease_token:'lease',p_error_code:null,p_outcome:'provider_notification',p_unmatched_count:0,
+  });
+});
+
+it('rejects a provider notification claiming missing targets', async () => {
+  const rpc=vi.fn(async () => ({data:true,error:null}));
+  await processInboxEvent({rpc} as never,row,'secret',() => async () =>
+    new Response(JSON.stringify({ok:true,outcome:'provider_notification',unmatched_count:1}),{status:200}),vi.fn());
+  expect(rpc).toHaveBeenCalledWith('finish_whatsapp_ingress_event_with_outcome',
+    expect.objectContaining({p_error_code:'processing_failed',p_outcome:'processed',p_unmatched_count:0}));
+});
+
 it('keeps malformed successful HTTP bodies retryable instead of inventing an audit outcome', async () => {
   const rpc=vi.fn(async () => ({data:true,error:null}));
   await processInboxEvent({rpc} as never,row,'secret',() => async () =>

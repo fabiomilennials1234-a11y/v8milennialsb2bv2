@@ -317,3 +317,19 @@ recuperados,8 inconclusivas,0 erros.11 eventos completed/processed,1 tentativa;
 PR2178 merge `d28871396`;198 testes direcionados +3 integrações SQL aprovados.
 GitHub Actions não iniciou por cobrança/limite da conta. Rota direta permanece
 OFF; economia de invocações desta recuperação=zero.
+
+
+## FileDownloaded FIFO barrier repaired — 2026-09-24
+
+TorqueSDR's FileDownloaded head failed strict validation eight times, blocking
+61 pending updates while the process remained alive. SQL36 (production ledger
+20260924185213) and worker notification-20260924-v2 add a strict observed-shape
+provider_notification outcome and one-shot audited replay, preserving payload
+and order. Claims paused at revision 5 and resumed at revision 6.
+The dead letter completed as a notification; pending and new natural traffic
+drained. Readback: 109 normal processed, 23 recovery processed, one notification,
+zero noncompleted events. New /worker-health and Docker probe detect blocked or
+aged queues independently of direct admission. Healthy with zero restarts;
+179 focused unit tests and three SQL integrations passed. Provider and Edge v121
+remain unchanged; direct routing remains off. Remaining activation gates:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.

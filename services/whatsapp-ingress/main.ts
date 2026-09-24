@@ -1,3 +1,4 @@
+import { createQueueHealth } from './queue-health.ts';
 import { loadConfig } from './config.ts';
 import { BackgroundTasks, createIngress } from './runtime.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -36,6 +37,10 @@ const recovery = recoveryConfig.enabled ? createReceiptRecoveryLoop(
   }), recoveryConfig.instanceIds, recoveryConfig.baseUrl,
 ) : null;
 const recoveryFinished = recovery?.run() ?? Promise.resolve();
+const queueHealth = config.enabled ? createQueueHealth(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(10_000) }) },
+}), [...config.instanceIds]) : undefined;
 const ingress = createIngress(config, createWhatsAppWebhookHandler({
   allowInstance: id => config.instanceIds.has(id),
   strictUpdateTargets: true,
@@ -44,7 +49,7 @@ const ingress = createIngress(config, createWhatsAppWebhookHandler({
     if (response.status === 200) worker?.notify();
     return response;
   },
-}), background, () => worker?.healthy() ?? false);
+}), background, () => worker?.healthy() ?? false, queueHealth);
 const server = Deno.serve({ hostname: '0.0.0.0', port: config.port }, ingress.handle);
 let stopping = false;
 async function shutdown() {
