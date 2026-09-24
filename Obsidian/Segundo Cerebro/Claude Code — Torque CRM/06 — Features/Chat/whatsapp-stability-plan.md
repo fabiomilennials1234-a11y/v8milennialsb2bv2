@@ -336,3 +336,9 @@ Recuperação não recompõe eventos de edição/exclusão/reação/pin, nem eve
 perdidos antes da persistência. Rota direta permanece bloqueada; ponte Edge
 atual não economiza invocações. Flags e evidência operacional atualizada:
 `docs/operations/whatsapp-receipt-recovery-2026-09-24.md`.
+
+Ativação: imagem `recovery-20260924-v3`, worker único, pausa retomada/revision4.
+Recuperação ligada só TorqueSDR; primeira página finalizada às16:45:09UTC:50
+verificadas,0 correções confirmadas,9 inconclusivas persistidas,0 erros. Cursor
+avançou/lease liberada; demais páginas pendentes.194 testes direcionados e
+integração SQL aprovados. Provider e Edge v121 inalterados; rota direta OFF.

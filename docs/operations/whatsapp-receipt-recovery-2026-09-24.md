@@ -116,3 +116,34 @@ and must drain normally. The SQL rollback refuses a live recovery lease and only
 revokes the recovery RPCs, retaining cursor/gap evidence. Never revert Edge gate
 admission while accepted events remain. No provider mutation is part of this
 release or its rollback.
+
+
+## Production activation and validation
+
+SQL35 was applied as ledger `20260924163948`. Readback confirmed anon and
+authenticated cannot execute the recovery RPC or read checkpoint state; service
+role has EXECUTE/SELECT but no direct checkpoint UPDATE. Existing inbox rows
+remained `receipt_recovery=false`. No ephemeral database branch was created.
+
+Worker image `torque-whatsapp-ingress:recovery-20260924-v3` replaced the sole
+container after claim pause revision 3 and an empty processing readback. Seven
+critical source modules matched image bytes. Health passed first with recovery
+off; only the TorqueSDR recovery allowlist was then enabled. Claims resumed at
+revision 4. Admission remained queued through Edge v121; direct HTTP acceptance
+remains false. The original private environment is retained on the VPS for
+rollback, permissions 0600. No provider route changed.
+
+First real apply finished at **2026-09-24 16:45:09 UTC**: 50 checked, zero planned
+repairs, zero enqueued, nine inconclusive, zero unscanned and zero errors. Cursor
+advanced, lease released, nine gaps persisted, and another page remains. CLI exit
+2 correctly denotes partial coverage. This later batch differs from the earlier
+read-only preview; it is not evidence of nine lost receipts or nine repairs.
+
+Validation: 194 focused unit tests passed; SQL recovery integration passed;
+independent review approved tenant fencing, trusted provenance, exact ID/chat
+matching, quote suppression and existing-group repair. Deno and changed-file
+ESLint passed. Type ratchet introduced zero errors; frontend production build
+passed. The full unit run before the final defensive tests had 13,813 passing,
+151 failing and 154 skipped: the same 158 failure headings as the pre-existing
+baseline. The repository-wide suite is not green. Changed vault documents and
+indexes passed their checks; unrelated global vault debt remains outside scope.
