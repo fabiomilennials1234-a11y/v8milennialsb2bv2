@@ -159,5 +159,6 @@ owner: claude-agent
 - [[2026-09-23-workflow-chique-reenrollment|Chiquê Distribuidora — correção delimitada de reinscrição]]
 - [[2026-09-24-supabase-capacity-wave2|Supabase Pro — sondagem segura e redução de chamadas ociosas]]
 - [[2026-09-24-tv-query-efficiency|TV — consulta financeira independente da composição local]]
+- [[2026-09-24-whatsapp-direct-ingress-https|WhatsApp direto — HTTPS preparado, migração pendente]]
 - [[2026-09-24-whatsapp-ingress-readiness|WhatsApp ingress — preparação e piloto de fila]]
 - [[2026-09-24-whatsapp-ingress-writer-guard|2026-09-24-whatsapp-ingress-writer-guard]]
