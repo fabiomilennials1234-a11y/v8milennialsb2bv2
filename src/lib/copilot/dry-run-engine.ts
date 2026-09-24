@@ -38,7 +38,11 @@ export interface OpenRouterToolDef {
     parameters: {
       type: "object";
       properties: Record<string, any>;
-      required?: string[];
+      /**
+       * Always send an array. Some OpenRouter providers call `.some()` on this
+       * field while validating tool schemas, including when no field is required.
+       */
+      required: string[];
     };
   };
 }
@@ -164,6 +168,7 @@ const TOOL_ID_TO_OPENROUTER: Record<
           properties: {
             reason: { type: "string", description: "Justificativa" },
           },
+          required: [],
         },
       },
     },
@@ -177,6 +182,7 @@ const TOOL_ID_TO_OPENROUTER: Record<
           properties: {
             reason: { type: "string", description: "Motivo" },
           },
+          required: [],
         },
       },
     },
