@@ -8,6 +8,7 @@
 // (ADR-0007) via useSDRPerformance — a MESMA fonte do KPI "Reuniões", matando o
 // R6 (Reuniões ≠ Comparecidas na mesma tela). Fim do recompute client-side de
 // ticket/conversão e da dependência do array truncado em 500 (usePipelineEntries).
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers, useCurrentTeamMember, useIdentity } from "@/modules/identity";
@@ -86,7 +87,8 @@ export function useTVDashboardData() {
   const dayOfMonth = now.getDate();
   const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
 
-  const { isAdmin } = useIdentity();
+  const identity = useIdentity();
+  const { isAdmin } = identity;
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
   const { data: teamMembers } = useTeamMembers();
@@ -104,14 +106,15 @@ export function useTVDashboardData() {
 
   const myId = currentTeamMember?.id ?? null;
 
-  return useQuery({
-    queryKey: [
-      "tv-dashboard-canonical",
-      currentMonth, currentYear, isAdmin, myId, organizationId,
-      propostas, confirmacoes, whatsapp, teamGoals, individualGoals,
-      sdrPerf.totals.marcadas, sdrPerf.totals.comparecidas, sdrPerf.totals.noShowRate,
-    ],
-    queryFn: async (): Promise<TVDashboardMetrics> => {
+  const referenceDate = localDateStr(now);
+  const enabled = identity.isReady && !!identity.userId && !!organizationId
+    && identity.organizationId === organizationId && !!myId
+    && !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp;
+  const salesQuery = useQuery({
+    // Only RPC scope belongs in this key. Pipeline and goal updates change the
+    // local composition, not the financial ledger request.
+    queryKey: ["tv-dashboard-sales", identity.userId, organizationId, "month", referenceDate, isAdmin ? null : myId],
+    queryFn: async (): Promise<SalesMetricsResult | null> => {
       // ── Fonte canônica de VENDA: get_sales_metrics (#995) ────────────────
       // Período NOMEADO ('month' + ref hoje); o banco resolve as fronteiras no
       // tz da org. O frontend NUNCA converte tz nem trunca entries. Receita já
@@ -126,7 +129,7 @@ export function useTVDashboardData() {
         const { data, error } = await supabase.rpc("get_sales_metrics" as any, {
           p_org_id: organizationId,
           p_period: "month",
-          p_ref: localDateStr(now),
+          p_ref: referenceDate,
           p_pipeline_id: null,
           // Central de controle: admin vê o time; não-admin vê só os próprios números.
           p_filter_member_id: isAdmin ? null : myId,
@@ -144,6 +147,15 @@ export function useTVDashboardData() {
         }
       }
 
+      return sales;
+    },
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const compose = useCallback((sales: SalesMetricsResult | null): TVDashboardMetrics => {
       const revenueTotal = sales?.revenue_total ?? 0;
       const wonCount = sales?.won_count ?? 0;
       const lostCount = sales?.lost_count ?? 0;
@@ -306,12 +318,16 @@ export function useTVDashboardData() {
           vendidoValue,
         },
       };
-    },
-    // Não gate em !!sales: se a RPC falhar (RLS/schema/ledger vazio), renderiza TV
-    // com zeros na receita em vez de travar em loading indefinido.
-    enabled: !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp && (isAdmin !== undefined),
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 60,
-    refetchIntervalInBackground: false,
-  });
+  }, [propostas, confirmacoes, whatsapp, teamGoals, individualGoals, teamMembers,
+    currentTeamMember, isAdmin, myId, dayOfMonth, lastDayOfMonth,
+    sdrPerf.totals.comparecidas, sdrPerf.totals.marcadas, sdrPerf.totals.noShowRate, sdrPerf.bySDR]);
+  const data = useMemo(() => enabled && salesQuery.data !== undefined
+    ? compose(salesQuery.data) : undefined, [enabled, salesQuery.data, compose]);
+  const refetch = useCallback(async (options?: Parameters<typeof salesQuery.refetch>[0]) => {
+    // TanStack imperative refetch bypasses enabled; keep scope transitions inert.
+    if (!enabled) return { ...salesQuery, data: undefined };
+    const result = await salesQuery.refetch(options);
+    return { ...result, data: enabled && result.data !== undefined ? compose(result.data) : undefined };
+  }, [salesQuery, enabled, compose]);
+  return { ...salesQuery, data, refetch };
 }
