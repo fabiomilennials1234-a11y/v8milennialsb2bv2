@@ -136,10 +136,12 @@ local worker; the two-second idle poll is recovery, not the normal receipt path.
 Remote SQL fixtures test quota boundaries with a synthetic private counter;
 the separate local PGlite test fills all 20,000 rows. Neither is a peak-load test.
 These tests do not establish
-VPS capacity, provider retries, restart survival or failover. Live routing stays
+VPS capacity, provider retries or failover. A separate process-restart rehearsal
+below covers only the durable worker with a fixture business handler. Live routing stays
 disabled until those acceptance checks pass. Rollback changes provider routing
 back to the existing Edge endpoint; keep its deployment and credentials valid.
-Stop new admission first, then drain/preserve accepted events. The migration
+After restoring and verifying provider routing, stop new admission, then
+drain/preserve accepted events. The migration
 rollback refuses outstanding/dead-letter events and never drops the inbox.
 Do not blindly replay terminal pin/reaction events after newer state; inspect
 order and reconcile explicitly. Keep cleanup running or execute its bounded
@@ -185,3 +187,20 @@ write barrier is not automatic reconciliation or an ingress activation flag.
 Leave the barrier on throughout cutover and rollback. Restore and verify the
 original provider route, drain accepted events, then remove protection. Never
 remove it first, which would allow an old rebind to overwrite the transition.
+
+
+## Deployment evidence — 2026-09-24
+
+Production inbox migration is now applied under ledger version `20260924124643`.
+The service remains disabled and provider routes unchanged. A disabled Docker
+container built from main `1498af879` passed health/readiness and graceful stop
+on the VPS; the temporary container was removed.
+
+`node --test tests/integration/whatsapp-ingress-process-restart.test.mjs` runs a
+real SIGKILL/restart rehearsal against filesystem-backed PGlite and the actual
+worker/admission/migration. It waits for the natural120s lease, confirms FIFO
+replay, and rejects stale completion during the replacement lease. The business
+handler is a replay-safe SQL fixture; this does not validate canonical effects,
+provider retries, host failure or peak traffic. Full scope and limitations:
+`tests/fixtures/ingress-restart/README.md`. Production state and activation gates:
+`docs/operations/supabase-capacity-ingress-pilot-2026-09-24.md`.

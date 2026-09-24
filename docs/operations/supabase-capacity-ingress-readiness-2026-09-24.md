@@ -1,5 +1,8 @@
 # WhatsApp ingress — readiness, 2026-09-24
 
+> Historical readiness snapshot before the writer guard and inbox deployment.
+> Current state: [pilot preparation](supabase-capacity-ingress-pilot-2026-09-24.md).
+
 ## Outcome and production state
 
 Preparation for moving `messages_update` off Edge, not a traffic cutover.
