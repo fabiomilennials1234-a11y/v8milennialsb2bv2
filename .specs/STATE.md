@@ -173,3 +173,7 @@ verificados,54 dependências intactas. Ingress ainda não recebeu tráfego regul
 Teste temporário não recebeu eventos: reentrega segue inconclusiva. Rota,
 container, proxy e credenciais remotas temporárias removidos; proteção temporária
 dos writers retirada, rota original conferida. Evidências: `docs/operations/supabase-capacity-ingress-runtime-2026-09-24.md`.
+
+Conferência final13:44UTC: inbox e contador zerados. Entre13:35–13:42UTC houve
+falha transversal REST/Auth e timeout de funções; banco registra restart13:41:45,
+não iniciado por este trabalho. SQL/REST recuperados, causa não determinada.

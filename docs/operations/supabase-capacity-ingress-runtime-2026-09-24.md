@@ -112,3 +112,18 @@ remaining within the internal1.4M target.
   fully green repository suite.
 - Lint ratchet output was byte-identical to the preceding baseline run: five
   existing warnings in quote files untouched by this patch. Baselines unchanged.
+
+## Transient production outage during final readback
+
+From approximately13:35 to13:42:17UTC the project returned widespread REST/Auth
+520/521/522/525 errors and Edge504s. Management status remained ACTIVE_HEALTHY.
+SQL and authenticated REST recovered without a restart or intervention by this
+work. `pg_postmaster_start_time()` then showed13:41:45.93029UTC, establishing a
+database restart, but not who or what initiated it. The public provider status
+page did not identify a matching incident at the time. Do not attribute a cause
+to the patch, quota, capacity or provider without further evidence.
+
+Final SQL readback13:44:54UTC: ingress row_count=0, payload_bytes=0, actual rows=0.
+Authenticated REST returned200 with the same budget. The probe route was already
+removed, original provider configuration verified, and the temporary writer
+guard absent. No regular ingress service was activated during the incident.
