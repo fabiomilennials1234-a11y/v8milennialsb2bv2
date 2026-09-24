@@ -63,6 +63,7 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { UazapiProvider } from "../_shared/whatsapp-providers/uazapi-provider.ts";
+import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-guard.ts";
 
 const PROCESSING_TIMEOUT_MS = 60_000;
 const MAX_INSTANCES_PER_BATCH = 200;
@@ -223,6 +224,9 @@ async function rebindOne(
       status_after: { connected: status.connected, state: status.state },
     };
   } catch (err) {
+    if (err instanceof UazapiIngressWriteGuardError && err.code === "webhook_route_protected") {
+      return { ...base, skipped_reason: err.code, verified: null };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { ...base, error: message };
   }

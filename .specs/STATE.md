@@ -130,3 +130,13 @@ fornecedor, carga e reinício continuam pendentes antes do corte de tráfego.
 Migration29 não aplicada. Economia adicional ativada nesta entrega: nenhuma.
 Ver `services/whatsapp-ingress/README.md` e
 `docs/operations/supabase-capacity-ingress-readiness-2026-09-24.md`.
+
+
+### Proteção dos writers — 2026-09-24
+
+Guarda por `UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS`, vazia por padrão, impede
+criação/reconfiguração de instância protegida antes de reserva ou escrita remota.
+Proxy retorna conflito409; rebind registra skip sem afirmar verificação.
+Env inválido falha fechado503. Não toca envio, leitura ou conexão.
+Integração protege os pontos de escrita; lista não ativada nesta entrega.
+Serviço ingress e SQL29 permanecem pendentes de ativação/testes operacionais.

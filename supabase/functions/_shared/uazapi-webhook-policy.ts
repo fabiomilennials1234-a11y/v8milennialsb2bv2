@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { UazapiClient } from "./uazapi-client.ts";
+import { assertLegacyWebhookWriteAllowed } from "./uazapi-ingress-write-guard.ts";
 
 export const UAZAPI_WEBHOOK_EVENTS = ["messages", "messages_update", "connection"];
 
@@ -33,6 +34,7 @@ export async function configureUazapiWebhook(
   organizationId: string,
   url: string,
 ) {
+  assertLegacyWebhookWriteAllowed(instanceId);
   const { data: intent, error } = await admin.rpc("prepare_uazapi_group_webhook", {
     p_instance_id: instanceId,
     p_organization_id: organizationId,

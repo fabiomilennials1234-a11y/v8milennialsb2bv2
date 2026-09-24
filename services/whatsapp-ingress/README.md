@@ -166,3 +166,22 @@ No production ingress, migration or provider routing was activated by this
 preparation. The current 20,000-row/two-day retention budget and serial worker
 are a small-canary configuration, not capacity for all ~20,595 daily receipts
 in the September 16–23 historical window.
+
+
+## Legacy-writer barrier — 2026-09-24
+
+`UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS` is an explicit comma-separated database
+UUID allowlist, empty by default. Configure it in every live function owning
+provider writes before any pilot route change, then wait for prior executions
+to finish. The guard runs before instance creation, adapter reconfiguration
+and central policy reservation. A malformed nonempty list fails closed.
+
+Listed instances reject legacy reconfiguration with409/webhook_route_protected.
+The rebind worker reports skipped/unverified, never successful repair. It does
+not read or validate the split; use full readback separately. Unlisted instances
+retain the legacy policy. Sends/status/connect are unaffected. This deliberate
+write barrier is not automatic reconciliation or an ingress activation flag.
+
+Leave the barrier on throughout cutover and rollback. Restore and verify the
+original provider route, drain accepted events, then remove protection. Never
+remove it first, which would allow an old rebind to overwrite the transition.

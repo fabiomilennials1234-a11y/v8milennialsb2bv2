@@ -1,5 +1,6 @@
 import { InstanceProvisioningUncertainError, provisionWhatsAppInstance } from "../_shared/instance-provisioning.ts";
 import { requestGroupCapture } from "../_shared/uazapi-webhook-policy.ts";
+import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-guard.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 // deno-lint-ignore-file no-explicit-any
 
@@ -1572,6 +1573,9 @@ Deno.serve(
       }
       return jsonResponse(200, { ok: true, result }, corsHeaders);
     } catch (e) {
+      if (e instanceof UazapiIngressWriteGuardError) {
+        return jsonResponse(e.status, { error: e.message, code: e.code }, corsHeaders);
+      }
       const msg = (e as Error).message ?? "Internal error";
       console.error(`[whatsapp-api-proxy] action=${action} UNHANDLED ERROR: ${msg}`, (e as Error).stack ?? e);
 

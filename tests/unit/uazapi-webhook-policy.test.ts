@@ -93,3 +93,28 @@ describe('capture management authorization', () => {
   const a=db(null);expect((await requestGroupCapture(a as never,'u','org',true,'false')).status).toBe(400);expect(a.rpc).not.toHaveBeenCalled();
  });
 });
+
+// Pilot protection must precede the policy lease and every provider operation.
+describe('ingress pilot write protection', () => {
+ const pilot='3ea9d185-62bb-4efd-a9b4-b557938ba9e6';
+ const other='e46a6cf2-3540-4148-867b-1ff1e494e788';
+ function protect(value:string) {
+  vi.stubGlobal('Deno',{env:{get:(name:string)=>name==='UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS'?value:undefined}});
+ }
+ it.each([pilot,`${pilot},bad`,`${pilot},`])('blocks before any lease or provider call %#',async value=>{
+  protect(value);
+  const c=client(),a=admin();
+  await expect(configureUazapiWebhook(c,a as never,pilot,'org',url)).rejects.toMatchObject(value===pilot?{code:'webhook_route_protected',status:409}:{code:'webhook_route_guard_invalid',status:503});
+  expect(a.rpc).not.toHaveBeenCalled();
+  expect(c.updateWebhook).not.toHaveBeenCalled();
+  expect(c.getWebhook).not.toHaveBeenCalled();
+ });
+ it('preserves legacy configuration for another valid instance',async()=>{
+  protect(pilot);
+  const c=client(),a=admin(null);
+  await configureUazapiWebhook(c,a as never,other,'org',url);
+  expect(a.rpc).toHaveBeenCalledTimes(1);
+  expect(c.updateWebhook).toHaveBeenCalledWith({...config,excludeMessages:['wasSentByApi']},{noRetry:false});
+  expect(c.getWebhook).not.toHaveBeenCalled();
+ });
+});

@@ -10,6 +10,7 @@ import { InstanceProvisioningUncertainError } from "../instance-provisioning.ts"
  * createInstance also persists the per-instance token via set_uazapi_credentials RPC.
  */
 
+import { assertLegacyWebhookWriteAllowed } from "../uazapi-ingress-write-guard.ts";
 import { configureUazapiWebhook, normalizeWebhook } from "../uazapi-webhook-policy.ts";
 import { normalizeUazapiMessageResult } from "../uazapi-message-result.ts";
 import { UazapiClient } from "../uazapi-client.ts";
@@ -121,6 +122,7 @@ export class UazapiProvider implements WhatsAppProvider {
   // =========================================================================
 
   async createInstance(input: CreateInstanceInput): Promise<CreateInstanceResult> {
+    assertLegacyWebhookWriteAllowed(input.instance_id);
     // Webhook auth: Uazapi has no HMAC / customHeaders. Secret is embedded
     // as a path segment; edge function validates with timingSafeCompare.
     if (!input.webhook_secret) {
@@ -503,6 +505,7 @@ export class UazapiProvider implements WhatsAppProvider {
   }
 
   async reconfigureWebhook(webhookUrl: string): Promise<void> {
+    assertLegacyWebhookWriteAllowed(this.instanceId);
     await configureUazapiWebhook(this.client, this.supabaseAdmin, this.instanceId, this.organizationId, webhookUrl);
   }
 

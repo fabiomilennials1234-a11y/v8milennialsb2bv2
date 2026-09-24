@@ -211,3 +211,12 @@ IDs e configuração integral; não reconfigura fornecedor. Writers de criação
 reconfigure e rebind ainda precisam coordenar a política dividida. Serviço
 não ativado, migration29 não aplicada e economia ainda não contabilizada.
 Detalhes: `docs/operations/supabase-capacity-ingress-readiness-2026-09-24.md`.
+
+
+### Guarda de reconfiguração — 2026-09-24
+
+A lista `UAZAPI_INGRESS_PROTECTED_INSTANCE_IDS` impede escritores legados de
+sobrescrever rotas de instâncias piloto. Criação protegida também para antes
+de criar instância remota ou persistir credenciais. Proxy409; rebind skip,
+sem fingir configuração verificada. Lista vazia mantém comportamento legado.
+Não equivale a migração de tráfego; ativação do serviço continua pendente.
