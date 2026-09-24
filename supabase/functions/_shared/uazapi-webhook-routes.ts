@@ -49,7 +49,10 @@ export function parseUazapiWebhookRoutes(raw: unknown, scope: 'instance' | 'glob
     if (Object.keys(data).some(key => !fields.includes(key))) return fail('route_unknown_fields');
     if (typeof data.id !== 'string' || !data.id || data.id.trim() !== data.id) return fail('route_id_missing');
     if (ids.has(data.id)) return fail('route_id_duplicate');
-    if (!httpsUrl(data.url) || typeof data.enabled !== 'boolean'
+    // The provider represents an unconfigured, explicitly disabled global
+    // route with an empty URL. Retain that inventory for exact readback only.
+    const disabledGlobalWithoutUrl = scope === 'global' && data.enabled === false && data.url === '';
+    if (typeof data.url !== 'string' || (!httpsUrl(data.url) && !disabledGlobalWithoutUrl) || typeof data.enabled !== 'boolean'
       || !stringSet(data.events) || !stringSet(data.excludeMessages)
       || typeof data.addUrlEvents !== 'boolean' || typeof data.addUrlTypesMessages !== 'boolean') return fail('route_config_inconclusive');
     if (data.events.some(event => !supportedEvents.includes(event))

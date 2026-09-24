@@ -246,6 +246,39 @@ describe("durable target availability", () => {
     expect(completeQuotePresentations).toHaveBeenCalledTimes(1);
   });
 
+  it("reuses durable target direction for a duplicate read and still completes quotes", async () => {
+    fetchMock.mockResolvedValueOnce(json([{ id: "row-a", message_id: "message-a", status: "read", direction: "outgoing" }]))
+      .mockResolvedValueOnce(json([]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read" }, { requireTarget: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(methodAt(0)).toBe("GET");
+    expect(urlAt(0).searchParams.get("select")).toContain("direction");
+    expect(methodAt(1)).toBe("PATCH");
+    expect(urlAt(1).searchParams.get("status")).toBe("in.(pending,sent,delivered,failed)");
+    expect(logRuntime).not.toHaveBeenCalled();
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("logs unmatched outgoing receipt using durable incoming target without another lookup", async () => {
+    fetchMock.mockResolvedValueOnce(json([{ id: "row-a", message_id: "message-a", status: "read", direction: "incoming" }]))
+      .mockResolvedValueOnce(json([]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read" }, { requireTarget: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(logRuntime).toHaveBeenCalledWith(expect.objectContaining({ action: "uazapi_receipt_unmatched" }));
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("reuses durable reaction snapshot while retaining compare-and-swap", async () => {
+    fetchMock.mockResolvedValueOnce(json([{ id: "row-a", message_id: "message-a", reactions: [], direction: "incoming" }]))
+      .mockResolvedValueOnce(json([{ id: "row-a" }]));
+    await applyMessageUpdate(db, instance, { id: "message-a", reaction: { emoji: "👍", from: "a" } }, { requireTarget: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(methodAt(0)).toBe("GET");
+    expect(methodAt(1)).toBe("PATCH");
+    expect(urlAt(1).searchParams.get("reactions")).toBe("eq.[]");
+    assertScope(urlAt(1));
+  });
+
   it("retains missing historical-target behavior for the Edge caller", async () => {
     fetchMock.mockImplementation(async () => json([]));
     await applyMessageUpdate(db, instance, { id: "message-a", reaction: { emoji: "👍", from: "a" } });

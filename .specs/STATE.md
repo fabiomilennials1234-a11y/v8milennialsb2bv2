@@ -157,3 +157,23 @@ prova todos os efeitos do webhook nem retries/capacidade do fornecedor.
 Acesso administrativo para configurar credenciais continua pendente. Piloto
 TorqueSDR ainda sem tráfego. Evidências e próximos gates em
 `docs/operations/supabase-capacity-ingress-pilot-2026-09-24.md`.
+
+### Ingress: runtime real e queries — 2026-09-24
+
+Credenciais conferidas; runtime em loopback validado com banco real e receipts
+já lidos. Perfil do piloto com margem:50/50 concluídos na primeira tentativa,
+p95 fila0,881s. Estresse concentrado:até11,725s; não extrapolar para todas as
+instâncias. Reuso da leitura durável reduz uma consulta por receipt duplicado;
+UPDATE atômico e conclusão comercial preservados. Testes canônicos PGlite novos.
+Global desativado com URL vazia aceito estritamente pelo preflight.
+
+Produção webhook114 recebeu patch mínimo já presente na main: reação de grupo
+explicitamente não capturado deixa de falhar por alvo ausente.55 arquivos
+verificados,54 dependências intactas. Ingress ainda não recebeu tráfego regular.
+Teste temporário não recebeu eventos: reentrega segue inconclusiva. Rota,
+container, proxy e credenciais remotas temporárias removidos; proteção temporária
+dos writers retirada, rota original conferida. Evidências: `docs/operations/supabase-capacity-ingress-runtime-2026-09-24.md`.
+
+Conferência final13:44UTC: inbox e contador zerados. Entre13:35–13:42UTC houve
+falha transversal REST/Auth e timeout de funções; banco registra restart13:41:45,
+não iniciado por este trabalho. SQL/REST recuperados, causa não determinada.

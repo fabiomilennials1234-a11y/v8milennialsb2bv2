@@ -9,6 +9,7 @@ const source = {
 const ingressUrl = 'https://ingress.example.invalid/webhook/test-secret';
 const unrelated = { ...source, id: 'wh_third-party', url: 'https://other.example.invalid/events', events: ['presence'], addUrlEvents: false };
 const globals = [{ ...unrelated, id: 'wh_global', enabled: false }];
+const emptyGlobal = { id: 'wh_empty-global', enabled: false, url: '', events: [], excludeMessages: [], addUrlEvents: false, addUrlTypesMessages: false };
 const input = () => ({ instanceRoutes: [structuredClone(source), structuredClone(unrelated)], globalRoutes: structuredClone(globals), expectedSourceUrl: source.url, ingressUrl });
 function plan() {
   const result = planUazapiUpdatesSplit(input());
@@ -21,6 +22,19 @@ function readback() {
 }
 
 describe('strict Uazapi route inventory', () => {
+  it('preserves the provider empty disabled global route, including its opaque ID', () => {
+    expect(parseUazapiWebhookRoutes(emptyGlobal, 'global')).toEqual({ ok: true, value: [emptyGlobal] });
+    expect(parseUazapiWebhookRoutes([emptyGlobal], 'global')).toEqual({ ok: true, value: [emptyGlobal] });
+    expect(parseUazapiWebhookRoutes([emptyGlobal], 'instance').ok).toBe(false);
+    expect(parseUazapiWebhookRoutes({ ...emptyGlobal, enabled: true }, 'global').ok).toBe(false);
+  });
+  it.each([
+    { enabled: undefined }, { enabled: 'false' }, { url: undefined }, { url: null }, { url: ' ' },
+    { id: '' }, { events: undefined }, { excludeMessages: undefined },
+    { addUrlEvents: undefined }, { addUrlTypesMessages: undefined }, { unknownDeliveryFlag: false },
+  ])('does not infer missing or unknown disabled-global configuration %#', changes => {
+    expect(parseUazapiWebhookRoutes({ ...emptyGlobal, ...changes }, 'global').ok).toBe(false);
+  });
   it('keeps every supported field and opaque IDs, copying input arrays', () => {
     const raw = input().instanceRoutes;
     const result = parseUazapiWebhookRoutes(raw);
@@ -83,6 +97,18 @@ describe('read-only updates split preflight', () => {
 });
 
 describe('all-routes split readback', () => {
+  it('plans with an empty disabled global route and rejects its drift or disappearance', () => {
+    const result = planUazapiUpdatesSplit({ ...input(), globalRoutes: emptyGlobal });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const p = result.value;
+    expect(p.globalsBefore).toEqual([emptyGlobal]);
+    const routes = [...p.desired.existingRoutes, { ...p.desired.addedRoute, id: 'wh_new' }];
+    expect(verifyUazapiUpdatesSplitReadback(p, routes, emptyGlobal)).toEqual({ ok: true, value: { addedRouteId: 'wh_new' } });
+    expect(verifyUazapiUpdatesSplitReadback(p, routes, []).ok).toBe(false);
+    expect(verifyUazapiUpdatesSplitReadback(p, routes, { ...emptyGlobal, url: 'https://new.example.invalid/webhook' }).ok).toBe(false);
+    expect(verifyUazapiUpdatesSplitReadback(p, routes, { ...emptyGlobal, enabled: true }).ok).toBe(false);
+  });
   it('accepts exact resulting coverage regardless of list/set ordering', () => {
     const { p, routes } = readback();
     routes[0] = { ...routes[0], events: ['connection', 'messages'] };
