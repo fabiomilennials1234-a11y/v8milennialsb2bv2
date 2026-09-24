@@ -46,6 +46,17 @@ só depois de verificar a janela de horário. Follow-ups pendentes também ganha
   `CHROMIUM_PATH` permite indicar um executável já instalado.
 - Build de produção e verificações de regressões de tipos/lint/testes.
 
+Resultados finais: 49 testes focados aprovados, ensaio SQL/rollback aprovado e
+ensaio de áudio real no Edge aprovado. Build, `typecheck:ratchet` e
+`lint:deps:check` aprovados; ESLint dos arquivos alterados sem erros ou warnings.
+O `test:ratchet` geral confirmou 33 falhas fora do diff, também reproduzidas no
+checkout original `ea7a1be2e`. O `lint:ratchet` original confirmou os cinco
+warnings em `quotes/presentation.ts`, `quotes/tool.ts` e testes de cotação;
+não pertencem a esta alteração. Baselines de dívida não foram aumentados.
+O guarda de versões passou sem duplicações ou colisões com `origin/main`.
+Advisors de segurança de produção consultados sem achados relacionados a
+notificações; isso não substitui o check dos grants após o futuro apply.
+
 ## Publicação e limites
 
 Não houve aplicação em produção, mensagens de teste para clientes, nem criação
