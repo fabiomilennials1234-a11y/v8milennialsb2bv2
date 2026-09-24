@@ -15,6 +15,10 @@ novo ciclo de medição. Meta 1,4M permanece projeção a confirmar.
 
 ## Produção
 
+PR2165 mergeado. Migration31 aplicada como versão remota `20260924034604`;
+seis hashes conferidos antes e depois, ACL service_role-only confirmada e seis
+agendas ativas. Somadas às12guardas anteriores,18invokers evitam HTTP ocioso.
+
 Publicados `process-workflow-executions` v169 (sondagem sem executar tarefas) e
 `attach-to-org-by-pending-invite` v90 (envelope correto do usuário autenticado).
 Dez testes direcionados passaram. Sondagem real autenticada 200/healthy;

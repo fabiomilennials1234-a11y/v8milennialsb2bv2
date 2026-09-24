@@ -46,6 +46,26 @@ after deployment without waiting for a full billing cycle to implement fixes.
 
 ## Next package validation
 
+PR2165 merged as `6af187da3f3d822dc9ed710e800fa1199caac992` at
+2026-09-24T03:45:48Z. Migration31 applied in production as
+`20260924034604_cron_skip_idle_followups`, with lock timeout3s, statement
+timeout30s and six original-body hash assertions inside the transaction.
+Post-apply: all six body hashes match approved SQL; anon/authenticated EXECUTE
+false, service_role true. All six schedules active (workflow every minute,
+other five every five minutes). No worker invoked manually during verification.
+Rollback remains the paired SQL file. Do not replay this migration based on
+the different local2027version prefix.
+
+GitHub CI again did not start because of account payment/spending restriction
+(job107484586018 annotation). Local validation below is the available evidence;
+no CI pass claimed. EasyPanel independently acknowledged merge push with HTTP200
+at2026-09-24T03:45:50.864Z; acknowledgment alone is not proof of completed build.
+
+Frontend rollout subsequently verified: image created
+2026-09-24T03:47:26.878668816Z, container `265da5ecfc10` running it.
+Its compiled `TVDashboard-MYwrPMui.js` contains the new `tv-coach-analysis`
+query key. This verifies the changed code was included in the running bundle.
+
 - Coach TV: eight behavioral tests and four existing contract tests passed;
   independent review covered identity/organization isolation, entitlement gate,
   remount caching, cooldown and explicit retry. Background interval does not
