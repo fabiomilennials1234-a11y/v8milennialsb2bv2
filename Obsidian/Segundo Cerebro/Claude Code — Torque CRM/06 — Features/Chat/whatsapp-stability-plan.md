@@ -377,3 +377,14 @@ CRM. SQL37 and the worker classifier retain the exact envelope and accept only
 boolean directions, preserving notification-only semantics and audited replay.
 See the operational gate report for current deployment and queue evidence;
 preparation alone does not mean direct routing is active.
+
+
+## Estado após SQL37 — 24/09/2026, 20:26 UTC
+
+PR2183, SQL37 e imagem `readiness-20260924-v1` concluíram o segundo
+FileDownloaded via replay auditado. Fila: 249 concluídos, zero pendentes ou dead
+letter; worker/Docker saudáveis. A rota Uazapi segue no Edge v121, com admissão
+direta e encaminhamento desligados. A guarda foi configurada só para TorqueSDR,
+mas prova autenticada de bloqueio ainda falta (`401`, não `409`). Sem economia
+Edge nova. Ensaios públicos e proteção confirmada precedem migração de URL.
+Evidência detalhada: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
