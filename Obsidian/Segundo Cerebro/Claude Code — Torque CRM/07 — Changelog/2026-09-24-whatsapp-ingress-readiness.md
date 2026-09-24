@@ -1,3 +1,13 @@
+---
+type: changelog
+title: WhatsApp ingress — preparação e piloto de fila
+status: active
+created: 2026-09-24
+updated: 2026-09-24
+tags: [whatsapp, performance, supabase, ingress]
+owner: gabriel
+---
+
 # WhatsApp ingress: preparação de ativação — 2026-09-24
 
 ## Mudanças
@@ -99,3 +109,33 @@ continua risco preexistente, com novas rejeições da fila a controlar. Próximo
 bloqueio concreto: TorqueSDR teve7 logs de receipts sem alvo em24h; worker estrito
 pode travar FIFO nesses casos. Definir desfecho auditado antes de ativar.
 Evidências e sequência: `docs/operations/whatsapp-live-update-parity-2026-09-24.md`.
+
+
+## SQL34 em produção; piloto ainda desligado — 2026-09-24
+
+Ledger de produção `20260924155231` registra SQL34
+(`20271021000034_whatsapp_ingress_completion_outcome.sql`). Schema prepara
+adiamento de receipts sem alvo por até cinco minutos e registro explícito do
+desfecho; lane adiada não segura os eventos regulares. Pausa, tickets e
+barreira de dead letter regular continuam aplicáveis.
+
+Worker segue pausado; rota do fornecedor não mudou. Piloto Edge → inbox ainda
+não recebe tráfego. Aplicar migration não comprova deploy/merge final do código
+nem gera economia de invocações Edge. O bloqueio descrito acima passou a ter
+política de desfecho preparada no banco, mas depende de ativação e observação
+do worker para validar comportamento em produção.
+
+### Atualização operacional — piloto ligado em24/09/2026 às16:04 UTC
+
+TorqueSDR `messages_update` agora passa pela Edge v121 para inbox e worker único
+na VPS. Gate queued/revision2; worker retomado/revision2; provider/URL inalterados.
+Recibo controlado de mensagem já lida:200, processed em1,84s, uma tentativa,
+sem erro; nenhuma mensagem enviada. SQL34 ledger20260924155231;58 arquivos live
+conferidos.149 testes direcionados e quatro integrações SQL aprovados; suíte
+completa13.780 aprovados e151 falhas idênticas às anteriores.
+
+**Rota direta VPS ainda desligada; economia Edge desta ponte=zero.** Documentação
+Uazapi declara que messages_update não repete entrega HTTP malsucedida. Falta
+recuperação/reconciliação testada antes da migração direta. Estado anterior de
+piloto desligado registra preparação; esta entrada supersede esse estado.
+Procedimento/readbacks: `docs/operations/whatsapp-edge-to-inbox-pilot.md`.

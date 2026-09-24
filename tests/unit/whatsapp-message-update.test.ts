@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { applyMessageUpdate } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
+import { applyMessageUpdate, isPureReceiptUpdate, normalizeMessageUpdatePayload } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
 
 const { completeQuotePresentations, logRuntime } = vi.hoisted(() => ({
   completeQuotePresentations: vi.fn(async () => {}), logRuntime: vi.fn(async () => {}),
@@ -71,6 +71,67 @@ describe("receipt HTTP contract", () => {
     fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
     await expect(applyMessageUpdate(db, instance, { id: "message-a", status: "read" })).rejects.toThrow("Receipt persistence failed");
     expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+});
+
+describe("bounded missing receipt policy", () => {
+  const age = (ms: number) => ({ requireTarget: true, queuedEventCreatedAt: new Date(Date.now() - ms).toISOString(), unmatchedReceiptGraceMs: 300_000 });
+  it("classifies normalized pure V2 receipts and rejects mixed mutations", () => {
+    const normalized = normalizeMessageUpdatePayload({ event: { MessageIDs: ["message-a"], Type: "Read", IsFromMe: false, pinned: true } });
+    expect(normalized.pinned).toBe(true);
+    expect(isPureReceiptUpdate(normalized)).toBe(false);
+    expect(isPureReceiptUpdate({ ids: ["message-a"], status: "read", fromMe: false })).toBe(true);
+    expect(isPureReceiptUpdate({ ids: ["message-a", ""], status: "read" })).toBe(false);
+    const emptyIds = normalizeMessageUpdatePayload({ event: { MessageIDs: [], messageid: "message-a", Type: "read" } });
+    expect(emptyIds.id).toBe("message-a");
+    expect(isPureReceiptUpdate(emptyIds)).toBe(true);
+  });
+
+  it("defers absent IDs during grace without delaying matched writes; audits after grace", async () => {
+    fetchMock.mockImplementation(async (_input, init) => init.method === "GET"
+      ? json([{ id: "row-a", message_id: "message-a", status: "sent", direction: "outgoing", reactions: [] }])
+      : json([{ id: "row-a" }]));
+    const update = { ids: ["message-a", "outside-crm"], status: "read" };
+    expect(await applyMessageUpdate(db, instance, update, age(299_000)))
+      .toEqual({ outcome: "deferred_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(1);
+    fetchMock.mockClear();
+    const result = await applyMessageUpdate(db, instance, update, age(301_000));
+    expect(result).toEqual({ outcome: "unmatched_receipt", unmatchedCount: 1 });
+    const patch = fetchMock.mock.calls.find(([, init]) => init.method === "PATCH");
+    expect(patch).toBeDefined();
+    const candidates = new URL(String(patch![0])).searchParams.get("message_id");
+    expect(candidates).toContain("message-a");
+    expect(candidates).not.toContain("outside-crm");
+    expect(completeQuotePresentations).toHaveBeenCalledTimes(2);
+    expect(completeQuotePresentations.mock.lastCall?.[3]).not.toContain("outside-crm");
+  });
+
+  it("records all absent IDs after grace without claiming a write", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    expect(await applyMessageUpdate(db, instance, { id: "outside-crm", status: "delivered" }, age(301_000)))
+      .toEqual({ outcome: "unmatched_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(0);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("defers an entirely absent pure receipt before grace without business writes", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    expect(await applyMessageUpdate(db, instance, { id: "outside-crm", status: "sent" }, age(1_000)))
+      .toEqual({ outcome: "deferred_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("never relaxes invalid time, mixed mutations or database failure", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    const missing = { id: "outside-crm", status: "read" };
+    await expect(applyMessageUpdate(db, instance, missing, { requireTarget: true, queuedEventCreatedAt: "invalid", unmatchedReceiptGraceMs: 300_000 }))
+      .rejects.toThrow("Message update target unavailable");
+    await expect(applyMessageUpdate(db, instance, { ...missing, pinned: true }, age(301_000)))
+      .rejects.toThrow("Message update target unavailable");
+    fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
+    await expect(applyMessageUpdate(db, instance, missing, age(301_000)))
+      .rejects.toThrow("Message update target unavailable");
   });
 });
 

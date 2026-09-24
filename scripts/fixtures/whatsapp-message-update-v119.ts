@@ -6,35 +6,6 @@ import { buildMessageIdCandidates, extractRawMessageIds, mapReceiptStatus } from
 type Instance = { id: string; organization_id: string; phone_number?: string | null };
 type Reaction = Record<string, unknown>;
 type Update = Record<string, unknown> & { ids?: unknown; id?: unknown; messageid?: unknown; key?: { id?: unknown } };
-export interface UnmatchedReceiptOutcome { outcome: "deferred_receipt" | "unmatched_receipt"; unmatchedCount: number }
-
-export function normalizeMessageUpdatePayload(payload: Record<string, unknown>): Update {
-  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) return payload.data as Update;
-  if (payload.event && typeof payload.event === "object" && !Array.isArray(payload.event)) {
-    const ev = payload.event as Record<string, unknown>;
-    return {
-      ...ev,
-      id: (Array.isArray(ev.MessageIDs) ? ev.MessageIDs[0] : undefined) ?? ev.messageid,
-      ids: Array.isArray(ev.MessageIDs) ? ev.MessageIDs : undefined,
-      status: ev.Type ?? ev.type,
-      chatid: ev.chatid ?? ev.Chat,
-      fromMe: ev.IsFromMe ?? ev.isFromMe,
-      owner: payload.owner,
-    };
-  }
-  return payload;
-}
-
-export function isPureReceiptUpdate(data: Update): boolean {
-  const ids = extractRawMessageIds(data);
-  return ["sent", "delivered", "read", "failed"].includes(mapReceiptStatus(data.status) ?? "")
-    && ids.length > 0 && ids.every(id => id.trim().length > 0)
-    && (data.ids === undefined || (Array.isArray(data.ids)
-      && data.ids.every(id => typeof id === "string" && id.trim().length > 0)))
-    && (data.fromMe === undefined || data.fromMe === false)
-    && data.edited === undefined && data.deleted === undefined && data.pinned === undefined
-    && data.reaction === undefined && data.reactions === undefined;
-}
 
 /** An atomic SQL predicate prevents late receipts from overwriting later states. */
 export function receiptPredecessors(status: string): string[] {
@@ -68,10 +39,8 @@ export function mergeUpdateReaction(current: unknown, value: unknown): Reaction[
   return kept;
 }
 
-export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: {
-  requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
-} = {}): Promise<UnmatchedReceiptOutcome | undefined> {
-  const rawIds = [...new Set(extractRawMessageIds(data))];
+export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: { requireTarget?: boolean } = {}): Promise<void> {
+  const rawIds = extractRawMessageIds(data);
   const receipt = mapReceiptStatus(data.status);
   if (options.requireTarget) {
     // Durable deliveries must retain unknown/malformed targets for investigation,
@@ -98,36 +67,20 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     if (data.reaction !== undefined) mergeUpdateReaction([], data.reaction);
   }
   if (!rawIds.length) return;
-  let ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
+  const ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
   const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
     .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
   const mutates = (receipt && receipt !== "pending" && data.fromMe !== true) || data.edited || data.deleted
     || typeof data.pinned === "boolean" || data.reactions || data.reaction;
   let scopedTargets: Array<{ id: string; message_id: string; reactions: unknown; status: string; direction: string }> | null = null;
-  let outcome: UnmatchedReceiptOutcome | undefined;
   if (options.requireTarget && mutates) {
     const { data: targets, error } = await scope();
     const found = new Set((targets ?? []).map(target => target.message_id));
-    if (error) throw new Error("Message update target unavailable");
-    const matched = rawIds.filter(id => buildMessageIdCandidates(id, instance.phone_number, data.owner).some(candidate => found.has(candidate)));
-    const missingCount = rawIds.length - matched.length;
-    if (missingCount) {
-      const pureReceipt = isPureReceiptUpdate(data);
-      const createdAt = Date.parse(options.queuedEventCreatedAt ?? "");
-      const elapsed = Date.now() - createdAt;
-      const pastGrace = Number.isFinite(createdAt) && Number.isFinite(elapsed)
-        && elapsed >= (options.unmatchedReceiptGraceMs ?? Number.POSITIVE_INFINITY)
-        && Number.isFinite(options.unmatchedReceiptGraceMs) && (options.unmatchedReceiptGraceMs ?? 0) >= 0;
-      if (!pureReceipt || !Number.isFinite(createdAt) || !Number.isFinite(elapsed)
-        || !Number.isFinite(options.unmatchedReceiptGraceMs) || (options.unmatchedReceiptGraceMs ?? 0) < 0) {
-        throw new Error("Message update target unavailable");
-      }
-      ids = [...new Set(matched.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
-      outcome = { outcome: pastGrace ? "unmatched_receipt" : "deferred_receipt", unmatchedCount: missingCount };
+    if (error || rawIds.some(id => !buildMessageIdCandidates(id, instance.phone_number, data.owner).some(candidate => found.has(candidate)))) {
+      throw new Error("Message update target unavailable");
     }
     scopedTargets = targets ?? [];
   }
-  if (ids.length === 0) return outcome;
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
     if (predecessors.length) {
@@ -208,5 +161,4 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
       if (!persisted) throw new Error("Reaction update contention");
     }
   }
-  return outcome;
 }

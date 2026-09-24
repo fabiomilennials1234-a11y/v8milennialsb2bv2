@@ -1,4 +1,4 @@
-import { applyMessageUpdate } from "./message-update.ts";
+import { applyMessageUpdate, isPureReceiptUpdate, normalizeMessageUpdatePayload, type UnmatchedReceiptOutcome } from "./message-update.ts";
 import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
@@ -1244,8 +1244,10 @@ async function handlePaymentResponseEvent(
   });
 }
 
-async function handleMessagesUpdateEvent(supabase: SupabaseClient, instance: ResolvedInstance, data: any, requireTarget = false) {
-  await applyMessageUpdate(supabase, instance, data, { requireTarget });
+async function handleMessagesUpdateEvent(supabase: SupabaseClient, instance: ResolvedInstance, data: any, options: {
+  requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
+} = {}) {
+  return await applyMessageUpdate(supabase, instance, data, options);
 }
 
 async function handleConnectionEvent(
@@ -1363,6 +1365,9 @@ export interface WhatsAppWebhookOptions {
   strictUpdateTargets?: boolean;
   /** Internal durable replay only; the original ingress already checked age. */
   trustedQueuedReplay?: boolean;
+  /** Durable queue creation time; worker-only bounded grace for pure receipts with absent targets. */
+  queuedEventCreatedAt?: string;
+  unmatchedReceiptGraceMs?: number;
   /** Optional durable admission after authentication and database tenant resolution.
    * Only null selects inline handling. An admission error must never fall back. */
   admitEvent?: (context: {
@@ -1627,6 +1632,7 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
     }
 
     try {
+      let updateOutcome: UnmatchedReceiptOutcome | undefined;
       const businessWork = (async () => {
           switch (event) {
             case "messages": {
@@ -1635,27 +1641,15 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
               break;
             }
             case "messages_update": {
-              // Uazapi V2: update data in payload.event (object) with PascalCase fields
-              let updateData = payload.data;
-              if (!updateData && typeof payload.event === "object" && payload.event !== null) {
-                const ev = payload.event;
-                updateData = {
-                  ...ev,
-                  id: ev.MessageIDs?.[0] ?? ev.messageid,
-                  // MessageIDs é array: um receipt pode cobrir várias mensagens.
-                  ids: Array.isArray(ev.MessageIDs) ? ev.MessageIDs : undefined,
-                  status: ev.Type ?? ev.type,
-                  chatid: ev.chatid ?? ev.Chat,
-                  // IsFromMe distingue "o contato leu a minha" (false) de "eu li a
-                  // dele" (true) — sem isso o receipt sobrescreve linha incoming.
-                  fromMe: ev.IsFromMe ?? ev.isFromMe,
-                  // Fallback do prefixo do message_id composto quando a instância
-                  // ainda não tem phone_number gravado.
-                  owner: payload.owner,
-                };
-              }
-              await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload,
-                inlineExecution !== null || (options.strictUpdateTargets ?? false));
+              const updateData = normalizeMessageUpdatePayload(payload);
+              updateOutcome = await handleMessagesUpdateEvent(supabase, instance, updateData, {
+                requireTarget: (options.strictUpdateTargets ?? false)
+                  || (inlineExecution !== null && !isPureReceiptUpdate(updateData)),
+                ...(options.trustedQueuedReplay ? {
+                  queuedEventCreatedAt: options.queuedEventCreatedAt,
+                  unmatchedReceiptGraceMs: options.unmatchedReceiptGraceMs,
+                } : {}),
+              });
               break;
             }
             case "connection":
@@ -1702,7 +1696,9 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
         payloadSnapshot: { event, instance_id: instance.id },
       });
 
-      return genericResponse(200, { ok: true });
+      return genericResponse(200, updateOutcome
+        ? { ok: true, outcome: updateOutcome.outcome, unmatched_count: updateOutcome.unmatchedCount }
+        : { ok: true });
     } catch (e) {
       await logRuntime({
         organizationId: instance.organization_id,
