@@ -48,6 +48,7 @@ const {
     SUPABASE_URL: "https://test.supabase.co",
     SUPABASE_ANON_KEY: "anon-key",
     SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+    UAZAPI_WEBHOOK_SECRET: "fixture-webhook-secret",
     ALLOWED_ORIGINS: "http://localhost:8080",
   };
 
@@ -406,6 +407,32 @@ describe('createInstance management permission', () => {
       }
     });
   }
+});
+
+describe('protected webhook routing response', () => {
+  it.each([
+    ['protected_instance', 409, 'webhook_route_protected'],
+    ['invalid_configuration', 503, 'webhook_route_guard_invalid'],
+  ] as const)('reports %s without claiming reconfiguration or logging secrets', async (reason, status, code) => {
+    const handler = await carregarProxyNovo();
+    const { UazapiIngressWriteGuardError } = await import('../../supabase/functions/_shared/uazapi-ingress-write-guard.ts');
+    mockGetWhatsAppProvider.mockResolvedValue({
+      provider: 'uazapi',
+      reconfigureWebhook: vi.fn().mockRejectedValue(new UazapiIngressWriteGuardError(reason)),
+    });
+    const response = await handler(new Request('http://localhost/whatsapp-api-proxy', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer jwt-do-usuario', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reconfigureWebhook', instance_id: INSTANCE_ID }),
+    }));
+    expect(response.status).toBe(status);
+    const body = await response.json();
+    expect(body.code).toBe(code);
+    expect(body.ok).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('fixture-webhook-secret');
+    expect(mockLogRuntime).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'reconfigureWebhook' }));
+    expect(JSON.stringify(mockLogRuntime.mock.calls)).not.toContain('fixture-webhook-secret');
+  });
 });
 
 async function excluirInstancia(

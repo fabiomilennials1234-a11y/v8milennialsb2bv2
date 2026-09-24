@@ -29,7 +29,7 @@ function assertRequestContract() {
     }
   }
 }
-beforeEach(() => { UazapiClient._resetCircuitState(); vi.stubGlobal("fetch", vi.fn()); });
+beforeEach(() => { vi.stubGlobal("Deno", { env: { get: () => undefined } }); UazapiClient._resetCircuitState(); vi.stubGlobal("fetch", vi.fn()); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("UAZAPI 2.1.1 request contracts", () => {
