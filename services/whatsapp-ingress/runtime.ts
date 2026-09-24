@@ -54,7 +54,9 @@ async function boundedBody(request: Request, timeoutMs: number): Promise<ArrayBu
 }
 
 export function createIngress(config: IngressConfig, canonical: Handler, background: BackgroundTasks, workerHealthy: () => boolean = () => true) {
-  let accepting = true;
+  // Rollback can stop new admission while the enabled worker still drains
+  // events already acknowledged by Postgres. Disabling the service stops both.
+  let accepting = config.accepting;
   const requests = new Set<Promise<Response>>();
   const ready = () => accepting && config.enabled && config.instanceIds.size > 0
     && requests.size < config.maxRequests && background.size < config.maxBackgroundTasks && workerHealthy();

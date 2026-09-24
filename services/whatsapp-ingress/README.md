@@ -20,7 +20,8 @@ webhook as an intermediate hop.
 - Initial canary accepts **only `messages_update`**. Messages, connection and
   other events return 503; provider routing must separate event types first.
 - Authentication and database tenant resolution precede durable admission.
-  The service returns **202 only after the enqueue RPC commits**. Failed inbox
+  The service returns **200 only after the enqueue RPC commits**, preserving
+  the existing Edge success status. Failed inbox
   writes return 503. Group receipts are intentionally ignored only when the
   group is positively identified and its organization's capture is explicitly
   false; policy lookup failures cannot authorize dropping events.
@@ -64,7 +65,7 @@ webhook as an intermediate hop.
   Explicit deletion of an instance/organization cascades its technical inbox
   and decrements the counter, preserving the existing deletion flow; this is
   intentional user deletion, not an automatic discard of accepted work.
-- Before enabling traffic, verify provider acceptance of 202 and retry/backoff
+- Before enabling traffic, verify provider retry/backoff
   for 408, 429, 500 and 503, plus replay of out-of-order receipts. Durable inbox
   protects events **after** successful commit; provider redelivery is still
   essential before commit, during capacity rejection or database downtime.
@@ -91,6 +92,14 @@ Required when enabled: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `INGRESS_SINGLE_WORKER_CONFIRMED=true`.
 Shared handler optional environment variables retain their existing meanings.
 `PORT` defaults to 8080. Service role credentials stay server-side.
+
+`INGRESS_ACCEPTING` defaults to `true`. Set it to `false` while keeping
+`INGRESS_ENABLED=true` for drain-only operation: admission and `/ready` return
+503, but the worker continues processing accepted events and cleanup. Use this
+after restoring and verifying provider routing during rollback. Changing the
+environment requires a controlled single-worker restart; claimed work remains
+durable and may wait for its lease to expire. Do not start an overlapping worker
+or set `INGRESS_ENABLED=false` while work still needs draining.
 
 `INGRESS_ALLOWED_NET` is an explicit comma-separated Deno host/port allowlist.
 Include the listening address, Supabase HTTPS host, and provider/media hosts
@@ -135,3 +144,25 @@ rollback refuses outstanding/dead-letter events and never drops the inbox.
 Do not blindly replay terminal pin/reaction events after newer state; inspect
 order and reconcile explicitly. Keep cleanup running or execute its bounded
 service-only RPC if this service is disabled after the canary.
+
+
+## Rollout preparation — 2026-09-24
+
+Strict queued replay now rejects absent/partially invalid IDs, unknown operations,
+and malformed operation fields before writes. Recognized no-ops remain valid.
+Unknown provider shapes remain retryable/dead-letter evidence rather than being
+silently completed; inspect them before increasing the canary scope.
+
+`supabase/functions/_shared/uazapi-webhook-routes.ts` offers a pure, read-only
+preflight and whole-configuration readback verifier. It preserves route IDs,
+filters and unrelated routes, rejects active global webhooks and overlapping
+managed events, and requires explicit complete fields. It never writes to the
+provider. Existing creation/reconfigure/rebind writers still use the singleton
+policy: **do not enable split routing until those writers share the routing
+policy and reconciliation lock**. Two provider writes are not atomic; a passing
+configuration check is not proof of gap-free or duplicate-free delivery.
+
+No production ingress, migration or provider routing was activated by this
+preparation. The current 20,000-row/two-day retention budget and serial worker
+are a small-canary configuration, not capacity for all ~20,595 daily receipts
+in the September 16–23 historical window.

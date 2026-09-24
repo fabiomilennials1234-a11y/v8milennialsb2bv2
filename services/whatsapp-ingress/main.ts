@@ -27,7 +27,7 @@ const ingress = createIngress(config, createWhatsAppWebhookHandler({
   strictUpdateTargets: true,
   admitEvent: async context => {
     const response = await admitReceipt(context);
-    if (response.status === 202) worker?.notify();
+    if (response.status === 200) worker?.notify();
     return response;
   },
 }), background, () => worker?.healthy() ?? false);
