@@ -242,3 +242,18 @@ separation of admission and effects; it still consumes an Edge invocation per
 callback. Do not count it as invocation savings, or activate a direct provider
 split based only on these tests. Production activation remains blocked pending
 handoff/recovery evidence recorded in the capacity runtime report.
+
+
+## Worker claim pause and terminal FIFO barrier
+
+SQL32 adds a service-only, revision-checked pause per resolved database instance.
+Pause blocks new claims; existing work may finish and admission remains durable.
+Resume refuses processing rows, including expired leases. A dead-letter head now
+blocks later events in that instance until explicit reconciliation; unrelated
+instances continue. No auto-replay or deletion was added.
+
+`/ready` still reflects admission liveness, not a drained queue or exclusive
+ownership. The operator CLI performs explicit actions without polling, prints
+only redacted counters, and never retries an ambiguous mutation. Full contract,
+permissions, rollback and limits: `docs/operations/whatsapp-ingress-worker-handoff.md`.
+This does not make the old Edge handoff or provider recovery safe automatically.

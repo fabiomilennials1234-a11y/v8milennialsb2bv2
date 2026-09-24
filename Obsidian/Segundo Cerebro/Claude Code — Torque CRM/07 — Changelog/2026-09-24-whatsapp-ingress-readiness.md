@@ -32,3 +32,22 @@ contabilizada e nenhum recurso temporário do ensaio permanece ativo.
 
 Referências: `services/whatsapp-ingress/README.md`, `.specs/STATE.md` e
 `docs/operations/supabase-capacity-ingress-runtime-2026-09-24.md`.
+
+
+## Controle de pausa e FIFO — 2026-09-24
+
+SQL32 corrige avanço após dead_letter: eventos posteriores da mesma instância
+ficam bloqueados até reconciliação. Adiciona pausa de novos claims com revisão
+CAS e snapshot privado sem payload. Enqueue e conclusão de trabalho aceito seguem
+funcionando; retomada recusa processamento ativo ou expirado ainda pendente.
+CLI explícito usa arquivo de credencial privado, sem retry cego nem polling.
+
+Não altera rotas/flags Edge, não cancela efeitos antigos em voo e não prova
+recuperação do fornecedor. Operação/rollback:
+`docs/operations/whatsapp-ingress-worker-handoff.md`.
+
+
+SQL32 aplicada em produção: ledger real `20260924143904`. Validação de pausa,
+revisão, tenant, claim e conclusão via service_role executada com ROLLBACK; fila
+e controles finais zerados. Permissões privadas conferidas. Nenhuma mudança de
+rota/flag/worker e nenhuma economia de invocações atribuída a esta proteção.
