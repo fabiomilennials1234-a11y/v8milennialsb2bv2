@@ -67,6 +67,16 @@ describe("larguraDoPainel", () => {
   });
 });
 
+/**
+ * O painel atravessa uma fronteira `React.lazy`, e resolver módulo dinâmico é
+ * assíncrono. O `findBy*` espera 1s por padrão — suficiente com o arquivo
+ * sozinho, apertado demais na suíte inteira em paralelo, onde estes dois
+ * testes entraram como INSTÁVEIS no `test:ratchet` (falhavam na varredura,
+ * passavam no retry). O teto maior não mascara defeito: o que se espera aqui é
+ * carregamento de chunk, não comportamento.
+ */
+const ESPERA_LAZY = { timeout: 5000 };
+
 const onClose = vi.fn();
 
 beforeEach(() => onClose.mockClear());
@@ -85,13 +95,13 @@ describe("AgendaPanel", () => {
 
   it("aberto mostra a tela dentro de uma camada nomeada", async () => {
     abrir();
-    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Atividades", undefined, ESPERA_LAZY)).toBeInTheDocument();
     expect(screen.getByText("conteudo da agenda")).toBeInTheDocument();
   });
 
   it("não cobre a tela inteira — é ancorado à direita", async () => {
     abrir();
-    const painel = await screen.findByLabelText("Atividades");
+    const painel = await screen.findByLabelText("Atividades", undefined, ESPERA_LAZY);
     expect(painel.className).toContain("right-0");
     expect(painel.className).not.toContain("inset-0");
   });
@@ -142,13 +152,13 @@ describe("AgendaPanel", () => {
   it("o botão de fechar da tela chega até o painel", async () => {
     const user = userEvent.setup();
     abrir();
-    await user.click(await screen.findByRole("button", { name: "Fechar Atividades" }));
+    await user.click(await screen.findByRole("button", { name: "Fechar Atividades" }, ESPERA_LAZY));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("sai de cena quando fecha", async () => {
     const { rerender } = abrir();
-    await screen.findByLabelText("Atividades");
+    await screen.findByLabelText("Atividades", undefined, ESPERA_LAZY);
     rerender(<AgendaPanel open={false} onClose={onClose} sidebarWidth={248} />);
     await waitForElementToBeRemoved(() => screen.queryByLabelText("Atividades"));
   });
