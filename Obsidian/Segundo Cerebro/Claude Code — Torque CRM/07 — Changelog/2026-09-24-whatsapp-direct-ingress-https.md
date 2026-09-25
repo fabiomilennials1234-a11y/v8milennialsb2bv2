@@ -64,3 +64,21 @@ só para TorqueSDR, mas dois rebinds com service key retornaram401, sem provar40
 Economia Edge adicional zero; CodeQL passou. Confirmação da proteção e
 ensaios públicos precedem qualquer cutover. Evidência e limites completos:
 `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Piloto direto ativo — 24/09/2026, 22:23:45 BRT
+
+TorqueSDR migrou por atualização única do webhook Uazapi existente, com
+readback exato de uma rota e global desativado. VPS recebe updates na inbox e
+encaminha `messages`/`connection` ao Edge; worker único com admissão/forward ON,
+gate queued. Sondas públicas e Docker saudáveis. Rebind autenticado retornou
+`skip=webhook_route_protected`; caminho proxy com JWT de usuário não testado.
+Primeira amostra pós-corte: oito updates regulares concluídos, quatro mensagens
+novas no escopo e fila 318 concluídos/zero pendências; tráfego continuou depois.
+Nenhuma mensagem foi enviada pelo agente. Nenhum erro posterior ao corte entre
+os 16 disponíveis no fornecedor nessa amostra. Edge webhook listado ACTIVE v122;
+nenhum bundle Edge novo publicado neste corte. Testes: 209 Vitest e 11 do
+operador Python passaram. Economia Edge ainda não quantificada; meta 1,4M não
+garantida. Rollback: ação `rollback` do script operacional restaura a URL Edge
+do backup sob pré-condição e readback exatos, mantendo fila/worker ativos.
+Evidência e risco pré-commit:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.

@@ -2,6 +2,10 @@
 
 > Estado técnico dos boundaries que mais de um componente depende. Atualizar ao mudar contrato.
 
+WhatsApp TorqueSDR: **rota direta VPS ativa desde 2026-09-25 01:23:45 UTC**;
+demais instâncias sem mudança. Evidência atual no fim deste arquivo e no
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
 ## Métricas Montáveis — Camada 2 (#1194 / ADR-0023) — fundação DB
 
 Status: **construído, atrás de flag, pgTAP pendente de run local** (2026-07-23). v1 liga só a TV.
@@ -334,7 +338,6 @@ aged queues independently of direct admission. Healthy with zero restarts;
 remain unchanged; direct routing remains off. Remaining activation gates:
 `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
 
-
 ## HTTPS para rota direta WhatsApp — preparação, 2026-09-24
 
 Registro do checkpoint até20:17UTC; estado de implantação/fila supersedido pela
@@ -393,3 +396,30 @@ proteção autenticada e ensaios públicos antes da mudança única da URL exist
 Testes focados e CodeQL passaram; CI completo segue vermelho em falhas
 preexistentes. Evidência detalhada e próximos gates:
 `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Rota direta TorqueSDR ativa — 2026-09-25 01:23:45 UTC
+
+`scripts/ops/whatsapp-direct-route-switch.py activate` atualizou uma vez o
+webhook Uazapi existente (ID `rfeaf66debd4692`) para
+`ingress.torquecrm.com.br`, preservando ID, eventos, exclusões, flags e caminho
+secreto; readback exato `true`, uma rota, global desativado. Backup privado
+do antes e do ambiente do piloto mantidos na VPS. Imagem
+`readiness-20260924-v1` recriada como worker único com admissão/forward ON;
+claims pausa9/retomada10, gate Edge queued revisão2. Testes públicos 404/405/
+413, `/ready` e `/worker-health` 200, Docker saudável sem reinícios. Rebind dry
+e real, autenticados por cron_config, retornaram200 com
+`skip=webhook_route_protected`; proxy v128/rebind v58 contêm guardas conferidas,
+mas caminho proxy com JWT de usuário não foi exercitado.
+
+Após corte, oito eventos regulares (`receipt_recovery=false`) foram concluídos;
+quatro mensagens novas constam no mesmo escopo, sem atribuir autoria. Fila:
+318 concluídos na primeira amostra; leitura posterior: 332 concluídos, 22
+eventos regulares pós-corte, zero pendentes/processando/leases vencidos/dead
+letter, revisão10. Instância conectada.
+`/webhook/errors` listou16 erros todos anteriores ao corte; amostra curta não
+garante ausência futura. Listagem atual mostra Edge webhook ACTIVE v122; nenhum
+bundle Edge novo foi publicado neste corte. Economia de invocações ainda não
+medida; 1,4M/mês não garantido. Rollback usa ação `rollback` do mesmo script,
+restaura uma vez a URL Edge do backup sob pré-condição/readback exatos e mantém
+fila/worker drenando. Risco de perda antes do commit persiste. Detalhes e
+evidência: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.

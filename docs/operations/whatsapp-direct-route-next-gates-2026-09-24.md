@@ -1,4 +1,18 @@
-# Direct WhatsApp route: incident and remaining activation gates
+# Direct WhatsApp route: TorqueSDR pilot active
+
+**Current checkpoint — 2026-09-25 01:23:45 UTC (2026-09-24 22:23:45 BRT):**
+TorqueSDR's existing Uazapi webhook now points to the public VPS ingress.
+`messages_update` is configured for durable admission there; `messages` and
+`connection` use the opt-in fixed Edge forwarder. Exact provider readback
+passed. Subsequent scoped SQL found regular post-cutover updates completed and
+new messages for the pilot organization/instance. Latest snapshot: 332 completed,
+including 22 regular post-cutover events, zero pending, processing, expired
+leases or dead letters, unpaused revision 10; public `/ready` and `/worker-health`
+returned 200. No post-cutover provider error appeared in the short sample.
+Edge invocation savings remain unmeasured. Current function listing shows
+`whatsapp-webhook` ACTIVE v122; earlier v121 references below are historical.
+Scope is this one pilot instance.
+Full activation evidence and rollback are recorded at the end of this file.
 
 ## Production incident found on 2026-09-24
 
@@ -43,7 +57,7 @@ Docker probes once per minute; unhealthy does not automatically restart the
 standalone container or release a FIFO barrier. This supplies a machine-readable
 health signal; it is not an external on-call notification service.
 
-## What still prevents direct activation
+## Precutover gates assessed at 20:26 UTC
 
 1. **Stable queue and operational response.** Both observed FileDownloaded
    barriers were repaired and drained by the 20:26 UTC snapshot. Continue
@@ -196,3 +210,60 @@ auth/limit and failure rehearsals with the new runtime; re-inventory global and
 instance webhooks; update the existing webhook URL once, preserving ID/events/
 filters, and read back. Start with TorqueSDR, observe traffic and invocation
 rate, then evaluate expansion. Keep accepted work queued during URL rollback.
+
+## TorqueSDR direct cutover — 2026-09-25 01:23:45 UTC
+
+At 22:23:45 BRT on 24 September, `scripts/ops/whatsapp-direct-route-switch.py`
+ran `activate` for TorqueSDR only. The existing local webhook ID
+`rfeaf66debd4692` changed from the Edge origin to
+`ingress.torquecrm.com.br`; its ID, event list, message exclusions, URL suffix
+flags and secret path stayed the same. The operation revalidated the disabled
+global webhook and returned `exact_readback=true`, `count=1`. It was one update
+of the existing route, not an added overlapping route. Private backups are
+`/opt/torque-whatsapp-ingress/direct-route-before-20260925.json` (mode 0600)
+and `/opt/torque-whatsapp-ingress/pilot-before-direct-20260925.env`; do not print
+their contents or webhook URLs.
+
+The sole `readiness-20260924-v1` worker was recreated on the EasyPanel overlay
+with direct admission and legacy forwarding enabled. Claims paused at revision
+9 and resumed at revision 10; the Edge execution gate remains queued at
+revision 2. Public checks: wrong secret 404, wrong method 405, unknown path 404,
+oversized body 413, `/ready` 200 and `/worker-health` 200. Docker health was
+healthy with zero restarts. Rebind dry run returned HTTP 200 with `skip=dry_run`; the real probe returned
+HTTP 200 with `skip=webhook_route_protected`, using authenticated cron configuration;
+neither altered the provider route. Published `whatsapp-api-proxy` v128 and
+`whatsapp-rebind-webhook` v58 contained matching guards/adapter bundles. The
+proxy path with a user JWT was **not** exercised, so that path is not claimed
+independently verified.
+
+A fresh function listing showed `whatsapp-webhook` ACTIVE v122,
+`whatsapp-api-proxy` v128 and `whatsapp-rebind-webhook` v58. No new Edge function
+bundle was deployed during this cutover; the listing alone does not explain
+the version increment.
+
+One local harness exercised the real local HTTP socket and PGlite for positive ACK
+after commit, negative admission failure and restart. The focused public-admission/runtime/router run passed 23 tests. Final focused validation passed 209
+Vitest tests across nine files and 11 Python operator tests. The initial post-cutover queue
+snapshot held 310 completed and zero pending, processing or dead letters. A
+later scoped SQL read found eight regular inbox events (`receipt_recovery=false`,
+created after 01:23:45 UTC) completed, and four new `whatsapp_messages` in the
+same organization/instance. Later incoming/outgoing traffic continued. This is
+real post-cutover traffic, not a synthetic recovery run; no message was sent by
+this agent, and the sample does not establish other message authorship. Updated queue: 318
+completed, no pending, processing or dead letters, control revision 10. The
+instance remained connected. Provider `GET /webhook/errors` returned 16 entries,
+all earlier than the cutover (latest 2026-09-24 19:20:39 UTC); no post-cutover
+error appeared in this short sample. A later queue read showed 332 completed,
+22 regular post-cutover events, zero pending/processing/expired/dead letters,
+unpaused revision 10; Docker remained healthy with zero restarts. Do not book a quantified reduction in Edge
+invocations or claim the 1.4M/month target from this cutover alone.
+
+**Rollback:** run `scripts/ops/whatsapp-direct-route-switch.py rollback` only
+when its exact source-route precondition matches the active direct route. It
+updates that same webhook ID once to the privately backed-up Edge URL and
+requires exact readback. Keep the queue and sole worker running while accepted
+events drain; do not turn off queued ownership first. A failed/ambiguous provider
+write requires inspection before any retry. The direct VPS endpoint is now an
+availability dependency for all three subscribed event types, including those
+forwarded to Edge. No provider replay guarantee was established for a callback lost before
+our durable commit; monitor provider errors and queue health through the pilot.
