@@ -50,6 +50,21 @@ export async function extractEdgeFunctionError(error: unknown): Promise<string> 
  * O que não casar com nenhum padrão conhecido passa direto — mensagem feia de
  * verdade ainda é melhor que mensagem genérica.
  */
+/**
+ * Aviso obrigatório em toda falha de entrega AMBÍGUA.
+ *
+ * A Uazapi responde 500/timeout no `POST /send/*` para mensagens que ela **já
+ * entregou** — medido duas vezes: 4× "Bom dia" na SC Beauty (2026-07-07) e, na
+ * Carol Distribuidora (2026-08-05), 4 erros 463 cujas mensagens reapareceram no
+ * history sync com o timestamp original casando ao segundo. Como o
+ * `whatsapp-api-proxy` só persiste a mensagem pelo webhook, o envio que "falha"
+ * some da tela: o vendedor lê o erro, reenvia, e o cliente recebe duas vezes.
+ *
+ * Sem esta frase a tradução do erro *induz* a duplicidade em vez de evitá-la.
+ */
+const PODE_TER_SIDO_ENTREGUE =
+  "A mensagem pode ter sido entregue mesmo com esse erro — confira a conversa no WhatsApp antes de reenviar.";
+
 export function friendlyWhatsAppSendError(raw: string): string {
   const s = raw.toLowerCase();
 
@@ -72,13 +87,25 @@ export function friendlyWhatsAppSendError(raw: string): string {
     s.includes("whatsapp server error 463") ||
     s.includes("error 463")
   ) {
-    return "O WhatsApp bloqueou temporariamente esse número para iniciar conversas novas (volume/qualidade de envio). Pare os disparos por algumas horas — o bloqueio sai sozinho. Conversas já abertas continuam funcionando.";
+    return `${PODE_TER_SIDO_ENTREGUE} O WhatsApp bloqueou temporariamente esse número para iniciar conversas novas (volume/qualidade de envio) — pare os disparos por algumas horas que o bloqueio sai sozinho. Conversas já abertas continuam funcionando.`;
   }
   if (s.includes("rate limit")) {
     return "Muitas mensagens em pouco tempo. Aguarde alguns segundos e tente de novo.";
   }
   if (s.includes("instance") && (s.includes("not connected") || s.includes("disconnected"))) {
     return "A instância do WhatsApp está desconectada. Reconecte em Configurações > WhatsApp.";
+  }
+  // Circuit breaker é o oposto do caso ambíguo: a requisição NÃO chegou a sair,
+  // então aqui podemos afirmar que não foi enviada — e o reenvio é seguro.
+  if (s.includes("circuit breaker")) {
+    return "O envio foi bloqueado após falhas seguidas do provedor e não chegou a sair. Aguarde cerca de 2 minutos e tente de novo.";
+  }
+  // Rede final: 5xx/timeout da Uazapi cujo motivo não casou com nenhum caso
+  // acima. Entrega indeterminada — vale o mesmo aviso do 463. Fica por último
+  // de propósito: "is not on WhatsApp" também chega como 500 e tem tratamento
+  // próprio (e determinístico) mais acima.
+  if (/uazapi server error 5\d\d/.test(s) || s.includes("timeout") || s.includes("aborted")) {
+    return `${PODE_TER_SIDO_ENTREGUE} O provedor não confirmou o envio (falha temporária de comunicação).`;
   }
   return raw;
 }
