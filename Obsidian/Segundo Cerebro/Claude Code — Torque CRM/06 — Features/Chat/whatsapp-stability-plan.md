@@ -388,3 +388,16 @@ direta e encaminhamento desligados. A guarda foi configurada só para TorqueSDR,
 mas prova autenticada de bloqueio ainda falta (`401`, não `409`). Sem economia
 Edge nova. Ensaios públicos e proteção confirmada precedem migração de URL.
 Evidência detalhada: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Piloto direto TorqueSDR — 24/09/2026, 22:23:45 BRT
+
+Webhook Uazapi existente aponta agora à VPS com readback exato; apenas
+TorqueSDR. `messages_update` usa inbox durável, `messages`/`connection` seguem
+ao Edge via encaminhamento fixo. Rebind autenticado confirmou skip protegido;
+proxy com JWT de usuário não foi exercitado. Oito eventos regulares concluídos
+na primeira amostra pós-corte e quatro mensagens novas no mesmo escopo;
+fila 318 concluídos/zero pendências nessa leitura, com tráfego posterior.
+Autoria das mensagens não atribuída ao agente. Economia Edge não medida e perda
+pré-commit continua possível. Rollback usa o mesmo webhook ID e URL Edge do
+backup, mantendo worker/fila drenando. Evidência operacional:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.

@@ -1,6 +1,16 @@
-# Dedicated WhatsApp ingress — disabled by default
+# Dedicated WhatsApp ingress — TorqueSDR pilot active
 
-Candidate runtime, not a production routing change. The service imports the same
+Current production checkpoint (2026-09-25 01:23:45 UTC): TorqueSDR's existing
+Uazapi webhook points to `ingress.torquecrm.com.br`, with direct admission and
+legacy forwarding enabled only for this pilot. The other instances remain on
+their existing routes. Provider readback matched the intended single route.
+Later scoped SQL found 22 regular post-cutover updates completed; an earlier
+sample saw four new messages for the same pilot organization/instance. Queue
+332 completed, zero pending/dead letters. Public readiness/worker health and Docker health
+passed. Provider error history showed no post-cutover entry in the short sample.
+Edge invocation savings remain unmeasured. [Cutover and rollback evidence](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
+
+The service imports the same
 `supabase/functions/whatsapp-webhook/handler.ts` used by the Edge entry point.
 Instance resolution, authentication, tenant scope, message persistence, media,
 triggers and Copilot remain canonical code. The optional event router can forward
@@ -151,8 +161,9 @@ Remote SQL fixtures test quota boundaries with a synthetic private counter;
 the separate local PGlite test fills all 20,000 rows. Neither is a peak-load test.
 These tests do not establish
 VPS capacity, provider retries or failover. A separate process-restart rehearsal
-below covers only the durable worker with a fixture business handler. Live routing stays
-disabled until those acceptance checks pass. Rollback changes provider routing
+below covers only the durable worker with a fixture business handler. This
+paragraph records earlier preparation; the TorqueSDR cutover above is active.
+Rollback changes provider routing
 back to the existing Edge endpoint; keep its deployment and credentials valid.
 After restoring and verifying provider routing, stop new admission, then
 drain/preserve accepted events. The migration
@@ -206,7 +217,8 @@ remove it first, which would allow an old rebind to overwrite the transition.
 ## Deployment evidence — 2026-09-24
 
 Production inbox migration is now applied under ledger version `20260924124643`.
-The service remains disabled and provider routes unchanged. A disabled Docker
+At that historical checkpoint the service was disabled and provider routes
+were unchanged. A disabled Docker
 container built from main `1498af879` passed health/readiness and graceful stop
 on the VPS; the temporary container was removed.
 
@@ -253,9 +265,9 @@ while requests still arrive does not prove the handoff safe.
 
 Provider redelivery before queue commit remains unproven. This bridge improves
 separation of admission and effects; it still consumes an Edge invocation per
-callback. Do not count it as invocation savings, or activate a direct provider
-split based only on these tests. Production activation remains blocked pending
-handoff/recovery evidence recorded in the capacity runtime report.
+callback. Do not count the Edge bridge as invocation savings or use these tests
+alone to justify a direct split. The later TorqueSDR cutover and its bounded
+evidence are recorded at the top and in the direct-route runbook.
 
 
 ## Worker claim pause and terminal FIFO barrier
@@ -324,7 +336,7 @@ only confirmed delivered/read progress for known outgoing messages; it cannot
 reconstruct pin, reaction, edit, delete or original operation order. Do not
 describe it as webhook replay or a guarantee of delivery.
 
-## Optional single-webhook event routing (deployed, disabled)
+## Optional single-webhook event routing (enabled for TorqueSDR)
 
 `INGRESS_FORWARD_LEGACY_EVENTS=true` enables the event router. After the shared
 handler authenticates the secret and resolves the database instance, only
@@ -346,10 +358,10 @@ direct admission off. At 20:17 UTC a new `FileDownloaded` dead letter with
 `IsFromMe=false` made `/worker-health` 503. SQL37 and image
 `readiness-20260924-v1` repaired and drained that head by the 20:26 UTC
 snapshot: 249 completed, zero pending/dead letters; public worker and Docker
-health returned healthy. Direct admission and legacy forwarding remain off; the
-supplier URL is unchanged. The pilot writer-guard environment was saved, but
-service-key rebind probes returned 401 rather than the expected 409; verify the
-guard before changing routes. The VPS becomes an availability
+health returned healthy. At that 20:26 UTC checkpoint, direct admission and
+legacy forwarding were off and the supplier URL was unchanged. Earlier
+service-key rebind probes returned 401; authenticated cron-config probes later
+confirmed the protected skip before the direct cutover recorded above. The VPS is now an availability
 dependency even for events forwarded to Edge. See the
 [direct-route runbook](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
 
