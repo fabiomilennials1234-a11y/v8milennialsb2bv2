@@ -22,6 +22,7 @@ import { useFeaturePermission } from "@/modules/identity";
 import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSalesMetrics } from "@/shared/realtime/invalidate-sales-metrics";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useCrossPipeMove } from "../lead-detail/modal/pipes/useCrossPipeMove";
@@ -285,6 +286,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         }
 
         toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        void invalidateSalesMetrics(queryClient, organizacaoId);
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
@@ -298,7 +300,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa],
+    [entryId, decidindo, queryClient, data, moverEtapa, organizacaoId],
   );
 
   /**

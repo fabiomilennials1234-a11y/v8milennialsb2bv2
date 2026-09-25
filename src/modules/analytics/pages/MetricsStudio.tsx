@@ -22,6 +22,7 @@ import { useMetricsStudioPanels, type StudioPanel } from "@/modules/analytics/ho
 import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
 import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
 import { useStudioClock } from "@/modules/analytics/hooks/useStudioClock";
+import { useSalesMetricsRealtime } from "@/modules/analytics/hooks/useSalesMetricsRealtime";
 import type { MetricCustomDefinition } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import type { EngineMetric } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
@@ -37,6 +38,7 @@ const showError = (error: unknown) => toast.error(error instanceof Error ? error
 
 /** Comando cuida da operação; aqui vivem os painéis compartilhados da organização. */
 export default function MetricsStudio() {
+  useSalesMetricsRealtime();
   const catalogo = useStudioCatalog();
   const abas = useMetricsStudioPanels();
   const { organizationId, timezone } = useOrganization();

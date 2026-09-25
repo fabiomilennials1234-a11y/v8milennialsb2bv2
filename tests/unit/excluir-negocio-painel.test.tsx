@@ -15,8 +15,9 @@ import type { DealCardData } from "@/modules/leads/components/deal-card/types";
 import { NEGOCIO_ESTAGNADO } from "@/modules/leads/components/deal-card/fixtures";
 
 const negocioRef: { value: DealCardData | null } = { value: null };
+const rpc = vi.hoisted(() => vi.fn());
 vi.mock("@/modules/leads/components/deal-card/useDealCardData", () => ({
-  useDealCardData: () => ({ data: negocioRef.value, isLoading: false }),
+  useDealCardData: () => ({ data: negocioRef.value, isLoading: false, organizacaoId: "org-1" }),
 }));
 
 interface Escrita {
@@ -56,7 +57,7 @@ vi.mock("@/integrations/supabase/client", () => {
     };
     return no;
   }
-  return { supabase: { from: (t: string) => construtor(t) } };
+  return { supabase: { from: (t: string) => construtor(t), rpc } };
 });
 
 vi.mock("@/modules/identity/permissions/hooks/useUserRole", async (importOriginal) => ({
@@ -106,8 +107,7 @@ function Abridor() {
   );
 }
 
-function montar() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function montar(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={qc}>
       <LeadPanelProvider>
@@ -131,10 +131,41 @@ async function abrirEConfirmarExclusao() {
 const apagou = () => escritas.filter((e) => e.op === "delete");
 
 beforeEach(() => {
+  rpc.mockReset().mockResolvedValue({ data: { outcome: "won" }, error: null });
   escritas.length = 0;
   linhasApagadas = [{ id: "e1" }];
   linhaAindaLa = { id: "e1" };
   negocioRef.value = null;
+});
+
+describe("O desfecho atualiza as métricas da organização", () => {
+  it("o clique em Ganhou invalida o painel já em cache sem mexer em outra org", async () => {
+    negocioRef.value = { ...NEGOCIO_ESTAGNADO, funilEhSystem: true };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const metric = ["metric-measure", "org-1", { kind: "leaf", id: "num_vendas" }];
+    const other = ["metric-measure", "org-2", { kind: "leaf", id: "num_vendas" }];
+    qc.setQueryData(metric, { value: 0 });
+    qc.setQueryData(other, { value: 4 });
+    montar(qc);
+    fireEvent.click(screen.getByText("abrir"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ganhou" }));
+    await waitFor(() => expect(qc.getQueryState(metric)?.isInvalidated).toBe(true));
+    expect(rpc).toHaveBeenCalledWith("definir_desfecho_da_entrada", expect.objectContaining({ p_entry_id: "e1", p_outcome: "won" }));
+    expect(qc.getQueryState(other)?.isInvalidated).toBe(false);
+  });
+
+  it("uma recusa ao salvar não muda as métricas", async () => {
+    negocioRef.value = { ...NEGOCIO_ESTAGNADO, funilEhSystem: true };
+    rpc.mockResolvedValue({ data: null, error: { message: "access_denied" } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const metric = ["metric-measure", "org-1", "num_vendas"];
+    qc.setQueryData(metric, { value: 0 });
+    montar(qc);
+    fireEvent.click(screen.getByText("abrir"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ganhou" }));
+    await waitFor(() => expect(rpc).toHaveBeenCalled());
+    expect(qc.getQueryState(metric)?.isInvalidated).toBe(false);
+  });
 });
 
 describe("O painel apaga qualquer funil pela fonte canônica", () => {
