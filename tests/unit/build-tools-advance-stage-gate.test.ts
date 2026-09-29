@@ -17,7 +17,7 @@
  * ferramenta não há decisão para registrar. Medido em prod em 29/09/2026 —
  * `ADVANCE_STAGE` não aparece **uma única vez** na tabela inteira (1.373 linhas,
  * desde 30/08), em nenhuma das orgs. Um gate que lê campo inexistente reprova
- * sempre e não deixa rastro, então nenhum teste que só olhasse o caminho felizd
+ * sempre e não deixa rastro, então nenhum teste que só olhasse o caminho feliz
  * o denunciaria — é por isso que a prova tem de ser sobre o NOME do campo.
  *
  * Os casos abaixo fixam as três combinações que importam:
@@ -28,25 +28,30 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildDynamicTools } from "../../supabase/functions/agent-message/engine/build-tools.ts";
+import { buildDynamicTools, type BuildToolsParams } from "../../supabase/functions/agent-message/engine/build-tools.ts";
 
 const PIPELINE_ID = "dc8c601c-88d8-42a6-9202-90f5e20ff872";
 
+/** A forma da ferramenta que este arquivo inspeciona (nome + enum do funil). */
+interface ToolShape {
+  name: string;
+  description: string;
+  input_schema: { properties: { target_pipe?: { enum?: string[] } } };
+}
+
 /** Supabase mínimo: nenhuma tabela lida por este caminho precisa devolver linha. */
-function makeSupabase() {
-  return {
-    from() {
-      const chain: Record<string, any> = {};
-      chain.select = () => chain;
-      ["eq", "in", "order", "limit"].forEach((m) => {
-        chain[m] = () => chain;
-      });
-      chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
-      chain.then = (resolve: any, reject?: any) =>
-        Promise.resolve({ data: [], count: 0, error: null }).then(resolve, reject);
-      return chain;
-    },
+function makeSupabase(): BuildToolsParams["supabase"] {
+  type Chain = Record<string, unknown>;
+  const from = () => {
+    const chain: Chain = {};
+    chain.select = () => chain;
+    for (const m of ["eq", "in", "order", "limit"]) chain[m] = () => chain;
+    chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
+    chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve({ data: [], count: 0, error: null }).then(resolve, reject);
+    return chain;
   };
+  return { from } as unknown as BuildToolsParams["supabase"];
 }
 
 /** Etapas do funil custom da org — `pipeline_type` NULL, como nasce todo funil de fábrica. */
@@ -55,22 +60,23 @@ const STAGES = [
   { stage_key: "aguardando_vendedor", name: "Aguardando vendedor", pipeline_type: null, pipeline_id: PIPELINE_ID, pipeline_slug: "vendas", pipeline_name: "Funil de Vendas" },
 ];
 
-function params(capabilities: Record<string, unknown>) {
+function params(capabilities: Record<string, unknown>): BuildToolsParams {
   return {
-    supabase: makeSupabase() as any,
+    supabase: makeSupabase(),
     organizationId: "org-1",
     capabilities: {
       id: "agent-1",
       active_pipes: [PIPELINE_ID],
       active_stages: { [PIPELINE_ID]: ["em_conversa", "aguardando_vendedor"] },
       ...capabilities,
-    } as any,
+    },
     orgCustomFields: [],
     pipelineStages: STAGES,
   };
 }
 
-const findAdvance = (tools: any[]) => tools.find((t) => t.name === "advance_stage");
+const findAdvance = (tools: unknown[]): ToolShape | undefined =>
+  (tools as ToolShape[]).find((t) => t.name === "advance_stage");
 
 describe("buildDynamicTools — gate de advance_stage (regressão 73f17a476)", () => {
   it("agente v1 com can_move_cards=true RECEBE a ferramenta (a coluna can_move_stage não existe)", async () => {
@@ -79,8 +85,8 @@ describe("buildDynamicTools — gate de advance_stage (regressão 73f17a476)", (
 
     expect(advance).toBeDefined();
     // O funil custom entra pelo slug real, não como "whatsapp".
-    expect(advance.input_schema.properties.target_pipe.enum).toEqual(["vendas"]);
-    expect(advance.description).toContain("aguardando_vendedor");
+    expect(advance!.input_schema.properties.target_pipe?.enum).toEqual(["vendas"]);
+    expect(advance!.description).toContain("aguardando_vendedor");
   });
 
   it("v2 com can_move_stage=false NÃO recebe a ferramenta, mesmo com can_move_cards=true", async () => {
@@ -109,12 +115,12 @@ describe("buildDynamicTools — gate de advance_stage (regressão 73f17a476)", (
         can_move_cards: true,
         active_pipes: [PIPELINE_ID],
         active_stages: { [PIPELINE_ID]: ["em_conversa"] },
-      } as any,
+      },
     });
     const advance = findAdvance(tools);
 
     expect(advance).toBeDefined();
-    expect(advance.description).toContain("em_conversa");
-    expect(advance.description).not.toContain("aguardando_vendedor");
+    expect(advance!.description).toContain("em_conversa");
+    expect(advance!.description).not.toContain("aguardando_vendedor");
   });
 });
