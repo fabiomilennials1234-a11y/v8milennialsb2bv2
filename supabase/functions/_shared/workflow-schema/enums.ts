@@ -13,6 +13,7 @@ export const NODE_TYPES = [
   "copilot",
   "end",
   "wait_response",
+  "question_buttons",
   "split_ab",
   "webhook_call",
   "goto",
