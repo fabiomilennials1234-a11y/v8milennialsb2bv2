@@ -69,6 +69,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
+import { useLeadOrigins } from "../hooks/useLeadOrigins";
 import { LeadMobileCard, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
 import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
@@ -121,26 +122,31 @@ import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 
-const originLabels: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  meta_ads: "Meta Ads",
-  outro: "Outros",
-  site: "Site",
-  remarketing: "Remarketing",
-  google_ads: "Google Ads",
-  cal: "Cal.com",
-  indicacao: "Indicação",
-};
-
+/**
+ * Classe da badge de origem por slug. A LISTA e o RÓTULO vêm de
+ * `useLeadOrigins` (registry `lead_origins`) — aqui mora só o vestuário, porque
+ * `originClassName` é classe Tailwind e o registry guarda cor como hex.
+ *
+ * Slug fora deste mapa ainda renderiza: cai no neutro de `outro`, com o rótulo
+ * certo vindo do hook. Até 2026-09-30 havia aqui um `originLabels` com 8 slugs
+ * que governava também o Select do formulário — quem tivesse origem fora das 8
+ * (Prospecção Ativa, Instagram, Tiktok, Landing Page, Evento) simplesmente não
+ * conseguia escolhê-la ao cadastrar pela aba Leads.
+ */
 const originColors: Record<string, string> = {
   whatsapp: "bg-green-500/10 text-green-600 border-green-500/20",
   meta_ads: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  instagram: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+  tiktok: "bg-muted text-muted-foreground border-muted",
   outro: "bg-muted text-muted-foreground border-muted",
   site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  landing_page: "bg-sky-500/10 text-sky-600 border-sky-500/20",
   remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
   google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
   cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
   indicacao: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  evento: "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  prospeccao_ativa: "bg-orange-500/10 text-orange-600 border-orange-500/20",
 };
 
 interface LeadFormData {
@@ -228,6 +234,10 @@ function formatDayInTz(value: string | Date, timeZone?: string | null): string {
 function LeadsInner() {
   const { openLead } = useLeadSheet();
   const { openDeal } = useDealSheet();
+  // Origens da org (registry `lead_origins`), não uma lista de slugs escrita à
+  // mão: é o que faz o formulário e o filtro desta tela oferecerem as mesmas
+  // opções que o cadastro de dentro do funil.
+  const { origins: leadOrigins, labelOf: originLabelOf } = useLeadOrigins();
   const [newDealLeadId, setNewDealLeadId] = useState<string | null>(null);
   const [filterState, setFilterState] = usePersistedState(
     "leads",
@@ -841,8 +851,8 @@ function LeadsInner() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Origens</SelectItem>
-            {Object.entries(originLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>{label}</SelectItem>
+            {leadOrigins.map((o) => (
+              <SelectItem key={o.slug} value={o.slug}>{o.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -971,7 +981,7 @@ function LeadsInner() {
         filterControls={clearPortfolio => <div className="flex flex-wrap gap-2">
           <Select value={filterOrigin} onValueChange={setFilterOrigin}>
             <SelectTrigger className="w-40" aria-label="Origem dos clientes"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{Object.entries(originLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
+            <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{leadOrigins.map((o) => <SelectItem key={o.slug} value={o.slug}>{o.label}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={filterQualification} onValueChange={setFilterQualification}>
             <SelectTrigger className="w-44" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
@@ -1019,7 +1029,7 @@ function LeadsInner() {
                   ciclo={reorderCycles?.[lead.id]}
                   selecionado={bulk.isSelected(lead.id)}
                   onOpen={() => openLead(lead.id)}
-                  originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
+                  originLabel={originLabelOf(lead.origin ?? "outro")}
                   originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                   createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
                 />
@@ -1096,7 +1106,7 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originLabel={originLabelOf(lead.origin ?? "outro")}
                     originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
@@ -1115,7 +1125,7 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originLabel={originLabelOf(lead.origin ?? "outro")}
                     originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
@@ -1235,8 +1245,8 @@ function LeadsInner() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(originLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  {leadOrigins.map((o) => (
+                    <SelectItem key={o.slug} value={o.slug}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
