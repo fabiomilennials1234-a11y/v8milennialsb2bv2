@@ -22,7 +22,13 @@ import { toAppError } from "./to-app-error";
  * - do usuário, só o UUID. Nome, e-mail e IP não.
  */
 
-const DROPPED_KEYS = new Set(["details", "hint"]);
+/**
+ * - `details`/`hint`: o Postgres põe ali o valor da linha.
+ * - `arguments`: o SDK embrulha `setTimeout` e listeners e anexa os argumentos
+ *   do callback que lançou — num handler de input, o evento com o que foi
+ *   digitado.
+ */
+const DROPPED_KEYS = new Set(["details", "hint", "arguments"]);
 const URL_KEYS = new Set(["url", "from", "to", "description"]);
 const MAX_DEPTH = 6;
 const MAX_TAG_LENGTH = 200;

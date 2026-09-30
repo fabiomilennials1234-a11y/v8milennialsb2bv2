@@ -141,7 +141,11 @@ describe("prepareEvent", () => {
         message: "falhou para joao@empresa.com.br",
         exception: { values: [{ type: "Error", value: "duplicate 5511987654321" }] },
         request: { url: "https://app/leads?search=joao", headers: { cookie: "sb=1" }, query_string: "search=joao" },
-        extra: { __serialized__: { code: "23505", details: "Key (phone)=(5511987654321)", hint: "x", message: "dup" } },
+        extra: {
+          __serialized__: { code: "23505", details: "Key (phone)=(5511987654321)", hint: "x", message: "dup" },
+          // o que o SDK anexa quando o erro nasce dentro de um listener embrulhado
+          arguments: [{ isTrusted: true, data: "J", inputType: "insertText" }],
+        },
       }),
       {},
     );
