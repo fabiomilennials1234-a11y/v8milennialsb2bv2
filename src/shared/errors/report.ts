@@ -1,6 +1,6 @@
 import { recordClientError } from "@/core/observability/client-error-buffer";
 import type { AppError } from "./app-error";
-import { getErrorMessage } from "./get-error-message";
+import { technicalSummary } from "./scrub";
 
 /**
  * Para onde vai um erro depois de normalizado (ADR-0038, decisão 2).
@@ -53,8 +53,9 @@ export function reportError(error: AppError, context: Record<string, string> = {
 
   try {
     // O anel guarda a causa técnica, com a mesma referência que o usuário vê no
-    // toast: quem lê o Chamado casa uma coisa com a outra.
-    const entry = new Error(`[${error.reference}] ${error.code}: ${getErrorMessage(cause)}`);
+    // toast: quem lê o Chamado casa uma coisa com a outra. Sem `details` do
+    // Postgres e com telefone/e-mail mascarados — o anel vai para o Chamado.
+    const entry = new Error(`[${error.reference}] ${error.code} · ${technicalSummary(cause)}`);
     entry.name = causeName(cause);
     if (cause instanceof Error && cause.stack) entry.stack = cause.stack;
     recordClientError(entry, "handled");

@@ -99,6 +99,22 @@ describe("notifyError", () => {
     expect(entry.message).toContain("sold_at");
   });
 
+  it("o anel do Chamado não leva o valor da linha nem o telefone do lead", () => {
+    notifyError(
+      {
+        code: "23505",
+        message: "duplicate key value violates unique constraint \"leads_phone_key\"",
+        details: "Key (phone)=(5511999990000) already exists.",
+        hint: null,
+      },
+      { fallback: FALLBACK },
+    );
+    const [entry] = readClientErrors();
+    expect(entry.message).toContain("leads_phone_key");
+    expect(entry.message).not.toContain("5511999990000");
+    expect(entry.message).not.toContain("Key (phone)");
+  });
+
   it("silent relata e não mostra toast", () => {
     notifyError(new Error("boom"), { fallback: FALLBACK, silent: true });
     expect(reports).toHaveLength(1);

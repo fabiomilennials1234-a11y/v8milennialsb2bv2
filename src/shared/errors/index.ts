@@ -26,4 +26,5 @@ export {
 } from "./support-launcher";
 export { ErrorReference } from "./ErrorReference";
 export { createQueryErrorHandlers } from "./query-error-handlers";
+export { scrubPii, technicalSummary } from "./scrub";
 export { getErrorMessage } from "./get-error-message";
