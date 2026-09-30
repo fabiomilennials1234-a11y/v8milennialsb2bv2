@@ -4,8 +4,8 @@ Runbook da virada para produção. Nada aqui roda sem o CTO: **merge em `main` d
 front sozinho** (webhook do EasyPanel), e edge function, migration e DML em prod são botão
 do humano.
 
-Estado em 2026-09-30: todas as fatias escritas, pilha em PRs draft, validação na branch
-efêmera pendente (seção 2). Nada mergeado.
+Estado em 2026-09-30: todas as fatias escritas, pilha em PRs draft (#2189–#2199), validação
+na branch efêmera em andamento (seção 2). Nada mergeado.
 
 ## 0. A pilha
 
@@ -15,10 +15,10 @@ efêmera pendente (seção 2). Nada mergeado.
 | 2 | #2190 | S0 source map | `main` | `/assets/*.map` passa a 404 |
 | 3 | #2191 | S1–S3 contrato | `main` | nenhum erro some em silêncio; toast com código |
 | 4 | #2193 | S4 migração | #2191 | ~240 sítios sem texto técnico; lint trava a volta |
-| 5 | S4b | estados falsos | S4 | falha de carga não vira "aguardando ativação"/"assinatura expirada"/404 |
-| 6 | S5 | edge 500 | S4b | 500 com frase PT + `request_id`; exceção no `runtime_logs` (só depois do redeploy) |
-| 7 | S7b | alerta de cron | S5 | migration: alerta só de falha sustentada, auto-resolve |
-| 8 | S6 | Sentry | S7b | front: SDK só com DSN; edge: só com `SENTRY_DSN_EDGE` |
+| 5 | #2196 | S4b estados falsos | #2193 | falha de carga não vira "aguardando ativação"/"assinatura expirada"/404 |
+| 6 | #2197 | S5 edge 500 | #2196 | 500 com frase PT + `request_id`; exceção no `runtime_logs` (só depois do redeploy) |
+| 7 | #2198 | S7b alerta de cron | #2197 | migration: alerta só de falha sustentada, auto-resolve |
+| 8 | #2199 | S6 Sentry | #2198 | front: SDK só com DSN; edge: só com `SENTRY_DSN_EDGE` |
 
 A S6 traz o merge da #2190 (precisa do `sourcemap: 'hidden'`). Cada PR é consistente sozinho:
 o front pode ir para prod em qualquer ponto da pilha.
