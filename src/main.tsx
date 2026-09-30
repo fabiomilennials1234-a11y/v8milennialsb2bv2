@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
-import { installClientErrorCapture } from "./core/observability/client-error-buffer";
+import { installClientErrorCapture, recordClientError } from "./core/observability/client-error-buffer";
+import { addErrorReporter, ringBufferEntry } from "@/shared/errors";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -7,6 +8,11 @@ import "./index.css";
 // `runtime_logs` nao ve: RLS, constraint, render. Anexados a um Chamado
 // quando o usuario abre um. Ver docs/adr/0017.
 installClientErrorCapture();
+
+// Todo erro que passa pelo contrato (`notifyError`, caches do React Query,
+// boundary) vai para o mesmo anel, com a referência que o usuário viu no toast.
+// Registrado aqui porque `shared` não pode importar `core` (ADR-0038).
+addErrorReporter(({ error }) => recordClientError(ringBufferEntry(error), "handled"));
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks
 // hashados que não existem mais (nginx agora devolve 404 nesses assets).

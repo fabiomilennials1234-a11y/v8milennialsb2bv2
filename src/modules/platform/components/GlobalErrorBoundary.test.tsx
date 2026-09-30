@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { setErrorReporter, type ErrorReport } from "@/shared/errors";
+import { addErrorReporter, type ErrorReport } from "@/shared/errors";
 import { GlobalErrorBoundary } from "./GlobalErrorBoundary";
 
 function Thrower({ error }: { error: Error }): never {
@@ -9,16 +9,17 @@ function Thrower({ error }: { error: Error }): never {
 
 describe("GlobalErrorBoundary", () => {
   let reports: ErrorReport[];
+  let unregister: () => void;
 
   beforeEach(() => {
     reports = [];
-    setErrorReporter((report) => reports.push(report));
+    unregister = addErrorReporter((report) => reports.push(report));
     // React loga o erro capturado no console; o teste não precisa desse ruído.
     vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
-    setErrorReporter(null);
+    unregister();
     vi.restoreAllMocks();
   });
 

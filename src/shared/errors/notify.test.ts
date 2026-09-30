@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isValidElement } from "react";
-import { clearClientErrors, readClientErrors } from "@/core/observability/client-error-buffer";
+import { clearClientErrors, readClientErrors, recordClientError } from "@/core/observability/client-error-buffer";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("sonner", async (importOriginal) => {
@@ -9,7 +9,7 @@ vi.mock("sonner", async (importOriginal) => {
 });
 
 import { notifyError } from "./notify";
-import { resetErrorReporterForTests, setErrorReporter, type ErrorReport } from "./report";
+import { addErrorReporter, ringBufferEntry, type ErrorReport } from "./report";
 import { registerSupportLauncher, type SupportPrefill } from "./support-launcher";
 
 function pg(code: string, message: string) {
@@ -40,16 +40,19 @@ const FALLBACK = "Não foi possível mover o card.";
 
 describe("notifyError", () => {
   let reports: ErrorReport[];
+  const unregister: Array<() => void> = [];
 
   beforeEach(() => {
     toastError.mockClear();
     clearClientErrors();
     reports = [];
-    setErrorReporter((report) => reports.push(report));
+    // O mesmo encanamento do `main.tsx`: o anel do Chamado e um vendor.
+    unregister.push(addErrorReporter(({ error }) => recordClientError(ringBufferEntry(error), "handled")));
+    unregister.push(addErrorReporter((report) => reports.push(report)));
   });
 
   afterEach(() => {
-    resetErrorReporterForTests();
+    unregister.splice(0).forEach((undo) => undo());
   });
 
   it("mostra a mensagem humana, nunca a técnica", () => {
@@ -115,6 +118,28 @@ describe("notifyError", () => {
     expect(entry.message).not.toContain("Key (phone)");
   });
 
+  it("detail entra como linha secundária, junto do código", () => {
+    notifyError(new Error("boom"), {
+      fallback: FALLBACK,
+      detail: "(#10) This message is sent outside of allowed window.",
+    });
+    const description = lastToast().options.description as { props: { detail?: string; reference: string } };
+    expect(description.props.detail).toBe("(#10) This message is sent outside of allowed window.");
+    expect(description.props.reference).toMatch(/^[0-9A-F]{8}$/);
+  });
+
+  it("detail vazio não vira linha em branco", () => {
+    notifyError(new Error("boom"), { fallback: FALLBACK, detail: "   " });
+    const description = lastToast().options.description as { props: { detail?: string } };
+    expect(description.props.detail).toBeUndefined();
+  });
+
+  it("message: a tradução de domínio vence o catálogo, e o erro segue relatado", () => {
+    notifyError(pg("42703", "column does not exist"), { fallback: FALLBACK, message: "Este funil ainda é o padrão." });
+    expect(lastToast().title).toBe("Este funil ainda é o padrão.");
+    expect(reports).toHaveLength(1);
+  });
+
   it("silent relata e não mostra toast", () => {
     notifyError(new Error("boom"), { fallback: FALLBACK, silent: true });
     expect(reports).toHaveLength(1);
@@ -122,9 +147,11 @@ describe("notifyError", () => {
   });
 
   it("um reporter que lança não quebra o toast", () => {
-    setErrorReporter(() => {
-      throw new Error("vendor fora");
-    });
+    unregister.push(
+      addErrorReporter(() => {
+        throw new Error("vendor fora");
+      }),
+    );
     expect(() => notifyError(new Error("boom"), { fallback: FALLBACK })).not.toThrow();
     expect(toastError).toHaveBeenCalledTimes(1);
   });

@@ -9,7 +9,7 @@ vi.mock("sonner", async (importOriginal) => {
 
 import { createQueryErrorHandlers } from "./query-error-handlers";
 import { notifyError } from "./notify";
-import { setErrorReporter, type ErrorReport } from "./report";
+import { addErrorReporter, type ErrorReport } from "./report";
 
 function pg(code: string, message: string) {
   return { code, message, details: null, hint: null };
@@ -24,14 +24,15 @@ function client() {
 
 describe("createQueryErrorHandlers", () => {
   let reports: ErrorReport[];
+  let unregister: () => void;
 
   beforeEach(() => {
     toastError.mockClear();
     reports = [];
-    setErrorReporter((report) => reports.push(report));
+    unregister = addErrorReporter((report) => reports.push(report));
   });
 
-  afterEach(() => setErrorReporter(null));
+  afterEach(() => unregister());
 
   it("mutation sem tratamento local não some: relata, sem toast", async () => {
     const qc = client();

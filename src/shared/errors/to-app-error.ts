@@ -36,14 +36,14 @@ export function isFunctionsErrorBody(value: unknown): value is FunctionsErrorBod
 // ─── Frase humana em português ──────────────────────────────────────────────
 
 const PT_WORDS =
-  /(?<!\p{L})(não|nao|você|voce|apenas|pelo|pela|uma|um|para|deve|precisa|já|está|são|sao|só|seu|sua|este|esta|esse|essa|ainda|mais|sem|com|foi|ser|pode|nenhum|nenhuma|antes|depois|ao|aos|da|dos|das|na|por|máximo|maximo|mínimo|minimo|obrigatório|obrigatorio)(?!\p{L})/giu;
+  /(?<!\p{L})(não|nao|você|voce|apenas|pelo|pela|uma|um|para|deve|precisa|já|está|são|sao|só|seu|sua|este|esta|esse|essa|ainda|mais|sem|com|foi|ser|pode|nenhum|nenhuma|antes|depois|ao|aos|da|dos|das|na|por|máximo|maximo|mínimo|minimo|obrigatório|obrigatorio|de|em|que|ou|os|o|e|num|numa|deste|desta|podem|somente|todas|todos|entre)(?![\p{L}-])/giu;
 const PT_ACCENT = /[ãõáéíóúâêôçà]/i;
 const SNAKE_CASE = /\b[a-z0-9]+_[a-z0-9_]+\b/i;
 /** `metrics.view`, `commissions.source`: identificador, não frase. */
 const DOTTED_IDENTIFIER = /\b[a-z]+\.[a-z_]+\b/i;
 /** Guardas de migration e SQL: escritos para quem aplica, não para o cliente. */
-const OPERATOR_TEXT = /^(fail|falha|guarda|dinheiro)\b|scrum[-\s]?\d|#\d|\bdeploy\b|\bsonda\b/i;
-const SQL_KEYWORD = /\b(DELETE|UPDATE|INSERT|SELECT|CREATE|DROP|ALTER|GRANT|REVOKE)\b/;
+const OPERATOR_TEXT = /^(fail|falha|guarda)\s*:|^dinheiro\b|scrum[-\s]?\d|#\d|\bdeploy\b|\bsonda\b/i;
+const SQL_KEYWORD = /\b(DELETE|UPDATE|INSERT|SELECT|CREATE|DROP|ALTER|GRANT|REVOKE|EXECUTE|DEFINER)\b/;
 const TECHNICAL = new RegExp(
   [
     "violates",
@@ -94,17 +94,59 @@ export function isHumanPortugueseMessage(message: string): boolean {
   if (OPERATOR_TEXT.test(text)) return false;
   if (SQL_KEYWORD.test(text)) return false;
   if (TECHNICAL.test(text)) return false;
-  if (/[%{}<>=`\\]/.test(text)) return false;
+  if (/[%{}<=`\\]/.test(text)) return false;
+  // `>` só é humano como separador de menu ("Configurações > WhatsApp");
+  // colado em algo (`->`, `a>b`, tag) é código.
+  if (/\S>|>\S/.test(text)) return false;
+  // Prefixo PT com cauda inglesa ("Erro ao enviar áudio: The object exceeded
+  // the maximum allowed size") não é frase humana — o acento enganaria.
+  if (ENGLISH_WORDS.test(text)) return false;
 
   if (PT_ACCENT.test(text)) return true;
   const matches = text.match(PT_WORDS);
-  return (matches?.length ?? 0) >= 2;
+  const ptCount = matches?.length ?? 0;
+  if (ptCount >= 2) return true;
+
+  // Frase sem acento com um só sinal ("Comprador incompleto: nome, e-mail e
+  // documento fiscal andam juntos" — só o `e`; "Sem acesso") ainda é humana se
+  // tiver mais de uma palavra (a palavra inglesa já foi recusada acima).
+  const words = text.match(/\p{L}+/gu) ?? [];
+  return ptCount === 1 && words.length >= 2;
+}
+
+/** Palavras que denunciam texto em inglês — mensagem de lib, driver ou runtime. */
+const ENGLISH_WORDS =
+  /\b(the|is|are|was|not|found|of|to|with|has|have|does|did|exist|exists|required|must|cannot|can't|could|invalid|failed|failure|error|denied|unauthorized|forbidden|already|only|null|row|rows|table|when|while|unable|unexpected|missing|expected|attempting|request|response|timeout|object|value|type)\b/i;
+
+const UUID_PARENTHETICAL = /\s*\([^()]*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b[^()]*\)/gi;
+
+/**
+ * "forbidden: apenas admin da organização ajusta estas configurações" — o
+ * prefixo é da máquina (e é ele que classifica o código); a frase depois dele é
+ * para a pessoa. Tira o prefixo antes de julgar a frase.
+ */
+const MACHINE_PREFIX = /^(forbidden|unauthorized|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*:\s+/i;
+
+function stripMachinePrefix(message: string): string {
+  return message.replace(MACHINE_PREFIX, "");
+}
+
+function joinSentences(first: string, second: string): string {
+  return /[.!?…]$/.test(first) ? `${first} ${second}` : `${first}. ${second}`;
+}
+
+/** "…andam juntos (link 3f2a…)" → "…andam juntos": o id não diz nada ao cliente. */
+function polish(message: string): string {
+  const text = message.replace(UUID_PARENTHETICAL, "").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // ─── Leitura da causa ───────────────────────────────────────────────────────
 
 interface Reading {
   message: string;
+  /** `HINT` do Postgres — no nosso banco é orientação ao usuário, em PT. */
+  hint: string;
   sqlstate: string | null;
   status: number | null;
   authCode: string | null;
@@ -127,6 +169,7 @@ const NETWORK_MESSAGE =
 function read(error: unknown): Reading {
   const base: Reading = {
     message: "",
+    hint: "",
     sqlstate: null,
     status: null,
     authCode: null,
@@ -180,7 +223,9 @@ function read(error: unknown): Reading {
   // classe quando `throwOnError()`. Reconhece pelos campos, não pela classe.
   const sqlstate = str(error.code);
   if ("code" in error && ("details" in error || "hint" in error)) {
-    return { ...base, message, sqlstate: sqlstate || null };
+    // `details` fica de fora de propósito: carrega o valor da linha
+    // (`Key (phone)=(5511…) already exists`) — dado de lead, não orientação.
+    return { ...base, message, hint: str(error.hint), sqlstate: sqlstate || null };
   }
 
   return { ...base, message };
@@ -383,7 +428,12 @@ export function toAppError(error: unknown, fallback: string = DEFAULT_FALLBACK):
   const { code, deliberate } = classify(reading);
   const entry = ERROR_CATALOG[code];
 
-  const human = reading.message && isHumanPortugueseMessage(reading.message) ? reading.message : null;
+  const candidate = stripMachinePrefix(reading.message);
+  const humanMessage = candidate && isHumanPortugueseMessage(candidate) ? polish(candidate) : null;
+  // `RAISE … USING HINT = 'Abra o card e preencha o valor da venda.'` diz o que
+  // fazer. Vem depois da frase principal, ou sozinho quando ela é técnica.
+  const humanHint = reading.hint && isHumanPortugueseMessage(reading.hint) ? polish(reading.hint) : null;
+  const human = humanMessage && humanHint ? joinSentences(humanMessage, humanHint) : (humanMessage ?? humanHint);
   const safeFallback = fallback.trim() || DEFAULT_FALLBACK;
   const userMessage = human ?? entry.message ?? safeFallback;
   // Frase humana é recusa escrita de propósito, mesmo sem código de máquina.
@@ -402,4 +452,12 @@ export function toAppError(error: unknown, fallback: string = DEFAULT_FALLBACK):
   };
   produced.add(appError);
   return appError;
+}
+
+/**
+ * Só a mensagem, para quem mostra o erro inline em vez de toast:
+ * `setErro(userMessageOf(err, "Não foi possível salvar o nome."))`.
+ */
+export function userMessageOf(error: unknown, fallback: string = DEFAULT_FALLBACK): string {
+  return toAppError(error, fallback).userMessage;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FALLBACK, isHumanPortugueseMessage, toAppError } from "./to-app-error";
+import { DEFAULT_FALLBACK, isHumanPortugueseMessage, toAppError, userMessageOf } from "./to-app-error";
 import { unwrapFunctionsError } from "./unwrap-functions-error";
 
 /** Formato real de `{ data, error }` do postgrest-js: objeto simples, não `Error`. */
@@ -105,6 +105,42 @@ describe("toAppError — mensagem para o usuário", () => {
   it("mostra a recusa humana em PT que a RPC escreveu", () => {
     const error = toAppError(pg("P0001", "Acesso negado: apenas usuarios master podem executar esta acao"), FALLBACK);
     expect(error.userMessage).toBe("Acesso negado: apenas usuarios master podem executar esta acao");
+  });
+
+  it("tira da frase o id entre parênteses, que não diz nada ao cliente", () => {
+    const error = toAppError(
+      pg("P0001", "Comprador incompleto: nome, e-mail e documento fiscal andam juntos (link 3f2a0c1e-9b7d-4c2a-8f11-2b6e5d4c3a10)"),
+      FALLBACK,
+    );
+    expect(error.userMessage).toBe("Comprador incompleto: nome, e-mail e documento fiscal andam juntos");
+  });
+
+  it("tira o prefixo de máquina e mostra a frase PT, mantendo a classificação", () => {
+    const error = toAppError(pg("42501", "forbidden: apenas admin da organização ajusta estas configurações"), FALLBACK);
+    expect(error.code).toBe("permission.denied");
+    expect(error.userMessage).toBe("Apenas admin da organização ajusta estas configurações");
+  });
+
+  it("prefixo de máquina com cauda técnica continua técnico", () => {
+    const error = toAppError(pg("P0001", "query_too_short: minimum 3 characters required"), FALLBACK);
+    expect(error.code).toBe("validation.invalid");
+    expect(error.userMessage).toBe("Algum dado enviado não é válido. Revise e tente de novo.");
+  });
+
+  it("junta o hint PT do banco à frase principal", () => {
+    const error = toAppError(
+      { code: "P0001", message: "Negócio ganho sem valor de venda.", details: null, hint: "Abra o card e preencha o valor da venda." },
+      FALLBACK,
+    );
+    expect(error.userMessage).toBe("Negócio ganho sem valor de venda. Abra o card e preencha o valor da venda.");
+  });
+
+  it("hint PT sozinho quando a frase principal é técnica", () => {
+    const error = toAppError(
+      { code: "22P02", message: "invalid input syntax for type numeric", details: null, hint: "Use apenas números, com ponto como separador decimal." },
+      FALLBACK,
+    );
+    expect(error.userMessage).toBe("Use apenas números, com ponto como separador decimal.");
   });
 
   it("mostra a frase PT de um Error lançado pelo próprio app", () => {
@@ -256,6 +292,16 @@ describe("isHumanPortugueseMessage", () => {
     "Sem permissão para registrar vendas.",
     "O negócio mudou de funil. Atualize a seleção.",
     "Pergunta com botões: use um a três botões e prazo positivo",
+    // Sem acento, um sinal só (`e`) — o texto que o fluxo de links de pagamento usa.
+    "Comprador incompleto: nome, e-mail e documento fiscal andam juntos",
+    "Somente propostas abertas podem receber valor manual",
+    "Apenas administradores podem excluir conversas",
+    "Sem acesso",
+    "Falha ao salvar",
+    // "no" e "se for" são PT — não podem contar como inglês.
+    "Selecione ao menos uma etapa no funil se for mover o negócio.",
+    // Caminho de menu — o texto de `communication/lib/edgeFunctionError.ts`.
+    "A instância do WhatsApp está desconectada. Reconecte em Configurações > WhatsApp.",
   ])("aceita %j", (message) => {
     expect(isHumanPortugueseMessage(message)).toBe(true);
   });
@@ -279,9 +325,34 @@ describe("isHumanPortugueseMessage", () => {
     "DELETE não afetou nenhuma linha",
     "metrics.view não foi semeada — NÃO faça o deploy do gate no front",
     "commissions.source é imutável (#994): linha manual não vira projeção nem o contrário",
+    // Inglês técnico sem as palavras da lista inglesa — não pode passar.
+    "dead-letter replay gate unavailable",
+    "Load failed",
+    "Not found",
+    "recovery gap capacity exhausted",
+    "Ambiguous active subscription; reconcile before navigation import",
+    "anon ganhou EXECUTE numa funcao SECURITY DEFINER",
+    "o valor chegou -> sem destino na organização",
+    // Prefixo PT, cauda inglesa: o acento não pode liberar.
+    "Erro ao enviar áudio: The object exceeded the maximum allowed size",
+    "Forbidden: geração de link de pagamento é autoridade de master",
+    "<div>não é frase</div>",
     "Erro",
     "",
   ])("recusa %j", (message) => {
     expect(isHumanPortugueseMessage(message)).toBe(false);
+  });
+});
+
+describe("userMessageOf", () => {
+  it("devolve só a mensagem segura, para erro mostrado inline", () => {
+    expect(userMessageOf(pg("42703", "column does not exist"), FALLBACK)).toBe(FALLBACK);
+    expect(userMessageOf(new Error("Selecione uma etapa antes de salvar."), FALLBACK)).toBe(
+      "Selecione uma etapa antes de salvar.",
+    );
+  });
+
+  it("sem fallback, usa o padrão", () => {
+    expect(userMessageOf({})).toBe(DEFAULT_FALLBACK);
   });
 });
