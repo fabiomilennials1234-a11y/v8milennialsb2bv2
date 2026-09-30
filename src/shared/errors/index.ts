@@ -25,4 +25,5 @@ export {
   type SupportPrefill,
 } from "./support-launcher";
 export { ErrorReference } from "./ErrorReference";
+export { createQueryErrorHandlers } from "./query-error-handlers";
 export { getErrorMessage } from "./get-error-message";

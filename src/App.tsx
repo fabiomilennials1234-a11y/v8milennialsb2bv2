@@ -10,6 +10,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "
 import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
+import { createQueryErrorHandlers } from "@/shared/errors";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
@@ -144,7 +145,10 @@ import { SupportPanel } from "@/modules/platform/components/support/SupportPanel
 import { SupportAccess } from "@/modules/platform/components/support/SupportAccess";
 import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
 
+// ADR-0038: nenhum erro de query ou mutation some em silêncio. Os caches só
+// relatam; o toast continua com a tela (ver `createQueryErrorHandlers`).
 const queryClient = new QueryClient({
+  ...createQueryErrorHandlers(),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,        // 5 minutos — dados são considerados frescos por 5 min
