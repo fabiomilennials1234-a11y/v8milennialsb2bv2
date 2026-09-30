@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
+import { CardEffectsHost, LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -353,6 +353,8 @@ export function FunilKanban({
           Sem `escopoFunil`, o botão vermelho desta barra mandava a PESSOA para
           a lixeira: ela sumia da lista de Leads, dos outros funis, da carteira
           e do chat — a partir de um clique dado sobre um card de negócio. */}
+      {/* Poeira dos cards excluídos — ver `prepararDissolucao`. */}
+      <CardEffectsHost />
       <BulkActionBar
         selectedIds={bulk.selectedIds}
         onClear={bulk.clearSelection}

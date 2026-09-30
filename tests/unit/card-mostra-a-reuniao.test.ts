@@ -57,6 +57,7 @@ vi.mock("@/modules/leads", () => ({
     cardsRenderizados.push(props.lead);
     return h("div", { "data-testid": "card" }, String(props.lead.name));
   },
+  CardEffectsHost: () => null,
 }));
 
 vi.mock("@/modules/pipelines/components/kanban/ExportStageDialog", () => ({

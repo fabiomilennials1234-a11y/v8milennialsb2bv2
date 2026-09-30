@@ -173,6 +173,8 @@ function AcaoPrimaria({
       type="button"
       onClick={onClick}
       disabled={desabilitado}
+      // De onde a celebração do painel lança o símbolo (`useCelebracaoDoDesfecho`).
+      data-desfecho={tom === "ganho" ? "won" : "lost"}
       className={cn(
         "disabled:pointer-events-none disabled:opacity-45",
         "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors",

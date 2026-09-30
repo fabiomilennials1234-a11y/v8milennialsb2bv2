@@ -16,6 +16,7 @@ import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardChecklistsPanel } from "./LeadCardChecklistsPanel";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
+import { CardOutcomeBurst } from "./CardOutcomeBurst";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
 
@@ -312,6 +313,8 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           selected && "ring-2 ring-primary/50",
         )}
       >
+        {/* Ganho/perda: anéis verdes ou vermelhos por cima do card. */}
+        <CardOutcomeBurst entryId={lead.id} />
         <div className="flex flex-col gap-1.5 px-2.5 py-2">
 
           {/* ── 1. inicial · nome + empresa · QUALIFICAÇÃO · menu ── */}
