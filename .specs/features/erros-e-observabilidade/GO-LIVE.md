@@ -5,7 +5,7 @@ front sozinho** (webhook do EasyPanel), e edge function, migration e DML em prod
 do humano.
 
 Estado em 2026-09-30: todas as fatias escritas, pilha em PRs draft (#2189–#2199), validação
-na branch efêmera em andamento (seção 2). Nada mergeado.
+na branch efêmera feita para G, H, I e L; J parcial; E, F e K pendentes (seção 2). Nada mergeado.
 
 ## 0. A pilha
 
@@ -57,12 +57,13 @@ com ausência confirmada em `list_branches`. Front local com `npm run dev:branch
 | D | edge devolve erro de negócio (`create-org-user` duplicado) | a frase PT do corpo | ✅ (rodada anterior) |
 | E | S4b: consulta do membro falha no boot | "Não conseguimos carregar sua conta" + tentar de novo; nunca "aguardando ativação" | ⏳ |
 | F | S4b: RPC de assinatura falha | "Não conseguimos confirmar sua assinatura"; acesso fechado; sem 404 | ⏳ |
-| G | S5: função de QA que lança (deploy só na branch) | 500 `{error: frase PT, code: server.unavailable, request_id}`, `X-Request-ID`, CORS; linha `unhandled_exception` no `runtime_logs` com o mesmo `request_id` | ⏳ |
-| H | S7b: `check_cron_job_health()` na branch | roda; job com 3/5 falhas abre 1 alerta; volta a passar e resolve (`auto_recovered`); `authenticated` não executa | ⏳ |
-| I | S6 sem DSN | nenhum request a `*.sentry.io`; chunk `sentry-*.js` nunca baixado | ⏳ |
-| J | S6 com DSN de QA (front) | erro provocado aparece no Sentry: stack desminificada, tags `reference`/`error_code`/`organization_id`/`role`/`session_id`, `user.id` só UUID, URL sem query, replay mascarado; o código do toast acha o evento | ⏳ DSN |
+| G | S5: função de QA que lança (deploy só na branch) | 500 `{error: frase PT, code: server.unavailable, request_id}`, `X-Request-ID`, CORS; linha `unhandled_exception` no `runtime_logs` com o mesmo `request_id` | ✅ 2026-09-30, branch `crxdqbpqxggbszdahwnn`. A 1ª rodada achou a mensagem crua no `runtime_logs` (telefone e `access_token`) — corrigido (`_shared/scrub.ts`) e remedido: `5511*****4321`, URL sem query, `session_id`/`request_id` casando |
+| H | S7b: `check_cron_job_health()` na branch | roda; job com 3/5 falhas abre 1 alerta; volta a passar e resolve (`auto_recovered`); `authenticated` não executa | ✅ grants (anon/authenticated `false`, service_role `true`, DEFINER, `search_path` pinado); cron de QA falhando abre 1 alerta, 2ª chamada não duplica, 3 execuções OK resolvem (`auto_recovered`, `resolved_by` nulo). Regra frequente: ver linha H2 |
+| H2 | S7b: regra do job frequente (≥ 5 execuções na janela) | falha isolada não alerta; ≥ 3 das últimas 5 alerta | ✅ mesmo cron com 11 execuções: `f s s s s` → 0 alertas (antes da S7b era `critical`); `f f f f s` → 1 alerta "4 das últimas 5 execuções falharam" (`rule: adr-0038-sustentada`). O ponto exato 3/5 ficou entre as duas medições — coberto pela simulação contra prod |
+| I | S6 sem DSN | nenhum request a `*.sentry.io`; chunk `sentry-*.js` nunca baixado | ✅ só o `sentry-loader` carrega; 0 requisições ao Sentry; CSP da meta com `worker-src` |
+| J | S6 com DSN de QA (front) | erro provocado aparece no Sentry: stack desminificada, tags `reference`/`error_code`/`organization_id`/`role`/`session_id`, `user.id` só UUID, URL sem query, replay mascarado; o código do toast acha o evento | 🟡 envelope do SDK real capturado no `beforeEnvelope` (DSN fictício): telefone mascarado, query e `details` fora, `/reset-password/:token`, `aria-label` fora do clique, recusa só como rastro, duplicata não sai, `arguments` do callback descartado (achado e corrigido). Falta com DSN real: chegada no Sentry, stack desminificada, replay |
 | K | S6 com DSN de QA (edge) | a função de QA gera evento com `function`, `request_id`, `session_id`; o `request_id` é o da resposta 500 | ⏳ DSN |
-| L | recusa esperada (RLS `access_denied`, sessão vencida) | **não** vira evento, vira rastro no próximo | ⏳ DSN |
+| L | recusa esperada (RLS `access_denied`, sessão vencida) | **não** vira evento, vira rastro no próximo | ✅ (envelope capturado): `JWT expired` não gerou evento e apareceu como rastro `app.error · auth.session_expired · <código>` no evento seguinte |
 
 ## 3. Sequência em produção
 
