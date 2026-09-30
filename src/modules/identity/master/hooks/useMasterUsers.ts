@@ -57,7 +57,7 @@ export function useMasterUsers() {
           role,
           is_active,
           organization_id,
-          organization:organizations(id, name, org_type)
+          organization:organizations!team_members_organization_id_fkey(id, name, org_type)
         `)
         .order("name");
 
