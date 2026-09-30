@@ -6,6 +6,9 @@
  *   2. Campos personalizados (+ CTA criar)
  *   3. Notas (lista + composer)
  *
+ * Exceção por org: onde `mostraNegocioNoChat` libera (hoje só a Riofix), entra
+ * a seção "Negócios" logo abaixo dos campos padrão — ver `lib/negocioNoChat.ts`.
+ *
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.
  */
@@ -13,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Tables } from "@/integrations/supabase/types";
 import {
   AtSign,
+  Briefcase,
   Check,
   Copy,
   FileText,
@@ -48,7 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUpdateLead } from "@/modules/leads";
-import { useResponsibleMembers } from "@/modules/identity";
+import { useOrganization, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
@@ -59,6 +63,8 @@ import {
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
+import { ContextPanelNegocios } from "./ContextPanelNegocios";
+import { mostraNegocioNoChat } from "@/modules/communication/lib/negocioNoChat";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
@@ -133,6 +139,8 @@ export function ContextPanelTabInfo({
   phoneNumber,
 }: ContextPanelTabInfoProps) {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const { organizationId } = useOrganization();
+  const comNegocios = mostraNegocioNoChat(organizationId);
 
   if (!lead && phoneNumber) {
     return (
@@ -180,6 +188,15 @@ export function ContextPanelTabInfo({
       <div className="flex flex-col">
         <SectionHeader icon={User} label="Campos padrão do sistema" />
         <StandardFields lead={lead} />
+
+        {comNegocios && (
+          <>
+            <SectionHeader icon={Briefcase} label="Negócios" />
+            <div className="px-4 pb-4">
+              <ContextPanelNegocios leadId={activeLeadId} />
+            </div>
+          </>
+        )}
 
         <SectionHeader icon={GitBranch} label="Funis do lead" />
         <div className="px-4 pb-4">
