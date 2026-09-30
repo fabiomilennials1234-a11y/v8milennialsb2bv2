@@ -203,9 +203,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
   /**
    * ── Ganhar / perder ───────────────────────────────────────────────────────
    *
-   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1). Não move o card: o
-   * vendedor decide na etapa em que estiver, que é o que destrava os 283 funis
-   * (71%) sem etapa terminal.
+   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1): o vendedor decide na etapa
+   * em que estiver, que é o que destrava os 283 funis (71%) sem etapa terminal.
+   * Quem move o card para a etapa de ganho/sucesso, quando há, é o BANCO
+   * (trigger em `deals.outcome`, Emenda 2) — esta tela não move nada, só
+   * invalida o board para a coluna nova aparecer.
    *
    * Vai por RPC, não por `.update()`, por três razões — e a terceira decide:
    * `deals.outcome` ainda não existe em `types.ts`; a transição de `outcome` é
