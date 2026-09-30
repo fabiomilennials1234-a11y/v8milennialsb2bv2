@@ -240,7 +240,13 @@ describe("O board do funil leva a reunião ao card", () => {
   it("negócio ganho chega ganho ao card, fora de etapa de ganho", () => {
     const card = montarBoard([entrada({ metadata: { deal_outcome: "won" } })]);
 
-    expect(card.won).toBe(true);
+    expect(card.outcome).toBe("won");
+  });
+
+  it("negócio perdido chega perdido ao card, fora de etapa de perda", () => {
+    const card = montarBoard([entrada({ metadata: { deal_outcome: "lost" } })]);
+
+    expect(card.outcome).toBe("lost");
   });
 
   it("negócio reaberto parado na etapa de ganho não chega ganho", () => {
@@ -249,7 +255,7 @@ describe("O board do funil leva a reunião ao card", () => {
       [etapa({ stage_role: "won" })],
     );
 
-    expect(card.won).toBe(false);
+    expect(card.outcome).toBeNull();
   });
 });
 

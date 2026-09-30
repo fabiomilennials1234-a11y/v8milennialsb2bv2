@@ -1,5 +1,5 @@
 import { memo, useRef, type ReactNode } from "react";
-import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -57,15 +57,26 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  */
 
 /**
- * Negócio ganho no funil: borda verde, fundo esverdeado e a faixa lateral do
- * `.kanban-card` (`--card-accent`) no mesmo tom.
+ * Negócio encerrado no funil: borda, fundo e a faixa lateral do `.kanban-card`
+ * (`--card-accent`) no tom do desfecho — verde no ganho, vermelho na perda.
  *
  * O fundo é uma CAMADA sobre `bg-card`, não uma troca dele: `bg-success/10`
  * sozinho deixaria o card translúcido sobre a coluna, e o card deixaria de
  * parecer um card. Exportado para o card confortável usar o mesmo desenho.
+ *
+ * Classes escritas por extenso, não montadas a partir do token: o Tailwind só
+ * gera as classes que encontra literais no código.
  */
-export const WON_CARD_CLASSES =
-  "border-success/50 bg-[linear-gradient(hsl(var(--success)/0.09),hsl(var(--success)/0.09))] [--card-accent:hsl(var(--success))]";
+export const OUTCOME_CARD_CLASSES = {
+  won: "border-success/50 bg-[linear-gradient(hsl(var(--success)/0.09),hsl(var(--success)/0.09))] [--card-accent:hsl(var(--success))]",
+  lost: "border-destructive/50 bg-[linear-gradient(hsl(var(--destructive)/0.09),hsl(var(--destructive)/0.09))] [--card-accent:hsl(var(--destructive))]",
+} as const;
+
+/** O selo que diz com palavra o que a cor diz. */
+const OUTCOME_BADGE = {
+  won: { className: "border-success/35 bg-success/15 text-success", Icon: Check, label: "Ganho" },
+  lost: { className: "border-destructive/35 bg-destructive/15 text-destructive", Icon: X, label: "Perdido" },
+} as const;
 
 interface Responsavel {
   name: string | null;
@@ -111,8 +122,8 @@ interface LeadCardCompactProps {
     qualTier?: QualificationTier | null;
     avatarUrl?: string | null;
     metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
-    /** Negócio ganho — pinta o card de verde e troca "parado" pelo selo. */
-    won?: boolean;
+    /** Negócio encerrado — pinta o card (verde/vermelho) e troca "parado" pelo selo. */
+    outcome?: "won" | "lost" | null;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -209,6 +220,16 @@ function Badge({ children, className, style }: {
   );
 }
 
+function OutcomeBadge({ outcome }: { outcome: "won" | "lost" }) {
+  const { className, Icon, label } = OUTCOME_BADGE[outcome];
+  return (
+    <Badge className={className}>
+      <Icon className="size-[9px]" />
+      {label}
+    </Badge>
+  );
+}
+
 /**
  * Uma das 4 linhas com ícone. `vazio` é o texto do convite a preencher — e,
  * quando o valor falta, a linha vira link azul sublinhado, como no print.
@@ -286,7 +307,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
           "kanban-card group relative cursor-pointer p-0",
           "flex flex-col rounded-[10px]",
-          lead.won && WON_CARD_CLASSES,
+          lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/50",
         )}
@@ -517,13 +538,9 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}
           <div className="flex flex-wrap items-center gap-1">
             {/* A cor sozinha não carrega informação para quem não distingue
-                verde (WCAG 1.4.1): o selo diz com palavra o que o fundo diz. */}
-            {lead.won && (
-              <Badge className="border-success/35 bg-success/15 text-success">
-                <Check className="size-[9px]" />
-                Ganho
-              </Badge>
-            )}
+                verde de vermelho (WCAG 1.4.1): o selo diz com palavra o que o
+                fundo diz. */}
+            {lead.outcome && <OutcomeBadge outcome={lead.outcome} />}
 
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
@@ -543,8 +560,8 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
             {dateIndicator && <Badge className={dateIndicator.className}>{dateIndicator.label}</Badge>}
 
-            {/* Negócio ganho não está "parado": está encerrado. */}
-            {!lead.won && diasParado != null && diasParado >= 3 && (
+            {/* Negócio ganho ou perdido não está "parado": está encerrado. */}
+            {!lead.outcome && diasParado != null && diasParado >= 3 && (
               <Badge
                 className={cn(
                   diasParado >= 14 ? "border-red-500/30 bg-red-500/10 text-red-500"

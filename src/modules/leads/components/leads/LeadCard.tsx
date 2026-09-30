@@ -27,7 +27,7 @@ import type { QualificationTier } from "../lead-detail/modal/types";
 import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
-import { LeadCardCompact, WON_CARD_CLASSES } from "./card/LeadCardCompact";
+import { LeadCardCompact, OUTCOME_CARD_CLASSES } from "./card/LeadCardCompact";
 import { DealLostMenuItem } from "./card/DealLostMenuItem";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
@@ -207,11 +207,11 @@ export interface LeadCardData extends DraggableItem {
   /** Status de confirmação da reunião — funil mergeado (ADR-0004). */
   confirmationStatus?: "pendente" | "pre_confirmado" | "confirmado" | null;
   /**
-   * O negócio do card foi GANHO. Quem resolve é o board (`isWonCard`, no
-   * módulo pipelines): o desfecho do negócio, ou o papel da etapa quando o card
-   * não tem negócio. O card só pinta.
+   * O negócio do card foi GANHO ou PERDIDO (`null` = aberto). Quem resolve é
+   * o board (`cardOutcome`, no módulo pipelines): o desfecho do negócio, ou o
+   * papel da etapa quando o card não tem negócio. O card só pinta.
    */
-  won?: boolean;
+  outcome?: "won" | "lost" | null;
 }
 
 export interface LeadCardProps {
@@ -672,7 +672,7 @@ export const LeadCard = memo(function LeadCard({
         data-lead-id={lead.id}
         className={cn(
           "kanban-card group cursor-pointer relative",
-          lead.won && WON_CARD_CLASSES,
+          lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/50",
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",

@@ -251,8 +251,9 @@ card into one does not win it.
    `stage_key` line is removed.
 5. **The board shows the outcome, not the column.** `get_pipeline_page`
    projects `metadata.deal_outcome`; a won card is highlighted (green border and
-   background, plus a "Ganho" badge) even where it did not move, and a reopened
-   card left in a success column is not.
+   background, plus a "Ganho" badge) even where it did not move, a lost card
+   the same way in red ("Perdido"), and a reopened card left in a success or
+   loss column is not.
 
 ### What is not covered
 
