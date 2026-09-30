@@ -105,7 +105,7 @@ import {
   endOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { notifyError } from "@/shared/errors";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -180,8 +180,25 @@ function FunilPageInner() {
   const { organizationId } = useOrganization();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
+  const {
+    data: pipelines = [],
+    isLoading: loadingPipelines,
+    isFetching: fetchingPipelines,
+    error: pipelinesError,
+    refetch: refetchPipelines,
+  } = usePipelines();
   const pipeline = resolveFunil(pipelines, param);
+
+  // Um slug ausente da lista em cache ainda não é "não encontrado": quem acabou
+  // de criar o funil navega antes do cache da lista atualizar. Refaz a consulta
+  // uma vez por slug antes de afirmar que o funil não existe (ADR-0038).
+  const conferidoNoServidor = useRef(new Set<string>());
+  const precisaConferir = !loadingPipelines && !pipeline && !!param && !conferidoNoServidor.current.has(param);
+  useEffect(() => {
+    if (!precisaConferir || !param) return;
+    conferidoNoServidor.current.add(param);
+    void refetchPipelines();
+  }, [precisaConferir, param, refetchPipelines]);
   const ehCustom = pipeline?.type === "custom";
   const ehSystem = pipeline?.type === "system";
   /** Slug de sistema do trio legado — liga os portes específicos de família. */
@@ -561,6 +578,30 @@ function FunilPageInner() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!pipeline && (precisaConferir || fetchingPipelines)) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Consulta que falhou não é funil inexistente.
+  if (!pipeline && pipelinesError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-center px-6">
+        <AlertTriangle className="w-12 h-12 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Não conseguimos carregar este funil</h2>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          {userMessageOf(pipelinesError, "Tente de novo em instantes.")}
+        </p>
+        <Button variant="outline" onClick={() => void refetchPipelines()}>
+          Tentar de novo
+        </Button>
       </div>
     );
   }

@@ -77,7 +77,10 @@ vi.mock('react-router-dom', () => ({
 }));
 
 // Stub lucide-react icons to avoid SVG rendering complexity in jsdom
-vi.mock('lucide-react', () => ({
+// Spread do módulo real: dublê por lista quebrava a suíte inteira a cada ícone
+// novo que o componente passasse a usar (ADR-0038 trouxe WifiOff/RefreshCw).
+vi.mock('lucide-react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('lucide-react')>()),
   Loader2: ({ className }: { className?: string }) => (
     <span data-testid="loader2" className={className} />
   ),
@@ -419,31 +422,18 @@ describe('ProtectedRoute', () => {
   });
 
   // 12
-    // PULADO — o bloco que este caso tenta exercitar é INALCANÇÁVEL, e o próprio
-  // teste chegou a essa conclusão: o corpo original era um despejo de raciocínio
-  // que terminava em "Dead code confirmed" e mesmo assim afirmava algo.
-  //
-  // O achado é real e vale mais que o teste. Em `ProtectedRoute`:
-  //   · o gate de vínculo (`requireOrganization && !isMaster` → `!teamMember`)
-  //     retorna "Aguardando Ativação" ANTES;
-  //   · o bloco de erro exige `teamMemberError && !teamMember && requireOrganization
-  //     && !isMaster` — o mesmo `!teamMember` que já foi capturado acima.
-  // Como as duas condições são avaliadas no MESMO render síncrono, com os mesmos
-  // valores, a segunda nunca é alcançada. "Erro ao Carregar" não aparece nunca:
-  // falha de rede ao buscar o team member é mostrada como "Aguardando Ativação".
-  //
-  // HERDADO — não é defeito desta branch e o conserto é no COMPONENTE (ordenar
-  // o gate de erro antes do de vínculo), não no teste.
-  //
-  // Em vez de pular, o caso passa a AFIRMAR o comportamento vigente. Um `skip`
-  // não cobre nada e envelhece calado; uma asserção trava o que o produto faz
-  // hoje e fica VERMELHA no dia em que alguém corrigir a ordem — que é
-  // exatamente o lembrete de que a expectativa precisa mudar junto.
-  it('lets the membership guard win over the error UI, which is unreachable', () => {
+  // Histórico: o bloco "Erro ao Carregar" do ProtectedRoute era INALCANÇÁVEL —
+  // o gate de vínculo (`!teamMember`) retornava "Aguardando Ativação" antes, e
+  // falha de rede virava diagnóstico falso sobre a conta. Este caso afirmava o
+  // defeito de propósito, para ficar vermelho no dia do conserto (#1873). O
+  // conserto veio no ADR-0038: o gate de erro vem antes do de vínculo, e o bloco
+  // morto saiu.
+  it('falha ao carregar o vínculo mostra "não conseguimos carregar", não "Aguardando Ativação"', () => {
     mockUseCurrentTeamMember.mockReturnValue({
       data: null,
       isLoading: false,
       error: new Error('Network failure'),
+      refetch: vi.fn(),
     });
     mockUseLocation.mockReturnValue({ pathname: '/dashboard' });
 
@@ -453,10 +443,14 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    // A falha de rede é engolida: quem não conseguiu carregar o vínculo recebe
-    // a mesma tela de quem ainda não tem vínculo nenhum.
-    expect(screen.getByText('Aguardando Ativação')).toBeInTheDocument();
-    expect(screen.queryByText('Erro ao Carregar')).not.toBeInTheDocument();
+    // ADR-0038: a asserção anterior travava o defeito ("a falha de rede é
+    // engolida") para ficar vermelha no dia do conserto. O conserto chegou:
+    // quem não conseguiu carregar recebe a verdade, com código e nova tentativa,
+    // e o acesso continua fechado.
+    expect(screen.getByText('Não conseguimos carregar sua conta')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /tentar de novo/i })).toBeInTheDocument();
+    expect(screen.getByText(/^Código [0-9A-F]{8}$/)).toBeInTheDocument();
+    expect(screen.queryByText('Aguardando Ativação')).not.toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
