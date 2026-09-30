@@ -32,6 +32,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { erpLabel } from "@/shared/format/erp-code";
+import { notifyError } from "@/shared/errors";
 
 interface ClientDetailModalProps {
   open: boolean;
@@ -134,8 +135,8 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
       }
       await updateClient.mutateAsync(updates);
       toast.success(client.is_active ? "Cliente marcado como inativo" : "Cliente reativado");
-    } catch {
-      toast.error("Erro ao atualizar status");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar status." });
     }
   };
 
@@ -143,8 +144,8 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
     try {
       await updateClient.mutateAsync({ id: client.id, potencial: potencial as any });
       toast.success("Potencial atualizado");
-    } catch {
-      toast.error("Erro ao atualizar potencial");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar potencial." });
     }
   };
 
@@ -153,8 +154,8 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
       await deleteClient.mutateAsync(client.id);
       toast.success("Cliente excluído permanentemente");
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao excluir cliente");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível excluir cliente." });
     } finally {
       setShowDeleteConfirm(false);
     }

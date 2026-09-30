@@ -37,6 +37,7 @@ import { ContextPanel } from "@/modules/communication/components/chat/context-pa
 import { contactLabel, type SocialContact } from "@/modules/communication/hooks/chat/types";
 import { useUnlinkSocialConversation } from "@/modules/communication/hooks/chat/useSocialLeadLink";
 import { SocialLeadLinkPanel } from "./SocialLeadLinkPanel";
+import { notifyError } from "@/shared/errors";
 
 function SocialIdentityRow({ contact }: { contact: SocialContact }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -100,11 +101,7 @@ function SocialIdentityRow({ contact }: { contact: SocialContact }) {
                       toast.success("Conversa desvinculada");
                     },
                     onError: (error) =>
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Não foi possível desvincular a conversa",
-                      ),
+                      notifyError(error, { fallback: "Não foi possível desvincular a conversa." }),
                   },
                 );
               }}

@@ -39,6 +39,7 @@ import {
   type FunnelStageView,
   type AddableFunnel,
 } from "./contextPanelFunnelHelpers";
+import { notifyError } from "@/shared/errors";
 
 interface ContextPanelFunnelsProps {
   leadId: string;
@@ -96,13 +97,13 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
         },
-        onError: () => {
+        onError: (caught: unknown) => {
           setPending((p) => {
             const next = { ...p };
             delete next[entryId];
             return next;
           });
-          toast.error("Falha ao mover etapa");
+          notifyError(caught, { fallback: "Não foi possível mover etapa." });
         },
       },
     );
@@ -140,7 +141,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
           queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
           toast.success(`Adicionado a ${funnel.label}`);
         },
-        onError: () => toast.error("Falha ao adicionar ao funil"),
+        onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível adicionar ao funil." }),
       },
     );
   };

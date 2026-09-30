@@ -214,13 +214,11 @@ export function useGenerateSummary() {
         },
       });
 
-      if (error) {
-        // Extract meaningful message from FunctionsHttpError
-        const msg =
-          data?.error ??
-          (error instanceof Error ? error.message : "Erro ao gerar resumo. Tente novamente.");
-        throw new Error(msg);
-      }
+      // Relança o `FunctionsHttpError` intacto. Embrulhá-lo num `new Error(...)`
+      // jogava fora o corpo — e com `error` setado, `data` vem `null`, então o
+      // `data?.error` nunca achava a recusa. O `notifyError` de quem chama lê o
+      // corpo e mostra a recusa em PT da `summarize-conversation` (ADR-0038).
+      if (error) throw error;
 
       return data as ConversationSummary;
     },

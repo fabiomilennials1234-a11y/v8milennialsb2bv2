@@ -39,6 +39,7 @@ import {
 } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { GoogleCalendarSharingSettings } from "@/modules/platform/components/settings/GoogleCalendarSharingSettings";
 import { useAuth } from "@/modules/identity";
+import { userMessageOf } from "@/shared/errors";
 // Ícone do Google (SVG inline para não precisar de dependência extra)
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -173,7 +174,7 @@ export function GoogleCalendarSettings() {
           </p>
           {error && (
             <p className="text-xs text-destructive mb-4">
-              {error instanceof Error ? error.message : "Erro desconhecido"}
+              {userMessageOf(error, "Não foi possível verificar a conexão com o Google Calendar.")}
             </p>
           )}
           <Button variant="outline" onClick={() => refetch()}>

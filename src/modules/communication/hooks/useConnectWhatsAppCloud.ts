@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 
 const FB_SDK_SRC = "https://connect.facebook.net/en_US/sdk.js";
 const FB_GRAPH_VERSION = "v21.0";
@@ -187,7 +188,7 @@ export function useConnectWhatsAppCloud(): UseConnectWhatsAppCloudResult {
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_instances", organizationId] });
       toast.success("WhatsApp Oficial conectado!");
     } catch (e) {
-      toast.error((e as Error).message || "Erro ao conectar WhatsApp Oficial");
+      notifyError(e, { fallback: "Não foi possível conectar WhatsApp Oficial." });
     } finally {
       window.removeEventListener("message", onMessage);
       setIsConnecting(false);

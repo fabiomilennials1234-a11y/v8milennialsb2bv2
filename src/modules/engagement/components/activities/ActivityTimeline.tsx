@@ -27,6 +27,7 @@ import {
   type ActivityType,
   type ActivityWithNames,
 } from "@/modules/engagement/hooks/useActivities";
+import { notifyError } from "@/shared/errors";
 
 // ─── Config ───────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ function CreateForm({ contactId, companyId, dealId, leadId }: CreateFormProps) {
           setDescription("");
           setOpen(false);
         },
-        onError: () => toast.error("Erro ao registrar atividade"),
+        onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível registrar atividade." }),
       }
     );
   }

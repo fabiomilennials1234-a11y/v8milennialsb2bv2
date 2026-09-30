@@ -38,6 +38,7 @@ import {
 } from "@/modules/leads/hooks/useBulkActions";
 import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
+import { notifyError } from "@/shared/errors";
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;
@@ -328,8 +329,8 @@ function BulkAssignDialog({
       toast.success(`${leadIds.length} leads atribuidos`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error("Erro ao atribuir leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atribuir leads." });
     }
   };
 
@@ -394,8 +395,8 @@ function BulkTagDialog({
       onOpenChange(false);
       setAddTags([]);
       onSuccess();
-    } catch {
-      toast.error("Erro ao aplicar tags");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível aplicar tags." });
     }
   };
 
@@ -459,8 +460,8 @@ function BulkDeleteDialog({
       toast.success(`${count} leads movidos para lixeira`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error("Erro ao excluir leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível excluir leads." });
     }
   };
 
@@ -514,7 +515,7 @@ function BulkExportDialog({
       }
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao exportar leads");
+      notifyError(e, { fallback: "Não foi possível exportar leads." });
     }
   };
 

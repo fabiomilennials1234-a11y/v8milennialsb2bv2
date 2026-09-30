@@ -105,6 +105,7 @@ import {
   endOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { notifyError } from "@/shared/errors";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -546,7 +547,7 @@ function FunilPageInner() {
       toast.success("Lead removido do funil");
       setRemoveEntryId(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao remover lead");
+      notifyError(e, { fallback: "Não foi possível remover lead." });
     }
   };
 
@@ -912,8 +913,8 @@ function FunilPageInner() {
                       ? `${result.deleted} leads movidos para lixeira.`
                       : "Leads movidos para lixeira.",
                   );
-                } catch {
-                  toast.error("Erro ao mover leads para lixeira.");
+                } catch (caught) {
+                  notifyError(caught, { fallback: "Não foi possível mover leads para lixeira." });
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const MILENNIALS_ORG_ID = "6030520a-2ca7-477d-be89-55758e2cd808";
 
@@ -78,7 +79,7 @@ export function useCadastroExternoPush() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao cadastrar cliente", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível cadastrar cliente." });
     },
   });
 }

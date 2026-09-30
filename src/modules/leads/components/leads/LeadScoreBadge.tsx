@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useCalculateLeadScore } from "../../hooks/useLeadScore";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface LeadScoreBadgeProps {
   score: number | null;
@@ -49,7 +50,7 @@ export function LeadScoreBadge({
               e.stopPropagation();
               calculateScore.mutate(leadId, {
                 onSuccess: () => toast.success("Score calculado!"),
-                onError: () => toast.error("Erro ao calcular score"),
+                onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível calcular score." }),
               });
             }}
             disabled={calculateScore.isPending}
@@ -197,7 +198,7 @@ export function LeadScoreBadge({
           onClick={() => {
             calculateScore.mutate(leadId, {
               onSuccess: () => toast.success("Score recalculado!"),
-              onError: () => toast.error("Erro ao recalcular score"),
+              onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível recalcular score." }),
             });
           }}
           disabled={calculateScore.isPending}

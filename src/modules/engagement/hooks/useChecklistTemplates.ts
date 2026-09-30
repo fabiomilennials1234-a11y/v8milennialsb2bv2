@@ -5,6 +5,7 @@ import { isVirtualTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { toast } from "sonner";
 import type { ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
+import { notifyError } from "@/shared/errors";
 
 export function useChecklistTemplates() {
   const { organizationId, isReady } = useOrganization();
@@ -138,7 +139,7 @@ export function useApplyChecklistTemplate() {
       toast.success("Template aplicado ao lead!");
     },
     onError: (error) => {
-      toast.error("Erro ao aplicar template", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível aplicar template." });
     },
   });
 }

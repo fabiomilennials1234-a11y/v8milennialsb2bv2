@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 type AppRole = Enums<"app_role">;
 
@@ -153,7 +154,7 @@ export function useMasterUpdateUser() {
       toast.success("Usuário atualizado!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao atualizar usuário");
+      notifyError(error, { fallback: "Não foi possível atualizar usuário." });
     },
   });
 }
@@ -200,7 +201,7 @@ export function useMasterChangeUserRole() {
       toast.success("Role alterada com sucesso!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao alterar role");
+      notifyError(error, { fallback: "Não foi possível alterar role." });
     },
   });
 }
@@ -236,7 +237,7 @@ export function useMasterMoveUserToOrg() {
       toast.success("Usuário movido para nova organização!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao mover usuário");
+      notifyError(error, { fallback: "Não foi possível mover usuário." });
     },
   });
 }
@@ -267,7 +268,7 @@ export function useMasterToggleUserActive() {
       toast.success(variables.isActive ? "Usuário ativado!" : "Usuário desativado!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao alterar status do usuário");
+      notifyError(error, { fallback: "Não foi possível alterar status do usuário." });
     },
   });
 }
@@ -365,7 +366,7 @@ export function useMasterAssignUserToOrg() {
       toast.success("Usuário vinculado à organização!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao vincular usuário");
+      notifyError(error, { fallback: "Não foi possível vincular usuário." });
     },
   });
 }
@@ -414,7 +415,7 @@ export function useMasterResetUserPassword() {
       toast.success("Senha alterada com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao redefinir senha");
+      notifyError(error, { fallback: "Não foi possível redefinir senha." });
     },
   });
 }

@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { sendPixButton } from "@/modules/communication/lib/whatsappApi";
 import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/communication/lib/accepted-interactive-message";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   open: boolean;
@@ -79,7 +80,7 @@ export function SendPixDialog({ open, onOpenChange, instanceId, phoneNumber }: P
       setAmount("");
       setText("");
     } catch (e) {
-      toast.error((e as Error).message);
+      notifyError(e, { fallback: "Não foi possível enviar o botão Pix." });
     } finally {
       setSending(false);
     }

@@ -20,6 +20,7 @@ import { resolveFilters } from "@/types/saved-views";
 import { SaveViewDialog } from "./SaveViewDialog";
 import type { SavedView, SavedViewEntityType } from "@/types/saved-views";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface SavedViewsDropdownProps<T extends Record<string, unknown>> {
   /** `"leads"` ou `pipeline:{uuid}` (via `pipelineEntityType`). */
@@ -92,8 +93,8 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
         onActiveViewChange(null);
       }
       toast.success("View excluída");
-    } catch {
-      toast.error("Erro ao excluir view");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível excluir view." });
     }
   };
 

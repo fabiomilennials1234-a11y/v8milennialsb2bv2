@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Escrita de `deal_items` — os produtos do negócio.
@@ -91,7 +91,7 @@ export function useEditarValorProposta(entryId: string | null) {
       if (error) throw error;
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
-    onError: (error: Error) => toast.error(`Não foi possível salvar o valor: ${error.message}`),
+    onError: (error: Error) => notifyError(error, { fallback: "Não foi possível salvar o valor." }),
   });
 }
 
@@ -143,7 +143,7 @@ export function useAdicionarItemDoNegocio(entryId: string | null) {
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: (erro: Error) => {
-      toast.error(`Não foi possível lançar o produto: ${erro.message}`);
+      notifyError(erro, { fallback: "Não foi possível lançar o produto." });
     },
   });
 }
@@ -180,7 +180,7 @@ export function useAtualizarItemDoNegocio(entryId: string | null) {
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: (erro: Error) => {
-      toast.error(`Não foi possível salvar o produto: ${erro.message}`);
+      notifyError(erro, { fallback: "Não foi possível salvar o produto." });
     },
   });
 }
@@ -232,7 +232,7 @@ export function useGarantirNegocioDaEntrada(entryId: string | null) {
     // bloco de produtos e o valor.
     onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: (erro: Error) => {
-      toast.error(`Não foi possível abrir o negócio deste card: ${erro.message}`);
+      notifyError(erro, { fallback: "Não foi possível abrir o negócio deste card." });
     },
   });
 }
@@ -252,7 +252,7 @@ export function useRemoverItemDoNegocio(entryId: string | null) {
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: (erro: Error) => {
-      toast.error(`Não foi possível remover o produto: ${erro.message}`);
+      notifyError(erro, { fallback: "Não foi possível remover o produto." });
     },
   });
 }

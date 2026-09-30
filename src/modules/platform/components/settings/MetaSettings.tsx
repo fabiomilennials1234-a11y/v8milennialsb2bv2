@@ -45,6 +45,7 @@ import {
 } from "@/modules/communication/hooks/useMetaConnection";
 import { MetaLeadgenConfig } from "./MetaLeadgenConfig";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -143,11 +144,7 @@ function ConnectionSection({
               connectMeta.mutate(type, {
                 onError: (err) => {
                   console.error(`[MetaSettings] Erro ao conectar ${type}:`, err);
-                  toast.error(
-                    err instanceof Error
-                      ? err.message
-                      : "Erro ao iniciar conexao Meta"
-                  );
+                  notifyError(err, { fallback: "Não foi possível iniciar conexão Meta." });
                 },
               });
             }}
@@ -265,7 +262,7 @@ function ConnectionSection({
                           disconnectMeta.mutate(connection.id, {
                             onSuccess: () =>
                               toast.success("Desconectado com sucesso!"),
-                            onError: () => toast.error("Erro ao desconectar"),
+                            onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível desconectar." }),
                           });
                         }
                       }}

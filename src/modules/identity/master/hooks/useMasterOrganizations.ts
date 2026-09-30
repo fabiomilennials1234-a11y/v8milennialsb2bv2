@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/contracts/workflows/funnel-templates";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Modelos de funil (kanban) para novas organizações.
@@ -444,7 +445,7 @@ export function useMasterCreateOrganization() {
     },
     onError: (error: any) => {
       console.error("Error creating organization:", error);
-      toast.error(error.message || "Erro ao criar organização");
+      notifyError(error, { fallback: "Não foi possível criar organização." });
     },
   });
 }
@@ -476,7 +477,7 @@ export function useMasterUpdateOrganization() {
       toast.success("Organização atualizada!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao atualizar organização");
+      notifyError(error, { fallback: "Não foi possível atualizar organização." });
     },
   });
 }
@@ -536,7 +537,7 @@ export function useMasterSetOrgSuspension() {
       );
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao alterar a suspensão da organização");
+      notifyError(error, { fallback: "Não foi possível alterar a suspensão da organização." });
     },
   });
 }
@@ -562,7 +563,7 @@ export function useMasterDeleteOrganization() {
       toast.success("Organização excluída!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao excluir organização");
+      notifyError(error, { fallback: "Não foi possível excluir organização." });
     },
   });
 }
@@ -601,7 +602,7 @@ export function useMasterBillingOverride() {
       toast.success("Plano liberado com sucesso!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao liberar plano");
+      notifyError(error, { fallback: "Não foi possível liberar plano." });
     },
   });
 }

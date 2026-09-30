@@ -14,6 +14,7 @@ import {
   type PipelineStatus,
 } from "../useLeadAllPipelines";
 import { usePipeOps } from "../../pipe-ops";
+import { notifyError, toAppError } from "@/shared/errors";
 
 interface UsePipeHandlersResult {
   isMutating: boolean;
@@ -71,9 +72,11 @@ export function useLeadPipeHandlers(leadId: string | null | undefined): UsePipeH
         toast.success(`Adicionado a "${pipeline.pipelineName}"`);
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "";
-      if (msg.includes("duplicate")) toast.info("Lead já está neste funil");
-      else toast.error("Erro ao adicionar lead");
+      // Pelo código, não pelo texto: o erro do Supabase é objeto simples, e o
+      // `instanceof Error ? .message : ""` antigo devolvia "" — o aviso de
+      // duplicado nunca aparecia (ADR-0038).
+      if (toAppError(error).code === "record.duplicate") toast.info("Lead já está neste funil");
+      else notifyError(error, { fallback: "Não foi possível adicionar o lead ao funil." });
     }
   };
 

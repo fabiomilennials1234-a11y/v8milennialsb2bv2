@@ -19,6 +19,7 @@ import {
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CustomizableField {
   field_path: string;
@@ -98,8 +99,8 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
     try {
       parsedWorkflow = JSON.parse(workflowDef);
       parsedTrigger = JSON.parse(triggerConfig);
-    } catch {
-      toast.error("JSON inválido em workflow ou trigger config");
+    } catch (caught) {
+      notifyError(caught, { fallback: "JSON inválido em workflow ou trigger config." });
       return;
     }
 
@@ -125,7 +126,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
       toast.success(templateId ? "Template atualizado" : "Template criado");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+      notifyError(err, { fallback: "Não foi possível salvar." });
     }
   };
 

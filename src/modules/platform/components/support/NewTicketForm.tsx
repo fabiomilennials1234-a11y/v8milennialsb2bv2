@@ -22,6 +22,7 @@ import {
 } from "@/modules/platform/lib/support-ticket-draft";
 import { useUploadTicketAttachment } from "@/modules/platform/hooks/useTicketAttachments";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { notifyError } from "@/shared/errors";
 
 const TIPO_ICONS: Record<TicketTipo, typeof AlertTriangle> = {
   bug: AlertTriangle,
@@ -133,7 +134,7 @@ export function NewTicketForm({
         toast.error(rateLimitMessage(limit.nextAt), { duration: 8000 });
         return;
       }
-      toast.error(err instanceof Error ? err.message : "Não deu para abrir o chamado.");
+      notifyError(err, { fallback: "Não deu para abrir o chamado." });
     }
   }
 

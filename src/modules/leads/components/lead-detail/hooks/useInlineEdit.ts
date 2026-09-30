@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface UseInlineEditOptions {
   value: string;
@@ -61,7 +61,7 @@ export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
       setLocalValue(savedValue);
     } catch (err: unknown) {
       setLocalValue(originalValue);
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+      notifyError(err, { fallback: "Não foi possível salvar." });
     } finally {
       editingRef.current = false;
       savingRef.current = false;

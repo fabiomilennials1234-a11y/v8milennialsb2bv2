@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
 import { useTeamMembers } from "@/modules/identity";
 import { useIndividualGoals } from "@/modules/engagement/hooks/useGoals";
+import { unwrapFunctionsError, userMessageOf } from "@/shared/errors";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -109,7 +110,12 @@ export function AICoachSection() {
         // Cache unsuccessful attempts too: a denied plan or provider failure
         // must not generate a fresh invocation on every rotation. Manual retry
         // bypasses this five-minute cooldown through refetch below.
-        return { analysis: null, error: cause instanceof Error ? cause.message : "Erro ao gerar análise" };
+        // O corpo da edge function é lido antes: a recusa do plano vem em PT lá
+        // dentro, e o `FunctionsHttpError` sozinho só diz "non-2xx".
+        return {
+          analysis: null,
+          error: userMessageOf(await unwrapFunctionsError(cause), "Não foi possível gerar a análise."),
+        };
       }
     },
   });

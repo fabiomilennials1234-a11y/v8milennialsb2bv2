@@ -34,6 +34,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { DisparoWizard } from "@/modules/pipelines";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
+import { notifyError } from "@/shared/errors";
 
 interface CarteiraBulkBarProps {
   selectedClients: PortfolioClientRow[];
@@ -203,8 +204,8 @@ function ReassignDialog({
       onOpenChange(false);
       setCloserId("none");
       onSuccess();
-    } catch {
-      toast.error("Erro ao reatribuir clientes");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível reatribuir clientes." });
     }
   };
 
@@ -283,8 +284,8 @@ function TagDialog({
       onOpenChange(false);
       setAddTags([]);
       onSuccess();
-    } catch {
-      toast.error("Erro ao aplicar tags");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível aplicar tags." });
     }
   };
 
@@ -378,8 +379,8 @@ function CopilotDialog({
       toast.success(`Copilot acionado para ${ok} de ${clients.length} clientes`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error("Erro ao acionar Copilot");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível acionar Copilot." });
     } finally {
       setFiring(false);
     }

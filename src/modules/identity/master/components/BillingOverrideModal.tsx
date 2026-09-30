@@ -32,6 +32,7 @@ import { AlertTriangle, CreditCard, Flag, Gauge } from "lucide-react";
 import { useMasterBillingOverride } from "../hooks/useMasterOrganizations";
 import { QuotaManagementPanel } from "./QuotaManagementPanel";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface BillingOverrideModalProps {
   open: boolean;
@@ -159,7 +160,7 @@ export function BillingOverrideModal({
       setFeatureReason("");
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar features");
+      notifyError(error, { fallback: "Não foi possível atualizar features." });
     }
   };
 

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useBadges, useCreateBadge, useDeleteBadge } from "@/modules/engagement/hooks/useBadges";
 import { MILESTONE_ICONS, MILESTONE_ICON_OPTIONS } from "@/modules/analytics/components/dashboard-outbound/milestone-icons";
+import { notifyError } from "@/shared/errors";
 
 const CRITERIA_TYPES = [
   { value: "leads_recebidos", label: "Leads recebidos" },
@@ -45,7 +46,7 @@ export function MilestonesConfig() {
       setName("");
       setCriteriaValue("");
     } catch (err: any) {
-      toast.error("Erro ao criar marco", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível criar marco." });
     }
   };
 
@@ -54,7 +55,7 @@ export function MilestonesConfig() {
       await deleteBadge.mutateAsync(id);
       toast.success("Marco removido");
     } catch (err: any) {
-      toast.error("Erro ao remover", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível remover." });
     }
   };
 

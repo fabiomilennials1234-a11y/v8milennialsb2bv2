@@ -6,6 +6,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { DealOutcome } from "../../../hooks/useLeadsDeals";
+import { notifyError } from "@/shared/errors";
 
 /** Monta só ao abrir o menu. O desfecho pertence à entrada, não ao lead/etapa. */
 export function DealLostMenuItem({ entryId }: { entryId: string }) {
@@ -47,7 +48,7 @@ export function DealLostMenuItem({ entryId }: { entryId: string }) {
         "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics",
       ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     },
-    onError: () => toast.error("Não foi possível alterar o negócio. Tente novamente."),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível alterar o negócio. Tente novamente." }),
     onSettled: () => { saving.current = false; },
   });
   const lost = outcome.data === "lost";

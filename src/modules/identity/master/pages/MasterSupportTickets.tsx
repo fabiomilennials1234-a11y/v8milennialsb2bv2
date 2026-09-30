@@ -71,6 +71,7 @@ import {
   useMasterSupportUnread,
   useMarkMasterRepliesRead,
 } from "../hooks/useMasterSupportUnread";
+import { notifyError } from "@/shared/errors";
 
 const ALL = "__all__";
 
@@ -443,7 +444,7 @@ function TicketRow({
             onValueChange={(v) =>
               triage.mutate(
                 { ticketId: ticket.id, severidade: v as TicketSeveridade },
-                { onError: () => toast.error("Não deu para definir a severidade.") },
+                { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para definir a severidade." }) },
               )
             }
           >
@@ -474,7 +475,7 @@ function TicketRow({
             onValueChange={(v) =>
               triage.mutate(
                 { ticketId: ticket.id, status: v as TicketStatus },
-                { onError: () => toast.error("Não deu para mudar o status.") },
+                { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para mudar o status." }) },
               )
             }
           >
@@ -598,7 +599,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}.`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
+      notifyError(err, { fallback: "Não deu para enviar." });
     }
   }
 
@@ -800,7 +801,7 @@ function DefectField({ ticket }: { ticket: MasterSupportTicket }) {
 
     triage.mutate(
       { ticketId: ticket.id, defect_url: parsed.url },
-      { onError: () => toast.error("Não deu para vincular o defeito.") },
+      { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para vincular o defeito." }) },
     );
   }
 

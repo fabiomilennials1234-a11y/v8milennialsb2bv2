@@ -47,6 +47,7 @@ import {
   UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyError } from "@/shared/errors";
 
 const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -181,8 +182,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
     } catch (error) {
       console.error("Import error:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      toast.error(`Erro durante a importação: ${msg}`);
+      notifyError(error, { fallback: "Não foi possível importar os leads." });
       setStep("preview");
     }
   };
@@ -318,8 +318,8 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
                   const leads = await parseCSV(file!, Object.keys(mapping).length ? mapping : undefined);
                   resumirLeads(leads);
                   setStep("preview");
-                } catch {
-                  toast.error("Erro ao processar arquivo");
+                } catch (caught) {
+                  notifyError(caught, { fallback: "Não foi possível processar arquivo." });
                 }
               }}
             >

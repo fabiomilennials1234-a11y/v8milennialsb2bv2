@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface Plan {
   id: string;
@@ -67,7 +68,7 @@ export function useUpdatePlan() {
       toast.success("Plano atualizado!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao atualizar plano");
+      notifyError(error, { fallback: "Não foi possível atualizar plano." });
     },
   });
 }

@@ -48,6 +48,7 @@ import {
   useRemoverItemDoNegocio,
 } from "./useItensDoNegocio";
 import type { DealCardComentario, ItemEditado } from "./types";
+import { notifyError } from "@/shared/errors";
 
 /**
  * A casca do painel — diálogo de DUAS COLUNAS no desktop, folha no celular.
@@ -293,7 +294,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Não foi possível registrar o desfecho");
+        notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
       } finally {
         setDecidindo(false);
       }
@@ -442,8 +443,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
           // É isto que responde "em qual negócio isto foi dito".
           pipelineEntryId: entryId,
         });
-      } catch {
-        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível publicar o comentário. O texto continua na caixa." });
         // Reergue para o bloco NÃO esvaziar a caixa — ver a regra 1 do
         // `DealCardComments`. Engolir aqui apagaria o que a pessoa escreveu.
         throw new Error("comentario-nao-publicado");
@@ -457,8 +458,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       if (!leadId) return;
       try {
         await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
-      } catch {
-        toast.error("Não foi possível salvar a edição do comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível salvar a edição do comentário." });
         throw new Error("comentario-nao-editado");
       }
     },
@@ -471,8 +472,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       try {
         await removerComentario.mutateAsync({ commentId: id, leadId });
         toast.success("Comentário apagado.");
-      } catch {
-        toast.error("Não foi possível apagar o comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível apagar o comentário." });
         throw new Error("comentario-nao-apagado");
       }
     },

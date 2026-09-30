@@ -1,9 +1,8 @@
-import { getErrorMessage } from "@/shared/errors";
+import { getErrorMessage, userMessageOf } from "@/shared/errors";
 
-/**
- * Traduz a falha da exclusão em mensagem para o usuário.
- *
- * Exportada e pura porque a versão anterior vivia dentro do `catch` e tinha dois
+/*
+ * Tradução da falha ao excluir funil — pura e exportada porque a versão
+ * anterior vivia dentro do `catch` e tinha dois
  * defeitos que só apareciam em produção:
  *
  * 1. `e instanceof Error` é FALSO para erro do Supabase — `PostgrestError` é
@@ -18,9 +17,17 @@ import { getErrorMessage } from "@/shared/errors";
  * As RPCs recusam em português e dizem o motivo — jogar isso fora transforma
  * recusa acionável em mistério.
  */
-export function mensagemDeFalhaAoExcluir(e: unknown): string {
-  const msg = getErrorMessage(e);
 
+const FALLBACK = "Não foi possível excluir o funil.";
+
+/**
+ * As recusas que a exclusão conhece, traduzidas para o que o usuário faz a
+ * seguir. `null` quando não é nenhuma delas — aí quem decide é o contrato de
+ * erro (ADR-0038): frase PT do banco passa, texto técnico vira o fallback e vai
+ * para o relatório.
+ */
+export function traducaoDeFalhaAoExcluir(e: unknown): string | null {
+  const msg = getErrorMessage(e);
   if (msg.includes("pipeline_is_org_default")) {
     return "Este funil ainda é o padrão da organização. Escolha o substituto e tente de novo.";
   }
@@ -30,14 +37,18 @@ export function mensagemDeFalhaAoExcluir(e: unknown): string {
   if (msg.includes("permissão")) {
     return "Você não tem permissão para excluir este funil";
   }
-  // Qualquer outra recusa vai CRUA para a tela. Preferimos texto técnico feio a
-  // usuário e suporte sem nenhuma pista do que aconteceu.
-  //
-  // `getErrorMessage` cai em `String(error)` quando o objeto não tem campo
-  // nenhum, e aí devolve "[object Object]" — que é pior que o genérico, porque
-  // parece defeito de código em vez de erro de operação. Esses dois casos são
-  // ausência de informação, não informação.
-  const semInformacao = !msg || msg === "Erro desconhecido" || msg === "[object Object]";
-  if (!semInformacao) return msg;
-  return "Erro ao excluir funil";
+  return null;
+}
+
+/**
+ * Traduz a falha da exclusão em mensagem para o usuário.
+ *
+ * Até o ADR-0038, qualquer recusa fora dos padrões conhecidos ia CRUA para a
+ * tela ("preferimos texto técnico feio a usuário sem pista"). Agora a pista vai
+ * para o relatório, com o código que aparece no toast, e a tela recebe uma
+ * frase — o `PostgrestError` como objeto simples continua reconhecido, que era
+ * o defeito medido em 2026-09-04.
+ */
+export function mensagemDeFalhaAoExcluir(e: unknown): string {
+  return traducaoDeFalhaAoExcluir(e) ?? userMessageOf(e, FALLBACK);
 }
