@@ -87,16 +87,17 @@ sendo trabalho do `runtime_logs`.
      code: ErrorCode;          // estável, máquina: "permission.denied", "lead.phone_taken", "network.offline"
      userMessage: string;      // PT-BR: o que aconteceu e o que fazer
      action?: ErrorAction;     // "Pedir acesso", "Reconectar WhatsApp", "Tentar de novo"
-     reference: string;        // código curto e copiável mostrado ao cliente (= eventId do Sentry)
+     reference: string;        // código curto e copiável mostrado ao cliente (8 hex)
      retryable: boolean;
      cause: unknown;           // técnico: vai para o Sentry, nunca para a tela
    }
    ```
 
-   A `reference` é o id do evento no Sentry: o cliente lê "Código: 7F3A9C21", o suporte cola esse
-   código na busca do Sentry e chega ao evento, com stack, breadcrumbs, replay e as tags
-   `session_id`/`request_id` que levam ao `runtime_logs`. Sem DSN (dev, teste), a referência é um
-   id local registrado no anel do Chamado.
+   A `reference` é gerada por nós (8 hex) e vai como **tag** em todo evento do Sentry: o cliente
+   lê "Código: 7F3A9C21", o suporte busca `reference:7F3A9C21` e chega ao evento, com stack,
+   breadcrumbs, replay e as tags `session_id`/`request_id` que levam ao `runtime_logs`. Não é o
+   `eventId` do Sentry porque ele não busca id parcial, e porque a referência precisa existir
+   antes (e sem) o vendor: é ela que o anel do Chamado grava.
 
    **Texto técnico nunca vai para a tela.** Código desconhecido cai numa mensagem PT de fallback
    que o chamador fornece ("Não foi possível salvar o lead"), mais o código copiável.

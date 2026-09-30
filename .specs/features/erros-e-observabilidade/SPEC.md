@@ -108,7 +108,8 @@ Regras do normalizador (cada uma vira teste):
    Postgres. A causa vai inteira em `cause`.
 2. `[object Object]`, string vazia e `"Erro desconhecido"` são ausência de informação e caem no
    `fallback` (memória *erro-do-supabase-nao-e-instanceof-error*).
-3. `reference` nasce como id local (8 hex). A S2 troca pelo `eventId` do Sentry quando houver DSN.
+3. `reference` é um id nosso (8 hex), estável por objeto de erro. Vai como tag `reference` para o
+   Sentry na S6 (o Sentry não busca `eventId` parcial).
 4. Não lê corpo de `Response`, porque é síncrono. O corpo das edge functions entra na S5, pelo
    envelope `{ error, code, request_id }`: quando o `context` do `FunctionsHttpError` já foi lido
    por um helper, o `code` do corpo vence o status.
@@ -134,11 +135,11 @@ notifyError(error: unknown, opts: {
 Faz, nesta ordem:
 
 1. `toAppError(error, fallback)`.
-2. Reporta: `recordClientError` (anel do Chamado, como hoje) **e** `reportException` da S6
-   (no-op sem DSN). Quando há Sentry, `reference = eventId.slice(0, 8)`.
-   **Não reporta** `validation.*`, `permission.denied` nem `auth.session_expired` como exceção:
-   vão como breadcrumb. São recusas esperadas, não defeito, e contá-las como erro queimaria a cota
-   grátis.
+2. Reporta: `recordClientError` (anel do Chamado, fonte `handled`, causa resumida sem `details`
+   do Postgres e com PII mascarada) **e** o `ErrorReporter` registrado (o Sentry, na S6).
+   O `AppError.reportable` decide se vira evento: recusa **deliberada** (RPC com código de
+   máquina, frase PT, 4xx de edge function, auth) vira breadcrumb; o mesmo código vindo cru do
+   Postgres (ex.: RLS `violates row-level security policy`) é defeito e vira evento.
 3. Toast padrão (sonner):
    - título = `userMessage`;
    - descrição = `Código: 7F3A9C21`, clicável para copiar;
@@ -167,10 +168,12 @@ toast sem nenhum texto técnico. Teste de componente: o toast renderiza com tít
 - `queryCache: new QueryCache({ onError })`: **só reporta**, sem toast. Query com erro já mostra o
   estado de erro inline na tela; toast em query que refaz sozinha vira spam. A query que quiser
   toast declara `meta: { errorToast: "Não foi possível carregar os leads." }`.
-- `mutationCache: new MutationCache({ onError })`: se a mutation **não tem `onError` próprio**
-  (`mutation.options.onError === undefined`), chama `notifyError` com `meta.errorMessage` ou o
-  fallback genérico "Não foi possível concluir a ação.". Se tem, só reporta, porque quem tratou já
-  mostrou. Isso evita toast duplo sem precisar tocar nas mutations existentes.
+- `mutationCache: new MutationCache({ onError })`: **só reporta**. Toast é opt-in por
+  `meta: { errorMessage }`. *Revisto na implementação:* a regra original ("toast quando não há
+  `onError` próprio") daria toast duplo — no TanStack v5, `mutate(vars, { onError })` e `try/catch`
+  em volta de `mutateAsync` não aparecem em `mutation.options`. Como o `MutationCache` roda antes
+  do `onError` local, o relatório sai do cache e o `notifyError` da tela reusa a referência sem
+  relatar de novo.
 
 **`GlobalErrorBoundary`**
 
@@ -179,8 +182,11 @@ toast sem nenhum texto técnico. Teste de componente: o toast renderiza com tít
   "Abrir chamado".
 - `componentDidCatch` reporta com `componentStack`. O ramo de chunk (auto-reload) fica como está.
 
-**Aceite:** teste do `MutationCache` para os dois casos (com e sem `onError` próprio). Teste do
-boundary: o texto do erro não aparece no DOM e o código aparece.
+**Aceite:** teste do `MutationCache` (relata sem toast; `meta` liga o toast; o `notifyError`
+local reusa a referência). Teste do boundary: o texto do erro não aparece no DOM e o código
+aparece.
+
+**Status:** S1–S3 entregues no PR #2191.
 
 ---
 
