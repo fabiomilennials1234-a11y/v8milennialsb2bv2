@@ -16,15 +16,33 @@ import { technicalSummary } from "./scrub";
  * Trocar de vendor é trocar uma função registrada.
  */
 
+/** Quem estava usando — só identificadores (UUID) e papel, nunca nome/e-mail/telefone. */
+export interface ReportIdentity {
+  userId: string | null;
+  organizationId: string | null;
+  role: string | null;
+}
+
 export interface ErrorReport {
   error: AppError;
   /** Tags seguras: sem PII, sem conteúdo. Ex.: `{ source: "mutation", feature: "kanban" }`. */
   context: Record<string, string>;
+  identity: ReportIdentity | null;
 }
 
 export type ErrorReporter = (report: ErrorReport) => void;
 
 const reporters = new Set<ErrorReporter>();
+
+let identity: ReportIdentity | null = null;
+
+/**
+ * Atualizada por quem conhece a sessão (a ponte no `App.tsx`). Fica aqui, e não
+ * no reporter do vendor, para qualquer destino receber a mesma identidade.
+ */
+export function setReportIdentity(next: ReportIdentity | null): void {
+  identity = next;
+}
 
 /** Registra um destino. Devolve a função que desfaz o registro. */
 export function addErrorReporter(reporter: ErrorReporter): () => void {
@@ -53,7 +71,7 @@ export function reportError(error: AppError, context: Record<string, string> = {
 
   for (const reporter of reporters) {
     try {
-      reporter({ error, context });
+      reporter({ error, context, identity });
     } catch {
       // Um destino falhar não impede os outros nem muda o que o usuário vê.
     }

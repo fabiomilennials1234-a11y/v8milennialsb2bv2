@@ -22,7 +22,15 @@ export {
 } from "./to-app-error";
 export { functionsErrorFromResponse, unwrapFunctionsError } from "./unwrap-functions-error";
 export { notifyError, showErrorToast, type NotifyErrorOptions } from "./notify";
-export { addErrorReporter, reportError, ringBufferEntry, type ErrorReport, type ErrorReporter } from "./report";
+export {
+  addErrorReporter,
+  reportError,
+  ringBufferEntry,
+  setReportIdentity,
+  type ErrorReport,
+  type ErrorReporter,
+  type ReportIdentity,
+} from "./report";
 export {
   canOpenSupport,
   openSupport,
