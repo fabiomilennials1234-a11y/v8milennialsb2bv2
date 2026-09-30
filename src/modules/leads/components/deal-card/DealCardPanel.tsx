@@ -1,6 +1,6 @@
 import { downloadCommentFile } from "../../lib/comment-attachments/storage";
 import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -40,6 +40,12 @@ import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
+import { useCelebracaoDoDesfecho } from "./useCelebracaoDoDesfecho";
+import {
+  cancelarEfeitoDeDesfecho,
+  definirPainelAberto,
+  dispararEfeitoDeDesfecho,
+} from "../../lib/card-effects";
 import { useRenomearNegocio } from "./useRenomearNegocio";
 import {
   useAtualizarItemDoNegocio,
@@ -77,6 +83,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
     useDealCardData(entryId, leadId, isOpen);
+
+  // O efeito do card (ganho, perda, poeira) espera o painel fechar: tocado
+  // por trás do overlay, ninguém o veria. Ver `lib/card-effects.ts`.
+  useEffect(() => {
+    definirPainelAberto(isOpen);
+    return () => definirPainelAberto(false);
+  }, [isOpen]);
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
 
@@ -235,10 +248,19 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const [pedindoValor, setPedindoValor] = useState(false);
 
+  /**
+   * Celebração dentro do painel: confete e baú no ganho, lixeira na perda.
+   * A origem do voo é o botão clicado, lida ANTES da RPC — depois dela o
+   * negócio encerra e o botão sai do cabeçalho.
+   */
+  const painelRef = useRef<HTMLDivElement>(null);
+  const { origemDo, celebrar, camada: camadaDaCelebracao } = useCelebracaoDoDesfecho(painelRef);
+
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
       setDecidindo(true);
+      const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
         const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
@@ -269,6 +291,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
             const terminal = data?.etapas.find((e) => e.papel === papel);
             if (terminal) {
               await moverEtapa(terminal.chave);
+              dispararEfeitoDeDesfecho(entryId, desfecho);
+              celebrar(desfecho, origem);
               return;
             }
             // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
@@ -287,6 +311,12 @@ export const DealCardPanel = memo(function DealCardPanel() {
         }
 
         toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        if (desfecho === "open") {
+          cancelarEfeitoDeDesfecho(entryId);
+        } else {
+          dispararEfeitoDeDesfecho(entryId, desfecho);
+          celebrar(desfecho, origem);
+        }
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
@@ -300,7 +330,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa],
+    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar],
   );
 
   /**
@@ -591,7 +621,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
    */
   const conteudo = (comLead: boolean) => (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+    <div ref={painelRef} className="relative flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+      {camadaDaCelebracao}
       {/* A coluna da pessoa só existe quando há pessoa. Um negócio órfão de lead
           não deveria existir (ADR-0023 §2), mas se existir o painel abre com o
           negócio ocupando tudo em vez de com uma coluna vazia acusando falta. */}

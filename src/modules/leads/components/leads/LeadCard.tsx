@@ -29,6 +29,7 @@ import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCompact } from "./card/LeadCardCompact";
 import { OUTCOME_CARD_CLASSES } from "./card/outcome-card-classes";
+import { CardOutcomeBurst } from "./card/CardOutcomeBurst";
 import { DealLostMenuItem } from "./card/DealLostMenuItem";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
@@ -681,6 +682,7 @@ export const LeadCard = memo(function LeadCard({
         )}
         onClick={onClick}
       >
+        <CardOutcomeBurst entryId={lead.id} />
         {/* ── Color stripes (Trello-style) ── */}
         <div className="p-3 pt-2.5 flex flex-col gap-2">
           {/* ── Selection checkbox ── */}
