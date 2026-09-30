@@ -45,6 +45,14 @@ FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Source map não vai para a imagem servida. Até 2026-09-30 o nginx entregava
+# `/assets/*.js.map` (7,3 MB: o código-fonte inteiro, com comentários) para
+# qualquer um. O `location` de /assets/ continua casando `.map`, mas o
+# `try_files $uri =404` agora devolve 404 porque o arquivo não existe.
+# O map continua nascendo no build (`sourcemap: 'hidden'`) para ser enviado ao
+# Sentry no estágio builder — ver docs/adr/0038.
+RUN find /usr/share/nginx/html -type f -name '*.map' -exec rm -f {} \;
+
 # SPA + headers de segurança + cache estratégico.
 # Assets hashados (Vite gera /assets/xxx-HASH.{js,css}) ficam 1 ano immutable.
 # index.html NUNCA é cacheado — garante que deploy novo invalide chunks antigos.
