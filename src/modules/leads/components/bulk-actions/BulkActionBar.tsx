@@ -234,8 +234,10 @@ function BulkMoveDialog({
       toast.success(sourcePipelineId ? `${entryIds?.length ?? 0} negócios movidos` : `${leadIds.length} leads adicionados ao funil`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error(sourcePipelineId ? "Erro ao mover negócios" : "Erro ao adicionar ao funil");
+    } catch (error) {
+      notifyError(error, {
+        fallback: sourcePipelineId ? "Não foi possível mover os negócios." : "Não foi possível adicionar ao funil.",
+      });
     }
   };
 
@@ -588,8 +590,10 @@ function BulkExcluirNegociosDialog({
       }
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error(`Erro ao excluir ${plural}`);
+    } catch (error) {
+      notifyError(error, {
+        fallback: count === 1 ? "Não foi possível excluir o negócio." : "Não foi possível excluir os negócios.",
+      });
     }
   };
 

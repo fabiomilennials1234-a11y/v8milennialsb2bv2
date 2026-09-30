@@ -49,7 +49,6 @@ import {
   type CustomField,
 } from "../../../hooks/useLeadCustomFields";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -184,8 +183,8 @@ const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onS
       await Promise.resolve(onSave(def.key, draft));
       editingRef.current = false;
       setEditing(false);
-    } catch {
-      toast.error(`Erro ao salvar ${def.label.toLowerCase()}`);
+    } catch (error) {
+      notifyError(error, { fallback: `Não foi possível salvar ${def.label.toLowerCase()}.` });
     } finally {
       savingRef.current = false;
       setSaving(false);
