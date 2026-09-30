@@ -56,6 +56,7 @@ import { useSeatUsage } from "../hooks/useSeatUsage";
 import { SeatUsageBar } from "../components/team/SeatUsageBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError, functionsErrorFromResponse } from "@/shared/errors";
 type TeamRole = "admin" | "member";
 
 interface TeamMemberFormData {
@@ -244,9 +245,7 @@ export default function Equipe() {
       });
       const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
       if (!res.ok) {
-        const msg = data?.message ?? data?.error ?? "Erro ao remover membro";
-        const detail = (data as { detail?: string })?.detail;
-        toast.error(detail ? `${msg} (${detail})` : msg);
+        notifyError(functionsErrorFromResponse(res.status, data), { fallback: "Não foi possível remover o membro." });
         setRemovingMemberId(null);
         return;
       }
@@ -256,7 +255,7 @@ export default function Equipe() {
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
       queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (error) {
-      toast.error("Erro ao remover membro. Tente novamente.");
+      notifyError(error, { fallback: "Não foi possível remover o membro. Tente novamente." });
       console.error(error);
     } finally {
       setRemovingMemberId(null);
@@ -338,14 +337,15 @@ export default function Equipe() {
       const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
       if (!res.ok) {
         const msg = data?.message ?? data?.error ?? "Erro ao criar usuário";
-        const detail = (data as { detail?: string })?.detail;
         const msgLower = String(msg).toLowerCase();
         if (msgLower.includes("limite")) {
           toast.error("Limite de usuários do plano atingido. Faça upgrade para adicionar mais.");
         } else if (msgLower.includes("já está cadastrado") || msgLower.includes("already")) {
           toast.error("Este email já está cadastrado.");
         } else {
-          toast.error(detail ? `${msg} (${detail})` : msg);
+          // O `detail` do "Insert failed" é o erro do banco — vai para o
+          // relatório, não para a tela (ADR-0038).
+          notifyError(functionsErrorFromResponse(res.status, data), { fallback: "Não foi possível criar o usuário." });
         }
         setCreateUserLoading(false);
         return;
@@ -357,7 +357,7 @@ export default function Equipe() {
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
       queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (err) {
-      toast.error("Erro ao criar usuário. Tente novamente.");
+      notifyError(err, { fallback: "Não foi possível criar o usuário. Tente novamente." });
       console.error(err);
     } finally {
       setCreateUserLoading(false);

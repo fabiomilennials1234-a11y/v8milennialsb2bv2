@@ -20,7 +20,7 @@ export {
   userMessageOf,
   type FunctionsErrorBody,
 } from "./to-app-error";
-export { unwrapFunctionsError } from "./unwrap-functions-error";
+export { functionsErrorFromResponse, unwrapFunctionsError } from "./unwrap-functions-error";
 export { notifyError, showErrorToast, type NotifyErrorOptions } from "./notify";
 export { addErrorReporter, reportError, ringBufferEntry, type ErrorReport, type ErrorReporter } from "./report";
 export {

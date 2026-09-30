@@ -246,6 +246,17 @@ describe("unwrapFunctionsError + toAppError", () => {
     expect(app.cause).toBe(error);
   });
 
+  it("rótulo HTTP em `error`, frase em `message`: vence a frase (formato de 12 edge functions)", async () => {
+    const error = functionsHttpError(409, { success: false, error: "Conflict", message: "Este email já está cadastrado." });
+    const app = toAppError(await unwrapFunctionsError(error), FALLBACK);
+    expect(app.userMessage).toBe("Este email já está cadastrado.");
+  });
+
+  it("identificador de máquina vence rótulo HTTP quando não há frase", async () => {
+    const error = functionsHttpError(400, { error: "Bad request", message: "rate_limited" });
+    expect(toAppError(await unwrapFunctionsError(error)).code).toBe("rate.limited");
+  });
+
   it("não mostra o inglês do corpo", async () => {
     const app = toAppError(await unwrapFunctionsError(functionsHttpError(401, { error: "Unauthorized" })), FALLBACK);
     expect(app.code).toBe("auth.session_expired");

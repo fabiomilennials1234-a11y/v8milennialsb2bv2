@@ -69,6 +69,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { notifyError, functionsErrorFromResponse } from "@/shared/errors";
 
 type AppRole = Enums<"app_role">;
 
@@ -194,8 +195,7 @@ export default function MasterUsers() {
       });
       const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
       if (!res.ok) {
-        const msg = data?.message ?? data?.error ?? "Erro ao criar usuário";
-        toast.error(msg);
+        notifyError(functionsErrorFromResponse(res.status, data), { fallback: "Não foi possível criar o usuário." });
         setCreateUserLoading(false);
         return;
       }
