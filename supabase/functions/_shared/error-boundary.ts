@@ -160,7 +160,6 @@ export function withErrorBoundary(
           sessionId: trace.sessionId,
           userId,
           method: req.method,
-          url: req.url,
         });
       } catch {
         // Telemetria nunca muda a resposta.

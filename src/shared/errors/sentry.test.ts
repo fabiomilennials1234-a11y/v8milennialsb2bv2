@@ -6,6 +6,7 @@ const sdk = vi.hoisted(() => {
     scope,
     init: vi.fn(),
     addBreadcrumb: vi.fn(),
+    addEventProcessor: vi.fn(),
     addIntegration: vi.fn(),
     captureException: vi.fn(),
     withScope: vi.fn((fn: (s: typeof scope) => void) => fn(scope)),
@@ -59,6 +60,8 @@ describe("initSentry", () => {
     expect(config.tracesSampleRate).toBeUndefined();
     expect(typeof config.beforeSend).toBe("function");
     expect(typeof config.beforeBreadcrumb).toBe("function");
+    // O evento de replay não passa pelo beforeSend.
+    expect(sdk.addEventProcessor).toHaveBeenCalledTimes(1);
   });
 
   it("defeito vira evento com referência, código e agrupamento; recusa esperada vira só rastro", () => {

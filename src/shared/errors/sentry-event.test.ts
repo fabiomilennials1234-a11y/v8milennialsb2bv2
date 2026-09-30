@@ -7,6 +7,9 @@ import {
   prepareEvent,
   scrubBreadcrumb,
   scrubRecordingEvent,
+  scrubReplayEvent,
+  scrubText,
+  scrubUrl,
   stripQuery,
   tagsFor,
 } from "./sentry-event";
@@ -30,6 +33,31 @@ describe("stripQuery", () => {
   });
 });
 
+describe("scrubUrl", () => {
+  it("token de redefinição de senha mora no path — vira marcador", () => {
+    expect(scrubUrl("https://torquecrm.com.br/reset-password/9f2c1ab0deadbeef?x=1")).toBe(
+      "https://torquecrm.com.br/reset-password/:token",
+    );
+  });
+
+  it("objeto do Storage fica só com o bucket — o caminho tem org, lead e nome de arquivo", () => {
+    expect(scrubUrl("https://x.supabase.co/storage/v1/object/sign/media/org-1/Contrato Joao.pdf?token=abc")).toBe(
+      "https://x.supabase.co/storage/v1/object/sign/media/:path",
+    );
+    expect(scrubUrl("https://x.supabase.co/storage/v1/object/public/avatars/u1/foto.png")).toBe(
+      "https://x.supabase.co/storage/v1/object/public/avatars/:path",
+    );
+  });
+});
+
+describe("scrubText", () => {
+  it("URL dentro da mensagem de erro de rede perde query e segredo de path", () => {
+    expect(
+      scrubText("error sending request for url (https://graph.facebook.com/v19.0/me?access_token=EAAG123): timeout"),
+    ).toBe("error sending request for url (https://graph.facebook.com/v19.0/me): timeout");
+  });
+});
+
 describe("scrubBreadcrumb", () => {
   it("tira query da URL de requisição e mascara telefone", () => {
     const crumb = scrubBreadcrumb({
@@ -47,21 +75,16 @@ describe("scrubBreadcrumb", () => {
     expect(crumb?.message).toBe('div.card > button.icon[aria-label][type="button"]');
   });
 
-  it("console de log/info some; aviso e erro ficam, sem os argumentos crus", () => {
+  it("log de console não sai, de nível nenhum — o build de produção não tira console.*", () => {
     expect(scrubBreadcrumb({ category: "console", level: "log", message: "lead", data: {} })).toBeNull();
-    const warn = scrubBreadcrumb({
-      category: "console",
-      level: "warning",
-      message: "falhou 5511987654321",
-      data: { arguments: [{ phone: "5511987654321" }], logger: "console" },
-    });
-    expect(warn?.message).toBe("falhou 5511*****4321");
-    expect(warn?.data).toEqual({ logger: "console" });
+    expect(
+      scrubBreadcrumb({ category: "console", level: "error", message: "falhou para João Silva", data: {} }),
+    ).toBeNull();
   });
 
-  it("navegação sem query", () => {
-    const crumb = scrubBreadcrumb({ category: "navigation", data: { from: "/leads?q=joao", to: "/chat#x" } });
-    expect(crumb?.data).toEqual({ from: "/leads", to: "/chat" });
+  it("navegação sem query e sem o token do reset", () => {
+    const crumb = scrubBreadcrumb({ category: "navigation", data: { from: "/leads?q=joao", to: "/reset-password/abc123" } });
+    expect(crumb?.data).toEqual({ from: "/leads", to: "/reset-password/:token" });
   });
 });
 
@@ -174,8 +197,30 @@ describe("scrubRecordingEvent", () => {
     expect(out.data.payload.description).toBe("https://x/rest/v1/leads");
   });
 
+  it("evento Meta leva o href da página — sem query nem segredo de path", () => {
+    const out = scrubRecordingEvent({ type: 4, timestamp: 1, data: { href: "https://app/reset-password/abc?x=1", width: 1, height: 1 } });
+    expect(out.data).toEqual({ href: "https://app/reset-password/:token", width: 1, height: 1 });
+  });
+
   it("snapshot de DOM passa intocado — já sai mascarado e varrê-lo custaria caro", () => {
     const snapshot = { type: 2, timestamp: 1, data: { node: { text: "5511987654321" } } };
     expect(scrubRecordingEvent(snapshot)).toBe(snapshot);
+  });
+});
+
+describe("scrubReplayEvent", () => {
+  it("lista de URLs visitadas e URL da página do replay_event saem limpas", () => {
+    const out = scrubReplayEvent({
+      type: "replay_event",
+      urls: ["https://app/leads?search=joao", "https://app/reset-password/abc"],
+      request: { url: "https://app/chat?phone=5511987654321" },
+    });
+    expect(out.urls).toEqual(["https://app/leads", "https://app/reset-password/:token"]);
+    expect(out.request).toEqual({ url: "https://app/chat" });
+  });
+
+  it("evento que não é de replay passa intocado (o beforeSend cuida dele)", () => {
+    const event = { type: undefined, urls: ["https://app/x?y=1"] };
+    expect(scrubReplayEvent(event)).toEqual({ type: undefined, urls: ["https://app/x?y=1"] });
   });
 });

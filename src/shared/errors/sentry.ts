@@ -1,6 +1,14 @@
-import { addBreadcrumb, addIntegration, captureException, init, withScope } from "@sentry/react";
+import { addBreadcrumb, addEventProcessor, addIntegration, captureException, init, withScope } from "@sentry/react";
 import { addErrorReporter, type ErrorReport } from "./report";
-import { exceptionFor, fingerprintFor, prepareEvent, scrubBreadcrumb, scrubRecordingEvent, tagsFor } from "./sentry-event";
+import {
+  exceptionFor,
+  fingerprintFor,
+  prepareEvent,
+  scrubBreadcrumb,
+  scrubRecordingEvent,
+  scrubReplayEvent,
+  tagsFor,
+} from "./sentry-event";
 
 /**
  * O Sentry do navegador (ADR-0038, S6). Observa exceção; não mostra nada.
@@ -133,6 +141,9 @@ export function initSentry(options: SentryOptions, pending: ErrorReport[] = []):
     beforeSend: prepareEvent,
     beforeBreadcrumb: scrubBreadcrumb,
   });
+
+  // O evento de replay não passa pelo `beforeSend` — só pelos processors.
+  addEventProcessor(scrubReplayEvent);
 
   const detach = addErrorReporter(sentryReporter);
   for (const report of pending) sentryReporter(report);

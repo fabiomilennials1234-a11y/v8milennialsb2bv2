@@ -15,8 +15,12 @@
  *   runtime atende várias requisições — o escopo de uma vazaria para outra.
  *   Cada captura vai num `withScope` próprio.
  * - O envio não segura a resposta: `EdgeRuntime.waitUntil` quando existe.
- * - Mesma régua de dado do front: telefone/e-mail/CPF/CNPJ mascarados, URL sem
- *   query, do usuário só o UUID.
+ * - Mesma régua de dado do front: telefone/e-mail/CPF/CNPJ mascarados, do
+ *   usuário só o UUID.
+ * - A URL da requisição NÃO vai: webhook guarda segredo no path
+ *   (`whatsapp-webhook/<segredo>`), e o nome da função já diz onde foi. URL
+ *   dentro de mensagem de exceção (o erro de `fetch` do Deno traz a URL inteira,
+ *   com `?access_token=` da Graph API) perde query e fragmento.
  */
 
 type SentryModule = typeof import("npm:@sentry/deno@11.1.0");
@@ -27,7 +31,6 @@ export interface UnhandledContext {
   sessionId?: string | null;
   userId?: string;
   method: string;
-  url: string;
 }
 
 const MIN_MASKABLE_DIGITS = 10;
@@ -60,6 +63,13 @@ export function stripQuery(url: string): string {
   return cut === -1 ? url : url.slice(0, cut);
 }
 
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>()]+/g;
+
+/** Texto livre: URL sem query/fragmento e PII mascarada. */
+export function scrubText(text: string): string {
+  return scrubPii(text.replace(URL_IN_TEXT, (url) => stripQuery(url)));
+}
+
 /** Os campos do evento que esta camada toca — o resto passa como veio. */
 export interface EdgeEvent {
   message?: string;
@@ -72,15 +82,12 @@ export interface EdgeEvent {
 
 export function prepareEdgeEvent<T extends EdgeEvent>(event: T): T {
   const e: EdgeEvent = event;
-  if (typeof e.message === "string") e.message = scrubPii(e.message);
+  if (typeof e.message === "string") e.message = scrubText(e.message);
   for (const exception of e.exception?.values ?? []) {
-    if (typeof exception.value === "string") exception.value = scrubPii(exception.value);
+    if (typeof exception.value === "string") exception.value = scrubText(exception.value);
   }
-  if (e.request) {
-    e.request = typeof e.request.url === "string"
-      ? { url: scrubPii(stripQuery(e.request.url)), method: e.request.method }
-      : {};
-  }
+  // Só o método: a URL pode ter segredo no path, e header/corpo não são nossos.
+  if (e.request) e.request = e.request.method ? { method: e.request.method } : {};
   if (e.user) e.user = e.user.id ? { id: e.user.id } : undefined;
   delete e.extra;
   delete e.server_name;
@@ -158,8 +165,8 @@ export function captureUnhandled(error: unknown, context: UnhandledContext): Pro
           ...(context.sessionId ? { session_id: context.sessionId } : {}),
         });
         if (context.userId) scope.setUser({ id: context.userId });
-        scope.setContext("request", { method: context.method, url: scrubPii(stripQuery(context.url)) });
-        Sentry.captureException(error instanceof Error ? error : new Error(scrubPii(String(error))));
+        scope.setContext("request", { method: context.method });
+        Sentry.captureException(error instanceof Error ? error : new Error(scrubText(String(error))));
       });
       await Sentry.flush(2000);
     }),

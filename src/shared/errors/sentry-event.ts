@@ -14,7 +14,9 @@ import { toAppError } from "./to-app-error";
  * - telefone, e-mail, CPF/CNPJ mascarados em todo texto (`scrubPii`);
  * - `details`/`hint` do Postgres descartados — carregam o valor da linha;
  * - URL sem query nem fragmento: filtro do PostgREST (`?phone=eq.5511…`) e o
- *   token do Supabase Auth, que volta no `#access_token=…`;
+ *   token do Supabase Auth, que volta no `#access_token=…`; segredo no path
+ *   (`/reset-password/<token>`) e caminho de arquivo do Storage trocados por
+ *   marcador; URL dentro de texto livre (mensagem de erro de rede) também;
  * - rótulo visível de elemento (`aria-label`, `title`, `alt`) fora do rastro de
  *   clique — é onde mora o nome do lead ("Excluir João Silva");
  * - do usuário, só o UUID. Nome, e-mail e IP não.
@@ -30,8 +32,33 @@ export function stripQuery(url: string): string {
   return cut === -1 ? url : url.slice(0, cut);
 }
 
+/**
+ * Segredo que mora no PATH, não na query — cortar a query não basta:
+ * - o token de redefinição de senha é segmento de rota (`/reset-password/:token`);
+ * - o caminho de objeto do Storage carrega org, lead e nome de arquivo do
+ *   cliente. Fica o bucket.
+ */
+const SECRET_PATH_SEGMENTS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\/reset-password\/[^/?#]+/g, "/reset-password/:token"],
+  [/(\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?[^/?#]+)\/[^?#]+/g, "$1/:path"],
+];
+
+export function scrubUrl(url: string): string {
+  let out = stripQuery(url);
+  for (const [pattern, replacement] of SECRET_PATH_SEGMENTS) out = out.replace(pattern, replacement);
+  return scrubPii(out);
+}
+
+/** URL dentro de texto livre: "error sending request for url (https://…?access_token=…)". */
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>()]+/g;
+
+/** Texto livre (mensagem de exceção, rastro): URLs limpas e PII mascarada. */
+export function scrubText(text: string): string {
+  return scrubPii(text.replace(URL_IN_TEXT, (url) => scrubUrl(url)));
+}
+
 function scrubValue(key: string, value: unknown, depth: number): unknown {
-  if (typeof value === "string") return scrubPii(URL_KEYS.has(key) ? stripQuery(value) : value);
+  if (typeof value === "string") return URL_KEYS.has(key) ? scrubUrl(value) : scrubText(value);
   if (value === null || typeof value !== "object" || depth >= MAX_DEPTH) return value;
   if (Array.isArray(value)) return value.map((item) => scrubValue(key, item, depth + 1));
   return scrubRecord(value as Record<string, unknown>, depth + 1);
@@ -49,20 +76,17 @@ export function scrubRecord(record: Record<string, unknown>, depth = 0): Record<
 const VISIBLE_LABEL_ATTRIBUTE = /\[(aria-label|title|alt|placeholder)=(?:"[^"]*"|'[^']*'|[^\]]*)\]/g;
 
 export function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
-  // Em produção o build tira `console.*` (vite.config.ts); o que sobra de log é
-  // de biblioteca e pode carregar qualquer coisa. Aviso e erro ficam.
-  if (breadcrumb.category === "console" && breadcrumb.level !== "error" && breadcrumb.level !== "warning") {
-    return null;
-  }
+  // Log de console não sai. O build de produção NÃO tira `console.*` (a opção
+  // no vite.config.ts está no lugar errado e é ignorada), e o que o app loga é
+  // texto livre — nome de lead, objeto inteiro. O passo a passo vem de clique,
+  // navegação e requisição.
+  if (breadcrumb.category === "console") return null;
 
   const out: Breadcrumb = { ...breadcrumb };
   if (typeof out.message === "string") {
-    out.message = scrubPii(out.message.replace(VISIBLE_LABEL_ATTRIBUTE, "[$1]"));
+    out.message = scrubText(out.message.replace(VISIBLE_LABEL_ATTRIBUTE, "[$1]"));
   }
-  if (out.data) {
-    const { arguments: _args, ...data } = out.data;
-    out.data = scrubRecord(data);
-  }
+  if (out.data) out.data = scrubRecord(out.data);
   return out;
 }
 
@@ -139,14 +163,14 @@ function isUnwantedAutoCapture(event: ErrorEvent, hint: EventHint): boolean {
 export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
   if (isUnwantedAutoCapture(event, hint)) return null;
 
-  if (event.message) event.message = scrubPii(event.message);
+  if (event.message) event.message = scrubText(event.message);
 
   for (const exception of event.exception?.values ?? []) {
-    if (exception.value) exception.value = scrubPii(exception.value);
+    if (exception.value) exception.value = scrubText(exception.value);
   }
 
   if (event.request) {
-    event.request = event.request.url ? { url: scrubPii(stripQuery(event.request.url)) } : {};
+    event.request = event.request.url ? { url: scrubUrl(event.request.url) } : {};
   }
 
   if (event.extra) event.extra = scrubRecord(event.extra);
@@ -174,18 +198,35 @@ export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | n
   return event;
 }
 
-/** `EventType.Custom` do rrweb: rastros e spans de rede que o replay anexa. */
+/** `EventType` do rrweb: Meta leva o `href` da página; Custom, rastros e spans de rede. */
+const RRWEB_META_EVENT = 4;
 const RRWEB_CUSTOM_EVENT = 5;
 
 /**
  * Evento da gravação de sessão (replay). O texto da tela já sai mascarado pelo
- * próprio replay, e o snapshot de DOM não é varrido aqui (é grande, e varrer a
- * cada mutação custaria caro). O que sobra com dado são os eventos custom: URL
- * de requisição e rastros.
+ * próprio replay (e `title`/`placeholder`/`aria-label` também, por padrão), e o
+ * snapshot de DOM não é varrido aqui (é grande, e varrer a cada mutação custaria
+ * caro). O que sobra com dado: o `href` da página e os eventos custom.
  */
 export function scrubRecordingEvent<T>(event: T): T {
   if (typeof event !== "object" || event === null) return event;
   const { type, data } = event as { type?: unknown; data?: unknown };
-  if (type !== RRWEB_CUSTOM_EVENT || typeof data !== "object" || data === null) return event;
+  if (typeof data !== "object" || data === null) return event;
+  if (type === RRWEB_META_EVENT) {
+    const { href } = data as { href?: unknown };
+    return typeof href === "string" ? { ...event, data: { ...data, href: scrubUrl(href) } } : event;
+  }
+  if (type !== RRWEB_CUSTOM_EVENT) return event;
   return { ...event, data: scrubRecord(data as Record<string, unknown>) };
+}
+
+/**
+ * O evento de replay não passa pelo `beforeSend`; passa pelos event processors.
+ * Ele carrega a lista de URLs visitadas e a URL da página.
+ */
+export function scrubReplayEvent<T extends { type?: string; urls?: string[]; request?: { url?: string } }>(event: T): T {
+  if (event.type !== "replay_event") return event;
+  if (event.urls) event.urls = event.urls.map(scrubUrl);
+  if (event.request?.url) event.request = { url: scrubUrl(event.request.url) };
+  return event;
 }
