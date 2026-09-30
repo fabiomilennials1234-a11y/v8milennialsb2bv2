@@ -14,12 +14,26 @@ const EMAIL = /([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,}
 const CPF = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g;
 const CNPJ = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g;
 const LONG_DIGITS = /\d{6,}/g;
+// Com grupo de captura: no `split`, os UUIDs ficam nos índices ímpares.
+const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
 function keepLastTwo(value: string): string {
   return value.replace(/\d(?=(?:\D*\d){2})/g, "*");
 }
 
+/**
+ * UUID não é dado pessoal — é o que casa um evento com a linha no banco. Fica
+ * de fora da máscara: o último bloco de um UUID pode ter 12 dígitos seguidos, e
+ * a regra de telefone o cortava ao meio.
+ */
 export function scrubPii(text: string): string {
+  return text
+    .split(UUID)
+    .map((part, index) => (index % 2 === 1 ? part : scrubSegment(part)))
+    .join("");
+}
+
+function scrubSegment(text: string): string {
   return text
     // JID do WhatsApp tem forma de e-mail, mas é telefone: a regra de dígitos
     // abaixo cuida dele e preserva o sufixo.

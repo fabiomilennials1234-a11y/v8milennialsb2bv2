@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
 import { createQueryErrorHandlers } from "@/shared/errors/query-error-handlers";
+import { setReportIdentity } from "@/shared/errors";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
@@ -198,6 +199,22 @@ function EnvMissingScreen() {
 function RealtimeOrgBridge({ children }: { children: React.ReactNode }) {
   const { organizationId } = useOrganization();
   return <RealtimeOrgProvider organizationId={organizationId}>{children}</RealtimeOrgProvider>;
+}
+
+// Quem estava usando, nos relatórios de erro (ADR-0038): só UUIDs e o papel —
+// nunca nome, e-mail ou telefone. Sem isto um evento no Sentry não diz de que
+// organização veio, e o suporte não casa o evento com o Chamado.
+function ReportIdentityBridge() {
+  const { user } = useAuth();
+  const { organizationId, role } = useOrganization();
+  const { isMaster } = useMasterAuth();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    setReportIdentity(userId ? { userId, organizationId, role: isMaster ? "master" : role } : null);
+  }, [userId, organizationId, role, isMaster]);
+
+  return null;
 }
 
 // Wrapper for pages that need the main layout
@@ -894,6 +911,7 @@ const App = () => {
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
+                <ReportIdentityBridge />
                 <TorqueIntro />
                 {/* PilhaDeCartoes usa useNavigate() para abrir o link do
                     cartão, então PRECISA ficar dentro do BrowserRouter.

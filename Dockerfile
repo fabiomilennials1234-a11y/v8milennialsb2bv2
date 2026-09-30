@@ -23,6 +23,18 @@ ARG VITE_INVITE_API_URL
 ARG VITE_META_APP_ID
 ARG VITE_META_WA_CONFIG_ID
 ARG VITE_APP_VERSION
+# Sentry (ADR-0038, S6). O DSN é público por desenho (vai no bundle); sem ele o
+# SDK nem chega ao navegador.
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_ENVIRONMENT
+ARG VITE_SENTRY_REPLAY_ON_ERROR_RATE
+# Upload de source map. Só ARG, NUNCA ENV: vive só neste estágio, que não vai
+# para a imagem servida. Use token de ORGANIZAÇÃO (escopo org:ci — só sobe map e
+# cria release), nunca token pessoal. Sem token, o build segue sem upload.
+ARG SENTRY_AUTH_TOKEN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+ARG SENTRY_URL
 # Feature flags
 ARG VITE_CHAT_ONDA_2B=true
 ARG VITE_CHAT_BUBBLE=true
@@ -35,6 +47,9 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_META_APP_ID=${VITE_META_APP_ID} \
     VITE_META_WA_CONFIG_ID=${VITE_META_WA_CONFIG_ID} \
     VITE_APP_VERSION=${VITE_APP_VERSION} \
+    VITE_SENTRY_DSN=${VITE_SENTRY_DSN} \
+    VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
+    VITE_SENTRY_REPLAY_ON_ERROR_RATE=${VITE_SENTRY_REPLAY_ON_ERROR_RATE} \
     VITE_CHAT_ONDA_2B=${VITE_CHAT_ONDA_2B} \
     VITE_CHAT_BUBBLE=${VITE_CHAT_BUBBLE}
 
@@ -64,7 +79,7 @@ RUN printf '%s\n' \
   'add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
   'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
   'add_header Permissions-Policy "geolocation=(), payment=()" always;' \
-  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://connect.facebook.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
+  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://connect.facebook.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/security-headers.conf && \
 printf '%s\n' \
   '# Landing pages estáticas em /lp/ (public/lp/v1, v2, v3): CSP própria, mais permissiva' \

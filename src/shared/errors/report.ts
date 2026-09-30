@@ -44,6 +44,14 @@ export function setReportIdentity(next: ReportIdentity | null): void {
   identity = next;
 }
 
+/**
+ * Para o destino que também captura sozinho (o Sentry pega exceção não tratada
+ * sem passar por `reportError`) carimbar a mesma identidade nesses eventos.
+ */
+export function getReportIdentity(): ReportIdentity | null {
+  return identity;
+}
+
 /** Registra um destino. Devolve a função que desfaz o registro. */
 export function addErrorReporter(reporter: ErrorReporter): () => void {
   reporters.add(reporter);
@@ -60,6 +68,15 @@ const reported = new WeakSet<object>();
 
 function isObject(value: unknown): value is object {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * A causa já passou por `reportError`? O Sentry também captura rejeição não
+ * tratada sozinho; quando é a mesma causa que a tela já relatou, o segundo evento
+ * é duplicata.
+ */
+export function wasReported(cause: unknown): boolean {
+  return isObject(cause) && reported.has(cause);
 }
 
 export function reportError(error: AppError, context: Record<string, string> = {}): void {

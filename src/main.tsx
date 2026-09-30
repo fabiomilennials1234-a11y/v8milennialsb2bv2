@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { installClientErrorCapture, recordClientError } from "./core/observability/client-error-buffer";
 import { addErrorReporter, ringBufferEntry } from "@/shared/errors";
+import { loadSentry, sentryOptionsFromEnv } from "@/shared/errors/sentry-loader";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -13,6 +14,12 @@ installClientErrorCapture();
 // boundary) vai para o mesmo anel, com a referência que o usuário viu no toast.
 // Registrado aqui porque `shared` não pode importar `core` (ADR-0038).
 addErrorReporter(({ error }) => recordClientError(ringBufferEntry(error), "handled"));
+
+// Sentry (ADR-0038, S6): só quando o build traz DSN. Sem ele, nenhum byte do
+// SDK chega ao navegador. Com ele, o SDK carrega fora do caminho crítico e uma
+// fila segura o que for relatado enquanto isso.
+const sentryOptions = sentryOptionsFromEnv(import.meta.env, __APP_VERSION__);
+if (sentryOptions) void loadSentry(sentryOptions);
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks
 // hashados que não existem mais (nginx agora devolve 404 nesses assets).

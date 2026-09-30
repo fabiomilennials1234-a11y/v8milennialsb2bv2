@@ -22,6 +22,12 @@ describe("scrubPii", () => {
   it("não mexe em número curto nem em código de erro", () => {
     expect(scrubPii("PGRST116 retornou 42 linhas (23505)")).toBe("PGRST116 retornou 42 linhas (23505)");
   });
+
+  it("não corta UUID cujo último bloco é só dígito — e ainda mascara o telefone ao lado", () => {
+    expect(scrubPii("/leads/550e8400-e29b-41d4-a716-446655440000 tel 5511987654321")).toBe(
+      "/leads/550e8400-e29b-41d4-a716-446655440000 tel 5511*****4321",
+    );
+  });
 });
 
 describe("technicalSummary", () => {
