@@ -75,8 +75,38 @@ export async function logEvent(
 }
 
 /**
+ * O que o cliente recebe quando a função quebra (ADR-0038, S5).
+ *
+ * `error` continua string — os chamadores leem `body.error` — mas agora é uma
+ * frase em PT, e não a mensagem técnica da exceção ("Cannot read properties of
+ * undefined"), que ia parar no toast. `code` é o do contrato do front
+ * (`src/shared/errors`), e `request_id` casa a resposta com a linha no
+ * `runtime_logs` e, na S6, com o evento no Sentry.
+ */
+export const UNHANDLED_ERROR_MESSAGE = "Tivemos um problema do nosso lado. Tente de novo em instantes.";
+
+function userIdFromJwt(req: Request): string | undefined {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return undefined;
+    const payloadPart = authHeader.replace("Bearer ", "").split(".")[1];
+    if (!payloadPart) return undefined;
+    const sub = JSON.parse(atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/"))).sub;
+    return typeof sub === "string" ? sub : undefined;
+  } catch {
+    // Ignore JWT parse errors — the error we are reporting matters more.
+    return undefined;
+  }
+}
+
+/**
  * Wraps an Edge Function handler so that an unhandled exception becomes a
  * CORS-bearing 500 instead of an opaque crash. Compatible with `Deno.serve()`.
+ *
+ * A exceção vai para três lugares: `console.error` (logs da função), a tabela
+ * `runtime_logs` (retenção de 30 dias, correlacionável por sessão/requisição —
+ * antes do ADR-0038 ela só ia para o console, que expira rápido) e a resposta,
+ * que leva só a frase PT, o código e o `request_id`.
  */
 export function withErrorBoundary(
   functionName: string,
@@ -86,38 +116,48 @@ export function withErrorBoundary(
     try {
       return await handler(req);
     } catch (error) {
-      let userId: string | undefined;
-
-      try {
-        const authHeader = req.headers.get("authorization");
-        if (authHeader) {
-          const payloadPart = authHeader.replace("Bearer ", "").split(".")[1];
-          if (payloadPart) userId = JSON.parse(atob(payloadPart)).sub;
-        }
-      } catch {
-        // Ignore JWT parse errors — the error we are reporting matters more.
-      }
-
+      const userId = userIdFromJwt(req);
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[${functionName}] Unhandled error:`, errorMessage);
 
-      const { sessionId, requestId } = getTraceContext(req);
+      const trace = getTraceContext(req);
+      const requestId = trace.requestId ?? crypto.randomUUID();
 
       await logError(error, {
         functionName,
         userId,
-        extra: { method: req.method, url: req.url, sessionId, requestId },
+        extra: { method: req.method, url: req.url, sessionId: trace.sessionId, requestId },
       });
+
+      // Import dinâmico: `logger.ts` importa `logError` deste arquivo; um import
+      // estático fecharia o ciclo. `logRuntime` nunca lança.
+      try {
+        const { logRuntime } = await import("./logger.ts");
+        await logRuntime({
+          module: "general",
+          action: "unhandled_exception",
+          status: "error",
+          errorMessage: errorMessage.slice(0, 2000),
+          triggeredBy: userId,
+          sessionId: trace.sessionId,
+          requestId,
+          payloadSnapshot: { function: functionName, method: req.method },
+        });
+      } catch {
+        // Telemetria nunca muda a resposta.
+      }
 
       const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
       return new Response(
         JSON.stringify({
-          error: errorMessage || "Ocorreu um erro interno. Tente novamente mais tarde.",
+          error: UNHANDLED_ERROR_MESSAGE,
+          code: "server.unavailable",
+          request_id: requestId,
         }),
         {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-ID": requestId },
         },
       );
     }
