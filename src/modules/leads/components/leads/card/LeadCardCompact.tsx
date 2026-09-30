@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
+import { OUTCOME_CARD_CLASSES } from "./outcome-card-classes";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
 import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
@@ -55,22 +56,6 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  * O padrão "campo vazio é link azul sublinhado" vem do print e é intencional:
  * é o convite a preencher. Vale para produto, responsáveis e valor.
  */
-
-/**
- * Negócio encerrado no funil: borda, fundo e a faixa lateral do `.kanban-card`
- * (`--card-accent`) no tom do desfecho — verde no ganho, vermelho na perda.
- *
- * O fundo é uma CAMADA sobre `bg-card`, não uma troca dele: `bg-success/10`
- * sozinho deixaria o card translúcido sobre a coluna, e o card deixaria de
- * parecer um card. Exportado para o card confortável usar o mesmo desenho.
- *
- * Classes escritas por extenso, não montadas a partir do token: o Tailwind só
- * gera as classes que encontra literais no código.
- */
-export const OUTCOME_CARD_CLASSES = {
-  won: "border-success/50 bg-[linear-gradient(hsl(var(--success)/0.09),hsl(var(--success)/0.09))] [--card-accent:hsl(var(--success))]",
-  lost: "border-destructive/50 bg-[linear-gradient(hsl(var(--destructive)/0.09),hsl(var(--destructive)/0.09))] [--card-accent:hsl(var(--destructive))]",
-} as const;
 
 /** O selo que diz com palavra o que a cor diz. */
 const OUTCOME_BADGE = {
