@@ -15,6 +15,7 @@
 
 import { getCorsHeaders } from "./cors.ts";
 import { getTraceContext } from "./request-trace.ts";
+import { scrubText } from "./scrub.ts";
 
 interface LogContext {
   functionName?: string;
@@ -132,14 +133,16 @@ export function withErrorBoundary(
       });
 
       // Import dinâmico: `logger.ts` importa `logError` deste arquivo; um import
-      // estático fecharia o ciclo. `logRuntime` nunca lança.
+      // estático fecharia o ciclo. `logRuntime` nunca lança. A mensagem vai
+      // mascarada: exceção de fetch traz a URL com o token, e mensagem de
+      // regra de negócio traz telefone de lead — `logRuntime` grava crua.
       try {
         const { logRuntime } = await import("./logger.ts");
         await logRuntime({
           module: "general",
           action: "unhandled_exception",
           status: "error",
-          errorMessage: errorMessage.slice(0, 2000),
+          errorMessage: scrubText(errorMessage).slice(0, 2000),
           triggeredBy: userId,
           sessionId: trace.sessionId,
           requestId,
