@@ -12,6 +12,7 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
+import { isWonCard } from "./funil-card-outcome";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -215,6 +216,9 @@ export function FunilKanban({
       // ações (ADR-0004); a DATA não. Montar amplo é seguro.
       stageKey: entry.stage_key ?? null,
       stageRole: stageRoleByKey.get(entry.stage_key) ?? null,
+      // Ganho é o desfecho do NEGÓCIO, não a coluna: o card ganho num funil sem
+      // etapa de ganho também pinta de verde. Ver `isWonCard`.
+      won: isWonCard(entry, stageRoleByKey.get(entry.stage_key)),
       pipelineId,
       meetingDate,
       // ── A reunião no card (S6) ──

@@ -157,3 +157,32 @@ describe("LeadCardCompact — contato e interação", () => {
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
   });
 });
+
+describe("LeadCardCompact — negócio ganho se distingue no funil", () => {
+  const PARADO = { ...LEAD, stageEnteredAt: new Date(Date.now() - 10 * 86_400_000).toISOString() };
+
+  it("card ganho recebe borda e fundo verdes", () => {
+    const { container } = montar({ lead: { ...PARADO, won: true } });
+    const card = container.querySelector("[data-lead-id]") as HTMLElement;
+    expect(card.className).toContain("border-success/50");
+    expect(card.className).toContain("--success");
+  });
+
+  it("card ganho diz 'Ganho' com palavra — a cor sozinha não basta", () => {
+    montar({ lead: { ...PARADO, won: true } });
+    expect(screen.getByText("Ganho")).toBeInTheDocument();
+  });
+
+  it("negócio ganho não aparece como parado", () => {
+    montar({ lead: { ...PARADO, won: true } });
+    expect(screen.queryByText(/d parado/)).toBeNull();
+  });
+
+  it("card aberto não muda: sem verde, sem selo, e segue avisando que está parado", () => {
+    const { container } = montar({ lead: PARADO });
+    const card = container.querySelector("[data-lead-id]") as HTMLElement;
+    expect(card.className).not.toContain("border-success");
+    expect(screen.queryByText("Ganho")).toBeNull();
+    expect(screen.getByText("10d parado")).toBeInTheDocument();
+  });
+});

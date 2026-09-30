@@ -56,6 +56,17 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  * é o convite a preencher. Vale para produto, responsáveis e valor.
  */
 
+/**
+ * Negócio ganho no funil: borda verde, fundo esverdeado e a faixa lateral do
+ * `.kanban-card` (`--card-accent`) no mesmo tom.
+ *
+ * O fundo é uma CAMADA sobre `bg-card`, não uma troca dele: `bg-success/10`
+ * sozinho deixaria o card translúcido sobre a coluna, e o card deixaria de
+ * parecer um card. Exportado para o card confortável usar o mesmo desenho.
+ */
+export const WON_CARD_CLASSES =
+  "border-success/50 bg-[linear-gradient(hsl(var(--success)/0.09),hsl(var(--success)/0.09))] [--card-accent:hsl(var(--success))]";
+
 interface Responsavel {
   name: string | null;
   avatar_url?: string | null;
@@ -100,6 +111,8 @@ interface LeadCardCompactProps {
     qualTier?: QualificationTier | null;
     avatarUrl?: string | null;
     metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
+    /** Negócio ganho — pinta o card de verde e troca "parado" pelo selo. */
+    won?: boolean;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -273,6 +286,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
           "kanban-card group relative cursor-pointer p-0",
           "flex flex-col rounded-[10px]",
+          lead.won && WON_CARD_CLASSES,
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/50",
         )}
@@ -502,6 +516,15 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
           {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}
           <div className="flex flex-wrap items-center gap-1">
+            {/* A cor sozinha não carrega informação para quem não distingue
+                verde (WCAG 1.4.1): o selo diz com palavra o que o fundo diz. */}
+            {lead.won && (
+              <Badge className="border-success/35 bg-success/15 text-success">
+                <Check className="size-[9px]" />
+                Ganho
+              </Badge>
+            )}
+
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
@@ -520,7 +543,8 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
             {dateIndicator && <Badge className={dateIndicator.className}>{dateIndicator.label}</Badge>}
 
-            {diasParado != null && diasParado >= 3 && (
+            {/* Negócio ganho não está "parado": está encerrado. */}
+            {!lead.won && diasParado != null && diasParado >= 3 && (
               <Badge
                 className={cn(
                   diasParado >= 14 ? "border-red-500/30 bg-red-500/10 text-red-500"
