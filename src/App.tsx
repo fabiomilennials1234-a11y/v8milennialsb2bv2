@@ -882,10 +882,15 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
+        {/* Os toasts ficam FORA do ThemeTransitionProvider: ele embrulha o app
+            numa `div.relative z-[1]`, e esse z-index cria um contexto de
+            empilhamento que prendia o toaster abaixo do overlay de qualquer
+            modal (z-50, portado no body). Todo erro disparado de dentro de um
+            formulário aparecia apagado atrás do modal (ADR-0038, validação). */}
+        <Toaster />
+        <Sonner />
         <ThemeTransitionProvider>
           <TooltipProvider>
-            <Toaster />
-            <Sonner />
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>

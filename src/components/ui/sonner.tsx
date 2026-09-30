@@ -10,6 +10,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Um modal do Radix põe `pointer-events: none` no body, e o toaster
+      // herdava: com formulário aberto, os botões do toast de erro (copiar
+      // código, "Falar com suporte") não recebiam clique (ADR-0038, validação).
+      style={{ pointerEvents: "auto" }}
       toastOptions={{
         classNames: {
           toast:
