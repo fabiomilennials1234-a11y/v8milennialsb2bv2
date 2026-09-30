@@ -19,7 +19,7 @@ function rate(raw: string | undefined): number {
 }
 
 /** `null` quando o build não tem DSN — e aí o SDK não carrega. */
-export function sentryOptionsFromEnv(env: SentryEnv, release: string): SentryOptions | null {
+export function sentryOptionsFromEnv(env: SentryEnv, release: string, sessionId?: string): SentryOptions | null {
   const dsn = env.VITE_SENTRY_DSN?.trim();
   if (!dsn) return null;
   return {
@@ -27,6 +27,7 @@ export function sentryOptionsFromEnv(env: SentryEnv, release: string): SentryOpt
     environment: env.VITE_SENTRY_ENVIRONMENT?.trim() || (env.PROD ? "production" : "development"),
     release,
     replayOnErrorRate: rate(env.VITE_SENTRY_REPLAY_ON_ERROR_RATE),
+    ...(sessionId ? { sessionId } : {}),
   };
 }
 

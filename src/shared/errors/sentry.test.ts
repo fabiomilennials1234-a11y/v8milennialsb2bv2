@@ -134,6 +134,14 @@ describe("sentryOptionsFromEnv", () => {
     expect(sentryOptionsFromEnv({ PROD: true, VITE_SENTRY_DSN: dsn, VITE_SENTRY_REPLAY_ON_ERROR_RATE: "7" }, "x")?.replayOnErrorRate).toBe(1);
     expect(sentryOptionsFromEnv({ PROD: true, VITE_SENTRY_DSN: dsn, VITE_SENTRY_REPLAY_ON_ERROR_RATE: "abc" }, "x")?.replayOnErrorRate).toBe(1);
   });
+
+  it("leva o id da aba — o mesmo que o edge grava — como tag fixa", () => {
+    const dsn = "https://k@o1.ingest.de.sentry.io/1";
+    const built = sentryOptionsFromEnv({ PROD: true, VITE_SENTRY_DSN: dsn }, "x", "sess-1");
+    expect(built?.sessionId).toBe("sess-1");
+    initSentry(built!);
+    expect(sdk.init.mock.calls[0][0].initialScope).toEqual({ tags: { app: "torque-web", session_id: "sess-1" } });
+  });
 });
 
 describe("loadSentry", () => {

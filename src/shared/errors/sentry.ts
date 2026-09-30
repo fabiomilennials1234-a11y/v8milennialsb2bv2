@@ -28,6 +28,12 @@ export interface SentryOptions {
   release: string;
   /** 0 a 1. Fração dos erros relatados que levam a gravação do minuto anterior. */
   replayOnErrorRate: number;
+  /**
+   * O id da aba (`x-torque-session-id`, o mesmo que o edge grava no
+   * `runtime_logs` e no evento dele). Buscar por ele no Sentry junta o que a aba
+   * viu com o que o servidor viu.
+   */
+  sessionId?: string;
 }
 
 /**
@@ -123,7 +129,7 @@ export function initSentry(options: SentryOptions, pending: ErrorReport[] = []):
     replaysOnErrorSampleRate: options.replayOnErrorRate,
     ignoreErrors: IGNORED_ERRORS,
     denyUrls: EXTENSION_URLS,
-    initialScope: { tags: { app: "torque-web" } },
+    initialScope: { tags: { app: "torque-web", ...(options.sessionId ? { session_id: options.sessionId } : {}) } },
     beforeSend: prepareEvent,
     beforeBreadcrumb: scrubBreadcrumb,
   });

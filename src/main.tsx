@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { installClientErrorCapture, recordClientError } from "./core/observability/client-error-buffer";
+import { getSessionId } from "./core/trace/request-trace";
 import { addErrorReporter, ringBufferEntry } from "@/shared/errors";
 import { loadSentry, sentryOptionsFromEnv } from "@/shared/errors/sentry-loader";
 import App from "./App.tsx";
@@ -18,7 +19,7 @@ addErrorReporter(({ error }) => recordClientError(ringBufferEntry(error), "handl
 // Sentry (ADR-0038, S6): só quando o build traz DSN. Sem ele, nenhum byte do
 // SDK chega ao navegador. Com ele, o SDK carrega fora do caminho crítico e uma
 // fila segura o que for relatado enquanto isso.
-const sentryOptions = sentryOptionsFromEnv(import.meta.env, __APP_VERSION__);
+const sentryOptions = sentryOptionsFromEnv(import.meta.env, __APP_VERSION__, getSessionId());
 if (sentryOptions) void loadSentry(sentryOptions);
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks
