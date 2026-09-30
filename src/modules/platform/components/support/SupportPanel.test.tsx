@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { SupportPanelProvider } from "./SupportPanelProvider";
 import { SupportPanel } from "./SupportPanel";
 import { useSupportPanel } from "./SupportPanelContext";
+import { canOpenSupport, openSupport } from "@/shared/errors";
 
 const createTicket = vi.fn();
 const createComment = vi.fn();
@@ -56,6 +57,15 @@ const markRead = vi.fn();
 vi.mock("@/modules/platform/hooks/useSupportUnread", () => ({
   useSupportUnread: () => ({ byTicket: unreadData.current, total: 0, isLoading: false }),
   useMarkSupportRepliesRead: () => ({ mutate: markRead }),
+}));
+// Os canais realtime usam React Query (a org, o invalidate). Sem estes dublês a
+// suíte inteira caía em "No QueryClient set" desde que painel e thread passaram
+// a assinar os canais — as 26 falhas estavam na baseline do ratchet.
+vi.mock("@/modules/platform/hooks/useSupportTicketsChannel", () => ({
+  useSupportTicketsChannel: () => undefined,
+}));
+vi.mock("@/modules/platform/hooks/useTicketChannel", () => ({
+  useTicketChannel: () => undefined,
 }));
 vi.mock("@/modules/platform/hooks/useSupportContext", () => ({
   useCaptureSupportContext: () => captureSupportContext,
@@ -152,6 +162,44 @@ describe("SupportPanel", () => {
     await user.click(screen.getByText("cmd-k abrir chamado"));
 
     expect(await screen.findByLabelText("Assunto")).toBeInTheDocument();
+  });
+
+  // ADR-0038: "Falar com suporte" num toast de erro chega aqui com o código.
+  it("um erro abre o formulário já com o código do erro e marcado como defeito", async () => {
+    setup();
+    expect(canOpenSupport()).toBe(true);
+
+    act(() => {
+      openSupport({
+        title: "Erro: Não foi possível mover o card.",
+        description: "Código do erro: 7F3A9C21\n\nO que eu estava fazendo quando aconteceu:\n",
+      });
+    });
+
+    expect(await screen.findByLabelText("Assunto")).toHaveValue("Erro: Não foi possível mover o card.");
+    expect(screen.getByLabelText(/detalhes/i)).toHaveValue(
+      "Código do erro: 7F3A9C21\n\nO que eu estava fazendo quando aconteceu:\n",
+    );
+  });
+
+  it("sem o painel montado, não há para onde levar o erro", () => {
+    const { unmount } = setup();
+    unmount();
+    expect(canOpenSupport()).toBe(false);
+  });
+
+  it("o atalho continua abrindo um formulário em branco depois de um erro", async () => {
+    const user = userEvent.setup();
+    setup();
+    act(() => {
+      openSupport({ title: "Erro: x", description: "Código do erro: 7F3A9C21" });
+    });
+    expect(await screen.findByLabelText("Assunto")).toHaveValue("Erro: x");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByText("cmd-k abrir chamado"));
+    await waitFor(() => expect(screen.getByLabelText("Assunto")).toHaveValue(""));
   });
 
   // A pergunta é factual. O usuário sabe se está parado; não sabe se é crítico.

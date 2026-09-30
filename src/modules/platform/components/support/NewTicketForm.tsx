@@ -45,6 +45,11 @@ interface Props {
   submitDisabled?: boolean;
   /** Estado de envio quando o submit é injetado. */
   isSubmitting?: boolean;
+  /**
+   * Rascunho inicial. Um Chamado aberto a partir de um toast de erro chega com o
+   * código do erro na descrição e já marcado como defeito (ADR-0038).
+   */
+  initialDraft?: Pick<TicketDraft, "title" | "description">;
 }
 
 export function NewTicketForm({
@@ -54,8 +59,11 @@ export function NewTicketForm({
   beforeFields,
   submitDisabled = false,
   isSubmitting = false,
+  initialDraft,
 }: Props) {
-  const [draft, setDraft] = useState<TicketDraft>(emptyTicketDraft());
+  const [draft, setDraft] = useState<TicketDraft>(() =>
+    initialDraft ? { ...emptyTicketDraft(), ...initialDraft, tipo: "bug" } : emptyTicketDraft(),
+  );
   const [submitted, setSubmitted] = useState(false);
   // Os arquivos esperam em memória: o caminho no bucket começa pelo id do
   // Chamado, que só existe depois do INSERT (ADR-0022, 2).

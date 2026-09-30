@@ -15,4 +15,14 @@ export {
   type FunctionsErrorBody,
 } from "./to-app-error";
 export { unwrapFunctionsError } from "./unwrap-functions-error";
+export { notifyError, showErrorToast, type NotifyErrorOptions } from "./notify";
+export { reportError, setErrorReporter, type ErrorReport, type ErrorReporter } from "./report";
+export {
+  canOpenSupport,
+  openSupport,
+  registerSupportLauncher,
+  supportPrefillFor,
+  type SupportPrefill,
+} from "./support-launcher";
+export { ErrorReference } from "./ErrorReference";
 export { getErrorMessage } from "./get-error-message";
