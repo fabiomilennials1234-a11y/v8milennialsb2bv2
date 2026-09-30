@@ -23,6 +23,8 @@
  *   com `?access_token=` da Graph API) perde query e fragmento.
  */
 
+import { scrubText } from "./scrub.ts";
+
 type SentryModule = typeof import("npm:@sentry/deno@11.1.0");
 
 export interface UnhandledContext {
@@ -31,43 +33,6 @@ export interface UnhandledContext {
   sessionId?: string | null;
   userId?: string;
   method: string;
-}
-
-const MIN_MASKABLE_DIGITS = 10;
-const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-
-/** Espelho do `scrubPii` do front (`src/shared/errors/scrub.ts`). */
-export function scrubPii(text: string): string {
-  return text
-    .split(UUID)
-    .map((part, index) =>
-      index % 2 === 1 ? part : part
-        .replace(
-          /([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g,
-          (match, first: string, domain: string) =>
-            /(^|\.)(whatsapp\.net|g\.us|lid)$/i.test(domain) ? match : `${first}***@${domain}`,
-        )
-        .replace(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, (v) => v.replace(/\d(?=(?:\D*\d){2})/g, "*"))
-        .replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, (v) => v.replace(/\d(?=(?:\D*\d){2})/g, "*"))
-        .replace(/\d{6,}/g, (digits) =>
-          digits.length < MIN_MASKABLE_DIGITS
-            ? digits
-            : digits.slice(0, 4) + "*".repeat(digits.length - 8) + digits.slice(-4)
-        )
-    )
-    .join("");
-}
-
-export function stripQuery(url: string): string {
-  const cut = url.search(/[?#]/);
-  return cut === -1 ? url : url.slice(0, cut);
-}
-
-const URL_IN_TEXT = /https?:\/\/[^\s"'<>()]+/g;
-
-/** Texto livre: URL sem query/fragmento e PII mascarada. */
-export function scrubText(text: string): string {
-  return scrubPii(text.replace(URL_IN_TEXT, (url) => stripQuery(url)));
 }
 
 /** Os campos do evento que esta camada toca — o resto passa como veio. */
