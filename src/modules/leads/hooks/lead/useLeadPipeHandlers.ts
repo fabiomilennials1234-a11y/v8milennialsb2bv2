@@ -44,7 +44,7 @@ export function useLeadPipeHandlers(leadId: string | null | undefined): UsePipeH
       const stageName = pipeline.stages.find((s) => s.id === newStageId)?.label;
       toast.success(`Movido para "${stageName}"`);
     } else if (pipeline.type === "custom" && pipeline.entryId) {
-      await moveInCustom.mutateAsync({ entry_id: pipeline.entryId, pipeline_id: pipeline.pipelineId, new_stage_id: newStageId });
+      await moveInCustom.mutateAsync({ entry_id: pipeline.entryId, pipeline_id: pipeline.pipelineId, stage_id: newStageId });
       const stageName = pipeline.stages.find((s) => s.id === newStageId)?.name;
       toast.success(`Movido para "${stageName}"`);
     }
