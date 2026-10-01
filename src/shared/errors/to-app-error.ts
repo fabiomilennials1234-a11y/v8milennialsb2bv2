@@ -249,7 +249,9 @@ function codeFromToken(token: string): ErrorCode | null {
   if (/not_found$|unavailable$/.test(token)) return "record.not_found";
   if (/conflict|^stale_/.test(token)) return "conflict.stale";
   if (/rate_limit/.test(token)) return "rate.limited";
-  if (/^invalid|_invalid|malformed|required|too_short|too_long/.test(token)) return "validation.invalid";
+  if (token.startsWith("invalid") || /_invalid|malformed|required|too_short|too_long/.test(token)) {
+    return "validation.invalid";
+  }
   return null;
 }
 
@@ -349,7 +351,9 @@ function classify(r: Reading): { code: ErrorCode; deliberate: boolean } {
     if (fromStatus) return { code: fromStatus, deliberate };
   }
   if (NETWORK_MESSAGE.test(r.message)) return { code: "network.offline", deliberate: false };
-  if (/^AbortError|timed out/i.test(r.message)) return { code: "request.timeout", deliberate: false };
+  if (/^AbortError/i.test(r.message) || /timed out/i.test(r.message)) {
+    return { code: "request.timeout", deliberate: false };
+  }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return { code: "network.offline", deliberate: false };
   }
@@ -390,12 +394,11 @@ function isReportable(code: ErrorCode, deliberate: boolean): boolean {
 const references = new WeakMap<object, string>();
 const produced = new WeakSet<object>();
 
+/** 8 hex maiúsculos, de `crypto.getRandomValues` (todo navegador e o Node do teste têm). */
 function mintReference(): string {
-  const uuid =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-  return uuid.replace(/-/g, "").slice(0, 8).toUpperCase();
+  const bytes = new Uint8Array(4);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
 
 /** A mesma causa recebe sempre a mesma referência. */
