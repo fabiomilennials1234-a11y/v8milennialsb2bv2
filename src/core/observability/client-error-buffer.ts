@@ -16,7 +16,12 @@ export const CLIENT_ERROR_CAPACITY = 20;
 const MESSAGE_MAX = 500;
 const STACK_MAX = 2000;
 
-export type ClientErrorSource = "unhandled" | "rejection" | "request";
+/**
+ * `handled`: um erro que a tela tratou e mostrou ao usuário (`notifyError`). É o
+ * caso mais comum e o que mais some — até o ADR-0038, o `catch` mostrava um toast
+ * e o erro não ia para lugar nenhum.
+ */
+export type ClientErrorSource = "unhandled" | "rejection" | "request" | "handled";
 
 export interface ClientError {
   at: string;
