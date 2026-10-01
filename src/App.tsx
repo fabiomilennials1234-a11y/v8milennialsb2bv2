@@ -30,23 +30,10 @@ import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
+import { lazyRetry } from "@/core/stale-build-recovery";
 
-// Retry helper para chunks que falham ao carregar (comum após deploy)
-function lazyRetry<T extends { default: any }>(
-  importFn: () => Promise<T>,
-  retries = 2
-): Promise<T> {
-  return importFn().catch((err) => {
-    if (retries > 0) {
-      return new Promise<T>((resolve) =>
-        setTimeout(() => resolve(lazyRetry(importFn, retries - 1)), 1000)
-      );
-    }
-    throw err;
-  });
-}
-
-// Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
+// lazyRetry: uma nova tentativa para falha passageira; chunk velho aciona a
+// recuperação de build (src/core/stale-build-recovery.ts).
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
