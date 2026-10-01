@@ -192,9 +192,27 @@ export function useMovePipelineEntry() {
     mutationFn: async ({ id, ...stage }: { id: string } & (
       { stageId: string; stageKey?: never } | { stageKey: string; stageId?: never }
     )) => {
+      // Quem manda `stage_id` manda `stage_key` junto: os gatilhos que fecham o
+      // negócio (`trg_enforce_closed_at`), gravam o histórico e capturam venda
+      // (`fn_capture_pipeline_stage_event`) são `UPDATE OF stage_key` — olham o
+      // SET, não o valor que o espelho copia. Só `stage_id` moveu o card e
+      // calou os três (Café Jurerê, 09/2026: "Perdido" sem `closed_at`).
+      let stageCols: { stage_id: string; stage_key: string } | { stage_key: string };
+      if (stage.stageKey !== undefined) {
+        stageCols = { stage_key: stage.stageKey };
+      } else {
+        const { data: target, error: stageError } = await supabase
+          .from("pipeline_stages")
+          .select("stage_key")
+          .eq("id", stage.stageId)
+          .single();
+        if (stageError) throw stageError;
+        stageCols = { stage_id: stage.stageId, stage_key: target.stage_key };
+      }
+
       const { data, error } = await (supabase.from as any)("pipeline_entries")
         .update({
-          ...(stage.stageId ? { stage_id: stage.stageId } : { stage_key: stage.stageKey }),
+          ...stageCols,
           stage_changed_at: new Date().toISOString(),
         })
         .eq("id", id)
