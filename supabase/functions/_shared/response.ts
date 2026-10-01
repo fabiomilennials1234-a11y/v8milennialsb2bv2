@@ -27,6 +27,12 @@ export interface ApiSuccessResponse<T = Record<string, unknown>> {
 export interface ApiErrorResponse {
   success: false;
   error: string;
+  /**
+   * Código do contrato de erro do front (ADR-0038) — `permission.denied`,
+   * `validation.invalid`, … Quando presente, vence o status HTTP na
+   * classificação e decide a mensagem do catálogo.
+   */
+  code?: string;
   details?: unknown;
   meta: ApiMeta;
 }
@@ -123,6 +129,8 @@ export function successResponse<T>(
 export interface ErrorResponseOptions {
   req?: Request;
   details?: unknown;
+  /** Ver `ApiErrorResponse.code`. */
+  code?: string;
 }
 
 /**
@@ -134,7 +142,7 @@ export function errorResponse(
   corsHeaders: Record<string, string>,
   options: ErrorResponseOptions = {},
 ): Response {
-  const { req, details } = options;
+  const { req, details, code } = options;
 
   const apiVersion = getApiVersion(req);
   const requestId = generateRequestId();
@@ -150,6 +158,7 @@ export function errorResponse(
     meta,
   };
 
+  if (code) body.code = code;
   if (details !== undefined) body.details = details;
 
   const headers = new Headers({

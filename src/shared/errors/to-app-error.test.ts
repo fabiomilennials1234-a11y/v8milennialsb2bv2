@@ -257,6 +257,19 @@ describe("unwrapFunctionsError + toAppError", () => {
     expect(toAppError(await unwrapFunctionsError(error)).code).toBe("rate.limited");
   });
 
+  it("envelope do boundary das edge functions (S5): frase PT, código e request_id", async () => {
+    const error = functionsHttpError(500, {
+      error: "Tivemos um problema do nosso lado. Tente de novo em instantes.",
+      code: "server.unavailable",
+      request_id: "3f2a0c1e-9b7d-4c2a-8f11-2b6e5d4c3a10",
+    });
+    const app = toAppError(await unwrapFunctionsError(error), FALLBACK);
+    expect(app.code).toBe("server.unavailable");
+    expect(app.userMessage).toBe("Tivemos um problema do nosso lado. Tente de novo em instantes.");
+    expect(app.reportable).toBe(true);
+    expect(app.action?.kind).toBe("support");
+  });
+
   it("não mostra o inglês do corpo", async () => {
     const app = toAppError(await unwrapFunctionsError(functionsHttpError(401, { error: "Unauthorized" })), FALLBACK);
     expect(app.code).toBe("auth.session_expired");
