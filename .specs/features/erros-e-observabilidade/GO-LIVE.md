@@ -4,9 +4,27 @@ Runbook da virada para produção. Nada aqui roda sem o CTO: **merge em `main` d
 front sozinho** (webhook do EasyPanel), e edge function, migration e DML em prod são botão
 do humano.
 
-Estado em 2026-10-01: todas as fatias escritas, pilha em PRs draft (#2189–#2199), validação
-na branch efêmera concluída (seção 2): G, H, H2, I, J, K, L medidos; E e F cobertos por teste
-automatizado. Nada mergeado. Próximo passo é o go-live (seção 3), decisão do CTO.
+**Go-live EXECUTADO em 2026-10-01** (seção "Execução" abaixo). Pendências no fim dela.
+
+## Execução (2026-10-01, UTC)
+
+| Hora | Passo | Resultado |
+|---|---|---|
+| 15:10–15:25 | Pré-voo | `main` andou 5 PRs; 2 conflitos de import (BulkActionBar, DealLostMenuItem) resolvidos na S4 e propagados. Suíte: pilha e `main` falham nos MESMOS 11 testes (7 arquivos) — zero introduzido. Ledger de prod sem colisão para `20271101000000`. Rollback da função capturado (`supabase/migrations/rollback/20271101000000_…`) |
+| 15:27 | #2189 (ADR) e #2190 (source map) | merge; `/assets/index-*.js.map` → **404** em prod, bundle sem `sourceMappingURL` |
+| 15:29 | #2191 (contrato) | CodeQL acusou 3 alertas no `to-app-error.ts` (2× regex com `^` só na 1ª alternativa, `Math.random` na referência) — corrigidos antes do merge |
+| 15:45–15:52 | #2193, #2196, #2197, #2198, #2199 | merge em ordem (commit de merge, sem apagar branch); CodeQL verde em todos; vermelho restante = os 4 herdados da `main` |
+| 15:50–15:51 | S7b no banco | ensaio transacional (erro forçado, nada gravado): 110.581 alertas, função nova ok, 21,5 s. Aplicado: **0 alertas abertos** (110.581 com `resolved_reason = adr-0038-ruido`), `authenticated` não executa mais a varredura, versão no ledger. Cron das 15:52 rodou com a função nova |
+| 15:56 | Front com Sentry | deploy automático (EasyPanel) 4 min após o merge; SDK em `production`, região EU. Fumaça `TORQUE-WEB-2` chegou (resolvida). **Defeito real capturado no 1º minuto: `TORQUE-WEB-1`** — 403 em `deal_order_adjustments` (policy chama `can_link_or_read_lead`, que `authenticated` não executa de propósito); virou tarefa |
+| 15:58 | Segredos do edge | `SENTRY_DSN_EDGE` (torque-edge) e `SENTRY_ENVIRONMENT=production` |
+| 16:02 | Edge, lote 1 | auditoria de drift das 166 candidatas (bundle de prod × `main`, blob por blob no histórico): 151 atrasadas, 1 igual, **14 com DRIFT** (código em prod que nunca entrou na main), 7 sem auditoria. Deploy só das **46** que diferiam SÓ nos arquivos desta entrega — 46/46 ok, tráfego normal depois. 1ª exceção não tratada já registrada em `runtime_logs` e no Sentry (`TORQUE-EDGE-1`, `summarize-conversations-batch`) |
+
+### Pendências
+
+- **Edge, 120 funções sem o boundary novo**: 102 levariam junto mudanças de outras pessoas ainda não publicadas (`logger.ts`, `auth.ts`, cliente Uazapi…), 14 com drift, 7 sem auditoria. Continuam funcionando com o boundary antigo. Reconciliar antes — tarefa aberta.
+- **Sentry, ações com login**: token de organização (`org:ci`) como build arg `SENTRY_AUTH_TOKEN` no EasyPanel (stack desminificada); regra `$user.geo.**` (3.2a); 2FA obrigatório na org.
+- **Release `0.0.0`**: o EasyPanel não passa `VITE_APP_VERSION`; os eventos saem sem versão. Passar o sha no build arg.
+- **E/F** validados só por teste automatizado (ver seção 2).
 
 ## 0. A pilha
 
