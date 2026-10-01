@@ -55,7 +55,7 @@ BEGIN
   SELECT g.revision INTO v_revision FROM public.workflow_data_grants g
     WHERE g.workflow_id = p_workflow_id AND g.organization_id = v_organization_id;
   IF coalesce(v_revision, 0) <> p_expected_revision THEN
-    RAISE EXCEPTION 'grant_revision_conflict' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'grant_revision_conflict' USING ERRCODE = 'PT409';
   END IF;
   INSERT INTO public.workflow_data_grants AS g
     (workflow_id, organization_id, fields, revision, approved_by)

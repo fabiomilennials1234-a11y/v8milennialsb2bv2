@@ -160,7 +160,7 @@ BEGIN
   IF NOT FOUND THEN RETURN false; END IF;
   IF v_event.status <> 'dead_letter' OR v_event.attempts <> p_expected_attempts
     OR v_event.last_error_code IS DISTINCT FROM p_expected_error_code THEN
-    RAISE EXCEPTION 'dead-letter replay state changed' USING ERRCODE='40001';
+    RAISE EXCEPTION 'dead-letter replay state changed' USING ERRCODE='PT409';
   END IF;
   IF v_event.event_name <> 'messages_update'
     OR NOT public.is_whatsapp_file_download_notification(v_event.payload)
