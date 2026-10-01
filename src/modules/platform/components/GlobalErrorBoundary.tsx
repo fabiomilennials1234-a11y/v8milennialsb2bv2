@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { ErrorReference, reportError, toAppError } from "@/shared/errors";
+import { isStaleChunkError, recoverFromStaleBuild } from "@/core/stale-build-recovery";
 
 interface Props {
   children: ReactNode;
@@ -20,8 +21,8 @@ const RENDER_FALLBACK = "Algo deu errado nesta tela.";
  * ErrorBoundary global — captura erros de runtime e exibe
  * uma tela de fallback ao invés de tela branca.
  *
- * Trata especialmente erros de chunk loading (comum após deploys)
- * fazendo reload automático uma vez.
+ * Erro de chunk (build velho após deploy) vai para a recuperação única de
+ * `@/core/stale-build-recovery`.
  */
 export class GlobalErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -30,15 +31,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    const isChunkError =
-      error.message?.includes("Failed to fetch dynamically imported module") ||
-      error.message?.includes("Loading chunk") ||
-      error.message?.includes("Loading CSS chunk") ||
-      error.message?.includes("Importing a module script failed") ||
-      error.message?.includes("Invalid or unexpected token") ||
-      error.message?.includes("Unexpected token '<'") ||
-      error.message?.includes("expected expression, got '<'") ||
-      error.name === "ChunkLoadError";
+    const isChunkError = isStaleChunkError(error);
 
     // A referência nasce aqui para já estar na primeira renderização da tela de
     // erro; `componentDidCatch` relata o mesmo objeto e recebe o mesmo código.
@@ -53,37 +46,17 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       reportError(toAppError(error, RENDER_FALLBACK), { source: "render" });
     }
 
-    // Auto-reload uma vez para erros de chunk (deploy novo invalidou cache).
-    // Desregistra SW + limpa caches antes do reload — index.html cacheado
-    // pelo SW antigo aponta para chunks que não existem mais no servidor,
-    // então reload puro reentra no mesmo loop.
-    if (this.state.isChunkError) {
-      const reloadKey = "chunk_error_reload";
-      const lastReload = sessionStorage.getItem(reloadKey);
-      const now = Date.now();
-
-      if (!lastReload || now - Number(lastReload) > 10_000) {
-        sessionStorage.setItem(reloadKey, String(now));
-        (async () => {
-          try {
-            const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
-            await Promise.all(regs.map((r) => r.unregister()));
-            if (typeof caches !== "undefined") {
-              const keys = await caches.keys();
-              await Promise.all(keys.map((k) => caches.delete(k)));
-            }
-          } catch {
-            // best-effort — segue pro reload mesmo se algo falhar
-          }
-          window.location.reload();
-        })();
-        return;
-      }
-    }
+    // Chunk velho: recuperação única (unregister SW + caches + reload, com
+    // throttle). Dentro da janela ela não recarrega — a tela abaixo fica, e o
+    // botão "Recarregar" força a mesma recuperação.
+    if (this.state.isChunkError) void recoverFromStaleBuild();
   }
 
   handleReload = () => {
-    window.location.reload();
+    // Reload puro numa versão velha reentra no mesmo erro: o SW antigo serve o
+    // mesmo index.html. O clique do usuário força a limpeza.
+    if (this.state.isChunkError) void recoverFromStaleBuild(undefined, { force: true });
+    else window.location.reload();
   };
 
   handleGoHome = () => {
