@@ -3,16 +3,6 @@
     "obsidian@obsidian-skills": true
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash scripts/orchestrador-router-hook.sh"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Bash(git commit*)",
