@@ -17,6 +17,10 @@
  *      caso 2. **Detectar não é alertar**, e é por isso que
  *      `checkExposedTables` mora aqui: sem consumidor, o detector seria mais
  *      uma feature construída e nunca ligada.
+ *   4. 2026-10-01 — duas requisições em laço infinito ocuparam a CPU do banco
+ *      por 5 h e o app ficou preso na tela de abertura. Este watchdog rodou o
+ *      tempo todo e não viu: vigiava conexões (61/90, abaixo do teto), não CPU.
+ *      Daí `checkCpu`.
  *
  * O segundo caso ensina a regra de ouro deste arquivo: **um alerta que depende
  * do canal que ele vigia não é alerta.** Por isso o watchdog usa secrets
@@ -35,6 +39,13 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
+import {
+  buildCpuAlertText,
+  parseCpuCounters,
+  parseCpuState,
+  parseMemoryPct,
+  stepCpu,
+} from "../_shared/cpu-alert.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -272,6 +283,79 @@ async function checkExposedTables(supabase: any): Promise<Alert | null> {
   };
 }
 
+// Teto e duração. 85% por 5 leituras (10 min a cada 2) separa incidente de pico:
+// em 01/10 a CPU ficou em 98-99% por 5 h com as conexões em 61/90 — a sonda de
+// pressão acima não disparava porque olhava a coisa errada.
+const CPU_ALERT_PCT_DEFAULT = 85;
+const CPU_ALERT_READINGS = 5;
+const CPU_STATE_KEY = "watchdog_cpu_state";
+// Sonda cega é um problema por si: avisa, mas uma vez por dia.
+const CPU_PROBE_DOWN_COOLDOWN_MINUTES = 24 * 60;
+
+/**
+ * CPU do banco alta de forma sustentada. Lógica e motivo em `_shared/cpu-alert.ts`.
+ *
+ * A leitura vem do endpoint de métricas da Supabase (node exporter), autenticado
+ * com a service role. Se ele não responder, a sonda diz que está cega em vez de
+ * ficar em silêncio: silêncio aqui pareceria "CPU normal".
+ */
+async function checkCpu(supabase: SupabaseClient): Promise<Alert | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  let prom: string;
+  try {
+    const resp = await fetch(`${supabaseUrl.replace(/\/$/, "")}/customer/v1/privileged/metrics`, {
+      headers: { Authorization: `Basic ${btoa(`service_role:${serviceRoleKey}`)}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`metrics ${resp.status}`);
+    prom = await resp.text();
+  } catch (err) {
+    return cpuProbeDown(err instanceof Error ? err.message : String(err));
+  }
+
+  const sample = parseCpuCounters(prom);
+  if (!sample) return cpuProbeDown("node_cpu_seconds_total ausente nas métricas");
+
+  const { data: rows } = await supabase
+    .from("cron_config")
+    .select("key, value")
+    .in("key", [CPU_STATE_KEY, "cpu_alert_pct"]);
+  const valor = (k: string) => rows?.find((r: { key: string }) => r.key === k)?.value;
+  const threshold = Number(valor("cpu_alert_pct")) || CPU_ALERT_PCT_DEFAULT;
+
+  const step = stepCpu(parseCpuState(valor(CPU_STATE_KEY)), sample, Date.now(), threshold, CPU_ALERT_READINGS);
+  await supabase
+    .from("cron_config")
+    .upsert({ key: CPU_STATE_KEY, value: JSON.stringify(step.state) }, { onConflict: "key" });
+
+  if (!step.alert || step.pct === null) return null;
+  return {
+    key: "cpu_high",
+    text: buildCpuAlertText({
+      pct: step.pct,
+      minutes: step.state.streak * 2,
+      thresholdPct: threshold,
+      memPct: parseMemoryPct(prom),
+    }),
+    logPayload: { pct: step.pct, streak: step.state.streak },
+  };
+}
+
+function cpuProbeDown(detail: string): Alert {
+  return {
+    key: "cpu_probe_down",
+    cooldownMinutes: CPU_PROBE_DOWN_COOLDOWN_MINUTES,
+    text:
+      `🟡 *Sonda de CPU do banco está cega*\n\n` +
+      `Não consegui ler as métricas da Supabase: ${detail.slice(0, 160)}\n\n` +
+      `Enquanto isso, CPU alta não gera aviso — foi a falta deste aviso que ` +
+      `deixou o incidente de 01/10 durar 5 h.`,
+    logPayload: { detail },
+  };
+}
+
 async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
   // Secrets próprias primeiro. O fallback para as do suporte existe para o
   // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
@@ -329,6 +413,7 @@ Deno.serve(
       checkSupportNotifyHealth(supabase),
       checkRunawayBackfill(supabase),
       checkExposedTables(supabase),
+      checkCpu(supabase),
     ]);
 
     const alerts = results
@@ -378,6 +463,6 @@ Deno.serve(
       }
     }
 
-    return json({ ok: true, checked: 4, sent, suppressed, failed });
+    return json({ ok: true, checked: results.length, sent, suppressed, failed });
   })
 );
