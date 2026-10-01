@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isVirtualTeamMember, useOrganization } from "@/modules/identity";
 import type { Json } from "@/integrations/supabase/types";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
+import { userMessageOf } from "@/shared/errors";
 
 interface PendingLayout {
   organizationId: string;
@@ -24,7 +25,7 @@ export interface PanelPersistence {
   refetch: () => void;
 }
 const key = (org: string, panel: string) => ["metrics-studio-panel", org, panel];
-const message = (error: unknown) => error instanceof Error ? error.message : "Não foi possível salvar o painel";
+const message = (error: unknown) => userMessageOf(error, "Não foi possível salvar o painel.");
 
 /** Fila por org+aba: mudar de aba nunca troca o destino nem descarta outra edição. */
 export function useMetricsStudioPanel(panelId: string | null): PanelPersistence {

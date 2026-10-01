@@ -94,6 +94,7 @@ import { EditMeetingDialog } from "./EditMeetingDialog";
 // de `communication` (ver CLAUDE.md do módulo), e o barrel é o caminho que a
 // regra de boundaries permite.
 import { ScheduleMessageModal } from "@/modules/communication";
+import { notifyError } from "@/shared/errors";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -393,10 +394,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        toast.error("Erro ao excluir evento", {
-          description:
-            (err as { message?: string }).message ?? "Tente novamente",
-        });
+        notifyError(err, { fallback: "Não foi possível excluir evento." });
         throw new Error("delete failed");
       }
 

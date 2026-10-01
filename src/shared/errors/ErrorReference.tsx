@@ -46,3 +46,19 @@ export function ErrorReference({ reference, className }: Props) {
     </button>
   );
 }
+
+interface DescriptionProps {
+  reference: string;
+  /** Linha secundária — ex.: o motivo que o fornecedor deu. */
+  detail?: string;
+}
+
+/** Descrição do toast de erro: o detalhe (se houver) e o código copiável. */
+export function ErrorToastDescription({ reference, detail }: DescriptionProps) {
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      {detail && <p className="text-xs leading-snug text-muted-foreground">{detail}</p>}
+      <ErrorReference reference={reference} />
+    </div>
+  );
+}

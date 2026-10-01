@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { notifyError } from "@/shared/errors";
 
 export interface ContatoParaEnviar {
   nome: string;
@@ -51,7 +52,7 @@ export function SendContactDialog({
 
     let phone;
     try { phone = validateContactPhone(telefone); }
-    catch (error) { toast.error((error as Error).message); return; }
+    catch (error) { notifyError(error, { fallback: "Telefone inválido." }); return; }
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       toast.error("Informe um e-mail válido"); return;
     }
@@ -70,7 +71,7 @@ export function SendContactDialog({
       setTelefone("");
       setEmail("");
     } catch (e) {
-      toast.error((e as Error).message);
+      notifyError(e, { fallback: "Não foi possível enviar o contato." });
     } finally {
       setEnviando(false);
     }

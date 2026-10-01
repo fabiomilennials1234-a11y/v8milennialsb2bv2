@@ -15,6 +15,7 @@ import { useEmailAccounts } from "@/modules/communication/hooks/useEmailAccounts
 import { useSendEmail } from "@/modules/communication/hooks/useEmails";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface EmailComposerProps {
   defaultTo?: string;
@@ -86,7 +87,7 @@ export function EmailComposer({
           onClose?.();
         },
         onError: (error) => {
-          toast.error(`Erro ao enviar: ${error.message}`);
+          notifyError(error, { fallback: "Não foi possível enviar." });
         },
       }
     );

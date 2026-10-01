@@ -32,6 +32,7 @@ import {
 import { useCreateCustomField } from "../../../hooks/useLeadCustomFields";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -109,8 +110,8 @@ export function AddCustomFieldPopover() {
       });
       toast.success("Campo criado com sucesso");
       handleOpenChange(false);
-    } catch {
-      toast.error("Erro ao criar campo personalizado");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível criar campo personalizado." });
     }
   }, [form, createField, handleOpenChange]);
 

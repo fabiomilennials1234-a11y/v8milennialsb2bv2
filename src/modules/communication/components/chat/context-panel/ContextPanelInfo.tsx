@@ -18,6 +18,7 @@ import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadInt
 import { AITimeline } from "@/modules/communication/components/chat/takeover/AITimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { notifyError } from "@/shared/errors";
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ function useUpdateLeadField(leadId: string | null | undefined, phoneNumber: stri
       if (ctx?.prev !== undefined) {
         qc.setQueriesData({ queryKey: ["lead_by_phone"] }, () => ctx.prev);
       }
-      toast.error("Falha ao atualizar campo do lead");
+      notifyError(_err, { fallback: "Não foi possível atualizar campo do lead." });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lead_by_phone"] });

@@ -19,6 +19,7 @@ import {
 import { sendWithBoundedRecovery, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
 import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
+import { userMessageOf } from "@/shared/errors";
 
 /**
  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
@@ -360,7 +361,7 @@ export function useSendWhatsAppMessage() {
           message: variables.message,
           mediaUrl: null,
           mediaType: null,
-          error: err instanceof Error ? err.message : "Falha ao enviar",
+          error: userMessageOf(err, "Não foi possível enviar a mensagem."),
           timestamp: context?.timestamp ?? new Date().toISOString(),
           direction: "outgoing",
           status: "failed",
@@ -624,7 +625,7 @@ export function useSendWhatsAppMedia() {
           message: variables.caption ?? null,
           mediaUrl: variables.media,
           mediaType: variables.mediaType,
-          error: err instanceof Error ? err.message : "Falha ao enviar mídia",
+          error: userMessageOf(err, "Não foi possível enviar a mídia."),
           timestamp: context?.timestamp ?? new Date().toISOString(),
           direction: "outgoing",
           status: "failed",

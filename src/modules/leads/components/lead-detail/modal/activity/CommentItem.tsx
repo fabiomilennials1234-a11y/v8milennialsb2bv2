@@ -13,6 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import type { LeadCommentWithAuthor } from "../types";
 
 interface CommentItemProps {
@@ -77,8 +78,7 @@ export const CommentItem = memo(function CommentItem({ comment, leadId, highligh
       toast.success("Comentário atualizado");
       setEditing(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao salvar";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível salvar o comentário." });
     }
   };
 
@@ -95,8 +95,7 @@ export const CommentItem = memo(function CommentItem({ comment, leadId, highligh
       });
       toast.success("Comentário apagado");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao apagar";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível apagar o comentário." });
     }
   };
 

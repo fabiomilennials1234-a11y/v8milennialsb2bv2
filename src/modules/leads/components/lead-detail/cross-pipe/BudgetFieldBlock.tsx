@@ -32,6 +32,7 @@ import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductC
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Cross-pipe field block for "Orçamento" (pipe_propostas).
@@ -164,8 +165,7 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
         toast.success(`Lead adicionado a ${nomePropostas}`);
         onSuccess?.();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : `Erro ao adicionar a ${nomePropostas}`;
-        toast.error(msg);
+        notifyError(err, { fallback: `Não foi possível adicionar o lead a ${nomePropostas}.` });
       }
     };
 
@@ -242,8 +242,8 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
     if (!isNew && id !== "legacy") {
       try {
         await deleteItem.mutateAsync({ id, propostaId: pipeData.id });
-      } catch {
-        toast.error("Erro ao remover produto");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível remover produto." });
         return;
       }
     }
@@ -388,8 +388,7 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
       toast.success(isNewSale ? "🎉 Venda fechada!" : "Proposta atualizada");
       onSuccess?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao salvar proposta";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível salvar a proposta." });
     }
   };
 

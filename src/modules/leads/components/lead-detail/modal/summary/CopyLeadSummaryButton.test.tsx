@@ -57,7 +57,8 @@ it("nunca copia resultado parcial ou mostra sucesso após falha de leitura", asy
   mocks.load.mockRejectedValue(new Error("Sem acesso"));
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Copiar resumo" }));
-  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("Sem acesso"));
+  // O toast padrão (ADR-0038) leva as opções com o código copiável.
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("Sem acesso", expect.anything()));
   expect(write).not.toHaveBeenCalled();
   expect(mocks.success).not.toHaveBeenCalled();
 });

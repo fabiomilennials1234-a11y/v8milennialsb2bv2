@@ -60,6 +60,7 @@ import {
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
+import { notifyError } from "@/shared/errors";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -235,7 +236,7 @@ function StandardFields({ lead }: { lead: LeadShape }) {
       { id: lead.id, ...patch } as any,
       {
         onSuccess: () => toast.success("Atualizado"),
-        onError: () => toast.error("Falha ao salvar"),
+        onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar." }),
       },
     );
   };
@@ -526,8 +527,8 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
       qc.invalidateQueries({ queryKey: ["lead_by_phone"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["lead-detail"] });
-    } catch {
-      toast.error("Erro ao atualizar tag");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar tag." });
     } finally {
       setBusy(null);
     }
@@ -730,7 +731,7 @@ function NotesBlock({
         ref.current?.blur();
         setFocused(false);
       },
-      onError: (err: any) => toast.error(err?.message || "Erro ao salvar nota"),
+      onError: (err: any) => notifyError(err, { fallback: "Não foi possível salvar nota." }),
     });
   }, [draft, addNote]);
 

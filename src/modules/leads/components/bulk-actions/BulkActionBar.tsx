@@ -38,6 +38,7 @@ import {
 } from "@/modules/leads/hooks/useBulkActions";
 import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
+import { notifyError } from "@/shared/errors";
 import { prepararDissolucao } from "../../lib/card-effects";
 
 interface BulkActionBarProps {
@@ -235,8 +236,10 @@ function BulkMoveDialog({
       toast.success(sourcePipelineId ? `${entryIds?.length ?? 0} negócios movidos` : `${leadIds.length} leads adicionados ao funil`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error(sourcePipelineId ? "Erro ao mover negócios" : "Erro ao adicionar ao funil");
+    } catch (error) {
+      notifyError(error, {
+        fallback: sourcePipelineId ? "Não foi possível mover os negócios." : "Não foi possível adicionar ao funil.",
+      });
     }
   };
 
@@ -330,8 +333,8 @@ function BulkAssignDialog({
       toast.success(`${leadIds.length} leads atribuidos`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error("Erro ao atribuir leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atribuir leads." });
     }
   };
 
@@ -396,8 +399,8 @@ function BulkTagDialog({
       onOpenChange(false);
       setAddTags([]);
       onSuccess();
-    } catch {
-      toast.error("Erro ao aplicar tags");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível aplicar tags." });
     }
   };
 
@@ -461,8 +464,8 @@ function BulkDeleteDialog({
       toast.success(`${count} leads movidos para lixeira`);
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error("Erro ao excluir leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível excluir leads." });
     }
   };
 
@@ -516,7 +519,7 @@ function BulkExportDialog({
       }
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao exportar leads");
+      notifyError(e, { fallback: "Não foi possível exportar leads." });
     }
   };
 
@@ -595,8 +598,10 @@ function BulkExcluirNegociosDialog({
       }
       onOpenChange(false);
       onSuccess();
-    } catch {
-      toast.error(`Erro ao excluir ${plural}`);
+    } catch (error) {
+      notifyError(error, {
+        fallback: count === 1 ? "Não foi possível excluir o negócio." : "Não foi possível excluir os negócios.",
+      });
     }
   };
 

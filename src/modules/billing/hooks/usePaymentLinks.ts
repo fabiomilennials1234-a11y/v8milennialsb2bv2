@@ -17,6 +17,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /**
  * `src/integrations/supabase/types.ts` é AUTO-GERADO e está atrás do banco: não
@@ -185,9 +186,9 @@ export function useCreatePaymentLink() {
     },
     onError: (error) => {
       // A mensagem do banco é a que serve: "Comprador incompleto: nome, e-mail
-      // e documento fiscal andam juntos" diz o que fazer. Um "erro ao gerar
-      // link" genérico não diz.
-      toast.error(error.message);
+      // e documento fiscal andam juntos" diz o que fazer. O `notifyError` a
+      // mostra como está (é frase PT) e só troca pelo fallback o texto técnico.
+      notifyError(error, { fallback: "Não foi possível gerar o link de pagamento." });
     },
   });
 }
@@ -217,6 +218,6 @@ export function useRevokePaymentLink() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       toast.success("Proposta revogada. O link deixou de resolver.");
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => notifyError(error, { fallback: "Não foi possível revogar o link." }),
   });
 }

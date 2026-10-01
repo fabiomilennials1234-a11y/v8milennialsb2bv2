@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /** All possible lead origins in the system */
 export const ALL_ORIGINS = [
@@ -188,7 +188,7 @@ export function useUpsertMktOriginConfig() {
       });
     },
     onError: (err: Error) => {
-      toast.error(err.message || "Erro ao salvar configuração");
+      notifyError(err, { fallback: "Não foi possível salvar configuração." });
     },
   });
 }
@@ -244,7 +244,7 @@ export function useBatchUpsertMktOriginConfig() {
       }
     },
     onError: (err: Error) => {
-      toast.error(err.message || "Erro ao salvar configurações");
+      notifyError(err, { fallback: "Não foi possível salvar configurações." });
     },
   });
 }

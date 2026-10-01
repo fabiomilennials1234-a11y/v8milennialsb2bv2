@@ -488,7 +488,9 @@ describe("SupportPanel", () => {
     await user.click(screen.getByText("Sim, estou parado"));
     await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("permission denied"));
+    // ADR-0038: o texto técnico não vai para a tela; vira o fallback do
+    // formulário — e continua não sendo a mensagem de rate limit.
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Não deu para abrir o chamado.", expect.anything()));
   });
 
   it("cai no thread do chamado recém-aberto", async () => {

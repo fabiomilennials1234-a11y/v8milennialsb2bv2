@@ -14,6 +14,7 @@ import {
   type HistorySyncJob,
 } from "@/modules/communication/hooks/useHistorySyncJobs";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   job: HistorySyncJob;
@@ -71,7 +72,7 @@ export function SyncProgressCard({ job }: Props) {
       await control.mutateAsync({ job, action: "cancel" });
       toast.success("Job cancelado");
     } catch (e) {
-      toast.error(`Erro ao cancelar: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível cancelar." });
     }
   };
 
@@ -80,7 +81,7 @@ export function SyncProgressCard({ job }: Props) {
       await control.mutateAsync({ job, action: "retry" });
       toast.success("Retomada agendada");
     } catch (e) {
-      toast.error(`Erro ao retomar: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível retomar." });
     }
   };
 

@@ -5,6 +5,7 @@ import { isVirtualTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { toast } from "sonner";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { notifyError } from "@/shared/errors";
 
 export type Checklist = Tables<"checklists">;
 export type ChecklistInsert = TablesInsert<"checklists">;
@@ -176,7 +177,7 @@ export function useCreateChecklist() {
       toast.success("Checklist criado!");
     },
     onError: (error) => {
-      toast.error("Erro ao criar checklist", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível criar checklist." });
     },
   });
 }
@@ -200,7 +201,7 @@ export function useUpdateChecklist() {
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
     onError: (error) => {
-      toast.error("Erro ao atualizar checklist", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível atualizar checklist." });
     },
   });
 }
@@ -218,7 +219,7 @@ export function useDeleteChecklist() {
       toast.success("Checklist removido");
     },
     onError: (error) => {
-      toast.error("Erro ao remover checklist", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível remover checklist." });
     },
   });
 }
@@ -248,7 +249,7 @@ export function useCreateChecklistItem() {
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
     onError: (error) => {
-      toast.error("Erro ao adicionar item", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível adicionar item." });
     },
   });
 }
@@ -324,7 +325,7 @@ export function useToggleChecklistItem() {
         );
       }
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
-      toast.error("Erro ao atualizar item", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível atualizar item." });
     },
     onSettled: (_d, _e, vars) => {
       queryClient.invalidateQueries({ queryKey: ["checklist_items", vars.checklist_id] });
@@ -352,7 +353,7 @@ export function useUpdateChecklistItem() {
       queryClient.invalidateQueries({ queryKey: ["checklist_items"] });
     },
     onError: (error) => {
-      toast.error("Erro ao editar item", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível editar item." });
     },
   });
 }
@@ -370,7 +371,7 @@ export function useDeleteChecklistItem() {
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
     onError: (error) => {
-      toast.error("Erro ao remover item", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível remover item." });
     },
   });
 }
@@ -391,7 +392,7 @@ export function useReorderChecklistItems() {
       queryClient.invalidateQueries({ queryKey: ["checklist_items"] });
     },
     onError: (error) => {
-      toast.error("Erro ao reordenar itens", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível reordenar itens." });
     },
   });
 }

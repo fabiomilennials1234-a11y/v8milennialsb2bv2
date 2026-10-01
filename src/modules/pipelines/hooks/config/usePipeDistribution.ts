@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type DistributionMode = "round_robin" | "random" | "single" | null;
 
@@ -130,7 +131,7 @@ export function useSavePipeDistribution() {
       toast.success("Distribuição salva!");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao salvar distribuição");
+      notifyError(error, { fallback: "Não foi possível salvar distribuição." });
     },
   });
 }

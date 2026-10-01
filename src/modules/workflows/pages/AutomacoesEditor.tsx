@@ -56,6 +56,7 @@ import type {
   CodeJavascriptNodeData,
   CodeHttpsNodeData,
 } from "@/types/workflow";
+import { notifyError } from "@/shared/errors";
 
 const DEFAULT_TRIGGER_NODE: WorkflowNode = {
   id: "trigger-1",
@@ -643,9 +644,11 @@ function AutomacoesEditorContent() {
         toast.success("Workflow salvo!");
       }
     } catch (err: any) {
-      toast.error(err.code === 'PT409'
-        ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
-        : err.message || "Erro ao salvar workflow");
+      if (err?.code === 'PT409') {
+        toast.error("Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.");
+      } else {
+        notifyError(err, { fallback: "Não foi possível salvar o workflow." });
+      }
     }
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
@@ -667,8 +670,8 @@ function AutomacoesEditorContent() {
         const result = await guidedDraft.setActive.mutateAsync(!isActive);
         setIsActive(result.is_active);
         toast.success(result.is_active ? 'Automação ativada.' : 'Automação desativada.');
-      } catch {
-        toast.error('Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados.');
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados." });
       }
       return;
     }

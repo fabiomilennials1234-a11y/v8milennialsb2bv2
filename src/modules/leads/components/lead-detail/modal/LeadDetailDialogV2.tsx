@@ -29,6 +29,7 @@ import { SmsSendDialog } from "@/modules/communication/components/sms/SmsSendDia
 import { AiEmailWriter } from "@/modules/communication/components/ai/AiEmailWriter";
 import { cn } from "@/lib/utils";
 import type { QualificationTier } from "./types";
+import { notifyError } from "@/shared/errors";
 
 interface LeadDetailDialogProps {
   /** Renderiza side modais quando o conteúdo principal está aberto. */
@@ -73,9 +74,9 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
           });
           toast.success(enabled ? "IA ativada" : "IA desativada");
         },
-        onError: () => {
+        onError: (caught: unknown) => {
           setOptimisticAi(null);
-          toast.error("Falha ao alternar IA");
+          notifyError(caught, { fallback: "Não foi possível alternar IA." });
         },
       }
     );
@@ -96,8 +97,7 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
       toast.success("Lead excluído");
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao excluir";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível excluir o lead." });
     }
   }, [lead, deleteLead, logAction, onClose]);
 

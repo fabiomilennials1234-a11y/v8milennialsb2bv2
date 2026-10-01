@@ -38,8 +38,10 @@ export const ERROR_CATALOG: Record<ErrorCode, CatalogEntry> = {
     message: "Essa senha é fraca demais. Use pelo menos 8 caracteres, misturando letras e números.",
     retryable: false,
   },
+  // Ambígua de propósito (anti-enumeração): dizer "já existe uma conta com esse
+  // e-mail" numa tela pública revela quem é cliente. Mesma regra do cadastro.
   "auth.user_exists": {
-    message: "Já existe uma conta com esse e-mail.",
+    message: "Não foi possível criar a conta com esse e-mail. Se você já tem conta, entre ou redefina a senha.",
     retryable: false,
   },
   "record.not_found": {

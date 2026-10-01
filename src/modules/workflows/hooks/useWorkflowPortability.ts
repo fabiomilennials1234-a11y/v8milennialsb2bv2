@@ -15,6 +15,7 @@ import {
 } from "@/lib/workflowPortability";
 import type { Workflow } from "@/types/workflow";
 import type { ImportReport } from "@/types/workflowPortability";
+import { notifyError } from "@/shared/errors";
 
 const database: SupabaseClient = supabase;
 
@@ -44,7 +45,7 @@ export function useExportWorkflow() {
         downloadWorkflowJson(file, filename);
         toast.success("Workflow exportado com sucesso!");
       } catch (err: any) {
-        toast.error(err.message || "Erro ao exportar workflow");
+        notifyError(err, { fallback: "Não foi possível exportar workflow." });
       }
     },
     [organizationId],
@@ -101,7 +102,7 @@ export function useImportWorkflow() {
       queryClient.invalidateQueries({ queryKey: ["workflows", organizationId] });
     },
     onError: (err: any) => {
-      toast.error(err.message || "Erro ao importar workflow");
+      notifyError(err, { fallback: "Não foi possível importar workflow." });
     },
   });
 

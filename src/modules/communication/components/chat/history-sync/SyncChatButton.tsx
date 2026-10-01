@@ -11,6 +11,7 @@ import { History, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useCreateHistorySyncJob, useHistorySyncJobs } from "@/modules/communication/hooks/useHistorySyncJobs";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   instanceId: string;
@@ -33,7 +34,7 @@ export function SyncChatButton({ instanceId, chatJid }: Props) {
       });
       toast.success("Sync deste chat agendado");
     } catch (e) {
-      toast.error(`Erro ao agendar sync: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível agendar sync." });
     }
   };
 

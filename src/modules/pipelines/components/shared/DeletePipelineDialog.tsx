@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { mensagemDeFalhaAoExcluir } from "../../lib/mensagem-falha-ao-excluir";
+import { traducaoDeFalhaAoExcluir } from "../../lib/mensagem-falha-ao-excluir";
+import { notifyError } from "@/shared/errors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,7 +112,10 @@ export function DeletePipelineDialog({
       onDeleted?.();
       if (navigateOnDelete) navigate("/funis");
     } catch (e) {
-      toast.error(mensagemDeFalhaAoExcluir(e));
+      notifyError(e, {
+        fallback: "Não foi possível excluir o funil.",
+        message: traducaoDeFalhaAoExcluir(e) ?? undefined,
+      });
     }
   };
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tansta
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 export type ProductType = "mrr" | "projeto" | "unitario";
 
 /**
@@ -184,7 +185,7 @@ export function useCreateProduct() {
       toast.success("Produto criado com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao criar produto: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível criar produto." });
     },
   });
 }
@@ -209,7 +210,7 @@ export function useUpdateProduct() {
       toast.success("Produto atualizado com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao atualizar produto: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível atualizar produto." });
     },
   });
 }
@@ -231,7 +232,7 @@ export function useDeleteProduct() {
       toast.success("Produto excluído com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao excluir produto: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível excluir produto." });
     },
   });
 }

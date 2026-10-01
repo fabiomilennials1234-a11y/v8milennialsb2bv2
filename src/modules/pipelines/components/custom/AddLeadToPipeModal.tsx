@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal } from "@/modules/leads";
+import { notifyError } from "@/shared/errors";
 
 interface AddLeadToPipeModalProps {
   open: boolean;
@@ -97,7 +98,7 @@ export function AddLeadToPipeModal({
       toast.success(`Lead adicionado ao funil "${pipelineName}"`);
       handleClose();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao adicionar lead");
+      notifyError(error, { fallback: "Não foi possível adicionar lead." });
     }
   };
 
@@ -115,7 +116,7 @@ export function AddLeadToPipeModal({
       toast.success(`Lead criado e adicionado ao funil "${pipelineName}"`);
       handleClose();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao adicionar lead ao funil");
+      notifyError(error, { fallback: "Não foi possível adicionar lead ao funil." });
     }
   };
 

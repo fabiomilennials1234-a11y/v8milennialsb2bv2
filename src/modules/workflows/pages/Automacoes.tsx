@@ -42,6 +42,7 @@ import { TRIGGER_LABELS } from "@/types/workflow";
 import type { Workflow as WorkflowType } from "@/types/workflow";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { notifyError } from "@/shared/errors";
 
 const TRIGGER_ICONS: Record<string, React.ElementType> = {
   lead_created: Zap,
@@ -80,11 +81,7 @@ export default function Automacoes() {
         onSuccess: () => {
           toast.success(workflow.is_active ? "Workflow desativado" : "Workflow ativado");
         },
-        onError: (err: unknown) =>
-          toast.error(
-            err instanceof Error && err.message ? err.message : "Erro ao alterar status",
-            { duration: 8000 },
-          ),
+        onError: (err: unknown) => notifyError(err, { fallback: "Não foi possível alterar o status." }),
       }
     );
   };
@@ -96,7 +93,7 @@ export default function Automacoes() {
         toast.success("Workflow excluído");
         setDeleteTarget(null);
       },
-      onError: () => toast.error("Erro ao excluir workflow"),
+      onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível excluir workflow." }),
     });
   };
 

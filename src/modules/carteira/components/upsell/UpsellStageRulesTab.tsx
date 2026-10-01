@@ -9,6 +9,7 @@ import { type PipelineStage, useUpdatePipelineStage } from "@/modules/pipelines"
 import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useUpsellGestaoRules, useSaveGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface UpsellStageRulesTabProps {
   stages: PipelineStage[];
@@ -204,8 +205,8 @@ export function UpsellStageRulesTab({ stages }: UpsellStageRulesTabProps) {
       }
 
       toast.success("Regras salvas com sucesso!");
-    } catch {
-      toast.error("Erro ao salvar regras");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar regras." });
     } finally {
       setSaving(false);
     }

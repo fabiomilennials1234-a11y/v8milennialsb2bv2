@@ -24,6 +24,7 @@ import type {
 import { followupRuleToDB } from "./useAgentFollowupRules";
 import type { AgentDocument } from "./useAgentDocuments";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 /**
  * Payload para atualização de configuração de pipeline
  */
@@ -384,9 +385,7 @@ export function useUpdateCopilotAgent() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar Copilot", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar Copilot." });
     },
   });
 }
@@ -413,9 +412,7 @@ export function useDeleteCopilotAgent() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao deletar Copilot", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível deletar Copilot." });
     },
   });
 }
@@ -450,9 +447,7 @@ export function useToggleCopilotAgent() {
       );
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar status", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar status." });
     },
   });
 }
@@ -498,9 +493,7 @@ export function useSetDefaultCopilotAgent() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao definir padrão", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível definir padrão." });
     },
   });
 }
@@ -538,9 +531,7 @@ export function useUpdateCopilotAgentPipeline() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar configuração", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar configuração." });
     },
   });
 }
@@ -622,9 +613,7 @@ export function useLinkAgentToWhatsAppInstance() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao vincular WhatsApp", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível vincular WhatsApp." });
     },
   });
 }

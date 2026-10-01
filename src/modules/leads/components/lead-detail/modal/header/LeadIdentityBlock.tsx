@@ -6,6 +6,7 @@ import { useLeadAge } from "../../hooks/useLeadAge";
 import { toast } from "sonner";
 import type { QualificationTier } from "../types";
 import { erpLabel } from "@/shared/format/erp-code";
+import { notifyError } from "@/shared/errors";
 
 interface LeadIdentityBlockProps {
   lead: {
@@ -42,8 +43,8 @@ export const LeadIdentityBlock = memo(function LeadIdentityBlock({ lead }: LeadI
     try {
       await navigator.clipboard.writeText(lead.phone);
       toast.success("Telefone copiado");
-    } catch {
-      toast.error("Não foi possível copiar");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível copiar." });
     }
   };
 

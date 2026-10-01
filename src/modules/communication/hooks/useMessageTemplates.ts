@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type MediaType = "text" | "image" | "audio" | "video" | "document";
 
@@ -80,7 +81,7 @@ export function useCreateMessageTemplate() {
       if (error.message?.includes("unique") || error.code === "23505") {
         toast.error("Já existe um template com esse comando.");
       } else {
-        toast.error(error.message || "Erro ao criar template");
+        notifyError(error, { fallback: "Não foi possível criar template." });
       }
     },
   });
@@ -118,7 +119,7 @@ export function useUpdateMessageTemplate() {
       if (error.message?.includes("unique") || error.code === "23505") {
         toast.error("Já existe um template com esse comando.");
       } else {
-        toast.error(error.message || "Erro ao atualizar template");
+        notifyError(error, { fallback: "Não foi possível atualizar template." });
       }
     },
   });
@@ -140,7 +141,7 @@ export function useDeleteMessageTemplate() {
       toast.success("Template removido.");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Erro ao remover template");
+      notifyError(error, { fallback: "Não foi possível remover template." });
     },
   });
 }

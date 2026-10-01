@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import type { WorkflowTemplate } from "@/contracts/workflows/workflow-template";
 import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { canonicalizeTemplateFunnelRefs } from "@/modules/workflows/lib/canonicalizeTemplateFunnelRefs";
+import { notifyError } from "@/shared/errors";
 
 // Reexportado por compatibilidade: a interface agora é contrato compartilhado
 // (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
@@ -206,7 +207,7 @@ export function WorkflowTemplates() {
       toast.success("Workflow criado a partir do template");
       navigate(`/automacoes/${result.id}`);
     } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao criar workflow");
+      notifyError(err, { fallback: "Não foi possível criar workflow." });
     }
   }
 

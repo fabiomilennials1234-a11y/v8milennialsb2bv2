@@ -15,6 +15,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { BillingQuote } from "@/modules/billing";
+import { userMessageOf } from "@/shared/errors";
 
 function brl(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -70,8 +71,11 @@ export function QuoteSummary({ quote, isLoading, isStale, error }: QuoteSummaryP
         <p className="text-sm font-medium">Este pacote não pode ser cotado</p>
         {/* A mensagem do motor é regra de negócio ("pix não é vendido no ciclo
             mensal"), não falha técnica. Trocá-la por um texto genérico manda o
-            operador procurar problema de rede. */}
-        <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
+            operador procurar problema de rede — `userMessageOf` a preserva
+            quando é frase em PT e só troca o texto técnico. */}
+        <p className="text-xs text-muted-foreground mt-1">
+          {userMessageOf(error, "Não foi possível cotar este pacote.")}
+        </p>
       </div>
     );
   }

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { toast } from "sonner";
 import type { AppError } from "./app-error";
-import { ErrorReference } from "./ErrorReference";
+import { ErrorToastDescription } from "./ErrorReference";
 import { reportError } from "./report";
 import { canOpenSupport, openSupport, supportPrefillFor } from "./support-launcher";
 import { toAppError } from "./to-app-error";
@@ -17,6 +17,18 @@ export interface NotifyErrorOptions {
   context?: Record<string, string>;
   /** Só relata, sem toast — para quando a tela já mostra o erro inline. */
   silent?: boolean;
+  /**
+   * Linha secundária acima do código. Para o raro caso em que um texto que não
+   * é nosso ajuda o usuário a agir — o motivo que o fornecedor deu para recusar
+   * um envio, por exemplo. Nunca a mensagem técnica do erro.
+   */
+  detail?: string;
+  /**
+   * Tradução de domínio já feita por quem chama ("Este funil ainda é o padrão
+   * da organização. Escolha o substituto…"). Vence a mensagem do catálogo; o
+   * erro continua sendo relatado e o código continua no toast.
+   */
+  message?: string;
 }
 
 /** Tempo de leitura de um erro: o dobro do padrão do sonner. */
@@ -44,10 +56,10 @@ function toastAction(error: AppError): { label: string; onClick: () => void } | 
  * ação. O `id` agrupa repetições — o mesmo erro disparado cinco vezes seguidas
  * atualiza um toast em vez de empilhar cinco.
  */
-export function showErrorToast(error: AppError): void {
+export function showErrorToast(error: AppError, detail?: string): void {
   toast.error(error.userMessage, {
     id: `app-error:${error.code}:${error.userMessage}`,
-    description: createElement(ErrorReference, { reference: error.reference }),
+    description: createElement(ErrorToastDescription, { reference: error.reference, detail }),
     duration: ERROR_TOAST_DURATION_MS,
     action: toastAction(error),
   });
@@ -55,7 +67,9 @@ export function showErrorToast(error: AppError): void {
 
 function deliver(error: AppError, options: NotifyErrorOptions): void {
   reportError(error, { source: "handled", ...options.context });
-  if (!options.silent) showErrorToast(error);
+  if (options.silent) return;
+  const message = options.message?.trim();
+  showErrorToast(message ? { ...error, userMessage: message } : error, options.detail?.trim() || undefined);
 }
 
 function isFunctionsHttpError(error: unknown): boolean {

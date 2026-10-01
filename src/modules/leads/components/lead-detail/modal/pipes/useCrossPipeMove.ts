@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { updateCustomPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
-import { toast } from "sonner";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+import { notifyError } from "@/shared/errors";
 
 /**
  * useCrossPipeMove — unified stage-move hook for both system and custom
@@ -163,8 +163,7 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
           setRecentlyMovedStageKey((cur) => (cur === targetKey ? null : cur));
         }, 360);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao mover";
-        toast.error(msg);
+        notifyError(err, { fallback: "Não foi possível mover o negócio de etapa." });
       } finally {
         setPendingStageKey(null);
       }

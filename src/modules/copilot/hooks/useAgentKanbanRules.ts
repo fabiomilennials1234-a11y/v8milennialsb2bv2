@@ -10,6 +10,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import type { CopilotAgentKanbanRule } from "@/types/copilot";
 
 export interface KanbanRuleForm {
@@ -110,9 +111,7 @@ export function useUpsertKanbanRules(agentId: string) {
     },
     onError: (error: unknown) => {
       console.error("Error upserting kanban rules:", error);
-      const msg =
-        error instanceof Error ? error.message : "Erro ao salvar regras";
-      toast.error("Erro ao salvar regras", { description: msg });
+      notifyError(error, { fallback: "Não foi possível salvar as regras por etapa." });
     },
   });
 }

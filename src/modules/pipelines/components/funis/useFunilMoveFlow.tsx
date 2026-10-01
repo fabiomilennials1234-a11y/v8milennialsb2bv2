@@ -36,6 +36,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -321,9 +322,8 @@ export function useFunilMoveFlow({
         if (opts.successToast) toast.success(opts.successToast);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "";
-        toast.error(
-          msg.includes("permissão") || msg.includes("Permissões") ? msg : "Erro ao mover lead",
-        );
+        if (msg.includes("permissão") || msg.includes("Permissões")) toast.error(msg);
+        else notifyError(e, { fallback: "Não foi possível mover o lead." });
       }
     },
     [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed],
@@ -474,8 +474,7 @@ export function useFunilMoveFlow({
         toast.success(`Negócio movido para ${nomeDoAlvo}!`);
         setPendingCompareceu(null);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : "Erro ao processar comparecimento";
-        toast.error(msg);
+        notifyError(error, { fallback: "Não foi possível processar o comparecimento." });
       } finally {
         setProcessingCompareceu(false);
       }

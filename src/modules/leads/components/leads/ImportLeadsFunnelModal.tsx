@@ -39,6 +39,7 @@ import {
   UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyError } from "@/shared/errors";
 
 const PIPELINE_TYPE: Record<FunnelDestination, "whatsapp" | "propostas" | "confirmacao"> = {
   qualificacao: "whatsapp",
@@ -202,8 +203,7 @@ export function ImportLeadsFunnelContent({
       ]);
     } catch (error) {
       console.error("Import error:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      toast.error(`Erro durante a importação: ${msg}`);
+      notifyError(error, { fallback: "Não foi possível importar os leads." });
       setStep("preview");
     }
   };
@@ -347,8 +347,8 @@ export function ImportLeadsFunnelContent({
                       );
                       setSelectedStageKey(defaultStage?.stage_key ?? "");
                       setStep("preview");
-                    } catch {
-                      toast.error("Erro ao processar arquivo");
+                    } catch (caught) {
+                      notifyError(caught, { fallback: "Não foi possível processar arquivo." });
                     }
                   }}
                 >

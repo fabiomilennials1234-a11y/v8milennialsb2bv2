@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import { notifyError } from "@/shared/errors";
 
 /** Intervalo do mês (dia 1 00:00 até último dia 23:59:59) para vincular metas ao mês. */
 function getMonthRange(month: number, year: number) {
@@ -295,7 +296,7 @@ export function useCreateGoal() {
       toast.success("Meta criada com sucesso!");
     },
     onError: (error) => {
-      toast.error("Erro ao criar meta: " + error.message);
+      notifyError(error, { fallback: "Não foi possível criar meta." });
     },
   });
 }
@@ -332,7 +333,7 @@ export function useUpdateGoal() {
       toast.success("Meta atualizada com sucesso!");
     },
     onError: (error) => {
-      toast.error("Erro ao atualizar meta: " + error.message);
+      notifyError(error, { fallback: "Não foi possível atualizar meta." });
     },
   });
 }

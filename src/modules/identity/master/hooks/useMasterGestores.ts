@@ -22,6 +22,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { GestorRow, GestorOrganizationRow } from "../../gestor";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /** Linha de gestor enriquecida para a tabela do Master. */
 export interface MasterGestorView extends GestorRow {
@@ -141,7 +142,7 @@ export function useCreateGestor() {
       toast.success("Gestor criado com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao criar gestor");
+      notifyError(error, { fallback: "Não foi possível criar gestor." });
     },
   });
 }
@@ -165,7 +166,7 @@ export function useToggleGestorActive() {
       toast.success(variables.isActive ? "Gestor ativado!" : "Gestor desativado!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao alterar status do gestor");
+      notifyError(error, { fallback: "Não foi possível alterar status do gestor." });
     },
   });
 }
@@ -189,7 +190,7 @@ export function useSetGestorOrgs() {
       toast.success("Organizações vinculadas atualizadas!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao atualizar organizações do gestor");
+      notifyError(error, { fallback: "Não foi possível atualizar organizações do gestor." });
     },
   });
 }

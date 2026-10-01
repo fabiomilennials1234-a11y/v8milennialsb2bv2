@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Users, Plus, CheckCircle2, ArrowRight, Loader2, ChevronRight } from "lucide-react";
 import { useCreateTeamMember } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -35,8 +35,7 @@ export function StepEquipe({ onNext }: Props) {
       });
       setDone(true);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao adicionar membro";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível adicionar o membro." });
     }
   };
 

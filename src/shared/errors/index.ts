@@ -3,6 +3,11 @@
  *
  * Para mostrar um erro ao usuário, use `notifyError(err, { fallback })`.
  * Nunca `toast.error(err.message)`: a mensagem técnica não vai para a tela.
+ *
+ * Os handlers globais do React Query ficam fora deste barrel
+ * (`@/shared/errors/query-error-handlers`): só o `App.tsx` precisa deles, e
+ * reexportá-los aqui puxaria `@tanstack/react-query` para toda tela que mostra
+ * erro — inclusive a de preview pública, que não pode alcançar o app.
  */
 export type { AppError, ErrorAction, ErrorActionKind, ErrorCode } from "./app-error";
 export { ERROR_CATALOG } from "./catalog";
@@ -12,11 +17,12 @@ export {
   isHumanPortugueseMessage,
   referenceFor,
   toAppError,
+  userMessageOf,
   type FunctionsErrorBody,
 } from "./to-app-error";
-export { unwrapFunctionsError } from "./unwrap-functions-error";
+export { functionsErrorFromResponse, unwrapFunctionsError } from "./unwrap-functions-error";
 export { notifyError, showErrorToast, type NotifyErrorOptions } from "./notify";
-export { reportError, setErrorReporter, type ErrorReport, type ErrorReporter } from "./report";
+export { addErrorReporter, reportError, ringBufferEntry, type ErrorReport, type ErrorReporter } from "./report";
 export {
   canOpenSupport,
   openSupport,
@@ -24,7 +30,6 @@ export {
   supportPrefillFor,
   type SupportPrefill,
 } from "./support-launcher";
-export { ErrorReference } from "./ErrorReference";
-export { createQueryErrorHandlers } from "./query-error-handlers";
+export { ErrorReference, ErrorToastDescription } from "./ErrorReference";
 export { scrubPii, technicalSummary } from "./scrub";
 export { getErrorMessage } from "./get-error-message";

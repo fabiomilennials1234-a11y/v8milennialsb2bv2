@@ -17,6 +17,7 @@ import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface ConditionRow {
   field: string;
@@ -101,7 +102,7 @@ export function ApprovalRulesConfig() {
       setDialogOpen(false);
       resetForm();
     } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao criar regra");
+      notifyError(err, { fallback: "Não foi possível criar regra." });
     } finally {
       setSaving(false);
     }

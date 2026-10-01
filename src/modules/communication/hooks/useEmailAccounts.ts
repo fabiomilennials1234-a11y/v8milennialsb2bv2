@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface EmailAccount {
   id: string;
@@ -47,7 +48,7 @@ export function useDisconnectEmailAccount() {
       queryClient.invalidateQueries({ queryKey: ["email-accounts"] });
     },
     onError: (error: Error) => {
-      toast.error(`Erro: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível desconectar a conta de e-mail." });
     },
   });
 }

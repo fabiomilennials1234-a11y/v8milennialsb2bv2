@@ -8,6 +8,7 @@ import {
   type ProductVariantInsert,
   type ProductVariantUpdate,
 } from "./useProducts";
+import { notifyError } from "@/shared/errors";
 
 export function useProductVariants(productId: string | undefined) {
   return useQuery({
@@ -48,7 +49,7 @@ export function useCreateProductVariant() {
       toast.success("Variação criada com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao criar variação: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível criar variação." });
     },
   });
 }
@@ -74,7 +75,7 @@ export function useUpdateProductVariant() {
       toast.success("Variação atualizada com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao atualizar variação: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível atualizar variação." });
     },
   });
 }
@@ -98,7 +99,7 @@ export function useDeleteProductVariant() {
       toast.success("Variação excluída com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao excluir variação: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível excluir variação." });
     },
   });
 }
@@ -125,7 +126,7 @@ export function useBulkCreateProductVariants() {
       toast.success(`${variables.length} variações criadas com sucesso!`);
     },
     onError: (error) => {
-      toast.error(`Erro ao criar variações: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível criar variações." });
     },
   });
 }

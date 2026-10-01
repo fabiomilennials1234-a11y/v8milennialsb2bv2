@@ -42,6 +42,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { BR_UFS } from "@/shared/format/br-uf";
+import { notifyError } from "@/shared/errors";
 
 interface LeadModalProps {
   open: boolean;
@@ -427,7 +428,7 @@ export function LeadModal({
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
         toast.error("Erro: organizacao nao encontrada. Execute o script SQL de vinculacao.");
       } else {
-        toast.error(`Erro ao salvar lead: ${error?.message || 'Erro desconhecido'}`);
+        notifyError(error, { fallback: "Não foi possível salvar lead." });
       }
     }
   };
