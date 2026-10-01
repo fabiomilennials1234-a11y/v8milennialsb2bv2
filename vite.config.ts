@@ -89,6 +89,36 @@ function sentrySourceMaps(env: Record<string, string>): PluginOption {
   });
 }
 
+/**
+ * Nome do componente React no rastro de clique e no replay (ADR-0038, S6):
+ * `data-sentry-component="KanbanCard"` em cada elemento renderizado. O passo a
+ * passo no Sentry passa de `div > button` para `KanbanCard > BotaoExcluir` —
+ * legível, e sem dado de lead (o nome vem do código, não da tela; o rótulo
+ * visível continua fora do rastro, ver `sentry-event.ts`).
+ *
+ * Plugin à parte, com `enforce: 'pre'` e ANTES do `react()`: o SWC também é
+ * `pre` e compila o JSX; o plugin do Sentry no fim da fila receberia JS sem JSX e
+ * não marcaria nada, em silêncio. Daqui só o `transform` de marcação — sem
+ * upload, sem release, sem debug id (isso é do `sentrySourceMaps`).
+ *
+ * Só no build: o dev do time não paga o passe extra de Babel por arquivo, e o
+ * dev não manda nada ao Sentry.
+ */
+function sentryComponentNames(): Plugin {
+  const [sentry] = sentryVitePlugin({
+    telemetry: false,
+    reactComponentAnnotation: { enabled: true },
+    sourcemaps: { disable: true },
+    release: { create: false, finalize: false, inject: false },
+  }) as Plugin[];
+  return {
+    name: "torque-sentry-component-names",
+    enforce: "pre",
+    apply: "build",
+    transform: sentry.transform,
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // `loadEnv` porque o valor pode vir do ambiente (CI) OU de um `.env` local —
@@ -114,6 +144,8 @@ export default defineConfig(({ mode }) => {
     },
   },
   plugins: [
+    // Antes do react(): precisa ver o JSX antes do SWC compilá-lo.
+    sentryComponentNames(),
     react(),
     cspComOrigemDoSupabase(env.VITE_SUPABASE_URL),
     VitePWA({
