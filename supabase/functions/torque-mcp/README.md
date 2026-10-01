@@ -99,6 +99,8 @@ tools/db.ts         db.read_sql (read-only role + READ ONLY txn, audited)
 tools/rls.ts        rls.check_access (master-ghost coverage audit)
 tools/schema.ts     schema.audit_definer + schema.audit_triggers (search_path audits)
 tools/migration.ts  migration.diff (repo-vs-DB migration-ledger drift)
+tools/support.ts    support.ticket_get + support.record_diagnosis (Chamado fix process,
+                    docs/operations/chamado-fix.md)
 ```
 
 ## Secrets (Supabase function env)

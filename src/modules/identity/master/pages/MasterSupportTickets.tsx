@@ -67,6 +67,7 @@ import {
   type MasterTicketFilters,
 } from "../hooks/useMasterSupportTickets";
 import { useMasterQueueChannel } from "../hooks/useMasterQueueChannel";
+import { TicketDiagnosisPanel } from "../components/support/TicketDiagnosisPanel";
 import {
   useMasterSupportUnread,
   useMarkMasterRepliesRead,
@@ -609,6 +610,15 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
   return (
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
+        {/* Etapa 4 do processo de fix: responder o cliente e executar o prompt. */}
+        <TicketDiagnosisPanel
+          ticketId={ticket.id}
+          onUseReply={(text) => {
+            setIsInternal(false);
+            setBody(text);
+          }}
+        />
+
         {ticket.description && (
           <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>

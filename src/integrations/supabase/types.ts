@@ -15988,6 +15988,80 @@ export type Database = {
           },
         ]
       }
+      support_ticket_diagnoses: {
+        Row: {
+          actual_cost_usd: number | null
+          complexity: string
+          created_at: string
+          customer_reply: string | null
+          diagnosed_by: string | null
+          estimated_cost_usd: number | null
+          executed_at: string | null
+          execution_outcome: string | null
+          keystones: Json
+          kind: string
+          recommended_effort: string
+          recommended_model: string
+          resolution_prompt: string
+          root_cause: string | null
+          source: string
+          summary: string
+          template_version: number
+          ticket_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual_cost_usd?: number | null
+          complexity: string
+          created_at?: string
+          customer_reply?: string | null
+          diagnosed_by?: string | null
+          estimated_cost_usd?: number | null
+          executed_at?: string | null
+          execution_outcome?: string | null
+          keystones: Json
+          kind: string
+          recommended_effort: string
+          recommended_model: string
+          resolution_prompt: string
+          root_cause?: string | null
+          source?: string
+          summary: string
+          template_version?: number
+          ticket_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual_cost_usd?: number | null
+          complexity?: string
+          created_at?: string
+          customer_reply?: string | null
+          diagnosed_by?: string | null
+          estimated_cost_usd?: number | null
+          executed_at?: string | null
+          execution_outcome?: string | null
+          keystones?: Json
+          kind?: string
+          recommended_effort?: string
+          recommended_model?: string
+          resolution_prompt?: string
+          root_cause?: string | null
+          source?: string
+          summary?: string
+          template_version?: number
+          ticket_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_diagnoses_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: true
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_tickets: {
         Row: {
           assigned_master_user_id: string | null
