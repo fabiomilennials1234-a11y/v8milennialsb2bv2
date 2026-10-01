@@ -134,8 +134,10 @@ export async function createDeal(input: ActionInput): Promise<ActionResult> {
 // "ganhar e perder são movimentos, não campos; encerrar é chegar na etapa
 // terminal" — e aquilo era verdade enquanto o desfecho fosse DERIVADO da etapa.
 //
-// Deixou de ser. `deals.outcome` (open|won|lost) é a fonte, e o card não se
-// move ao ganhar. As duas perguntas são diferentes e cada uma tem UMA resposta:
+// Deixou de ser. `deals.outcome` (open|won|lost) é a fonte, e esta ação não
+// move o card. Quem move, ao GANHAR, é o trigger `trg_negocio_ganho_vai_para_etapa_won`
+// em `deals` (Emenda 2, 20271021000039), e só quando o funil tem etapa de
+// ganho ou de sucesso. As duas perguntas são diferentes e cada uma tem UMA resposta:
 //
 //   Onde está o Negócio?     pipeline_entries.stage_key
 //   Ganhou ou perdeu?        deals.outcome

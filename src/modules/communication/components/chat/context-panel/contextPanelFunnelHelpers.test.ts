@@ -122,4 +122,70 @@ describe("availableFunnelsToAdd", () => {
     expect(rows[0].label).toBe("Reativação");
     expect(rows[0].firstStageKey).toBe("start");
   });
+
+  // Café Jurerê, 2026-09-30: lead com "Vendido" (fechado) em ENVASE - NEGOCIAÇÃO
+  // não conseguia abrir a recompra ali — o funil sumia de "Adicionar a".
+  const envase = (over: Record<string, unknown> = {}) =>
+    ({
+      type: "custom",
+      pipelineId: "cp-envase",
+      pipelineName: "ENVASE - NEGOCIAÇÃO EM ANDAMENTO",
+      pipelineColor: "#f97316",
+      pipelineIcon: "star",
+      entryId: "deal-1",
+      closedAt: null,
+      currentStageId: "s1",
+      currentStageName: "Cliente em Atendimento",
+      stages: [{ id: "s1", name: "Cliente em Atendimento", color: "#f97316", position: 0, role: "open" }],
+      ...over,
+    }) as PipelineStatus;
+
+  it("funil onde o negócio já fechou volta a ser oferecido (recompra)", () => {
+    const rows = availableFunnelsToAdd([envase({ closedAt: "2026-09-01T00:00:00Z" })]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].pipelineId).toBe("cp-envase");
+    expect(rows[0].firstStageId).toBe("s1");
+  });
+
+  it("negócio aberto tranca o funil, mesmo havendo outro fechado nele", () => {
+    const rows = availableFunnelsToAdd([
+      envase({ entryId: "deal-velho", closedAt: "2026-01-01T00:00:00Z" }),
+      envase({ entryId: "deal-novo", closedAt: null }),
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("dois negócios fechados no mesmo funil viram UMA opção", () => {
+    const rows = availableFunnelsToAdd([
+      envase({ entryId: "a", closedAt: "2026-01-01T00:00:00Z" }),
+      envase({ entryId: "b", closedAt: "2026-05-01T00:00:00Z" }),
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("linha com negócio sem closedAt conhecido é tratada como aberta", () => {
+    const semCampo = envase();
+    delete (semCampo as { closedAt?: unknown }).closedAt;
+    expect(availableFunnelsToAdd([semCampo])).toHaveLength(0);
+  });
+});
+
+describe("toFunnelRows — N negócios no mesmo funil", () => {
+  it("cada negócio tem chave própria (não colide no React)", () => {
+    const base = {
+      type: "custom",
+      pipelineId: "cp-1",
+      pipelineName: "Envase",
+      pipelineColor: "#f97316",
+      pipelineIcon: "star",
+      currentStageId: "s1",
+      currentStageName: "Ativo",
+      stages: [{ id: "s1", name: "Ativo", color: "#f97316", position: 0, role: "open" }],
+    };
+    const rows = toFunnelRows([
+      { ...base, entryId: "a", closedAt: "2026-01-01T00:00:00Z" } as PipelineStatus,
+      { ...base, entryId: "b", closedAt: null } as PipelineStatus,
+    ]);
+    expect(rows.map((r) => r.key)).toEqual(["a", "b"]);
+  });
 });

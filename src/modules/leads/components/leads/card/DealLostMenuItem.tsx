@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { DealOutcome } from "../../../hooks/useLeadsDeals";
 import { notifyError } from "@/shared/errors";
+import { cancelarEfeitoDeDesfecho, dispararEfeitoDeDesfecho } from "../../../lib/card-effects";
 
 /** Monta só ao abrir o menu. O desfecho pertence à entrada, não ao lead/etapa. */
 export function DealLostMenuItem({ entryId }: { entryId: string }) {
@@ -42,6 +43,8 @@ export function DealLostMenuItem({ entryId }: { entryId: string }) {
     onSuccess: async (next) => {
       queryClient.setQueryData(queryKey, next);
       toast.success(next === "lost" ? "Negócio marcado como perdido" : "Negócio removido de perdido");
+      if (next === "lost") dispararEfeitoDeDesfecho(entryId, "lost");
+      else cancelarEfeitoDeDesfecho(entryId);
       await Promise.all([
         "leads-deals", "deal-card-extras", "funil-desfecho-counts",
         "pipeline-page", "pipeline-stage-counts", "pipeline_entries",

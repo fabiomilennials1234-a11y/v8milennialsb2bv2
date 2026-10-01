@@ -60,6 +60,7 @@ export {
   useMoveLeadInStandardPipe,
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
+export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
 export type {
   StandardPipelineStatus,
   CustomPipelineStatus,
@@ -282,6 +283,11 @@ export {
   ORIGIN_COLORS,
 } from "./components/leads/LeadCard";
 export type { LeadCardData, LeadCardVariant, LeadCardProps } from "./components/leads/LeadCard";
+// Efeitos do card: ganho/perda (anéis) e exclusão (poeira). O board monta o
+// host; quem exclui prepara a dissolução antes. Ver `lib/card-effects.ts`.
+export { CardEffectsHost } from "./components/leads/card/CardEffectsHost";
+export { prepararDissolucao } from "./lib/card-effects";
+export type { Dissolucao } from "./lib/card-effects";
 export { LeadModal } from "./components/leads/LeadModal";
 export { LeadScoreBadge } from "./components/leads/LeadScoreBadge";
 export { TimelineItem } from "./components/leads/TimelineItem";
