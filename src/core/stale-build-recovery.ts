@@ -26,6 +26,8 @@ const STALE_CHUNK_PATTERNS = [
   /Importing a module script failed/i,
   /error loading dynamically imported module/i,
   /Loading (CSS )?chunk \S+ failed/i,
+  // CSS de um chunk lazy que sumiu: o preload do Vite rejeita o import() da rota.
+  /Unable to preload CSS/i,
   /ChunkLoadError/i,
   // Rota de SPA devolvendo index.html no lugar do .js de um chunk que sumiu.
   /Unexpected token '<'/i,
@@ -37,6 +39,40 @@ export function isStaleChunkError(reason: unknown): boolean {
   if (reason instanceof Error && reason.name === "ChunkLoadError") return true;
   const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
   return !!message && STALE_CHUNK_PATTERNS.some((re) => re.test(message));
+}
+
+/** Arquivo hashado do build (`/assets/…`) servido pela própria origem. */
+function isBuildAsset(url: string, base = document.baseURI): boolean {
+  try {
+    const u = new URL(url, base);
+    return u.origin === new URL(base).origin && u.pathname.startsWith("/assets/");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Falha de carga de recurso (evento `error` em fase de captura): `<link>` de
+ * stylesheet ou `<script>` do build. Esses erros não borbulham nem viram
+ * exceção de JS — sem a captura, CSS que sumiu deixa a tela crua sem
+ * recuperação (chamado 39ff2cd1, print das 18:39 UTC).
+ */
+export function isStaleAssetLoadError(event: Event): boolean {
+  const el = event.target;
+  if (el instanceof HTMLLinkElement) return el.rel === "stylesheet" && isBuildAsset(el.href);
+  if (el instanceof HTMLScriptElement) return !!el.src && isBuildAsset(el.src);
+  return false;
+}
+
+/**
+ * Stylesheets do build que não carregaram. Chamado no boot: script de módulo
+ * só executa depois dos stylesheets inseridos pelo parser, então
+ * `sheet === null` aqui é falha, não carga em andamento.
+ */
+export function missingStylesheets(doc: Document = document): string[] {
+  return Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
+    .filter((l) => isBuildAsset(l.href, doc.baseURI) && !l.sheet)
+    .map((l) => l.href);
 }
 
 /** O que a recuperação toca no browser — injetável para teste. */

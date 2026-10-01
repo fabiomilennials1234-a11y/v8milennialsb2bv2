@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RECOVERY_THROTTLE_MS,
+  isStaleAssetLoadError,
   isStaleChunkError,
+  missingStylesheets,
   lazyRetry,
   recoverFromStaleBuild,
   type RecoveryEnv,
@@ -130,6 +132,7 @@ describe("isStaleChunkError", () => {
     "Loading chunk 42 failed.",
     "Loading CSS chunk 7 failed",
     "Unexpected token '<'",
+    "Unable to preload CSS for /assets/Dashboard-abc123.css",
     "expected expression, got '<'",
   ])("reconhece %s", (message) => {
     expect(isStaleChunkError(new Error(message))).toBe(true);
@@ -144,5 +147,74 @@ describe("isStaleChunkError", () => {
   it("não confunde erro de runtime com chunk velho", () => {
     expect(isStaleChunkError(new Error("Cannot read properties of undefined"))).toBe(false);
     expect(isStaleChunkError(undefined)).toBe(false);
+  });
+});
+
+// Chamado 39ff2cd1, print das 18:39 UTC: o JS do app rodou (sidebar visível),
+// mas o CSS do build não aplicou e a rota não montou. Falha de <link> não vira
+// erro de JS — só aparece como evento de recurso (fase de captura) ou como
+// `link.sheet === null`.
+describe("isStaleAssetLoadError", () => {
+  function failedResource(el: Element): Event {
+    const ev = new Event("error");
+    Object.defineProperty(ev, "target", { value: el });
+    return ev;
+  }
+
+  it("reconhece stylesheet do build que falhou ao carregar", () => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/assets/index-abc123.css";
+    expect(isStaleAssetLoadError(failedResource(link))).toBe(true);
+  });
+
+  it("reconhece script do build que falhou ao carregar", () => {
+    const script = document.createElement("script");
+    script.src = "/assets/Leads-abc123.js";
+    expect(isStaleAssetLoadError(failedResource(script))).toBe(true);
+  });
+
+  it("ignora recurso de fora do build (fonte, imagem de terceiro)", () => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Inter";
+    expect(isStaleAssetLoadError(failedResource(link))).toBe(false);
+    const img = document.createElement("img");
+    img.src = "/assets/logo-abc123.png";
+    expect(isStaleAssetLoadError(failedResource(img))).toBe(false);
+  });
+
+  it("ignora erro de JS comum (target = window)", () => {
+    expect(isStaleAssetLoadError(new ErrorEvent("error", { message: "boom" }))).toBe(false);
+  });
+});
+
+describe("missingStylesheets", () => {
+  function doc(links: Array<{ href: string; loaded: boolean }>): Document {
+    const d = document.implementation.createHTMLDocument("t");
+    const base = d.createElement("base");
+    base.href = document.baseURI;
+    d.head.appendChild(base);
+    for (const l of links) {
+      const el = d.createElement("link");
+      el.rel = "stylesheet";
+      el.href = l.href;
+      Object.defineProperty(el, "sheet", { value: l.loaded ? {} : null });
+      d.head.appendChild(el);
+    }
+    return d;
+  }
+
+  it("aponta o CSS do build que não carregou", () => {
+    const d = doc([{ href: "/assets/index-abc123.css", loaded: false }]);
+    expect(missingStylesheets(d)).toEqual([expect.stringContaining("/assets/index-abc123.css")]);
+  });
+
+  it("CSS carregado e stylesheet de terceiro não contam", () => {
+    const d = doc([
+      { href: "/assets/index-abc123.css", loaded: true },
+      { href: "https://fonts.googleapis.com/css2?family=Inter", loaded: false },
+    ]);
+    expect(missingStylesheets(d)).toEqual([]);
   });
 });
