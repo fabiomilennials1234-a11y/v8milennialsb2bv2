@@ -59,6 +59,28 @@ funções extraídas via `*External` aliases (mantém compat com testes).
   v1:** inbound sem texto/mídia não passa por aqui (não tocamos `whatsapp-webhook`),
   então não cria lead automático. Ver `06 — Features/IA/Auto-criar lead no inbound.md`.
 
+## Encaminhamento comercial com confirmação (opt-in)
+
+`context_config.crm_actions_inline=true` executa `update_lead`, `advance_stage`
+e `transfer_to_human` sequencialmente, devolvendo o resultado real de cada ação
+ao modelo. Uma falha interrompe a sequência. `stage_movement_mode="explicit"`
+desativa a movimentação automática por contagem de turnos.
+
+`require_summary_confirmation=true` restringe essas ferramentas até haver uma
+confirmação explícita do último resumo. Correções exigem nova conferência;
+pedido direto de atendente permite somente a transferência. O reconhecedor é
+conservador e cobre frases em português; formulações ambíguas podem exigir uma
+nova confirmação. Use a flag apenas em fluxos comerciais que adotam esse contrato.
+
+Após sucesso do handoff, a conversa permanece `WAITING_HUMAN`. Um recibo curto,
+vinculado a organização, telefone, conversa e instante da pausa, permite uma
+única confirmação de encaminhamento pelo webhook/batch. A preferência de pausa
+humana continua prevalecendo e um novo inbound não reativa esse atendimento.
+
+Testes: `agent-engine-movement-context`, `copilot/inline-crm-tools`,
+`copilot/summary-confirmation`, `copilot/handoff-receipt` e regressões de
+fallback, cancelamento e movimentação de pipeline.
+
 ## Schema dependencies
 
 - `copilot_agents`
