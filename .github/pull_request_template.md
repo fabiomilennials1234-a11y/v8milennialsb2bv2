@@ -93,5 +93,4 @@ $ npm run test:unit
 - [ ] Commits seguem Conventional Commits (`feat:`, `fix:`, `docs(vault):`, etc.)
 - [ ] Sem segredos commitados (`.env`, credentials, service_role)
 - [ ] CHANGELOG do vault atualizado (se mudança relevante)
-- [ ] CLAUDE.md atualizado (se mudou padrão ou área frágil)
 - [ ] Wikilinks do vault não ficaram órfãos

@@ -104,9 +104,6 @@ sequenceDiagram
     Webhook-->>Uaz: 200 OK
 ```
 
-Patch defensivo: ver
-[`Obsidian/.../supabase/functions/whatsapp-webhook/CLAUDE.md`](../../supabase/functions/whatsapp-webhook/CLAUDE.md).
-
 ## Flow 3: Cron tick → Edge function
 
 `pg_cron` dispara → `pg_net.http_post` → edge fn → faz trabalho → atualiza estado.

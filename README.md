@@ -37,8 +37,6 @@ TanStack Query v5 · Supabase (Postgres + Auth + Edge Functions + Realtime
 | Audiência | Doc |
 |---|---|
 | **Devs humanos** | Este README + [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
-| **Agentes IA** | `CLAUDE.md` por módulo (`src/modules/<bc>/`, `supabase/*`) + [`docs/agents/`](./docs/agents/) |
-| **LLM crawlers** | [`llms.txt`](./llms.txt) |
 | **Vault profundo** | [`Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/00%20—%20INDEX.md) |
 | **Arquitetura visual** | [`docs/architecture/`](./docs/architecture/) (C4 mermaid) |
 
@@ -60,7 +58,7 @@ no vault — setup completo em ~90min.
 Frontend: push `main` → Docker → EasyPanel (VPS Hostinger).
 Edge functions: `supabase functions deploy <fn> --project-ref <ref>`.
 Migrations: só via `scripts/db-push-branch.sh` (recusa prod e checkout linkado) —
-ver [`supabase/migrations/CLAUDE.md`](./supabase/migrations/CLAUDE.md).
+ver [`.specs/project/runbook-validacao-local.md`](./.specs/project/runbook-validacao-local.md).
 
 Project ref: `jsjsmuncfkbsbzqzqhfq` (prod). O projeto dev foi **aposentado** em
 2026-07-22 — validação é em branch efêmera do Supabase a partir de prod
