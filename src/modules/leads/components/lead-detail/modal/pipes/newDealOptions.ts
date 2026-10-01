@@ -3,6 +3,7 @@ import type {
   PipelineStatus,
   StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
+import { funisSemNegocioAberto } from "../../../../lib/negocio-aberto";
 import type { NewDealOption } from "./NewDealDialog";
 
 /**
@@ -70,21 +71,21 @@ export interface BuildNewDealOptionsInput {
 }
 
 /**
- * Funis em que o lead ainda **não** tem negócio viram opção de abertura.
+ * Funis em que o lead **não** tem negócio aberto viram opção de abertura.
  *
- * `useLeadAllPipelines` emite uma linha vazia (`pipeId`/`entryId` nulos) por
- * funil sem negócio; é essa linha que se lê como "dá pra abrir aqui". Funil com
- * negócio aberto não aparece — o card dele já está na tela.
+ * Funil com negócio aberto não aparece — o card dele já está na tela. Funil
+ * onde o negócio já fechou (ganho/perdido) aparece: é a recompra
+ * (`funisSemNegocioAberto`).
  */
 export function buildNewDealOptions(
   pipelines: PipelineStatus[],
   { canAdd, vendaFechada }: BuildNewDealOptionsInput,
 ): NewDealOption[] {
-  const systemPipes = pipelines.filter(isSystemPipe);
-  const inactiveSystem = systemPipes.filter((p) => p.pipeId === null);
+  const abriveis = funisSemNegocioAberto(pipelines);
+  const inactiveSystem = abriveis.filter(isSystemPipe);
   const upsellPipe = pipelines.find(isUpsellPipe) ?? null;
   const upsellActive = !!upsellPipe?.pipeId;
-  const inactiveCustom = pipelines.filter(isCustomPipe).filter((p) => p.entryId === null);
+  const inactiveCustom = abriveis.filter(isCustomPipe);
 
   const semPermissao = canAdd.reason ?? "Sem permissão";
   const out: NewDealOption[] = [];
@@ -152,9 +153,9 @@ export function resolveNewDealTarget(
 ): NewDealTarget | null {
   if (optionKey.startsWith("custom:")) {
     const pipelineId = optionKey.slice("custom:".length);
-    const pipe = pipelines
+    const pipe = funisSemNegocioAberto(pipelines)
       .filter(isCustomPipe)
-      .find((p) => p.entryId === null && p.pipelineId === pipelineId);
+      .find((p) => p.pipelineId === pipelineId);
     return pipe ? { kind: "custom", pipe } : null;
   }
 
@@ -166,8 +167,8 @@ export function resolveNewDealTarget(
     return pipe ? { kind: "standard", pipe } : null;
   }
 
-  const pipe = pipelines
+  const pipe = funisSemNegocioAberto(pipelines)
     .filter(isSystemPipe)
-    .find((p) => p.pipeId === null && p.pipeType === pipeType);
+    .find((p) => p.pipeType === pipeType);
   return pipe ? { kind: "standard", pipe } : null;
 }

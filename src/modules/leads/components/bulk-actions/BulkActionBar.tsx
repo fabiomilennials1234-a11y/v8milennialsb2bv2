@@ -39,6 +39,7 @@ import {
 import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
 import { notifyError } from "@/shared/errors";
+import { prepararDissolucao } from "../../lib/card-effects";
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;
@@ -163,6 +164,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
           count={count}
           pipelineId={escopoFunil.pipelineId}
           nomeDoFunil={escopoFunil.nomeDoFunil}
+          entryIds={escopoFunil.entryIds}
           onSuccess={onClear}
         />
       ) : (
@@ -564,6 +566,7 @@ function BulkExcluirNegociosDialog({
   count,
   pipelineId,
   nomeDoFunil,
+  entryIds,
   onSuccess,
 }: {
   open: boolean;
@@ -572,12 +575,16 @@ function BulkExcluirNegociosDialog({
   count: number;
   pipelineId: string;
   nomeDoFunil?: string;
+  /** Os cards marcados, para virarem poeira. Ausente: somem sem efeito. */
+  entryIds?: string[];
   onSuccess: () => void;
 }) {
   const mutation = useBulkRemoverNegocios();
   const plural = count === 1 ? "negócio" : "negócios";
 
   const handleDelete = async () => {
+    // Cópia dos cards antes de excluir; só vira poeira se algo foi excluído.
+    const poeira = prepararDissolucao(entryIds ?? []);
     try {
       const apagados = await mutation.mutateAsync({ lead_ids: leadIds, pipeline_id: pipelineId });
       // Zero linhas com sucesso = RLS recusou em silêncio, ou outra aba já
@@ -586,6 +593,7 @@ function BulkExcluirNegociosDialog({
       if (apagados === 0) {
         toast.error("Nada foi excluído — sem permissão, ou os cards já não estavam mais aqui.");
       } else {
+        poeira.dissolver();
         toast.success(`${apagados} ${apagados === 1 ? "negócio excluído" : "negócios excluídos"}`);
       }
       onOpenChange(false);

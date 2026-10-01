@@ -19,7 +19,7 @@
  */
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 import { LeadCardCompact } from "@/modules/leads/components/leads/card/LeadCardCompact";
 
@@ -155,5 +155,50 @@ describe("LeadCardCompact — contato e interação", () => {
     montar();
 
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
+  });
+});
+
+describe("LeadCardCompact — negócio encerrado se distingue no funil", () => {
+  const PARADO = { ...LEAD, stageEnteredAt: new Date(Date.now() - 10 * 86_400_000).toISOString() };
+
+  it("card ganho recebe borda e fundo verdes", () => {
+    const { container } = montar({ lead: { ...PARADO, outcome: "won" } });
+    const card = container.querySelector("[data-lead-id]") as HTMLElement;
+    expect(card.className).toContain("border-success/50");
+    expect(card.className).toContain("--success");
+  });
+
+  it("card perdido recebe borda e fundo vermelhos", () => {
+    const { container } = montar({ lead: { ...PARADO, outcome: "lost" } });
+    const card = container.querySelector("[data-lead-id]") as HTMLElement;
+    expect(card.className).toContain("border-destructive/50");
+    expect(card.className).toContain("--destructive");
+    expect(card.className).not.toContain("border-success");
+  });
+
+  it("o selo diz com palavra o que a cor diz — a cor sozinha não basta", () => {
+    montar({ lead: { ...PARADO, outcome: "won" } });
+    expect(screen.getByText("Ganho")).toBeInTheDocument();
+    cleanup();
+    montar({ lead: { ...PARADO, outcome: "lost" } });
+    expect(screen.getByText("Perdido")).toBeInTheDocument();
+  });
+
+  it("negócio encerrado não aparece como parado", () => {
+    montar({ lead: { ...PARADO, outcome: "won" } });
+    expect(screen.queryByText(/d parado/)).toBeNull();
+    cleanup();
+    montar({ lead: { ...PARADO, outcome: "lost" } });
+    expect(screen.queryByText(/d parado/)).toBeNull();
+  });
+
+  it("card aberto não muda: sem cor, sem selo, e segue avisando que está parado", () => {
+    const { container } = montar({ lead: PARADO });
+    const card = container.querySelector("[data-lead-id]") as HTMLElement;
+    expect(card.className).not.toContain("border-success");
+    expect(card.className).not.toContain("border-destructive");
+    expect(screen.queryByText("Ganho")).toBeNull();
+    expect(screen.queryByText("Perdido")).toBeNull();
+    expect(screen.getByText("10d parado")).toBeInTheDocument();
   });
 });
