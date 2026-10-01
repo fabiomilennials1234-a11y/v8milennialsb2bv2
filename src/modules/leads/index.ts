@@ -60,6 +60,7 @@ export {
   useMoveLeadInStandardPipe,
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
+export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
 export type {
   StandardPipelineStatus,
   CustomPipelineStatus,

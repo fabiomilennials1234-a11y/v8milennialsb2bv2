@@ -6,7 +6,7 @@
  * `useLeadAllPipelines` (standard + custom); os rótulos de funis de sistema vêm
  * de `usePipelineDisplayConfig` (customizável por org — grill 2026-07-27).
  */
-import type { PipelineStatus } from "@/modules/leads";
+import { funisSemNegocioAberto, type PipelineStatus } from "@/modules/leads";
 
 export interface FunnelStageView {
   key: string;
@@ -16,7 +16,7 @@ export interface FunnelStageView {
   role: string | null;
 }
 export interface FunnelCardRow {
-  /** Chave única de UI (pipeType p/ sistema, pipelineId p/ custom). */
+  /** Chave única de UI = o negócio (entryId): o lead pode ter N no mesmo funil. */
   key: string;
   /** pipeline_entries.id — alvo do move. */
   entryId: string;
@@ -55,9 +55,10 @@ export interface AddableFunnel {
 }
 
 /**
- * Funis em que o lead ainda NÃO está e que dá pra adicionar pelo chat: precisa
- * de pipeline_id resolvível (exclui upsell legacy) e ao menos uma etapa. Rótulo
- * de sistema vem do display config; custom usa o nome próprio.
+ * Funis em que o lead não tem negócio ABERTO e que dá pra adicionar pelo chat:
+ * precisa de pipeline_id resolvível (exclui upsell legacy) e ao menos uma
+ * etapa. Negócio fechado (ganho/perdido) não tranca o funil — é a recompra.
+ * Rótulo de sistema vem do display config; custom usa o nome próprio.
  */
 export function availableFunnelsToAdd(
   pipelines: PipelineStatus[],
@@ -66,12 +67,11 @@ export function availableFunnelsToAdd(
   const cfgByType = new Map(displayConfig.map((c) => [c.pipe_type, c]));
   const out: AddableFunnel[] = [];
 
-  for (const p of pipelines) {
+  for (const p of funisSemNegocioAberto(pipelines)) {
     const firstStageKey = p.stages[0]?.id;
     if (!firstStageKey) continue;
 
     if (p.type === "standard") {
-      if (p.pipeId) continue; // lead já está
       if (!p.pipelineDbId) continue; // upsell legacy — não adicionável
       // SCRUM-637: `pipeType` já é o pipe_type do display config (slug real).
       const cfg = cfgByType.get(p.pipeType);
@@ -83,7 +83,6 @@ export function availableFunnelsToAdd(
         firstStageKey,
       });
     } else {
-      if (p.entryId) continue; // lead já está
       out.push({
         pipelineId: p.pipelineId,
         label: p.pipelineName,
@@ -115,7 +114,7 @@ export function toFunnelRows(
       // errado. pipelineDbId null marca esses; fora do card.
       if (!p.pipelineDbId) continue;
       rows.push({
-        key: p.pipeType,
+        key: p.pipeId,
         entryId: p.pipeId,
         label: labelByType.get(p.pipeType) ?? p.label,
         color: p.color,
@@ -125,7 +124,7 @@ export function toFunnelRows(
     } else {
       if (!p.entryId) continue;
       rows.push({
-        key: p.pipelineId,
+        key: p.entryId,
         entryId: p.entryId,
         label: p.pipelineName,
         color: p.pipelineColor,

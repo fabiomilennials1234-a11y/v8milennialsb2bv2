@@ -38,7 +38,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {
 } }));
 vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org" }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: () => {} }));
-vi.mock("@/modules/leads", () => ({
+vi.mock("@/modules/leads", async () => ({
+  // Regra pura de "funil abrível" — a real, não um dublê.
+  ...(await import("@/modules/leads/lib/negocio-aberto")),
   useLeadActionGates: () => ({ canMoveMeeting: { allowed: state.allowed }, canAddToPipe: { allowed: state.allowed } }),
   useLeadAllPipelines: () => ({ data: [state.system ? {
     type: "standard", pipeType: "whatsapp", pipelineDbId: "pipeline", label: "Envase", color: "#ffaa00",
