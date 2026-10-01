@@ -52,6 +52,15 @@ export interface DealCardStage {
   nome: string;
   /** Etapa terminal — desenha diferente e encerra a trilha. */
   papel: "aberto" | "ganho" | "perdido";
+  /**
+   * Terminal para o BANCO (`stage_role` + `is_final_*`), que é o que
+   * `editar_valor_proposta` consulta. Só decide o bloco de valor — a régua
+   * segue em `papel`. "reuniao-final" é etapa de reunião com
+   * `is_final_positive`: o banco recusa valor manual e não é venda. Quem
+   * calcula é `terminalDaEtapa` (`acao-do-valor.ts`). Ausente (fixture,
+   * preview) cai para `papel`.
+   */
+  terminal?: "ganho" | "perdido" | "reuniao-final" | null;
 }
 
 export interface DealCardMove {

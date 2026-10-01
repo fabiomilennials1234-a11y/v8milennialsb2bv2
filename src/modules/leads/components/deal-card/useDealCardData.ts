@@ -13,6 +13,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { montarReuniaoDoNegocio } from "./reuniao-do-negocio";
 import type { DealCardData, DealCardMove, DealCardStage } from "./types";
+import { terminalDaEtapa } from "./acao-do-valor";
 
 /**
  * Liga o Card do Negócio aos dados reais.
@@ -116,7 +117,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           .from("pipeline_stages")
           // `stage_key` entra para a régua conseguir casar a etapa: é o
           // slug que os gatilhos gravam em `pipeline_entries.stage_key`.
-          .select("id, stage_key, name, stage_role, position")
+          .select("id, stage_key, name, stage_role, is_final_positive, is_final_negative, position")
           .eq("pipeline_id", pipelineId)
           .eq("is_active", true)
           .order("position"),
@@ -282,6 +283,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       chaveEntry: String(e.stage_key ?? e.id),
       nome: String(e.name ?? ""),
       papel: papelDaEtapa(e.stage_role),
+      terminal: terminalDaEtapa(e.stage_role, e.is_final_positive, e.is_final_negative),
     }));
 
     // Pela chave de LEITURA: é `to_stage_key` que chega aqui, não o uuid.
