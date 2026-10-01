@@ -25,6 +25,16 @@ o front pode ir para prod em qualquer ponto da pilha.
 
 ## 1. Ações humanas no Sentry (bloqueiam a validação da S6)
 
+**Feito em 2026-10-01** (conferido pela API da própria conta): org `torquecrm` na região **EU**
+(`de.sentry.io`); projetos `torque-web` (React), `torque-edge` (Deno) e `torque-qa` (React);
+na org: Data Scrubber + Default Scrubbers + Prevent Storing of IP **exigidos** para todos os
+projetos, Enhanced Privacy ligado, Allow Shared Issues desligado; Sensitive Fields
+`telefone, phone, celular, whatsapp, cpf, cnpj, email`; Safe Fields `session_id, request_id,
+reference` (o scrubber padrão não pode apagar os ids de correlação); rate limit 200/h nas
+chaves de `torque-web` e `torque-edge`; `torque-web` só aceita `torquecrm.com.br` e
+`*.torquecrm.com.br`. **Pendentes:** token `org:ci` (item 6, no dia do go-live, direto no
+EasyPanel), regras de alerta (item 7), 2FA obrigatório na org (recomendado).
+
 O token de upload **nunca** passa pelo chat: vai direto no EasyPanel. O DSN pode passar
 (é público por desenho, vai no bundle).
 
