@@ -9,6 +9,7 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger, hasActiveWorkflowsForTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation, reactivateSystemDisabledContact } from "../_shared/copilot/cancellation.ts";
+import { canDeliverHandoffAck } from "../_shared/copilot/handoff-receipt.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -419,6 +420,15 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       // continuam bloqueando. Nada é religado proativamente — só quando o lead
       // escreve. Ver reactivateSystemDisabledContact / systemDisabled.
       if (initialCancel.systemDisabled) {
+        // A handoff is intentional, even when no human user set the phone flag.
+        const latestConversation = await supabase.from("conversations").select("state")
+          .eq("organization_id", organizationId).eq("lead_id", lead.id)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (latestConversation.error || latestConversation.data?.state === "WAITING_HUMAN") {
+          return new Response(JSON.stringify({ skipped: true, reason: "waiting_human", lead_id: lead.id }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         await reactivateSystemDisabledContact(supabase, organizationId, from, lead.id);
         console.log('[agent-message] Reativado contato (bulk sistema) no inbound:', lead.id);
         // não retorna — cai no fluxo normal e responde
@@ -508,7 +518,7 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // Se cancelado, retornamos skipped e NÃO entregamos a resposta — caller
     // (sz-chat-webhook etc) não dispara sendSzChatResponse.
     const cancelCheck = await isCopilotCanceled(supabase, organizationId, from);
-    if (cancelCheck.canceled) {
+    if (cancelCheck.canceled && !(await canDeliverHandoffAck(supabase, organizationId, from, (response as any).handoff_receipt))) {
       console.log('[agent-message] Canceled mid-LLM — skipping delivery for lead:', lead.id);
       const evalMeta = (response as any)._eval_meta;
 
@@ -593,7 +603,9 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
 
     // 5.5. POST-LLM ABSORB LOOP — pick up messages that arrived during LLM processing
     try {
-      const { iterations, messagesProcessed } = await absorbPendingMessages({
+      const { iterations, messagesProcessed } = (response as any).handoff_receipt
+        ? { iterations: 0, messagesProcessed: 0 }
+        : await absorbPendingMessages({
         supabase,
         engine,
         leadId: lead.id,

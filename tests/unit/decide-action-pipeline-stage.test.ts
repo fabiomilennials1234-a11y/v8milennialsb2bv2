@@ -114,6 +114,13 @@ function entry(pipelineId: string, stage: { id: string; stage_key: string }, id 
 }
 
 describe("enqueuePipelineStageUpdate", () => {
+  it("does not advance by turn count when the agent requires explicit stage tools", async () => {
+    pipeEntries[CUSTOM_PIPE_ID] = entry(CUSTOM_PIPE_ID, CUSTOM_STAGES[1]);
+    await enqueuePipelineStageUpdate(supabaseComEtapas(), ORG, LEAD, 2, null, {
+      ...capsComRegraCustom, context_config: { stage_movement_mode: "explicit" },
+    });
+    expect(enqueued).toHaveLength(0);
+  });
   beforeEach(() => {
     enqueued.length = 0;
     for (const k of Object.keys(pipeEntries)) delete pipeEntries[k];

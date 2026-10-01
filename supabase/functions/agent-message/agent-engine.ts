@@ -66,6 +66,8 @@ import {
   getConversationHistory as getConversationHistoryExternal,
 } from "./engine/history.ts";
 import { extractConversationContext } from "../_shared/copilot/context-extractor.ts";
+import { INLINE_CRM_TOOLS, runInlineCrmTools, type HandoffReceipt } from "./engine/inline-crm-tools.ts";
+import { summaryConfirmationGate } from "./engine/summary-confirmation.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -218,7 +220,9 @@ export class AgentEngine {
       this.retrieveSemanticContext(userMessage, capabilities.id),
       this.retrieveLongTermMemories(userMessage, leadId),
       this.loadOrgCustomFields(),
-      capabilities.can_qualify_lead ? this.loadPipelineStages() : Promise.resolve([]),
+      // Movement needs the real funnel stages even when qualification is disabled.
+      (capabilities.can_qualify_lead || (capabilities.can_move_stage ?? capabilities.can_move_cards))
+        ? this.loadPipelineStages() : Promise.resolve([]),
       this.loadProductCatalog(),
     ]);
 
@@ -331,7 +335,7 @@ export class AgentEngine {
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
-    const tools = await buildDynamicToolsExternal({
+    let tools = await buildDynamicToolsExternal({
       supabase: this.supabase,
       organizationId: this.organizationId,
       capabilities,
@@ -349,6 +353,13 @@ export class AgentEngine {
       conversationId: conversation.id,
     });
     console.log('[AgentEngine] History messages count:', historyMessages.length);
+    if (capabilities.context_config?.require_summary_confirmation === true) {
+      const gate = summaryConfirmationGate(userMessage, historyMessages);
+      if (!gate.confirmed) {
+        tools = tools.filter(tool => !INLINE_CRM_TOOLS.has(tool.name) ||
+          (tool.name === 'transfer_to_human' && gate.humanRequested));
+      }
+    }
     
     // Garantir que a mensagem atual do usuário está incluída
     // (pode não estar no histórico se foi criada agora)
@@ -371,6 +382,7 @@ export class AgentEngine {
     let finalNextState = conversation.state;
     let finalAction: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
     let finalAssistantMessage = '';
+    let handoffReceipt: HandoffReceipt | undefined;
     // Tool-calls extras do MESMO turno (além da ação principal). Só ações de
     // mídia são seguras de executar em paralelo (idempotentes); as demais
     // continuam descartadas de propósito (evita qualify/advance/transfer duplos).
@@ -430,6 +442,35 @@ export class AgentEngine {
       telemetry.finish_reasons.push(finishReason);
       if (!choice?.message?.content) telemetry.content_null_turns += 1;
       if (finishReason === 'length') telemetry.truncated = true;
+
+      const crmCalls = choice?.message?.tool_calls;
+      if (capabilities.context_config?.crm_actions_inline === true &&
+          crmCalls?.some((call: any) => INLINE_CRM_TOOLS.has(call.function?.name))) {
+        const outcome = await runInlineCrmTools({
+          supabase: this.supabase, organizationId: this.organizationId, leadId,
+          conversationId: conversation.id, calls: crmCalls,
+          availableTools: tools.map((tool: any) => tool.name),
+          primaryPipeline: funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
+          notifyPhones: capabilities.handoff_notify_phones,
+        });
+        telemetry.tools_called.push(...crmCalls.map((call: any) => `INLINE:${call.function.name}`));
+        multiTurnMessages.push({ role: 'assistant', content: null, tool_calls: crmCalls });
+        for (const result of outcome.results) multiTurnMessages.push({
+          role: 'tool', tool_call_id: result.tool_call_id, content: JSON.stringify(result.result),
+        });
+        handoffReceipt = outcome.receipt;
+        if (outcome.handedOff) finalNextState = 'WAITING_HUMAN';
+        if (outcome.failed) {
+          finalAssistantMessage = 'Não consegui concluir todas as etapas do encaminhamento. O atendimento precisa de revisão pela equipe.';
+          break;
+        }
+        if (outcome.handedOff) {
+          finalAssistantMessage = capabilities.context_config?.handoff_message ||
+            'Pronto! Encaminhei seu atendimento para a equipe, que continuará por aqui.';
+          break;
+        }
+        continue;
+      }
 
       const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } =
         processLLMResponseExternal(response, conversation, this.organizationId);
@@ -717,7 +758,7 @@ export class AgentEngine {
       );
     };
 
-    if (await isRecentDuplicate(cleanMessage)) {
+    if (!handoffReceipt && await isRecentDuplicate(cleanMessage)) {
       console.warn('[AgentEngine] Duplicate AI response detected — regenerating (anti-repeat) for lead:', leadId);
       telemetry.duplicate_regenerated = true;
       const applyHandoffFallback = () => {
@@ -1002,6 +1043,7 @@ export class AgentEngine {
       state: nextState,
       action_executed: actionToExecute?.action,
       execution_result: executionResult,
+      handoff_receipt: handoffReceipt,
       // Metadados para LLM-as-a-judge (#8) — usados em fire-and-forget pelo caller
       _eval_meta: {
         conversationId: conversation.id,

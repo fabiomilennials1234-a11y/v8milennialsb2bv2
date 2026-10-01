@@ -94,23 +94,25 @@ export async function executeUpdateLead(
   }
 
   if (Object.keys(leadUpdates).length > 0) {
-    await supabase
+    const { error } = await supabase
       .from("leads")
       .update(leadUpdates)
       .eq("id", lead_id)
       .eq("organization_id", tenantId);
+    if (error) return { success: false, error: error.message };
   }
   if (notesToAppend.length > 0) {
     const newNotes = notesToAppend.join("\n");
     const updatedNotes = lead.notes ? `${lead.notes}\n\n${newNotes}` : newNotes;
-    await supabase
+    const { error } = await supabase
       .from("leads")
       .update({ notes: sanitizeString(updatedNotes, 5000) ?? updatedNotes })
       .eq("id", lead_id)
       .eq("organization_id", tenantId);
+    if (error) return { success: false, error: error.message };
   }
   for (const cf of customFieldUpdates) {
-    await supabase.from("lead_custom_field_values").upsert(
+    const { error } = await supabase.from("lead_custom_field_values").upsert(
       {
         lead_id,
         field_id: cf.field_id,
@@ -119,6 +121,7 @@ export async function executeUpdateLead(
       },
       { onConflict: "lead_id,field_id" },
     );
+    if (error) return { success: false, error: error.message };
   }
 
   return { success: true, message: "Lead atualizado", data: { lead_id } };

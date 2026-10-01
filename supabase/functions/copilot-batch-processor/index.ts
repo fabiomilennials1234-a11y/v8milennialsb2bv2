@@ -25,6 +25,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { canDeliverHandoffAck } from "../_shared/copilot/handoff-receipt.ts";
 import { montarPayloadDoAgente } from "../_shared/copilot-batch-payload.ts";
 import { recordQuotePresentation, type QuotePresentation } from "../_shared/quotes/presentation.ts";
 import {
@@ -171,6 +172,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     // --- Gera resposta via agent-message (normal mode) ---
     const agentMessageUrl = `${supabaseUrl}/functions/v1/agent-message`;
     let parts: string[] = [];
+    let handoffReceipt: { conversation_id: string; paused_at: string } | undefined;
     let presentation: QuotePresentation | undefined;
     try {
       const resp = await fetch(agentMessageUrl, {
@@ -206,6 +208,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       }
       parts = data.messages ?? (data.message ? [data.message] : []);
       presentation = data.quote_presentation;
+      handoffReceipt = data.handoff_receipt;
     } catch (e) {
       await applyOutcome({ kind: "transient_error", error: e instanceof Error ? e.message : String(e) });
       return json({ ok: false, reason: "agent_message_exception" }, 200);
@@ -242,9 +245,9 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
 
       const recheck = await isCopilotCanceled(supabase, orgId, phone);
-      if (recheck.canceled) { canceledMid = true; break; }
+      if (recheck.canceled && !(i === 0 && parts.length === 1 && await canDeliverHandoffAck(supabase, orgId, phone, handoffReceipt))) { canceledMid = true; break; }
 
-      const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot", idempotencyKey: presentation ? `quote-summary:${presentation.message_id}:${i}` : undefined });
+      const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot", idempotencyKey: handoffReceipt ? `handoff-ack:${handoffReceipt.conversation_id}:${handoffReceipt.paused_at}` : presentation ? `quote-summary:${presentation.message_id}:${i}` : undefined });
       const msgId = sendResult.messageId
         ?? `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       summaryAccepted &&= sendResult.success && Boolean(sendResult.messageId);

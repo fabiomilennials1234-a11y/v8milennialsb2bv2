@@ -32,6 +32,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { authorFromWebhookEcho } from "../_shared/message-authorship.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { canDeliverHandoffAck } from "../_shared/copilot/handoff-receipt.ts";
 import {
   downloadAndPersistMedia,
   enqueueMediaJob,
@@ -808,7 +809,9 @@ export async function triggerReactions(
             persisted.organization_id,
             persisted.phone_number,
           );
-          if (cancelCheck.canceled) {
+          if (cancelCheck.canceled && !(i === 0 && parts.length === 1 && await canDeliverHandoffAck(
+            supabase, persisted.organization_id, persisted.phone_number, agentData.handoff_receipt,
+          ))) {
             canceledMidDelivery = true;
             logCopilotCancellation({
               organizationId: persisted.organization_id,
@@ -830,7 +833,7 @@ export async function triggerReactions(
               trackSource: "copilot",
               // idk só multi-chunk: chunks distintos da MESMA reply não colidem
               // no dedup por conteúdo. Single-chunk sem idk → pega loop. #1156.
-              idempotencyKey: agentData.quote_presentation ? `quote-summary:${agentData.quote_presentation.message_id}:${i}` : parts.length > 1 ? `wh:${dedupNonce}:${i}` : undefined,
+              idempotencyKey: agentData.handoff_receipt ? `handoff-ack:${agentData.handoff_receipt.conversation_id}:${agentData.handoff_receipt.paused_at}` : agentData.quote_presentation ? `quote-summary:${agentData.quote_presentation.message_id}:${i}` : parts.length > 1 ? `wh:${dedupNonce}:${i}` : undefined,
             },
           );
 

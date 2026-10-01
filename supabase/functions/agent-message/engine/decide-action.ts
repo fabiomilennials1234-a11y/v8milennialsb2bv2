@@ -394,6 +394,7 @@ export async function enqueuePipelineStageUpdate(
 ): Promise<void> {
   try {
     // advance_stage será enfileirado como tool call — não duplicar
+    if (capabilities?.context_config?.stage_movement_mode === "explicit") return;
     if (actionToExecute?.action === "ADVANCE_STAGE") {
       return;
     }
