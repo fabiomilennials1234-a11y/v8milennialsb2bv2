@@ -57,6 +57,7 @@ vi.mock("@/modules/leads", () => ({
     cardsRenderizados.push(props.lead);
     return h("div", { "data-testid": "card" }, String(props.lead.name));
   },
+  CardEffectsHost: () => null,
 }));
 
 vi.mock("@/modules/pipelines/components/kanban/ExportStageDialog", () => ({
@@ -91,6 +92,9 @@ vi.mock("@/modules/workflows/hooks/useStageWorkflows", () => ({
 vi.mock("@/modules/identity", () => ({ useCanDo: () => ({ allowed: true }) }));
 vi.mock("@/shared/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
+    // `selectedIds` é o que o board lê desde 5e7cb4350 (mover selecionados);
+    // sem ele o board nem monta.
+    selectedIds: new Set<string>(),
     isSelected: () => false,
     toggle: vi.fn(),
     clear: vi.fn(),
@@ -230,6 +234,29 @@ describe("O board do funil leva a reunião ao card", () => {
     const card = montarBoard([entrada()], [etapa({ stage_role: null })]);
 
     expect(card.stageRole).toBeNull();
+  });
+
+  // ADR-0023 Emenda 2: ganho é o desfecho do NEGÓCIO, que get_pipeline_page
+  // projeta em `metadata.deal_outcome` — não a coluna em que o card está.
+  it("negócio ganho chega ganho ao card, fora de etapa de ganho", () => {
+    const card = montarBoard([entrada({ metadata: { deal_outcome: "won" } })]);
+
+    expect(card.outcome).toBe("won");
+  });
+
+  it("negócio perdido chega perdido ao card, fora de etapa de perda", () => {
+    const card = montarBoard([entrada({ metadata: { deal_outcome: "lost" } })]);
+
+    expect(card.outcome).toBe("lost");
+  });
+
+  it("negócio reaberto parado na etapa de ganho não chega ganho", () => {
+    const card = montarBoard(
+      [entrada({ metadata: { deal_outcome: "open" } })],
+      [etapa({ stage_role: "won" })],
+    );
+
+    expect(card.outcome).toBeNull();
   });
 });
 

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+import { prepararDissolucao } from "../../lib/card-effects";
 
 /**
  * Excluir o NEGÓCIO — o card, não a pessoa.
@@ -128,6 +129,9 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
       const { entryId, leadId, ehSystem } = negocio;
 
       setExcluindo(true);
+      // Cópia do card ANTES do DELETE: depois, o refetch pode já tê-lo tirado
+      // da tela. Só vira poeira se a exclusão der certo.
+      const poeira = prepararDissolucao([entryId]);
       try {
         if (!organizationId) {
           throw new Error("Organização ativa não encontrada");
@@ -187,6 +191,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
           tier: 1,
         });
 
+        poeira.dissolver();
         invalidar(qc, leadId);
         toast.success("Negócio excluído. O lead continua na base.");
         return "excluido";

@@ -78,6 +78,7 @@ import {
   LeadModal,
   useBatchedLeadMetrics,
   useDeleteAllLeadsInPipe,
+  prepararDissolucao,
 } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
@@ -555,12 +556,15 @@ function FunilPageInner() {
 
   const handleRemoveEntry = async () => {
     if (!removeEntryId || !pipeline) return;
+    // Cópia do card antes de remover: vira poeira só se a remoção der certo.
+    const poeira = prepararDissolucao([removeEntryId]);
     try {
       if (ehCustom) {
         await removeLead.mutateAsync({ entry_id: removeEntryId, pipeline_id: pipeline.id });
       } else {
         await deleteEntry.mutateAsync(removeEntryId);
       }
+      poeira.dissolver();
       toast.success("Lead removido do funil");
       setRemoveEntryId(null);
     } catch (e) {
