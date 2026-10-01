@@ -153,8 +153,11 @@ export default defineConfig(({ mode }) => {
         drop: ['console', 'debugger'],
       },
     }),
-    // Source maps em produção para stack traces legíveis, em dev para debugging
-    sourcemap: true,
+    // `hidden`: o map é gerado, mas o bundle não aponta para ele (sem
+    // `//# sourceMappingURL`). Ele existe para ser enviado ao Sentry e nunca é
+    // servido — o Dockerfile o apaga da imagem do nginx. Com `true`, o código-fonte
+    // inteiro ficava público em /assets/*.js.map. Ver docs/adr/0038.
+    sourcemap: 'hidden',
     // Dividir chunks para melhor cache
     rollupOptions: {
       output: {
