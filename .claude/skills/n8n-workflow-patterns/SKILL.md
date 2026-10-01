@@ -1,6 +1,6 @@
 ---
 name: n8n-workflow-patterns
-description: Patterns and best practices for building n8n workflows — Trello ingestion, data transformation, conditional routing, error handling, and retry logic. Used by agent-automation.
+description: Patterns and best practices for building n8n workflows — Trello ingestion, data transformation, conditional routing, error handling, and retry logic.
 ---
 
 # n8n Workflow Patterns — Torque CRM

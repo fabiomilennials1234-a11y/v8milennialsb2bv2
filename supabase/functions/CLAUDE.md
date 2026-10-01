@@ -235,7 +235,15 @@ fluxo. Ver `docs/operations/toth-preorder-processing.md` antes de ativar.
 | `retry-dead-letter-jobs` | pg_cron | x-cron-secret |
 | `webhook-send-test` | UI — **USADO** por `WebhookSettings.tsx:197` (teste de webhook do usuário) | JWT |
 
-## Para subagent que tocar uma função
+## Contrato do lead-webhook
+
+```json
+{"source":"meta_ads","organization_id":"uuid","fields":{"name":"...","phone":"...","email":"...","company":"..."},"tags":["Ouro"],"place_in_pipe":{"pipe":"vendas","stage":"novo"},"assigned_user_id":"uuid","update_existing_if_match":true}
+```
+
+Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive. `place_in_pipe.pipe` aceita id (uuid) ou slug de qualquer funil da org; funil inexistente → 4xx (D6). Sem `place_in_pipe`, o lead entra no funil padrão da org (`default_pipeline_id`).
+
+## Para agente que tocar uma função
 
 1. Identifique o BC dono na tabela acima
 2. Compartilhe via `supabase/functions/_shared/<bc>/<modulo>.ts` quando código for usado por 2+ funções do mesmo BC
@@ -271,7 +279,7 @@ Não escopo desta slice. Documentar quando virar projeto.
   - `supabase/functions/whatsapp-webhook/CLAUDE.md`
   - `supabase/functions/_shared/CLAUDE.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md` slice 15
-- Padrão edge function: ver `CLAUDE.md` raiz (Deno.serve + withErrorBoundary + withSecurityHeaders + getCorsHeaders + OPTIONS early return)
+- Padrão edge function: `Deno.serve(withErrorBoundary('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. O boundary devolve 500 **com CORS** — nunca remova o wrapper.
 
 ## Agendamento canônico — 2026-09-14
 

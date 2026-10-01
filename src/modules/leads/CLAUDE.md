@@ -143,7 +143,7 @@ Comparação rápida (slice 4 — não-resolvida, vai pra slice 15):
 | `place_in_campaign` | Sim — distribuição round-robin via `campaign-distribution` | (verificar) |
 | `update_existing_if_match` | Sim — match por phone/email | Sim — match por phone/email/name + day boundary |
 | Triggers downstream | `enqueueWebhookDeliveries` (workflow + n8n) | `fireTrigger` direto |
-| Documentação | `README.md` no diretório, mencionado em `CLAUDE.md` raiz | Sem README |
+| Documentação | `README.md` no diretório + contrato em `supabase/functions/CLAUDE.md` | Sem README |
 
 **Recomendação para slice 15**: `lead-webhook` é o canônico (é o documentado, integrado a n8n e usado pelos 20+ workflows Trello→V8). `webhook-new-lead` parece um experimento/fork com auth mais nova mas menos completo. Caminhos:
 1. **Consolidar features** (`validateApiKey` + helpers de validação) em `lead-webhook` e deprecar `webhook-new-lead` (rota `/webhook-new-lead` continua respondendo com 301 ou 200 por 90 dias).

@@ -1,6 +1,6 @@
 ---
 name: n8n-code-javascript
-description: Reference for writing JavaScript Code nodes in n8n — syntax, expressions, built-in variables, data manipulation, and common pitfalls. Used by agent-automation.
+description: Reference for writing JavaScript Code nodes in n8n — syntax, expressions, built-in variables, data manipulation, and common pitfalls.
 ---
 
 # n8n Code Nodes — JavaScript Reference

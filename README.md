@@ -37,8 +37,7 @@ TanStack Query v5 · Supabase (Postgres + Auth + Edge Functions + Realtime
 | Audiência | Doc |
 |---|---|
 | **Devs humanos** | Este README + [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
-| **Agentes IA (Claude Code)** | [`CLAUDE.md`](./CLAUDE.md) |
-| **Agentes IA (agnostic)** | [`AGENTS.md`](./AGENTS.md) |
+| **Agentes IA** | `CLAUDE.md` por módulo (`src/modules/<bc>/`, `supabase/*`) + [`docs/agents/`](./docs/agents/) |
 | **LLM crawlers** | [`llms.txt`](./llms.txt) |
 | **Vault profundo** | [`Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/00%20—%20INDEX.md) |
 | **Arquitetura visual** | [`docs/architecture/`](./docs/architecture/) (C4 mermaid) |
@@ -60,18 +59,16 @@ no vault — setup completo em ~90min.
 
 Frontend: push `main` → Docker → EasyPanel (VPS Hostinger).
 Edge functions: `supabase functions deploy <fn> --project-ref <ref>`.
-Migrations: `supabase db push --linked --project-ref <ref>`.
+Migrations: só via `scripts/db-push-branch.sh` (recusa prod e checkout linkado) —
+ver [`supabase/migrations/CLAUDE.md`](./supabase/migrations/CLAUDE.md).
 
 Project ref: `jsjsmuncfkbsbzqzqhfq` (prod). O projeto dev foi **aposentado** em
-2026-07-22 — validação agora é em branch efêmera do Supabase a partir de prod.
-Ver `CLAUDE.md` § Ambientes (há um bloqueio ativo: o baseline das migrations é
-pré-requisito).
+2026-07-22 — validação é em branch efêmera do Supabase a partir de prod
+([runbook](./.specs/project/runbook-validacao-local.md)).
 
 ## Time
 
-CTO Gabriel + 1 dev junior + 3 subagentes Claude Code
-(`arquiteto`, `design`, `engenheiro`) — ver
-[`Obsidian/.../01 — Identidade/Subagentes.md`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/01%20—%20Identidade/Subagentes.md).
+CTO Gabriel + 1 dev junior + agentes Claude Code.
 
 ## Licença
 

@@ -138,15 +138,20 @@ Divergiu, é drift: registre no PR e **não reaplique achando que falta**.
 
 ## Apply
 
+**Nunca `supabase db push` na mão, nunca checkout linkado.** Toda escrita passa por
+`scripts/db-push-branch.sh` — recusa o ref de prod, recusa o dev aposentado
+(`bcfadphgsibjzivtbjvc`), recusa checkout linkado, roda `--dry-run` e exige
+confirmação batendo com o ref da URL.
+
 ```bash
-# Prod — SÓ COM AUTORIZAÇÃO CTO
-supabase db push --linked --project-ref jsjsmuncfkbsbzqzqhfq
+scripts/db-push-branch.sh --db-url "postgresql://…<ref-da-branch>…"
 ```
 
-Dev foi **aposentado** em 2026-07-22. O alvo de validação é branch efêmera a partir
-de prod — hoje **bloqueada** até o baseline das migrations. Ver `CLAUDE.md` raiz
-§ Ambientes. Sem ambiente, mudança de risco vai pra prod com rollback capturado e
-testado ANTES da escrita, e baseline medido no alvo.
+Validação = branch efêmera de prod, criada e encerrada na mesma sessão. Passo a
+passo e classes de drift do ledger: `.specs/project/runbook-validacao-local.md`.
+
+**Prod é botão do humano** — ver
+[`05 — How-to/aplicar-migration-prod`](../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/05%20—%20How-to/aplicar-migration-prod.md).
 
 ## Regen types após apply
 
@@ -161,7 +166,7 @@ supabase gen types typescript --project-id <ref> > src/integrations/supabase/typ
 ```bash
 supabase migration new revert_<slug>
 # Editar arquivo gerado com DROP/ALTER reverso
-supabase db push --linked --project-ref <ref>
+# Aplicar pelo mesmo caminho da seção Apply (scripts/db-push-branch.sh)
 ```
 
 ## Testes RLS — obrigatório

@@ -2,8 +2,8 @@
 
 > SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas
 > e automações com IA. React + Supabase + Edge Functions. ~30 organizações
-> ativas. ICP: fábricas e distribuidoras B2B. Time: CTO + 1 dev junior + 3
-> subagentes Claude Code. Domínio: torquecrm.com.br.
+> ativas. ICP: fábricas e distribuidoras B2B. Time: CTO + 1 dev junior +
+> agentes Claude Code. Domínio: torquecrm.com.br.
 
 Important notes:
 - Repositório privado. Acesso restrito.
@@ -17,8 +17,8 @@ Important notes:
 ## Docs
 
 - [README](README.md): overview humano + quick start
-- [CLAUDE.md](CLAUDE.md): spec Claude Code (subagentes + áreas frágeis)
-- [AGENTS.md](AGENTS.md): spec agent-agnostic
+- [CONTEXT.md](CONTEXT.md): glossário de domínio
+- [docs/agents/](docs/agents/domain.md): como agentes consomem a doc de domínio
 - [CONTRIBUTING.md](CONTRIBUTING.md): branch/commit/PR + protocolo vault
 - [MASTER-ROADMAP-WORLD-CLASS.md](docs/MASTER-ROADMAP-WORLD-CLASS.md): 7 waves, 47 gaps. Ler ANTES de remover arquivo — distingue andaime de wave futura de resíduo morto
 
@@ -28,7 +28,6 @@ Important notes:
 - [Módulos](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Modulos.md): 14 bounded contexts pós-modularização (slices 1-16)
 - [Multi-tenancy](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Multi-tenancy.md): shared schema + RLS isolation
 - [Áreas Frágeis](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Areas Frageis.md): onde sangra (Copilot, WhatsApp, Permissões)
-- [Subagentes](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/01 — Identidade/Subagentes.md): pipeline arquiteto → design/engenheiro → arquiteto
 
 ## Bounded contexts (sub-CLAUDE.md por módulo)
 
@@ -71,14 +70,13 @@ Important notes:
 
 - [ADR Refactor Agent Engine](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-04-27-refactor-agent-engine-modular.md)
 - [ADR Meeting Date Sync](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-04-30-meeting-date-sync.md)
-- [ADR Consolidação Subagentes 10→3](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-05-15-consolidacao-subagentes.md)
 
 ## Tutorials
 
 - [Onboarding Dev](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/01-onboarding-dev.md): setup completo ~90min
 - [Primeiro PR](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/02-primeiro-PR.md): convenções na prática ~45min
 - [Tour do Vault](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/03-tour-vault.md): Diátaxis + frontmatter + wikilinks
-- [Trabalhando com Claude](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/04-trabalhando-com-claude.md): subagentes + JIT context
+- [Trabalhando com Claude](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/04-trabalhando-com-claude.md): JIT context
 
 ## Optional
 

@@ -7,8 +7,8 @@ Valor histórico, **não operacional**. Nada aqui é referenciado por código vi
 (verificado via `git grep`). SQL aqui são patches pontuais antigos — migrations
 reais vivem em `supabase/migrations/`.
 
-Para contexto operacional atual: `CLAUDE.md`, `AGENTS.md`, `llms.txt`, `CONTEXT.md`
-no root, e o vault Obsidian.
+Para contexto operacional atual: `llms.txt` e `CONTEXT.md` no root, os `CLAUDE.md`
+de cada módulo e o vault Obsidian.
 
 ## sql/
 
