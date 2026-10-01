@@ -8,7 +8,9 @@
  * without which the caller's browser reports a CORS failure and the real error
  * is lost.
  *
- * Observability now lives in `runtime_logs` (see `logger.ts#logRuntime`).
+ * Observability now lives in `runtime_logs` (see `logger.ts#logRuntime`). Since
+ * ADR-0038 (S6) the unhandled exception also goes to Sentry — `sentry.ts` again,
+ * but now a reporter only, reached from here and only with `SENTRY_DSN_EDGE`.
  */
 
 import { getCorsHeaders } from "./cors.ts";
@@ -145,6 +147,22 @@ export function withErrorBoundary(
           sessionId: trace.sessionId,
           requestId,
           payloadSnapshot: { function: functionName, method: req.method },
+        });
+      } catch {
+        // Telemetria nunca muda a resposta.
+      }
+
+      // Sentry (ADR-0038, S6): só com `SENTRY_DSN_EDGE`. Import dinâmico pelo
+      // mesmo motivo do de cima e para o SDK não pesar no cold start de quem
+      // não quebrou. Não segura a resposta (`EdgeRuntime.waitUntil`).
+      try {
+        const { captureUnhandled } = await import("./sentry.ts");
+        await captureUnhandled(error, {
+          functionName,
+          requestId,
+          sessionId: trace.sessionId,
+          userId,
+          method: req.method,
         });
       } catch {
         // Telemetria nunca muda a resposta.
