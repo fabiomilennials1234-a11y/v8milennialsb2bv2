@@ -192,7 +192,11 @@ export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | n
   }
 
   const identity = getReportIdentity();
-  event.user = identity?.userId ? { id: identity.userId } : undefined;
+  // `ip_address: null` explícito: sem ele o Sentry não GUARDA o IP (a org
+  // proíbe), mas DEDUZ a cidade a partir dele antes de descartar — medido na
+  // validação, `user.geo: Florianópolis` num evento anônimo. Localização da
+  // pessoa não é dado de que precisamos para achar defeito.
+  event.user = identity?.userId ? { id: identity.userId, ip_address: null } : { ip_address: null };
   if (identity?.organizationId || identity?.role) {
     event.tags = {
       ...event.tags,
@@ -214,7 +218,7 @@ const RRWEB_CUSTOM_EVENT = 5;
  * snapshot de DOM não é varrido aqui (é grande, e varrer a cada mutação custaria
  * caro). O que sobra com dado: o `href` da página e os eventos custom.
  */
-export function scrubRecordingEvent<T>(event: T): T {
+export function scrubRecordingEvent<T>(event: T): T | null {
   if (typeof event !== "object" || event === null) return event;
   const { type, data } = event as { type?: unknown; data?: unknown };
   if (typeof data !== "object" || data === null) return event;
@@ -223,6 +227,16 @@ export function scrubRecordingEvent<T>(event: T): T {
     return typeof href === "string" ? { ...event, data: { ...data, href: scrubUrl(href) } } : event;
   }
   if (type !== RRWEB_CUSTOM_EVENT) return event;
+
+  // O replay monta os PRÓPRIOS rastros de clique a partir do DOM — não passam
+  // pelo `beforeBreadcrumb`. Medido na validação: o clique gravado saía com
+  // `[aria-label="Mostrar senha"]`; numa tela de lead seria o nome da pessoa.
+  // Mesma régua do rastro do evento; o que ele descarta (console), cai aqui.
+  const { tag, payload } = data as { tag?: unknown; payload?: unknown };
+  if (tag === "breadcrumb" && typeof payload === "object" && payload !== null) {
+    const crumb = scrubBreadcrumb(payload as Breadcrumb);
+    return crumb ? { ...event, data: { ...data, payload: crumb } } : null;
+  }
   return { ...event, data: scrubRecord(data as Record<string, unknown>) };
 }
 

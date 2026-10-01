@@ -40,7 +40,7 @@ export interface EdgeEvent {
   message?: string;
   exception?: { values?: Array<{ value?: string }> };
   request?: { url?: string; method?: string };
-  user?: { id?: string | number };
+  user?: { id?: string | number; ip_address?: string | null };
   extra?: unknown;
   server_name?: string;
 }
@@ -53,7 +53,8 @@ export function prepareEdgeEvent<T extends EdgeEvent>(event: T): T {
   }
   // Só o método: a URL pode ter segredo no path, e header/corpo não são nossos.
   if (e.request) e.request = e.request.method ? { method: e.request.method } : {};
-  if (e.user) e.user = e.user.id ? { id: e.user.id } : undefined;
+  // `ip_address: null`: sem isso o Sentry deduz a localização pelo IP da conexão.
+  e.user = e.user?.id ? { id: e.user.id, ip_address: null } : { ip_address: null };
   delete e.extra;
   delete e.server_name;
   return event;
@@ -125,7 +126,9 @@ export function captureUnhandled(error: unknown, context: UnhandledContext): Pro
       if (!Sentry) return;
       Sentry.withScope((scope) => {
         scope.setTags({
-          function: context.functionName,
+          // `function` é chave reservada no Sentry (busca da pilha) e o servidor
+          // dele descarta a tag — medido na validação. Por isso `edge_function`.
+          edge_function: context.functionName,
           request_id: context.requestId,
           ...(context.sessionId ? { session_id: context.sessionId } : {}),
         });

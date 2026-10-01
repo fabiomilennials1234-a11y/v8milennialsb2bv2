@@ -158,7 +158,7 @@ describe("prepareEvent", () => {
   it("usuário: só o UUID; organização e papel como tag", () => {
     setReportIdentity({ userId: "u-1", organizationId: "org-1", role: "admin" });
     const out = prepareEvent(event({ user: { id: "u-1", email: "a@b.com", ip_address: "1.2.3.4" } }), {});
-    expect(out?.user).toEqual({ id: "u-1" });
+    expect(out?.user).toEqual({ id: "u-1", ip_address: null });
     expect(out?.tags).toMatchObject({ organization_id: "org-1", role: "admin" });
   });
 
@@ -198,12 +198,30 @@ describe("scrubRecordingEvent", () => {
       timestamp: 1,
       data: { tag: "performanceSpan", payload: { op: "resource.fetch", description: "https://x/rest/v1/leads?phone=eq.5511987654321" } },
     });
-    expect(out.data.payload.description).toBe("https://x/rest/v1/leads");
+    expect(out?.data.payload.description).toBe("https://x/rest/v1/leads");
   });
 
   it("evento Meta leva o href da página — sem query nem segredo de path", () => {
     const out = scrubRecordingEvent({ type: 4, timestamp: 1, data: { href: "https://app/reset-password/abc?x=1", width: 1, height: 1 } });
-    expect(out.data).toEqual({ href: "https://app/reset-password/:token", width: 1, height: 1 });
+    expect(out?.data).toEqual({ href: "https://app/reset-password/:token", width: 1, height: 1 });
+  });
+
+  it("clique gravado pelo próprio replay perde o rótulo visível — não passa pelo beforeBreadcrumb", () => {
+    const out = scrubRecordingEvent({
+      type: 5,
+      timestamp: 1,
+      data: {
+        tag: "breadcrumb",
+        payload: { category: "ui.click", message: 'div > button.icon[aria-label="Excluir João Silva"][type="button"]' },
+      },
+    });
+    expect(out?.data.payload.message).toBe('div > button.icon[aria-label][type="button"]');
+  });
+
+  it("log de console gravado pelo replay é descartado", () => {
+    expect(
+      scrubRecordingEvent({ type: 5, timestamp: 1, data: { tag: "breadcrumb", payload: { category: "console", message: "lead" } } }),
+    ).toBeNull();
   });
 
   it("snapshot de DOM passa intocado — já sai mascarado e varrê-lo custaria caro", () => {

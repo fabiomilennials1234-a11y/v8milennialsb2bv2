@@ -17,7 +17,7 @@ Deno.test("prepareEdgeEvent: exceção mascarada, request só com o método (URL
   assertEquals(event.message, "falhou para j***@empresa.com.br");
   assertEquals(event.exception?.values?.[0].value, "duplicate key 5511*****4321");
   assertEquals(event.request, { method: "POST" });
-  assertEquals(event.user, { id: "u-1" });
+  assertEquals(event.user, { id: "u-1", ip_address: null });
   assertFalse("extra" in event);
   assertFalse("server_name" in event);
 });
