@@ -23,18 +23,21 @@ ARG VITE_INVITE_API_URL
 ARG VITE_META_APP_ID
 ARG VITE_META_WA_CONFIG_ID
 ARG VITE_APP_VERSION
-# Sentry (ADR-0038, S6). O DSN é público por desenho (vai no bundle); sem ele o
-# SDK nem chega ao navegador.
-ARG VITE_SENTRY_DSN
+# Sentry (ADR-0038, S6). O DSN é público por desenho (vai no bundle de qualquer
+# jeito), então o do projeto `torque-web` (org EU) é o padrão: a imagem de
+# produção nasce com o Sentry ligado sem depender de build arg no EasyPanel.
+# Para desligar, passe VITE_SENTRY_DSN vazio no build. O DSN só aceita eventos
+# de torquecrm.com.br (Allowed Domains) e tem teto de 200/h.
+ARG VITE_SENTRY_DSN=https://e85f15eeea72098a71636681f0574932@o4512181312946176.ingest.de.sentry.io/4512181365702736
 ARG VITE_SENTRY_ENVIRONMENT
 ARG VITE_SENTRY_REPLAY_ON_ERROR_RATE
 # Upload de source map. Só ARG, NUNCA ENV: vive só neste estágio, que não vai
 # para a imagem servida. Use token de ORGANIZAÇÃO (escopo org:ci — só sobe map e
 # cria release), nunca token pessoal. Sem token, o build segue sem upload.
 ARG SENTRY_AUTH_TOKEN
-ARG SENTRY_ORG
-ARG SENTRY_PROJECT
-ARG SENTRY_URL
+ARG SENTRY_ORG=torquecrm
+ARG SENTRY_PROJECT=torque-web
+ARG SENTRY_URL=https://de.sentry.io
 # Feature flags
 ARG VITE_CHAT_ONDA_2B=true
 ARG VITE_CHAT_BUBBLE=true
