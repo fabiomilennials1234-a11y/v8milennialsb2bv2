@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { PostgrestClient } from "@supabase/postgrest-js";
+import { toAppError } from "@/shared/errors/to-app-error";
 import { clearClientErrors, readClientErrors } from "../observability/client-error-buffer";
 import {
   SESSION_ID_HEADER,
@@ -203,5 +205,60 @@ describe("createTracedFetch — captura de falhas", () => {
     const base = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
     await createTracedFetch(base)(new Request("https://api.test/rest/v1/x", { method: "DELETE" }));
     expect(readClientErrors()[0].message).toContain("/rest/v1/x");
+  });
+});
+
+/**
+ * TORQUE-WEB-4: erro do PostgREST sem corpo chegava como `{ message: "" }` e o
+ * contrato classificava `unknown · sem mensagem`. Pela biblioteca real, não por
+ * dublê: é o postgrest-js que decide o que vira erro.
+ */
+describe("createTracedFetch — erro do PostgREST sem corpo", () => {
+  const URL_BASE = "https://api.test/rest/v1";
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    resetSessionIdForTests();
+    clearClientErrors();
+  });
+
+  function client(response: () => Response) {
+    return new PostgrestClient(URL_BASE, { fetch: createTracedFetch(vi.fn(async () => response())) });
+  }
+
+  it("HEAD com 503 vira erro com o status, e o contrato o classifica", async () => {
+    const { error } = await client(() => new Response(null, { status: 503 }))
+      .from("leads")
+      .select("*", { count: "exact", head: true });
+
+    expect(error).toMatchObject({ status: 503, message: "HTTP 503" });
+    expect(toAppError(error).code).toBe("server.unavailable");
+  });
+
+  it("GET com 504 vazio também leva o status", async () => {
+    const { error } = await client(() => new Response("", { status: 504 })).from("leads").select("id");
+    expect(toAppError(error).code).toBe("request.timeout");
+  });
+
+  it("404 vazio continua sendo 'nada', não erro", async () => {
+    const { error, status } = await client(() => new Response(null, { status: 404 }))
+      .from("leads")
+      .select("*", { count: "exact", head: true });
+    expect(error).toBeNull();
+    expect(status).toBe(204);
+  });
+
+  it("corpo do PostgREST passa intacto", async () => {
+    const body = { code: "42501", message: "permission denied for table leads", details: null, hint: null };
+    const { error } = await client(() => new Response(JSON.stringify(body), { status: 403 }))
+      .from("leads")
+      .select("id");
+    expect(error).toEqual(body);
+  });
+
+  it("fora do PostgREST não mexe na resposta", async () => {
+    const traced = createTracedFetch(vi.fn(async () => new Response("", { status: 500 })));
+    const res = await traced("https://api.test/functions/v1/agent-message");
+    await expect(res.text()).resolves.toBe("");
   });
 });

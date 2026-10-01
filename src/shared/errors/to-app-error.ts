@@ -225,7 +225,15 @@ function read(error: unknown): Reading {
   if ("code" in error && ("details" in error || "hint" in error)) {
     // `details` fica de fora de propósito: carrega o valor da linha
     // (`Key (phone)=(5511…) already exists`) — dado de lead, não orientação.
-    return { ...base, message, hint: str(error.hint), sqlstate: sqlstate || null };
+    // `status` só existe no envelope que `createTracedFetch` monta quando o
+    // PostgREST responde erro sem corpo (todo `HEAD`, 5xx vazio do gateway).
+    return {
+      ...base,
+      message,
+      hint: str(error.hint),
+      sqlstate: sqlstate || null,
+      status: typeof error.status === "number" ? error.status : null,
+    };
   }
 
   return { ...base, message };

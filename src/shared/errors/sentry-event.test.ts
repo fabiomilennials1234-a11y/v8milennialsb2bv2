@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ErrorEvent } from "@sentry/react";
 import { reportError, setReportIdentity } from "./report";
 import {
   exceptionFor,
   fingerprintFor,
+  LIBRARY_CHUNKS,
   prepareEvent,
   scrubBreadcrumb,
   scrubRecordingEvent,
@@ -244,5 +247,85 @@ describe("scrubReplayEvent", () => {
   it("evento que não é de replay passa intocado (o beforeSend cuida dele)", () => {
     const event = { type: undefined, urls: ["https://app/x?y=1"] };
     expect(scrubReplayEvent(event)).toEqual({ type: undefined, urls: ["https://app/x?y=1"] });
+  });
+});
+
+/**
+ * Todo problema do front tinha o mesmo culpado, `ef(assets/sentry-…)` — o
+ * reporter. Os quadros abaixo são os do TORQUE-WEB-9 em produção.
+ */
+describe("prepareEvent — culpado", () => {
+  const ORIGIN = "https://torquecrm.com.br";
+  const frame = (file: string, fn: string) => ({ filename: `${ORIGIN}/assets/${file}`, abs_path: `${ORIGIN}/assets/${file}`, function: fn, in_app: true });
+
+  function reported(tags: Record<string, string>, url: string) {
+    return event({
+      tags: { reference: "52213C06", ...tags },
+      request: { url },
+      exception: {
+        values: [{
+          type: "AppError",
+          value: "validation.invalid · 22P02",
+          stacktrace: {
+            frames: [
+              frame("ChatWhatsApp-CGA5zn1_.js", "moveStage"),
+              frame("query-kznv8RwB.js", "We.execute"),
+              frame("index-O3e3aBH8.js", "Object.onError"),
+              frame("sentry-Dxg-HdwQ.js", "In"),
+              frame("sentry-Dxg-HdwQ.js", "ef"),
+            ],
+          },
+        }],
+      },
+    });
+  }
+
+  it("quadros de biblioteca e do reporter saem do app; o código da tela fica", () => {
+    const out = prepareEvent(reported({ source: "mutation", mutation: "anonymous" }, `${ORIGIN}/chat-whatsapp`), {})!;
+    const inApp = out.exception!.values![0].stacktrace!.frames!.map((f) => [f.function, f.in_app]);
+    expect(inApp).toEqual([
+      ["moveStage", true],
+      ["We.execute", false],
+      ["Object.onError", true],
+      ["In", false],
+      ["ef", false],
+    ]);
+  });
+
+  it("source map no ar: node_modules e src/shared/errors também saem", () => {
+    const e = event({
+      tags: { reference: "X" },
+      exception: { values: [{ stacktrace: { frames: [
+        { filename: "webpack:///node_modules/@tanstack/query-core/build/modern/mutation.js", in_app: true },
+        { abs_path: "app:///src/shared/errors/report.ts", in_app: true },
+        { abs_path: "app:///src/modules/leads/hooks/lead/useLeadPipeHandlers.ts", in_app: true },
+      ] } }] },
+    });
+    const frames = prepareEvent(e, {})!.exception!.values![0].stacktrace!.frames!;
+    expect(frames.map((f) => f.in_app)).toEqual([false, false, true]);
+  });
+
+  it("culpado = tela + operação, sem id nem query", () => {
+    const query = prepareEvent(reported({ source: "query", query: "leads-count" }, `${ORIGIN}/funil/confirmacao?lead=5511987654321`), {})!;
+    expect(query.transaction).toBe("/funil/confirmacao · query leads-count");
+
+    const mutation = prepareEvent(
+      reported({ source: "mutation", mutation: "anonymous" }, `${ORIGIN}/leads/660e8400-e29b-41d4-a716-446655440001/negocios/42`),
+      {},
+    )!;
+    expect(mutation.transaction).toBe("/leads/:id/negocios/:n · mutation");
+  });
+
+  it("erro não tratado tem pilha real — o culpado fica com o Sentry", () => {
+    const out = prepareEvent(event({ request: { url: `${ORIGIN}/chat-whatsapp` } }), { originalException: new TypeError("x is undefined") })!;
+    expect(out.transaction).toBeUndefined();
+  });
+
+  it("a lista de chunks de biblioteca acompanha o manualChunks do vite.config", () => {
+    const config = readFileSync(resolve(__dirname, "../../../vite.config.ts"), "utf8");
+    const block = config.slice(config.indexOf("manualChunks: {"), config.indexOf("},", config.indexOf("manualChunks: {")));
+    const chunks = [...block.matchAll(/^\s*'?([\w-]+)'?\s*:\s*\[/gm)].map((m) => m[1]);
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const chunk of chunks) expect(LIBRARY_CHUNKS).toContain(chunk);
   });
 });
