@@ -90,7 +90,7 @@ BEGIN
   END IF;
   IF v_deal.outcome <> 'won' THEN RAISE EXCEPTION 'order_not_won' USING ERRCODE = '22023'; END IF;
   IF p_expected_updated_at IS NULL OR v_deal.updated_at IS DISTINCT FROM p_expected_updated_at THEN
-    RAISE EXCEPTION 'order_state_changed' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'order_state_changed' USING ERRCODE = 'PT409';
   END IF;
   IF p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 1000 THEN
     RAISE EXCEPTION 'adjustment_reason_required' USING ERRCODE = '22023';

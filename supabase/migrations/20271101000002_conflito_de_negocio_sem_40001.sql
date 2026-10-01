@@ -1,7 +1,7 @@
 -- Conflito de negócio é resposta HTTP definitiva, nunca `40001`.
 --
 -- INCIDENTE 2026-10-01 (13:56 → 17:58 UTC). `editar_valor_proposta` recusava ficha
--- desatualizada com `ERRCODE = '40001'` (serialization_failure). O PostgREST
+-- desatualizada com o SQLSTATE 40001 (serialization_failure). O PostgREST
 -- (hasql-transaction) trata `40001` como falha transitória e REPETE A TRANSAÇÃO
 -- SEM LIMITE, no mesmo backend, a cada ~5 ms. Como a ficha continua velha, o erro
 -- volta sempre: um clique virou um laço eterno. Dois cliques simultâneos ocuparam
@@ -39,7 +39,7 @@
 
 DO $$
 DECLARE
-  -- Só `RAISE ... USING ERRCODE = '40001'` (ou o nome da condição). Comparações
+  -- Só RAISE ... USING ERRCODE com o SQLSTATE 40001 (ou o nome da condição). Comparações
   -- de SQLSTATE em handlers (`WHEN serialization_failure`, `SQLSTATE '40001'`)
   -- ficam como estão: tratar serialização real continua correto.
   v_pattern constant text := '(ERRCODE\s*=\s*)''(40001|serialization_failure)''';

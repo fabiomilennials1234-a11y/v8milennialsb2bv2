@@ -24,7 +24,7 @@ BEGIN
       AND (ps.is_final_positive OR ps.is_final_negative)) THEN
       RAISE EXCEPTION 'Somente propostas abertas podem receber valor manual' USING ERRCODE = '22023';
     END IF;
-    IF p_expected_updated_at IS NOT NULL THEN RAISE EXCEPTION 'Atualize a ficha antes de salvar' USING ERRCODE = '40001'; END IF;
+    IF p_expected_updated_at IS NOT NULL THEN RAISE EXCEPTION 'Atualize a ficha antes de salvar' USING ERRCODE = 'PT409'; END IF;
     v_id := public.garantir_negocio_da_entrada(p_entry_id);
   ELSE
     v_id := v_entry.deal_id;
@@ -35,7 +35,7 @@ BEGIN
     RAISE EXCEPTION 'Somente propostas abertas podem receber valor manual' USING ERRCODE = '22023';
   END IF;
   IF v_entry.deal_id IS NOT NULL AND (p_expected_updated_at IS NULL OR v_deal.updated_at IS DISTINCT FROM p_expected_updated_at) THEN
-    RAISE EXCEPTION 'O negócio mudou. Atualize a ficha antes de salvar' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'O negócio mudou. Atualize a ficha antes de salvar' USING ERRCODE = 'PT409';
   END IF;
   IF EXISTS (SELECT 1 FROM public.deal_items WHERE deal_id = v_id) THEN
     RAISE EXCEPTION 'Edite os produtos para alterar o total deste negócio' USING ERRCODE = '22023';

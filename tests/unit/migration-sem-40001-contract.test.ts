@@ -1,5 +1,5 @@
 /**
- * Nenhuma migration nova levanta `40001` à mão.
+ * Nenhuma migration levanta `40001` à mão.
  *
  * O PostgREST (hasql-transaction) trata `40001` (serialization_failure) como
  * falha transitória e repete a transação SEM LIMITE. Uma recusa de negócio com
@@ -11,28 +11,25 @@
  * Conflito de versão é resposta definitiva: `ERRCODE = 'PT409'` → HTTP 409, que o
  * front já lê como `conflict.stale`.
  *
- * As migrations anteriores ficam de fora: a 20271101000002 reescreveu em produção
- * toda função que ainda levantava `40001`. O risco daqui para a frente é copiar um
- * corpo antigo para uma migration nova — é isso que este teste pega.
+ * Vale para o diretório INTEIRO, não só para migrations novas: várias das
+ * antigas estão em produção fora do ledger (aplicadas via MCP) e outras nunca
+ * rodaram. Um `db push` re-executa qualquer uma delas, e se alguma ainda tivesse
+ * `40001` recolocaria o laço por cima da correção.
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const MIGRATIONS_DIR = resolve(__dirname, "../../supabase/migrations");
-const CORRECAO = "20271101000002";
 const RAISE_40001 = /ERRCODE\s*=\s*'(40001|serialization_failure)'/i;
 
-function migrationsDepoisDaCorrecao(): string[] {
-  return readdirSync(MIGRATIONS_DIR).filter((f) => {
-    const m = /^(\d{14})_.*\.sql$/.exec(f);
-    return m !== null && m[1] > CORRECAO;
-  });
+function migrationsAtivas(): string[] {
+  return readdirSync(MIGRATIONS_DIR).filter((f) => /^\d{14}_.*\.sql$/.test(f));
 }
 
 describe("migrations não levantam 40001 como recusa de negócio", () => {
-  it("nenhuma migration posterior à correção usa ERRCODE 40001", () => {
-    const ofensoras = migrationsDepoisDaCorrecao().filter((f) =>
+  it("nenhuma migration ativa usa ERRCODE 40001", () => {
+    const ofensoras = migrationsAtivas().filter((f) =>
       RAISE_40001.test(readFileSync(resolve(MIGRATIONS_DIR, f), "utf8")),
     );
     expect(ofensoras, "use ERRCODE = 'PT409' para conflito de versão").toEqual([]);
@@ -44,7 +41,7 @@ describe("migrations não levantam 40001 como recusa de negócio", () => {
     expect(RAISE_40001.test("RAISE EXCEPTION 'x' USING ERRCODE = 'PT409';")).toBe(false);
   });
 
-  it("a migration de correção existe (o corte não aponta para o vazio)", () => {
-    expect(readdirSync(MIGRATIONS_DIR).some((f) => f.startsWith(`${CORRECAO}_`))).toBe(true);
+  it("o diretório não está vazio (verde por ausência não vale)", () => {
+    expect(migrationsAtivas().length).toBeGreaterThan(50);
   });
 });
