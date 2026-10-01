@@ -4,8 +4,9 @@ Runbook da virada para produção. Nada aqui roda sem o CTO: **merge em `main` d
 front sozinho** (webhook do EasyPanel), e edge function, migration e DML em prod são botão
 do humano.
 
-Estado em 2026-09-30: todas as fatias escritas, pilha em PRs draft (#2189–#2199), validação
-na branch efêmera feita para G, H, I e L; J parcial; E, F e K pendentes (seção 2). Nada mergeado.
+Estado em 2026-10-01: todas as fatias escritas, pilha em PRs draft (#2189–#2199), validação
+na branch efêmera concluída (seção 2): G, H, H2, I, J, K, L medidos; E e F cobertos por teste
+automatizado. Nada mergeado. Próximo passo é o go-live (seção 3), decisão do CTO.
 
 ## 0. A pilha
 
@@ -65,14 +66,14 @@ com ausência confirmada em `list_branches`. Front local com `npm run dev:branch
 | B | rede caída numa mutation | "Sem conexão…" + código | ✅ (rodada anterior) |
 | C | RPC inexistente | fallback PT + código + "Falar com suporte"; Chamado sai com o mesmo código no `support_context` | ✅ (rodada anterior) |
 | D | edge devolve erro de negócio (`create-org-user` duplicado) | a frase PT do corpo | ✅ (rodada anterior) |
-| E | S4b: consulta do membro falha no boot | "Não conseguimos carregar sua conta" + tentar de novo; nunca "aguardando ativação" | ⏳ |
-| F | S4b: RPC de assinatura falha | "Não conseguimos confirmar sua assinatura"; acesso fechado; sem 404 | ⏳ |
+| E | S4b: consulta do membro falha no boot | "Não conseguimos carregar sua conta" + tentar de novo; nunca "aguardando ativação" | 🟡 coberto por teste automatizado (`tests/unit/protected-route.test.tsx`), não exercitado no app: exige login, e Claude não autentica em IdP remoto. CTO optou por fechar assim (2026-10-01) |
+| F | S4b: RPC de assinatura falha | "Não conseguimos confirmar sua assinatura"; acesso fechado; sem 404 | 🟡 coberto por teste automatizado (`SubscriptionProtectedRoute.test.tsx`, 5 casos), mesmo motivo do E |
 | G | S5: função de QA que lança (deploy só na branch) | 500 `{error: frase PT, code: server.unavailable, request_id}`, `X-Request-ID`, CORS; linha `unhandled_exception` no `runtime_logs` com o mesmo `request_id` | ✅ 2026-09-30, branch `crxdqbpqxggbszdahwnn`. A 1ª rodada achou a mensagem crua no `runtime_logs` (telefone e `access_token`) — corrigido (`_shared/scrub.ts`) e remedido: `5511*****4321`, URL sem query, `session_id`/`request_id` casando |
 | H | S7b: `check_cron_job_health()` na branch | roda; job com 3/5 falhas abre 1 alerta; volta a passar e resolve (`auto_recovered`); `authenticated` não executa | ✅ grants (anon/authenticated `false`, service_role `true`, DEFINER, `search_path` pinado); cron de QA falhando abre 1 alerta, 2ª chamada não duplica, 3 execuções OK resolvem (`auto_recovered`, `resolved_by` nulo). Regra frequente: ver linha H2 |
 | H2 | S7b: regra do job frequente (≥ 5 execuções na janela) | falha isolada não alerta; ≥ 3 das últimas 5 alerta | ✅ mesmo cron com 11 execuções: `f s s s s` → 0 alertas (antes da S7b era `critical`); `f f f f s` → 1 alerta "4 das últimas 5 execuções falharam" (`rule: adr-0038-sustentada`). O ponto exato 3/5 ficou entre as duas medições — coberto pela simulação contra prod |
 | I | S6 sem DSN | nenhum request a `*.sentry.io`; chunk `sentry-*.js` nunca baixado | ✅ só o `sentry-loader` carrega; 0 requisições ao Sentry; CSP da meta com `worker-src` |
-| J | S6 com DSN de QA (front) | erro provocado aparece no Sentry: stack desminificada, tags `reference`/`error_code`/`organization_id`/`role`/`session_id`, `user.id` só UUID, URL sem query, replay mascarado; o código do toast acha o evento | 🟡 envelope do SDK real capturado no `beforeEnvelope` (DSN fictício): telefone mascarado, query e `details` fora, `/reset-password/:token`, `aria-label` fora do clique, recusa só como rastro, duplicata não sai, `arguments` do callback descartado (achado e corrigido). Falta com DSN real: chegada no Sentry, stack desminificada, replay |
-| K | S6 com DSN de QA (edge) | a função de QA gera evento com `function`, `request_id`, `session_id`; o `request_id` é o da resposta 500 | ⏳ DSN |
+| J | S6 com DSN de QA (front) | erro provocado aparece no Sentry: stack desminificada, tags `reference`/`error_code`/`organization_id`/`role`/`session_id`, `user.id` só UUID, URL sem query, replay mascarado; o código do toast acha o evento | ✅ 2026-10-01, build de **produção** (`vite preview`) contra a branch `bynogergolkkuvwtwbzh`, conferido no evento **gravado** (MCP do Sentry, `TORQUE-QA-2/3`): telefone mascarado, URL sem query, release e `session_id`, replay anexado e mascarado. Achados e corrigidos nesta rodada: o replay gravava o `aria-label` do clique (fechado), `user.geo` deduzido pelo IP (ver 3.2a). Sem login, `reference`/`organization_id`/`role` só pelos testes e pelo envelope da rodada anterior. Stack desminificada fica para o 1º evento de prod (precisa do token de upload) |
+| K | S6 com DSN de QA (edge) | a função de QA gera evento com `edge_function`, `request_id`, `session_id`; o `request_id` é o da resposta 500 | ✅ 2026-10-01, `TORQUE-QA-1`: arquivo e linha exatos (`error-boundary.ts:93`, `qa-unhandled/index.ts:4`), mensagem mascarada sem `access_token`, contexto só com o método, `request_id`/`session_id` iguais aos da resposta. Achado e corrigido: a tag `function` é reservada no Sentry e era descartada — virou `edge_function` |
 | L | recusa esperada (RLS `access_denied`, sessão vencida) | **não** vira evento, vira rastro no próximo | ✅ (envelope capturado): `JWT expired` não gerou evento e apareceu como rastro `app.error · auth.session_expired · <código>` no evento seguinte |
 
 ## 3. Sequência em produção
@@ -97,6 +98,16 @@ com ausência confirmada em `list_branches`. Front local com `npm run dev:branch
 2. Merge na ordem da tabela da seção 0. Depois de cada merge, *retarget* do próximo para `main`.
    **Sem `--delete-branch`** até a pilha inteira entrar — apagar a base fecha o PR de cima.
 3. Cada merge deploya o front. Conferir o `CreatedAt` da imagem na VPS contra o `mergedAt`.
+
+### 3.2a Sentry: regra que apaga a localização (1 min, precisa de login)
+
+Medido na validação: mesmo com *Prevent Storing of IP Addresses*, o Sentry **deduz a cidade**
+pelo IP da conexão antes de descartá-lo (`user.geo: Florianópolis` num evento do navegador). O
+SDK já manda `ip_address: null`, e não basta. Em Settings → Security & Privacy → *Advanced
+Data Scrubbing* → *Add Rule*: método **Remove**, tipo **Anything**, fonte `$user.geo.**`.
+Conferir no 1º evento de prod que `user.geo` não aparece; se aparecer, a dedução acontece depois
+do scrubbing e a alternativa é um *tunnel* próprio (o IP que chega ao Sentry passa a ser o do
+nosso servidor).
 
 ### 3.3 Migration S7b
 
@@ -186,3 +197,4 @@ dela (o `_shared/` vai no bundle).
 | edge `reportException` com `await flush` | `captureUnhandled` em `EdgeRuntime.waitUntil` | o envio não segura a resposta 500 |
 | — | captura automática passa pela régua do contrato | rejeição sem `catch` de recusa esperada não vira evento; a que a tela já relatou não vira duplicata |
 | — | `enhanceFetchErrorMessages: "report-only"` | o SDK reescreveria "Failed to fetch" em tempo de execução, e o app lê essa mensagem |
+| — | nome do componente React no clique (`data-sentry-component`), plugin à parte antes do SWC, só no build | passo a passo legível sem PII; o plugin do Sentry no fim da fila não marcava nada porque o SWC compila o JSX antes. Cobertura parcial medida: o Sentry procura o componente até 5 níveis acima do clique, e os primitivos do shadcn (`forwardRef`) não são marcados. Custo: +69 KB gzip no total, +11 KB no chunk principal |
