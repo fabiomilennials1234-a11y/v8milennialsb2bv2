@@ -166,8 +166,64 @@ function isUnwantedAutoCapture(event: ErrorEvent, hint: EventHint): boolean {
   return !toAppError(original).reportable;
 }
 
+/**
+ * Chunks de biblioteca do build — espelha `manualChunks` do `vite.config.ts`
+ * (um teste trava a divergência), mais o chunk do SDK do Sentry, que também
+ * leva este reporter. `node_modules` e `src/shared/errors` valem quando o
+ * source map estiver no ar.
+ */
+export const LIBRARY_CHUNKS = ["vendor", "supabase", "charts", "motion", "query", "dnd", "date-fns", "sentry", "sentry-replay"];
+const LIBRARY_CHUNK = new RegExp(`/assets/(?:${LIBRARY_CHUNKS.join("|")})-[\\w-]+\\.js$`);
+const LIBRARY_PATH = /\/node_modules\/|\/src\/shared\/errors\//;
+
+/**
+ * Sem isto todo problema do front tinha o mesmo culpado: `ef(assets/sentry-…)`,
+ * o `exceptionFor` que monta o `Error` — o quadro do reporter era o "do app" mais
+ * perto do topo. Biblioteca e reporter saem do app; o culpado desce para o
+ * código que chamou.
+ */
+function markLibraryFrames(event: ErrorEvent): void {
+  for (const exception of event.exception?.values ?? []) {
+    for (const frame of exception.stacktrace?.frames ?? []) {
+      const path = stripQuery(frame.abs_path ?? frame.filename ?? "");
+      if (LIBRARY_CHUNK.test(path) || LIBRARY_PATH.test(path)) frame.in_app = false;
+    }
+  }
+}
+
+function routeOf(url: string): string | null {
+  try {
+    const path = new URL(url).pathname.replace(UUID_LIKE, ":id").replace(/\/\d+(?=\/|$)/g, "/:n");
+    return path || "/";
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Erro do PostgREST, da edge function ou do Auth não tem pilha nossa: nasce
+ * como objeto, e o `Error` que o representa é montado dentro do reporter. A
+ * pilha desse `Error` nunca vai apontar a tela. O Sentry usa `transaction`
+ * como culpado quando ela existe: tela + operação diz onde o usuário estava e
+ * o que pediu — `/funil/confirmacao · query leads-count`.
+ */
+function culpritFor(event: ErrorEvent): string | null {
+  const tags = event.tags ?? {};
+  const route = event.request?.url ? routeOf(event.request.url) : null;
+  const key = (name: string) => (typeof tags[name] === "string" && tags[name] !== "anonymous" ? String(tags[name]) : "");
+  const operation = key("query")
+    ? `query ${key("query")}`
+    : key("mutation")
+      ? `mutation ${key("mutation")}`
+      : typeof tags.source === "string" ? tags.source : "";
+  const parts = [route, operation].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
   if (isUnwantedAutoCapture(event, hint)) return null;
+
+  markLibraryFrames(event);
 
   if (event.message) event.message = scrubText(event.message);
 
@@ -177,6 +233,13 @@ export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | n
 
   if (event.request) {
     event.request = event.request.url ? { url: scrubUrl(event.request.url) } : {};
+  }
+
+  // Só no que veio do nosso reporter: erro não tratado tem pilha real, e o
+  // culpado que o Sentry tira dela é o certo.
+  if (event.tags?.reference && !event.transaction) {
+    const culprit = culpritFor(event);
+    if (culprit) event.transaction = culprit;
   }
 
   if (event.extra) event.extra = scrubRecord(event.extra);
