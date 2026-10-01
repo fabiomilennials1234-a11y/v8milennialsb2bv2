@@ -1,6 +1,6 @@
 ---
 name: supabase-postgres-best-practices
-description: PostgreSQL best practices for Supabase — RLS policies, migrations, indexing, query optimization, pg_cron, and multi-tenancy patterns. Used by agent-dba.
+description: PostgreSQL best practices for Supabase — RLS policies, migrations, indexing, query optimization, pg_cron, and multi-tenancy patterns.
 ---
 
 # Supabase PostgreSQL Best Practices — Torque CRM

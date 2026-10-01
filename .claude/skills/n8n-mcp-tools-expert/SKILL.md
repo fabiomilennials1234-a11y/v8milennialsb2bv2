@@ -1,6 +1,6 @@
 ---
 name: n8n-mcp-tools-expert
-description: Expert at using n8n MCP tools for workflow management — creating, editing, listing, and debugging workflows via MCP protocol. Used by agent-automation.
+description: Expert at using n8n MCP tools for workflow management — creating, editing, listing, and debugging workflows via MCP protocol.
 ---
 
 # n8n MCP Tools Expert — Torque CRM

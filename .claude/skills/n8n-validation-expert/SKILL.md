@@ -1,6 +1,6 @@
 ---
 name: n8n-validation-expert
-description: Expert at validating n8n workflows — diagnosing errors, fixing broken executions, validating node configurations, and resolving common pitfalls. Used by agent-automation.
+description: Expert at validating n8n workflows — diagnosing errors, fixing broken executions, validating node configurations, and resolving common pitfalls.
 ---
 
 # n8n Validation Expert — Torque CRM

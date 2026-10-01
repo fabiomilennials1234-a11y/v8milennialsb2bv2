@@ -7,8 +7,7 @@ Layout: **single-context** — um `CONTEXT.md` + `docs/adr/` na raiz. Não é mo
 ## Before exploring, read these
 
 - **`CONTEXT.md`** na raiz — glossário de domínio + linguagem ubíqua.
-- **`docs/adr/`** — 21 ADRs numeradas. Leia as que tocam a área em que você vai mexer.
-- **`CLAUDE.md`** na raiz — stack, arquitetura, áreas frágeis, gotchas.
+- **`docs/adr/`** — ADRs numeradas. Leia as que tocam a área em que você vai mexer.
 - **Sub-`CLAUDE.md`** do bounded context em questão: `src/modules/<bc>/CLAUDE.md`, `supabase/functions/_shared/CLAUDE.md`, `supabase/functions/agent-message/CLAUDE.md`, `supabase/functions/whatsapp-webhook/CLAUDE.md`, `supabase/migrations/CLAUDE.md`. São contexto JIT — leia o do módulo que você toca, não todos.
 - **Vault Obsidian** — `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/`, entrada em `00 — INDEX.md`. Alinhado a Diátaxis. Consultar **antes** de agir em features: `02 — Arquitetura/`, `03 — Reference/` (schema, RLS, edge functions, cron, env vars, RPCs), `04 — Decisões/` (ADRs), `06 — Features/` (regras de negócio por domínio).
 
@@ -19,11 +18,9 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 ```
 /
 ├── CONTEXT.md                     ← glossário / linguagem ubíqua
-├── CLAUDE.md                      ← stack, arquitetura, gotchas
-├── AGENTS.md                      ← spec agent-agnostic
 ├── llms.txt                       ← índice curado pra LLMs
 ├── docs/
-│   ├── adr/                       ← 0001..0021, decisões imutáveis
+│   ├── adr/                       ← decisões imutáveis, numeração sequencial
 │   └── agents/                    ← este diretório (config das skills)
 ├── src/modules/<bc>/CLAUDE.md     ← contexto por bounded context
 └── Obsidian/Segundo Cerebro/…     ← vault Diátaxis (source of truth expandido)
@@ -31,7 +28,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## ADRs
 
-Numeração sequencial de 4 dígitos, kebab-case: `docs/adr/0022-<slug>.md`. Próximo número livre: **0022** (cuidado: existem dois `0002` e não existe `0006` — não reaproveite números vagos, siga o maior + 1).
+Numeração sequencial de 4 dígitos, kebab-case: `docs/adr/NNNN-<slug>.md`. Próximo número = **o maior existente + 1** (`ls docs/adr`). Há buracos e repetições antigas na sequência — não reaproveite número vago.
 
 Decisão arquitetural nova também deve aparecer no vault em `04 — Decisões/`.
 
@@ -41,8 +38,8 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 Termos com significado travado neste projeto — não invente sinônimo:
 
-- **Roles em código são sempre `admin`, `master`, `membro`.** "SDR" e "Closer" existem só em UI/docs, nunca como role.
-- **Lead**, **pipe** (`pipe_whatsapp` / `pipe_confirmacao` / `pipe_propostas`), **stage**, **org** (`organization_id`), **team member**, **copilot agent**, **workflow**, **campanha**, **carteira**.
+- **Role é `team_members.role`, enum `app_role` = `admin | sdr | closer | agency | bdr | cliente | member`.** Em uso: `admin` e `member`. É **`member`, nunca `membro`** — `membro` estoura `22P02` no INSERT. **`master` não é role**: é a camada de cima (`is_master_user()`, `useMasterAuth()`). SDR/Closer existem no enum mas o produto os trata como rótulo de UI. Guarda: `tests/unit/role-vocabulary.test.ts`.
+- **Lead**, **funil** (`pipelines` + `pipeline_stages` + `pipeline_entries`, ADR-0034; `pipe_*` são views de compat em demolição), **stage** (comportamento por `stage_role`), **org** (`organization_id`), **team member**, **copilot agent**, **workflow**, **campanha**, **carteira**.
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
