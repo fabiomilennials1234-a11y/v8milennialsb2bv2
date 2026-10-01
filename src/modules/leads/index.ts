@@ -286,7 +286,7 @@ export type { LeadCardData, LeadCardVariant, LeadCardProps } from "./components/
 // Efeitos do card: ganho/perda (anéis) e exclusão (poeira). O board monta o
 // host; quem exclui prepara a dissolução antes. Ver `lib/card-effects.ts`.
 export { CardEffectsHost } from "./components/leads/card/CardEffectsHost";
-export { prepararDissolucao } from "./lib/card-effects";
+export { prepararDissolucao, useEntradasEmDesfecho } from "./lib/card-effects";
 export type { Dissolucao } from "./lib/card-effects";
 export { LeadModal } from "./components/leads/LeadModal";
 export { LeadScoreBadge } from "./components/leads/LeadScoreBadge";
