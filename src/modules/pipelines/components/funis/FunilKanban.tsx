@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { CardEffectsHost, LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
+import { CardEffectsHost, LeadCard, useEntradasEmDesfecho, type LeadCardData, type LeadMetrics } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -12,7 +12,8 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
-import { cardOutcome } from "./funil-card-outcome";
+import { cardClosedAt, cardOutcome } from "./funil-card-outcome";
+import type { ClosedGroupingAccessors } from "@/modules/pipelines/lib/closed-outcome-groups";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -24,6 +25,9 @@ export interface FunilEntry {
   stage_key: string;
   notes: string | null;
   created_at: string;
+  /** Datas da entrada — recuo de `cardClosedAt` quando o negócio não diz quando fechou. */
+  entered_at?: string | null;
+  stage_changed_at?: string | null;
   /** Funil mergeado (ADR-0004): dados de reunião achatados do metadata. */
   meeting_date?: string | null;
   /** Valor achatado de `metadata.sale_value` pelo leitor canônico do funil. */
@@ -145,6 +149,19 @@ export function FunilKanban({
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
 
+  // Cards ganhos e perdidos ficam empilhados na coluna, por mês do desfecho.
+  // Exceção: o card cuja onda de ganho/perda ainda vai tocar fica solto até
+  // ela acabar — senão a celebração tocaria dentro da pilha fechada.
+  const emDesfecho = useEntradasEmDesfecho();
+  const closedGrouping = useMemo<ClosedGroupingAccessors<LeadCardData>>(
+    () => ({
+      outcomeOf: (card) => (emDesfecho.has(card.id) ? null : card.outcome),
+      closedAtOf: (card) => card.closedAt,
+      amountOf: (card) => card.value,
+    }),
+    [emDesfecho],
+  );
+
   // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
   // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
   // falta marcada final_negative que vem antes ganharia da etapa `lost` real,
@@ -219,6 +236,7 @@ export function FunilKanban({
       // Ganho/perda é o desfecho do NEGÓCIO, não a coluna: o card ganho num
       // funil sem etapa de ganho também pinta de verde. Ver `cardOutcome`.
       outcome: cardOutcome(entry, stageRoleByKey.get(entry.stage_key)),
+      closedAt: cardClosedAt(entry),
       pipelineId,
       meetingDate,
       // ── A reunião no card (S6) ──
@@ -274,6 +292,7 @@ export function FunilKanban({
           if (stage) onMove(itemId, stage);
         }}
         disabled={!canMovePipe}
+        closedGrouping={closedGrouping}
         onDeleteAllLeads={onDeleteAllLeads}
         onExportStage={(stageKey, stageTitle) => {
           const col = columns.find((c) => c.id === stageKey);
