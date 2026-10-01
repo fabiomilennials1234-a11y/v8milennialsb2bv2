@@ -181,6 +181,31 @@ describe("buildNewDealOptions — funil com negócio não é opção de negócio
 
     expect(opcoes.map((o) => o.label)).toEqual(["Assinatura", "Reativação"]);
   });
+
+  it("funil onde o negócio já fechou volta a ser opção — é a recompra", () => {
+    const opcoes = buildNewDealOptions(
+      [
+        { ...QUALIFICACAO_COM_NEGOCIO, closedAt: "2026-09-01T00:00:00Z" },
+        { ...CUSTOM_REATIVACAO, entryId: "ce-1", closedAt: "2026-09-01T00:00:00Z" },
+        { ...CUSTOM_REATIVACAO, entryId: "ce-2", closedAt: "2026-03-01T00:00:00Z" },
+      ],
+      { canAdd: PODE, vendaFechada: false },
+    );
+
+    expect(opcoes.map((o) => o.key)).toEqual(["sys:whatsapp", "custom:cp-1"]);
+  });
+
+  it("negócio aberto tranca o funil mesmo com outro já fechado nele", () => {
+    const opcoes = buildNewDealOptions(
+      [
+        { ...CUSTOM_REATIVACAO, entryId: "ce-1", closedAt: null },
+        { ...CUSTOM_REATIVACAO, entryId: "ce-2", closedAt: "2026-03-01T00:00:00Z" },
+      ],
+      { canAdd: PODE, vendaFechada: false },
+    );
+
+    expect(opcoes).toEqual([]);
+  });
 });
 
 describe("buildNewDealOptions — Carteira é consequência de venda, não negócio novo", () => {
@@ -250,6 +275,12 @@ describe("resolveNewDealTarget — chave que não casa NÃO vira escrita", () =>
     );
 
     expect(resolveNewDealTarget("sys:confirmacao", depois)).toBeNull();
+  });
+
+  it("roteia recompra para o funil cujo negócio já fechou", () => {
+    const fechado = { ...CUSTOM_REATIVACAO, entryId: "ce-1", closedAt: "2026-09-01T00:00:00Z" };
+
+    expect(resolveNewDealTarget("custom:cp-1", [fechado])).toEqual({ kind: "custom", pipe: fechado });
   });
 
   it("devolve null para chave desconhecida em vez de escolher o mais parecido", () => {
