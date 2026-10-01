@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
+import { CardEffectsHost, LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -12,6 +12,7 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
+import { cardOutcome } from "./funil-card-outcome";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -215,6 +216,9 @@ export function FunilKanban({
       // ações (ADR-0004); a DATA não. Montar amplo é seguro.
       stageKey: entry.stage_key ?? null,
       stageRole: stageRoleByKey.get(entry.stage_key) ?? null,
+      // Ganho/perda é o desfecho do NEGÓCIO, não a coluna: o card ganho num
+      // funil sem etapa de ganho também pinta de verde. Ver `cardOutcome`.
+      outcome: cardOutcome(entry, stageRoleByKey.get(entry.stage_key)),
       pipelineId,
       meetingDate,
       // ── A reunião no card (S6) ──
@@ -349,6 +353,8 @@ export function FunilKanban({
           Sem `escopoFunil`, o botão vermelho desta barra mandava a PESSOA para
           a lixeira: ela sumia da lista de Leads, dos outros funis, da carteira
           e do chat — a partir de um clique dado sobre um card de negócio. */}
+      {/* Poeira dos cards excluídos — ver `prepararDissolucao`. */}
+      <CardEffectsHost />
       <BulkActionBar
         selectedIds={bulk.selectedIds}
         onClear={bulk.clearSelection}

@@ -15,6 +15,12 @@ export interface StandardPipelineStatus {
   /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
   pipelineDbId: string | null;
   pipeId: string | null;
+  /**
+   * `pipeline_entries.closed_at` do negócio desta linha. Negócio fechado
+   * (ganho/perdido) não impede abrir outro no mesmo funil — é a recompra.
+   * Ausente = trate como aberto (é o lado seguro: não oferece duplicata).
+   */
+  closedAt?: string | null;
   currentStage: string | null;
   currentStageLabel: string | null;
   stages: { id: string; label: string; color: string; role?: string | null }[];
@@ -27,6 +33,8 @@ export interface CustomPipelineStatus {
   pipelineColor: string;
   pipelineIcon: string;
   entryId: string | null;
+  /** Ver `StandardPipelineStatus.closedAt`. */
+  closedAt?: string | null;
   currentStageId: string | null;
   currentStageName: string | null;
   stages: { id: string; name: string; color: string; position: number; role?: string | null }[];
@@ -211,6 +219,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           results.push({
             ...base,
             pipeId: entry.id || null,
+            closedAt: entry.closed_at ?? null,
             currentStage: entry.stage_key || null,
             currentStageLabel: stages.find((s) => s.id === entry.stage_key)?.label || null,
           });
@@ -265,6 +274,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           results.push({
             ...base,
             entryId: entry.id || null,
+            closedAt: entry.closed_at ?? null,
             currentStageId: currentStage?.id || null,
             currentStageName: currentStage?.name || null,
           });
