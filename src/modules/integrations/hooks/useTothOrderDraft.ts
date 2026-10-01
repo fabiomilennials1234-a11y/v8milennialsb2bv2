@@ -51,7 +51,9 @@ function translateError(error: RpcError): TothOrderDraftError {
   if (error.code === "PGRST202" || error.code === "42883") {
     return new TothOrderDraftError("A preparação de pedidos ainda não está disponível neste ambiente.", "unavailable");
   }
-  if (error.code === "40001" || error.message?.includes("toth_revision_conflict")) {
+  // PT409 é o conflito de versão que o banco levanta (HTTP 409); 40001 só sobra
+  // para serialização real. Ver 20271101000002_conflito_de_negocio_sem_40001.sql.
+  if (["PT409", "40001"].includes(error.code ?? "") || error.message?.includes("toth_revision_conflict")) {
     return new TothOrderDraftError(
       "O rascunho ou o vínculo do cliente mudou. Suas alterações locais foram preservadas. Carregue a versão atual antes de continuar.",
       "conflict",

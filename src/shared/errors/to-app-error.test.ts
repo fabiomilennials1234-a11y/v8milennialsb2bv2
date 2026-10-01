@@ -41,6 +41,9 @@ describe("toAppError — classificação", () => {
     [pg("23514", "new row for relation \"leads\" violates check constraint"), "validation.invalid"],
     [pg("22023", "invalid_scope"), "validation.invalid"],
     [pg("PT409", "draft_revision_conflict"), "conflict.stale"],
+    // Recusa de versão das RPCs de negócio (20271101000002): texto humano + PT409.
+    [pg("PT409", "O negócio mudou. Atualize a ficha antes de salvar"), "conflict.stale"],
+    [pg("PT409", "toth_client_link_changed"), "conflict.stale"],
     [pg("57014", "canceling statement due to statement timeout"), "request.timeout"],
     [pg("", "TypeError: Failed to fetch"), "network.offline"],
     [pg("42703", "column \"sold_at\" does not exist"), "unknown"],
@@ -193,6 +196,7 @@ describe("toAppError — o que vira relatório", () => {
   it("recusa deliberada de RPC não vira evento", () => {
     expect(toAppError(pg("42501", "access_denied")).reportable).toBe(false);
     expect(toAppError(pg("PT422", "reference_unavailable")).reportable).toBe(false);
+    expect(toAppError(pg("PT409", "O negócio mudou. Atualize a ficha antes de salvar")).reportable).toBe(false);
   });
 
   it("recusa humana não vira evento", () => {
