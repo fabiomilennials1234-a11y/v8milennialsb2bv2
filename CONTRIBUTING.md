@@ -1,7 +1,7 @@
 # CONTRIBUTING — Torque CRM
 
 Padrões de contribuição do Torque CRM. Documento curto e operacional.
-Detalhe técnico vive nos `CLAUDE.md` de cada módulo e no vault.
+Detalhe técnico vive em `docs/adr/`, no `CONTEXT.md` e no vault.
 
 ---
 
@@ -173,7 +173,6 @@ git commit -m "docs(vault): renomeia <X> para <Y>"
 - [ ] Build não quebra (`npm run build`)
 - [ ] Lint limpo (`npm run lint`)
 - [ ] Wikilinks do vault íntegros (se tocou em vault)
-- [ ] CLAUDE.md atualizado (se mudou padrão estrutural ou área frágil)
 
 ### No PR
 
