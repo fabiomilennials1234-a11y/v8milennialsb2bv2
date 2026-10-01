@@ -185,3 +185,84 @@ across 107 organizations.
 Manual win/loss from any stage in the UI is **not** part of this amendment. The
 card's buttons still move to the terminal stage, so for the 283 funnels without
 one, the workflow action is currently the only path.
+
+---
+
+## Amendment 2 — A won Negócio moves to its funnel's win stage, when there is one (2026-09-30)
+
+**Status:** accepted · **Refines:** Amendment 1. Outcome stays the source.
+
+### What changes
+
+When `deals.outcome` **transitions to** `won`, trigger
+`trg_negocio_ganho_vai_para_etapa_won` (migration `20271021000039`) moves the
+Negócio's `pipeline_entries` row, within the same funnel, to the first active
+stage that answers, in this order:
+
+1. `stage_role = 'won'` (lowest `position`) — the canonical role;
+2. `is_final_positive` (the "Sucesso" badge) with `stage_role = 'open'`
+   (highest `position` — the most advanced success stage).
+
+A funnel with neither moves nothing — the outcome holds on its own, exactly as
+in Amendment 1.
+
+### Why the success stage counts (product decision, 2026-09-30)
+
+Measured in production on 2026-09-30: of 436 active funnels, **7** have a stage
+with `stage_role = 'won'`, and since `3ceed8b52` the UI no longer assigns that
+role. What organisations actually configure is the **success** stage: **400**
+funnels have one. Keying on `won` alone would have made the feature inert in
+98% of funnels.
+
+### Why a success stage with a meeting role is excluded
+
+**150** funnels have only success stages whose role is `meeting_booked` or
+`meeting_held` (e.g. "Orçamento Gerado ✓ · Reunião marcada"). Meeting metrics
+count **stage events** (ADR-0007, ADR-0017), so moving a won Negócio there
+would record a meeting that never happened. In those funnels the card stays
+put; the board still highlights it as won.
+
+### Why this does not reopen the "two truths" problem
+
+The two questions from Amendment 1 still have one answer each:
+`deals.outcome` says *won or lost*, `pipeline_entries.stage_key` says *where*.
+This amendment only makes the *where* follow the *won* when the funnel has a
+place for it. Outcome is still never derived from a success stage — dragging a
+card into one does not win it.
+
+### Obligations
+
+1. **One sale, not two.** The move emits a stage event, which reaches
+   `fn_capture_sale_event`; that function must keep its
+   `v_outcome_atual IS DISTINCT FROM v_novo` guard, or a move into a `won`
+   stage writes a second `sale` into an append-only ledger. The migration fails
+   the apply if the guard disappears.
+2. **The win never fails because of the move.** The `won` stage's own
+   `requires_sale_value` lock may refuse the entry (an org spared from the value
+   rollout winning with no value). Only `check_violation` is caught, inside a
+   sub-block: the move is undone, the win stays.
+3. **Every writer is covered.** The rule lives on `deals`, not in the UI RPC,
+   so the `win_deal` workflow action and the API move the card too.
+4. **The move sets `stage_key` as well as `stage_id`.** `AFTER UPDATE OF
+   stage_key` triggers — the stage event, the stage history, `closed_at` — fire
+   on the columns in the `SET` list, not on what the mirror trigger derives.
+   With `stage_id` alone the card would change column without a trace in the
+   funnel metrics. `scripts/test-negocio-ganho-etapa-won.mjs` fails if the
+   `stage_key` line is removed.
+5. **The board shows the outcome, not the column.** `get_pipeline_page`
+   projects `metadata.deal_outcome`; a won card is highlighted (green border and
+   background, plus a "Ganho" badge) even where it did not move, a lost card
+   the same way in red ("Perdido"), and a reopened card left in a success or
+   loss column is not.
+
+### What is not covered
+
+- **Forwarding is not executed.** A success stage's "→ other funnel"
+  (`target_pipeline_id`) runs in the frontend drag flow, not in the database.
+  A card moved by the trigger stays in the success stage.
+- **Losing does not move.** Only `won` was asked for; `lost` keeps Amendment 1
+  behaviour.
+- **Reopening does not move back.** There is no reliable "previous stage" to
+  return to without guessing.
+- **No backfill.** Only transitions after the apply move. Already-won cards are
+  highlighted but stay where they are.

@@ -175,7 +175,15 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
     });
   }
 
-  if (capabilities.can_move_stage) {
+  // A coluna de `copilot_agents` chama-se `can_move_cards` — `can_move_stage` é o
+  // nome do v2, onde o objeto de capabilities é montado à mão
+  // (`copilot-v2-worker/index.ts`). Aqui `capabilities` é a ROW do agente
+  // (`SELECT_AGENT` = "*"), então ler só `can_move_stage` devolvia `undefined`
+  // para todo agente v1 e a ferramenta nunca era registrada — a IA perdia a
+  // movimentação de card em toda a frota, calada, desde 73f17a476 (07/09/2026).
+  // `??` e não `||`: no v2, `can_move_stage: false` é uma decisão explícita e não
+  // deve cair no nome do v1.
+  if (capabilities.can_move_stage ?? capabilities.can_move_cards) {
     const activePipeRefs = Array.isArray(capabilities.active_pipes)
       ? capabilities.active_pipes.map((ref: unknown) => String(ref).toLowerCase())
       : [];
