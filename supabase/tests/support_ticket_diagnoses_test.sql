@@ -1,6 +1,7 @@
 -- supabase/tests/support_ticket_diagnoses_test.sql
 --
--- Guarda de 20271102000000_chamado_diagnostico_e_prompt.sql.
+-- Guarda de 20271102000000_chamado_diagnostico_e_prompt.sql e
+-- 20271103000000_chamado_diagnostico_precisao.sql.
 --
 -- O diagnóstico de um Chamado carrega root cause, caminhos de arquivo e o
 -- prompt de resolução — detalhe interno do sistema. O cliente LÊ a linha do
@@ -19,7 +20,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(14);
+SELECT plan(18);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -174,6 +175,27 @@ SELECT lives_ok($$
   UPDATE public.support_ticket_diagnoses
      SET executed_at = now(), execution_outcome = 'resolvido', actual_cost_usd = 1.37
 $$, '(e) desfecho coerente é aceito');
+
+-- ---------------------------------------------------------------------------
+-- (f) Precisão do diagnóstico: domínios e só com execução registrada
+-- ---------------------------------------------------------------------------
+SELECT throws_ok($$
+  UPDATE public.support_ticket_diagnoses SET root_cause_confirmed = 'talvez'
+$$, '23514', NULL, '(f) confirmação fora do domínio é recusada');
+
+SELECT throws_ok($$
+  UPDATE public.support_ticket_diagnoses SET extra_commits = -1
+$$, '23514', NULL, '(f) commits extras negativos são recusados');
+
+SELECT lives_ok($$
+  UPDATE public.support_ticket_diagnoses
+     SET root_cause_confirmed = 'sim', extra_commits = 1, reply_contradicted = true
+$$, '(f) precisão coerente com a execução é aceita');
+
+SELECT throws_ok($$
+  UPDATE public.support_ticket_diagnoses
+     SET executed_at = NULL, execution_outcome = NULL, actual_cost_usd = NULL
+$$, '23514', NULL, '(f) desfazer a execução sem limpar a precisão é recusado');
 
 SELECT * FROM finish();
 

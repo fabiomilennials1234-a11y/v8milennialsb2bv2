@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { formatLead, leadSelector, resolveOrgScope } from "./lead.ts";
+import { textOf } from "../../_shared/mcp/content.ts";
 
 Deno.test("leadSelector — id wins over phone, trims, null when neither", () => {
   assertEquals(leadSelector({ id: " abc ", phone: "11" }), { by: "id", value: "abc" });
@@ -23,7 +24,7 @@ Deno.test("resolveOrgScope — token org is authoritative; matching arg ok; mism
 });
 
 Deno.test("formatLead — absence vs present", () => {
-  assertEquals(formatLead(null).content[0].text, "No lead found.");
+  assertEquals(textOf(formatLead(null)), "No lead found.");
   const out = formatLead({ id: "x", name: "Acme" });
-  assertEquals(out.content[0].text.includes("Acme"), true);
+  assertEquals(textOf(out).includes("Acme"), true);
 });

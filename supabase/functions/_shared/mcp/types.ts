@@ -30,8 +30,13 @@ export interface JsonSchema {
   additionalProperties?: boolean;
 }
 
+/** MCP content blocks. `image` carries base64 bytes the model reads directly. */
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
 export interface ToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: ToolContent[];
   isError?: boolean;
 }
 

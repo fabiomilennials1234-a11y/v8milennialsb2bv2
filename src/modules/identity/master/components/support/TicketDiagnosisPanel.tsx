@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
+  AlertTriangle,
   Check,
   ClipboardCopy,
   CornerDownLeft,
@@ -40,6 +41,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/shared/errors";
 import {
+  CAUSE_CONFIRMATIONS,
+  CAUSE_LABELS,
   CLAUDE_EFFORTS,
   CLAUDE_MODELS,
   COMPLEXITY_LABELS,
@@ -49,6 +52,7 @@ import {
   KIND_LABELS,
   MODEL_LABELS,
   OUTCOME_LABELS,
+  customerRepliesSince,
   diagnoseCommand,
   formatUsd,
   isOneOf,
@@ -56,8 +60,9 @@ import {
   parseUsd,
   routeDeviation,
   routeFor,
-  sessionSetup,
+  sessionCommands,
   validateDraft,
+  type CauseConfirmation,
   type DiagnosisDraft,
   type ExecutionOutcome,
   type Keystone,
@@ -86,13 +91,18 @@ async function copy(text: string, what: string) {
   }
 }
 
+type ThreadComment = { from_staff: boolean; is_internal: boolean; created_at: string };
+
 export function TicketDiagnosisPanel({
   ticketId,
   onUseReply,
+  comments = [],
 }: {
   ticketId: string;
   /** Leva a resposta sugerida para o campo de resposta ao cliente. */
   onUseReply: (text: string) => void;
+  /** A conversa do Chamado: avisa quando o cliente respondeu depois do diagnóstico. */
+  comments?: ReadonlyArray<ThreadComment>;
 }) {
   const { data: diagnosis, isLoading } = useTicketDiagnosis(ticketId);
   const [editing, setEditing] = useState(false);
@@ -133,7 +143,7 @@ export function TicketDiagnosisPanel({
             onDone={() => setEditing(false)}
           />
         ) : diagnosis ? (
-          <DiagnosisView diagnosis={diagnosis} onUseReply={onUseReply} />
+          <DiagnosisView diagnosis={diagnosis} onUseReply={onUseReply} comments={comments} />
         ) : (
           <EmptyDiagnosis ticketId={ticketId} onManual={() => setEditing(true)} />
         )}
@@ -162,7 +172,8 @@ function EmptyDiagnosis({ ticketId, onManual }: { ticketId: string; onManual: ()
   return (
     <div className="space-y-2.5">
       <p className="text-sm text-muted-foreground">
-        Ainda sem diagnóstico. Rode no Claude Code, na raiz do repositório:
+        Ainda sem diagnóstico. Rode no Claude Code, numa sessão nova (<code>/clear</code>), na
+        raiz do repositório:
       </p>
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-md border border-border/60 bg-background/70 px-2.5 py-1.5 font-mono text-xs">
@@ -188,9 +199,11 @@ function EmptyDiagnosis({ ticketId, onManual }: { ticketId: string; onManual: ()
 function DiagnosisView({
   diagnosis,
   onUseReply,
+  comments,
 }: {
   diagnosis: TicketDiagnosis;
   onUseReply: (text: string) => void;
+  comments: ReadonlyArray<ThreadComment>;
 }) {
   const keystones = parseKeystones(diagnosis.keystones);
   const route = {
@@ -203,6 +216,9 @@ function DiagnosisView({
     isOneOf(DIAGNOSIS_KINDS, diagnosis.kind) && isOneOf(DIAGNOSIS_COMPLEXITIES, diagnosis.complexity)
       ? routeDeviation(diagnosis.kind, diagnosis.complexity, route)
       : "na-matriz";
+  const commands = sessionCommands(route);
+  // A resposta sugerida descreve o Chamado no momento do diagnóstico.
+  const newReplies = customerRepliesSince(comments, diagnosis.updated_at);
 
   return (
     <div className="space-y-4">
@@ -241,15 +257,24 @@ function DiagnosisView({
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* Um comando por colagem: o Claude Code lê a colagem inteira como um comando. */}
           <Button
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 text-xs"
-            onClick={() => copy(sessionSetup(route), "Setup de modelo e effort")}
-            title={sessionSetup(route)}
+            onClick={() => copy(commands.model, "Comando de modelo")}
           >
             <Terminal className="h-3.5 w-3.5" aria-hidden />
-            1. Copiar setup
+            1. {commands.model}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => copy(commands.effort, "Comando de effort")}
+          >
+            <Terminal className="h-3.5 w-3.5" aria-hidden />
+            2. {commands.effort}
           </Button>
           <Button
             size="sm"
@@ -257,7 +282,7 @@ function DiagnosisView({
             onClick={() => copy(diagnosis.resolution_prompt, "Prompt")}
           >
             <ClipboardCopy className="h-3.5 w-3.5" aria-hidden />
-            2. Copiar prompt
+            3. Copiar prompt
           </Button>
           {diagnosis.customer_reply && (
             <Button
@@ -271,6 +296,17 @@ function DiagnosisView({
             </Button>
           )}
         </div>
+        {diagnosis.customer_reply && newReplies > 0 && (
+          <p role="status" className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-400">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              {newReplies === 1
+                ? "O cliente respondeu depois do diagnóstico."
+                : `O cliente respondeu ${newReplies} vezes depois do diagnóstico.`}{" "}
+              Leia a conversa antes de usar a resposta sugerida.
+            </span>
+          </p>
+        )}
         <details>
           <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
             Ver prompt ({diagnosis.resolution_prompt.length.toLocaleString("pt-BR")} caracteres)
@@ -312,6 +348,13 @@ function ExecutionFooter({ diagnosis }: { diagnosis: TicketDiagnosis }) {
   const record = useRecordDiagnosisExecution();
   const [outcome, setOutcome] = useState<ExecutionOutcome | "">("");
   const [cost, setCost] = useState("");
+  const [cause, setCause] = useState<CauseConfirmation | "">("");
+  const [extraCommits, setExtraCommits] = useState("0");
+  const [contradicted, setContradicted] = useState<"sim" | "nao" | "">("");
+  const extra = Number(extraCommits);
+  const extraValid = extraCommits.trim() !== "" && Number.isInteger(extra) && extra >= 0 && extra <= 50;
+  // Os três campos de precisão são o que mede o diagnóstico: sem eles o registro não serve.
+  const ready = !!outcome && !!cause && !!contradicted && extraValid;
 
   const executed =
     diagnosis.execution_outcome && isOneOf(EXECUTION_OUTCOMES, diagnosis.execution_outcome)
@@ -320,11 +363,26 @@ function ExecutionFooter({ diagnosis }: { diagnosis: TicketDiagnosis }) {
 
   function submit(next: ExecutionOutcome | null) {
     record.mutate(
-      { ticketId: diagnosis.ticket_id, outcome: next, actualCostUsd: next ? parseUsd(cost) : null },
+      {
+        ticketId: diagnosis.ticket_id,
+        outcome: next,
+        actualCostUsd: next ? parseUsd(cost) : null,
+        precision:
+          next && cause && contradicted
+            ? {
+                rootCauseConfirmed: cause,
+                extraCommits: extra,
+                replyContradicted: contradicted === "sim",
+              }
+            : null,
+      },
       {
         onSuccess: () => {
           setOutcome("");
           setCost("");
+          setCause("");
+          setExtraCommits("0");
+          setContradicted("");
         },
         onError: (e: unknown) => notifyError(e, { fallback: "Não deu para registrar a execução." }),
       },
@@ -341,6 +399,7 @@ function ExecutionFooter({ diagnosis }: { diagnosis: TicketDiagnosis }) {
           custo real {formatUsd(diagnosis.actual_cost_usd)} · estimado{" "}
           {formatUsd(diagnosis.estimated_cost_usd)}
         </span>
+        <PrecisionSummary diagnosis={diagnosis} />
         <Button
           variant="ghost"
           size="sm"
@@ -378,16 +437,64 @@ function ExecutionFooter({ diagnosis }: { diagnosis: TicketDiagnosis }) {
         aria-label="Custo real em dólares, do /cost do Claude Code"
         className="h-8 w-[140px] text-xs"
       />
+      <Select value={cause} onValueChange={(v) => setCause(v as CauseConfirmation)}>
+        <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="A causa diagnosticada se confirmou?">
+          <SelectValue placeholder="Causa" />
+        </SelectTrigger>
+        <SelectContent>
+          {CAUSE_CONFIRMATIONS.map((c) => (
+            <SelectItem key={c} value={c}>
+              {CAUSE_LABELS[c]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        value={extraCommits}
+        onChange={(e) => setExtraCommits(e.target.value)}
+        inputMode="numeric"
+        aria-label="Commits além do fix planejado"
+        title="Commits além do fix planejado (0 = o plano estava completo)"
+        className={cn("h-8 w-[64px] text-xs", !extraValid && "border-destructive")}
+      />
+      <Select value={contradicted} onValueChange={(v) => setContradicted(v as "sim" | "nao")}>
+        <SelectTrigger className="h-8 w-[180px] text-xs" aria-label="O cliente desmentiu a resposta sugerida?">
+          <SelectValue placeholder="Resposta ao cliente" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="nao">Resposta se sustentou</SelectItem>
+          <SelectItem value="sim">Cliente desmentiu</SelectItem>
+        </SelectContent>
+      </Select>
       <Button
         size="sm"
         variant="outline"
         className="h-8 text-xs"
-        disabled={!outcome || record.isPending}
+        disabled={!ready || record.isPending}
         onClick={() => outcome && submit(outcome)}
       >
         {record.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : "Registrar"}
       </Button>
     </div>
+  );
+}
+
+/** O que a execução revelou sobre o diagnóstico — só aparece quando foi registrado. */
+function PrecisionSummary({ diagnosis }: { diagnosis: TicketDiagnosis }) {
+  const cause = isOneOf(CAUSE_CONFIRMATIONS, diagnosis.root_cause_confirmed)
+    ? diagnosis.root_cause_confirmed
+    : null;
+  if (!cause) return null;
+  const extra = diagnosis.extra_commits ?? 0;
+  return (
+    <span className="text-muted-foreground">
+      <span aria-hidden>· </span>
+      {CAUSE_LABELS[cause].toLowerCase()}
+      {extra > 0 && ` · ${extra} ${extra === 1 ? "commit extra" : "commits extras"}`}
+      {diagnosis.reply_contradicted && (
+        <span className="text-amber-400"> · cliente desmentiu a resposta</span>
+      )}
+    </span>
   );
 }
 

@@ -15,12 +15,15 @@ export const DIAGNOSIS_COMPLEXITIES = ["trivial", "baixa", "media", "alta", "cri
 export const CLAUDE_MODELS = ["haiku", "sonnet", "opus", "fable"] as const;
 export const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export const EXECUTION_OUTCOMES = ["resolvido", "parcial", "falhou"] as const;
+/** A execução confirmou a causa diagnosticada? Mede a precisão do diagnóstico. */
+export const CAUSE_CONFIRMATIONS = ["sim", "nao", "parcial"] as const;
 
 export type DiagnosisKind = (typeof DIAGNOSIS_KINDS)[number];
 export type DiagnosisComplexity = (typeof DIAGNOSIS_COMPLEXITIES)[number];
 export type ClaudeModel = (typeof CLAUDE_MODELS)[number];
 export type ClaudeEffort = (typeof CLAUDE_EFFORTS)[number];
 export type ExecutionOutcome = (typeof EXECUTION_OUTCOMES)[number];
+export type CauseConfirmation = (typeof CAUSE_CONFIRMATIONS)[number];
 
 export interface Keystone {
   label: string;
@@ -51,6 +54,12 @@ export const OUTCOME_LABELS: Record<ExecutionOutcome, string> = {
   resolvido: "Resolvido",
   parcial: "Parcial",
   falhou: "Falhou",
+};
+
+export const CAUSE_LABELS: Record<CauseConfirmation, string> = {
+  sim: "Causa confirmada",
+  parcial: "Causa parcial",
+  nao: "Causa errada",
 };
 
 export const MODEL_LABELS: Record<ClaudeModel, string> = {
@@ -118,9 +127,28 @@ export function routeDeviation(
   return delta > 0 ? "acima" : "abaixo";
 }
 
-/** O que o dev cola no Claude Code antes do prompt: troca modelo e effort da sessão. */
-export function sessionSetup(route: Route): string {
-  return `/model ${route.model}\n/effort ${route.effort}`;
+/**
+ * O que o dev cola no Claude Code antes do prompt, UM comando por colagem: o
+ * Claude Code lê a colagem inteira como um comando só, então `/model opus` e
+ * `/effort medium` juntos viram "Model 'opus\n/effort medium' not found".
+ */
+export function sessionCommands(route: Route): { model: string; effort: string } {
+  return { model: `/model ${route.model}`, effort: `/effort ${route.effort}` };
+}
+
+/**
+ * Quantas mensagens do cliente chegaram depois do diagnóstico. Maior que zero,
+ * a resposta sugerida pode ter ficado velha: no Chamado 39ff2cd1 o cliente
+ * desmentiu a resposta 7 minutos depois de ela ser enviada.
+ */
+export function customerRepliesSince(
+  comments: ReadonlyArray<{ from_staff: boolean; is_internal: boolean; created_at: string }>,
+  since: string,
+): number {
+  const t = Date.parse(since);
+  return comments.filter(
+    (c) => !c.from_staff && !c.is_internal && Date.parse(c.created_at) > t,
+  ).length;
 }
 
 /** O comando que inicia a etapa 2 para este Chamado. */

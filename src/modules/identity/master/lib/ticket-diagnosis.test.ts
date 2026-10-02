@@ -5,7 +5,8 @@ import {
   parseUsd,
   routeDeviation,
   routeFor,
-  sessionSetup,
+  customerRepliesSince,
+  sessionCommands,
   validateDraft,
   type DiagnosisDraft,
 } from "./ticket-diagnosis";
@@ -59,8 +60,11 @@ describe("routeDeviation", () => {
 });
 
 describe("comandos copiáveis", () => {
-  it("setup troca modelo e effort da sessão", () => {
-    expect(sessionSetup({ model: "opus", effort: "high" })).toBe("/model opus\n/effort high");
+  it("setup sai em dois comandos, um por colagem", () => {
+    expect(sessionCommands({ model: "opus", effort: "high" })).toEqual({
+      model: "/model opus",
+      effort: "/effort high",
+    });
   });
   it("comando de diagnóstico carrega o id do Chamado", () => {
     expect(diagnoseCommand("abc")).toBe("/chamado-diagnosticar abc");
@@ -106,5 +110,21 @@ describe("parseUsd", () => {
     expect(parseUsd("1,239")).toBe(1.24);
     expect(parseUsd("")).toBeNull();
     expect(parseUsd("-2")).toBeNull();
+  });
+});
+
+describe("customerRepliesSince", () => {
+  const since = "2026-10-01T20:05:10Z";
+  it("conta só mensagem pública do cliente depois do diagnóstico", () => {
+    const comments = [
+      { from_staff: false, is_internal: false, created_at: "2026-10-01T18:51:06Z" }, // antes
+      { from_staff: true, is_internal: false, created_at: "2026-10-01T20:12:38Z" }, // equipe
+      { from_staff: false, is_internal: false, created_at: "2026-10-01T20:24:23Z" }, // conta
+      { from_staff: false, is_internal: true, created_at: "2026-10-01T20:30:00Z" }, // interna
+    ];
+    expect(customerRepliesSince(comments, since)).toBe(1);
+  });
+  it("sem mensagens, zero", () => {
+    expect(customerRepliesSince([], since)).toBe(0);
   });
 });

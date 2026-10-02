@@ -13,14 +13,22 @@ torque-mcp seguem este documento. Mudou aqui, muda lá.
 | 3 | Claude Code | Monta o diagnóstico + prompt de resolução e grava no Chamado | `support.record_diagnosis` → `support_ticket_diagnoses` |
 | 4 | Dev operacional | Responde o cliente e executa o prompt | Master → Suporte → Chamado → painel **Diagnóstico** |
 
-A etapa 4 não pede investigação. Quem a executa faz três coisas, nesta ordem:
+A etapa 4 não pede investigação. Quem a executa faz isto, nesta ordem:
 
 1. **Usar resposta sugerida** → revisa → Enviar (o cliente recebe a resposta).
-2. **Copiar setup** → cola no Claude Code (`/model …` e `/effort …`).
-3. **Copiar prompt** → cola no Claude Code. No fim, **Execução** → desfecho + custo real (`/cost`).
+   Se o painel avisar que o cliente respondeu depois do diagnóstico, leia a
+   conversa antes: a resposta pode ter ficado velha.
+2. Numa **sessão nova** do Claude Code (`/clear`): **1. `/model …`** e
+   **2. `/effort …`**, um botão e uma colagem para cada. O Claude Code lê a
+   colagem inteira como um comando só; os dois juntos falham.
+3. **3. Copiar prompt** → cola no Claude Code. A própria sessão grava a
+   execução no fim (`support.record_execution`); sem torque-mcp, registre no
+   painel **Execução**.
 
 O comando da etapa 2 aparece no próprio painel, pronto para copiar, enquanto o
-Chamado não tem diagnóstico.
+Chamado não tem diagnóstico. Rode-o também numa sessão nova: no Chamado 39ff2cd1
+o diagnóstico rodou numa sessão que já carregava 285 k tokens de outra tarefa e
+custou o dobro.
 
 ## Por que este formato
 
@@ -70,43 +78,64 @@ Como medir a complexidade:
 
 ## Estimativa de custo
 
-`custo ≈ tokens_entrada × (0,85 × preço_cache + 0,15 × preço_entrada) + tokens_saída × preço_saída`
+A conta é feita em código: `estimateCostUsd(modelo, complexidade)` em
+`supabase/functions/torque-mcp/tools/support.ts`. O `support.record_diagnosis`
+preenche `estimated_cost_usd` sozinho quando o diagnóstico não manda um valor.
+Não calcule à mão.
 
-Orçamento de tokens por complexidade (ponto de partida; recalibrar pela média
-de `actual_cost_usd` depois de ~10 execuções por nível):
+`custo = leitura_cache × preço_leitura + escrita_cache × 2 × preço_entrada + saída × preço_saída`
 
-| Complexidade | Entrada | Saída |
-|---|---|---|
-| trivial | 0,5 M | 10 k |
-| baixa | 1,5 M | 30 k |
-| média | 4 M | 80 k |
-| alta | 10 M | 200 k |
-| crítica | 20 M | 400 k |
+Uma sessão do Claude Code é quase toda leitura de cache: na execução do
+39ff2cd1, 99% da entrada. A escrita de cache usa TTL de 1 h, que custa 2× a
+entrada e foi 15–37% do custo da execução. A v1 desta tabela ignorava a escrita
+e cobrava a leitura a 0,1× da entrada; no Opus 5.5 ela é 0,05×.
 
-Preços por 1 M de tokens (entrada / saída), conforme
+Tokens da sessão de execução por complexidade. "média" é o medido no 39ff2cd1
+(real US$ 3,02; a tabela dá US$ 2,90). Os outros níveis mantêm a proporção da
+v1 até haver ~10 execuções por nível com `actual_cost_usd`:
+
+| Complexidade | Leitura de cache | Escrita de cache | Saída |
+|---|---|---|---|
+| trivial | 0,8 M | 12,5 k | 5 k |
+| baixa | 2,4 M | 37,5 k | 15 k |
+| média | 6,5 M | 100 k | 40 k |
+| alta | 16 M | 250 k | 100 k |
+| crítica | 32 M | 500 k | 200 k |
+
+Preços por 1 M de tokens, conforme
 <https://platform.claude.com/docs/en/about-claude/pricing>, lidos em
-2026-10-01. **Confira a página antes de confiar no número.** Leitura de cache
-foi tomada como 0,1 × entrada.
+2026-10-02. **Confira a página antes de confiar no número.**
 
-| Modelo | Entrada | Saída |
-|---|---|---|
-| haiku | US$ 1 | US$ 5 |
-| sonnet | US$ 2 | US$ 10 |
-| opus | US$ 4 | US$ 20 |
-| fable | US$ 10 | US$ 50 |
+| Modelo | Entrada | Leitura de cache | Saída |
+|---|---|---|---|
+| haiku | US$ 1 | US$ 0,10 | US$ 5 |
+| sonnet | US$ 2 | US$ 0,20 | US$ 10 |
+| opus | US$ 4 | US$ 0,20 | US$ 20 |
+| fable | US$ 10 | US$ 0,25 | US$ 50 |
 
-## Template do prompt de resolução — v1
+## Template do prompt de resolução — v2
 
-`template_version = 1` em `support_ticket_diagnoses`. Mudar o template é subir a
+`template_version = 2` em `support_ticket_diagnoses`. Mudar o template é subir a
 versão, para comparar acurácia e custo entre versões.
+
+O que a v2 mudou, e por quê (Chamado 39ff2cd1, primeira execução medida):
+
+| Na v1 | Na v2 |
+|---|---|
+| O print anexado não foi aberto; mostrava a falha que o fix não cobriu | Seção **Anexos**: o que cada um mostra, e o executor pode abri-los |
+| K1 dependia do Sentry, que o executor não acessa | Seção **Pré-requisitos de acesso**; keystone só com fonte acessível |
+| O PR citou uma verificação que ainda não tinha terminado | Entrega: o PR só cita o resultado depois que o verifier devolve |
+| O fix entrou em prod 12 h depois do merge, sem ninguém notar | Keystone de deploy: marcador do diff conferido no bundle de prod |
+| Ninguém gravou o desfecho | Entrega: `support.record_execution` com a precisão |
 
 ```markdown
 # Chamado <ticket_id> — <título curto>
-<!-- template v1 · <tipo> · complexidade <nível> · rota <modelo>/<effort> · estimado US$ <x> -->
+<!-- template v2 · <tipo> · complexidade <nível> · rota <modelo>/<effort> · estimado US$ <x> -->
 
 ## Sessão
-Esta task roda em **<modelo> · effort <effort>**. Antes deste prompt o dev rodou
-`/model <modelo>` e `/effort <effort>`. Se a sessão estiver em outro modelo, pare e avise.
+Esta task roda em **<modelo> · effort <effort>**, numa sessão nova. Antes deste
+prompt o dev rodou `/model <modelo>` e `/effort <effort>`. Se a sessão estiver em
+outro modelo, ou se esta conversa já tiver outra tarefa, pare e avise.
 <se desviar da matriz: uma linha com o porquê>
 
 ## Objetivo
@@ -116,6 +145,17 @@ Esta task roda em **<modelo> · effort <effort>**. Antes deste prompt o dev rodo
 - Org: <nome> · rota: <rota> · versão: <app_version>
 - Sintoma relatado: "<citação literal do cliente>"
 - Reprodução: <passos mínimos>
+- Quando: <janela do sintoma, em UTC> · o que mudou perto disso: <deploys de
+  frontend/edge, migrations — ou "nada">
+
+## Anexos
+<um por linha: `attachment_id` · horário · o que mostra. Abra com
+`mcp__torque-mcp__support_attachment_get` se precisar ver. "Nenhum" se não houver.>
+
+## Pré-requisitos de acesso
+<o que a execução precisa acessar além do repo (torque-mcp, gh, Management API).
+Fonte que o executor não acessa (Sentry, painel de terceiro) não entra em
+keystone: o diagnóstico já buscou o dado, ou a fonte fica de fora.>
 
 ## Diagnóstico (feito na etapa 2 — não refaça)
 <evidência: arquivo:linha, query + resultado resumido, log, commit que introduziu>
@@ -155,11 +195,19 @@ escale **só aquela fase**: chame o Agent com `model: "opus"`.
 ## Pronto quando (keystones)
 - [ ] K1 — <o que prova> · `<comando/query>`
 - [ ] K2 — …
+- [ ] KD — (fix de frontend) marcador do diff no bundle de produção, **depois do merge e
+      do deploy** · `curl -s https://torquecrm.com.br/ | grep -oE '/assets/index-[^"]+\.js' | xargs -I{} curl -s https://torquecrm.com.br{} | grep -c '<texto único do diff>'` → ≥ 1
 Verifique cada um **uma vez**, no fim (+1 re-run se falhar). Nada de verificação além destes.
+O KD não roda nesta sessão: ele fecha o Chamado depois do deploy (merge em main não garante deploy).
 
 ## Entrega
 - Branch nova a partir de `origin/main`: `fix/chamado-<8 primeiros do id>`; commit; PR citando o Chamado.
+- O PR cita a verificação **só depois** que o `chamado-verifier` devolver o resultado, com o output dele.
 - Sem deploy, sem migration em produção, sem push em main.
+- Grave a execução: `mcp__torque-mcp__support_record_execution` (dry-run → `confirm_token`) com
+  `outcome`, `actual_cost_usd` (`/cost`), `root_cause_confirmed` (sim | nao | parcial),
+  `extra_commits` (commits além do fix planejado) e `reply_contradicted` (o cliente desmentiu
+  a resposta sugerida?). Se ainda não dá para saber, grave o que sabe e diga o que falta.
 - Resposta final: keystones com o output literal, custo (`/cost`), arquivos alterados, PR.
 
 ## Se travar
@@ -172,6 +220,11 @@ Pare e descreva: o que tentou, a evidência e o que falta. Não amplie o escopo.
   (dry-run → plano → `confirm_token` → aplica; auditado em `master_audit_logs`).
 - Sem o torque-mcp deployado, a skill entrega o payload e o dev registra à mão
   no painel (**Ou registre o diagnóstico à mão**).
-- Re-diagnosticar sobrescreve o diagnóstico e limpa o desfecho da execução.
+- Re-diagnosticar sobrescreve o diagnóstico e limpa o desfecho da execução e a precisão.
+- A execução fecha com `support.record_execution` (ou o painel **Execução**):
+  desfecho, custo real e os três campos que medem o diagnóstico —
+  `root_cause_confirmed`, `extra_commits`, `reply_contradicted`
+  (`20271103000000_chamado_diagnostico_precisao.sql`). Sem eles não há como
+  dizer se o diagnóstico acertou, só se o Chamado foi resolvido.
 - O cliente nunca vê o diagnóstico: RLS só-master em `support_ticket_diagnoses`
   (`supabase/tests/support_ticket_diagnoses_test.sql`).

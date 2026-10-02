@@ -22,7 +22,12 @@ import { dbReadSqlTool } from "./tools/db.ts";
 import { rlsCheckAccessTool } from "./tools/rls.ts";
 import { schemaAuditDefinerTool, schemaAuditTriggersTool } from "./tools/schema.ts";
 import { migrationDiffTool } from "./tools/migration.ts";
-import { supportRecordDiagnosisTool, supportTicketGetTool } from "./tools/support.ts";
+import {
+  supportAttachmentGetTool,
+  supportRecordDiagnosisTool,
+  supportRecordExecutionTool,
+  supportTicketGetTool,
+} from "./tools/support.ts";
 import {
   workflowBuildTool,
   workflowGetTool,
@@ -50,6 +55,7 @@ const TOOLS = [
   workflowGetTool,
   workflowValidateTool,
   supportTicketGetTool,
+  supportAttachmentGetTool,
   leadRestoreTool,
   copilotUpdatePromptTool,
   copilotSetSectionsTool,
@@ -57,6 +63,7 @@ const TOOLS = [
   workflowBuildTool,
   workflowSetActiveTool,
   supportRecordDiagnosisTool,
+  supportRecordExecutionTool,
 ];
 
 // Isolate-scoped cache of the signed-in master session. The principal is fixed
