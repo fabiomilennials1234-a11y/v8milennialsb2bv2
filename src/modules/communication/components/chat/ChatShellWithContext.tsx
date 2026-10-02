@@ -578,6 +578,7 @@ export function ChatShellWithContext() {
     alternar: alternarCaixa,
     marcarSomente,
     marcarTodas,
+    marcarConjunto,
   } = useCaixasSelecionadas({
     caixas: boxes,
     caixaPreferida: preferredInstanceId,
@@ -1397,6 +1398,7 @@ export function ChatShellWithContext() {
             onAlternarCaixa={alternarCaixa}
             onSomenteCaixa={setSelectedBoxId}
             onTodasAsCaixas={marcarTodas}
+            onMarcarConjunto={marcarConjunto}
             naoLidasPorCaixa={naoLidasPorCaixa}
             metaPorLinha={metaPorLinha}
             waitingHumanCount={waitingHumanCount}

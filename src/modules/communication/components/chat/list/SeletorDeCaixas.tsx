@@ -22,7 +22,7 @@
  * ter a mesma cor nas duas telas; uma segunda derivação daria duas cores para a
  * mesma coisa, que é pior que nenhuma cor.
  */
-import { Check, ChevronDown, Settings } from "lucide-react";
+import { Check, ChevronsUpDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -86,15 +86,19 @@ export function SeletorDeCaixas({
    * por "1 caixa" faria a org de um número perder a informação que ela usa todo
    * dia para saber por qual número está falando.
    */
-  const rotulo = marcadas.length === 1 ? primeira.name : `${marcadas.length} caixas`;
+  const todasMarcadas = podeMarcarTodas && marcadas.length === caixas.length;
+  const soNumeros = caixas.every((c) => c.kind === "whatsapp");
+  const rotulo =
+    marcadas.length === 1
+      ? primeira.name
+      : todasMarcadas
+        ? `Todas as caixas · ${caixas.length} ${soNumeros ? "números" : "caixas"}`
+        : `${marcadas.length} caixas`;
 
   return (
     <div>
-      <div className="mb-1.5 flex items-center justify-between px-1">
-        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-          Caixa de entrada
-        </p>
-        {isAdmin && onOpenInstances && (
+      {isAdmin && onOpenInstances && (
+        <div className="mb-1 flex justify-end px-1">
           <Button
             variant="ghost"
             size="sm"
@@ -105,35 +109,44 @@ export function SeletorDeCaixas({
             <Settings className="w-3.5 h-3.5" />
             Instâncias
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            // Superfície translúcida: o seletor mora na coluna de tinta.
-            className="h-10 w-full justify-between rounded-2xl border-white/10 bg-white/[.05] px-3 font-semibold shadow-none hover:-translate-y-0 hover:border-white/20 hover:bg-white/[.08]"
+          {/* V5: bloco de duas linhas sobre a tinta — rótulo micro em cima,
+              caixa embaixo, selo do canal à esquerda (como no mockup). */}
+          <button
+            type="button"
+            className="group flex w-full items-center gap-2.5 rounded-2xl border border-foreground/10 bg-foreground/[.05] px-2.5 py-2 text-left transition-colors hover:border-foreground/20 hover:bg-foreground/[.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={
               marcadas.length === 1
                 ? `Caixa de entrada: ${primeira.name}`
                 : `Caixa de entrada: ${marcadas.length} caixas marcadas`
             }
           >
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] bg-foreground/[.07]">
               <ChannelBadge
                 channel={ehOficial(primeira) ? "whatsapp_oficial" : primeira.kind}
-                size={14}
+                size={18}
               />
-              {marcadas.length === 1 && (
-                <span
-                  className={cn("w-1.5 h-1.5 rounded-full shrink-0", corDoStatus(primeira.status))}
-                />
-              )}
-              <span className="truncate">{rotulo}</span>
             </span>
-            <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
-          </Button>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[10px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+                Caixa de entrada
+              </span>
+              <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                {marcadas.length === 1 && (
+                  <span
+                    className={cn("w-1.5 h-1.5 rounded-full shrink-0", corDoStatus(primeira.status))}
+                    aria-hidden
+                  />
+                )}
+                <span className="truncate">{rotulo}</span>
+              </span>
+            </span>
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden />
+          </button>
         </DropdownMenuTrigger>
 
         <DropdownMenuContent

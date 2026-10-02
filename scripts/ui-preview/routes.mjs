@@ -8,7 +8,8 @@ import { id, buildFixtures } from "./fixtures/seed.mjs";
 const fx = buildFixtures();
 const firstThread = fx.db.whatsapp_messages[0];
 
-const settingsOthers = ["integracoes", "billing", "webhooks", "api", "sla", "api-keys", "sandbox", "checklists", "oraculo-profile", "general", "ajuda"];
+// V5 (CTO, 02/10): sete abas com rota própria; as antigas viraram seções.
+const settingsTabs = ["integracoes", "assinatura", "api-webhooks", "geral"];
 
 export const ROUTES = [
   { name: "dashboard", path: "/dashboard" },
@@ -48,7 +49,7 @@ export const ROUTES = [
   { name: "config-tags", path: "/configuracoes/tags" },
   { name: "config-notificacoes", path: "/configuracoes/notificacoes" },
   { name: "config-whatsapp", path: "/configuracoes/whatsapp" },
-  ...settingsOthers.map((t) => ({ name: `config-${t}`, path: `/configuracoes/outros?tab=${t}` })),
+  ...settingsTabs.map((t) => ({ name: `config-${t}`, path: `/configuracoes/${t}` })),
   { name: "faq", path: "/faq" },
   { name: "pitstop", path: "/pitstop" },
   { name: "tv", path: "/tv", fullReload: true },

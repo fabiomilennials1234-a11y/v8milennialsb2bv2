@@ -145,6 +145,12 @@ export const rpcHandlers = {
   },
   is_master_user: (_a, fx) => fx.isMaster,
   get_my_organization_ids: (_a, fx) => [fx.orgId],
+  // Porta da ficha do lead e do painel do Negócio (`useLeadDetail`). Sem ela o
+  // fallback devolvia null e as duas telas abriam em "Lead não encontrado".
+  can_view_lead: (a, fx) => {
+    const lead = fx.db.leads.find((l) => l.id === a.p_lead_id);
+    return [{ status: !lead ? "not_found" : lead.deleted_at ? "deleted" : "exists", metadata: {} }];
+  },
   ...pipelineRpcs,
   ...analyticsRpcs(threads),
 };

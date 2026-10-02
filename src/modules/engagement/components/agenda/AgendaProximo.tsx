@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UnifiedEvent } from "./agenda-helpers";
 
-const GOOGLE_SETTINGS_PATH = "/configuracoes/outros?tab=integracoes";
+const GOOGLE_SETTINGS_PATH = "/configuracoes/integracoes";
 
 function quando(d: Date) {
   if (isToday(d)) return format(d, "HH:mm");

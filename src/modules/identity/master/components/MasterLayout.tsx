@@ -1,65 +1,55 @@
 /**
- * Layout específico para área Master
+ * Layout da área Master.
  *
- * Inclui sidebar própria e header com indicador de modo Master.
+ * V5 (onda "mais perto do mockup", 02/10): sem lateral própria. A área Master
+ * é uma página com o aviso vermelho de que tudo aqui vale para TODAS as
+ * organizações, a pílula de grupos e o segmentado das sub-páginas
+ * (`MasterNav`). O shell em volta (trilho e barra superior do app) é do
+ * roteamento em `App.tsx`; enquanto a rota não estiver dentro dele, este
+ * layout desenha a bancada e o "Voltar ao app" sozinho.
  *
- * V5: mesma bancada do app (`data-layout="main"` liga a grade de 28px no
- * fundo) e a lateral em tinta flutuante. O sinal vermelho de "Modo Master"
- * continua sempre à vista, agora como pílula fixa no topo da área de trabalho
- * — vermelho é o aviso de que tudo aqui atravessa organizações. O padding da
- * página mora no <main>; as páginas não somam o próprio.
- *
- * Celular: a lateral de 256 px ocupava dois terços da tela a 390. Abaixo de
- * `md` ela vira gaveta, aberta pelo botão ao lado da pílula.
+ * O padding da página mora no <main>; as páginas não somam o próprio.
  */
 
-import { useState } from "react";
-import { Outlet } from "react-router-dom";
-import { Menu, Shield } from "lucide-react";
-import { MasterSidebar } from "./MasterSidebar";
+import { Outlet, useNavigate } from "react-router-dom";
+import { ArrowLeft, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useMasterAuth } from "../hooks/useMasterAuth";
+import { MasterNav } from "./MasterSidebar";
 
 export function MasterLayout() {
-  const [navOpen, setNavOpen] = useState(false);
+  const navigate = useNavigate();
+  const { masterUser, isOutbounder } = useMasterAuth();
 
   return (
-    <div className="flex h-screen bg-background" data-layout="main">
-      <div className="hidden md:flex">
-        <MasterSidebar />
-      </div>
-
-      <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground">
-          <SheetTitle className="sr-only">Navegação Master</SheetTitle>
-          <MasterSidebar
-            className="m-0 h-full w-full rounded-none border-0 shadow-none"
-            onNavigate={() => setNavOpen(false)}
-          />
-        </SheetContent>
-      </Sheet>
-
-      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden md:overflow-x-auto">
-        {/* Master Mode Indicator — a faixa externa não captura clique; só a pílula e o menu. */}
-        <div className="pointer-events-none sticky top-0 z-20 flex items-center gap-2 px-4 pt-3 md:justify-center">
-          <Button
-            variant="ink"
-            size="icon"
-            className="pointer-events-auto shrink-0 md:hidden"
-            aria-label="Abrir navegação Master"
-            onClick={() => setNavOpen(true)}
-          >
-            <Menu />
+    <div className="min-h-screen bg-background" data-layout="main">
+      <main className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+            <ArrowLeft />
+            Voltar ao app
           </Button>
-          <div className="pointer-events-auto inline-flex min-w-0 items-center gap-2 rounded-full bg-destructive px-4 py-1.5 text-xs font-semibold text-destructive-foreground shadow-[0_8px_24px_-8px_hsl(var(--destructive)/.7)]">
-            <Shield className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="truncate">
-              Modo Master Admin<span className="max-sm:hidden"> — acesso total ao sistema</span>
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1.5 text-xs font-bold text-destructive-foreground shadow-[0_8px_24px_-8px_hsl(var(--destructive)/.7)]">
+            <Shield className="h-3.5 w-3.5" aria-hidden />
+            {isOutbounder ? "Painel Outbound" : "Modo master"}
+          </span>
+          <span className="ml-auto truncate text-xs text-muted-foreground max-sm:hidden">
+            {masterUser?.notes || "Master User"} · todas as ações são logadas
+          </span>
         </div>
 
-        <div className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+        <MasterNav />
+
+        {/* Faixa vermelha: o que se faz aqui atravessa organizações. */}
+        <p
+          role="note"
+          className="flex items-start gap-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-2.5 text-[12.5px] font-semibold text-destructive"
+        >
+          <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          Camada master · o que você fizer aqui vale para todas as organizações e fica na auditoria.
+        </p>
+
+        <div className="min-w-0">
           <Outlet />
         </div>
       </main>

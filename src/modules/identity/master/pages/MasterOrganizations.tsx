@@ -190,7 +190,6 @@ export default function MasterOrganizations() {
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
-                <TableHead>ID</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Plano</TableHead>
@@ -201,13 +200,13 @@ export default function MasterOrganizations() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={6} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredOrgs?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhuma organização encontrada
                   </TableCell>
                 </TableRow>
@@ -219,28 +218,6 @@ export default function MasterOrganizations() {
                         <p className="font-medium">{org.name}</p>
                         <p className="text-sm text-muted-foreground">{org.slug}</p>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1.5 group/copy"
-                        onClick={() => {
-                          navigator.clipboard.writeText(org.id);
-                          setCopiedId(org.id);
-                          toast.success("ID copiado");
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                        title={org.id}
-                      >
-                        <code className="text-xs text-muted-foreground font-mono">
-                          {org.id.slice(0, 8)}...
-                        </code>
-                        {copiedId === org.id ? (
-                          <Check className="w-3 h-3 text-success-strong" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
-                        )}
-                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant={org.org_type === "outbound" ? "info" : "soft"}>
@@ -259,11 +236,23 @@ export default function MasterOrganizations() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label={`Ações de ${org.name}`}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* V5: a coluna de ID saiu da tabela; o copiar continua aqui. */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              navigator.clipboard.writeText(org.id);
+                              setCopiedId(org.id);
+                              toast.success("ID copiado");
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === org.id ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                            Copiar ID
+                          </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Eye className="w-4 h-4 mr-2" />
                             Ver Detalhes

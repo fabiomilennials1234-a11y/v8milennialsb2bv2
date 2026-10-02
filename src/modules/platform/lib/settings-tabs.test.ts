@@ -6,16 +6,18 @@ import {
   SETTINGS_OTHERS_PATH,
   SETTINGS_TABS,
   SETTINGS_TAB_PATHS,
+  hostSettingsTab,
   isPrimarySettingsTab,
   resolveSettingsTab,
   settingsTabPath,
-  visibleOtherSettingsTabs,
-  visiblePrimarySettingsTabs,
+  visibleSettingsSections,
   visibleSettingsTabs,
 } from "./settings-tabs";
 
 const ADMIN_OUTBOUND = { isAdmin: true, isOutboundOrg: true };
 const MEMBRO_INBOUND = { isAdmin: false, isOutboundOrg: false };
+
+const tab = (value: string) => SETTINGS_TABS.find((t) => t.value === value)!;
 
 describe("registro das abas de Configurações", () => {
   it("slugs e values são únicos", () => {
@@ -26,25 +28,40 @@ describe("registro das abas de Configurações", () => {
   });
 
   /**
-   * Só três abas viram rota — decisão do CTO. Se uma quarta ganhar `primary`
-   * sem passar por essa decisão, este caso avisa.
+   * Sete abas — decisão do CTO de 02/10 (eram quinze, que rolavam na pílula).
+   * Se uma oitava aparecer sem passar por essa decisão, este caso avisa.
    */
-  it("apenas Tags, Notificações e WhatsApp são primárias", () => {
-    expect(SETTINGS_TABS.filter(isPrimarySettingsTab).map((t) => t.value)).toEqual([
-      "tags",
-      "notifications",
-      "whatsapp",
+  it("as abas são exatamente as sete do mockup, na ordem dele", () => {
+    expect(SETTINGS_TABS.filter((t) => !t.group && !t.redirect).map((t) => t.label)).toEqual([
+      "Tags",
+      "Notificações",
+      "WhatsApp",
+      "Integrações",
+      "Assinatura e cobrança",
+      "API & Webhooks",
+      "Geral",
     ]);
   });
 
-  it("primária tem rota própria; o resto mora em Outros com `?tab=`", () => {
-    expect(settingsTabPath(SETTINGS_TABS[0])).toBe("/configuracoes/tags");
-    expect(settingsTabPath(SETTINGS_TABS[1])).toBe("/configuracoes/notificacoes");
-    expect(settingsTabPath(SETTINGS_TABS[2])).toBe("/configuracoes/whatsapp");
+  it("toda aba tem rota própria; seção aponta para a aba que a hospeda", () => {
+    expect(settingsTabPath(tab("tags"))).toBe("/configuracoes/tags");
+    expect(settingsTabPath(tab("integracoes"))).toBe("/configuracoes/integracoes");
+    expect(settingsTabPath(tab("api-webhooks"))).toBe("/configuracoes/api-webhooks");
+    expect(settingsTabPath(tab("sla"))).toBe("/configuracoes/geral?secao=sla");
+    expect(settingsTabPath(tab("webhooks"))).toBe("/configuracoes/api-webhooks?secao=webhooks");
+  });
 
-    for (const tab of SETTINGS_TABS.filter((t) => !isPrimarySettingsTab(t))) {
-      expect(settingsTabPath(tab)).toBe(`${SETTINGS_OTHERS_PATH}?tab=${tab.value}`);
-    }
+  it("Checklists saiu das Configurações — o link antigo vai para /checklists", () => {
+    expect(settingsTabPath(tab("checklists"))).toBe("/checklists");
+    expect(visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value)).not.toContain("checklists");
+  });
+
+  it("link antigo de aba que virou seção resolve, e a aba-mãe é a que abre", () => {
+    expect(hostSettingsTab(resolveSettingsTab("api-keys")!).value).toBe("api-webhooks");
+    expect(hostSettingsTab(resolveSettingsTab("sandbox")!).value).toBe("general");
+    expect(hostSettingsTab(resolveSettingsTab("perfil-operacao")!).value).toBe("general");
+    // Aba de verdade resolve para ela mesma.
+    expect(hostSettingsTab(resolveSettingsTab("whatsapp")!).value).toBe("whatsapp");
   });
 
   /**
@@ -61,7 +78,9 @@ describe("registro das abas de Configurações", () => {
   });
 
   it("toda rota de configuração está na matriz de permissão de view", () => {
-    expect(SETTINGS_TAB_PATHS).toHaveLength(4); // as três primárias + Outros
+    // as sete abas + a porta antiga "Outros", que só redireciona
+    expect(SETTINGS_TAB_PATHS).toHaveLength(8);
+    expect(SETTINGS_TAB_PATHS).toContain(SETTINGS_OTHERS_PATH);
     for (const path of SETTINGS_TAB_PATHS) {
       expect(NAV_VIEW_PERMISSIONS[path]).toBe("settings.view");
     }
@@ -70,62 +89,52 @@ describe("registro das abas de Configurações", () => {
   it("aceita slug de rota e `?tab=`, e recusa o que não conhece", () => {
     expect(resolveSettingsTab("notificacoes")?.value).toBe("notifications");
     expect(resolveSettingsTab("notifications")?.slug).toBe("notificacoes");
-    expect(resolveSettingsTab("whatsapp")?.value).toBe("whatsapp");
-    // Link antigo para uma aba que hoje mora em Outros ainda resolve — é assim
-    // que `/configuracoes?tab=integracoes` continua abrindo Integrações.
     expect(resolveSettingsTab("integracoes")?.value).toBe("integracoes");
-    // "outros" é a porta, não uma aba: quem resolve o conteúdo é o `?tab=`.
+    // "outros" é a porta antiga, não uma aba.
     expect(resolveSettingsTab("outros")).toBeNull();
     expect(resolveSettingsTab("inexistente")).toBeNull();
     expect(resolveSettingsTab(null)).toBeNull();
   });
 
-  it("Marcos só em org outbound; Central de Ajuda só para admin", () => {
-    const membro = visibleSettingsTabs(MEMBRO_INBOUND).map((t) => t.value);
-    expect(membro).not.toContain("marcos");
-    expect(membro).not.toContain("ajuda");
-    expect(membro).not.toContain("billing");
+  it("Assinatura só para admin; Marcos só em org outbound; Central de Ajuda só para admin", () => {
+    expect(visibleSettingsTabs(MEMBRO_INBOUND).map((t) => t.value)).not.toContain("billing");
+    expect(visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value)).toContain("billing");
 
-    const admin = visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value);
-    expect(admin).toContain("marcos");
-    expect(admin).toContain("ajuda");
-    expect(admin).toContain("billing");
+    const secoesMembro = visibleSettingsSections("general", MEMBRO_INBOUND).map((t) => t.value);
+    expect(secoesMembro).not.toContain("marcos");
+    expect(secoesMembro).not.toContain("ajuda");
+
+    const secoesAdmin = visibleSettingsSections("general", ADMIN_OUTBOUND).map((t) => t.value);
+    expect(secoesAdmin).toContain("marcos");
+    expect(secoesAdmin).toContain("ajuda");
   });
 
-  it("o gating não alcança as primárias — elas valem para todo mundo", () => {
-    expect(visiblePrimarySettingsTabs(MEMBRO_INBOUND)).toHaveLength(3);
-    expect(visiblePrimarySettingsTabs(MEMBRO_INBOUND)).toContain(DEFAULT_SETTINGS_TAB);
-    expect(visibleOtherSettingsTabs(ADMIN_OUTBOUND).length).toBeGreaterThan(
-      visibleOtherSettingsTabs(MEMBRO_INBOUND).length,
-    );
+  it("a aba padrão vale para todo mundo", () => {
+    expect(isPrimarySettingsTab(DEFAULT_SETTINGS_TAB)).toBe(true);
+    expect(visibleSettingsTabs(MEMBRO_INBOUND)).toContain(DEFAULT_SETTINGS_TAB);
   });
 });
 
 /**
- * Guarda do buraco que esta mudança fechou: no desktop o gatilho do Pitstop só
- * abre o painel — não navega. Sem itens de configuração no painel, a tela
- * `/configuracoes` não tem nenhum caminho de UI.
+ * O Pitstop é o único caminho de UI até `/configuracoes` no desktop. Sem os
+ * itens de configuração nele, a tela fica sem porta.
  */
 describe("grupo Configurações do Pitstop", () => {
-  it("mostra as três primárias e uma porta para Outros — nada além", () => {
+  it("membro vê as seis abas que pode abrir — sem Assinatura, sem 'Outros'", () => {
     const group = buildSettingsGroup(MEMBRO_INBOUND);
-
     expect(group.items.map((item) => item.label)).toEqual([
       "Tags",
       "Notificações",
       "WhatsApp",
-      "Outros",
+      "Integrações",
+      "API & Webhooks",
+      "Geral",
     ]);
-    expect(group.items.map((item) => item.path)).toEqual([
-      "/configuracoes/tags",
-      "/configuracoes/notificacoes",
-      "/configuracoes/whatsapp",
-      SETTINGS_OTHERS_PATH,
-    ]);
+    expect(group.items.map((item) => item.path)).toContain("/configuracoes/geral");
   });
 
-  it("não cresce com o inventário: admin de org outbound vê os mesmos 4 itens", () => {
-    expect(buildSettingsGroup(ADMIN_OUTBOUND).items).toHaveLength(4);
+  it("admin vê as sete", () => {
+    expect(buildSettingsGroup(ADMIN_OUTBOUND).items).toHaveLength(7);
   });
 
   it("todo item tem rótulo e ícone", () => {

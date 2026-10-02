@@ -246,3 +246,26 @@ describe("useCaixasSelecionadas — a ordem e o `só esta`", () => {
     expect(result.current.caixasMarcadas).toEqual([comercial]);
   });
 });
+
+describe("useCaixasSelecionadas — o atalho de canal (`marcarConjunto`)", () => {
+  it("marca exatamente as caixas do canal, sem somar às que estavam marcadas", () => {
+    const { result } = renderHook(() =>
+      useCaixasSelecionadas({ caixas: [comercial, tecnica, insta], caixaPreferida: "cx-insta", userId: "u1" }),
+    );
+
+    act(() => result.current.marcarConjunto(["cx-tecnica", "cx-comercial"]));
+
+    expect(result.current.marcadas).toEqual(["cx-comercial", "cx-tecnica"]);
+  });
+
+  it("id fora do permitido é descartado; conjunto vazio é sem-op", () => {
+    const { result } = renderHook(() =>
+      useCaixasSelecionadas({ caixas: [comercial, tecnica], userId: "u1" }),
+    );
+    const antes = result.current.marcadas;
+
+    act(() => result.current.marcarConjunto(["cx-de-outra-org"]));
+
+    expect(result.current.marcadas).toEqual(antes);
+  });
+});

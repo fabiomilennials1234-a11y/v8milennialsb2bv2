@@ -1,40 +1,32 @@
 /**
- * Sidebar específica para área Master Admin
+ * Navegação da área Master.
+ *
+ * V5 (onda "mais perto do mockup", 02/10): a lateral vermelha de 18 itens
+ * virou uma pílula de 7 grupos (Dashboard · Organizações · Usuários · Planos ·
+ * Saúde · Auditoria · Suporte) e, dentro do grupo, um segmentado com as
+ * sub-páginas. Os destinos são EXATAMENTE os mesmos de antes, com os mesmos
+ * filtros de permissão — só a forma mudou. O arquivo mantém o nome antigo para
+ * não espalhar renomeação; o componente agora é `MasterNav`.
  *
  * Outbounder vê apenas Dashboard, Organizações e Usuários.
  * Master (all=true) vê tudo.
  */
 
-import { NavLink, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { NavLink, useLocation } from "react-router-dom";
 import {
-  Shield,
   LayoutDashboard,
   Building2,
   Users,
-  UserCog,
   CreditCard,
   Activity,
-  Flag,
-  ArrowLeft,
-  Monitor,
-  Heart,
-  Brain,
-  ToggleLeft,
-  MessageSquare,
-  Rocket,
-  Megaphone,
-  CircleDollarSign,
+  HeartPulse,
   LifeBuoy,
-  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 
 interface NavItem {
   label: string;
-  icon: React.ElementType;
   path: string;
   /** Se definido, o item só aparece quando a permissão existir (ou all=true) */
   permission?: string;
@@ -46,140 +38,137 @@ interface NavItem {
   requiresFullMaster?: boolean;
 }
 
-const allNavItems: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/master" },
-  { label: "Organizações", icon: Building2, path: "/master/organizations", permission: "organizations" },
-  { label: "Usuários", icon: Users, path: "/master/users", permission: "users" },
-  { label: "Usuários Ativos", icon: Radio, path: "/master/usuarios-ativos", permission: "users", requiresFullMaster: true },
-  { label: "Gestores", icon: UserCog, path: "/master/gestores", permission: "gestores" },
-  { label: "Planos", icon: CreditCard, path: "/master/plans", permission: "billing" },
-  { label: "Features", icon: Flag, path: "/master/features", permission: "features" },
-  { label: "Suporte", icon: LifeBuoy, path: "/master/support-tickets", permission: "support" },
-  { label: "Logs de Auditoria", icon: Activity, path: "/master/audit-logs", permission: "audit" },
-  { label: "Operations", icon: Monitor, path: "/master/operations", permission: "audit" },
-  { label: "Automation Health", icon: Heart, path: "/master/automation-health", permission: "audit" },
-  { label: "WhatsApp Health", icon: MessageSquare, path: "/master/whatsapp-health", permission: "audit" },
-  { label: "Qualidade Oráculo", icon: Brain, path: "/master/oraculo-feedback", permission: "audit", requiresFullMaster: true },
-  { label: "Copilot Reasoning", icon: Brain, path: "/master/copilot-reasoning", permission: "audit" },
-  { label: "Copilot Toggle Audit", icon: ToggleLeft, path: "/master/copilot-toggle-audit", permission: "audit" },
-  { label: "Etapas Won/Lost", icon: CircleDollarSign, path: "/master/stage-roles", permission: "audit" },
-  { label: "Onboarding", icon: Rocket, path: "/master/onboarding", permission: "features" },
-  { label: "Meta — Ativos", icon: Megaphone, path: "/master/meta-assets", permission: "features" },
-];
-
-interface MasterSidebarProps {
-  className?: string;
-  /** Chamado depois de navegar — a gaveta do celular fecha sozinha. */
-  onNavigate?: () => void;
+interface NavGroup {
+  label: string;
+  icon: React.ElementType;
+  items: NavItem[];
 }
 
-export function MasterSidebar({ className, onNavigate }: MasterSidebarProps = {}) {
-  const navigate = useNavigate();
-  const { masterUser, permissions, isOutbounder } = useMasterAuth();
+/** Os mesmos 18 destinos da lateral antiga, agrupados. */
+const MASTER_GROUPS: NavGroup[] = [
+  { label: "Dashboard", icon: LayoutDashboard, items: [{ label: "Dashboard", path: "/master" }] },
+  {
+    label: "Organizações",
+    icon: Building2,
+    items: [
+      { label: "Organizações", path: "/master/organizations", permission: "organizations" },
+      { label: "Onboarding", path: "/master/onboarding", permission: "features" },
+      { label: "Meta — Ativos", path: "/master/meta-assets", permission: "features" },
+      { label: "Etapas Won/Lost", path: "/master/stage-roles", permission: "audit" },
+    ],
+  },
+  {
+    label: "Usuários",
+    icon: Users,
+    items: [
+      { label: "Usuários", path: "/master/users", permission: "users" },
+      { label: "Usuários Ativos", path: "/master/usuarios-ativos", permission: "users", requiresFullMaster: true },
+      { label: "Gestores", path: "/master/gestores", permission: "gestores" },
+    ],
+  },
+  {
+    label: "Planos",
+    icon: CreditCard,
+    items: [
+      { label: "Planos", path: "/master/plans", permission: "billing" },
+      { label: "Features", path: "/master/features", permission: "features" },
+    ],
+  },
+  {
+    label: "Saúde",
+    icon: HeartPulse,
+    items: [
+      { label: "Operations", path: "/master/operations", permission: "audit" },
+      { label: "Automation Health", path: "/master/automation-health", permission: "audit" },
+      { label: "WhatsApp Health", path: "/master/whatsapp-health", permission: "audit" },
+      { label: "Qualidade Oráculo", path: "/master/oraculo-feedback", permission: "audit", requiresFullMaster: true },
+      { label: "Copilot Reasoning", path: "/master/copilot-reasoning", permission: "audit" },
+    ],
+  },
+  {
+    label: "Auditoria",
+    icon: Activity,
+    items: [
+      { label: "Logs de Auditoria", path: "/master/audit-logs", permission: "audit" },
+      { label: "Copilot Toggle Audit", path: "/master/copilot-toggle-audit", permission: "audit" },
+    ],
+  },
+  { label: "Suporte", icon: LifeBuoy, items: [{ label: "Suporte", path: "/master/support-tickets", permission: "support" }] },
+];
 
-  // Filtrar nav items baseado nas permissões
-  const navItems = allNavItems.filter((item) => {
+function pathCasa(atual: string, path: string) {
+  return path === "/master" ? atual === "/master" || atual === "/master/" : atual === path || atual.startsWith(`${path}/`);
+}
+
+const PILL_ITEM =
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+
+export function MasterNav({ className }: { className?: string }) {
+  const { pathname } = useLocation();
+  const { permissions } = useMasterAuth();
+
+  const pode = (item: NavItem) => {
     // Itens de frota inteira: só master pleno. Checado ANTES do resto, senão
     // o outbounder passaria pelo `permission: "users"` que ele possui.
     if (item.requiresFullMaster && !permissions.all) return false;
     if (!item.permission) return true; // Dashboard sempre visível
     if (permissions.all) return true; // Master full access
     return !!(permissions as Record<string, boolean>)[item.permission];
-  });
+  };
 
-  // V5: tinta flutuante, igual à lateral do app (Sidebar.tsx). O acento da
-  // área Master é VERMELHO — o ouro fica para o produto; aqui o ativo ganha
-  // ícone e trilho em `destructive` (ou `insights` para o outbounder), para
-  // ninguém confundir as duas lateralidades num relance.
-  const accentText = isOutbounder ? "text-insights" : "text-destructive";
+  const grupos = MASTER_GROUPS.map((g) => ({ ...g, items: g.items.filter(pode) })).filter((g) => g.items.length > 0);
+  const ativo = grupos.find((g) => g.items.some((i) => pathCasa(pathname, i.path))) ?? grupos[0];
 
   return (
-    <motion.aside
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      className={cn(
-        "m-3 mr-0 flex h-[calc(100vh-1.5rem)] w-64 shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta",
-        className,
-      )}
-    >
-      {/* Header */}
-      <div className="border-b border-sidebar-border px-4 pb-4 pt-5">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-              isOutbounder ? "bg-insights/15" : "bg-destructive/15",
-            )}
-          >
-            <Shield className={cn("h-[18px] w-[18px]", accentText)} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-bold tracking-tight text-sidebar-foreground">
-              {isOutbounder ? "Painel Outbound" : "Master Admin"}
-            </h2>
-            <p className="truncate text-xs text-sidebar-foreground/55">
-              {isOutbounder ? "Gestão de Outbound" : "Acesso Total"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === "/master"}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              cn(
-                "group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
-                isActive
-                  ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {/* Trilho de 3px colado na borda da lateral, com brilho. */}
-                {isActive && (
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "absolute -left-2.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full",
-                      isOutbounder
-                        ? "bg-insights shadow-[0_0_12px_hsl(var(--insights)/.65)]"
-                        : "bg-destructive shadow-[0_0_12px_hsl(var(--destructive)/.65)]"
-                    )}
-                  />
-                )}
-                <item.icon className={cn("h-[17px] w-[17px] shrink-0", isActive && accentText)} />
-                <span className="flex-1 truncate">{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+    <div className={cn("flex min-w-0 flex-col gap-3", className)}>
+      <nav
+        aria-label="Seções do Master"
+        className="inline-flex max-w-full items-center gap-0.5 self-start overflow-x-auto rounded-full bg-tinta p-1 text-tinta-muted shadow-relevo-tinta scrollbar-hide"
+      >
+        {grupos.map((g) => {
+          const isAtivo = g === ativo;
+          return (
+            <NavLink
+              key={g.label}
+              to={g.items[0].path}
+              end={g.items[0].path === "/master"}
+              aria-current={isAtivo ? "page" : undefined}
+              className={cn(
+                PILL_ITEM,
+                isAtivo
+                  ? "bg-destructive text-destructive-foreground shadow-[0_8px_24px_-10px_hsl(var(--destructive)/.8)]"
+                  : "hover:text-tinta-foreground",
+              )}
+            >
+              <g.icon className="h-3.5 w-3.5" aria-hidden />
+              {g.label}
+            </NavLink>
+          );
+        })}
       </nav>
 
-      {/* Footer */}
-      <div className="space-y-2 border-t border-sidebar-border p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start rounded-xl border border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          onClick={() => navigate("/")}
+      {ativo && ativo.items.length > 1 && (
+        <nav
+          aria-label={`Páginas de ${ativo.label}`}
+          className="inline-flex max-w-full items-center gap-0.5 self-start overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar ao App
-        </Button>
-
-        <div className="px-2.5 py-1.5 text-xs text-sidebar-foreground/55">
-          <p className="truncate font-medium text-sidebar-foreground/80">{masterUser?.notes || "Master User"}</p>
-          <p>Todas as ações são logadas</p>
-        </div>
-      </div>
-    </motion.aside>
+          {ativo.items.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+                )
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense, type ElementType, type ReactNode } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePipelineDisplayConfig } from "@/modules/pipelines";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
@@ -10,9 +10,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Shield,
-  Database,
-  Globe,
   MoreHorizontal,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -56,12 +53,10 @@ import { useOrganization } from "@/modules/identity";
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_BASE_PATH,
-  SETTINGS_OTHERS_PATH,
-  SETTINGS_OTHERS_SLUG,
-  isPrimarySettingsTab,
+  canSeeSettingsTab,
+  hostSettingsTab,
   resolveSettingsTab,
   settingsTabPath,
-  visibleOtherSettingsTabs,
   visibleSettingsTabs,
 } from "@/modules/platform/lib/settings-tabs";
 import { toast } from "sonner";
@@ -110,19 +105,11 @@ const SandboxPanel = lazy(() =>
     default: m.SandboxPanel,
   }))
 );
-const ChecklistTemplatesManager = lazy(() =>
-  import("@/modules/engagement/components/checklists/ChecklistTemplatesManager").then((m) => ({
-    default: m.ChecklistTemplatesManager,
-  }))
-);
 const OraculoPerfilSettings = lazy(() =>
   import("@/modules/copilot").then((m) => ({ default: m.OraculoPerfilSettings }))
 );
-const ApiKeysPanel = lazy(() =>
-  import("@/modules/platform/components/settings/ApiKeysPanel").then((m) => ({
-    default: m.ApiKeysPanel,
-  }))
-);
+// API Keys não tem mais aba própria: `ApiDocsSettings` já embute o painel de
+// chaves (era a mesma tela em dois lugares).
 
 const colorOptions = [
   "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444",
@@ -373,9 +360,11 @@ function ConfirmacaoOverdueSettings() {
   const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
   // Nome do funil de reuniões como a ORG o vê (SCRUM-641).
   const { data: displayConfigs } = usePipelineDisplayConfig();
+  // Sem o funil de reuniões, o título dizia "Funil Funil removido" (o prefixo
+  // fixo somado ao fallback). Agora o título não depende do nome existir.
   const nomeConfirmacao = (() => {
     const c = displayConfigs?.find((x) => x.pipe_type === "confirmacao");
-    return c ? c.display_name || NOME_DE_FABRICA.confirmacao : "Funil removido";
+    return c ? c.display_name || NOME_DE_FABRICA.confirmacao : null;
   })();
   const [localDays, setLocalDays] = useState(settings.confirmacao_overdue_days);
   const [saved, setSaved] = useState(false);
@@ -400,7 +389,7 @@ function ConfirmacaoOverdueSettings() {
   return (
     <div className="space-y-4">
       <SectionHeading
-        title={`Funil ${nomeConfirmacao}`}
+        title={nomeConfirmacao ? `Atraso · ${nomeConfirmacao}` : "Atraso de reunião"}
         description={<>Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)</>}
       />
       <div className="flex flex-wrap items-end gap-3">
@@ -642,77 +631,57 @@ export default function Configuracoes() {
   const location = useLocation();
 
   const isOutboundOrg = orgType === "outbound";
-  const tabs = useMemo(
-    () => visibleSettingsTabs({ isAdmin, isOutboundOrg }),
-    [isAdmin, isOutboundOrg],
-  );
+  const visibilidade = useMemo(() => ({ isAdmin, isOutboundOrg }), [isAdmin, isOutboundOrg]);
+  const tabs = useMemo(() => visibleSettingsTabs(visibilidade), [visibilidade]);
 
-  // A URL manda. `:tab` é a rota das três primárias; `?tab=` identifica as de
-  // "Outros" e continua servindo os links antigos (onboarding, banner do chat).
-  // Aba pedida mas invisível para este usuário (Marcos fora de outbound, Ajuda
-  // sem admin) cai no padrão da rota em que ele está.
-  const isOthersRoute = tabParam === SETTINGS_OTHERS_SLUG;
+  // A URL manda. `:tab` é a rota da aba; `?tab=` serve os links antigos
+  // (onboarding, banner do chat, "Outros"). V5: as quinze abas viraram sete —
+  // aba antiga que virou SEÇÃO abre o grupo dela rolado até a seção, e
+  // Checklists (que duplicava `/checklists`) desvia para lá.
   const requested = resolveSettingsTab(tabParam) ?? resolveSettingsTab(searchParams.get("tab"));
-  const fallbackTab = isOthersRoute
-    ? (visibleOtherSettingsTabs({ isAdmin, isOutboundOrg })[0] ?? DEFAULT_SETTINGS_TAB)
-    : DEFAULT_SETTINGS_TAB;
-  const activeTab =
-    requested && tabs.some((t) => t.value === requested.value) ? requested : fallbackTab;
+  const secaoPedida =
+    searchParams.get("secao") ?? (requested?.group && canSeeSettingsTab(requested, visibilidade) ? requested.value : null);
+  const host = requested ? hostSettingsTab(requested) : null;
+  const activeTab = host && tabs.some((t) => t.value === host.value) ? host : DEFAULT_SETTINGS_TAB;
 
-  // Normaliza para o endereço canônico da aba ativa. Os demais parâmetros de
-  // query sobrevivem de propósito: o retorno do OAuth do Google cai aqui com
+  // Normaliza para o endereço canônico. Os demais parâmetros de query
+  // sobrevivem de propósito: o retorno do OAuth do Google cai aqui com
   // `?google=connected&email=…`, e descartá-los engoliria o toast de conexão.
   useEffect(() => {
+    if (requested?.redirect) {
+      navigate(requested.redirect, { replace: true });
+      return;
+    }
     const nextParams = new URLSearchParams(searchParams);
-    if (isPrimarySettingsTab(activeTab)) nextParams.delete("tab");
-    else nextParams.set("tab", activeTab.value);
-
-    const basePath = isPrimarySettingsTab(activeTab)
-      ? `${SETTINGS_BASE_PATH}/${activeTab.slug}`
-      : SETTINGS_OTHERS_PATH;
+    nextParams.delete("tab");
+    if (secaoPedida) nextParams.set("secao", secaoPedida);
+    const basePath = `${SETTINGS_BASE_PATH}/${activeTab.slug}`;
     const query = nextParams.toString();
     const canonical = query ? `${basePath}?${query}` : basePath;
-
     if (`${location.pathname}${location.search}` !== canonical) {
       navigate(canonical, { replace: true });
     }
-  }, [activeTab, location.pathname, location.search, navigate, searchParams]);
+  }, [activeTab, requested, secaoPedida, location.pathname, location.search, navigate, searchParams]);
 
-  // Quinze pílulas não cabem numa linha: a fileira rola. Sem isto, abrir
-  // `/configuracoes/outros?tab=general` deixava a pílula ativa fora da vista.
-  // Rola só o eixo X da própria fileira — nunca a página.
-  const tabsListRef = useRef<HTMLDivElement>(null);
+  // Leva o olho até a seção pedida (link antigo de aba que virou seção).
   useEffect(() => {
-    const list = tabsListRef.current;
-    if (!list) return;
-    const centerActive = () => {
-      const active = list.querySelector<HTMLElement>('[data-state="active"]');
-      if (!active) return;
-      const listBox = list.getBoundingClientRect();
-      const activeBox = active.getBoundingClientRect();
-      if (activeBox.left >= listBox.left && activeBox.right <= listBox.right) return;
-      const target = list.scrollLeft + (activeBox.left - listBox.left) - (listBox.width - activeBox.width) / 2;
-      list.scrollTo?.({ left: Math.max(0, target) });
-    };
-    centerActive();
-    // A largura da fileira muda depois do primeiro desenho (o Pitstop abre ao
-    // lado e a estreita): recentra quando ela mudar de tamanho.
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(centerActive);
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, [activeTab.value]);
+    if (!secaoPedida) return;
+    // API Keys mora dentro da documentação da API (o painel embute as chaves).
+    const alvo = secaoPedida === "api-keys" ? "api" : secaoPedida;
+    const id = window.setTimeout(() => {
+      document.getElementById(`secao-${alvo}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 150);
+    return () => window.clearTimeout(id);
+  }, [secaoPedida, activeTab.value]);
+
+  const ver = (value: string) => {
+    const tab = resolveSettingsTab(value);
+    return !!tab && canSeeSettingsTab(tab, visibilidade);
+  };
 
   return (
     // Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo registro
-    // que alimenta o Pitstop — dois inventários divergiriam. Leitura da ajuda
-    // mora no painel de suporte (o "?" do Cmd+K); aqui fica só a autoria, e
-    // `HelpAdminPanel` não se protege sozinho — quem gateava era o
-    // `HelpCenter`, que saiu daqui.
-    //
-    // V5: o `<Tabs>` envolve o cabeçalho para a navegação da página morar
-    // dentro do `PageHeader` como pílula escura (antes: círculos de 48px que
-    // cresciam para 160px com gradiente). Mesmos `value`s, mesma navegação.
+    // que alimenta o Pitstop — dois inventários divergiriam.
     <Tabs
       value={activeTab.value}
       onValueChange={(value) => {
@@ -723,12 +692,12 @@ export default function Configuracoes() {
     >
       <PageHeader
         title="Configurações"
-        subtitle="Gerencie as configurações do sistema"
+        subtitle={activeTab.subtitle ?? "Gerencie as configurações do sistema"}
         tabs={
-          <TabsList ref={tabsListRef} variant="pill" aria-label="Seções de configurações">
+          <TabsList variant="pill" aria-label="Seções de configurações">
             {tabs.map((tab) => (
+              // Só o rótulo: sete pílulas com ícone não cabem no centro da barra.
               <TabsTrigger key={tab.value} value={tab.value}>
-                <tab.icon className="h-4 w-4" aria-hidden />
                 {tab.label}
               </TabsTrigger>
             ))}
@@ -763,126 +732,89 @@ export default function Configuracoes() {
           </Suspense>
         </TabsContent>
 
-        <TabsContent value="webhooks" className="mt-0">
-          <Suspense fallback={<TabFallback label="Webhooks" />}>
-            <SettingsCard>
-              <WebhookSettings />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="api" className="mt-0">
-          <Suspense fallback={<TabFallback label="documentação" />}>
-            <ApiDocsSettings />
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="sla" className="mt-0">
-          <Suspense fallback={<TabFallback label="SLA" />}>
-            <SettingsCard>
-              <SlaConfigPanel />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="api-keys" className="mt-0">
-          <Suspense fallback={<TabFallback label="API Keys" />}>
-            <SettingsCard>
-              <ApiKeysPanel />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="sandbox" className="mt-0">
-          <Suspense fallback={<TabFallback label="Sandbox" />}>
-            <SettingsCard>
-              <SandboxPanel />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="checklists" className="mt-0">
-          <Suspense fallback={<TabFallback label="Checklists" />}>
-            <SettingsCard>
-              <ChecklistTemplatesManager />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="oraculo-profile" className="mt-0">
-          <Suspense fallback={<TabFallback label="Perfil da operação" />}>
-            <SettingsCard>
-              <OraculoPerfilSettings />
-            </SettingsCard>
-          </Suspense>
-        </TabsContent>
-
         {isAdmin && <TabsContent value="billing" className="mt-0">
           <Suspense fallback={<TabFallback label="assinatura e cobrança" />}>
             <BillingSettings onContactSupport={supportAvailable ? openNewTicket : undefined} />
           </Suspense>
         </TabsContent>}
 
-        <TabsContent value="general" className="mt-0">
-          <SettingsCard>
-            <GeneralSettings />
-          </SettingsCard>
-        </TabsContent>
-
-        {isAdmin && (
-          <TabsContent value="ajuda" className="mt-0">
-            <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+        {/* API & Webhooks: as chaves e a documentação (o painel embute a
+            gestão de chaves) e os webhooks de saída. */}
+        <TabsContent value="api-webhooks" className="mt-0 space-y-5">
+          <SecaoDeConfiguracao id="api" titulo="Chaves e documentação da API">
+            <Suspense fallback={<TabFallback label="documentação" />}>
+              <ApiDocsSettings />
+            </Suspense>
+          </SecaoDeConfiguracao>
+          <SecaoDeConfiguracao id="webhooks" titulo="Webhooks de saída">
+            <Suspense fallback={<TabFallback label="Webhooks" />}>
               <SettingsCard>
-                <HelpAdminPanel />
+                <WebhookSettings />
               </SettingsCard>
             </Suspense>
-          </TabsContent>
-        )}
+          </SecaoDeConfiguracao>
+        </TabsContent>
 
-        {orgType === "outbound" && (
-          <TabsContent value="marcos" className="mt-0">
-            <Suspense fallback={<TabFallback label="Marcos" />}>
-              <MilestonesConfig />
+        {/* Geral: a organização e, abaixo, o que antes eram abas próprias. */}
+        <TabsContent value="general" className="mt-0 space-y-5">
+          <SecaoDeConfiguracao id="general" titulo="Organização">
+            <SettingsCard>
+              <GeneralSettings />
+            </SettingsCard>
+          </SecaoDeConfiguracao>
+          <SecaoDeConfiguracao id="sla" titulo="SLA de atendimento">
+            <Suspense fallback={<TabFallback label="SLA" />}>
+              <SettingsCard>
+                <SlaConfigPanel />
+              </SettingsCard>
             </Suspense>
-          </TabsContent>
-        )}
+          </SecaoDeConfiguracao>
+          <SecaoDeConfiguracao id="oraculo-profile" titulo="Perfil da operação">
+            <Suspense fallback={<TabFallback label="Perfil da operação" />}>
+              <SettingsCard>
+                <OraculoPerfilSettings />
+              </SettingsCard>
+            </Suspense>
+          </SecaoDeConfiguracao>
+          <SecaoDeConfiguracao id="sandbox" titulo="Sandbox">
+            <Suspense fallback={<TabFallback label="Sandbox" />}>
+              <SettingsCard>
+                <SandboxPanel />
+              </SettingsCard>
+            </Suspense>
+          </SecaoDeConfiguracao>
+          {ver("marcos") && (
+            <SecaoDeConfiguracao id="marcos" titulo="Marcos">
+              <Suspense fallback={<TabFallback label="Marcos" />}>
+                <MilestonesConfig />
+              </Suspense>
+            </SecaoDeConfiguracao>
+          )}
+          {ver("ajuda") && (
+            <SecaoDeConfiguracao id="ajuda" titulo="Central de Ajuda">
+              <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+                <SettingsCard>
+                  <HelpAdminPanel />
+                </SettingsCard>
+              </Suspense>
+            </SecaoDeConfiguracao>
+          )}
+        </TabsContent>
       </div>
-
-      {/* ⚠️ HERDADO: os três cartões abaixo são FIXOS no código — não medem
-          banco, RLS nem latência. Ficam (decisão de produto pendente); só a
-          forma mudou. Ver docs/ui-v5/validacao-telas.md. */}
-      <div className="grid grid-cols-1 gap-4 pt-3 md:grid-cols-3">
-        <StatusCard icon={Database} title="Banco de Dados" detail="Status: Conectado" badge="Online" />
-        <StatusCard icon={Shield} title="Segurança" detail="RLS: Ativo" badge="Protegido" />
-        <StatusCard icon={Globe} title="API" detail={<>Latência: {"<"}50ms</>} badge="Rápido" />
-      </div>
+      {/* Os três cartões fixos "Banco de Dados / Segurança / API" saíram
+          (decisão do CTO, 02/10): não mediam banco, RLS nem latência. */}
     </Tabs>
   );
 }
 
-function StatusCard({
-  icon: Icon,
-  title,
-  detail,
-  badge,
-}: {
-  icon: ElementType;
-  title: string;
-  detail: ReactNode;
-  badge: string;
-}) {
+/** Seção de uma aba-grupo: âncora para links antigos e título que separa. */
+function SecaoDeConfiguracao({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
   return (
-    <Card className="flex items-start gap-3 p-4">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
-        <Icon className="h-4 w-4" aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <p className="text-sm font-bold tracking-tight">{title}</p>
-          <Badge variant="success">{badge}</Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
-      </div>
-    </Card>
+    <section id={`secao-${id}`} aria-labelledby={`secao-${id}-titulo`} className="scroll-mt-24 space-y-3">
+      <h2 id={`secao-${id}-titulo`} className="px-1 text-[13px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+        {titulo}
+      </h2>
+      {children}
+    </section>
   );
 }

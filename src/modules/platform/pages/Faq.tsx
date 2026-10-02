@@ -1,9 +1,13 @@
 /**
- * Faq — Central de Ajuda / Perguntas Frequentes do Torque CRM.
+ * Central de Ajuda (rota /faq).
  *
- * Página estática (sem backend) alimentada por `faq-data.ts`. Busca em tempo
- * real sobre pergunta + resposta + keywords, com filtro por categoria.
- * Rota /faq.
+ * V5 (onda "mais perto do mockup", 02/10): página com três abas —
+ *  · Artigos: os artigos do CMS (vídeo, feedback), que antes só apareciam no
+ *    painel de suporte;
+ *  · Perguntas frequentes: o FAQ estático de `faq-data.ts` (busca em tempo real
+ *    sobre pergunta + resposta + keywords, com filtro por categoria) — igual;
+ *  · Meus chamados: a lista de chamados do painel, agora numa página.
+ * "Abrir chamado" abre o MESMO formulário do painel de suporte.
  */
 
 import { useMemo, useState } from "react";
@@ -23,10 +27,21 @@ import {
   CalendarDays,
   BarChart2,
   CreditCard,
+  BookOpen,
+  Headset,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCurrentTeamMember } from "@/modules/identity";
+import { useHelpArticles } from "@/modules/platform/hooks/useHelpCenter";
+import { useSupportTickets } from "@/modules/platform/hooks/useSupportTickets";
+import { useSupportPanel } from "@/modules/platform/components/support/SupportPanelContext";
+import { AjudaArtigos } from "@/modules/platform/components/support/AjudaArtigos";
+import { AjudaChamados } from "@/modules/platform/components/support/AjudaChamados";
 import {
   Accordion,
   AccordionContent,
@@ -71,6 +86,65 @@ const matchesQuery = (item: FaqItem, q: string) => {
 };
 
 export default function Faq() {
+  const { openNewTicket, openTicket } = useSupportPanel();
+  const { data: membro } = useCurrentTeamMember();
+  const { data: articles = [], isLoading: artigosCarregando } = useHelpArticles();
+  const { data: tickets = [] } = useSupportTickets();
+  const temArtigos = articles.some((a) => a.is_published);
+  const abertos = tickets.filter((t) => t.status !== "resolvido" && t.status !== "fechado").length;
+  // Sem artigo publicado a aba Artigos é um convite vazio: abre no FAQ.
+  const [aba, setAba] = useState<string | null>(null);
+  const abaAtiva = aba ?? (artigosCarregando || temArtigos ? "artigos" : "faq");
+  const primeiroNome = membro?.name?.trim().split(/\s+/)[0] ?? null;
+
+  return (
+    <Tabs value={abaAtiva} onValueChange={setAba} className="space-y-5">
+      <PageHeader
+        title="Central de Ajuda"
+        subtitle="Artigos, perguntas frequentes e os seus chamados com o suporte"
+        actions={
+          <Button onClick={openNewTicket}>
+            <Plus />
+            Abrir chamado
+          </Button>
+        }
+        tabs={
+          <TabsList variant="pill" aria-label="Seções da ajuda">
+            <TabsTrigger value="artigos">
+              <BookOpen className="h-3.5 w-3.5" />
+              Artigos
+            </TabsTrigger>
+            <TabsTrigger value="faq">
+              <HelpCircle className="h-3.5 w-3.5" />
+              Perguntas frequentes
+            </TabsTrigger>
+            <TabsTrigger value="chamados">
+              <Headset className="h-3.5 w-3.5" />
+              Meus chamados
+              {abertos > 0 && (
+                <span className="rounded-full bg-white/10 px-1.5 text-[11px] font-bold tabular-nums [[data-state=active]>&]:bg-primary-foreground/15">
+                  {abertos}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        }
+      />
+      <TabsContent value="artigos" className="mt-0">
+        <AjudaArtigos primeiroNome={primeiroNome} onAbrirChamado={openNewTicket} onVerFaq={() => setAba("faq")} />
+      </TabsContent>
+      <TabsContent value="faq" className="mt-0">
+        <PerguntasFrequentes />
+      </TabsContent>
+      <TabsContent value="chamados" className="mt-0">
+        <AjudaChamados onAbrir={openTicket} onNovo={openNewTicket} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** O FAQ estático de sempre (85 perguntas), agora numa aba. */
+function PerguntasFrequentes() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -99,15 +173,10 @@ export default function Faq() {
     // Largura de leitura: perguntas e respostas são texto corrido.
     <div className="mx-auto w-full max-w-4xl space-y-8">
       <div className="space-y-5">
-        <PageHeader
-          title="Central de Ajuda"
-          subtitle={
-            <>
-              Respostas rápidas para as dúvidas mais comuns do Torque
-              {totalQuestions > 0 && ` · ${totalQuestions} perguntas`}
-            </>
-          }
-        />
+        <p className="text-[13px] text-muted-foreground">
+          Respostas rápidas para as dúvidas mais comuns do Torque
+          {totalQuestions > 0 && ` · ${totalQuestions} perguntas`}
+        </p>
 
         {/* Busca */}
         <div className="relative">
@@ -117,7 +186,6 @@ export default function Faq() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar uma dúvida... (ex.: conectar WhatsApp, importar leads)"
             className="h-11 rounded-full pl-10 text-sm shadow-relevo"
-            autoFocus
           />
         </div>
 
