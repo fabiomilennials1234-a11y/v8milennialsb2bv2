@@ -405,3 +405,26 @@ export async function requestHistoryRecovery(
 export function transcribeAudio(instanceId: string, rowId: string) {
   return callProxy<{ text: string; provider: string; createdAt: string; cached: boolean }>("transcribeAudio", { instance_id: instanceId, payload: { row_id: rowId } });
 }
+
+// ============================================================================
+// Grupos (nó de automação `send_to_group`)
+// ============================================================================
+
+export type InstanceGroup = { jid: string; name: string };
+export type InstanceGroupList = { groups: InstanceGroup[]; truncated: boolean };
+
+/**
+ * Os grupos de que a instância participa, para o seletor do nó "Enviar p/
+ * grupo". Só Uazapi lista (422 `groups_not_supported` nos demais) e só quem
+ * edita automações pode listar (403) — o painel cai no campo manual nos dois.
+ */
+export async function listGroups(instanceId: string): Promise<InstanceGroupList> {
+  const r = await callProxy<Partial<InstanceGroupList>>("listGroups", {
+    instance_id: instanceId,
+    payload: {},
+  });
+  return {
+    groups: Array.isArray(r?.groups) ? r.groups : [],
+    truncated: r?.truncated === true,
+  };
+}

@@ -2,6 +2,7 @@ import { InstanceProvisioningUncertainError, provisionWhatsAppInstance } from ".
 import { requestGroupCapture } from "../_shared/uazapi-webhook-policy.ts";
 import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-guard.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
+import { authorizeGroupListing, listInstanceGroups } from "../_shared/whatsapp-group-list.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -305,6 +306,9 @@ Deno.serve(
     // NULL quando o ator não tem cadeira na org alvo (Master, Gestor de
     // Portfólio): a mensagem sai, apenas sem autor.
     let callerTeamMemberId: string | null = null;
+    // Gestor de Portfólio resolvido no ramo abaixo. Hoje só a `listGroups` lê:
+    // Master e Gestor passam por fora do gate de `workflows.edit`.
+    let isGestor = false;
 
     if (isMaster) {
       // Master can act on any org. Require explicit target so we never assume.
@@ -333,6 +337,7 @@ Deno.serve(
       // Master, precisa de organization_id explícito e só alcança orgs às quais
       // está vinculado. Enviar mensagem é operação → liberado.
       callerOrgId = targetOrgId;
+      isGestor = true;
     } else {
       const { data: userOrg, error: orgErr } = await supabaseAdmin
         .from("team_members")
@@ -609,6 +614,26 @@ Deno.serve(
             );
           }
         }
+      }
+
+      // -----------------------------------------------------------------------
+      // listGroups — gate extra, depois da fronteira de tenant e antes de
+      // instanciar o provider: só quem edita automações lista os grupos do
+      // número (nó `send_to_group`), e só Uazapi tem grupo. Ver
+      // _shared/whatsapp-group-list.ts.
+      // -----------------------------------------------------------------------
+      if (action === "listGroups") {
+        const gate = await authorizeGroupListing({
+          isMaster,
+          isGestor,
+          provider: (instance as WhatsAppInstance).provider,
+          canEditWorkflows: async () =>
+            await supabaseUser.rpc("has_feature_permission", {
+              p_feature_key: "workflows.edit",
+              p_org_id: callerOrgId,
+            }),
+        });
+        if (!gate.ok) return jsonResponse(gate.status, gate.body, corsHeaders);
       }
 
       // -----------------------------------------------------------------------
@@ -1534,6 +1559,12 @@ Deno.serve(
             cursor?: string;
           };
           result = await provider.historySync({ chat_jid, limit, cursor });
+          break;
+        }
+
+        case "listGroups": {
+          // Gate (permissão + provedor) já aplicado antes do provider.
+          result = await listInstanceGroups(provider);
           break;
         }
 
