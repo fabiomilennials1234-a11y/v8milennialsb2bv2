@@ -39,8 +39,8 @@ const STATUS_LABEL: Record<NotificameTemplateStatus, string> = {
 };
 
 const STATUS_TONE: Record<NotificameTemplateStatus, string> = {
-  APPROVED: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-  PENDING: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  APPROVED: "border-success/25 bg-success/10 text-success",
+  PENDING: "border-warning/30 bg-warning/15 text-warning-strong",
   REJECTED: "border-destructive/30 bg-destructive/10 text-destructive",
   PAUSED: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
   DISABLED: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",

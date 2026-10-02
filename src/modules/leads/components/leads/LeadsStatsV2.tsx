@@ -1,23 +1,22 @@
-import type { ComponentType } from "react";
+import type { KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Users, CalendarDays, UserCheck, X } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Users, CalendarDays, UserCheck, X, type LucideIcon } from "lucide-react";
+import { KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 
 /**
- * Faixa de números da tela de Leads — versão "Depois".
+ * Faixa de números da tela de Leads — V5 (`KpiTile`).
  *
- * O que muda em relação aos `.stat-card`:
- * - o número é o protagonista (28px, tabular, tracking negativo), o rótulo é
- *   caption — na versão anterior os dois tinham quase o mesmo peso;
- * - cada card ganha **contexto**: "este mês" sozinho é um número solto;
- *   "este mês · 12% do total" é uma leitura. A barra embaixo é a mesma
+ * O que vem da versão anterior e continua valendo:
+ * - o número é o protagonista, o rótulo é legenda;
+ * - cada cartão ganha **contexto**: "este mês" sozinho é um número solto;
+ *   "12% do total entraram este mês" é uma leitura. A barra embaixo é a mesma
  *   proporção, pra bater o olho sem ler;
- * - **card é controle, não decoração**: clicar aplica o filtro que ele conta
- *   (Linear faz isso nos insights; Stripe nos tiles de disputa). O card ativo
- *   ganha borda dourada e um "×" pra desfazer.
+ * - **cartão é controle, não decoração**: clicar aplica o filtro que ele conta
+ *   (Linear faz isso nos insights; Stripe nos tiles de disputa). O cartão ativo
+ *   ganha anel dourado e o ícone vira um "×" pra desfazer.
  *
- * O card de rating saiu junto com o filtro de rating da página (main de
+ * O cartão de rating saiu junto com o filtro de rating da página (main de
  * 2026-09); os três que ficam seguem `useLeadsStats` + `useLeadsCount`.
  */
 export interface LeadsStatsV2Props {
@@ -36,11 +35,11 @@ interface Tile {
   key: string;
   label: string;
   value: number;
-  icon: ComponentType<{ className?: string }>;
+  icon: LucideIcon;
+  tone: "neutral" | "gold" | "good";
   /** Proporção 0–1 em relação ao total; `undefined` = sem barra. */
   share?: number;
   context: string;
-  accent?: "primary" | "success";
   filter?: { active: boolean; toggle: () => void; hint: string };
 }
 
@@ -54,6 +53,12 @@ function share(part: number, total: number): number | undefined {
 
 const EASE = [0.2, 0, 0, 1] as const;
 
+const BAR: Record<Tile["tone"], string> = {
+  neutral: "bg-foreground/60",
+  gold: "bg-primary",
+  good: "bg-success",
+};
+
 export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }: LeadsStatsV2Props) {
   const reduce = useReducedMotion();
   const semDono = Math.max(0, total - withOwner);
@@ -64,16 +69,17 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
       label: "Total de leads",
       value: total,
       icon: Users,
-      context: "na organização, com os filtros atuais",
+      tone: "neutral",
+      context: "Na organização, com os filtros atuais",
     },
     {
       key: "mes",
       label: "Este mês",
       value: thisMonth,
       icon: CalendarDays,
+      tone: "gold",
       share: share(thisMonth, total),
-      context: total ? `${pf.format(thisMonth / total)} do total entraram este mês` : "entraram este mês",
-      accent: "primary",
+      context: total ? `${pf.format(thisMonth / total)} do total entraram este mês` : "Entraram este mês",
       filter: filters?.thisMonth && { ...filters.thisMonth, hint: "Filtrar por criados este mês" },
     },
     {
@@ -81,90 +87,68 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
       label: "Com responsável",
       value: withOwner,
       icon: UserCheck,
+      tone: "good",
       share: share(withOwner, total),
-      context: total ? `${nf.format(semDono)} sem dono` : "nenhum sem dono",
-      accent: "success",
+      context: total ? `${nf.format(semDono)} sem dono` : "Nenhum sem dono",
       filter: filters?.unassigned && { ...filters.unassigned, hint: "Mostrar só os sem dono" },
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {tiles.map((t, i) => {
-        const Icon = t.icon;
-        const bar = t.accent === "primary" ? "bg-primary" : t.accent === "success" ? "bg-success" : "bg-foreground/60";
         const clickable = !!t.filter;
         const active = !!t.filter?.active;
-        const Tag = clickable ? motion.button : motion.div;
+        const onKeyDown = clickable
+          ? (e: KeyboardEvent<HTMLDivElement>) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                t.filter!.toggle();
+              }
+            }
+          : undefined;
 
         return (
-          <Tag
+          <KpiTile
             key={t.key}
-            type={clickable ? "button" : undefined}
-            onClick={clickable ? t.filter!.toggle : undefined}
+            label={t.label}
+            value={isLoading ? "·" : nf.format(t.value)}
+            loading={isLoading}
+            // Ativo: o ícone vira o "×" que desfaz, no chip de ouro.
+            icon={active ? X : t.icon}
+            tone={active ? "gold" : t.tone}
+            note={isLoading ? " " : t.context}
+            // O cartão É o botão: `role` + teclado, sem envelopar <div> em
+            // <button> (conteúdo em bloco dentro de botão é HTML inválido).
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
             aria-pressed={clickable ? active : undefined}
-            title={clickable ? (active ? "Remover filtro" : t.filter!.hint) : undefined}
-            initial={reduce ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, ease: EASE, delay: reduce ? 0 : i * 0.04 }}
+            // `KpiTile` tira `title` do TIPO (o nome está ocupado pelo rótulo),
+            // mas repassa o atributo ao <div>: é a dica nativa de hover.
+            {...{ title: clickable ? (active ? "Remover filtro" : t.filter!.hint) : undefined }}
+            onClick={clickable ? t.filter!.toggle : undefined}
+            onKeyDown={onKeyDown}
             className={cn(
-              "group relative flex flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4 text-left",
-              "transition-[border-color,background-color] duration-150",
-              active ? "border-primary/60 bg-primary/[0.04]" : "border-border",
-              clickable && !active && "hover:border-muted-foreground/30 cursor-pointer",
-              clickable && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              clickable &&
+                "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              active && "ring-2 ring-primary/70",
             )}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                {t.label}
-              </span>
-              {active ? (
-                <span
-                  aria-hidden="true"
-                  className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                >
-                  <X className="size-3" />
-                </span>
-              ) : (
-                <Icon
-                  aria-hidden="true"
-                  className={cn(
-                    "size-4 text-muted-foreground/70 transition-colors duration-150 group-hover:text-foreground/80",
-                    t.accent === "primary" && "text-primary/80 group-hover:text-primary",
-                  )}
+            {t.share !== undefined && (
+              <div
+                className="h-1 w-full overflow-hidden rounded-full bg-muted"
+                role="img"
+                aria-label={`${pf.format(t.share)} do total`}
+              >
+                <motion.div
+                  className={cn("h-full rounded-full", BAR[t.tone])}
+                  initial={reduce ? false : { width: 0 }}
+                  animate={{ width: `${(isLoading ? 0 : t.share) * 100}%` }}
+                  transition={{ duration: 0.4, ease: EASE, delay: reduce ? 0 : 0.15 + i * 0.04 }}
                 />
-              )}
-            </div>
-
-            {isLoading ? (
-              <Skeleton className="h-8 w-20 rounded-md" />
-            ) : (
-              <span className="text-[28px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-foreground">
-                {nf.format(t.value)}
-              </span>
+              </div>
             )}
-
-            <div className="flex flex-col gap-1.5">
-              <span className="truncate text-xs text-muted-foreground" title={t.context}>
-                {isLoading ? " " : t.context}
-              </span>
-              {t.share !== undefined && (
-                <div
-                  className="h-1 w-full overflow-hidden rounded-full bg-muted"
-                  role="img"
-                  aria-label={`${pf.format(t.share)} do total`}
-                >
-                  <motion.div
-                    className={cn("h-full rounded-full", bar)}
-                    initial={reduce ? false : { width: 0 }}
-                    animate={{ width: `${(isLoading ? 0 : t.share) * 100}%` }}
-                    transition={{ duration: 0.4, ease: EASE, delay: reduce ? 0 : 0.15 + i * 0.04 }}
-                  />
-                </div>
-              )}
-            </div>
-          </Tag>
+          </KpiTile>
         );
       })}
     </div>

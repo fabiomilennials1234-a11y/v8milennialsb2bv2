@@ -32,7 +32,7 @@ function Row({
     <div className="flex items-start gap-3 px-4 py-3.5">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{label}</p>
         <div className="mt-0.5 text-sm text-foreground">{children}</div>
       </div>
     </div>
@@ -70,7 +70,7 @@ export function StepReview({ draft }: StepReviewProps) {
         subtitle="Confira antes de enviar. Depois de iniciado, o disparo segue sozinho — você acompanha e pode pausar a qualquer momento."
       />
 
-      <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-sunken">
         <Row icon={Users} label="Pra quem">
           <span className="font-medium">{draft.audienceLabel || "—"}</span>
           <span className="text-muted-foreground">
@@ -121,7 +121,7 @@ export function StepReview({ draft }: StepReviewProps) {
       {/* Day-by-day plan — only when it spans multiple days */}
       {plan.isPlan && (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             Distribuição por dia
           </p>
           <div className="flex flex-wrap gap-1.5">

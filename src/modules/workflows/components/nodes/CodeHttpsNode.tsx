@@ -23,7 +23,7 @@ function CodeHttpsNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="code_https"
-      icon={<Network className="w-5 h-5 text-violet-500" />}
+      icon={<Network />}
       title={nodeData.label || "HTTPS"}
       subtitle={buildSubtitle(nodeData)}
       selected={selected}

@@ -126,7 +126,7 @@ export function MobileChatListHeader({
           : vendorOptions.find((v) => v.id === vendorFilter)?.name ?? "Vendedor";
 
   return (
-    <div className="bg-background border-b border-border/30 shrink-0">
+    <div className="shrink-0 border-b border-border/40 bg-background">
       {/* ── Row 1: Instance pill + Search ──────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 pt-2 pb-1">
         {searchExpanded ? (
@@ -173,7 +173,7 @@ export function MobileChatListHeader({
               <span
                 className={cn(
                   "w-2 h-2 rounded-full shrink-0",
-                  instanceConnected ? "bg-emerald-500" : "bg-red-500",
+                  instanceConnected ? "bg-success" : "bg-destructive",
                 )}
               />
               <span className="truncate max-w-[160px]">{instanceName}</span>
@@ -203,7 +203,7 @@ export function MobileChatListHeader({
             className={cn(
               "shrink-0 h-auto w-auto gap-1 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap [&>svg]:hidden",
               vendorActive
-                ? "bg-[hsl(47_100%_50%)]/10 text-[hsl(47_100%_50%)] border-[hsl(47_100%_50%)]/30"
+                ? "border-transparent bg-primary-soft font-semibold text-primary-soft-foreground"
                 : "border-border/40 text-muted-foreground",
             )}
             aria-label="Filtrar por vendedor"
@@ -237,7 +237,7 @@ export function MobileChatListHeader({
               className={cn(
                 "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                 isActive
-                  ? "bg-[hsl(47_100%_50%)]/10 text-[hsl(47_100%_50%)] border-[hsl(47_100%_50%)]/30"
+                  ? "border-transparent bg-primary-soft font-semibold text-primary-soft-foreground"
                   : "border-border/40 text-muted-foreground active:bg-muted/60",
               )}
             >

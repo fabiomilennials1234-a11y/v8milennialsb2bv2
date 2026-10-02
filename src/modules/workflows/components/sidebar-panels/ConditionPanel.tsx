@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useOrgUtmValues, UTM_VALUE_FIELDS } from "@/modules/workflows/hooks/useOrgUtmValues";
 import { useOrgCustomFieldValues } from "@/modules/workflows/hooks/useOrgCustomFieldValues";
 import { ValueCombobox } from "./ValueCombobox";
+import { DiscontinuedNotice } from "../DiscontinuedNotice";
 
 interface ConditionPanelProps {
   data: ConditionNodeData;
@@ -35,27 +36,33 @@ const FIELD_OPTIONS = [
   { value: "utm_campaign", label: "Campanha (UTM)" },
   { value: "utm_source", label: "Fonte (UTM source)" },
   { value: "utm_medium", label: "Meio (UTM medium)" },
-  { value: "utm_content", label: "Conteudo (UTM content)" },
+  { value: "utm_content", label: "Conteúdo (UTM content)" },
   { value: "utm_term", label: "Termo (UTM term)" },
-  { value: "rating", label: "Rating" },
   { value: "faturamento", label: "Faturamento" },
   { value: "segment", label: "Segmento" },
-  { value: "urgency", label: "Urgencia" },
-  { value: "score", label: "Score" },
+  { value: "urgency", label: "Urgência" },
   { value: "tag", label: "Tag" },
   { value: "stage_id", label: "Etapa atual do negócio" },
   // ── Negócio ── (ADR-0023: lead não tem etapa nem valor; negócio tem)
-  { value: "deal_value", label: "Valor do negocio" },
-  { value: "has_open_deal", label: "Tem negocio aberto (true/false)" },
+  { value: "deal_value", label: "Valor do negócio" },
+  { value: "has_open_deal", label: "Tem negócio aberto (true/false)" },
   { value: "days_in_stage", label: "Dias parado na etapa" },
-  { value: "pre_sale_responsible_id", label: "Responsavel Pre-vendas" },
-  { value: "sale_responsible_id", label: "Responsavel Vendas" },
-  { value: "any_responsible", label: "Responsavel (qualquer)" },
-  { value: "sdr_id", label: "Responsavel Qualificacao (legado)" },
-  { value: "last_message", label: "Ultima mensagem" },
+  { value: "pre_sale_responsible_id", label: "Responsável Pré-vendas" },
+  { value: "sale_responsible_id", label: "Responsável Vendas" },
+  { value: "any_responsible", label: "Responsável (qualquer)" },
+  { value: "sdr_id", label: "Responsável Qualificação (legado)" },
+  { value: "last_message", label: "Última mensagem" },
   { value: "message_count", label: "Qtd. mensagens" },
   { value: "days_since_contact", label: "Dias sem contato" },
   { value: "custom", label: "Campo customizado" },
+];
+
+// Score e rating do lead saíram do produto (CTO, 02/10). Não são oferecidos para
+// condição nova; só aparecem quando já são o campo salvo do nó, com o selo de
+// descontinuado, para serem trocados. O executor continua avaliando os salvos.
+const DISCONTINUED_FIELD_OPTIONS = [
+  { value: "rating", label: "Rating (descontinuado)" },
+  { value: "score", label: "Score (descontinuado)" },
 ];
 
 // Fields that reference a team member (FK). Value picks a member, not free text.
@@ -98,12 +105,12 @@ const NO_VALUE_OPERATORS: ConditionOperator[] = ["is_empty", "is_not_empty"];
 const CUSTOM_FIELD_PREFIX = "custom.";
 
 const TIMEZONE_OPTIONS = [
-  { value: "America/Sao_Paulo", label: "Brasilia (GMT-3)" },
+  { value: "America/Sao_Paulo", label: "Brasília (GMT-3)" },
   { value: "America/Manaus", label: "Manaus (GMT-4)" },
-  { value: "America/Belem", label: "Belem (GMT-3)" },
+  { value: "America/Belem", label: "Belém (GMT-3)" },
   { value: "America/Fortaleza", label: "Fortaleza (GMT-3)" },
   { value: "America/Recife", label: "Recife (GMT-3)" },
-  { value: "America/Cuiaba", label: "Cuiaba (GMT-4)" },
+  { value: "America/Cuiaba", label: "Cuiabá (GMT-4)" },
   { value: "America/Rio_Branco", label: "Rio Branco (GMT-5)" },
   { value: "America/Noronha", label: "Noronha (GMT-2)" },
 ];
@@ -256,13 +263,13 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
         <Input
           value={data.label || ""}
           onChange={(e) => onUpdate({ label: e.target.value })}
-          placeholder={mode === "time_window" ? "Ex: Horario comercial" : "Ex: Score maior que 50?"}
+          placeholder={mode === "time_window" ? "Ex: Horário comercial" : "Ex: Lead tem a tag VIP?"}
         />
       </div>
 
       {/* Mode toggle */}
       <div className="space-y-2">
-        <Label>Tipo de condicao</Label>
+        <Label>Tipo de condição</Label>
         <div className="grid grid-cols-2 gap-2">
           <Button
             type="button"
@@ -282,7 +289,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
             onClick={() => handleModeChange("time_window")}
           >
             <Clock className="w-3.5 h-3.5" />
-            Horario
+            Horário
           </Button>
         </div>
       </div>
@@ -300,13 +307,14 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                 <SelectValue placeholder="Selecione o campo" />
               </SelectTrigger>
               <SelectContent>
-                {FIELD_OPTIONS.map((opt) => (
+                {[...FIELD_OPTIONS, ...DISCONTINUED_FIELD_OPTIONS.filter((opt) => opt.value === data.field)].map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {DISCONTINUED_FIELD_OPTIONS.some((opt) => opt.value === data.field) && <DiscontinuedNotice />}
           </div>
 
           {isCustomField && (
@@ -331,8 +339,8 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                 </SelectContent>
               </Select>
               {customFieldMissing && (
-                <p className="text-xs text-amber-600 dark:text-amber-500">
-                  Este campo nao existe mais na org — a condicao nunca sera
+                <p className="text-xs text-warning-strong">
+                  Este campo não existe mais na org — a condição nunca será
                   verdadeira. Selecione outro campo.
                 </p>
               )}
@@ -394,12 +402,12 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                   onValueChange={(v) => onUpdate({ value: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o responsavel" />
+                    <SelectValue placeholder="Selecione o responsável" />
                   </SelectTrigger>
                   <SelectContent>
                     {members.length === 0 ? (
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                        Nenhum responsavel disponivel
+                        Nenhum responsável disponível
                       </div>
                     ) : (
                       members.map((m) => (
@@ -481,7 +489,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
                   className={cn(
                     "cursor-pointer select-none px-2.5 py-1 text-xs",
                     timeWindow.days.includes(d.value)
-                      ? "bg-primary text-primary-foreground"
+                      ? "border-tinta bg-tinta text-tinta-foreground hover:bg-tinta"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                   onClick={() => toggleDay(d.value)}
@@ -495,7 +503,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           {/* Time range */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Inicio</Label>
+              <Label>Início</Label>
               <Input
                 type="time"
                 value={timeWindow.startTime}
@@ -533,9 +541,9 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           </div>
 
           {/* Behavior note */}
-          <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 p-3">
-            <p className="text-xs text-blue-700 dark:text-blue-400">
-              <strong>Fora da janela:</strong> o fluxo ficara pausado e sera retomado automaticamente no proximo horario permitido.
+          <div className="rounded-xl border border-insights/20 bg-insights/[.06] p-3">
+            <p className="text-xs text-foreground/80">
+              <strong className="text-insights">Fora da janela:</strong> o fluxo ficará pausado e será retomado automaticamente no próximo horário permitido.
             </p>
           </div>
         </>

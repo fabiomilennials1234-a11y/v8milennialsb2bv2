@@ -54,7 +54,7 @@ const STATUS_META: Record<
   active: {
     label: "Ativo",
     dot: "bg-primary",
-    pill: "border-primary/30 bg-primary/10 text-primary",
+    pill: "border-transparent bg-primary-soft text-primary-soft-foreground",
   },
   paused: {
     label: "Pausado",
@@ -191,10 +191,9 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
           : undefined
       }
       className={cn(
-        "group rounded-xl border border-border/70 bg-card p-4 transition-colors duration-200",
-        "hover:border-border",
+        "group rounded-card border border-card-border bg-card p-5 shadow-relevo transition-[transform,box-shadow] duration-200 motion-reduce:transition-none",
         onOpen &&
-          "cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "cursor-pointer hover:-translate-y-0.5 hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isTerminal && "opacity-75",
       )}
     >
@@ -212,7 +211,7 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
               <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
               {status.label}
             </span>
-            <p className="min-w-0 truncate text-sm font-medium text-foreground">
+            <p className="min-w-0 truncate text-[15px] font-bold tracking-tight text-foreground">
               {firstLine(plan.message)}
             </p>
           </div>
@@ -302,7 +301,7 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
 
       {/* Progress — the load-bearing element. Gold fill, skipped noted in copy. */}
       <div className="mt-3.5 space-y-1.5">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className={cn(
               "h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",

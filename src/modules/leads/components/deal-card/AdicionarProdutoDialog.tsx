@@ -285,7 +285,7 @@ export function AdicionarProdutoDialog({
           )}
 
           {jaLancado && (
-            <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] text-amber-200/90">
+            <p className="rounded-xl border border-warning/35 bg-warning/15 px-3 py-2 text-[12px] text-warning-strong">
               Este produto já está neste negócio ({jaLancado.quantidade} ×{" "}
               {formatBRL(jaLancado.precoUnitario, 2)}). A quantidade vai{" "}
               <strong className="font-semibold">somar</strong> na linha que já

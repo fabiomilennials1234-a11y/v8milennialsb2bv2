@@ -743,7 +743,7 @@ function AutomacoesEditorContent() {
 
   if (!isNew && guidedDraft.isError) {
     return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
-      <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
+      <Button type="button" variant="outline" onClick={() => guidedDraft.refetch()}>Tentar novamente</Button></div>;
   }
 
   if (!isNew && (isLoading || guidedDraft.isPending || !initialized)) {
@@ -784,26 +784,26 @@ function AutomacoesEditorContent() {
         hiddenNodeTypes={["code_javascript"]}
       />
 
-      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
-        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
+      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-warning/25 bg-warning/[.08] px-4 py-3 text-sm">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
+          <div><p className="font-semibold">{legacyReview.items.length} condicionais legados</p>
             <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
       </div>}
-      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-        <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
+      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-warning/25 bg-warning/[.08] px-4 py-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
+        <div><p className="font-semibold">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
           <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
       </div>}
 
-      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-        <p>Não foi possível consultar a versão publicada.</p>
+      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/[.06] px-4 py-3 text-sm">
+        <p className="font-semibold text-destructive">Não foi possível consultar a versão publicada.</p>
         <button type="button" className="mt-1 underline underline-offset-4" disabled={guidedDraft.publication.isFetching}
           onClick={() => guidedDraft.publication.refetch()}>Recarregar publicação</button>
       </div>}
-      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-        <p className="font-medium">Publicação não concluída</p>
+      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/[.06] px-4 py-3 text-sm">
+        <p className="font-semibold text-destructive">Publicação não concluída</p>
         <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
           {issue.nodeId ? <button type="button" className="text-left underline underline-offset-4"
             onClick={() => setSelectedNodeId(issue.nodeId!)}>{issue.message}</button> : issue.message}
@@ -841,11 +841,11 @@ function AutomacoesEditorContent() {
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="sm:max-w-lg p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
-            <SheetTitle>Configuracoes do workflow</SheetTitle>
+            <SheetTitle>Configurações do workflow</SheetTitle>
           </SheetHeader>
           <Tabs defaultValue="reenrollment" className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
-              <TabsTrigger value="reenrollment">Re-inscricao</TabsTrigger>
+            <TabsList variant="segmented" className="mx-6 mt-4 self-start">
+              <TabsTrigger value="reenrollment">Re-inscrição</TabsTrigger>
               {!isNew && id && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
             </TabsList>
 

@@ -68,7 +68,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
   return (
     <CommandGroup
       heading="Navegação"
-      className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
+      className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[.06em] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
       {NAV_ITEMS.map(({ id, label, path, Icon }) => {
         const locked = isItemLocked(path);
@@ -78,7 +78,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
             value={`${id} ${label}`}
             onSelect={() => handleSelect(id, path, locked)}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl mx-1.5",
               "cursor-default select-none",
               "aria-selected:bg-muted/60",
               "hover:bg-muted/40",
@@ -90,7 +90,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
             <span className="text-sm font-medium leading-tight truncate text-foreground">
               {label}
             </span>
-            {locked && <Lock className="ml-auto h-3 w-3 shrink-0 text-amber-500/70" aria-hidden />}
+            {locked && <Lock className="ml-auto h-3 w-3 shrink-0 text-warning-strong/70" aria-hidden />}
           </CommandItem>
         );
       })}

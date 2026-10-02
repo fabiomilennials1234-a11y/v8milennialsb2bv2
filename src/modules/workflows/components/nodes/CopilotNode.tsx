@@ -11,7 +11,7 @@ function CopilotNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="copilot"
-      icon={<Bot className="w-5 h-5 text-cyan-500" />}
+      icon={<Bot />}
       title={nodeData.label || "Copilot"}
       subtitle={nodeData.agentName || "Selecione o agente"}
       detail="Transfere controle para o agente"

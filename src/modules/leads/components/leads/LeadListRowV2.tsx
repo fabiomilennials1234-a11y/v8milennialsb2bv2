@@ -91,8 +91,8 @@ export function LeadListHeaderV2({
     <div
       className={cn(
         GRID_COLS,
-        "sticky top-0 z-10 h-10 border-b border-border bg-card/95 px-4 backdrop-blur",
-        "text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground",
+        "sticky top-0 z-10 h-11 border-b border-border bg-card/95 px-4 backdrop-blur",
+        "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground",
       )}
     >
       <span>{selectAll}</span>
@@ -172,7 +172,7 @@ export function LeadListRowV2({
         // Época de recompra: a linha esverdeia, mesmo idioma da V1 — quem varre
         // a lista procurando quem ligar enxerga a faixa, não o anel.
         ciclo?.emEpoca && "bg-success/[0.05] hover:bg-success/[0.08]",
-        selected && "bg-primary/[0.06] hover:bg-primary/[0.09]",
+        selected && "bg-primary-soft/60 hover:bg-primary-soft",
       )}
     >
       {/* trilho de seleção — a cor vai só onde há sinal */}
@@ -200,7 +200,7 @@ export function LeadListRowV2({
                 lugar, não a semântica. */}
             {standing?.relacao === "cliente" && (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-1.5 py-px text-[10.5px] font-semibold text-primary"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-soft px-1.5 py-px text-[10.5px] font-bold text-primary-soft-foreground"
                 title={
                   relacaoPorCadastroErp
                     ? "Cadastrado no ERP"
@@ -211,12 +211,12 @@ export function LeadListRowV2({
                         : "Fechou negócio no funil"
                 }
               >
-                <span className="size-1 rounded-full bg-primary" />
+                <span className="size-1 rounded-full bg-current" />
                 Cliente
               </span>
             )}
             {standing?.relacao === "perdido" && (
-              <span className="shrink-0 rounded-md border border-destructive/35 bg-destructive/5 px-1.5 py-px text-[10.5px] font-medium text-destructive/80">
+              <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-px text-[10.5px] font-semibold text-destructive">
                 Perdido
               </span>
             )}
@@ -258,7 +258,7 @@ export function LeadListRowV2({
       {/* tags — só etiquetas; origem foi pra linha do nome */}
       <div className="flex flex-wrap items-center gap-1">
         {tags.slice(0, 2).map((tag) => (
-          <Badge key={tag.id} variant="secondary" className="h-5 px-1.5 text-[11px] font-medium">
+          <Badge key={tag.id} variant="soft" className="h-5 px-1.5 text-[11px] font-medium">
             {tag.name}
           </Badge>
         ))}
@@ -356,7 +356,7 @@ export function LeadListRowV2({
             )}
           </div>
         ) : (
-          <span className="inline-block rounded-md border border-dashed border-border px-2 py-px text-[12px] text-muted-foreground">
+          <span className="inline-block rounded-full border border-dashed border-border px-2 py-px text-[12px] text-muted-foreground">
             sem negócio
           </span>
         )}

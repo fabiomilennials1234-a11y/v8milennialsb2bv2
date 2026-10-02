@@ -2,7 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { BadgeCheck, CalendarX, HeartPulse, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -81,8 +83,8 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
   // fantasma de get_funnel_health (erro 42725) virou tela morta e silenciosa.
   if (isError && !data) {
     return (
-      <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-        <p className="font-medium">Erro ao carregar a saúde do funil</p>
+      <div className="rounded-card border border-destructive/40 bg-destructive/5 p-5 text-sm text-destructive">
+        <p className="font-semibold">Erro ao carregar a saúde do funil</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {error instanceof Error ? error.message : "Verifique a conexão e tente de novo."}
         </p>
@@ -95,18 +97,18 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
 
   if (isLoading || !data) {
     return (
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
-        <Skeleton className="h-[420px]" />
+      <div className="grid items-start gap-4 lg:grid-cols-[380px_1fr]">
+        <Skeleton className="h-[420px] rounded-card" />
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             {Array(4)
               .fill(0)
               .map((_, i) => (
-                <Skeleton key={i} className="h-24" />
+                <Skeleton key={i} className="h-28 rounded-card" />
               ))}
           </div>
-          <Skeleton className="h-72" />
-          <Skeleton className="h-56" />
+          <Skeleton className="h-72 rounded-card" />
+          <Skeleton className="h-56 rounded-card" />
         </div>
       </div>
     );
@@ -138,16 +140,18 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
   const booked = data.stages.reuniao;
   const held = data.stages.compareceram;
 
+  // V5: no Estúdio esta janela não tem moldura (`semMoldura` no registry) —
+  // os blocos abaixo SÃO os cartões de bento, pousados direto na bancada.
   return (
     <TooltipProvider delayDuration={150}>
       {/* Falhou mas há dado anterior em cache (keepPreviousData): mantém a tela
           e avisa que os números podem estar defasados. */}
       {isError && (
-        <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
+        <div className="mb-4 rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-xs text-destructive">
           Não foi possível atualizar os dados — mostrando o último resultado carregado.
         </div>
       )}
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <SaudeOriginFilter value={origins} onChange={setOrigins} />
       </div>
       <div className="mt-3 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
@@ -157,20 +161,20 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
             <CardContent className="p-6">
               {bottleneck ? (
                 <>
-                  <div className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-red-500">
+                  <div className="text-[11px] font-bold uppercase tracking-[.06em] text-destructive">
                     Maior gargalo
                   </div>
-                  <div className="mt-2 bg-gradient-to-b from-red-400 to-red-600 bg-clip-text text-7xl font-black tracking-tighter text-transparent tabular-nums">
+                  <div className="mt-2 text-7xl font-extrabold leading-none tracking-[-0.05em] text-destructive tabular-nums">
                     {fmtPct(bottleneck.conv)}
                   </div>
-                  <div className="mt-3 text-[15px] font-semibold">
+                  <div className="mt-3 text-[15px] font-bold tracking-[-0.02em]">
                     {bottleneck.label}
-                    <span className="ml-2 text-[13px] font-normal text-muted-foreground">
+                    <span className="ml-2 text-[13px] font-medium text-muted-foreground">
                       meta {bottleneck.goal}%
                     </span>
                   </div>
                   {bottleneck.label === "Reunião → Compareceu" && (
-                    <p className="mt-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                    <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
                       Só <b className="font-semibold text-foreground">{held} das {booked} reuniões</b>{" "}
                       marcadas aconteceram —{" "}
                       <b className="font-semibold text-foreground">{booked - held} perdidas</b> no
@@ -180,7 +184,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                 </>
               ) : (
                 <>
-                  <div className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                  <div className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                     Saúde do funil
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">
@@ -190,7 +194,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                 </>
               )}
 
-              <div className="mt-5 overflow-hidden rounded-xl bg-background/60">
+              <div className="mt-5 overflow-hidden rounded-2xl bg-sunken">
                 {transitions.map((t, i) => {
                   const status = t.conv !== null ? statusOf(t.conv, t.goal) : null;
                   return (
@@ -198,7 +202,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                       key={t.label}
                       className={cn(
                         "flex items-center gap-2.5 px-3.5 py-3 text-xs",
-                        i > 0 && "border-t border-border/50"
+                        i > 0 && "border-t border-border/60"
                       )}
                     >
                       <span
@@ -218,7 +222,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                       >
                         {t.conv !== null ? fmtPct(t.conv) : "—"}
                       </span>
-                      <span className="w-14 text-right text-[10px] text-muted-foreground tabular-nums">
+                      <span className="w-14 text-right text-[11px] text-muted-foreground tabular-nums">
                         meta {t.goal}%
                       </span>
                     </div>
@@ -228,9 +232,9 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
 
               {/* ───── Tempo até a venda (ciclos médios, variante V3) ───── */}
               {data.cycles && (
-                <div className="mt-5 border-t border-border pt-4">
+                <div className="mt-5 border-t border-border/60 pt-4">
                   <div className="flex items-baseline justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                    <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                       <HelpTip text="Médias calculadas só sobre os leads do período que viraram venda. A venda vale a primeira chegada à etapa de venda no funil de fechamento; a reunião, a primeira reunião realizada.">
                         Tempo até a venda
                       </HelpTip>
@@ -253,9 +257,9 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                         </span>
                       </b>
                     </div>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-[1.5px] ring-primary/50 shadow-[0_0_10px_hsl(47_100%_50%/.35)]" />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/30" />
                     <div className="relative h-3.5 min-w-0 flex-1">
-                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-primary to-emerald-500" />
+                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-primary to-success" />
                       <b className="absolute left-1/2 top-[-7px] -translate-x-1/2 whitespace-nowrap bg-card px-1.5 text-[13.5px] font-extrabold tabular-nums">
                         {fmtDays(data.cycles.meeting_to_sale_days)}
                         <span className="text-[10.5px] font-bold text-muted-foreground">
@@ -263,7 +267,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                         </span>
                       </b>
                     </div>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 ring-[1.5px] ring-emerald-500/50 shadow-[0_0_10px_hsl(152_76%_40%/.35)]" />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success ring-2 ring-success/30" />
                   </div>
                   <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
                     <span>lead entrou</span>
@@ -271,14 +275,14 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                     <span>venda</span>
                   </div>
 
-                  <div className="mt-4 flex items-center gap-3 rounded-xl bg-background/60 px-4 py-3">
-                    <span className="whitespace-nowrap text-3xl font-black tracking-tight text-primary tabular-nums">
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-sunken px-4 py-3">
+                    <span className="whitespace-nowrap text-3xl font-extrabold tracking-[-0.04em] tabular-nums">
                       {fmtDays(data.cycles.lead_to_sale_days)}
                       <span className="text-[15px] font-bold text-muted-foreground">
                         {data.cycles.lead_to_sale_days != null && "d"}
                       </span>
                     </span>
-                    <span className="text-[11.5px] leading-snug text-muted-foreground">
+                    <span className="text-xs leading-snug text-muted-foreground">
                       <b className="font-semibold text-foreground">Ciclo médio de venda</b>
                       <br />
                       da entrada do lead até fechar a venda
@@ -291,66 +295,45 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
         </motion.div>
 
         {/* ───── Main: KPIs + mesa + matriz ───── */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <motion.div
-            className="grid grid-cols-2 gap-3 xl:grid-cols-4"
+            className="grid grid-cols-2 gap-4 xl:grid-cols-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Leads no período
-                </div>
-                <div className="mt-1.5 text-[26px] font-extrabold tracking-tight tabular-nums">
-                  {cohort}
-                </div>
-                <div className="truncate text-[11px] text-muted-foreground">
-                  {origins.length > 0 ? originsLabel : `criados ${periodLabel}`}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Viraram venda
-                </div>
-                <div className="mt-1.5 text-[26px] font-extrabold tracking-tight text-primary tabular-nums">
-                  {sold}
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  {cohort > 0 ? `${fmtPct((sold / cohort) * 100)} ponta a ponta` : "—"}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Etapas saudáveis
-                </div>
-                <div className="mt-1.5 text-[26px] font-extrabold tracking-tight tabular-nums">
-                  <span className="text-emerald-500">{healthy}</span>
-                  <span className="text-base text-muted-foreground"> / {transitions.length}</span>
-                </div>
-                <div className="text-[11px] text-muted-foreground">vs metas Torque</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Reuniões perdidas
-                </div>
-                <div className="mt-1.5 text-[26px] font-extrabold tracking-tight text-red-500 tabular-nums">
-                  {booked - held}
-                </div>
-                <div className="text-[11px] text-muted-foreground">não aconteceram</div>
-              </CardContent>
-            </Card>
+            <KpiTile
+              label="Leads no período"
+              value={cohort}
+              icon={Users}
+              tone="neutral"
+              note={origins.length > 0 ? originsLabel : `criados ${periodLabel}`}
+            />
+            <KpiTile
+              label="Viraram venda"
+              value={sold}
+              icon={BadgeCheck}
+              tone="gold"
+              note={cohort > 0 ? `${fmtPct((sold / cohort) * 100)} ponta a ponta` : "—"}
+            />
+            <KpiTile
+              label="Etapas saudáveis"
+              value={<><span className="text-success">{healthy}</span><ValueUnit>/ {transitions.length}</ValueUnit></>}
+              icon={HeartPulse}
+              tone="good"
+              note="vs metas Torque"
+            />
+            <KpiTile
+              label="Reuniões perdidas"
+              value={<span className={booked - held > 0 ? "text-destructive" : undefined}>{booked - held}</span>}
+              icon={CalendarX}
+              tone="bad"
+              note="não aconteceram"
+            />
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-            <Card>
+            <Card className="overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -372,7 +355,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                       <TableRow
                         key={s.key}
                         onClick={() => setOpenStage(s.key)}
-                        className={cn("cursor-pointer", status === "bad" && "bg-red-500/5")}
+                        className={cn("cursor-pointer", status === "bad" && "bg-destructive/5")}
                       >
                         <TableCell className="pl-5 font-semibold">
                           <HelpTip text={s.tooltip}>{s.label}</HelpTip>
@@ -380,17 +363,17 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                         <TableCell
                           className={cn(
                             "text-right font-bold tabular-nums",
-                            isLast && "text-primary"
+                            isLast && "text-primary-soft-foreground"
                           )}
                         >
                           {count}
                         </TableCell>
                         <TableCell className="pl-4">
-                          <div className="relative h-[18px] min-w-[160px] overflow-hidden rounded-[5px] bg-muted/60">
+                          <div className="relative h-[18px] min-w-[160px] overflow-hidden rounded-full bg-muted">
                             <div
                               className={cn(
-                                "absolute inset-y-0 left-0 min-w-[3px] rounded-[5px] bg-gradient-to-r",
-                                status === "bad" ? "from-red-700 to-red-500" : "from-yellow-600 to-primary"
+                                "absolute inset-y-0 left-0 min-w-[3px] rounded-full",
+                                status === "bad" ? "bg-destructive" : "bg-primary"
                               )}
                               style={{ width: `${cohort > 0 ? (count / cohort) * 100 : 0}%` }}
                             />
@@ -401,7 +384,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                             <span className="text-muted-foreground">—</span>
                           ) : (
                             <>
-                              <b className={cn(status === "bad" && "text-red-500")}>{fmtPct(conv)}</b>{" "}
+                              <b className={cn(status === "bad" && "text-destructive")}>{fmtPct(conv)}</b>{" "}
                               <span className="text-[11px] text-muted-foreground">/ {s.goal}%</span>
                             </>
                           )}
@@ -418,13 +401,13 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <div className="mb-3">
-              <div className="text-sm font-semibold">Pré-vendas × etapas</div>
-              <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-                Leads do período agrupados por quem fez a pré-venda — a venda credita o pré-vendas, não quem fechou.
-              </div>
-            </div>
-            <Card>
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-[15px] tracking-[-0.02em]">Pré-vendas × etapas</CardTitle>
+                <CardDescription className="text-xs">
+                  Leads do período agrupados por quem fez a pré-venda — a venda credita o pré-vendas, não quem fechou.
+                </CardDescription>
+              </CardHeader>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -461,7 +444,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                         >
                           <TableCell className="pl-5 font-medium">
                             {!ghost && (
-                              <span className="mr-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-muted align-middle text-[9px] font-bold text-primary">
+                              <span className="mr-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary-soft align-middle text-[9px] font-bold text-primary-soft-foreground">
                                 {initials}
                               </span>
                             )}
@@ -477,7 +460,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                           <TableCell
                             className={cn(
                               "text-right font-semibold tabular-nums",
-                              !ghost && "text-primary"
+                              !ghost && "text-primary-soft-foreground"
                             )}
                           >
                             {row.compraram}

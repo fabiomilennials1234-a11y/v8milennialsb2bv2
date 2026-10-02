@@ -1,7 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
-import { Search, Lightbulb, ChevronDown, ChevronUp, Settings2, ClipboardList, MessageSquare, ListChecks } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  Search,
+  Lightbulb,
+  ChevronDown,
+  ChevronUp,
+  Settings2,
+  ClipboardList,
+  MessageSquare,
+  ListChecks,
+  Clock,
+  AlarmClock,
+} from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +37,15 @@ import { useTeamMembers, useCurrentTeamMember, useOrganization } from "@/modules
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+/** Cartão de bento que segura uma lista da Revisão (itens ou estado vazio). */
+function ListaCard({ children }: { children: ReactNode }) {
+  return (
+    <section className="rounded-card border border-card-border bg-card p-2 text-card-foreground shadow-relevo">
+      {children}
+    </section>
+  );
+}
 
 function RevisaoInner() {
   const navigate = useNavigate();
@@ -168,7 +190,7 @@ function RevisaoInner() {
     if (pending.length === 0 && completed.length === 0) return null;
 
     return (
-      <div>
+      <ListaCard>
         {pending.map((task) => (
           <RevisionItem
             key={`${task.type}-${task.id}`}
@@ -187,12 +209,12 @@ function RevisaoInner() {
 
         {showCompleted && completed.length > 0 && (
           <>
-            <div className="flex items-center gap-3 py-3 px-2">
-              <div className="flex-1 h-px bg-border/50" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground/40 font-medium">
-                Concluídos ({completed.length})
+            <div className="flex items-center gap-3 px-3 py-3">
+              <div className="h-px flex-1 bg-border/60" />
+              <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                Concluídos <span className="tabular-nums">({completed.length})</span>
               </span>
-              <div className="flex-1 h-px bg-border/50" />
+              <div className="h-px flex-1 bg-border/60" />
             </div>
             {completed.map((task) => (
               <RevisionItem
@@ -205,150 +227,165 @@ function RevisaoInner() {
             ))}
           </>
         )}
-      </div>
+      </ListaCard>
     );
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Revisão</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Suas tarefas e mensagens agendadas
-          </p>
-        </div>
-        {isAdmin && (
-          <Button variant="outline" size="sm" onClick={() => setAutomationSettingsOpen(true)} className="gap-1.5">
-            <Settings2 className="w-4 h-4" />
-            Automações
-          </Button>
-        )}
-      </div>
+    // A página inteira mora no <Tabs>: a lista de abas sobe para o cabeçalho
+    // (navegação da página, pílula escura) e os conteúdos ficam aqui embaixo —
+    // o Radix só exige que List e Content estejam sob a mesma raiz.
+    <Tabs defaultValue="all" className="space-y-5">
+      <PageHeader
+        title="Revisão"
+        subtitle="Suas tarefas e mensagens agendadas"
+        actions={
+          isAdmin && (
+            <Button variant="outline" onClick={() => setAutomationSettingsOpen(true)}>
+              <Settings2 />
+              Automações
+            </Button>
+          )
+        }
+        tabs={
+          <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+            <TabsList variant="pill" aria-label="Tipo de tarefa" className="self-start">
+              <TabsTrigger value="all">Tudo</TabsTrigger>
+              <TabsTrigger value="messages">Mensagens</TabsTrigger>
+              <TabsTrigger value="followups">Follow-ups</TabsTrigger>
+            </TabsList>
 
-      <Tabs defaultValue="all" className="w-full">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <TabsList className="max-w-full justify-start overflow-x-auto scrollbar-hide">
-            <TabsTrigger value="all">Tudo</TabsTrigger>
-            <TabsTrigger value="messages">Mensagens</TabsTrigger>
-            <TabsTrigger value="followups">Follow-ups</TabsTrigger>
-          </TabsList>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 sm:w-56"
+                />
+              </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 w-full sm:w-48"
-              />
+              {isAdmin && (
+                <Select value={assignedTo} onValueChange={setAssignedTo}>
+                  <SelectTrigger className="w-full sm:w-44" aria-label="Responsável">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mine">Minhas tarefas</SelectItem>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {teamMembers.filter((m) => m.is_active).map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <div className="flex h-10 items-center gap-2 rounded-full border border-input bg-card px-3.5 shadow-relevo">
+                <Checkbox
+                  id="show-completed"
+                  checked={showCompleted}
+                  onCheckedChange={(v) => setShowCompleted(!!v)}
+                />
+                <Label htmlFor="show-completed" className="cursor-pointer text-[13px] font-medium text-foreground/80">
+                  Concluídos
+                </Label>
+              </div>
             </div>
+          </div>
+        }
+      />
 
-            {isAdmin && (
-              <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger className="h-9 w-full sm:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mine">Minhas tarefas</SelectItem>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {teamMembers.filter((m) => m.is_active).map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-14 rounded-2xl" />)}
+        </div>
+      ) : (
+        <>
+          <TabsContent value="all" className="mt-0 space-y-4">
+            {suggestionsCount > 0 && (
+              <section className="overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+                <button
+                  type="button"
+                  onClick={() => setSuggestionsOpen(!suggestionsOpen)}
+                  aria-expanded={suggestionsOpen}
+                  className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+                    <Lightbulb className="h-4 w-4" strokeWidth={2.2} />
+                  </span>
+                  <span className="text-[15px] font-bold tracking-[-0.02em]">Sugestões</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+                    {suggestionsCount}
+                  </span>
+                  <span className="ml-auto text-muted-foreground">
+                    {suggestionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </span>
+                </button>
+
+                {/* Só dois tipos de sugestão aparecem: lead sem contato e
+                    follow-up vencido. "Lead quente" saiu (score do lead não é
+                    mais usado — CTO, 02/10); a edge ainda manda a lista, e a
+                    tela a ignora. Ver `contarSugestoesDoDia`. */}
+                {suggestionsOpen && priorities && (
+                  <ul className="divide-y divide-border/50 border-t border-border/50">
+                    {priorities.leads_sem_acao?.slice(0, 3).map((lead) => (
+                      <li key={lead.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning-strong">
+                          <Clock className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          Lead sem contato: <span className="font-semibold text-foreground">{lead.name}</span>
+                          {lead.company && ` · ${lead.company}`}
+                        </span>
+                      </li>
+                    ))}
+                    {priorities.followups_vencidos?.slice(0, 3).map((fu) => (
+                      <li key={fu.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-destructive/10 text-destructive">
+                          <AlarmClock className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          Follow-up vencido: <span className="font-semibold text-foreground">{fu.lead?.name || fu.title}</span>
+                          <span className="tabular-nums">{` · ${fu.days_overdue}d atrás`}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             )}
 
-            <div className="flex items-center gap-1.5">
-              <Checkbox
-                id="show-completed"
-                checked={showCompleted}
-                onCheckedChange={(v) => setShowCompleted(!!v)}
-              />
-              <Label htmlFor="show-completed" className="text-xs text-muted-foreground cursor-pointer">
-                Concluídos
-              </Label>
-            </div>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="space-y-3 mt-6">
-            {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-14" />)}
-          </div>
-        ) : (
-          <>
-            <TabsContent value="all" className="mt-4">
-              {suggestionsCount > 0 && (
-                <div className="mb-4">
-                  <button
-                    onClick={() => setSuggestionsOpen(!suggestionsOpen)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-sm transition-colors hover:bg-primary/10"
-                  >
-                    <span className="flex items-center gap-2 text-foreground/80">
-                      <Lightbulb className="w-3.5 h-3.5 text-primary" />
-                      Sugestões ({suggestionsCount})
-                    </span>
-                    {suggestionsOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                  </button>
-
-                  {suggestionsOpen && priorities && (
-                    <div className="mt-1 space-y-1">
-                      {priorities.leads_sem_acao?.slice(0, 3).map((lead) => (
-                        <div key={lead.id} className="flex items-center px-3 py-1.5 rounded-md bg-card border border-border text-xs">
-                          <span className="text-muted-foreground">
-                            Lead sem contato: <span className="text-foreground font-medium">{lead.name}</span>
-                            {lead.company && ` · ${lead.company}`}
-                          </span>
-                        </div>
-                      ))}
-                      {priorities.followups_vencidos?.slice(0, 3).map((fu) => (
-                        <div key={fu.id} className="flex items-center px-3 py-1.5 rounded-md bg-card border border-border text-xs">
-                          <span className="text-muted-foreground">
-                            Follow-up vencido: <span className="text-foreground font-medium">{fu.lead?.name || fu.title}</span>
-                            {` · ${fu.days_overdue}d atrás`}
-                          </span>
-                        </div>
-                      ))}
-                      {priorities.leads_quentes?.slice(0, 3).map((lead) => (
-                        <div key={lead.id} className="flex items-center px-3 py-1.5 rounded-md bg-card border border-border text-xs">
-                          <span className="text-muted-foreground">
-                            Lead quente: <span className="text-foreground font-medium">{lead.name}</span>
-                            {lead.company && ` · ${lead.company}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {filteredTasks.length === 0 ? (
+            {filteredTasks.length === 0 ? (
+              <ListaCard>
                 <EmptyState icon={ClipboardList} title="Nenhuma tarefa pendente" description="Sua pista está limpa." />
-              ) : (
-                renderList(filteredTasks)
-              )}
-            </TabsContent>
+              </ListaCard>
+            ) : (
+              renderList(filteredTasks)
+            )}
+          </TabsContent>
 
-            <TabsContent value="messages" className="mt-4">
-              {messageTasks.length === 0 ? (
+          <TabsContent value="messages" className="mt-0">
+            {messageTasks.length === 0 ? (
+              <ListaCard>
                 <EmptyState icon={MessageSquare} title="Nenhuma mensagem agendada" description="Agende mensagens pelo chat ou pelo modal do lead." />
-              ) : (
-                renderList(messageTasks)
-              )}
-            </TabsContent>
+              </ListaCard>
+            ) : (
+              renderList(messageTasks)
+            )}
+          </TabsContent>
 
-            <TabsContent value="followups" className="mt-4">
-              {followUpTasks.length === 0 ? (
+          <TabsContent value="followups" className="mt-0">
+            {followUpTasks.length === 0 ? (
+              <ListaCard>
                 <EmptyState icon={ListChecks} title="Nenhum follow-up pendente" description="Crie follow-ups nos funis ou no drawer do lead." />
-              ) : (
-                renderList(followUpTasks)
-              )}
-            </TabsContent>
-          </>
-        )}
-      </Tabs>
+              </ListaCard>
+            ) : (
+              renderList(followUpTasks)
+            )}
+          </TabsContent>
+        </>
+      )}
 
       {isAdmin && (
         <Dialog open={automationSettingsOpen} onOpenChange={setAutomationSettingsOpen}>
@@ -374,12 +411,10 @@ function RevisaoInner() {
           defaultAssignedTo={scheduleContext.defaultAssignedTo}
         />
       )}
-    </div>
+    </Tabs>
   );
 }
 
 export default function Revisao() {
-  return (
-        <RevisaoInner />
-  );
+  return <RevisaoInner />;
 }

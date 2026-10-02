@@ -37,20 +37,25 @@ export function MonthView({
   const currentMonth = date.getMonth();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+    // V5: cartão de bento (raio de cartão, relevo) — a grade é o cartão.
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
       {/* Um único contêiner de rolagem para cabeçalho e grade: separados, eles
           desalinhariam no celular, onde 7 colunas não cabem na largura e a
           grade precisa rolar de lado DENTRO do cartão — a página nunca rola de
           lado (DESIGN.md § Espaço e densidade). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+        {/* Rótulo micro do V5. O nome por extenso NÃO vai em maiúsculas: em
+            caixa alta e com tracking, "SEGUNDA-FEIRA" não cabe na coluna do
+            painel a 1366px e voltaria a truncar — o defeito que o par
+            extenso/curto existe para evitar. O curto ("SEG") cabe sempre. */}
         <div className="grid min-w-[680px] shrink-0 grid-cols-7 border-b border-border md:min-w-0">
           {DAY_NAMES_FULL.map((name, i) => (
             <div
               key={name}
-              className="truncate px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground"
+              className="truncate px-3 py-2.5 text-left text-[11px] font-bold text-muted-foreground"
             >
               <span className="hidden lg:inline">{name}</span>
-              <span className="lg:hidden">{DAY_NAMES_SHORT[i]}</span>
+              <span className="uppercase tracking-[.06em] lg:hidden">{DAY_NAMES_SHORT[i]}</span>
             </div>
           ))}
         </div>
@@ -86,9 +91,9 @@ export function MonthView({
                 <span
                   className={`flex h-5 w-5 items-center justify-center rounded-full text-xs tabular-nums ${
                     today
-                      ? "bg-primary font-bold text-primary-foreground"
+                      ? "bg-primary font-bold text-primary-foreground shadow-brilho-ouro"
                       : isCurrentMonth
-                        ? "font-medium text-foreground"
+                        ? "font-semibold text-foreground"
                         : "text-muted-foreground"
                   }`}
                 >
@@ -118,7 +123,7 @@ export function MonthView({
                       e.stopPropagation();
                       onShowMore?.(day);
                     }}
-                    className="shrink-0 rounded px-1 text-left text-[10px] text-foreground/70 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                    className="shrink-0 rounded-md px-1 text-left text-[10px] font-semibold text-foreground/70 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
                   >
                     +{dayEvents.length - MAX_PILLS} mais
                   </button>

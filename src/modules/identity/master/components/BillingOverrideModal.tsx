@@ -203,12 +203,12 @@ export function BillingOverrideModal({
         </DialogHeader>
 
         {/* Current Status */}
-        <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
+        <div className="p-3 bg-muted rounded-xl flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">Status Atual</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge
-                variant={organization.subscription_status === "active" ? "default" : "secondary"}
+                variant={organization.subscription_status === "active" ? "success" : "soft"}
               >
                 {organization.subscription_status}
               </Badge>
@@ -216,7 +216,7 @@ export function BillingOverrideModal({
                 {organization.subscription_plan || "free"}
               </span>
               {organization.billing_override && (
-                <Badge className="bg-purple-500">Override Ativo</Badge>
+                <Badge variant="gold">Override Ativo</Badge>
               )}
             </div>
           </div>
@@ -284,9 +284,9 @@ export function BillingOverrideModal({
               />
             </div>
 
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
-              <p className="text-sm text-yellow-700 dark:text-yellow-400">
+            <div className="p-3 bg-warning/10 border border-warning/40 rounded-xl flex gap-2">
+              <AlertTriangle className="w-5 h-5 text-warning-strong shrink-0" />
+              <p className="text-sm text-warning-strong">
                 Esta ação será registrada no log de auditoria. O plano será
                 liberado imediatamente e a organização terá acesso a todas as
                 features do plano selecionado.

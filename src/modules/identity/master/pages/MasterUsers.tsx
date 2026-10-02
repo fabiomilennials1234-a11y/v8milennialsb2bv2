@@ -256,7 +256,7 @@ export default function MasterUsers() {
         subtitle="Gerencie todos os usuários do sistema"
         actions={
           <Button onClick={() => setCreateUserOpen(true)}>
-            <UserPlus className="w-4 h-4 mr-2" />
+            <UserPlus className="w-4 h-4" />
             Criar usuário
           </Button>
         }

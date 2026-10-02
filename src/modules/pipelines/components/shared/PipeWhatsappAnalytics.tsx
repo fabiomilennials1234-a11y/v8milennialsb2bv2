@@ -68,7 +68,7 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
   }, [items]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stat cards — uma por etapa do funil de Saúde */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <AnalyticsStatCard label="Entraram" value={entraram} sub="no período" accent="neutral" />
@@ -103,7 +103,7 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
         />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-4 md:grid-cols-2">
         <AnalyticsPanel title="Saúde do Funil" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="leads" />
         </AnalyticsPanel>

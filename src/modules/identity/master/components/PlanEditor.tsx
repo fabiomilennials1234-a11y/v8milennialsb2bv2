@@ -132,7 +132,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
         </div>
         <div className="flex items-center gap-2">
           {dirty && (
-            <span className="text-xs text-amber-500 font-medium">Alterações não salvas</span>
+            <span className="text-xs text-warning-strong font-medium">Alterações não salvas</span>
           )}
           <Button onClick={handleSave} disabled={updatePlan.isPending || !dirty}>
             {updatePlan.isPending ? (

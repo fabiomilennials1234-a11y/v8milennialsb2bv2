@@ -41,6 +41,12 @@ interface AgendaOutcomeToggleProps {
  * No escuro os pares `-200` dão 11,2:1 e 11,4:1. É a mesma armadilha já
  * documentada em `--warning` (`index.css`), e o par `x dark:y` de escala é o
  * idioma que a #1792 fixou em `SessionDeadBanner` justamente para corrigi-la.
+ *
+ * V5 (2026-10): banho e borda viraram token (`success`/`destructive` — é
+ * preenchimento, o papel deles); o TEXTO continua no par de escala. O V5
+ * resolveu isso para o âmbar com `warning-strong`,
+ * mas ainda não tem o equivalente para verde e vermelho — quando existir um
+ * `success-strong`/`destructive-strong`, é ele que entra aqui.
  */
 const OPCOES: Array<{
   key: AttendanceOutcome;
@@ -53,14 +59,14 @@ const OPCOES: Array<{
     label: "Compareceu",
     Icon: Check,
     selecionado:
-      "border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
+      "border-success/40 bg-success/15 text-emerald-800 dark:text-emerald-200",
   },
   {
     key: "nao_compareceu",
     label: "Não compareceu",
     Icon: X,
     selecionado:
-      "border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200",
+      "border-destructive/40 bg-destructive/15 text-red-800 dark:text-red-200",
   },
 ];
 
@@ -71,9 +77,9 @@ export function AgendaOutcomeToggle({
   disabled = false,
 }: AgendaOutcomeToggleProps) {
   return (
-    <div className="space-y-1.5 border-t border-border/30 pt-2.5">
+    <div className="space-y-2 border-t border-border pt-3">
       <div className="flex items-center gap-1.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Resultado
         </p>
         {saving && (
@@ -97,12 +103,12 @@ export function AgendaOutcomeToggle({
               // para "sem registro" quando alguém marca errado.
               onClick={() => onChange(ativo ? null : key)}
               className={cn(
-                "flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-[11px] font-medium transition-colors",
+                "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-1.5 text-[11px] font-semibold transition-colors",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                 "disabled:cursor-not-allowed disabled:opacity-50",
                 ativo
                   ? selecionado
-                  : "border-border/50 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon className="h-3 w-3 shrink-0" strokeWidth={ativo ? 3 : 2} />
@@ -113,7 +119,7 @@ export function AgendaOutcomeToggle({
       </div>
 
       {value === null && (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground">
           Sem registro — não entra na contagem.
         </p>
       )}

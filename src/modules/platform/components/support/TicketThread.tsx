@@ -115,7 +115,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Meus chamados
         </button>
-        <h3 className="text-sm font-medium leading-snug text-foreground">{ticket.title}</h3>
+        <h3 className="text-sm font-bold leading-snug tracking-tight text-foreground">{ticket.title}</h3>
         <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
           <StatusDot status={ticket.status} />
           {STATUS_LABELS[ticket.status]}
@@ -253,8 +253,8 @@ function Bubble({
           className={cn(
             "whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
             fromOrg
-              ? "rounded-br-sm bg-primary/10 text-foreground"
-              : "rounded-bl-sm border border-border/60 bg-muted/30 text-foreground",
+              ? "rounded-br-sm bg-primary-soft text-foreground"
+              : "rounded-bl-sm border border-border/60 bg-muted/40 text-foreground",
           )}
         >
           {body}

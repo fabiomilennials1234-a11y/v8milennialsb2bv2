@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTeamGoals, useFollowUps } from "@/modules/engagement";
 import {
@@ -20,6 +21,7 @@ import { TrapezoidFunnel } from "./TrapezoidFunnel";
 import { OraculoBriefing } from "./OraculoBriefing";
 import { LiveOpsFeed } from "./LiveOpsFeed";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface TabVisaoGeralV2Props {
   section?: "meta" | "kpis" | "receita" | "funil" | "oraculo" | "feed";
@@ -37,6 +39,11 @@ const MONTH_LONG = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
+
+/** Faixa de KPIs: 4 por linha quando há largura, 2 no estreito (rola dentro da janela). */
+const KPI_GRID = "grid h-full auto-rows-fr grid-cols-2 gap-4 lg:grid-cols-4";
+const CARTAO_AVULSO = "rounded-card border border-card-border bg-card p-5 shadow-relevo";
+const ROTULO = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
 
 function formatK(value: number): string {
   if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1).replace(".", ",")}M`;
@@ -132,8 +139,21 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
 
 
   const monthlyQueries = show("meta") ? [gaugeQuery, goalsQuery] : [];
-  if (isError || monthlyQueries.some((query) => query.isError)) return <div role="alert" className="p-4 text-sm">Não foi possível carregar os indicadores.<Button variant="link" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button></div>;
+  if (isError || monthlyQueries.some((query) => query.isError)) return (
+    <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 py-4 text-center">
+      <AlertTriangle className="h-5 w-5 text-destructive/80" aria-hidden />
+      <p className="text-[13px] font-semibold">Não foi possível carregar os indicadores.</p>
+      <Button variant="outline" size="sm" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button>
+    </div>
+  );
   if (isLoading || monthlyQueries.some((query) => query.isLoading)) {
+    // Dentro de uma janela do Estúdio o esqueleto tem a forma do próprio bloco.
+    if (section === "kpis") return (
+      <div className={KPI_GRID}>
+        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="min-h-[96px] rounded-card" />)}
+      </div>
+    );
+    if (section) return <Skeleton className="h-full min-h-32 w-full rounded-2xl" />;
     return (
       <div className="mt-3.5 grid grid-cols-2 gap-3.5 md:grid-cols-12">
         <Skeleton className="col-span-2 h-[200px] rounded-2xl md:col-span-4 md:row-span-3 md:h-[460px]" />
@@ -160,24 +180,24 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       ? (totalMetrics.funnelVendas / totalMetrics.totalLeads) * 100
       : null;
 
+  // Dentro do Estúdio cada seção mora numa janela, e a janela JÁ é o cartão
+  // (título, raio, sombra): o bloco desenha só o corpo. Sem `section` (grade
+  // completa, hoje sem consumidor) cada bloco volta a ser o próprio cartão.
+  const cartao = section ? "" : CARTAO_AVULSO;
+  const kpiCol = section ? "min-w-0" : "col-span-1 md:col-span-2";
+
   return (
-    <div className={!section || section === "kpis" ? "grid grid-cols-2 gap-3.5 md:grid-cols-12" : "h-full [&>*]:h-full"}>
+    <div className={section === "kpis" ? KPI_GRID : !section ? "grid grid-cols-2 gap-4 md:grid-cols-12" : "h-full [&>*]:h-full"}>
       {/* Velocímetro da meta */}
       {show("meta") && (
-      <div
-        className="cmd-cell cmd-rise col-span-2 flex flex-col p-5 md:col-span-4 md:row-span-3"
-        style={{
-          animationDelay: ".1s",
-          background: "radial-gradient(300px 300px at 50% 42%, hsl(var(--primary)/.06), transparent 70%), hsl(var(--card))",
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <span className="cmd-lbl">Meta do mês</span>
-          <Link to="/gestao-metas" className="text-[11.5px] font-bold text-muted-foreground transition-colors hover:text-primary">
+      <div className={cn("col-span-2 flex flex-col md:col-span-4 md:row-span-3", cartao)}>
+        <div className="flex items-center justify-between gap-2">
+          {!section && <span className={ROTULO}>Meta do mês</span>}
+          <Link to="/gestao-metas" className="ml-auto text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
             Ajustar →
           </Link>
         </div>
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           {gauge.target > 0 ? (
             <ClusterGauge
               currentPercent={gauge.currentPercent}
@@ -190,18 +210,18 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
             <GaugeEmptyState />
           )}
         </div>
-        <div className="grid grid-cols-3 border-t border-border/70 pt-3.5 text-center">
-          <div>
-            <b className="block text-[15px] font-extrabold tracking-[-0.02em] tabular-nums">{formatK(gauge.realized)}</b>
-            <span className="text-[11px] font-semibold text-muted-foreground/70">Realizado</span>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="min-w-0 rounded-2xl bg-sunken px-1.5 py-2.5">
+            <b className="block truncate text-[15px] font-extrabold tracking-[-0.03em] tabular-nums">{formatK(gauge.realized)}</b>
+            <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">Realizado</span>
           </div>
-          <div className="border-l border-border/70">
-            <b className="block text-[15px] font-extrabold tracking-[-0.02em] tabular-nums">{gauge.target > 0 ? formatK(gauge.target) : "—"}</b>
-            <span className="text-[11px] font-semibold text-muted-foreground/70">Meta</span>
+          <div className="min-w-0 rounded-2xl bg-sunken px-1.5 py-2.5">
+            <b className="block truncate text-[15px] font-extrabold tracking-[-0.03em] tabular-nums">{gauge.target > 0 ? formatK(gauge.target) : "—"}</b>
+            <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">Meta</span>
           </div>
-          <div className="border-l border-border/70">
-            <b className="block text-[15px] font-extrabold tracking-[-0.02em] tabular-nums">{gauge.target > 0 ? formatK(gauge.perBusinessDay) : "—"}</b>
-            <span className="text-[11px] font-semibold text-muted-foreground/70">Por dia útil</span>
+          <div className="min-w-0 rounded-2xl bg-sunken px-1.5 py-2.5">
+            <b className="block truncate text-[15px] font-extrabold tracking-[-0.03em] tabular-nums">{gauge.target > 0 ? formatK(gauge.perBusinessDay) : "—"}</b>
+            <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">Por dia útil</span>
           </div>
         </div>
       </div>
@@ -209,7 +229,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       )}
       {/* KPIs compactos */}
       {show("kpis") && <>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Leads novos" value={m?.totalLeads ?? 0} format="int"
           delta={m && p ? deltaBadge(m.totalLeads, p.totalLeads) : undefined}
@@ -217,7 +237,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Ver leads do período →" quickActionTo={leadsPeriodLink} delay={0.14}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Reuniões" value={m?.reunioesMarcadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.reunioesMarcadas, p.reunioesMarcadas) : undefined}
@@ -225,7 +245,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Abrir agenda →" quickActionTo="/agenda" delay={0.18}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Propostas" value={m?.propostasEnviadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.propostasEnviadas, p.propostasEnviadas) : undefined}
@@ -233,7 +253,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Ver propostas →" quickActionTo="/funis" delay={0.22}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Vendas" value={m?.novosClientes ?? 0} format="int"
           delta={m && p ? deltaBadge(m.novosClientes, p.novosClientes) : undefined}
@@ -241,7 +261,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Ver fechamentos →" quickActionTo="/funis" delay={0.26}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Ticket" value={m?.ticketMedio ?? 0} format="currencyK"
           delta={m && p ? deltaBadge(m.ticketMedio, p.ticketMedio) : undefined}
@@ -249,7 +269,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Por produto →" quickActionTo="/produtos" delay={0.3}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Resposta da equipe" value={response.isError ? null : response.data ?? null} format="minutes"
           delta={!response.isError && !prevResponse.isError && response.data != null && prevResponse.data != null ? deltaBadge(response.data, prevResponse.data, true) : undefined}
@@ -257,7 +277,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Abrir conversas →" quickActionTo="/chat-whatsapp" delay={0.34}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Conversão" value={m?.taxaConversao ?? 0} format="percent"
           delta={
@@ -269,7 +289,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
           quickActionLabel="Funil completo →" quickActionTo="/funis" delay={0.38}
         />
       </div>
-      <div className="col-span-1 md:col-span-2">
+      <div className={kpiCol}>
         <KpiCardCompact
           label="Follow-ups" value={overdueCount} format="int"
           delta={overdueCount > 0 ? { label: String(overdueCount), tone: "down" } : undefined}
@@ -281,7 +301,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </>}
       {/* Receita acumulada */}
       {show("receita") && (
-      <div className="col-span-2 md:col-span-8">
+      <div className={cn("col-span-2 md:col-span-8", cartao)}>
         <RevenueAccumulatedChart
           daily={m?.dailySales ?? []}
           prevDaily={p?.dailySales ?? []}
@@ -299,7 +319,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       )}
       {/* Funil + Oráculo + Feed */}
       {show("funil") && (
-      <div className="col-span-2 md:col-span-4">
+      <div className={cn("col-span-2 md:col-span-4", cartao)}>
         <TrapezoidFunnel
           stages={[
             { label: "Leads", value: totalMetrics?.totalLeads ?? 0 },
@@ -312,8 +332,8 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
         />
       </div>
       )}
-      {show("oraculo") && <div className="col-span-2 md:col-span-4"><OraculoBriefing onAsk={onAskOraculo} /></div>}
-      {show("feed") && <div className="col-span-2 md:col-span-4"><LiveOpsFeed /></div>}
+      {show("oraculo") && <div className={cn("col-span-2 md:col-span-4", cartao)}><OraculoBriefing onAsk={onAskOraculo} /></div>}
+      {show("feed") && <div className={cn("col-span-2 md:col-span-4", cartao)}><LiveOpsFeed /></div>}
     </div>
   );
 }

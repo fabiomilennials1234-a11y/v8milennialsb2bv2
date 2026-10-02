@@ -8,9 +8,9 @@ export function StageDeleteAutomationImpact({ automations }: StageDeleteAutomati
   if (automations <= 0) return null;
 
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+    <div className="rounded-2xl border border-warning/35 bg-warning/10 p-3">
       <div className="flex items-start gap-2 text-sm">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
         <span>
           <strong>
             {automations} {automations === 1 ? "automação será desativada" : "automações serão desativadas"}.

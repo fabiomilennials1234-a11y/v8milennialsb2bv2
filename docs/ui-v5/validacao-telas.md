@@ -12,6 +12,15 @@ Decisões de produto já tomadas e respeitadas aqui:
 - **Score do lead não é mais usado** — CTO, 01/10, neste pedido.
 - **A coluna do funil não decide ganho/perda** — desfecho vive no Negócio (03/09).
 
+### Decisões do CTO sobre o resíduo de score (02/10)
+
+| # | Onde | Decisão | Neste PR | Depois |
+|---|---|---|---|---|
+| 1 | Automações: gatilho "Score Atingido", ações "Atualizar Rating"/"Calcular Lead Score (IA)", condição "Pontuação de qualificação", variáveis `{{score}}`/`{{rating}}`/`{{ai_temperatura}}` | **Remover** | Saem de toda superfície de criação; passo já salvo abre com selo "Descontinuado" e pode ser removido | Executor nas edge functions — medir uso em prod antes de cortar (senão automação existente para em silêncio) |
+| 2 | Revisão: sugestões "Lead quente" (score ≥ 70) | **Remover** | Front para de mostrar e de contar | `get-daily-priorities` para de calcular `leads_quentes` |
+| 3 | Métricas LLM: "Taxa de Qualificação" (score ≥ 70) | **Trocar por qualificação** | Mesmo critério de "Boas avaliações" do Estúdio (Prata/Ouro/Diamante) | — |
+| 4 | Carteira: health score do cliente | **Manter** | Só restyle | — |
+
 Legenda: ✅ entra como está (só forma) · 🔁 entra re-hierarquizado (mesmo dado) ·
 ⛔ ideia do mockup que NÃO entra · ⚠️ resíduo/decisão pendente.
 

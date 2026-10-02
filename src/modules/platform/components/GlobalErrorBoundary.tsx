@@ -83,8 +83,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <div className="flex flex-col items-center gap-4 max-w-md text-center">
-            <AlertTriangle className="h-12 w-12 text-yellow-500" />
-            <h2 className="text-xl font-semibold">
+            <AlertTriangle className="h-12 w-12 text-warning-strong" />
+            <h2 className="text-xl font-extrabold tracking-[-0.02em]">
               {this.state.isChunkError
                 ? "Atualização Detectada"
                 : "Algo deu errado"}
@@ -95,20 +95,20 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 : "Ocorreu um erro inesperado. Tente recarregar a página."}
             </p>
             {this.state.error && !this.state.isChunkError && (
-              <pre className="text-xs text-left bg-muted p-3 rounded-lg max-w-full overflow-auto max-h-32">
+              <pre className="max-h-32 max-w-full overflow-auto rounded-xl bg-muted p-3 text-left text-xs">
                 {this.state.error.message}
               </pre>
             )}
             <div className="flex gap-3">
               <button
                 onClick={this.handleGoHome}
-                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+                className="rounded-full border border-input bg-card px-4 py-2 text-sm font-semibold shadow-relevo transition-colors hover:border-foreground/20"
               >
                 Ir para o início
               </button>
               <button
                 onClick={this.handleReload}
-                className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-2"
+                className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-brilho-ouro transition-colors hover:bg-primary/90"
               >
                 <RefreshCw className="w-4 h-4" />
                 Recarregar

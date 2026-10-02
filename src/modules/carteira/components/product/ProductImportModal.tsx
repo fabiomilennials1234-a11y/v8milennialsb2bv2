@@ -453,7 +453,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto sm:rounded-lg">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
@@ -470,7 +470,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
             </p>
 
             {/* Ações principais - sempre visíveis no topo */}
-            <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-3 rounded-xl bg-sunken p-3">
               <Button variant="outline" asChild>
                 <label className="cursor-pointer">
                   <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={handleFileChange} />
@@ -486,7 +486,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
               </Button>
             </div>
 
-            <div className="bg-muted/50 border rounded-lg p-4 text-sm space-y-2">
+            <div className="space-y-2 rounded-xl bg-sunken p-4 text-sm">
               <p className="font-medium">Colunas suportadas:</p>
               <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                 {SYSTEM_FIELDS.map((f) => (
@@ -595,7 +595,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
                         {r.error ? (
                           <span className="text-destructive text-xs">{r.error}</span>
                         ) : (
-                          <span className="text-green-600 text-xs">OK</span>
+                          <span className="text-xs font-semibold text-success">OK</span>
                         )}
                       </td>
                     </tr>

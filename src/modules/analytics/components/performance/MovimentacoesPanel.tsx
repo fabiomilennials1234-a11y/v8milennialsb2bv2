@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { DateRange as RDPDateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
+import { KpiTile } from "@/components/ui/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -36,7 +37,9 @@ import {
 } from "@/modules/analytics/lib/movimentacoes-period";
 
 // ────────────────────────────────────────────────────────────────────────
-// MovimentacaoTile — anatomia fiel ao KPICard (racing-stripe + chip + count-up)
+// MovimentacaoTile — V5: o `KpiTile` do bento (rótulo, número grande, chip
+// tintado) com o count-up de sempre. O wrapper animado carrega o `role=group`
+// e o nome acessível que os testes e o leitor de tela usam.
 // ────────────────────────────────────────────────────────────────────────
 interface MovimentacaoTileProps {
   label: string;
@@ -63,6 +66,19 @@ function MovimentacaoTileBase({
   const animated = useCountUp(value, 1200, !reduceMotion);
   const display = reduceMotion ? value : animated;
 
+  const note =
+    (hero && subValue) || emptyCaption ? (
+      <>
+        {hero && subValue && (
+          <>
+            <span className="font-medium">{subValue.caption}</span>{" "}
+            <span className="font-bold tabular-nums text-foreground/90">{subValue.amount}</span>
+          </>
+        )}
+        {emptyCaption}
+      </>
+    ) : undefined;
+
   return (
     <motion.div
       role="group"
@@ -70,48 +86,16 @@ function MovimentacaoTileBase({
       initial={reduceMotion ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: reduceMotion ? 0 : delay }}
-      className="relative bg-card rounded-lg border border-border p-5 overflow-hidden group"
+      className="min-w-0"
     >
-      {/* Racing stripe */}
-      <div
-        className={cn(
-          "absolute left-0 top-0 w-[3px] h-full transition-colors",
-          hero ? "bg-primary" : "bg-primary/60 group-hover:bg-primary",
-        )}
+      <KpiTile
+        className="h-full"
+        label={label}
+        value={Math.round(display).toLocaleString("pt-BR")}
+        icon={Icon}
+        tone={hero ? "gold" : "neutral"}
+        note={note}
       />
-
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-            {label}
-          </p>
-          <p className="mt-1.5 text-2xl font-extrabold tracking-[-0.03em] tabular-nums text-foreground">
-            {Math.round(display).toLocaleString("pt-BR")}
-          </p>
-
-          {hero && subValue && (
-            <p className="mt-1 text-sm font-bold tabular-nums text-foreground/90">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {subValue.caption}
-              </span>{" "}
-              {subValue.amount}
-            </p>
-          )}
-
-          {emptyCaption && (
-            <p className="mt-1 text-[11px] text-muted-foreground">{emptyCaption}</p>
-          )}
-        </div>
-
-        <div
-          className={cn(
-            "p-2.5 rounded-lg",
-            hero ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-          )}
-        >
-          <Icon className="w-4 h-4" />
-        </div>
-      </div>
     </motion.div>
   );
 }
@@ -148,25 +132,32 @@ function PeriodRangeControl({ state, onChange }: PeriodRangeControlProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {/* Alternador claro do V5 (mesma forma do `TabsList variant="segmented"`),
+          mas continua sendo grupo de BOTÕES com aria-pressed — trocar para
+          aba mudaria o papel que o teste e o leitor de tela esperam. */}
       <div
         role="group"
         aria-label="Período das movimentações"
-        className="flex gap-0.5 rounded-lg border border-border bg-muted/30 p-0.5"
+        className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]"
       >
         {MOVIMENTACOES_PRESETS.map((p) => {
           const active = state.preset === p.value;
           return (
-            <Button
+            <button
               key={p.value}
               type="button"
-              variant={active ? "default" : "ghost"}
-              size="sm"
               aria-pressed={active}
               onClick={() => handlePreset(p.value)}
-              className="h-7 px-3 text-xs rounded-md focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active
+                  ? "bg-card text-foreground shadow-relevo"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
               {p.label}
-            </Button>
+            </button>
           );
         })}
       </div>
@@ -174,7 +165,7 @@ function PeriodRangeControl({ state, onChange }: PeriodRangeControlProps) {
       {state.preset === "custom" && (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs tabular-nums">
               <CalendarDays className="w-3.5 h-3.5" />
               {custom?.from && custom?.to
                 ? `${format(custom.from, "dd MMM", { locale: ptBR })} — ${format(custom.to, "dd MMM yyyy", { locale: ptBR })}`
@@ -225,12 +216,12 @@ export function MovimentacoesPanel() {
       initial={reduceMotion ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="glass-card rounded-xl p-5"
+      className="space-y-3"
       aria-label="Movimentações no período"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h2 className="text-base font-semibold tracking-[-0.015em]">
+          <h2 className="text-[15px] font-bold tracking-[-0.02em]">
             Movimentações no período
           </h2>
           <TooltipProvider>
@@ -239,7 +230,7 @@ export function MovimentacoesPanel() {
                 <button
                   type="button"
                   aria-label="O que isto conta?"
-                  className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex items-center justify-center rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Info className="w-3.5 h-3.5" />
                 </button>
@@ -254,25 +245,27 @@ export function MovimentacoesPanel() {
         <PeriodRangeControl state={period} onChange={setPeriod} />
       </div>
 
-      <div className="mt-4">
+      <div>
         {isError ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
+          <div className="flex flex-col items-center justify-center gap-2 rounded-card border border-card-border bg-card px-4 py-8 text-center shadow-relevo">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+            </span>
             <p className="text-sm text-muted-foreground">
               Não foi possível carregar as movimentações.
             </p>
-            <Button variant="ghost" size="sm" onClick={() => refetch()}>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
               Tentar de novo
             </Button>
           </div>
         ) : isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Skeleton className="h-[92px] rounded-lg" />
-            <Skeleton className="h-[92px] rounded-lg" />
-            <Skeleton className="h-[92px] rounded-lg" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Skeleton className="h-[92px] rounded-card" />
+            <Skeleton className="h-[92px] rounded-card" />
+            <Skeleton className="h-[92px] rounded-card" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <MovimentacaoTile
               label="Marcadas"
               value={marcadas}

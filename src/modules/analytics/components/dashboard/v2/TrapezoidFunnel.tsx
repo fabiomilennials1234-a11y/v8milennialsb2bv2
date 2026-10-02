@@ -14,11 +14,13 @@ interface TrapezoidFunnelProps {
   prevLabel: string;
 }
 
+// Rampa de ouro em token (o mesmo matiz perdendo força a cada etapa) e o
+// verde de venda no fundo — sem gradiente literal, os dois temas respondem.
 const LEVEL_STYLE = [
-  { inset: "0%", insetB: "7%", bg: "linear-gradient(180deg,hsl(47 100% 50%),hsl(47 100% 43%))", color: "hsl(30 18% 12%)" },
-  { inset: "7%", insetB: "14%", bg: "linear-gradient(180deg,hsl(46 85% 38%),hsl(46 85% 32%))", color: "hsl(45 30% 96%)" },
-  { inset: "14%", insetB: "21%", bg: "linear-gradient(180deg,hsl(44 50% 25%),hsl(44 50% 20%))", color: "hsl(45 25% 92%)" },
-  { inset: "21%", insetB: "26%", bg: "linear-gradient(180deg,hsl(142 70% 42%),hsl(142 70% 34%))", color: "hsl(0 0% 100%)" },
+  { inset: "0%", insetB: "7%", cls: "bg-primary text-primary-foreground" },
+  { inset: "7%", insetB: "14%", cls: "bg-primary/70 text-primary-foreground" },
+  { inset: "14%", insetB: "21%", cls: "bg-primary/35 text-foreground" },
+  { inset: "21%", insetB: "26%", cls: "bg-success text-success-foreground" },
 ] as const;
 
 const RATE_LABELS = ["viram reunião", "recebem proposta", "fecham"] as const;
@@ -43,15 +45,15 @@ function TrapezoidFunnelBase({ stages, deltaPp, prevLabel }: TrapezoidFunnelProp
   const hasData = stages[0].value > 0;
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".5s" }}>
-      <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Funil de vendas</span>
-        <span className="rounded-full bg-primary/15 px-[9px] py-[3px] text-[10.5px] font-extrabold tracking-[.02em] text-primary tabular-nums">
+    // Corpo da janela "Funil de conversão" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-end">
+        <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
           conv. total {convTotal.toFixed(1).replace(".", ",")}%
         </span>
       </div>
 
-      <div className="mt-4 flex flex-col items-center">
+      <div className="mb-3.5 mt-3 flex flex-col items-center">
         {stages.map((stage, i) => {
           const st = LEVEL_STYLE[i];
           return (
@@ -62,24 +64,22 @@ function TrapezoidFunnelBase({ stages, deltaPp, prevLabel }: TrapezoidFunnelProp
                   style={{ animationDelay: `${1 + (i - 1) * 0.25}s` }}
                 >
                   <span className="h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-muted-foreground/40" />
-                  <span className="rounded-full bg-primary/15 px-2 py-[2px] text-[10.5px] font-extrabold text-primary tabular-nums">
+                  <span className="rounded-full bg-primary-soft px-2 py-[2px] text-[10.5px] font-bold tabular-nums text-primary-soft-foreground">
                     {Math.round(rates[i - 1])}%
                   </span>
-                  <span className="text-[10.5px] font-semibold text-muted-foreground/70">{RATE_LABELS[i - 1]}</span>
+                  <span className="text-[11px] font-semibold text-muted-foreground">{RATE_LABELS[i - 1]}</span>
                 </div>
               )}
               <div
-                className="cmd-growy relative flex h-[50px] w-full cursor-pointer items-center justify-center transition-[filter] duration-150 hover:brightness-[1.18]"
+                className={`cmd-growy relative flex h-[50px] w-full items-center justify-center transition-[filter] duration-150 hover:brightness-110 ${st.cls}`}
                 style={{
                   clipPath: `polygon(${st.inset} 0, calc(100% - ${st.inset}) 0, calc(100% - ${st.insetB}) 100%, ${st.insetB} 100%)`,
-                  background: st.bg,
-                  color: st.color,
                   animationDelay: `${0.6 + i * 0.25}s`,
                 }}
               >
-                <span className="text-[17px] font-extrabold tracking-[-0.02em] tabular-nums">{stage.value}</span>
-                <span className="ml-2 text-[10.5px] font-bold uppercase tracking-[.06em] opacity-75">{stage.label}</span>
-                <span className="absolute right-3.5 text-[10.5px] font-bold opacity-60 tabular-nums">
+                <span className="text-[17px] font-extrabold tracking-[-0.03em] tabular-nums">{stage.value}</span>
+                <span className="ml-2 text-[10.5px] font-bold uppercase tracking-[.06em] opacity-80">{stage.label}</span>
+                <span className="absolute right-3.5 text-[10.5px] font-bold opacity-70 tabular-nums">
                   {Math.round(shares[i])}%
                 </span>
               </div>
@@ -89,10 +89,10 @@ function TrapezoidFunnelBase({ stages, deltaPp, prevLabel }: TrapezoidFunnelProp
       </div>
 
       <div
-        className="cmd-fadein mt-3.5 flex items-center justify-between border-t border-border/70 pt-3"
+        className="cmd-fadein mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border/60 pt-3"
         style={{ animationDelay: "1.7s" }}
       >
-        <span className="text-[11px] font-semibold text-muted-foreground/70">
+        <span className="text-[11px] font-semibold text-muted-foreground">
           {hasData ? (
             <>Gargalo: <b className="font-extrabold text-destructive">{stages[bottleneckIdx].label} → {stages[bottleneckIdx + 1].label}</b></>
           ) : (
@@ -104,7 +104,7 @@ function TrapezoidFunnelBase({ stages, deltaPp, prevLabel }: TrapezoidFunnelProp
             {deltaPp >= 0 ? "+" : ""}{deltaPp.toFixed(1).replace(".", ",")}pp {prevLabel}
           </b>
         )}
-        <Link to="/funis" className="text-[11px] font-bold text-muted-foreground transition-colors hover:text-primary">
+        <Link to="/funis" className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
           Ver funis →
         </Link>
       </div>

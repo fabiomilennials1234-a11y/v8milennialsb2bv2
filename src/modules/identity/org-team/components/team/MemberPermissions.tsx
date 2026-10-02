@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { useTeamMembers } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
@@ -102,19 +103,19 @@ function LeadVisibilityField({
   const active = LEAD_VISIBILITY_OPTIONS.find((o) => o.level === level);
 
   return (
-    <div className={`px-4 py-3 ${disabled ? "opacity-50" : ""}`}>
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex-1 min-w-0">
-          <span className="font-medium text-sm">Visualizacao de leads</span>
-          <p className="text-xs text-muted-foreground mt-0.5">
+    <div className={cn("px-4 py-3", disabled && "opacity-50")}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-semibold">Visualização de leads</span>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {active?.description}
           </p>
         </div>
 
         <div
-          className="inline-flex rounded-md border border-border p-0.5 shrink-0"
+          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-[3px]"
           role="radiogroup"
-          aria-label="Visualizacao de leads"
+          aria-label="Visualização de leads"
         >
           {LEAD_VISIBILITY_OPTIONS.map((option) => {
             const isActive = option.level === level;
@@ -126,12 +127,13 @@ function LeadVisibilityField({
                 aria-checked={isActive}
                 disabled={disabled}
                 onClick={() => onChange(option.level)}
-                className={
-                  "px-3 py-1 text-xs rounded-sm transition-colors whitespace-nowrap disabled:cursor-not-allowed " +
-                  (isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground")
-                }
+                className={cn(
+                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+                  isActive
+                    ? "bg-card text-foreground shadow-relevo"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {option.label}
               </button>
@@ -140,15 +142,15 @@ function LeadVisibilityField({
         </div>
       </div>
 
-      {/* O admin precisa saber que salvar normaliza as tres chaves. Mudanca de
-          permissao que acontece de lado, sem ninguem pedir, e a que ninguem
+      {/* O admin precisa saber que salvar normaliza as três chaves. Mudança de
+          permissão que acontece de lado, sem ninguém pedir, é a que ninguém
           audita depois. */}
       {isLegacy && !disabled && (
-        <p className="text-xs text-amber-500/90 mt-2">
-          A configuracao atual mistura as tres chaves antigas
+        <p className="mt-2 rounded-xl bg-warning/15 px-3 py-2 text-xs leading-relaxed text-warning-strong">
+          A configuração atual mistura as três chaves antigas
           (`leads.view_all`, `leads.view_unassigned`, `leads.view_subordinates`)
-          num estado que o banco ja resolve como &ldquo;{active?.label}&rdquo;.
-          Salvar grava as tres de forma coerente, sem mudar quem enxerga o que.
+          num estado que o banco já resolve como &ldquo;{active?.label}&rdquo;.
+          Salvar grava as três de forma coerente, sem mudar quem enxerga o quê.
         </p>
       )}
     </div>
@@ -350,13 +352,13 @@ export function MemberPermissions() {
   // Save permissions
   const handleSave = async () => {
     if (Object.keys(localOverrides).length === 0) {
-      toast.info("Nenhuma alteracao para salvar.");
+      toast.info("Nenhuma alteração para salvar.");
       return;
     }
 
     if (scope === "org") {
       if (!organizationId) {
-        toast.error("Organizacao nao resolvida.");
+        toast.error("Organização não resolvida.");
         return;
       }
       setIsSaving(true);
@@ -364,7 +366,7 @@ export function MemberPermissions() {
         // Grava a linha explícita mesmo quando o valor coincide com o catálogo
         // global: a intenção do admin é explícita, e apagar a linha faria a
         // política voltar a seguir o produto sem ninguém pedir. Quem quer
-        // voltar ao padrão usa "Restaurar padrao".
+        // voltar ao padrão usa "Restaurar padrão".
         const rows = Object.entries(localOverrides).map(([feature_key, enabled]) => ({
           organization_id: organizationId,
           feature_key,
@@ -377,11 +379,11 @@ export function MemberPermissions() {
 
         if (error) throw error;
 
-        toast.success("Politica da organizacao salva!");
+        toast.success("Política da organização salva!");
         setLocalOverrides({});
         queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
       } catch (err: any) {
-        toast.error(err?.message || "Erro ao salvar a politica da organizacao.");
+        toast.error(err?.message || "Erro ao salvar a política da organização.");
         console.error("[MemberPermissions] org save error:", err);
       } finally {
         setIsSaving(false);
@@ -398,7 +400,7 @@ export function MemberPermissions() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        toast.error("Sessao expirada. Faca login novamente.");
+        toast.error("Sessão expirada. Faça login novamente.");
         setIsSaving(false);
         return;
       }
@@ -428,16 +430,16 @@ export function MemberPermissions() {
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error((data as any)?.message ?? (data as any)?.error ?? "Erro ao salvar permissoes");
+          throw new Error((data as any)?.message ?? (data as any)?.error ?? "Erro ao salvar permissões");
         }
       }
 
-      toast.success("Permissoes salvas com sucesso!");
+      toast.success("Permissões salvas com sucesso!");
       setLocalOverrides({});
       queryClient.invalidateQueries({ queryKey: ["member_feature_permissions"] });
       queryClient.invalidateQueries({ queryKey: ["feature-permissions"] });
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar permissoes.");
+      toast.error(err?.message || "Erro ao salvar permissões.");
       console.error("[MemberPermissions] save error:", err);
     } finally {
       setIsSaving(false);
@@ -448,7 +450,7 @@ export function MemberPermissions() {
   const handleReset = async () => {
     if (scope === "org") {
       if (!organizationId) {
-        toast.error("Organizacao nao resolvida.");
+        toast.error("Organização não resolvida.");
         return;
       }
       setIsSaving(true);
@@ -460,11 +462,11 @@ export function MemberPermissions() {
 
         if (error) throw error;
 
-        toast.success("Politica da organizacao restaurada ao padrao do produto.");
+        toast.success("Política da organização restaurada ao padrão do produto.");
         setLocalOverrides({});
         queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
       } catch (err: any) {
-        toast.error(err?.message || "Erro ao restaurar a politica.");
+        toast.error(err?.message || "Erro ao restaurar a política.");
         console.error("[MemberPermissions] org reset error:", err);
       } finally {
         setIsSaving(false);
@@ -488,12 +490,12 @@ export function MemberPermissions() {
         if (error) throw error;
       }
 
-      toast.success("Permissoes resetadas para o padrao!");
+      toast.success("Permissões resetadas para o padrão!");
       setLocalOverrides({});
       queryClient.invalidateQueries({ queryKey: ["member_feature_permissions"] });
       queryClient.invalidateQueries({ queryKey: ["feature-permissions"] });
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao resetar permissoes.");
+      toast.error(err?.message || "Erro ao resetar permissões.");
       console.error("[MemberPermissions] reset error:", err);
     } finally {
       setIsSaving(false);
@@ -507,23 +509,25 @@ export function MemberPermissions() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <div>
-              <CardTitle>Permissoes por Feature</CardTitle>
-              <CardDescription>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Shield className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 space-y-1">
+              <CardTitle>Permissões por feature</CardTitle>
+              <CardDescription className="text-[13px]">
                 {scope === "org"
-                  ? "Politica da organizacao: vale para todo membro, inclusive quem for contratado depois. Excecoes individuais ficam na aba Por membro."
-                  : "Excecao individual: sobrepoe a politica da organizacao apenas para os membros selecionados."}
+                  ? "Política da organização: vale para todo membro, inclusive quem for contratado depois. Exceções individuais ficam na aba Por membro."
+                  : "Exceção individual: sobrepõe a política da organização apenas para os membros selecionados."}
               </CardDescription>
             </div>
           </div>
-          <div className="flex gap-2 items-center">
-            {/* Duas coisas diferentes, nunca no mesmo toggle: a POLITICA da org
-                e a EXCECAO de uma pessoa. Misturar as duas foi o que fez a
-                permissao vazar na contratacao seguinte. */}
-            <div className="inline-flex rounded-md border border-border p-0.5 mr-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Duas coisas diferentes, nunca no mesmo toggle: a POLÍTICA da org
+                e a EXCEÇÃO de uma pessoa. Misturar as duas foi o que fez a
+                permissão vazar na contratação seguinte. */}
+            <div className="mr-1 inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
               {(["org", "member"] as const).map((s0) => (
                 <button
                   key={s0}
@@ -532,14 +536,15 @@ export function MemberPermissions() {
                     setScope(s0);
                     setLocalOverrides({});
                   }}
-                  className={
-                    "px-3 py-1 text-xs rounded-sm transition-colors " +
-                    (scope === s0
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground")
-                  }
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    scope === s0
+                      ? "bg-card text-foreground shadow-relevo"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  {s0 === "org" ? "Organizacao" : "Por membro"}
+                  {s0 === "org" ? "Organização" : "Por membro"}
                 </button>
               ))}
             </div>
@@ -548,17 +553,16 @@ export function MemberPermissions() {
               size="sm"
               onClick={handleReset}
               disabled={isSaving || (scope === "member" && selectedList.length === 0)}
-              className="gap-1"
             >
-              <RotateCcw className="w-4 h-4" />
-              {scope === "org" ? "Restaurar padrao" : "Resetar para padrao"}
+              <RotateCcw />
+              {scope === "org" ? "Restaurar padrão" : "Resetar para padrão"}
             </Button>
             <Button
               size="sm"
               onClick={handleSave}
               disabled={isSaving || !hasChanges}
             >
-              {isSaving ? "Salvando..." : "Salvar permissoes"}
+              {isSaving ? "Salvando..." : "Salvar permissões"}
             </Button>
           </div>
         </div>
@@ -567,7 +571,7 @@ export function MemberPermissions() {
         <div className="flex gap-6 flex-col lg:flex-row">
           {/* Left panel: member list — só no escopo por membro. Editando a
               política da organização não há quem selecionar. */}
-          <div className={`w-full lg:w-72 shrink-0 space-y-3 ${scope === "org" ? "hidden" : ""}`}>
+          <div className={cn("w-full shrink-0 space-y-3 lg:w-72", scope === "org" && "hidden")}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -577,11 +581,11 @@ export function MemberPermissions() {
                 className="pl-9"
               />
             </div>
-            <div className="border rounded-lg max-h-[400px] overflow-y-auto">
+            <div className="max-h-[400px] overflow-y-auto rounded-xl border border-border">
               {/* Select all */}
               <button
                 type="button"
-                className="flex items-center gap-2 w-full px-3 py-2 hover:bg-muted text-sm border-b"
+                className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-sm transition-colors hover:bg-muted"
                 onClick={() =>
                   toggleSelectAll(selectedIds.size !== filteredMembers.length)
                 }
@@ -604,9 +608,10 @@ export function MemberPermissions() {
                   <button
                     key={member.id}
                     type="button"
-                    className={`flex items-center gap-2 w-full px-3 py-2 hover:bg-muted text-sm ${
-                      isSelected(member.id) ? "bg-primary/5" : ""
-                    }`}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted",
+                      isSelected(member.id) && "bg-primary-soft/60",
+                    )}
                     onClick={() => toggleSelect(member.id)}
                   >
                     {isSelected(member.id) ? (
@@ -627,12 +632,12 @@ export function MemberPermissions() {
           {/* Right panel: permissions matrix by module */}
           <div className="flex-1 min-w-0 space-y-4">
             {scope === "member" && selectedList.length === 0 ? (
-              <div className="flex items-center justify-center h-48 rounded-lg border border-dashed text-muted-foreground text-sm">
-                Selecione um ou mais membros para editar as permissoes.
+              <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+                Selecione um ou mais membros para editar as permissões.
               </div>
             ) : loadingPerms || loadingFeatures ? (
-              <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                Carregando permissoes...
+              <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+                Carregando permissões...
               </div>
             ) : (
               <>
@@ -648,7 +653,7 @@ export function MemberPermissions() {
                 </div>
 
                 {filteredGroups.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
+                  <div className="py-8 text-center text-sm text-muted-foreground">
                     Nenhuma feature encontrada.
                   </div>
                 ) : (
@@ -664,15 +669,16 @@ export function MemberPermissions() {
                     return (
                       <div
                         key={slug}
-                        className={`border rounded-lg overflow-hidden ${
-                          !moduleEnabled ? "opacity-50" : ""
-                        }`}
+                        className={cn(
+                          "overflow-hidden rounded-xl border border-border",
+                          !moduleEnabled && "opacity-50",
+                        )}
                       >
                         {/* Module header */}
-                        <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
+                        <div className="flex items-center justify-between border-b border-border bg-sunken px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4 text-primary" />
-                            <span className="font-semibold text-sm">{label}</span>
+                            <Shield className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-bold">{label}</span>
                           </div>
                           {hasViewFeature && (
                             <Switch
@@ -685,7 +691,7 @@ export function MemberPermissions() {
                         </div>
 
                         {/* Feature list — separated by view vs action */}
-                        <div className="divide-y">
+                        <div className="divide-y divide-border">
                           {(() => {
                             // A porta do módulo já é o switch do cabeçalho, e as
                             // três chaves de visibilidade de leads viraram um
@@ -714,26 +720,24 @@ export function MemberPermissions() {
                               return (
                                 <div
                                   key={feature.key}
-                                  className={`flex items-center justify-between px-4 py-2.5 ${
-                                    disabled ? "opacity-50" : ""
-                                  }`}
+                                  className={cn(
+                                    "flex items-center justify-between px-4 py-2.5",
+                                    disabled && "opacity-50",
+                                  )}
                                 >
-                                  <div className="flex-1 min-w-0 mr-3">
+                                  <div className="mr-3 min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-medium text-sm">
+                                      <span className="text-sm font-medium">
                                         {feature.name}
                                       </span>
                                       {feature.is_admin_only && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-xs bg-purple-500/10 text-purple-500 border-purple-500/20"
-                                        >
-                                          Apenas Admin
+                                        <Badge variant="gold" className="px-2 py-0 text-[11px]">
+                                          Apenas admin
                                         </Badge>
                                       )}
                                     </div>
                                     {feature.description && (
-                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
                                         {feature.description}
                                       </p>
                                     )}
@@ -753,9 +757,9 @@ export function MemberPermissions() {
                               <>
                                 {(showLeadVisibility || viewFeatures.length > 0) && (
                                   <>
-                                    <div className="px-4 pt-3 pb-1">
-                                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                                        Visualizacao
+                                    <div className="px-4 pb-1 pt-3">
+                                      <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                                        Visualização
                                       </p>
                                     </div>
                                     {showLeadVisibility && (
@@ -773,9 +777,9 @@ export function MemberPermissions() {
                                   </>
                                 )}
                                 {actionFeatures.length > 0 && (
-                                  <div className="px-4 pt-3 pb-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                                      Acoes
+                                  <div className="px-4 pb-1 pt-3">
+                                    <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                                      Ações
                                     </p>
                                   </div>
                                 )}
@@ -789,12 +793,12 @@ export function MemberPermissions() {
                   })
                 )}
 
-                {/* No escopo "Organizacao" a selecao de membros nem aparece —
+                {/* No escopo "Organização" a seleção de membros nem aparece —
                     anunciar "aplicado a N membros" ali seria mentira sobre onde
-                    a gravacao vai cair. */}
+                    a gravação vai cair. */}
                 {scope === "member" && selectedList.length > 1 && (
                   <p className="text-xs text-muted-foreground">
-                    Alteracoes serao aplicadas a todos os {selectedList.length}{" "}
+                    Alterações serão aplicadas a todos os {selectedList.length}{" "}
                     membros selecionados.
                   </p>
                 )}

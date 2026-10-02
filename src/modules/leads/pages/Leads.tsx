@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   LeadListRow,
   LeadListHeader,
@@ -132,15 +134,21 @@ const originLabels: Record<string, string> = {
   indicacao: "Indicação",
 };
 
+/**
+ * Tinta de cada origem — só tokens (V5). A paleta crua de antes (`green-600`,
+ * `blue-600`…) era afinada para o claro e reprovava contraste no escuro. A
+ * origem sempre vem escrita ao lado da cor, então dois canais com o mesmo
+ * matiz (WhatsApp e Indicação) não perdem identidade.
+ */
 const originColors: Record<string, string> = {
-  whatsapp: "bg-green-500/10 text-green-600 border-green-500/20",
-  meta_ads: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  outro: "bg-muted text-muted-foreground border-muted",
-  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
-  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
-  cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  indicacao: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  whatsapp: "bg-success/10 text-success border-success/25",
+  meta_ads: "bg-insights/10 text-insights border-insights/25",
+  outro: "bg-muted text-muted-foreground border-border",
+  site: "bg-chart-5/10 text-chart-5 border-chart-5/25",
+  remarketing: "bg-warning/15 text-warning-strong border-warning/30",
+  google_ads: "bg-destructive/10 text-destructive border-destructive/25",
+  cal: "bg-primary-soft text-primary-soft-foreground border-primary/30",
+  indicacao: "bg-success/10 text-success border-success/25",
 };
 
 interface LeadFormData {
@@ -704,59 +712,52 @@ function LeadsInner() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-2xl font-bold"
-          >
-            Leads
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Da primeira conversa à próxima compra.
-          </p>
-        </div>
-
-        {/* Ações da lista de leads; carteira tem suas próprias ações. */}
-        {!portfolioActive && <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-5">
+      <PageHeader
+        title="Leads"
+        subtitle="Da primeira conversa à próxima compra."
+        // Ações da lista de leads; a carteira (aba Clientes) tem as suas.
+        actions={!portfolioActive && <>
           {isV2 ? (
-            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)} className="gap-2">
-              <History className="w-4 h-4" />
+            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)}>
+              <History />
               Importações
             </Button>
           ) : (
             <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-              <History className="w-4 h-4" />
+              <History />
             </Button>
           )}
-          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
-            <FileUp className="w-4 h-4" />
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport}>
+            <FileUp />
             Importar
           </Button>
-          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
-            <FileDown className="w-4 h-4" />
+          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport}>
+            <FileDown />
             Exportar
           </Button>
-          <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
-            <Plus className="w-4 h-4" />
-            Novo Lead
+          <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
+            <Plus />
+            Novo lead
           </Button>
-        </div>}
-      </div>
-
-      <div className="flex gap-6 overflow-x-auto border-b border-border" role="group" aria-label="Classificação dos leads">
-        {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
-          <button key={option.value} type="button" aria-pressed={filterClassificacao === option.value}
-            onClick={() => setFilterClassificacao(option.value)}
-            className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
-            <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
-          </button>
-        ))}
-      </div>
+        </>}
+        tabs={
+          /* A gaveta troca a vista inteira (Clientes vira a carteira) — é
+             navegação de página, por isso a pílula escura. Mesmos valores. */
+          <Tabs value={filterClassificacao} onValueChange={setFilterClassificacao}>
+            <TabsList variant="pill" aria-label="Classificação dos leads">
+              {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
+                <TabsTrigger key={option.value} value={option.value}>
+                  {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
+                  <span className="text-[11px] font-bold tabular-nums opacity-70">
+                    {tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
+      />
       {!portfolioActive && <>
       {/* Stats */}
       {isV2 ? (
@@ -827,7 +828,7 @@ function LeadsInner() {
         >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, empresa, email ou telefone..."
+            placeholder="Buscar por nome, empresa, e-mail ou telefone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
@@ -836,22 +837,22 @@ function LeadsInner() {
           />
         </div>
         <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[170px]" aria-label="Origem">
             <SelectValue placeholder="Origem" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas Origens</SelectItem>
+            <SelectItem value="all">Todas as origens</SelectItem>
             {Object.entries(originLabels).map(([key, label]) => (
               <SelectItem key={key} value={key}>{label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={filterQualification} onValueChange={setFilterQualification}>
-          <SelectTrigger className="w-[170px]">
+          <SelectTrigger className="w-[190px]" aria-label="Qualificação">
             <SelectValue placeholder="Qualificação" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas Qualificações</SelectItem>
+            <SelectItem value="all">Todas as qualificações</SelectItem>
             {QUALIFICATION_TIERS.map((tier) => {
               const cfg = QUALIFICATION_TIER_CONFIG[tier];
               const Icon = cfg.icon;
@@ -875,7 +876,7 @@ function LeadsInner() {
         {/* Dono da conta — casa exatamente o que a coluna homônima da lista
             mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
         <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px]" aria-label="Dono da conta">
             <SelectValue placeholder="Dono da conta" />
           </SelectTrigger>
           <SelectContent>
@@ -923,7 +924,7 @@ function LeadsInner() {
 
       {hasCreatedRange && (
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+          <Badge variant="soft" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
             <Calendar className="h-3.5 w-3.5" />
             {createdFrom && createdTo
               ? formatDayInTz(createdFrom, orgTimezone) === formatDayInTz(createdTo, orgTimezone)
@@ -936,7 +937,7 @@ function LeadsInner() {
               type="button"
               onClick={clearCreatedRange}
               aria-label="Remover filtro de período"
-              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-card"
             >
               <X className="h-3 w-3" />
             </button>
@@ -948,14 +949,14 @@ function LeadsInner() {
           ele o deep-link filtra a lista em silêncio e o admin lê "sumiram leads". */}
       {hasAssignmentFilter && (
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+          <Badge variant="soft" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
             <UserX className="h-3.5 w-3.5" />
             Sem responsável
             <button
               type="button"
               onClick={clearAssignmentFilter}
               aria-label="Remover filtro de atribuição"
-              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-card"
             >
               <X className="h-3 w-3" />
             </button>
@@ -987,7 +988,7 @@ function LeadsInner() {
         </div>}
       /> : <>
       {/* Table (desktop) / Card list (mobile) */}
-      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
+      <div className={cn(!isMobile && "overflow-hidden rounded-card border border-card-border bg-card shadow-relevo")}>
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
             {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
@@ -1004,10 +1005,10 @@ function LeadsInner() {
             <LeadMobileSortBar sort={sort} onSortChange={setPersistedSort} />
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                <Skeleton key={i} className="h-24 w-full rounded-card" />
               ))
             ) : leads.length === 0 ? (
-              <div className="rounded-xl border border-border py-10 text-center text-sm text-muted-foreground">
+              <div className="rounded-card border border-card-border bg-card py-10 text-center text-sm text-muted-foreground shadow-relevo">
                 Nenhum lead encontrado
               </div>
             ) : (
@@ -1058,7 +1059,7 @@ function LeadsInner() {
               )}
               {isLoading ? (
                 isV2 ? (
-                  <div className="divide-y divide-border/70">
+                  <div className="divide-y divide-border">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <div key={i} className="flex h-14 items-center gap-4 px-4">
                         <Skeleton className="size-4 rounded" />
@@ -1127,9 +1128,9 @@ function LeadsInner() {
 
         {/* Paginação */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <span className="text-sm text-muted-foreground">
-              Página {page + 1} de {totalPages} ({totalLeads} leads)
+          <div className={cn("flex items-center justify-between gap-3 py-3", !isMobile && "border-t border-border px-4")}>
+            <span className="text-[13px] tabular-nums text-muted-foreground">
+              Página {page + 1} de {totalPages} · {totalLeads?.toLocaleString("pt-BR")} leads
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -1178,10 +1179,10 @@ function LeadsInner() {
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingLead ? "Editar Lead" : "Novo Lead"}
+              {editingLead ? "Editar lead" : "Novo lead"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">Nome *</Label>
@@ -1205,7 +1206,7 @@ function LeadsInner() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
                   type="email"
@@ -1246,7 +1247,7 @@ function LeadsInner() {
             {!editingLead && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Adicionar ao Funil</Label>
+                  <Label>Adicionar ao funil</Label>
                   <Select
                     value={selectedPipe}
                     onValueChange={(v) => { setSelectedPipe(v); setSelectedStage(""); }}
@@ -1263,10 +1264,10 @@ function LeadsInner() {
                 </div>
                 {selectedPipe && stageOptions.length > 0 && (
                   <div className="grid gap-2">
-                    <Label>Etapa Inicial</Label>
+                    <Label>Etapa inicial</Label>
                     <Select value={selectedStage} onValueChange={setSelectedStage}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder="Selecione…" />
                       </SelectTrigger>
                       <SelectContent>
                         {stageOptions.map((opt) => (
@@ -1286,7 +1287,7 @@ function LeadsInner() {
                   id="segment"
                   value={formData.segment}
                   onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                  placeholder="Ex: Tecnologia, Varejo..."
+                  placeholder="Ex.: Tecnologia, Varejo…"
                 />
               </div>
               <div className="grid gap-2">
@@ -1295,7 +1296,7 @@ function LeadsInner() {
                   id="faturamento"
                   value={formData.faturamento}
                   onChange={(e) => setFormData({ ...formData, faturamento: e.target.value })}
-                  placeholder="Ex: R$ 100.000, Acima de 1M..."
+                  placeholder="Ex.: R$ 100.000, acima de 1 mi…"
                 />
               </div>
             </div>
@@ -1339,7 +1340,7 @@ function LeadsInner() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="compromisso_date">Compromisso Marcado</Label>
+                <Label htmlFor="compromisso_date">Compromisso marcado</Label>
                 <Input
                   id="compromisso_date"
                   type="datetime-local"
@@ -1353,7 +1354,7 @@ function LeadsInner() {
                   id="urgency"
                   value={formData.urgency}
                   onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
-                  placeholder="Ex: Alta, Média, Baixa..."
+                  placeholder="Ex.: Alta, Média, Baixa…"
                 />
               </div>
             </div>
@@ -1364,18 +1365,18 @@ function LeadsInner() {
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anotações sobre o lead..."
+                placeholder="Anotações sobre o lead…"
                 rows={3}
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={handleSubmit} disabled={createLead.isPending || updateLead.isPending}>
-              {editingLead ? "Salvar" : "Criar Lead"}
+              {editingLead ? "Salvar" : "Criar lead"}
             </Button>
           </div>
         </DialogContent>
@@ -1388,7 +1389,7 @@ function LeadsInner() {
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Lead</AlertDialogTitle>
+            <AlertDialogTitle>Excluir lead</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir o lead "{leadToDelete?.name}"? Esta ação irá remover também todas as reuniões, propostas e follow-ups associados.
             </AlertDialogDescription>

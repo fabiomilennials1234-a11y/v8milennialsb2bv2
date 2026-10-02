@@ -98,16 +98,18 @@ export function ScheduleFollowUpModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Clock className="h-4 w-4" />
+            </span>
             Agendar Follow Up
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Lead info */}
-          <div className="p-3 rounded-lg bg-muted/50 border">
-            <p className="text-sm font-medium">{leadName}</p>
+          <div className="rounded-2xl bg-sunken px-4 py-3">
+            <p className="text-sm font-semibold">{leadName}</p>
             {sourcePipe && (
               <p className="text-xs text-muted-foreground mt-0.5">
                 Via: {nomeDoPipe(sourcePipe)}
@@ -218,7 +220,7 @@ export function ScheduleFollowUpModal({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"

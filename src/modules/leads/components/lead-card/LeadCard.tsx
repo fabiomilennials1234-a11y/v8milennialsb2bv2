@@ -79,10 +79,11 @@ function AcaoRapida({
       title={rotulo}
       aria-label={rotulo}
       className={cn(
-        "flex size-8 items-center justify-center rounded-lg border border-border text-muted-foreground",
-        "transition-[color,border-color,background-color] hover:border-muted-foreground/40 hover:bg-muted/60 hover:text-foreground",
+        // V5: o botão de ícone é quadrado arredondado sobre o cartão, com relevo.
+        "flex size-9 items-center justify-center rounded-xl border border-input bg-card text-muted-foreground shadow-relevo",
+        "transition-[color,border-color,transform] hover:-translate-y-px hover:border-foreground/20 hover:text-foreground",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "disabled:pointer-events-none disabled:opacity-35",
+        "disabled:pointer-events-none disabled:opacity-35 disabled:shadow-none",
       )}
     >
       <Icone className="size-[15px]" />
@@ -184,15 +185,19 @@ export function LeadCard({
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+    // Sem moldura própria: quem emoldura é a casca (diálogo/folha do V5, raio
+    // 28). A borda + raio de antes desenhava um segundo quadro dentro do primeiro.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-card">
       {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
-      <header className="flex shrink-0 flex-col gap-4 border-b border-border px-6 py-5">
+      {/* `pr-14`: o "×" da casca mora em `right-4 top-4` (ui/dialog, ui/sheet)
+          e as ações rápidas não podem nascer embaixo dele. */}
+      <header className="flex shrink-0 flex-col gap-4 border-b border-border py-5 pl-6 pr-14">
         <div className="flex items-start gap-4">
           <Avatar nome={lead.nome} />
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <h1 className="truncate text-[19px] font-semibold tracking-[-0.02em]">{lead.nome}</h1>
+              <h1 className="truncate text-[22px] font-extrabold leading-tight tracking-[-0.03em]">{lead.nome}</h1>
 
               {/* Relação e Situação, sempre as duas, nunca colapsadas —
                   ADR-0023 §6. 180 leads em prod são Cliente E estão em
@@ -201,7 +206,7 @@ export function LeadCard({
                   94% da base e selo ali seria decoração. */}
               {lead.relacao === "cliente" ? (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[12px] font-semibold text-primary"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 text-[12px] font-bold text-primary-soft-foreground"
                   title={
                     lead.prova === "ambas"
                       ? "Comprou pelo funil e tem pedido no ERP"
@@ -210,7 +215,7 @@ export function LeadCard({
                         : "Fechou negócio no funil"
                   }
                 >
-                  <span className="size-1.5 rounded-full bg-primary" />
+                  <span className="size-1.5 rounded-full bg-current" />
                   Cliente
                 </span>
               ) : (
@@ -230,7 +235,7 @@ export function LeadCard({
                   <span className="truncate text-muted-foreground">· {lead.situacao.funil}</span>
                 </span>
               ) : (
-                <span className="inline-flex shrink-0 rounded-md border border-dashed border-border px-2 py-0.5 text-[12px] text-muted-foreground">
+                <span className="inline-flex shrink-0 rounded-full border border-dashed border-border px-2 py-0.5 text-[12px] text-muted-foreground">
                   Sem negócio aberto
                 </span>
               )}
@@ -267,14 +272,14 @@ export function LeadCard({
                 disabled={!onToggleCopilot}
                 title={lead.copilotAtivo ? "Desligar o Copilot neste lead" : "Ligar o Copilot"}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded px-1 py-0.5 transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   onToggleCopilot && "hover:bg-muted hover:text-foreground",
                   !onToggleCopilot && "cursor-default",
                 )}
               >
                 <Bot
-                  className={cn("size-3.5", lead.copilotAtivo ? "text-primary" : "opacity-50")}
+                  className={cn("size-3.5", lead.copilotAtivo ? "text-primary-soft-foreground" : "opacity-50")}
                 />
                 Copilot {lead.copilotAtivo ? "ativo" : "desligado"}
               </button>
@@ -304,7 +309,7 @@ export function LeadCard({
         <div className="flex flex-wrap items-center gap-1.5">
             {lead.dono ? (
               <span
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-[3px] text-[12px]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-[3px] text-[12px] font-medium"
                 title={lead.dono.papel}
               >
                 <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
@@ -319,7 +324,7 @@ export function LeadCard({
               lead.tags.map((t) => (
                 <span
                   key={t.id}
-                  className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[12px] text-muted-foreground"
+                  className="inline-flex rounded-full bg-muted px-2.5 py-[3px] text-[12px] text-muted-foreground"
                 >
                   {t.nome}
                 </span>
@@ -338,7 +343,9 @@ export function LeadCard({
             funil, barra de etapa, tempo em aberto e tempo parado, e isso não
             cabe em 348px sem truncar justo o que é acionável. O cabeçalho já
             responde "o que está acontecendo" com a Situação. */}
-        <aside className="flex w-[348px] shrink-0 flex-col border-r border-border">
+        {/* Trilho afundado (`sunken`): os ladrilhos de cima viram cartões
+            brancos sobre ele — o bento do V5 dentro da ficha. */}
+        <aside className="flex w-[348px] shrink-0 flex-col border-r border-border bg-sunken">
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-5">
             <LeadCardMetrics metricas={lead.metricas} />
           </div>
@@ -364,14 +371,14 @@ export function LeadCard({
                   type="button"
                   onClick={() => setAba(a.chave)}
                   className={cn(
-                    "relative px-3 py-3 text-[13.5px] transition-colors",
+                    "relative px-3 py-3 text-[13px] transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    ativo ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    ativo ? "font-semibold text-foreground" : "font-medium text-muted-foreground hover:text-foreground/80",
                   )}
                 >
                   {a.rotulo}
                   {a.contagem !== undefined && (
-                    <span className="ml-1.5 text-[11.5px] tabular-nums text-muted-foreground/60">
+                    <span className="ml-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground/70">
                       {a.contagem}
                     </span>
                   )}

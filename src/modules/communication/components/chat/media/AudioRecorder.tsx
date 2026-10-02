@@ -144,13 +144,13 @@ export function AudioRecorder({ onRecorded, onCancel }: AudioRecorderProps) {
   }, []);
 
   return (
-    <div className="flex items-center gap-3 w-full bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
+    <div className="flex w-full items-center gap-3 rounded-2xl bg-destructive/10 p-3">
       <Button variant="ghost" size="icon" onClick={cancelRecording}>
-        <X className="w-5 h-5 text-red-500" />
+        <X className="h-5 w-5 text-destructive" />
       </Button>
 
       <div className="flex-1 flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+        <div className="h-3 w-3 animate-pulse rounded-full bg-destructive" />
         <span className="text-sm font-medium tabular-nums">{formatTime(recordingTime)}</span>
         <span className="text-sm text-muted-foreground">Gravando...</span>
       </div>
@@ -159,7 +159,7 @@ export function AudioRecorder({ onRecorded, onCancel }: AudioRecorderProps) {
         variant="default"
         size="icon"
         onClick={stopRecording}
-        className="bg-green-500 hover:bg-green-600"
+        className="rounded-full"
       >
         <Send className="w-4 h-4" />
       </Button>

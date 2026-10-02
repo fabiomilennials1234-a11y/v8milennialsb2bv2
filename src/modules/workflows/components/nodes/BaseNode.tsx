@@ -3,7 +3,38 @@ import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNodeType } from "@/types/workflow";
-import { NODE_COLORS } from "@/types/workflow";
+import { DISCONTINUED_STEP_HINT, NODE_COLORS } from "@/types/workflow";
+import { DiscontinuedBadge } from "../DiscontinuedNotice";
+import { NODE_HANDLE_CLASS, nodeCardClassName } from "./node-style";
+
+/** Chip do ícone no matiz do tipo. Força o ícone a herdar a cor do chip. */
+export function NodeIconChip({ nodeType, children }: { nodeType: WorkflowNodeType; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "grid h-9 w-9 shrink-0 place-items-center rounded-xl [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:text-current",
+        NODE_COLORS[nodeType].chip,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Botão de excluir que aparece no hover — mesmo alvo em todos os nós. */
+export function NodeDeleteButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute -right-2 -top-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-relevo transition-colors hover:bg-destructive/90 group-hover:flex focus-visible:flex"
+      title="Excluir nó"
+      aria-label="Excluir nó"
+    >
+      <X className="h-3 w-3" />
+    </button>
+  );
+}
 
 interface BaseNodeProps {
   nodeId?: string;
@@ -15,6 +46,8 @@ interface BaseNodeProps {
   selected?: boolean;
   /** O que falta configurar neste nó. Presente = o nó impede a ativação. */
   warning?: string;
+  /** Passo que não é mais oferecido (score/rating). Renderiza o selo e a dica. */
+  discontinued?: boolean;
   showSourceHandle?: boolean;
   showTargetHandle?: boolean;
   children?: React.ReactNode;
@@ -29,11 +62,12 @@ export function BaseNode({
   detail,
   selected,
   warning,
+  discontinued,
   showSourceHandle = true,
   showTargetHandle = true,
   children,
 }: BaseNodeProps) {
-  const colors = NODE_COLORS[nodeType];
+  const ink = nodeType === "trigger";
   const { deleteElements } = useReactFlow();
 
   const handleDelete = useCallback(
@@ -47,53 +81,36 @@ export function BaseNode({
   );
 
   return (
-    <div
-      className={cn(
-        "group relative w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
-        colors.border,
-        colors.bgLight,
-        colors.bgDark,
-        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg",
-        // Nó incompleto: o autor precisa achar ESTE nó entre vinte. Recusar sem
-        // apontar seria trocar um defeito por outro.
-        warning && "ring-2 ring-amber-500/70 ring-offset-2 ring-offset-background"
-      )}
-    >
-      {nodeId && (
-        <button
-          onClick={handleDelete}
-          className="absolute -top-2 -right-2 z-10 hidden group-hover:flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 transition-colors"
-          title="Excluir nó"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
+    <div className={nodeCardClassName({ nodeType, selected, warning: !!warning, className: "w-[280px]" })}>
+      {nodeId && <NodeDeleteButton onClick={handleDelete} />}
 
-      {showTargetHandle && (
-        <Handle
-          type="target"
-          position={Position.Top}
-          className="!w-3 !h-3 !bg-muted-foreground/50 !border-2 !border-background"
-        />
-      )}
+      {showTargetHandle && <Handle type="target" position={Position.Top} className={NODE_HANDLE_CLASS} />}
 
       <div className="p-3">
         <div className="flex items-center gap-2.5">
-          <div className={cn("p-1.5 rounded-lg", colors.bgLight, colors.bgDark)}>
-            {icon}
-          </div>
+          <NodeIconChip nodeType={nodeType}>{icon}</NodeIconChip>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+            <p className={cn("truncate text-sm font-bold tracking-[-0.01em]", ink ? "text-tinta-foreground" : "text-foreground")}>
+              {title}
+            </p>
             {subtitle && (
-              <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+              <p className={cn("truncate text-xs", ink ? "text-tinta-muted" : "text-muted-foreground")}>{subtitle}</p>
             )}
           </div>
         </div>
         {detail && (
-          <p className="text-xs text-muted-foreground mt-2 truncate">{detail}</p>
+          <p className={cn("mt-2 truncate text-xs", ink ? "text-tinta-muted" : "text-muted-foreground")}>{detail}</p>
+        )}
+        {discontinued && (
+          <div className="mt-2 space-y-1">
+            <DiscontinuedBadge />
+            <p className={cn("text-[11px] leading-snug", ink ? "text-tinta-muted" : "text-muted-foreground")}>
+              {DISCONTINUED_STEP_HINT}
+            </p>
+          </div>
         )}
         {warning && (
-          <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <p className={cn("mt-2 flex items-start gap-1.5 text-xs font-semibold", ink ? "text-warning" : "text-warning-strong")}>
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
             <span>{warning}</span>
           </p>
@@ -101,13 +118,7 @@ export function BaseNode({
         {children}
       </div>
 
-      {showSourceHandle && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          className="!w-3 !h-3 !bg-muted-foreground/50 !border-2 !border-background"
-        />
-      )}
+      {showSourceHandle && <Handle type="source" position={Position.Bottom} className={NODE_HANDLE_CLASS} />}
     </div>
   );
 }

@@ -49,14 +49,14 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
-  scheduled: { icon: Clock, color: "text-yellow-500", label: "Agendado" },
-  processing: { icon: Loader2, color: "text-yellow-500", label: "Processando" },
-  sent: { icon: CheckCircle2, color: "text-green-500", label: "Enviado" },
-  failed: { icon: XCircle, color: "text-red-500", label: "Falhou" },
-  waiting_response: { icon: Hourglass, color: "text-blue-500", label: "Aguardando" },
-  response_received: { icon: CheckCircle2, color: "text-green-500", label: "Respondido" },
-  timed_out: { icon: AlertTriangle, color: "text-amber-500", label: "Timeout" },
-  executed: { icon: ArrowRightLeft, color: "text-purple-500", label: "Executado" },
+  scheduled: { icon: Clock, color: "text-warning-strong", label: "Agendado" },
+  processing: { icon: Loader2, color: "text-warning-strong", label: "Processando" },
+  sent: { icon: CheckCircle2, color: "text-success", label: "Enviado" },
+  failed: { icon: XCircle, color: "text-destructive", label: "Falhou" },
+  waiting_response: { icon: Hourglass, color: "text-insights", label: "Aguardando" },
+  response_received: { icon: CheckCircle2, color: "text-success", label: "Respondido" },
+  timed_out: { icon: AlertTriangle, color: "text-warning-strong", label: "Timeout" },
+  executed: { icon: ArrowRightLeft, color: "text-primary-soft-foreground", label: "Executado" },
   cancelled: { icon: Ban, color: "text-muted-foreground", label: "Cancelado" },
 };
 
@@ -202,7 +202,7 @@ function QueueItemCard({
   const ItemStatusIcon = statusCfg.icon;
 
   return (
-    <div className="rounded-lg border bg-card p-3 space-y-2">
+    <div className="space-y-2 rounded-xl border border-border bg-card p-3">
       {/* Header: action + status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
@@ -257,7 +257,7 @@ function QueueItemCard({
 
       {/* Error message */}
       {item.error_message && (
-        <div className="text-xs bg-red-500/10 text-red-500 rounded px-2 py-1.5 flex items-start gap-1.5">
+        <div className="flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
           <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
           <span>{item.error_message}</span>
         </div>

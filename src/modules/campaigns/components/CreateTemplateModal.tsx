@@ -613,9 +613,9 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
 
           {/* === Tips for text === */}
           {messageType === "text" && (
-            <Card className="bg-blue-500/5 border-blue-500/20">
+            <Card className="bg-insights/5 border-insights/20">
               <CardContent className="p-4 text-sm space-y-2">
-                <p className="font-medium text-blue-700">Dicas para bons templates:</p>
+                <p className="font-medium text-insights">Dicas para bons templates:</p>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1">
                   <li>Use o nome do lead para personalizar</li>
                   <li>Seja direto e objetivo</li>

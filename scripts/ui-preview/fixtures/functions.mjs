@@ -49,4 +49,40 @@ export const functionHandlers = {
       conversation_id: null,
     },
   }),
+  // /follow-ups (Revisão) — DailyPrioritiesData (src/modules/engagement/hooks/useDailyPriorities.ts)
+  "get-daily-priorities": (_body, fx) => {
+    const now = fx.NOW;
+    const lead = (id) => fx.db.leads.find((l) => l.id === id);
+    return {
+      generated_at: new Date(now).toISOString(),
+      leads_sem_acao: fx.db.leads.slice(18, 24).map((l, i) => ({
+        id: l.id,
+        name: l.name,
+        company: l.company,
+        phone: l.phone,
+        email: l.email,
+        qualification_score: l.qualification_score ?? 50,
+        updated_at: l.updated_at,
+        pipe_type: "vendas",
+        pipe_status: "novo",
+        last_action_at: new Date(now - (i + 2) * 864e5).toISOString(),
+      })),
+      followups_vencidos: fx.db.follow_ups
+        .filter((f) => !f.completed_at && f.due_date < new Date(now).toISOString())
+        .map((f) => {
+          const l = lead(f.lead_id);
+          return {
+            id: f.id,
+            title: f.title,
+            description: f.description,
+            due_date: f.due_date,
+            priority: f.priority,
+            source_pipe: "vendas",
+            days_overdue: Math.max(0, Math.floor((now - new Date(f.due_date).getTime()) / 864e5)),
+            lead: { id: l.id, name: l.name, company: l.company, phone: l.phone },
+          };
+        }),
+      leads_quentes: [],
+    };
+  },
 };

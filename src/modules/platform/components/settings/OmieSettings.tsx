@@ -127,8 +127,8 @@ export function OmieSettings() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-          <Landmark className="w-5 h-5 text-amber-500" />
+        <div className="w-10 h-10 rounded-lg bg-warning/15 flex items-center justify-center">
+          <Landmark className="w-5 h-5 text-warning-strong" />
         </div>
         <div>
           <h3 className="font-semibold">Omie</h3>
@@ -350,7 +350,7 @@ export function OmieSettings() {
               className={cn(
                 "text-[11px]",
                 status?.erp_sync_mode === "canonical"
-                  ? "text-amber-500 flex items-start gap-1"
+                  ? "text-warning-strong flex items-start gap-1"
                   : "text-muted-foreground",
               )}
             >
@@ -389,8 +389,8 @@ export function OmieSettings() {
           </AlertDialog>
 
           {/* Info box — the money layer */}
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-xs text-muted-foreground">
-            <p className="font-medium text-amber-500 mb-1 flex items-center gap-1.5">
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-warning-strong mb-1 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />O que o Omie traz para a Carteira:
             </p>
             <ul className="space-y-1">
@@ -401,7 +401,7 @@ export function OmieSettings() {
                 { text: "Inadimplência e receita em risco por cliente", live: erp.can("receivables") },
               ].map((f) => (
                 <li key={f.text} className="flex items-start gap-1.5">
-                  <span className={f.live ? "text-amber-500" : "text-muted-foreground/40"}>•</span>
+                  <span className={f.live ? "text-warning-strong" : "text-muted-foreground/40"}>•</span>
                   <span className={f.live ? "" : "text-muted-foreground/60"}>
                     {f.text}
                     {!f.live && (

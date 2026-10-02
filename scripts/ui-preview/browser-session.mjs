@@ -53,10 +53,26 @@ export function initialStorage({ theme = "dark", master = false } = {}) {
  */
 export async function prepareContext(context, opts = {}) {
   const storage = initialStorage(opts);
-  // install(): the clock STARTS at the fixture instant and then flows in real
-  // time. (setFixedTime freezes Date.now and stalls the kanban's time-based
-  // reveal — the board stays blank.)
-  if (opts.now != null) await context.clock.install({ time: opts.now });
+  // Shift ONLY `Date` so the page starts at the fixture instant and time keeps
+  // flowing. Playwright's context.clock (install/setFixedTime) also fakes
+  // rAF/performance/timers, which stalls framer-motion: screens rendered
+  // blank or fully black. Shifting Date alone has no such side effect.
+  if (opts.now != null) {
+    await context.addInitScript((fixed) => {
+      const RealDate = Date;
+      const offset = fixed - RealDate.now();
+      function ShiftedDate(...args) {
+        if (!new.target) return new RealDate(RealDate.now() + offset).toString();
+        return args.length === 0 ? new RealDate(RealDate.now() + offset) : new RealDate(...args);
+      }
+      ShiftedDate.prototype = RealDate.prototype;
+      Object.setPrototypeOf(ShiftedDate, RealDate);
+      ShiftedDate.now = () => RealDate.now() + offset;
+      ShiftedDate.parse = RealDate.parse;
+      ShiftedDate.UTC = RealDate.UTC;
+      window.Date = ShiftedDate;
+    }, opts.now);
+  }
   await context.addInitScript((entries) => {
     try {
       // Only on the app origin; never touch other origins.

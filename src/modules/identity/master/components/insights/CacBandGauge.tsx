@@ -67,12 +67,12 @@ export function CacBandGauge({
   const zone = semGauge ? "destructive" : zoneOf(cacAtual!, cacIdeal!, cacMaximo!);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6">
+    <div className="rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-6">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           CAC atual
         </p>
-        <p className="font-display text-[28px] tabular-nums tracking-[-0.02em] text-foreground">
+        <p className="text-[1.75rem] font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
           {cacAtual === null ? "—" : formatBRL(cacAtual)}
         </p>
       </div>
@@ -87,7 +87,7 @@ export function CacBandGauge({
         <>
           {/* ── Gauge: bandas mín/ideal/máx (ticket-based, break-even) ── */}
           {/* Trilho */}
-          <div className="relative mt-6 h-3 w-full overflow-hidden rounded-full bg-muted/50">
+          <div className="relative mt-6 h-3 w-full overflow-hidden rounded-full bg-muted">
             <motion.div
               className="absolute inset-y-0 left-0 bg-success/25"
               style={{ width: `${idealPct}%`, transformOrigin: "left" }}
@@ -153,7 +153,7 @@ export function CacBandGauge({
                 />
                 <span
                   className={cn(
-                    "block text-[10px] font-medium uppercase tracking-[0.06em]",
+                    "block text-[10px] font-bold uppercase tracking-[.06em]",
                     tick.accent ? "text-insights" : "text-muted-foreground",
                   )}
                 >
@@ -184,7 +184,7 @@ export function CacBandGauge({
             Ver cálculo
           </button>
           {showCalc && (
-            <div className="mt-2 space-y-1 font-mono text-[12px] leading-relaxed text-muted-foreground">
+            <div className="mt-2 space-y-1 rounded-xl bg-sunken px-3 py-2.5 font-mono text-[12px] leading-relaxed text-muted-foreground">
               <p>
                 CAC atual = Anúncios ÷ Nº de vendas = {formatBRL(anuncios)} ÷{" "}
                 {formatInt(numVendas)} = {formatBRL(cacAtual!)}

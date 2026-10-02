@@ -5,6 +5,8 @@ import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -67,14 +69,14 @@ export default function MasterOraculoFeedback() {
   const invented = cases.filter((item) => item.reason === "invented").length;
 
   return (
-    <div className="space-y-6 p-6">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Operação de IA</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Qualidade do Oráculo</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Feedback reproduzível, com o rastro exato das consultas.</p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Operação de IA"
+        title="Qualidade do Oráculo"
+        subtitle="Feedback reproduzível, com o rastro exato das consultas."
+      />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Metric icon={MessageSquareText} label="Avaliações" value={cases.length} />
         <Metric icon={AlertTriangle} label="Negativas" value={negative} tone="warning" />
         <Metric icon={Sparkles} label="Possível invenção" value={invented} tone="danger" />
@@ -86,7 +88,7 @@ export default function MasterOraculoFeedback() {
         </div>
       )}
 
-      <div className="grid min-h-[560px] overflow-hidden rounded-2xl border border-border bg-card lg:grid-cols-[360px_1fr]">
+      <div className="grid min-h-[560px] overflow-hidden rounded-card border border-card-border bg-card shadow-relevo lg:grid-cols-[360px_1fr]">
         <ScrollArea className="border-b border-border lg:border-b-0 lg:border-r">
           <div className="space-y-1 p-2">
             {list.isLoading && <p className="p-4 text-sm text-muted-foreground">Carregando avaliações…</p>}
@@ -107,7 +109,7 @@ export default function MasterOraculoFeedback() {
               >
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">{item.organization_name}</span>
-                  <Badge variant={item.rating === "negative" ? "destructive" : "secondary"} className="ml-auto">
+                  <Badge variant={item.rating === "negative" ? "destructive" : "success"} className="ml-auto">
                     {item.rating === "negative" ? REASON[item.reason ?? ""] ?? "Negativa" : "Positiva"}
                   </Badge>
                 </div>
@@ -145,12 +147,14 @@ function Metric({ icon: Icon, label, value, tone }: {
   value: number;
   tone?: "warning" | "danger";
 }) {
+  // KpiTile não tem tom de aviso: em `warning` o chip fica neutro e o número leva o âmbar.
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <Icon className={cn("size-4 text-primary", tone === "warning" && "text-amber-500", tone === "danger" && "text-destructive")} />
-      <p className="mt-4 text-2xl font-semibold tabular-nums">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
+    <KpiTile
+      icon={Icon}
+      label={label}
+      tone={tone === "danger" ? "bad" : tone === "warning" ? "neutral" : "gold"}
+      value={<span className={cn(tone === "warning" && "text-warning-strong")}>{value}</span>}
+    />
   );
 }
 
@@ -160,7 +164,7 @@ function CaseDetail({ value }: { value: FeedbackCase }) {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">{value.organization_name}</h2>
-          <Badge variant={value.rating === "negative" ? "destructive" : "secondary"}>
+          <Badge variant={value.rating === "negative" ? "destructive" : "success"}>
             {value.rating === "negative" ? REASON[value.reason ?? ""] ?? "Negativa" : "Positiva"}
           </Badge>
         </div>
@@ -194,7 +198,7 @@ function CaseDetail({ value }: { value: FeedbackCase }) {
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{title}</h3>
       {children}
     </section>
   );

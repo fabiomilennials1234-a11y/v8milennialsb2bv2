@@ -99,7 +99,7 @@ export function AjustarPedidoGanho({
     }
   };
   const campo =
-    "h-9 w-full rounded-md border border-border bg-background px-2 text-sm tabular-nums";
+    "h-9 w-full rounded-lg border border-input bg-card px-2 text-sm tabular-nums";
   return (
     <section
       className="rounded-xl border border-primary/40 bg-card p-4 space-y-4"
@@ -170,7 +170,7 @@ export function AjustarPedidoGanho({
         <label className="block text-sm">
           Motivo do ajuste
           <textarea
-          className="min-h-24 w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+          className="min-h-24 w-full rounded-lg border border-input bg-card px-2 py-2 text-sm"
             aria-label="Motivo do ajuste"
             maxLength={1000}
             value={motivo}
@@ -195,7 +195,7 @@ export function AjustarPedidoGanho({
           type="button"
           disabled={salvando}
           onClick={onCancelar}
-          className="rounded-md px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+          className="inline-flex h-9 items-center rounded-full px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50"
         >
           Cancelar ajuste
         </button>
@@ -203,7 +203,7 @@ export function AjustarPedidoGanho({
           type="button"
           disabled={salvando || !valido || !mudou || !motivo.trim()}
           onClick={salvar}
-          className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50"
+          className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-brilho-ouro disabled:opacity-50 disabled:shadow-none"
         >
           {salvando ? "Salvando…" : "Salvar ajuste"}
         </button>

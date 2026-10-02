@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { useAuth, useCanDo, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
@@ -220,7 +221,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const googleOwnerCalendars = useMemo(() => {
     const list: Array<{ id: string; name: string; color: string }> = [];
     if (gcalStatus?.connected) {
-      list.push({ id: ownUserId, name: "Meu Calendario", color: USER_COLORS[0] });
+      list.push({ id: ownUserId, name: "Meu Calendário", color: USER_COLORS[0] });
     }
     sharingData?.incoming?.forEach((share, idx) => {
       list.push({
@@ -372,7 +373,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
   const handleDeleteGoogleEvent = useCallback(
     async (event: UnifiedEvent) => {
-      if (!session?.access_token) throw new Error("Nao autenticado");
+      if (!session?.access_token) throw new Error("Não autenticado");
 
       const base = (
         (import.meta.env.VITE_SUPABASE_URL as string) ?? ""
@@ -400,7 +401,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         throw new Error("delete failed");
       }
 
-      toast.success("Evento excluido");
+      toast.success("Evento excluído");
       refetchGoogle();
     },
     [session, refetchGoogle],
@@ -510,51 +511,50 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      {/* Cabeçalho da página — mesmo molde de Leads/Copilot */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-2xl font-bold"
-          >
-            Atividades
-          </motion.h1>
-          <p className="mt-1 text-muted-foreground">
-            {seesEveryone
-              ? "Crie, edite e gerencie as atividades da equipe."
-              : "Crie, edite e gerencie suas atividades."}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            title="Atualizar"
-            aria-label="Atualizar agenda"
-          >
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          </Button>
-          <Button onClick={handleNewEvent} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova atividade
-          </Button>
-          {onClose && (
+      {/* Cabeçalho — o `PageHeader` do V5 nos DOIS lugares onde a tela vive.
+          No painel sobreposto (`onClose` presente) o título desce para o
+          tamanho que o próprio `PageHeader` já usa no celular: o painel é uma
+          camada sobre outra página, e um título de página cheio ali competiria
+          com o título da página de baixo, que continua à mostra. O h1 e o nome
+          acessível são os mesmos nos dois contextos — só o corpo muda. */}
+      <PageHeader
+        title="Atividades"
+        subtitle={
+          seesEveryone
+            ? "Crie, edite e gerencie as atividades da equipe."
+            : "Crie, edite e gerencie suas atividades."
+        }
+        className={cn(onClose && "[&_h1]:text-[1.375rem]")}
+        actions={
+          <>
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
-              onClick={onClose}
-              title="Fechar"
-              aria-label="Fechar Atividades"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              title="Atualizar"
+              aria-label="Atualizar agenda"
             >
-              <X className="h-4 w-4" />
+              <RefreshCw className={cn(isLoading && "animate-spin")} />
             </Button>
-          )}
-        </div>
-      </div>
+            <Button onClick={handleNewEvent}>
+              <Plus />
+              Nova atividade
+            </Button>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                title="Fechar"
+                aria-label="Fechar Atividades"
+              >
+                <X />
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Abas de estado + filtros */}
       <AgendaFilterBar
@@ -569,40 +569,45 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
       {/* Navegação de período + alternância de visão */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1">
-          <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-foreground">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {/* `first-letter:uppercase`, e não `capitalize`: o rótulo vem do
+              date-fns em minúsculas ("agosto de 2026") e `capitalize` subiria
+              também o "De". */}
+          <h2 className="truncate text-[15px] font-bold tracking-[-0.02em] text-foreground first-letter:uppercase">
             {dateLabel}
           </h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => navigate("prev")}
-            aria-label="Período anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => navigate("next")}
-            aria-label="Próximo período"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => navigate("today")}
-          >
-            Hoje
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => navigate("prev")}
+              aria-label="Período anterior"
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => navigate("next")}
+              aria-label="Próximo período"
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3"
+              onClick={() => navigate("today")}
+            >
+              Hoje
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs tabular-nums text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
             {isLoading
               ? "Carregando…"
               : eventosNoPeriodo.length === 0
@@ -614,33 +619,41 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
               zero sem contexto é ruído, não informação.
               O número é DERIVADO da lista já em tela: acompanha os filtros,
               acompanha o escopo de quem está vendo, e não pode divergir do que
-              a grade mostra. Trocar um resultado move de balde; não soma. */}
+              a grade mostra. Trocar um resultado move de balde; não soma.
+
+              O banho da pílula é token (`success`/`destructive`), mas o TEXTO
+              segue no par de escala `x dark:y`: os dois tokens são valor de
+              preenchimento e, como texto, reprovam AA no tema claro — mesma
+              medição documentada em `AgendaOutcomeToggle`. */}
           {!isLoading && resumo.total > 0 && (
             <div
-              className="flex items-center gap-2.5 text-xs tabular-nums"
+              className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums"
               aria-label="Comparecimento no período"
             >
-              <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+              <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
                 <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
                 {resumo.compareceu}
                 <span className="sr-only">compareceram</span>
               </span>
-              <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-red-700 dark:text-red-300">
                 <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
                 {resumo.naoCompareceu}
                 <span className="sr-only">não compareceram</span>
               </span>
               {resumo.semRegistro > 0 && (
-                <span className="text-muted-foreground">
+                <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
                   {resumo.semRegistro} sem registro
                 </span>
               )}
             </div>
           )}
-          {/* Mesma linguagem do segmentado de estado: pílula sobre superfície
-              afundada. Dois segmentados com formas diferentes lado a lado leem
-              como dois sistemas. */}
-          <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
+          {/* Alternador segmentado do V5 — mesma forma do segmentado de estado
+              da barra de filtros. Continua sendo par de botões com
+              `aria-pressed` (não aba): não há painel por visão para um
+              `tabpanel` apontar. O rótulo inativo fica em `foreground/70`, e
+              não em `muted-foreground`, que mede ~4,4:1 sobre `--muted` no
+              tema claro. */}
+          <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
             {(["month", "day"] as const).map((v) => (
               <button
                 key={v}
@@ -648,11 +661,11 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
                 onClick={() => setView(v)}
                 aria-pressed={view === v}
                 className={cn(
-                  "rounded-full px-3 py-1 text-[12px] transition-colors",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  "rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   view === v
-                    ? "border border-border bg-card font-semibold text-foreground shadow-sm"
-                    : "font-medium text-foreground/80 hover:text-foreground",
+                    ? "bg-card text-foreground shadow-relevo"
+                    : "text-foreground/70 hover:text-foreground",
                 )}
               >
                 {v === "month" ? "Mês" : "Dia"}
@@ -668,21 +681,21 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         <div
           role="alert"
           aria-live="polite"
-          // Cor crua sempre em par `x dark:y` — o idioma que a #1792 fixou em
-          // `SessionDeadBanner`. Só o tom escuro deixaria o texto a 1,1:1 no
-          // tema claro.
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-800 dark:text-red-100"
+          // Só token: a cor de estado mora na borda, no banho e no ícone; o
+          // TEXTO fica em `foreground`/`muted-foreground`. Vermelho como texto
+          // é o que obrigava o par de escala `x dark:y` aqui antes — com o
+          // texto neutro o contraste vale nos dois temas sem par nenhum.
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
         >
           <div className="flex min-w-0 items-center gap-3">
-            <AlertTriangle
-              className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
-              aria-hidden="true"
-            />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            </span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-red-800 dark:text-red-50">
+              <p className="text-sm font-semibold text-foreground">
                 Não foi possível carregar a agenda.
               </p>
-              <p className="mt-0.5 text-xs text-red-700/90 dark:text-red-200/80">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 O calendário abaixo pode estar incompleto.
               </p>
             </div>
@@ -691,9 +704,9 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            className="shrink-0 gap-2 border-red-500/40 bg-red-500/10 text-red-800 hover:bg-red-500/20 hover:text-red-900 dark:border-red-400/40 dark:text-red-50 dark:hover:text-white"
+            className="shrink-0"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw />
             Tentar de novo
           </Button>
         </div>

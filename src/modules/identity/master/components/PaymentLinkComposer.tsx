@@ -254,8 +254,9 @@ export function PaymentLinkComposer() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="space-y-6">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/* V5: a bancada tem grade — formulário e resumo moram em cartão. */}
+      <div className="space-y-6 rounded-card border border-card-border bg-card p-5 shadow-relevo">
         {/* ---------------------------------------------------------------- */}
         <section className="space-y-4">
           <h3 className="text-sm font-medium">Para quem é a proposta</h3>
@@ -597,7 +598,8 @@ export function PaymentLinkComposer() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      <aside className="lg:sticky lg:top-6 h-fit space-y-4 rounded-xl border p-5">
+      {/* top-16: o selo sticky "Modo Master" ocupa o topo da área de trabalho. */}
+      <aside className="lg:sticky lg:top-16 h-fit space-y-4 rounded-card border border-card-border bg-card p-5 shadow-relevo">
         <h3 className="text-sm font-medium">Composição do preço</h3>
         <QuoteSummary
           quote={quote}

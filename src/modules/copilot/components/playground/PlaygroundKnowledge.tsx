@@ -92,8 +92,8 @@ function getFileIcon(fileType: KnowledgeFileType) {
 }
 
 function getTypeBadge(fileType: KnowledgeFileType) {
-  if (fileType === "image") return { label: "Imagem", variant: "default" as const, className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" };
-  if (fileType === "video") return { label: "Video", variant: "default" as const, className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" };
+  if (fileType === "image") return { label: "Imagem", variant: "default" as const, className: "bg-primary-soft text-primary-soft-foreground border-primary/20" };
+  if (fileType === "video") return { label: "Vídeo", variant: "default" as const, className: "bg-insights/10 text-insights border-insights/20" };
   return { label: "Doc", variant: "secondary" as const, className: "" };
 }
 
@@ -147,7 +147,7 @@ export function PlaygroundKnowledge({
         // Size validation for media files
         if (isMediaType(fileType) && file.size > MAX_MEDIA_SIZE) {
           toast.error(`${file.name} excede 20MB`, {
-            description: `Arquivos de ${fileType === "image" ? "imagem" : "video"} devem ter no maximo 20MB.`,
+            description: `Arquivos de ${fileType === "image" ? "imagem" : "vídeo"} devem ter no máximo 20MB.`,
           });
           continue;
         }
@@ -156,7 +156,7 @@ export function PlaygroundKnowledge({
         if (!isMediaType(fileType) && file.size > MAX_DOCUMENT_SIZE) {
           toast.error(`${file.name} excede 25MB`, {
             description:
-              "Documentos devem ter no maximo 25MB. Divida o catalogo em partes e envie cada uma separadamente.",
+              "Documentos devem ter no máximo 25MB. Divida o catálogo em partes e envie cada uma separadamente.",
           });
           continue;
         }
@@ -253,14 +253,16 @@ export function PlaygroundKnowledge({
   };
 
   return (
-    <div className="border rounded-lg">
+    <div className="overflow-hidden rounded-2xl border border-border/70">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Base de Conhecimento</span>
+      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            <BookOpen className="w-4 h-4" />
+          </span>
+          <span className="text-sm font-bold tracking-tight">Base de Conhecimento</span>
           {(docCount > 0 || linkCount > 0) && (
-            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+            <Badge variant="soft" className="text-[11px] tabular-nums">
               {docCount} doc{docCount !== 1 ? "s" : ""}, {linkCount} link{linkCount !== 1 ? "s" : ""}
             </Badge>
           )}
@@ -270,24 +272,26 @@ export function PlaygroundKnowledge({
       <div className="p-4 space-y-4">
         {/* ===== Documents & Media ===== */}
         <div className="space-y-2">
-          <Label className="text-sm flex items-center gap-1.5">
+          <Label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             <FileText className="w-3.5 h-3.5" />
-            Documentos e Midia
+            Documentos e Mídia
           </Label>
 
           {/* Drop zone */}
           <div
-            className="border-2 border-dashed rounded-lg p-4 text-center hover:bg-muted/50 transition-colors cursor-pointer"
+            className="cursor-pointer rounded-2xl border-2 border-dashed border-border bg-sunken p-5 text-center transition-colors hover:border-primary/40 hover:bg-primary-soft/30"
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
             onClick={() => fileInputRef.current?.click()}
           >
-            <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1.5" />
+            <span className="mx-auto mb-2 grid h-9 w-9 place-items-center rounded-xl bg-card text-foreground/60 shadow-relevo">
+              <Upload className="w-4 h-4" />
+            </span>
             <p className="text-xs text-muted-foreground">
               Arraste arquivos aqui ou clique para selecionar
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              PDF, DOC, TXT (ate 25MB), imagens (PNG, JPG) e videos (MP4, MOV) ate 20MB
+              PDF, DOC, TXT (até 25MB), imagens (PNG, JPG) e vídeos (MP4, MOV) até 20MB
             </p>
             <input
               ref={fileInputRef}
@@ -308,7 +312,7 @@ export function PlaygroundKnowledge({
                 const badge = getTypeBadge(ft);
                 const isMedia = isMediaType(ft);
                 return (
-                  <div key={doc.id} className="rounded-lg bg-muted/30 overflow-hidden">
+                  <div key={doc.id} className="overflow-hidden rounded-xl border border-border/60 bg-sunken">
                     {/* Header row */}
                     <div className="flex items-center justify-between px-3 py-2 group">
                       <div className="flex items-center gap-2 min-w-0">
@@ -326,11 +330,11 @@ export function PlaygroundKnowledge({
                         )}
                         <span className="flex items-center gap-0.5 text-[10px]">
                           {doc.status === "ready" ? (
-                            <CheckCircle2 className="w-3 h-3 text-green-500" />
+                            <CheckCircle2 className="w-3 h-3 text-success" aria-label="Pronto" />
                           ) : doc.status === "processing" ? (
-                            <Loader2 className="w-3 h-3 text-yellow-500 animate-spin" />
+                            <Loader2 className="w-3 h-3 text-warning-strong animate-spin" aria-label="Processando" />
                           ) : doc.status === "error" ? (
-                            <AlertCircle className="w-3 h-3 text-red-500" />
+                            <AlertCircle className="w-3 h-3 text-destructive" aria-label="Erro" />
                           ) : (
                             <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
                           )}
@@ -339,7 +343,8 @@ export function PlaygroundKnowledge({
                       {onDeleteExisting && (
                         <button
                           type="button"
-                          className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                          aria-label={`Remover ${doc.file_name}`}
                           onClick={() => onDeleteExisting(doc.id, doc.file_path)}
                         >
                           <X className="w-3 h-3" />
@@ -350,10 +355,10 @@ export function PlaygroundKnowledge({
                     {/* Editable metadata — description + "quando enviar". Available
                         for documents (PDF) and media alike. Persisted on blur. */}
                     {onUpdateExisting && (
-                      <div className="px-3 pb-3 space-y-2 border-t border-border/30 pt-2">
+                      <div className="space-y-2 border-t border-border/50 px-3 pb-3 pt-2">
                         <div className="space-y-1">
                           <Label className="text-[10px] font-medium text-muted-foreground">
-                            {isMedia ? "Descricao do conteudo" : "Descricao (opcional)"}
+                            {isMedia ? "Descrição do conteúdo" : "Descrição (opcional)"}
                           </Label>
                           <Input
                             value={existingDraftValue(doc, "description")}
@@ -361,8 +366,8 @@ export function PlaygroundKnowledge({
                             onBlur={() => commitExistingDraft(doc, "description")}
                             placeholder={
                               isMedia
-                                ? "Ex: Tabela de precos 2026 com planos e comparativo"
-                                : "Ex: Catalogo completo de produtos 2026"
+                                ? "Ex: Tabela de preços 2026 com planos e comparativo"
+                                : "Ex: Catálogo completo de produtos 2026"
                             }
                             className="h-7 text-xs"
                           />
@@ -373,7 +378,7 @@ export function PlaygroundKnowledge({
                             value={existingDraftValue(doc, "send_when")}
                             onChange={(e) => setExistingDraft(doc, "send_when", e.target.value)}
                             onBlur={() => commitExistingDraft(doc, "send_when")}
-                            placeholder="Ex: Quando o lead pedir o catalogo ou tabela de precos"
+                            placeholder="Ex: Quando o lead pedir o catálogo ou tabela de preços"
                             className="h-7 text-xs"
                           />
                         </div>
@@ -396,7 +401,7 @@ export function PlaygroundKnowledge({
                 return (
                   <div
                     key={doc.id}
-                    className="rounded-lg bg-muted/30 overflow-hidden"
+                    className="overflow-hidden rounded-xl border border-border/60 bg-sunken"
                   >
                     {/* File header */}
                     <div className="flex items-center justify-between px-3 py-2 group">
@@ -420,7 +425,8 @@ export function PlaygroundKnowledge({
                         </span>
                         <button
                           type="button"
-                          className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                          aria-label={`Remover ${doc.name}`}
                           onClick={() => removeDoc(doc.id)}
                         >
                           <X className="w-3 h-3" />
@@ -431,18 +437,18 @@ export function PlaygroundKnowledge({
                     {/* Metadata fields — description + "quando enviar". Shown for
                         documents (PDF) and media alike; for documents the
                         description is optional (summary is auto-generated). */}
-                    <div className="px-3 pb-3 space-y-2 border-t border-border/30 pt-2">
+                    <div className="space-y-2 border-t border-border/50 px-3 pb-3 pt-2">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-medium text-muted-foreground">
-                          {isMedia ? "Descricao do conteudo" : "Descricao (opcional)"}
+                          {isMedia ? "Descrição do conteúdo" : "Descrição (opcional)"}
                         </Label>
                         <Input
                           value={doc.description || ""}
                           onChange={(e) => updateDoc(doc.id, { description: e.target.value })}
                           placeholder={
                             isMedia
-                              ? "Ex: Tabela de precos 2026 com planos e comparativo"
-                              : "Ex: Catalogo completo de produtos 2026"
+                              ? "Ex: Tabela de preços 2026 com planos e comparativo"
+                              : "Ex: Catálogo completo de produtos 2026"
                           }
                           className="h-7 text-xs"
                         />
@@ -454,8 +460,8 @@ export function PlaygroundKnowledge({
                           onChange={(e) => updateDoc(doc.id, { sendWhen: e.target.value })}
                           placeholder={
                             isMedia
-                              ? "Ex: Quando o lead perguntar sobre preco ou pedir proposta"
-                              : "Ex: Quando o lead pedir o catalogo ou tabela de precos"
+                              ? "Ex: Quando o lead perguntar sobre preço ou pedir proposta"
+                              : "Ex: Quando o lead pedir o catálogo ou tabela de preços"
                           }
                           className="h-7 text-xs"
                         />
@@ -469,8 +475,8 @@ export function PlaygroundKnowledge({
         </div>
 
         {/* ===== Links ===== */}
-        <div className="space-y-2 pt-2 border-t">
-          <Label className="text-sm flex items-center gap-1.5">
+        <div className="space-y-2 border-t border-border/60 pt-4">
+          <Label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             <Link2 className="w-3.5 h-3.5" />
             Links
           </Label>
@@ -499,7 +505,8 @@ export function PlaygroundKnowledge({
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 px-2"
+              className="h-8 w-8 rounded-[10px] p-0"
+              aria-label="Adicionar link"
               onClick={addLink}
               disabled={!newLinkAlias.trim() || !newLinkUrl.trim()}
             >
@@ -513,7 +520,7 @@ export function PlaygroundKnowledge({
               {links.map((link) => (
                 <div
                   key={link.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 group"
+                  className="group flex items-center justify-between rounded-xl border border-border/60 bg-sunken px-3 py-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <Link2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -526,7 +533,8 @@ export function PlaygroundKnowledge({
                     </span>
                     <button
                       type="button"
-                      className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                      aria-label={`Remover link ${link.alias}`}
                       onClick={() => removeLink(link.id)}
                     >
                       <X className="w-3 h-3" />

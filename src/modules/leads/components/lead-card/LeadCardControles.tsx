@@ -35,7 +35,7 @@ import type { QualificationTier } from "../lead-detail/modal/types";
 function Faixa({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+      <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         {rotulo}
       </span>
       <div className="flex items-center gap-2">{children}</div>

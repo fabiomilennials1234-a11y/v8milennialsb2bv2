@@ -64,7 +64,7 @@ export function MobileConversationRow({
         isSelected
           ? "bg-primary/15"
           : hasUnread
-            ? "bg-amber-950/20"
+            ? "bg-primary/[0.07]"
             : "active:bg-muted/60",
       )}
       onClick={() => onPress(key)}
@@ -107,7 +107,7 @@ export function MobileConversationRow({
             dateTime={contact.last_message_time || ""}
             className={cn(
               "text-xs whitespace-nowrap shrink-0 tabular-nums",
-              hasUnread ? "text-amber-500 font-medium" : "text-muted-foreground",
+              hasUnread ? "font-bold text-primary-soft-foreground" : "text-muted-foreground",
             )}
           >
             {formatContactTime(contact.last_message_time)}
@@ -116,9 +116,9 @@ export function MobileConversationRow({
 
         {/* Bottom row: preview + badges */}
         <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className="text-xs text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
+          <p className="text-xs text-muted-foreground truncate flex-1 min-w-0 flex items-center gap-1">
             {isOutgoingWorkflow && (
-              <span className="text-purple-400 shrink-0 text-[10px]">Auto:</span>
+              <span className="shrink-0 text-[10px] font-semibold text-bubble-workflow-foreground">Auto:</span>
             )}
             {isOutgoingManual && (
               <span className="text-foreground/50 shrink-0">Você:</span>
@@ -144,7 +144,7 @@ export function MobileConversationRow({
 
             {/* Unread badge */}
             {hasUnread && (
-              <Badge className="h-5 min-w-5 px-1.5 text-xs bg-amber-500 text-white border-0 hover:bg-amber-500">
+              <Badge className="h-5 min-w-5 border-0 bg-primary px-1.5 text-[10.5px] font-extrabold tabular-nums text-primary-foreground hover:bg-primary">
                 {contact.unread_count > 99 ? "99+" : contact.unread_count}
               </Badge>
             )}

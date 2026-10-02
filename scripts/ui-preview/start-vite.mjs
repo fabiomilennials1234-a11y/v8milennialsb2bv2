@@ -3,6 +3,7 @@
  * Starts the real app (Vite dev server) pointed at the ui-preview mock.
  *
  *   node scripts/ui-preview/start-vite.mjs            # http://localhost:4180
+ *   UI_PREVIEW_HMR=1 node scripts/ui-preview/start-vite.mjs   # keep HMR (interactive)
  *
  * Env is injected on the PROCESS, which Vite ranks above every .env file —
  * so a stray `.env.local` / `.env.development.local` aimed at a real project
@@ -39,7 +40,8 @@ if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
 }
 
 console.log(`ui-preview: vite --mode uipreview on http://localhost:${APP_PORT}  →  Supabase ${MOCK_URL}`);
-const child = spawn("npx", ["vite", "--mode", "uipreview", "--port", String(APP_PORT), "--strictPort", "--host", "localhost"], {
+const config = resolve(ROOT, "scripts/ui-preview/vite.config.mjs"); // vite.config.ts + HMR off
+const child = spawn("npx", ["vite", "--config", config, "--mode", "uipreview", "--port", String(APP_PORT), "--strictPort", "--host", "localhost"], {
   cwd: ROOT,
   env,
   stdio: "inherit",

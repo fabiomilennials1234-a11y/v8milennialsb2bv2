@@ -168,7 +168,7 @@ export default function MasterGestores() {
         subtitle="Gerencie gestores e as organizações que cada um administra"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Novo Gestor
           </Button>
         }

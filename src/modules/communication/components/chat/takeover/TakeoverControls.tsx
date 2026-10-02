@@ -92,7 +92,7 @@ function TakeoverDropdownItems({
             Retomar IA
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => markHumanActive()}>
-            <User className="h-3.5 w-3.5 mr-2 text-green-500" />
+            <User className="h-3.5 w-3.5 mr-2 text-success" />
             Assumir conversa
           </DropdownMenuItem>
         </>
@@ -101,7 +101,7 @@ function TakeoverDropdownItems({
       {state === "WAITING_HUMAN" && (
         <>
           <DropdownMenuItem onSelect={() => markHumanActive()}>
-            <User className="h-3.5 w-3.5 mr-2 text-green-500" />
+            <User className="h-3.5 w-3.5 mr-2 text-success" />
             Assumir conversa
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => resumeAi()}>
@@ -114,7 +114,7 @@ function TakeoverDropdownItems({
       {state === "HUMAN_ACTIVE" && (
         <>
           <DropdownMenuItem onSelect={() => markHandoffBack()}>
-            <RefreshCw className="h-3.5 w-3.5 mr-2 text-blue-500" />
+            <RefreshCw className="h-3.5 w-3.5 mr-2 text-insights" />
             Devolver para IA
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pauseAi("dont_resume")}>

@@ -12,7 +12,7 @@ interface StreakCounterProps {
 const streakConfig = {
   sales: { label: "Vendas", icon: TrendingUp, color: "text-success" },
   meetings: { label: "Reuniões", icon: Calendar, color: "text-primary" },
-  goals: { label: "Metas", icon: Zap, color: "text-chart-5" },
+  goals: { label: "Metas", icon: Zap, color: "text-insights" },
 };
 
 const sizeConfig = {
@@ -38,9 +38,9 @@ export function StreakCounter({
       initial={{ scale: 0.9, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-card",
+        "relative overflow-hidden rounded-card border border-card-border bg-card shadow-relevo",
         sizes.container,
-        isOnFire && "border-orange-400/50 bg-gradient-to-br from-orange-500/5 to-red-500/5"
+        isOnFire && "border-warning/40 bg-warning/[0.06]"
       )}
     >
       {/* Background flames animation */}
@@ -62,7 +62,7 @@ export function StreakCounter({
               className="absolute bottom-0"
               style={{ left: `${15 + i * 18}%` }}
             >
-              <Flame className="w-8 h-8 text-orange-400/20" />
+              <Flame className="w-8 h-8 text-warning/20" />
             </motion.div>
           ))}
         </div>
@@ -78,14 +78,11 @@ export function StreakCounter({
               "rounded-xl flex items-center justify-center",
               sizes.container,
               isOnFire 
-                ? "bg-gradient-to-br from-orange-400 to-red-500" 
-                : "bg-muted"
+                ? "bg-warning text-warning-foreground" 
+                : "bg-muted text-muted-foreground"
             )}
           >
-            <Flame className={cn(
-              sizes.icon,
-              isOnFire ? "text-white" : "text-muted-foreground"
-            )} />
+            <Flame className={sizes.icon} />
           </motion.div>
 
           {/* Streak Info */}
@@ -95,7 +92,7 @@ export function StreakCounter({
                 key={currentStreak}
                 initial={{ scale: 1.5, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className={cn(sizes.number, "font-bold", isOnFire ? "text-orange-500" : "text-foreground")}
+                className={cn(sizes.number, "font-extrabold tabular-nums tracking-[-0.04em]", isOnFire ? "text-warning-strong" : "text-foreground")}
               >
                 {currentStreak}
               </motion.span>
@@ -103,7 +100,7 @@ export function StreakCounter({
             </div>
             <p className={cn(sizes.text, "text-muted-foreground flex items-center gap-1")}>
               <Icon className="w-3 h-3" />
-              Streak de {config.label}
+              Sequência de {config.label.toLowerCase()}
             </p>
           </div>
         </div>
@@ -111,8 +108,8 @@ export function StreakCounter({
         {/* Best Streak */}
         <div className="text-right">
           <p className={cn(sizes.text, "text-muted-foreground")}>Melhor</p>
-          <p className={cn(sizes.text, "font-bold flex items-center gap-1 justify-end")}>
-            {isRecord && <Zap className="w-3 h-3 text-primary" />}
+          <p className={cn(sizes.text, "font-bold tabular-nums flex items-center gap-1 justify-end")}>
+            {isRecord && <Zap className="w-3 h-3 text-primary-soft-foreground" />}
             {bestStreak} dias
           </p>
         </div>
@@ -123,9 +120,10 @@ export function StreakCounter({
         <motion.div
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
-          className="absolute -top-2 -right-2 bg-gradient-to-br from-orange-400 to-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg"
+          className="absolute -top-2 -right-2 inline-flex items-center gap-1 rounded-full bg-warning px-2 py-1 text-xs font-bold text-warning-foreground shadow-relevo"
         >
-          🔥 On Fire!
+          <Flame className="h-3 w-3" aria-hidden />
+          Em chamas!
         </motion.div>
       )}
     </motion.div>

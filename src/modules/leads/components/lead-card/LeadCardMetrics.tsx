@@ -12,23 +12,33 @@ import type { LeadCardMetrics as Metricas } from "./types";
  *
  * Ladrilho com ícone em vez de número solto: o ícone dá âncora de varredura —
  * a pessoa acha "ciclo de recompra" pela forma antes de ler o rótulo. Cada um
- * tem cor própria e fria; o ouro fica reservado para o valor acumulado, que é o
- * único número aqui que responde "quanto essa relação já valeu".
+ * tem tom semântico próprio (tokens do V5, os mesmos do `KpiTile`); o ouro fica
+ * reservado para o valor acumulado, que é o único número aqui que responde
+ * "quanto essa relação já valeu".
  *
  * Idade e "sem contato" ficam SEMPRE, porque existem para todo lead e são a
  * única leitura de temperatura de quem nunca comprou — 94% da base.
  */
 
+/** Tons do chip do ícone — os mesmos do `KpiTile` (V5), só tokens. */
+const TOM = {
+  ouro: "bg-primary text-primary-foreground",
+  info: "bg-insights/10 text-insights",
+  bom: "bg-success/10 text-success",
+  alerta: "bg-warning/15 text-warning-strong",
+  neutro: "bg-muted text-foreground/70",
+} as const;
+
 function Ladrilho({
   icone: Icone,
-  cor,
+  tom,
   rotulo,
   valor,
   sufixo,
   destaque,
 }: {
   icone: typeof Wallet;
-  cor: string;
+  tom: keyof typeof TOM;
   rotulo: string;
   valor: string;
   sufixo?: string;
@@ -37,16 +47,13 @@ function Ladrilho({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-        destaque ? "border-primary/30 bg-primary/[0.07]" : "border-border bg-card",
+        "flex flex-col gap-2 rounded-2xl border px-3 py-3 shadow-relevo",
+        destaque ? "border-primary/30 bg-primary-soft" : "border-card-border bg-card",
       )}
     >
       <div className="flex items-start gap-2">
         <span
-          className={cn(
-            "flex size-[22px] shrink-0 items-center justify-center rounded-md border",
-            cor,
-          )}
+          className={cn("flex size-[22px] shrink-0 items-center justify-center rounded-[7px]", TOM[tom])}
           aria-hidden="true"
         >
           <Icone className="size-3" />
@@ -54,19 +61,24 @@ function Ladrilho({
         {/* Sem `truncate`: o rótulo quebra em duas linhas em vez de virar
             "CICLO DE RE…". Rótulo cortado não identifica o número, que é a
             única função dele. */}
-        <span className="text-[10.5px] font-medium uppercase leading-[1.25] tracking-[0.06em] text-muted-foreground">
+        <span
+          className={cn(
+            "text-[10.5px] font-bold uppercase leading-[1.25] tracking-[.06em]",
+            destaque ? "text-primary-soft-foreground" : "text-muted-foreground",
+          )}
+        >
           {rotulo}
         </span>
       </div>
       <span
         className={cn(
-          "text-[17px] font-semibold leading-none tracking-[-0.02em] tabular-nums",
-          destaque ? "text-primary" : "text-foreground",
+          "font-extrabold leading-none tracking-[-0.04em] tabular-nums text-foreground",
+          destaque ? "text-[22px]" : "text-[18px]",
         )}
       >
         {valor}
         {sufixo && (
-          <span className="ml-0.5 text-[11.5px] font-medium text-muted-foreground">{sufixo}</span>
+          <span className="ml-0.5 text-[11.5px] font-bold tracking-normal text-muted-foreground">{sufixo}</span>
         )}
       </span>
     </div>
@@ -79,7 +91,7 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">A relação</h2>
+        <h2 className="text-sm font-bold tracking-[-0.01em]">A relação</h2>
         <p className="mt-0.5 text-[11.5px] text-muted-foreground">
           {comprou ? "Quanto esta pessoa já valeu" : "Ainda sem compra registrada"}
         </p>
@@ -90,7 +102,7 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
           <div className="col-span-2">
             <Ladrilho
               icone={Wallet}
-              cor="border-primary/35 bg-primary/10 text-primary"
+              tom="ouro"
               rotulo="Já comprou"
               valor={formatBRL(metricas.acumulado)}
               destaque
@@ -98,26 +110,26 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
           </div>
           <Ladrilho
             icone={LineChart}
-            cor="border-sky-500/25 bg-sky-500/10 text-sky-400"
+            tom="info"
             rotulo="Ticket médio"
             valor={formatBRL(metricas.ticketMedio, 2)}
           />
           <Ladrilho
             icone={Package}
-            cor="border-violet-500/25 bg-violet-500/10 text-violet-400"
+            tom="neutro"
             rotulo="Pedidos"
             valor={String(metricas.pedidos)}
           />
           <Ladrilho
             icone={RefreshCw}
-            cor="border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+            tom="bom"
             rotulo="Ciclo de recompra"
             valor={metricas.cicloDias === null ? "—" : String(metricas.cicloDias)}
             sufixo={metricas.cicloDias === null ? undefined : "dias"}
           />
           <Ladrilho
             icone={CalendarClock}
-            cor="border-amber-500/25 bg-amber-500/10 text-amber-400"
+            tom="alerta"
             rotulo="Última compra"
             valor={metricas.ultimaCompraDias === null ? "—" : String(metricas.ultimaCompraDias)}
             sufixo={metricas.ultimaCompraDias === null ? undefined : "dias"}
@@ -128,14 +140,14 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
       <div className="grid grid-cols-2 gap-2">
         <Ladrilho
           icone={CalendarClock}
-          cor="border-border bg-muted text-muted-foreground"
+          tom="neutro"
           rotulo="Na base há"
           valor={String(metricas.idadeDias)}
           sufixo="dias"
         />
         <Ladrilho
           icone={Timer}
-          cor="border-border bg-muted text-muted-foreground"
+          tom="neutro"
           rotulo="Sem contato"
           valor={metricas.semContatoDias === null ? "nunca" : String(metricas.semContatoDias)}
           sufixo={metricas.semContatoDias === null ? undefined : "dias"}

@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Dialog,
   DialogContent,
@@ -238,29 +240,26 @@ export default function MessageTemplates() {
   const preview = resolveVariables(body, PREVIEW_LEAD, PREVIEW_ATTENDANT);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Templates</h1>
-          <p className="text-muted-foreground">
-            Gerencie templates de mensagem com variáveis dinâmicas
-          </p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Template
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Templates"
+        subtitle="Respostas rápidas do chat: digite / e o comando para inserir. Aceitam variáveis dinâmicas."
+        actions={
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Novo template
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Buscar por comando ou nome..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
+          className="rounded-full pl-10 shadow-relevo"
         />
       </div>
 
@@ -268,14 +267,11 @@ export default function MessageTemplates() {
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="rounded-lg border bg-card p-5 animate-pulse space-y-3"
-            >
-              <div className="h-5 w-24 rounded bg-muted" />
-              <div className="h-4 w-40 rounded bg-muted" />
-              <div className="h-8 w-full rounded bg-muted" />
-            </div>
+            <Card key={i} className="animate-pulse space-y-3 p-5">
+              <div className="h-5 w-24 rounded-full bg-muted" />
+              <div className="h-4 w-40 rounded-full bg-muted" />
+              <div className="h-8 w-full rounded-xl bg-muted" />
+            </Card>
           ))}
         </div>
       )}
@@ -284,71 +280,75 @@ export default function MessageTemplates() {
       {!isLoading && filtered.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((t) => (
-            <div
+            <Card
               key={t.id}
-              className="group rounded-lg border bg-card p-5 space-y-3 transition-shadow hover:shadow-md"
+              className="group flex flex-col gap-3 p-5 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
             >
-              <div className="flex items-start justify-between">
-                <span className="font-mono text-sm font-semibold text-primary">
+              <div className="flex items-start justify-between gap-2">
+                <span className="rounded-full bg-primary-soft px-2.5 py-1 font-mono text-[12.5px] font-bold text-primary-soft-foreground">
                   /{t.command}
                 </span>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-8 w-8"
                     onClick={() => openEdit(t)}
+                    aria-label={`Editar template /${t.command}`}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-8 w-8"
                     onClick={() => handleDelete(t)}
+                    aria-label={`Excluir template /${t.command}`}
                   >
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
                 </div>
               </div>
-              <p className="text-sm font-medium">{t.display_name}</p>
+              <p className="text-[15px] font-bold leading-tight tracking-tight">{t.display_name}</p>
               {t.media_type && t.media_type !== "text" && (
                 <div className="flex items-center gap-1.5">
-                  {(() => { const Icon = MEDIA_ICON[t.media_type] ?? FileText; return <Icon className="h-3.5 w-3.5 text-primary" />; })()}
-                  <span className="text-xs text-primary font-medium">
+                  {(() => { const Icon = MEDIA_ICON[t.media_type] ?? FileText; return <Icon className="h-3.5 w-3.5 text-muted-foreground" />; })()}
+                  <span className="text-xs font-semibold text-foreground/80">
                     {MEDIA_TYPE_CONFIG[t.media_type as keyof typeof MEDIA_TYPE_CONFIG]?.label ?? t.media_type}
                   </span>
                   {t.media_type === "image" && t.media_url && (
-                    <img src={t.media_url} alt="" className="h-10 w-10 rounded object-cover ml-auto" />
+                    <img src={t.media_url} alt="" className="ml-auto h-10 w-10 rounded-xl object-cover" />
                   )}
                 </div>
               )}
               <p className="text-sm text-muted-foreground line-clamp-2">
                 {t.body}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-auto text-xs tabular-nums text-muted-foreground">
                 {formatDate(t.created_at)}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Empty state */}
       {!isLoading && filtered.length === 0 && (
-        <div className="rounded-lg border bg-card p-12 text-center">
-          <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">
-            Nenhum template cadastrado
+        <Card className="flex flex-col items-center p-12 text-center">
+          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+            <FileText className="h-5 w-5" />
+          </span>
+          <h3 className="mb-1.5 text-lg font-bold tracking-tight">
+            {search ? "Nenhum template encontrado" : "Nenhum template cadastrado"}
           </h3>
-          <p className="text-muted-foreground mb-4">
+          <p className="mb-5 max-w-sm text-sm text-muted-foreground">
             Crie templates com variáveis para agilizar suas mensagens
           </p>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Template
+          <Button variant="outline" onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Novo template
           </Button>
-        </div>
+        </Card>
       )}
 
       {/* Create/Edit Modal */}
@@ -356,7 +356,7 @@ export default function MessageTemplates() {
         <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden sm:max-w-lg max-sm:overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle>
-              {editing ? "Editar Template" : "Novo Template"}
+              {editing ? "Editar template" : "Novo template"}
             </DialogTitle>
           </DialogHeader>
 
@@ -365,7 +365,7 @@ export default function MessageTemplates() {
             <div className="space-y-2">
               <Label htmlFor="tpl-command">Comando</Label>
               <div className="flex items-center gap-0">
-                <span className="flex h-9 items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm text-muted-foreground font-mono">
+                <span className="flex h-10 items-center rounded-l-md border border-r-0 border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
                   /
                 </span>
                 <Input
@@ -404,10 +404,11 @@ export default function MessageTemplates() {
                       key={type}
                       type="button"
                       onClick={() => { setMediaType(type); if (type === "text") { setMediaUrl(null); } }}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-xs font-medium transition-colors ${
+                      aria-pressed={mediaType === type}
+                      className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs font-semibold transition-colors ${
                         mediaType === type
-                          ? "bg-primary/10 text-primary border-primary/50"
-                          : "bg-muted/30 text-muted-foreground border-border hover:bg-muted/50"
+                          ? "border-transparent bg-primary-soft text-primary-soft-foreground"
+                          : "border-border bg-card text-muted-foreground hover:bg-muted"
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -423,7 +424,7 @@ export default function MessageTemplates() {
               <div className="space-y-2">
                 <Label>Arquivo</Label>
                 {mediaUrl ? (
-                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                  <div className="flex items-center gap-3 rounded-xl border bg-sunken p-3">
                     {mediaType === "image" && (
                       <img src={mediaUrl} alt="" className="h-16 w-16 rounded object-cover" />
                     )}
@@ -452,7 +453,7 @@ export default function MessageTemplates() {
                 ) : (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors"
+                    className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-6 transition-colors hover:border-primary/50"
                   >
                     {uploading ? (
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -521,9 +522,9 @@ export default function MessageTemplates() {
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Eye className="h-3.5 w-3.5" />
-                  <span>Preview</span>
+                  <span>Pré-visualização</span>
                 </div>
-                <div className="rounded-md border bg-muted/50 p-3 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                <div className="whitespace-pre-wrap break-words rounded-xl border bg-sunken p-3 text-sm [overflow-wrap:anywhere]">
                   {preview}
                 </div>
               </div>

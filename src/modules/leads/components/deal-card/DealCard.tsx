@@ -1,6 +1,7 @@
 import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
+import { CalendarCheck, CalendarDays, Check, Hourglass, Loader2, MoreHorizontal, Trash2, Wallet, X } from "lucide-react";
+import { KpiTile, ValueUnit } from "@/components/ui/bento";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,47 +63,47 @@ function formatarData(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-const TOM = {
-  azul: "border-sky-500/30 bg-sky-500/[0.07]",
-  verde: "border-emerald-500/30 bg-emerald-500/[0.07]",
-  roxo: "border-violet-500/30 bg-violet-500/[0.07]",
-  alerta: "border-destructive/40 bg-destructive/[0.09]",
+/**
+ * Os três cartões do topo do print, no cartão de número do V5 (`KpiTile`).
+ * O tom vira o chip do ícone; a paleta crua de antes (`sky-400`, `violet-400`)
+ * sumia no claro. Mesmos rótulos, mesmos números, mesma nota.
+ */
+const TOM_DO_LADRILHO = {
+  azul: "info",
+  verde: "good",
+  roxo: "neutral",
+  alerta: "bad",
 } as const;
 
-const TINTA = {
-  azul: "text-sky-400",
-  verde: "text-emerald-400",
-  roxo: "text-violet-400",
-  alerta: "text-destructive",
-} as const;
-
-/** Os três cartões coloridos do topo do print. */
 function Ladrilho({
   rotulo,
   valor,
   sufixo,
   tom,
   nota,
+  icone,
 }: {
   rotulo: string;
   valor: string;
   sufixo?: string;
-  tom: keyof typeof TOM;
+  tom: keyof typeof TOM_DO_LADRILHO;
   nota?: string;
+  icone: typeof Wallet;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border px-4 py-3", TOM[tom])}>
-      <span className={cn("truncate text-[11.5px] font-medium tracking-[0.01em]", TINTA[tom])}>
-        {rotulo}
-      </span>
-      <span className="truncate text-[21px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
-        {valor}
-        {sufixo && (
-          <span className="ml-1 text-[13px] font-medium text-muted-foreground">{sufixo}</span>
-        )}
-      </span>
-      {nota && <span className="truncate text-[11px] text-muted-foreground/75">{nota}</span>}
-    </div>
+    <KpiTile
+      label={rotulo}
+      icon={icone}
+      tone={TOM_DO_LADRILHO[tom]}
+      className={cn(tom === "alerta" && "ring-1 ring-destructive/35")}
+      value={
+        <span className="block truncate">
+          {valor}
+          {sufixo && <ValueUnit>{sufixo}</ValueUnit>}
+        </span>
+      }
+      note={nota}
+    />
   );
 }
 
@@ -134,14 +135,14 @@ function Abas<T extends string>({
             onClick={() => onTrocar(i.chave)}
             className={cn(
               "relative px-3 transition-colors",
-              compacta ? "py-2 text-[12.5px]" : "py-2.5 text-[13.5px]",
+              compacta ? "py-2 text-[12.5px]" : "py-2.5 text-[13px]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-              acesa ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+              acesa ? "font-semibold text-foreground" : "font-medium text-muted-foreground hover:text-foreground/80",
             )}
           >
             {i.rotulo}
             {(i.contagemTexto ?? i.contagem) !== undefined && (
-              <span className="ml-1.5 text-[11px] tabular-nums text-muted-foreground/60">
+              <span className="ml-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground/70">
                 {i.contagemTexto ?? i.contagem}
               </span>
             )}
@@ -177,11 +178,11 @@ function AcaoPrimaria({
       data-desfecho={tom === "ganho" ? "won" : "lost"}
       className={cn(
         "disabled:pointer-events-none disabled:opacity-45",
-        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors",
+        "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-[background-color,border-color,color,transform] active:scale-[.98]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         tom === "ganho"
-          ? "border-success/40 text-success hover:bg-success/10"
-          : "border-border text-muted-foreground hover:border-destructive/40 hover:text-destructive",
+          ? "border-success/40 bg-success/10 text-success hover:bg-success/15"
+          : "border-input bg-card text-muted-foreground shadow-relevo hover:border-destructive/40 hover:text-destructive",
       )}
     >
       <Icone className="size-3.5" />
@@ -230,10 +231,10 @@ function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reunia
   const quando = new Date(reuniao.data);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-2xl border border-card-border bg-card px-3.5 py-3 shadow-relevo">
       <span
         className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md border",
+          "flex size-7 shrink-0 items-center justify-center rounded-[9px] border",
           tom.selo,
         )}
         aria-hidden="true"
@@ -260,7 +261,7 @@ function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reunia
       </span>
       <span className={cn("text-[12px]", tom.texto)}>{situacao.rotulo}</span>
       {situacao.daAgenda && (
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           <CalendarDays className="size-3" aria-hidden="true" />
           Agenda
         </span>
@@ -456,7 +457,7 @@ export function DealCard({
   const { total, temValor } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
 
   return (
-    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
       {/* ── Cabeçalho ─────────────────────────────────────────────────────
           Não está no print — o negócio do DataCrazy não tem título nem funil
           visível ali. Aqui tem, e some daqui seria perder o que identifica o
@@ -466,14 +467,14 @@ export function DealCard({
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <NomeDoNegocio key={negocio.id} titulo={negocio.titulo} nomeLead={negocio.lead.nome} onRenomear={onRenomear} />
             {negocio.estado === "ganho" && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 text-[12px] font-semibold text-success">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-success">
                 <button
                   type="button"
                   aria-label="Remover de ganho"
                   title="Remover de ganho"
                   disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
                   onClick={() => onDefinirDesfecho?.("open")}
-                  className="grid size-5 place-items-center rounded hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="grid size-5 place-items-center rounded-full hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="size-3" aria-hidden="true" />
                 </button>
@@ -481,14 +482,14 @@ export function DealCard({
               </span>
             )}
             {negocio.estado === "perdido" && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-destructive/35 bg-destructive/[0.08] px-2 py-0.5 text-[12px] font-semibold text-destructive">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/35 bg-destructive/[0.08] py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-destructive">
                 <button
                   type="button"
                   aria-label="Remover de perdido"
                   title="Remover de perdido"
                   disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
                   onClick={() => onDefinirDesfecho?.("open")}
-                  className="grid size-5 place-items-center rounded hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="grid size-5 place-items-center rounded-full hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="size-3" aria-hidden="true" />
                 </button>
@@ -560,7 +561,7 @@ export function DealCard({
                     aria-label="Mais opções do negócio"
                     data-testid="deal-card-kebab"
                     className={cn(
-                      "inline-flex size-8 shrink-0 items-center justify-center rounded-md",
+                      "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
                       "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       "disabled:pointer-events-none disabled:opacity-50",
@@ -653,8 +654,9 @@ export function DealCard({
         ) : (
           <div className="flex flex-col gap-5">
             {/* Os três cartões do print. */}
-            <div className="flex flex-wrap items-stretch gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Ladrilho
+                icone={Hourglass}
                 tom={estagnado ? "alerta" : "azul"}
                 rotulo={estagnado ? "Parado na etapa" : "Em aberto"}
                 valor={
@@ -681,12 +683,14 @@ export function DealCard({
                   afirmar que o negócio não vale nada, e não saber quanto vale
                   é outra coisa. Decisão do dono do produto em 22/08. */}
               <Ladrilho
+                icone={Wallet}
                 tom="verde"
                 rotulo="Valor Total"
                 valor={temValor ? formatBRL(total, 2) : "—"}
                 nota={negocio.itens.length > 0 ? `${negocio.itens.length} produto(s)` : undefined}
               />
               <Ladrilho
+                icone={CalendarDays}
                 tom="roxo"
                 rotulo="Data de Criação"
                 valor={negocio.criadoEm ? formatarData(negocio.criadoEm) : "—"}
@@ -737,33 +741,33 @@ export function DealCard({
             {!aberto && negocio.desfecho && (
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border px-4 py-3",
+                  "flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border px-4 py-3",
                   negocio.estado === "ganho"
                     ? "border-success/35 bg-success/[0.07]"
-                    : "border-border bg-card",
+                    : "border-card-border bg-sunken",
                 )}
               >
                 <div className="flex flex-col">
-                  <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+                  <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                     {negocio.estado === "ganho" ? "Vendido em" : "Perdido em"}
                   </span>
-                  <span className="text-[14px] font-semibold tabular-nums">
+                  <span className="text-[15px] font-extrabold tracking-[-0.02em] tabular-nums">
                     {formatarData(negocio.desfecho.quando)}
                   </span>
                 </div>
                 {negocio.desfecho.valorVenda ? (
                   <div className="flex flex-col">
-                    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                       Valor da venda
                     </span>
-                    <span className="text-[14px] font-semibold tabular-nums text-success">
+                    <span className="text-[15px] font-extrabold tracking-[-0.02em] tabular-nums text-success">
                       {formatBRL(negocio.desfecho.valorVenda)}
                     </span>
                   </div>
                 ) : null}
                 {negocio.desfecho.motivo && (
                   <div className="flex flex-col">
-                    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                       Motivo
                     </span>
                     <span className="text-[14px] font-medium">{negocio.desfecho.motivo}</span>
@@ -800,7 +804,7 @@ export function DealCard({
                   ) : (
                     <button
                       type="button"
-                      className="rounded-md border border-primary/40 px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                      className="inline-flex h-9 items-center rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => setAjustandoPedido(true)}
                     >
                       Ajustar pedido ganho
@@ -820,8 +824,8 @@ export function DealCard({
                     />
                   )}
                   {ajustesPedido.length > 0 && (
-                    <section className="space-y-2 rounded-xl border border-border p-4">
-                      <h3 className="text-sm font-semibold">Histórico de ajustes</h3>
+                    <section className="space-y-2 rounded-2xl border border-card-border bg-sunken p-4">
+                      <h3 className="text-sm font-bold">Histórico de ajustes</h3>
                       {ajustesPedido.map(ajuste => (
                         <div key={ajuste.id} className="text-sm border-b border-border pb-2 last:border-0">
                           <p className="tabular-nums">
@@ -845,7 +849,7 @@ export function DealCard({
                   placeholder="O que precisa ser lembrado sobre este negócio…"
                   rows={4}
                   className={cn(
-                    "w-full resize-none rounded-lg border border-border bg-card px-3.5 py-2.5",
+                    "w-full resize-none rounded-xl border border-input bg-card px-3.5 py-2.5 shadow-relevo",
                     "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
                     "transition-colors hover:border-muted-foreground/30",
                     "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",

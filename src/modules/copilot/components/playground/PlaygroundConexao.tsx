@@ -56,26 +56,28 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
   return (
     <div className="space-y-6">
       {/* ===== WhatsApp Instance ===== */}
-      <Card>
+      <Card className="rounded-2xl border-border/70 shadow-none">
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Smartphone className="w-5 h-5" />
-            Instancia WhatsApp
+          <CardTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-success/10 text-success">
+              <Smartphone className="w-4 h-4" />
+            </span>
+            Instância WhatsApp
           </CardTitle>
-          <CardDescription>
-            Vincule uma instancia para o agente responder automaticamente.
+          <CardDescription className="text-xs">
+            Vincule uma instância para o agente responder automaticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {state.whatsappInstanceId && selectedInstance ? (
-            <div className="p-4 border rounded-lg bg-green-500/10 border-green-500/20">
+            <div className="rounded-2xl border border-success/20 bg-success/[.06] p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Link2 className="w-5 h-5 text-green-500" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-success/15 text-success">
+                    <Link2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium">
+                    <p className="font-bold">
                       {selectedInstance.instance_name}
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -87,9 +89,9 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
                   variant="outline"
                   size="sm"
                   onClick={() => onChange({ whatsappInstanceId: null })}
-                  className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
-                  <Unlink className="w-4 h-4 mr-2" />
+                  <Unlink />
                   Desvincular
                 </Button>
               </div>
@@ -98,14 +100,14 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
             <>
               {isLoadingInstances ? (
                 <p className="text-center py-4 text-muted-foreground text-sm">
-                  Carregando instancias...
+                  Carregando instâncias...
                 </p>
               ) : whatsappInstances.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Smartphone className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Nenhuma instancia encontrada</p>
+                  <p className="text-sm font-semibold text-foreground/80">Nenhuma instância encontrada</p>
                   <p className="text-xs mt-1">
-                    Crie uma instancia na pagina de WhatsApp
+                    Crie uma instância na página de WhatsApp
                   </p>
                 </div>
               ) : (
@@ -116,7 +118,7 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma instancia" />
+                    <SelectValue placeholder="Selecione uma instância" />
                   </SelectTrigger>
                   <SelectContent>
                     {whatsappInstances.map((instance) => {
@@ -136,10 +138,10 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
                             <Badge
                               variant={
                                 instance.status === "connected"
-                                  ? "default"
-                                  : "secondary"
+                                  ? "success"
+                                  : "soft"
                               }
-                              className="text-[10px] px-1"
+                              className="px-1.5 text-[10px]"
                             >
                               {instance.status === "connected"
                                 ? "Online"
@@ -164,13 +166,15 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
 
       {/* ===== Retencao & Carteira ===== */}
       {hasFeature("customer_portfolio") && (
-        <Card>
+        <Card className="rounded-2xl border-border/70 shadow-none">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Shield className="w-5 h-5 text-primary" />
-              Retencao & Carteira
+            <CardTitle className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+                <Shield className="w-4 h-4" />
+              </span>
+              Retenção & Carteira
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Comportamento do agente para clientes ativos na carteira.
             </CardDescription>
           </CardHeader>
@@ -179,7 +183,7 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-sm font-medium">
-                  Ativar retencao de clientes
+                  Ativar retenção de clientes
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Injeta contexto de carteira no prompt automaticamente.
@@ -192,12 +196,12 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
             </div>
 
             {state.retentionEnabled && (
-              <div className="space-y-5 pl-1 border-l-2 border-primary/30 ml-1">
+              <div className="ml-1 space-y-5 border-l-2 border-primary/30 pl-4">
                 {/* Frequencia maxima */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">
-                      Frequencia maxima de contato
+                      Frequência máxima de contato
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -273,10 +277,10 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-medium">
-                      Somente alertas estrategicos
+                      Somente alertas estratégicos
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Notifica o responsavel ao inves de abordar diretamente.
+                      Notifica o responsável ao invés de abordar diretamente.
                     </p>
                   </div>
                   <Switch

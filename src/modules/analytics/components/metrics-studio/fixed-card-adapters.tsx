@@ -46,7 +46,7 @@ const ProductChampions = lazy(() =>
 );
 
 function Carregando() {
-  return <Skeleton className="h-full w-full rounded-lg" />;
+  return <Skeleton className="h-full w-full rounded-2xl" />;
 }
 
 export function RankingVendedoresCard({ range }: FixedCardContext) {

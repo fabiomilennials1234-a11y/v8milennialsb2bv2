@@ -342,7 +342,7 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
             <div
               className={cn(
                 "flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200",
-                broad ? "bg-warning/15 text-warning-strong" : "bg-primary/15 text-primary",
+                broad ? "bg-warning/15 text-warning-strong" : "bg-primary-soft text-primary-soft-foreground",
               )}
             >
               <Users className="h-4 w-4" />

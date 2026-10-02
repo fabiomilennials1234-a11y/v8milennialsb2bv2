@@ -17,7 +17,7 @@ function WebhookCallNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="webhook_call"
-      icon={<Globe className="w-5 h-5 text-indigo-500" />}
+      icon={<Globe />}
       title={nodeData.label || "Webhook"}
       subtitle={`${method} ${urlPreview}`}
       selected={selected}

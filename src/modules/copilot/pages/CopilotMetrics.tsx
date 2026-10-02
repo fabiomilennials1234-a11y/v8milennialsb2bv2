@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { QUALIFIED_TIER_FILTER } from "@/modules/copilot/lib/qualified-leads-filter";
 import { useCurrentTeamMember } from "@/modules/identity";
 import {
   Bot,
@@ -98,13 +99,13 @@ function useCopilotMetrics(orgId?: string, agentId?: string, days = 30) {
       if (agentId && agentId !== "all") varQuery = varQuery.eq("agent_id", agentId);
       const { data: variants } = await varQuery;
 
-      // Buscar contagem de leads qualificados (para qualification_rate geral)
+      // Leads qualificados = régua de "Boas avaliações" (tier efetivo
+      // prata/ouro/diamante). Ver lib/qualified-leads-filter.ts.
       const { count: qualifiedLeads } = await supabase
         .from("leads")
         .select("id", { count: "exact" })
         .eq("organization_id", orgId!)
-        .not("qualification_score", "is", null)
-        .gte("qualification_score", 70)
+        .or(QUALIFIED_TIER_FILTER)
         .gte("created_at", since);
 
       const { count: totalLeads } = await supabase
@@ -297,8 +298,8 @@ export default function CopilotMetrics() {
           value={kpi(totalEvals.toLocaleString("pt-BR"))}
           note={`Últimos ${days} dias`}
         />
-        {/* ⚠️ Decisão pendente do CTO: este KPI lê qualification_score >= 70.
-            Restyle não mexe na fonte — só na forma. */}
+        {/* Qualificação, não score (CTO, 02/10): tier efetivo prata/ouro/diamante
+            sobre o mesmo denominador de antes — leads criados no período. */}
         <KpiTile
           label="Taxa de Qualificação"
           icon={Users}
@@ -310,7 +311,7 @@ export default function CopilotMetrics() {
               <ValueUnit>%</ValueUnit>
             </span>,
           )}
-          note="Leads qualificados (score ≥ 70)"
+          note="Leads com qualificação Prata, Ouro ou Diamante"
         />
         <KpiTile
           label="Agentes Ativos"

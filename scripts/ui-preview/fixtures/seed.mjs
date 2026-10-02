@@ -745,7 +745,8 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
       cnpj: `${String(11 + i).padStart(2, "0")}.${String(222 + i * 7).slice(0, 3)}.333/0001-${String(10 + i).slice(0, 2)}`,
       email: l.email,
       phone: l.phone,
-      segment: l.segment,
+      // carteira segment buckets (get_portfolio_kpis.segment_counts)
+      segment: daysSince > 90 ? "dormindo" : daysSince > 60 ? "resgate" : orders < 5 ? "novo" : avg > 50000 ? "ouro" : "prata",
       is_active: daysSince < 100,
       first_sale_at: ago(int(120, 700) * D),
       last_order_at: ago(daysSince * D),
@@ -759,7 +760,7 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
       health_status: daysSince < 30 ? "healthy" : daysSince < 70 ? "at_risk" : "critical",
       health_updated_at: ago(D),
       trend: pick(["up", "stable", "down"]),
-      churn_probability: Math.min(0.95, daysSince / 130),
+      churn_probability: Math.round(Math.min(95, (daysSince / 130) * 100)), // percent
       potencial: pick(["alto", "medio", "baixo"]),
       tipo_cliente_tempo: daysSince < 60 ? "recorrente" : "inativo",
       responsible_id: tm(7),

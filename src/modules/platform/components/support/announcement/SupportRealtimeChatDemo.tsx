@@ -26,8 +26,8 @@ export function SupportRealtimeChatDemo({ compact = false }: { compact?: boolean
     <div className="overflow-hidden rounded-xl border border-border bg-muted/40">
       <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5 text-xs text-muted-foreground">
         <span>Chamado #251</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-500">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 [animation-duration:1.4s]" />
+        <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-success">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success [animation-duration:1.4s]" />
           ao vivo
         </span>
       </div>

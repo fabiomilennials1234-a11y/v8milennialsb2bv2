@@ -31,7 +31,7 @@ export function MetaConversationList({ pageId, channel, selectedConversationId, 
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-2">
+    <div className="flex h-full flex-col gap-0.5 overflow-y-auto p-2">
       {conversations.map((c) => (
         <MetaConversationListItem
           key={c.id}

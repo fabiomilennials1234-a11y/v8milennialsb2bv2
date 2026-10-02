@@ -179,12 +179,12 @@ export function LeadCardContainer({
   // enquanto carrega, e o painel pisca de duas larguras a cada abertura.
   const molduraAviso =
     forma === "coluna"
-      ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border"
-      : "rounded-xl border border-border";
+      ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border bg-sunken"
+      : "rounded-[inherit]";
 
   if (isLoading || visibility === "loading") {
     return (
-      <div className={cn("flex h-full items-center justify-center bg-background", molduraAviso)}>
+      <div className={cn("flex h-full items-center justify-center bg-card", molduraAviso)}>
         <span className="text-[13px] text-muted-foreground">Carregando…</span>
       </div>
     );
@@ -203,7 +203,7 @@ export function LeadCardContainer({
     return (
       <div
         className={cn(
-          "flex h-full items-center justify-center bg-background px-6 text-center",
+          "flex h-full items-center justify-center bg-card px-6 text-center",
           molduraAviso,
         )}
       >

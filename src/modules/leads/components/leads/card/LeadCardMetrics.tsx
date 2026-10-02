@@ -126,7 +126,7 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
                 className={cn(
                   "flex items-center gap-1 px-1 py-px rounded",
                   checklistDone
-                    ? "bg-emerald-500/15 text-emerald-400"
+                    ? "bg-success/15 text-success"
                     : hasChecklists
                     ? "text-foreground/70"
                     : "text-muted-foreground/40",

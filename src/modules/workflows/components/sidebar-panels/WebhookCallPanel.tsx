@@ -78,8 +78,8 @@ export function WebhookCallPanel({ data, onUpdate }: WebhookCallPanelProps) {
         </p>
       </div>
 
-      <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
-        <p className="text-xs text-indigo-700 dark:text-indigo-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Envia uma requisição HTTP para um endpoint externo. Útil para integrar com
           sistemas de pagamento, ERPs, CRMs externos, etc.
         </p>

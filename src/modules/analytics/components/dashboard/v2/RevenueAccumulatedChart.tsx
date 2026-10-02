@@ -92,25 +92,25 @@ function RevenueAccumulatedChartBase({
   }, [daily, prevDaily, periodStart, prevStart, dayOfPeriod, daysTotal]);
 
   return (
-    <div className="cmd-cell cmd-rise px-5 pb-3.5 pt-[18px]" style={{ animationDelay: ".46s" }}>
-      <div className="flex items-baseline justify-between">
-        <div>
-          <span className="cmd-lbl">Receita acumulada</span>
-          <div className="mt-1 text-[26px] font-black tracking-[-0.04em] tabular-nums">
-            {formatK(animatedTotal)}{" "}
-            {deltaPct !== null && (
-              <span
-                className={cn(
-                  "ml-1 inline-flex -translate-y-[5px] items-center rounded-[7px] px-[7px] py-[2.5px] align-middle text-[11px] font-bold",
-                  deltaPct >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
-                )}
-              >
-                {deltaPct >= 0 ? "+" : ""}{deltaPct.toFixed(1).replace(".", ",")}%
-              </span>
-            )}
-          </div>
+    // Corpo da janela "Receita acumulada" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[2rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums">
+            {formatK(animatedTotal)}
+          </span>
+          {deltaPct !== null && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
+                deltaPct >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
+              )}
+            >
+              {deltaPct >= 0 ? "+" : ""}{deltaPct.toFixed(1).replace(".", ",")}%
+            </span>
+          )}
         </div>
-        <div className="flex gap-4 text-[11.5px] font-semibold text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <i className="h-[3px] w-3.5 rounded-sm bg-primary" />{currentLabel}
           </span>
@@ -122,7 +122,8 @@ function RevenueAccumulatedChartBase({
           </span>
         </div>
       </div>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-2.5">
+      <div className="min-h-3 flex-1" aria-hidden />
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="shrink-0">
         <defs>
           <linearGradient id="cmd-rev-area" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="hsl(var(--primary))" stopOpacity=".22" />
@@ -169,7 +170,7 @@ function RevenueAccumulatedChartBase({
           <circle
             cx={lastX} cy={lastY} r={4.5}
             fill="hsl(var(--primary))"
-            stroke="hsl(var(--background))"
+            stroke="hsl(var(--card))"
             strokeWidth={2}
             className="cmd-fadein"
             style={{ animationDelay: "2.1s" }}

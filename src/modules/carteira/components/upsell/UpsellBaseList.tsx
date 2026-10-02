@@ -16,9 +16,9 @@ interface UpsellBaseListProps {
 
 const potencialConfig: Record<string, { class: string; label: string }> = {
   baixo: { class: "bg-muted text-muted-foreground", label: "Baixo" },
-  medio: { class: "bg-primary/10 text-primary", label: "Medio" },
-  alto: { class: "bg-green-500/10 text-green-600", label: "Alto" },
-  estrategico: { class: "bg-purple-500/10 text-purple-600", label: "Estrategico" },
+  medio: { class: "bg-primary-soft text-primary-soft-foreground", label: "Médio" },
+  alto: { class: "bg-success/10 text-success", label: "Alto" },
+  estrategico: { class: "bg-insights/10 text-insights", label: "Estratégico" },
 };
 
 export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: UpsellBaseListProps) {
@@ -51,7 +51,7 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="border border-border rounded-lg"
+        className="overflow-hidden rounded-card border border-card-border bg-card shadow-relevo"
       >
         <Table>
           <TableHeader>
@@ -81,17 +81,17 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className="cursor-pointer hover:bg-muted/50 border-b border-border"
+                    className="cursor-pointer border-b border-border/60 hover:bg-muted/40"
                     onClick={() => { setDetailClientId(client.id); setDetailOpen(true); }}
                   >
                     <TableCell className="font-medium">{erpLabel(client)}</TableCell>
                     <TableCell className="text-muted-foreground">{client.company || "-"}</TableCell>
                     <TableCell>
-                      <Badge className={`text-[10px] border-0 ${config.class}`}>
+                      <Badge className={`border-0 text-[10.5px] ${config.class}`}>
                         {config.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-green-600">
+                    <TableCell className="text-right font-semibold tabular-nums text-success">
                       R$ {(vendasPorCliente[client.id] || 0).toLocaleString("pt-BR")}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -99,7 +99,7 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{client.tipo_cliente_tempo}</TableCell>
                     <TableCell>
-                      <Badge className={`text-[10px] border-0 ${client.is_active ? "bg-green-500/10 text-green-600" : "bg-destructive/10 text-destructive"}`}>
+                      <Badge className={`border-0 text-[10.5px] ${client.is_active ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
                         {client.is_active ? "Ativo" : "Inativo"}
                       </Badge>
                     </TableCell>

@@ -81,8 +81,8 @@ export function CopilotPanel({ data, onUpdate }: CopilotPanelProps) {
         )}
       </div>
 
-      <div className="p-3 rounded-lg bg-cyan-50 dark:bg-cyan-950 border border-cyan-200 dark:border-cyan-800">
-        <p className="text-xs text-cyan-700 dark:text-cyan-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Ao atingir este nó, o workflow transfere o controle da conversa para o agente
           selecionado e encerra a execução.
         </p>

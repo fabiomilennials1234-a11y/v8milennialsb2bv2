@@ -415,7 +415,7 @@ export function ChatComposer({
   return (
     <div
       className={cn(
-        "p-3 border-t border-border/60 bg-background shrink-0 min-w-0",
+        "min-w-0 shrink-0 border-t border-border/60 bg-card px-3 pb-3 pt-2.5",
         isDragOver && "ring-2 ring-ring ring-inset bg-muted/30",
       )}
       onDragOver={handleDragOver}
@@ -425,7 +425,7 @@ export function ChatComposer({
       <ReplyPreview />
       {/* Sem permissão */}
       {!canReply ? (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-strong">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>
             Apenas os vendedores selecionados para este número podem responder no chat. Peça ao admin para incluir você na configuração da instância.
@@ -535,7 +535,7 @@ export function ChatComposer({
           />
 
           {/* Input row — container "pill" arredondado (estilo mockup) */}
-          <div className="relative flex items-end gap-1 rounded-xl border border-border/70 dark:border-white/[0.07] bg-muted/30 dark:bg-white/[0.03] px-1.5 py-1 transition-colors focus-within:border-primary/40">
+          <div className="relative flex items-end gap-1 rounded-[22px] border border-border/70 bg-sunken px-1.5 py-1 transition-colors focus-within:border-primary/50 focus-within:bg-card">
             {/* File input oculto */}
             <input
               ref={fileInputRef}
@@ -644,7 +644,7 @@ export function ChatComposer({
                 disabled={sendMessage.isPending}
                 size="icon"
                 aria-label="Enviar mensagem"
-                className="gradient-gold text-primary-foreground border-0 rounded-lg shadow-[0_4px_12px_hsl(var(--primary)/0.3)] hover:shadow-[0_6px_16px_hsl(var(--primary)/0.4)] hover:brightness-105 transition-all shrink-0"
+                className="shrink-0 rounded-full"
               >
                 {sendMessage.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

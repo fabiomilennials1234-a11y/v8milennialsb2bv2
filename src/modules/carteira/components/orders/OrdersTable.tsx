@@ -57,10 +57,13 @@ interface OrdersTableProps {
 // ─── Constantes de estilo (espelham CarteiraClientTable:181-185) ────────────
 
 const iconBtnClass =
-  "w-[30px] h-[30px] rounded-md border border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "w-[30px] h-[30px] rounded-lg border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const thBase =
-  "h-auto text-[11px] font-semibold uppercase tracking-wider py-2.5";
+  "h-auto border-b border-border/70 py-2.5 text-[11px] font-bold uppercase tracking-[.06em]";
+
+/** Casca de cartão do V5 — a mesma nos três estados (carregando, vazio, tabela). */
+const shell = "overflow-hidden rounded-card border border-card-border bg-card shadow-relevo";
 
 type SortColumn = "client" | "value" | "date";
 
@@ -146,8 +149,8 @@ export function OrdersTable({
   // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="divide-y divide-border">
+      <div className={shell}>
+        <div className="divide-y divide-border/60">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex gap-4 px-4 py-3.5 animate-pulse">
               <div className="h-4 bg-muted rounded w-48" />
@@ -177,15 +180,15 @@ export function OrdersTable({
         };
 
     return (
-      <div className="rounded-xl border border-border bg-card py-20 flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-          <empty.Icon className="w-6 h-6 text-muted-foreground/60" />
+      <div className={cn(shell, "flex flex-col items-center gap-4 py-20")}>
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+          <empty.Icon className="h-6 w-6" />
         </div>
-        <div className="text-center space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">
+        <div className="space-y-1 text-center">
+          <p className="text-sm font-bold text-foreground">
             {empty.title}
           </p>
-          <p className="text-[13px] text-muted-foreground/60 max-w-[340px]">
+          <p className="max-w-[340px] text-[13px] text-muted-foreground">
             {empty.body}
           </p>
         </div>
@@ -195,13 +198,13 @@ export function OrdersTable({
 
   // ── Table ─────────────────────────────────────────────────────────────────
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className={shell}>
       {/* CarteiraClientTable não tem scroller horizontal (problema latente lá).
           Aqui a tabela é mais larga, então o scroller é obrigatório. */}
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="border-border hover:bg-transparent bg-muted/50">
+            <TableRow className="border-0 hover:bg-transparent">
               <SortableHeader col="client" label="Cliente" className="pl-4" />
               <SortableHeader col="value" label="Valor" className="text-right" />
               <SortableHeader col="date" label="Data" />
@@ -251,7 +254,7 @@ export function OrdersTable({
               return (
                 <TableRow
                   key={order.id}
-                  className="border-border transition-colors group/row hover:bg-muted/50"
+                  className="group/row border-border/60 transition-colors hover:bg-muted/40"
                 >
                   {/* 1 — Cliente */}
                   <TableCell className="pl-4 py-3">
@@ -266,7 +269,7 @@ export function OrdersTable({
                   </TableCell>
 
                   {/* 2 — Valor (alvo de comparação vertical: direita + tabular) */}
-                  <TableCell className="py-3 text-right text-sm tabular-nums text-foreground">
+                  <TableCell className="py-3 text-right text-sm font-semibold tabular-nums text-foreground">
                     {formatBRL(Number(order.sale_value), 2)}
                   </TableCell>
 
@@ -291,7 +294,7 @@ export function OrdersTable({
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 border",
+                        "h-5 px-2 py-0 text-[10.5px]",
                         sourceBadgeClass(order.source),
                       )}
                     >
@@ -306,13 +309,13 @@ export function OrdersTable({
                   <TableCell className="py-3">
                     {order.is_erp_linked && (
                       <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0 h-4 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        variant="success"
+                        className="h-5 px-2 py-0 text-[10.5px]"
                       >
                         {order.erp_source === "nfe" ? (
-                          <ReceiptText className="w-2.5 h-2.5 mr-0.5" />
+                          <ReceiptText className="mr-1 h-3 w-3" />
                         ) : (
-                          <Link2 className="w-2.5 h-2.5 mr-0.5" />
+                          <Link2 className="mr-1 h-3 w-3" />
                         )}
                         {erpSourceLabel(order.erp_source)}
                       </Badge>
@@ -360,7 +363,7 @@ export function OrdersTable({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
+        <div className="flex items-center justify-between border-t border-border/70 px-4 py-2.5">
           <span className="text-[13px] text-muted-foreground tabular-nums">
             Mostrando {from}–{to} de {total}
           </span>

@@ -279,8 +279,8 @@ export function TothSettings() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center">
-          <Server className="w-5 h-5 text-sky-500" />
+        <div className="w-10 h-10 rounded-lg bg-insights/10 flex items-center justify-center">
+          <Server className="w-5 h-5 text-insights" />
         </div>
         <div className="min-w-0">
           <h3 className="font-semibold">Toth</h3>
@@ -340,12 +340,12 @@ export function TothSettings() {
               aria-invalid={reading.verdict === "invalido"}
               className={cn(
                 reading.verdict === "invalido" && "border-destructive focus-visible:ring-destructive",
-                reading.verdict === "inseguro" && "border-amber-500/60 focus-visible:ring-amber-500",
-                reading.verdict === "ok" && "border-emerald-500/50",
+                reading.verdict === "inseguro" && "border-warning/60 focus-visible:ring-warning",
+                reading.verdict === "ok" && "border-success/50",
               )}
             />
             {reading.verdict === "ok" && (
-              <p className="text-[11px] text-emerald-500 flex items-center gap-1">
+              <p className="text-[11px] text-success flex items-center gap-1">
                 <Lock className="w-3 h-3" />
                 Conexão criptografada com {reading.host}
               </p>
@@ -424,7 +424,7 @@ export function TothSettings() {
                   flowReading.verdict === "invalido" &&
                     "border-destructive focus-visible:ring-destructive",
                   flowReading.verdict === "inseguro" &&
-                    "border-amber-500/60 focus-visible:ring-amber-500",
+                    "border-warning/60 focus-visible:ring-warning",
                 )}
               />
               {flowReading.verdict === "invalido" && (
@@ -465,7 +465,7 @@ export function TothSettings() {
             </div>
 
             {!isFlowPartValid({ flowEndpoint, flowClientId, flowClientSecret }) && (
-              <p className="text-[11px] text-amber-500 flex items-start gap-1">
+              <p className="text-[11px] text-warning-strong flex items-start gap-1">
                 <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
                 Preencha os três campos do serviço de pedidos — ou deixe os três em branco.
               </p>
@@ -480,9 +480,9 @@ export function TothSettings() {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5 overflow-hidden"
+              className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-2.5 overflow-hidden"
             >
-              <p className="text-xs font-medium text-amber-500 flex items-center gap-1.5">
+              <p className="text-xs font-medium text-warning-strong flex items-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
                 Este endereço não usa criptografia
               </p>
@@ -497,7 +497,7 @@ export function TothSettings() {
                   id="toth-accept-insecure"
                   checked={acceptedInsecure}
                   onCheckedChange={(v) => setAcceptedInsecure(v === true)}
-                  className="mt-0.5 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                  className="mt-0.5 data-[state=checked]:bg-warning data-[state=checked]:border-warning"
                 />
                 <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors">
                   Entendo o risco e autorizo a conexão sem criptografia
@@ -531,10 +531,10 @@ export function TothSettings() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
           {/* Aviso permanente — não some depois do dia da configuração */}
           {status?.insecure_transport && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 flex items-start gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-warning-strong mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p className="text-xs font-medium text-amber-500">Conexão sem criptografia</p>
+                <p className="text-xs font-medium text-warning-strong">Conexão sem criptografia</p>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Este ERP responde em <code className="text-foreground">http://</code>, então a
                   senha e o token trafegam em texto claro. Assim que houver um endereço{" "}
@@ -676,7 +676,7 @@ export function TothSettings() {
               <p
                 className={`text-[11px] leading-relaxed flex items-start gap-1 ${
                   janelaInerte || status?.clientes_dias_compras == null
-                    ? "text-amber-500"
+                    ? "text-warning-strong"
                     : "text-muted-foreground"
                 }`}
               >
@@ -836,7 +836,7 @@ export function TothSettings() {
               className={cn(
                 "text-[11px]",
                 status?.erp_sync_mode === "canonical"
-                  ? "text-amber-500 flex items-start gap-1"
+                  ? "text-warning-strong flex items-start gap-1"
                   : "text-muted-foreground",
               )}
             >
@@ -877,12 +877,12 @@ export function TothSettings() {
           </AlertDialog>
 
           {/* O que entra, e o que ainda não dá para saber */}
-          <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
-            <p className="font-medium text-sky-500">O que o Toth traz para a Carteira:</p>
+          <div className="bg-insights/5 border border-insights/20 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-insights">O que o Toth traz para a Carteira:</p>
             <ul className="space-y-1">
               {capabilityLines(Boolean(status?.flow_base_url)).map((line) => (
                 <li key={line.text} className="flex items-start gap-1.5">
-                  <span className={line.live ? "text-sky-500" : "text-muted-foreground/40"}>•</span>
+                  <span className={line.live ? "text-insights" : "text-muted-foreground/40"}>•</span>
                   <span className={line.live ? "" : "text-muted-foreground/60"}>
                     {line.text}
                     {!line.live && (
@@ -894,7 +894,7 @@ export function TothSettings() {
                 </li>
               ))}
             </ul>
-            <p className="text-[11px] leading-relaxed border-t border-sky-500/15 pt-2">
+            <p className="text-[11px] leading-relaxed border-t border-insights/15 pt-2">
               <span className="text-foreground">Limitação atual do ERP:</span> as cobranças chegam
               sem a data do pagamento, então ainda não é possível medir prazo médio de recebimento.
               O saldo em aberto e o atraso são confiáveis — um pagamento parcial reduz o valor
@@ -928,7 +928,7 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
       className="rounded-lg border bg-muted/20 p-3 space-y-3"
     >
       <div className="flex items-center gap-2 flex-wrap">
-        <FlaskConical className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+        <FlaskConical className="w-3.5 h-3.5 text-insights shrink-0" />
         <span className="text-xs font-medium">Simulação — nada foi gravado</span>
         <div className="ml-auto flex items-center gap-1">
           {data.empresa && (
@@ -939,7 +939,7 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
           {data.janela_dias_compras && (
             <Badge
               variant={data.janela_inerte ? "outline" : "secondary"}
-              className={`text-[10px] ${data.janela_inerte ? "text-amber-500 border-amber-500/40" : ""}`}
+              className={`text-[10px] ${data.janela_inerte ? "text-warning-strong border-warning/40" : ""}`}
             >
               últimos {data.janela_dias_compras} dias
               {data.janela_inerte ? " · sem efeito" : ""}
@@ -957,7 +957,7 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
           simulação mostra doze mil clientes e parece que o recorte está errado,
           quando o que está faltando é o parâmetro que o liga. */}
       {data.janela_inerte && (
-        <p className="text-[11px] text-amber-500 leading-relaxed">
+        <p className="text-[11px] text-warning-strong leading-relaxed">
           A janela de {data.janela_dias_compras} dias não filtrou nada: o ERP só a aplica
           acompanhada das marcas.
         </p>
@@ -1012,7 +1012,7 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
       </div>
 
       {t.wouldCreate === 0 && t.wouldEnrich === 0 && (
-        <p className="text-[11px] text-amber-500 leading-relaxed">
+        <p className="text-[11px] text-warning-strong leading-relaxed">
           Nada entraria. No modo <strong>{data.modo}</strong> o ERP só preenche cliente que já
           existe na carteira — e ela está vazia. Para popular, troque para “ERP canônico”.
         </p>
@@ -1025,8 +1025,8 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
       </div>
 
       {adocao.mensagens > 0 && (
-        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
-          <p className="text-[11px] font-medium text-amber-500">
+        <div className="rounded border border-warning/30 bg-warning/10 p-2 space-y-1">
+          <p className="text-[11px] font-medium text-warning-strong">
             {adocao.mensagens} mensagem(ns) de WhatsApp seriam vinculadas
           </p>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -1063,7 +1063,7 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
 function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div className="rounded bg-card/60 py-2">
-      <p className={cn("text-base font-semibold", accent && "text-sky-500")}>
+      <p className={cn("text-base font-semibold", accent && "text-insights")}>
         {value.toLocaleString("pt-BR")}
       </p>
       <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
@@ -1110,7 +1110,7 @@ function SyncRow({
           ? formatDistanceToNow(new Date(at), { addSuffix: true, locale: ptBR })
           : "Nunca sincronizado"}
       </p>
-      {note && <p className="text-[11px] text-amber-500/80 leading-snug">{note}</p>}
+      {note && <p className="text-[11px] text-warning-strong/80 leading-snug">{note}</p>}
     </div>
   );
 }

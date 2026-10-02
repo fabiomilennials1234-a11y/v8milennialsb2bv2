@@ -16,6 +16,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { useWhatsAppInstances } from "@/modules/communication";
 import { useCreateBlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
@@ -158,49 +160,51 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
-      {/* Header: title + progress + close */}
-      <div className="border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto w-full max-w-2xl px-5 pt-5">
-          <div className="flex items-center justify-between">
-            <h1 className="text-sm font-semibold tracking-tight text-foreground">Novo disparo</h1>
-            {!wiz.isMonitor && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Fechar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <div className="pb-5 pt-5">
-            <WizardProgress index={wiz.index} furthest={wiz.furthest} onJump={wiz.goTo} />
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      {/* Header: título da página + fechar. O fechar some no acompanhamento —
+          ali o caminho de saída é "Acompanhar disparos", no rodapé. */}
+      <PageHeader
+        eyebrow="Disparos"
+        title="Novo disparo"
+        actions={
+          !wiz.isMonitor ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={onClose}
+              className="rounded-full"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <Card className="px-5 pb-4 pt-5 sm:px-8">
+        <WizardProgress index={wiz.index} furthest={wiz.furthest} onJump={wiz.goTo} />
+      </Card>
 
       {/* Step content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl px-5 py-9">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={wiz.stepId}
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {renderStep()}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
+      <Card className="px-5 py-7 sm:px-8 sm:py-9">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={wiz.stepId}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {renderStep()}
+          </motion.div>
+        </AnimatePresence>
+      </Card>
 
-      {/* Footer: Voltar / Continuar — sticky, calm */}
-      <div className="sticky bottom-0 border-t border-border/40 bg-background/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-5 py-4">
+      {/* Footer: Voltar / Continuar — barra flutuante, presa ao pé da área de
+          rolagem (o <main>). */}
+      <div className="sticky bottom-3 z-10 rounded-full border border-card-border bg-card/95 shadow-relevo-alto backdrop-blur">
+        <div className="flex w-full items-center justify-between gap-4 px-2.5 py-2">
           {wiz.isMonitor ? (
             <Button onClick={onFinish} className="ml-auto gap-2">
               Acompanhar disparos

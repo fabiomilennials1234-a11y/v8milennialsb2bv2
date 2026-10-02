@@ -43,8 +43,8 @@ import {
 } from "@/modules/communication/lib/notificame-operacao";
 
 const CORES: Record<NivelDeSaude, { rotulo: string; classe: string }> = {
-  verde: { rotulo: "Qualidade alta", classe: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
-  amarelo: { rotulo: "Qualidade média", classe: "bg-amber-500/15 text-amber-500 border-amber-500/30" },
+  verde: { rotulo: "Qualidade alta", classe: "bg-success/10 text-success border-success/25" },
+  amarelo: { rotulo: "Qualidade média", classe: "bg-warning/15 text-warning-strong border-warning/30" },
   vermelho: { rotulo: "Qualidade baixa", classe: "bg-destructive/15 text-destructive border-destructive/30" },
 };
 

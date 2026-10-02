@@ -16,10 +16,10 @@ import { TrendingUp } from "lucide-react";
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs">
-      <p className="font-medium text-foreground mb-1 capitalize">{label}</p>
+    <div className="rounded-xl border border-card-border bg-card px-3 py-2 text-xs shadow-relevo-alto">
+      <p className="mb-1 font-bold capitalize text-foreground">{label}</p>
       {payload.map((p: any) => (
-        <p key={p.dataKey} className="text-muted-foreground">
+        <p key={p.dataKey} className="tabular-nums text-muted-foreground">
           <span
             className="inline-block w-2 h-2 rounded-full mr-1.5"
             style={{ backgroundColor: p.color }}
@@ -41,27 +41,31 @@ export function RevenueChart() {
 
   if (isLoading) {
     return (
-      <div className="bg-card border border-border rounded-xl p-5 animate-pulse">
-        <div className="h-4 bg-muted rounded w-40 mb-4" />
-        <div className="h-[240px] bg-muted rounded" />
+      <div className="animate-pulse rounded-card border border-card-border bg-card p-5 shadow-relevo">
+        <div className="mb-4 h-4 w-40 rounded bg-muted" />
+        <div className="h-[240px] rounded-xl bg-muted" />
       </div>
     );
   }
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-xl p-5 text-center text-sm text-muted-foreground">
+      <div className="rounded-card border border-card-border bg-card p-8 text-center text-sm text-muted-foreground shadow-relevo">
         Sem dados de receita para exibir.
       </div>
     );
   }
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-4 h-4 text-primary" />
-        <h3 className="text-sm font-semibold text-foreground">Receita Mensal</h3>
-        <span className="text-[10px] text-muted-foreground ml-auto">últimos {chartData.length} meses</span>
+    <section className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+          <TrendingUp className="h-4 w-4" />
+        </span>
+        <h3 className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Receita mensal</h3>
+        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          últimos {chartData.length} meses
+        </span>
       </div>
 
       <ResponsiveContainer width="100%" height={240}>
@@ -90,7 +94,7 @@ export function RevenueChart() {
             tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
             width={52}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
           <Area
             type="monotone"
             dataKey="approved"
@@ -109,14 +113,14 @@ export function RevenueChart() {
         </AreaChart>
       </ResponsiveContainer>
 
-      <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-primary rounded-full" /> Aprovado
+      <div className="mt-3 flex items-center gap-4 text-[11px] font-medium text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-3 rounded-full bg-primary" /> Aprovado
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-muted-foreground rounded-full border-dashed" /> Pendente
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-3 rounded-full bg-muted-foreground" /> Pendente
         </span>
       </div>
-    </div>
+    </section>
   );
 }

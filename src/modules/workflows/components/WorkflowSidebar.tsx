@@ -132,9 +132,9 @@ export function WorkflowSidebar({
         if ((nodeData as ConditionNodeData).guidedCondition) {
           const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);
           const source = legacyReview?.source;
-          return <>{legacyReview && <div role="note" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm">
-            <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-              <div><p className="font-medium">Correção pendente da regra antiga</p>
+          return <>{legacyReview && <div role="note" className="mb-4 rounded-xl border border-warning/30 bg-warning/[.08] p-3 text-sm">
+            <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
+              <div><p className="font-semibold">Correção pendente da regra antiga</p>
                 <p className="mt-1 text-muted-foreground">Antes: {String(source?.field ?? "sem campo")} · {String(source?.operator ?? "sem operador")}{source?.value ? ` · ${String(source.value)}` : ""}</p>
                 <p className="mt-1 text-muted-foreground">{legacyReview.details}</p>
               </div></div>
@@ -192,15 +192,15 @@ export function WorkflowSidebar({
   };
 
   return (
-    <div role="complementary" aria-label={`Configurar ${title}`} className="min-w-0 max-w-full shrink-0 border-l bg-card flex flex-col h-full" style={{ width: guided && expanded ? 640 : 360 }}>
+    <div role="complementary" aria-label={`Configurar ${title}`} className="min-w-0 max-w-full shrink-0 border-l border-border/60 bg-card flex flex-col h-full" style={{ width: guided && expanded ? 640 : 360 }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="font-semibold text-sm">Configurar {title}</h3>
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+        <h3 className="min-w-0 truncate text-sm font-bold tracking-tight">Configurar {title}</h3>
         <div className="flex items-center gap-1">
-        {guided && <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={expanded ? 'Reduzir painel' : 'Ampliar painel'} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>
+        {guided && <Button variant="ghost" size="icon" className="h-8 w-8 rounded-[10px]" aria-label={expanded ? 'Reduzir painel' : 'Ampliar painel'} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>
           {expanded ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>}
-        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Fechar painel" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-[10px]" aria-label="Fechar painel" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
         </div>
@@ -211,12 +211,12 @@ export function WorkflowSidebar({
         const unresolved = getUnresolvedFields(nodeData as unknown as Record<string, unknown>);
         if (unresolved.length === 0) return null;
         return (
-          <div className="mx-4 mt-3 p-3 rounded-md border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950">
-            <div className="flex items-center gap-2 text-sm font-medium text-orange-700 dark:text-orange-300">
+          <div className="mx-4 mt-3 rounded-xl border border-warning/30 bg-warning/[.08] p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-warning-strong">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               Configuração pendente
             </div>
-            <ul className="mt-1.5 text-xs text-orange-600 dark:text-orange-400 space-y-0.5 pl-6 list-disc">
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-6 text-xs text-foreground/80">
               {unresolved.map((label) => (
                 <li key={label}>{label}</li>
               ))}
@@ -234,7 +234,7 @@ export function WorkflowSidebar({
 
       {/* Actions */}
       {(onDeleteNode || (onDuplicateNode && canDuplicate)) && (
-        <div className="px-4 py-3 border-t space-y-2">
+        <div className="space-y-2 border-t border-border/60 px-4 py-3">
           {onDuplicateNode && canDuplicate && (
             <Button
               variant="outline"
@@ -242,7 +242,7 @@ export function WorkflowSidebar({
               className="w-full"
               onClick={() => onDuplicateNode(selectedNode.id)}
             >
-              <Copy className="w-4 h-4 mr-2" />
+              <Copy />
               Duplicar Nó
             </Button>
           )}
@@ -253,7 +253,7 @@ export function WorkflowSidebar({
               className="w-full"
               onClick={() => onDeleteNode(selectedNode.id)}
             >
-              <Trash2 className="w-4 h-4 mr-2" />
+              <Trash2 />
               Excluir Nó
             </Button>
           )}

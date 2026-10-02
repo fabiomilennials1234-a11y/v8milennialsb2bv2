@@ -60,7 +60,7 @@ function BlockedBanner({
       role="status"
       aria-live="polite"
       className={cn(
-        "border-t border-border/60 bg-muted/40 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+        "border-t border-border/60 bg-sunken transition-opacity duration-150 ease-out motion-reduce:transition-none",
         compact ? "px-3 py-2" : "px-4 py-2.5",
       )}
     >
@@ -204,14 +204,14 @@ function EmptyComposerCard({
       aria-live="polite"
       aria-label="Composer indisponível"
       className={cn(
-        "border-t border-border/60 bg-background flex flex-col items-start gap-3",
+        "border-t border-border/60 bg-card flex flex-col items-start gap-3",
         compact ? "px-4 py-4" : "px-6 py-5",
         "min-h-[var(--chat-composer-min-h,44px)]",
       )}
     >
       <div
         className={cn(
-          "rounded-xl border border-border/60 bg-muted/40 flex items-center justify-center",
+          "rounded-xl bg-muted flex items-center justify-center",
           compact ? "p-2" : "p-2.5",
         )}
       >
@@ -226,7 +226,7 @@ function EmptyComposerCard({
       <div className="flex flex-col gap-1">
         <h3
           className={cn(
-            "font-semibold text-foreground tracking-tight",
+            "font-bold text-foreground tracking-tight",
             compact ? "text-[14px]" : "text-[15px]",
           )}
         >
@@ -248,7 +248,6 @@ function EmptyComposerCard({
               type="button"
               size={compact ? "sm" : "default"}
               onClick={primary.onClick}
-              className="gradient-primary text-white border-0"
             >
               <primary.icon className="w-4 h-4 mr-2" aria-hidden />
               {primary.label}
@@ -294,14 +293,14 @@ export function ChatComposerShell({
     () => (
       <div
         className={cn(
-          "border-t border-border/60 bg-background animate-pulse motion-reduce:animate-none",
+          "border-t border-border/60 bg-card animate-pulse motion-reduce:animate-none",
           variant === "compact" ? "px-3 py-2" : "px-4 py-3",
         )}
         aria-hidden
       >
         <div
           className={cn(
-            "rounded-xl bg-muted/40",
+            "rounded-2xl bg-muted",
             variant === "compact" ? "h-9" : "h-10",
           )}
           style={{ minHeight: "var(--chat-composer-min-h, 44px)" }}

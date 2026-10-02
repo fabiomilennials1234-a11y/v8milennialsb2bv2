@@ -406,304 +406,304 @@ export default function Equipe() {
         actions={
           isAdmin && (
             <>
-            <Dialog
-              open={isDialogOpen}
-              onOpenChange={(open) => {
-                if (!open) setEditingMember(null);
-                setIsDialogOpen(open);
-              }}
-            >
-              <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
-                <DialogHeader>
-                  <DialogTitle>Editar Membro</DialogTitle>
-                  <DialogDescription>
-                    Ajuste as informações do membro da equipe (OTE, comissões, Cal.com, etc.)
-                  </DialogDescription>
-                </DialogHeader>
-              <div className="grid gap-4 py-4 overflow-y-auto flex-1 pr-1">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Nome</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Nome completo"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email (Cal.com)</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="email@exemplo.com"
-                      className="pl-9"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Email usado no Cal.com para atribuição automática de reuniões
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="role">Função</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value: TeamRole) => setFormData(prev => ({ ...prev, role: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a função" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="member">Membro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="job_title">Cargo</Label>
-                  <Input
-                    id="job_title"
-                    value={formData.job_title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, job_title: e.target.value }))}
-                    placeholder="Ex: Vendedor, Representante"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="metric_type">Tipo de Métrica</Label>
-                  <Select
-                    value={formData.metric_type}
-                    onValueChange={(value: "meetings" | "sales") => setFormData(prev => ({ ...prev, metric_type: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="meetings">Reuniões</SelectItem>
-                      <SelectItem value="sales">Vendas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+              <Dialog
+                open={isDialogOpen}
+                onOpenChange={(open) => {
+                  if (!open) setEditingMember(null);
+                  setIsDialogOpen(open);
+                }}
+              >
+                <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle>Editar Membro</DialogTitle>
+                    <DialogDescription>
+                      Ajuste as informações do membro da equipe (OTE, comissões, Cal.com, etc.)
+                    </DialogDescription>
+                  </DialogHeader>
+                <div className="grid gap-4 py-4 overflow-y-auto flex-1 pr-1">
                   <div className="grid gap-2">
-                    <Label htmlFor="ote_base">OTE Base (R$)</Label>
+                    <Label htmlFor="name">Nome</Label>
                     <Input
-                      id="ote_base"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.ote_base}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setFormData(prev => ({ ...prev, ote_base: isNaN(val) ? 0 : val }));
-                      }}
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Nome completo"
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ote_bonus">OTE Bônus (R$)</Label>
-                    <Input
-                      id="ote_bonus"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.ote_bonus}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setFormData(prev => ({ ...prev, ote_bonus: isNaN(val) ? 0 : val }));
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="commission_mrr">Comissão Rec. (%)</Label>
-                    <Input
-                      id="commission_mrr"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.commission_mrr_percent}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setFormData(prev => ({ ...prev, commission_mrr_percent: isNaN(val) ? 0 : val }));
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="commission_projeto">Comissão Projeto (%)</Label>
-                    <Input
-                      id="commission_projeto"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.commission_projeto_percent}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setFormData(prev => ({ ...prev, commission_projeto_percent: isNaN(val) ? 0 : val }));
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="user_id">Vincular ao Usuário</Label>
-                  <Select
-                    value={formData.user_id || "none"}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, user_id: value === "none" ? null : value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um usuário" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {profiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id}>
-                          {profile.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Vincule a um usuário cadastrado para ele acessar suas comissões
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="is_active">Membro Ativo</Label>
-                  <Switch
-                    id="is_active"
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
-                  />
-                </div>
-              </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleSubmitEdit}
-                    disabled={updateMember.isPending}
-                  >
-                    {updateMember.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={isCreateUserDialogOpen} onOpenChange={handleCreateUserDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2" disabled={seatUsage ? !seatUsage.can_add : false}>
-                  <UserPlus className="w-4 h-4" />
-                  Criar usuário
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[440px]">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <UserPlus className="w-5 h-5" />
-                    Criar usuário
-                  </DialogTitle>
-                  <DialogDescription>
-                    Informe o nome da conta, o email para login, a posição na organização e a senha. A pessoa entrará no sistema com esse email e a senha que você definir.
-                  </DialogDescription>
-                </DialogHeader>
-                {createdUserEmail ? (
-                  <div className="space-y-4 py-4">
-                    <p className="text-sm text-muted-foreground">
-                      Usuário <strong>{createdUserEmail}</strong> criado. A pessoa pode entrar no sistema com esse email e a senha que você definiu.
-                    </p>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>Fechar</Button>
-                      <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: "member", job_title: "", metric_type: "meetings", password: "" }); }}>
-                        Criar outro usuário
-                      </Button>
-                    </DialogFooter>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-name">Nome</Label>
-                        <Input
-                          id="create-user-name"
-                          value={createUserForm.name}
-                          onChange={(e) => setCreateUserForm((p) => ({ ...p, name: e.target.value }))}
-                          placeholder="Nome completo"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-email">Email (para login)</Label>
-                        <Input
-                          id="create-user-email"
-                          type="email"
-                          value={createUserForm.email}
-                          onChange={(e) => setCreateUserForm((p) => ({ ...p, email: e.target.value }))}
-                          placeholder="email@exemplo.com"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-role">Função</Label>
-                        <Select
-                          value={createUserForm.role}
-                          onValueChange={(v) => setCreateUserForm((p) => ({ ...p, role: v as TeamRole }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Administrador</SelectItem>
-                            <SelectItem value="member">Membro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-job-title">Cargo</Label>
-                        <Input
-                          id="create-user-job-title"
-                          value={createUserForm.job_title}
-                          onChange={(e) => setCreateUserForm((p) => ({ ...p, job_title: e.target.value }))}
-                          placeholder="Ex: Vendedor, Representante"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-metric-type">Tipo de Métrica</Label>
-                        <Select
-                          value={createUserForm.metric_type}
-                          onValueChange={(v) => setCreateUserForm((p) => ({ ...p, metric_type: v as "meetings" | "sales" }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="meetings">Reuniões</SelectItem>
-                            <SelectItem value="sales">Vendas</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="create-user-password">Senha (para ela entrar no sistema)</Label>
-                        <Input
-                          id="create-user-password"
-                          type="password"
-                          value={createUserForm.password}
-                          onChange={(e) => setCreateUserForm((p) => ({ ...p, password: e.target.value }))}
-                          placeholder="Mínimo 6 caracteres"
-                          minLength={6}
-                        />
-                      </div>
+                    <Label htmlFor="email">Email (Cal.com)</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="email@exemplo.com"
+                        className="pl-9"
+                      />
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button onClick={handleCreateUserSubmit} disabled={createUserLoading}>
-                        {createUserLoading ? "Criando..." : "Criar usuário"}
-                      </Button>
-                    </DialogFooter>
-                  </>
-                )}
-              </DialogContent>
-            </Dialog>
+                    <p className="text-xs text-muted-foreground">
+                      Email usado no Cal.com para atribuição automática de reuniões
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="role">Função</Label>
+                    <Select
+                      value={formData.role}
+                      onValueChange={(value: TeamRole) => setFormData(prev => ({ ...prev, role: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a função" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="member">Membro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="job_title">Cargo</Label>
+                    <Input
+                      id="job_title"
+                      value={formData.job_title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, job_title: e.target.value }))}
+                      placeholder="Ex: Vendedor, Representante"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="metric_type">Tipo de Métrica</Label>
+                    <Select
+                      value={formData.metric_type}
+                      onValueChange={(value: "meetings" | "sales") => setFormData(prev => ({ ...prev, metric_type: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="meetings">Reuniões</SelectItem>
+                        <SelectItem value="sales">Vendas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="ote_base">OTE Base (R$)</Label>
+                      <Input
+                        id="ote_base"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.ote_base}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setFormData(prev => ({ ...prev, ote_base: isNaN(val) ? 0 : val }));
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="ote_bonus">OTE Bônus (R$)</Label>
+                      <Input
+                        id="ote_bonus"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.ote_bonus}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setFormData(prev => ({ ...prev, ote_bonus: isNaN(val) ? 0 : val }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="commission_mrr">Comissão Rec. (%)</Label>
+                      <Input
+                        id="commission_mrr"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.commission_mrr_percent}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setFormData(prev => ({ ...prev, commission_mrr_percent: isNaN(val) ? 0 : val }));
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="commission_projeto">Comissão Projeto (%)</Label>
+                      <Input
+                        id="commission_projeto"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.commission_projeto_percent}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setFormData(prev => ({ ...prev, commission_projeto_percent: isNaN(val) ? 0 : val }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="user_id">Vincular ao Usuário</Label>
+                    <Select
+                      value={formData.user_id || "none"}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, user_id: value === "none" ? null : value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um usuário" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {profiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id}>
+                            {profile.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Vincule a um usuário cadastrado para ele acessar suas comissões
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="is_active">Membro Ativo</Label>
+                    <Switch
+                      id="is_active"
+                      checked={formData.is_active}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
+                    />
+                  </div>
+                </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleSubmitEdit}
+                      disabled={updateMember.isPending}
+                    >
+                      {updateMember.isPending ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={isCreateUserDialogOpen} onOpenChange={handleCreateUserDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" disabled={seatUsage ? !seatUsage.can_add : false}>
+                    <UserPlus className="w-4 h-4" />
+                    Criar usuário
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[440px]">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <UserPlus className="w-5 h-5" />
+                      Criar usuário
+                    </DialogTitle>
+                    <DialogDescription>
+                      Informe o nome da conta, o email para login, a posição na organização e a senha. A pessoa entrará no sistema com esse email e a senha que você definir.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {createdUserEmail ? (
+                    <div className="space-y-4 py-4">
+                      <p className="text-sm text-muted-foreground">
+                        Usuário <strong>{createdUserEmail}</strong> criado. A pessoa pode entrar no sistema com esse email e a senha que você definiu.
+                      </p>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>Fechar</Button>
+                        <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: "member", job_title: "", metric_type: "meetings", password: "" }); }}>
+                          Criar outro usuário
+                        </Button>
+                      </DialogFooter>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-name">Nome</Label>
+                          <Input
+                            id="create-user-name"
+                            value={createUserForm.name}
+                            onChange={(e) => setCreateUserForm((p) => ({ ...p, name: e.target.value }))}
+                            placeholder="Nome completo"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-email">Email (para login)</Label>
+                          <Input
+                            id="create-user-email"
+                            type="email"
+                            value={createUserForm.email}
+                            onChange={(e) => setCreateUserForm((p) => ({ ...p, email: e.target.value }))}
+                            placeholder="email@exemplo.com"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-role">Função</Label>
+                          <Select
+                            value={createUserForm.role}
+                            onValueChange={(v) => setCreateUserForm((p) => ({ ...p, role: v as TeamRole }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Administrador</SelectItem>
+                              <SelectItem value="member">Membro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-job-title">Cargo</Label>
+                          <Input
+                            id="create-user-job-title"
+                            value={createUserForm.job_title}
+                            onChange={(e) => setCreateUserForm((p) => ({ ...p, job_title: e.target.value }))}
+                            placeholder="Ex: Vendedor, Representante"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-metric-type">Tipo de Métrica</Label>
+                          <Select
+                            value={createUserForm.metric_type}
+                            onValueChange={(v) => setCreateUserForm((p) => ({ ...p, metric_type: v as "meetings" | "sales" }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="meetings">Reuniões</SelectItem>
+                              <SelectItem value="sales">Vendas</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="create-user-password">Senha (para ela entrar no sistema)</Label>
+                          <Input
+                            id="create-user-password"
+                            type="password"
+                            value={createUserForm.password}
+                            onChange={(e) => setCreateUserForm((p) => ({ ...p, password: e.target.value }))}
+                            placeholder="Mínimo 6 caracteres"
+                            minLength={6}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleCreateUserSubmit} disabled={createUserLoading}>
+                          {createUserLoading ? "Criando..." : "Criar usuário"}
+                        </Button>
+                      </DialogFooter>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
             </>
           )
         }
@@ -775,7 +775,7 @@ export default function Equipe() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead className="font-mono text-xs">ID</TableHead>
+              <TableHead>ID</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Função</TableHead>
               <TableHead>Cargo</TableHead>
@@ -809,7 +809,7 @@ export default function Equipe() {
                   </TableCell>
                   <TableCell>
                     {(member as any).email ? (
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                      <span className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Mail className="w-3 h-3" />
                         {(member as any).email}
                       </span>
@@ -826,7 +826,7 @@ export default function Equipe() {
                     <div className="flex flex-col gap-0.5">
                       <span className="text-sm">{(member as any).job_title || <span className="text-xs text-muted-foreground/50 italic">-</span>}</span>
                       {(member as any).metric_type && (
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 w-fit">
+                        <Badge variant="soft" className="w-fit px-1.5 py-0 text-[10px]">
                           {(member as any).metric_type === "meetings" ? "Reuniões" : "Vendas"}
                         </Badge>
                       )}
@@ -845,10 +845,10 @@ export default function Equipe() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(Number(member.ote_base) || 0)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(Number(member.ote_bonus) || 0)}</TableCell>
-                  <TableCell className="text-right">{Number(member.commission_mrr_percent || 0)}%</TableCell>
-                  <TableCell className="text-right">{Number(member.commission_projeto_percent || 0)}%</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCurrency(Number(member.ote_base) || 0)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCurrency(Number(member.ote_bonus) || 0)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(member.commission_mrr_percent || 0)}%</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(member.commission_projeto_percent || 0)}%</TableCell>
                   {isAdmin && (
                     <TableCell>
                       <DropdownMenu>

@@ -54,7 +54,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -100 }}
-      className="flex items-center gap-3 py-2 px-1 group"
+      className="group flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
     >
       <Checkbox
         checked={item.is_completed}
@@ -69,14 +69,14 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
           onChange={(e) => setEditTitle(e.target.value)}
           onBlur={handleSave}
           onKeyDown={handleKeyDown}
-          className="h-8 text-sm flex-1"
+          className="h-9 flex-1 text-sm"
         />
       ) : (
         <span
           onClick={() => setIsEditing(true)}
           className={cn(
-            "flex-1 text-sm cursor-pointer hover:text-primary transition-colors",
-            item.is_completed && "line-through text-muted-foreground"
+            "flex-1 cursor-pointer text-sm transition-colors hover:text-foreground/70",
+            item.is_completed && "text-muted-foreground line-through"
           )}
         >
           {item.title}
@@ -86,13 +86,14 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+        className="h-8 w-8 flex-shrink-0 rounded-[10px] text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
           onDelete(item.id);
         }}
+        aria-label="Remover item"
       >
-        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+        <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </motion.div>
   );

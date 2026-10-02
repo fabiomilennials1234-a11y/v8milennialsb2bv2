@@ -43,10 +43,13 @@ export default function MasterPlans() {
             subtitle="Configure features, limites e preços"
           />
         </div>
-        <PlanEditor
-          plan={selectedPlan}
-          onClose={() => setSelectedPlan(null)}
-        />
+        {/* O editor é um formulário solto: na bancada com grade ele precisa de cartão. */}
+        <Card className="p-5">
+          <PlanEditor
+            plan={selectedPlan}
+            onClose={() => setSelectedPlan(null)}
+          />
+        </Card>
       </div>
     );
   }

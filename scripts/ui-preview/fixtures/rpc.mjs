@@ -122,7 +122,11 @@ export const rpcHandlers = {
     is_overdue: false,
     is_blocked: false,
   }),
-  org_get_seat_usage: (_a, fx) => ({ used: fx.db.team_members.length, included: 25, extra: 0 }),
+  // SeatUsage (src/modules/identity/org-team/hooks/useSeatUsage.ts)
+  org_get_seat_usage: (_a, fx) => {
+    const active = fx.db.team_members.filter((m) => m.is_active).length;
+    return { paid_seats: 15, active_members: active, plan_name: "enterprise", is_unlimited: false, can_add: active < 15, remaining: Math.max(0, 15 - active) };
+  },
   org_resolve_all_quotas: (_a, fx) => {
     const usage = {
       max_leads: fx.db.leads.length,

@@ -99,9 +99,9 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
       </p>
 
       {isActive && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 px-4 py-2.5">
-          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-          <span className="text-sm text-green-700 dark:text-green-300">
+        <div className="flex items-center gap-2 rounded-2xl border border-success/30 bg-success/10 px-4 py-2.5">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
+          <span className="text-sm text-success">
             Distribuição automática ativa
             {poolCount > 0 && ` \u2014 ${poolCount} membro${poolCount > 1 ? "s" : ""} no pool`}
           </span>
@@ -178,7 +178,7 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
         )}
 
         {needsPool && (
-          <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
+          <p className="flex items-center gap-2 text-sm text-warning-strong">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             Selecione ao menos um responsável para a distribuição funcionar.
           </p>

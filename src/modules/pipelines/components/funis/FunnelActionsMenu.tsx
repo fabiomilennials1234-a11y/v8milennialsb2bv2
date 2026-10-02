@@ -93,7 +93,7 @@ export function FunnelActionsMenu({
             aria-label={`Ações do funil ${nomeAtual}`}
             data-testid="funnel-actions-menu"
             className={cn(
-              "shrink-0 rounded-md p-1.5 text-muted-foreground",
+              "shrink-0 rounded-xl p-1.5 text-muted-foreground",
               "hover:bg-muted hover:text-foreground transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               REVELA_NO_HOVER,

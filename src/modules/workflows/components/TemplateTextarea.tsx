@@ -10,8 +10,6 @@ const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{telefone}}":           "(11) 99999-9999",
   "{{faturamento}}":        "R$ 50.000",
   "{{segmento}}":           "Software",
-  "{{score}}":              "85",
-  "{{rating}}":             "8",
   "{{origem}}":             "Site",
   "{{urgencia}}":           "Alta",
   "{{observacoes}}":        "Interessado no plano premium",

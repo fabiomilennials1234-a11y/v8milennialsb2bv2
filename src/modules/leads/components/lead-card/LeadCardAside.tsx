@@ -81,7 +81,7 @@ export function LeadCardAside({
   const grupoAtivo = grupos[Math.min(grupo, Math.max(0, grupos.length - 1))];
 
   return (
-    <aside className="relative flex h-full min-h-0 w-[32%] min-w-[300px] max-w-[480px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-border">
+    <aside className="relative flex h-full min-h-0 w-[32%] min-w-[300px] max-w-[480px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-border bg-sunken">
       <div className="shrink-0">
         {/* Capa + avatar, como no print. A capa não é enfeite gratuito: ela dá
             um chão para o avatar transbordar e é o que separa a coluna da
@@ -100,7 +100,7 @@ export function LeadCardAside({
               style={{ "--h": h } as React.CSSProperties}
               className={cn(
                 "flex size-[76px] items-center justify-center rounded-full text-[30px] font-semibold",
-                "ring-4 ring-background",
+                "ring-4 ring-sunken",
                 "bg-[hsl(var(--h)_70%_92%)] text-[hsl(var(--h)_55%_32%)]",
                 "dark:bg-[hsl(var(--h)_42%_22%)] dark:text-[hsl(var(--h)_58%_74%)]",
               )}
@@ -116,7 +116,7 @@ export function LeadCardAside({
                 aria-label="Abrir a ficha completa do lead"
                 className={cn(
                   "absolute -bottom-0.5 -right-0.5 flex size-7 items-center justify-center rounded-full",
-                  "border border-border bg-card text-muted-foreground shadow-sm",
+                  "border border-input bg-card text-muted-foreground shadow-relevo",
                   "transition-colors hover:text-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 )}
@@ -126,7 +126,7 @@ export function LeadCardAside({
             )}
           </div>
 
-          <h2 className="mt-2.5 max-w-full truncate text-center text-[17px] font-semibold tracking-[-0.02em]">
+          <h2 className="mt-2.5 max-w-full truncate text-center text-[19px] font-extrabold tracking-[-0.03em]">
             {lead.nome}
           </h2>
           {lead.empresa && (
@@ -143,8 +143,8 @@ export function LeadCardAside({
               um centímetro de distância, uma que reage ao clique e outra não. */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
             {lead.relacao === "cliente" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-[3px] text-[11.5px] font-semibold text-primary">
-                <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-[3px] text-[11.5px] font-bold text-primary-soft-foreground">
+                <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
                 Cliente
               </span>
             )}
@@ -153,7 +153,7 @@ export function LeadCardAside({
                 {lead.tags.map((t) => (
                   <span
                     key={t.id}
-                    className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[11.5px] text-muted-foreground"
+                    className="inline-flex rounded-full bg-muted px-2.5 py-[3px] text-[11.5px] text-muted-foreground"
                   >
                     {t.nome}
                   </span>
@@ -210,8 +210,8 @@ export function LeadCardAside({
                       "relative shrink-0 px-2.5 py-2.5 text-[12.5px] transition-colors",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                       acesa
-                        ? "font-medium text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
+                        ? "font-semibold text-foreground"
+                        : "font-medium text-muted-foreground hover:text-foreground/80",
                     )}
                   >
                     {g.titulo}

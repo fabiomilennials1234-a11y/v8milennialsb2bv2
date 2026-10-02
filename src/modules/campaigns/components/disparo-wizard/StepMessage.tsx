@@ -169,8 +169,8 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
               onChange={onPickFile}
             />
             {draft.media ? (
-              <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-sunken p-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground">
                   <Paperclip className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -178,7 +178,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                   <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                     {draft.media.type} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
                     {uploading && (
-                      <span className="flex items-center gap-1 normal-case text-primary">
+                      <span className="flex items-center gap-1 normal-case text-primary-soft-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" /> enviando…
                       </span>
                     )}
@@ -209,7 +209,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 {draft.mediaError}
               </p>
             ) : draft.media?.type === "video" ? (
-              <p className="flex items-center gap-1.5 text-xs text-amber-500">
+              <p className="flex items-center gap-1.5 text-xs text-warning-strong">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 Vídeo em massa aumenta o risco de bloqueio — prefira imagem ou link quando der.
               </p>
@@ -222,8 +222,8 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
           </div>
 
           {/* Anti-ban */}
-          <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-4">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
+          <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-sunken p-4">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -242,7 +242,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
         {/* Live WhatsApp preview */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
               Como o cliente vai ver
             </p>
             <button
@@ -351,7 +351,7 @@ function EscolhaDeTemplate({
       {!isLoading && !error && aprovados.length === 0 && (
         // Lista vazia NÃO é erro, e dizer "nenhum template" sem dizer por quê
         // manda o operador procurar defeito onde não há.
-        <div className="rounded-xl border border-border/70 bg-card p-5 text-sm">
+        <div className="rounded-2xl border border-border/60 bg-sunken p-5 text-sm">
           <p className="font-medium">Nenhum Template aprovado nesta conta ainda.</p>
           <p className="mt-1 text-muted-foreground">
             Um Template em análise não pode ser disparado — a Meta recusaria o envio. Assim

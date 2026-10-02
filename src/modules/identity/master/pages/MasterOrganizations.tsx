@@ -166,7 +166,7 @@ export default function MasterOrganizations() {
         }
         actions={
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Nova Organização
           </Button>
         }

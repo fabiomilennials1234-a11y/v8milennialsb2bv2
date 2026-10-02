@@ -207,9 +207,9 @@ export function DeletePipelineDialog({
 
         {/* Funil padrão da org (624): substituto obrigatório ANTES do delete. */}
         {!bloqueado && ehPadrao && (
-          <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="space-y-2 rounded-2xl border border-warning/35 bg-warning/10 p-3">
             <div className="flex items-start gap-2 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
               <span>
                 Este é o <strong>funil padrão</strong> da organização — leads que chegam
                 sem destino declarado caem nele. Escolha o novo padrão antes de excluir.

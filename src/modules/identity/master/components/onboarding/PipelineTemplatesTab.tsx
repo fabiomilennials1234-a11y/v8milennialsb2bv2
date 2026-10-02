@@ -22,7 +22,7 @@ export function PipelineTemplatesTab() {
   };
 
   return (
-    <div className="space-y-4 mt-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           {templates?.length ?? 0} templates

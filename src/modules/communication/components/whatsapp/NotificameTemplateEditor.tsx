@@ -486,7 +486,7 @@ export function NotificameTemplateEditor({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Como o cliente vê</p>
             <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-              <div className="ml-auto max-w-full rounded-xl rounded-tr-sm bg-emerald-600/15 p-3 text-sm">
+              <div className="ml-auto max-w-full rounded-xl rounded-tr-sm bg-success/15 p-3 text-sm">
                 {header.trim() && (
                   <p className="mb-1 font-semibold text-foreground">
                     <PreviewText text={header} exemplos={exemplos} />
@@ -512,7 +512,7 @@ export function NotificameTemplateEditor({
                     {botoes
                       .filter((b) => b.texto.trim())
                       .map((b, i) => (
-                        <p key={i} className="py-2 text-center text-[13px] text-sky-500">
+                        <p key={i} className="py-2 text-center text-[13px] font-semibold text-insights">
                           {b.texto.trim()}
                         </p>
                       ))}

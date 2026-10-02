@@ -210,10 +210,10 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
   // Confirmed-and-navigated-back: no local file in memory but the audience is frozen.
   if (confirmed && !parsed) {
     return (
-      <div className="rounded-xl border border-border/70 bg-card p-4">
+      <div className="rounded-2xl border border-border/60 bg-sunken p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground">
               <CheckCircle2 className="h-4 w-4" />
             </div>
             <div className="min-w-0">

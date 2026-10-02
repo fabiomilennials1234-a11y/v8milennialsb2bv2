@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react";
 import {
-  Copy,
   Merge,
   Loader2,
   Phone,
@@ -15,8 +14,9 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -26,7 +26,11 @@ import {
   useMergeLeads,
   type DuplicateGroup,
 } from "../hooks/useDuplicateLeads";
-import { cn } from "@/lib/utils";
+
+interface MatchInfo {
+  label: string;
+  tone: NonNullable<BadgeProps["variant"]>;
+}
 
 export default function Duplicates() {
   const { data: duplicates, isLoading, isError, error, refetch } = useDuplicateLeads();
@@ -59,50 +63,53 @@ export default function Duplicates() {
     }
   }, [mergeTarget, mergeMutation]);
 
-  const matchLabel = (type: string) => {
+  // Tom por tipo de coincidência — tons do `Badge` (V5), só tokens.
+  const matchLabel = (type: string): MatchInfo => {
     switch (type) {
-      case "phone": return { label: "Telefone", cls: "bg-blue-500/10 text-blue-500" };
-      case "email": return { label: "Email", cls: "bg-purple-500/10 text-purple-500" };
-      case "name": return { label: "Nome", cls: "bg-amber-500/10 text-amber-500" };
-      default: return { label: type, cls: "bg-muted text-muted-foreground" };
+      case "phone": return { label: "Telefone", tone: "info" };
+      case "email": return { label: "E-mail", tone: "gold" };
+      case "name": return { label: "Nome", tone: "warning" };
+      default: return { label: type, tone: "soft" };
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Copy className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold tracking-tight">Duplicatas</h1>
-          {duplicates && (
-            <Badge variant="secondary" className="tabular-nums">{duplicates.length}</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar duplicata..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Reescanear
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Duplicatas"
+        subtitle={
+          duplicates
+            ? `${duplicates.length.toLocaleString("pt-BR")} ${duplicates.length === 1 ? "par encontrado" : "pares encontrados"}`
+            : "Leads que parecem ser a mesma pessoa"
+        }
+        actions={
+          <>
+            <div className="relative w-64 max-sm:w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar duplicata…"
+                aria-label="Buscar duplicata"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+              {isLoading && <Loader2 className="animate-spin" />}
+              Reescanear
+            </Button>
+          </>
+        }
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="flex flex-col items-center justify-center rounded-card border border-card-border bg-card py-24 text-center shadow-relevo">
           <AlertTriangle className="mb-3 h-10 w-10 text-destructive/70" />
-          <p className="text-sm font-medium">Nao foi possivel carregar as duplicatas</p>
+          <p className="text-sm font-medium">Não foi possível carregar as duplicatas</p>
           <p className="mt-1 max-w-md text-xs text-muted-foreground">
             {(error as Error)?.message ?? "Erro inesperado ao buscar duplicatas."}
           </p>
@@ -111,12 +118,12 @@ export default function Duplicates() {
           </Button>
         </div>
       ) : !filtered.length ? (
-        <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center rounded-card border border-card-border bg-card py-24 text-muted-foreground shadow-relevo">
           <CheckCircle2 className="mb-3 h-10 w-10 opacity-40" />
           <p className="text-sm">Nenhuma duplicata encontrada</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 xl:grid-cols-2">
           {filtered.map((dup, idx) => (
             <DuplicateCard
               key={`${dup.lead_a_id}-${dup.lead_b_id}-${idx}`}
@@ -135,9 +142,9 @@ export default function Duplicates() {
           <AlertDialogHeader>
             <AlertDialogTitle>Mesclar leads</AlertDialogTitle>
             <AlertDialogDescription>
-              O lead <strong>{mergeTarget?.mergeName}</strong> sera mesclado em{" "}
-              <strong>{mergeTarget?.keepName}</strong>. Tags, historico e dados de funil serão consolidados.
-              Esta acao nao pode ser desfeita.
+              O lead <strong>{mergeTarget?.mergeName}</strong> será mesclado em{" "}
+              <strong>{mergeTarget?.keepName}</strong>. Tags, histórico e dados de funil serão consolidados.
+              Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -159,20 +166,20 @@ function DuplicateCard({
   onMerge,
 }: {
   dup: DuplicateGroup;
-  matchLabel: (type: string) => { label: string; cls: string };
+  matchLabel: (type: string) => MatchInfo;
   onMerge: (keepId: string, mergeId: string, keepName: string, mergeName: string) => void;
 }) {
   const match = matchLabel(dup.match_type);
 
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Badge variant="outline" className={cn("text-xs", match.cls)}>
-            Match: {match.label}
+      <CardContent className="p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <Badge variant={match.tone}>
+            Coincide: {match.label}
           </Badge>
           {dup.similarity > 0 && (
-            <Badge variant="outline" className="text-xs tabular-nums">
+            <Badge variant="soft" className="tabular-nums">
               {Math.round(dup.similarity * 100)}% similar
             </Badge>
           )}
@@ -198,14 +205,14 @@ function DuplicateCard({
           />
         </div>
 
-        <div className="flex gap-2 mt-4 pt-3 border-t">
+        <div className="mt-4 flex gap-2 border-t border-border pt-4">
           <Button
             size="sm"
             variant="outline"
             className="flex-1"
             onClick={() => onMerge(dup.lead_a_id, dup.lead_b_id, dup.lead_a_name, dup.lead_b_name)}
           >
-            <Merge className="mr-1.5 h-3.5 w-3.5" />
+            <Merge className="h-3.5 w-3.5" />
             Manter "{dup.lead_a_name.split(" ")[0]}"
           </Button>
           <Button
@@ -214,7 +221,7 @@ function DuplicateCard({
             className="flex-1"
             onClick={() => onMerge(dup.lead_b_id, dup.lead_a_id, dup.lead_b_name, dup.lead_a_name)}
           >
-            <Merge className="mr-1.5 h-3.5 w-3.5" />
+            <Merge className="h-3.5 w-3.5" />
             Manter "{dup.lead_b_name.split(" ")[0]}"
           </Button>
         </div>
@@ -235,8 +242,8 @@ function LeadSide({
   company: string | null;
 }) {
   return (
-    <div className="space-y-1">
-      <p className="text-sm font-medium">{name}</p>
+    <div className="min-w-0 space-y-1 rounded-2xl bg-sunken p-3">
+      <p className="truncate text-sm font-bold">{name}</p>
       {company && (
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Building2 className="h-3 w-3" /> {company}

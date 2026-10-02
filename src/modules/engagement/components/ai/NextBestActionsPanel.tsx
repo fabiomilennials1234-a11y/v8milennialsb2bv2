@@ -33,15 +33,38 @@ import { ptBR } from "date-fns/locale";
 
 // ── Action type config ────────────────────────────────────────
 
+// `color` = fundo + texto do chip do ícone. Só tokens: vale no escuro.
 const ACTION_CONFIG: Record<ActionType, { icon: typeof Phone; color: string; label: string }> = {
-  call: { icon: Phone, color: "text-blue-500", label: "Ligar" },
-  email: { icon: Mail, color: "text-purple-500", label: "Email" },
-  meeting: { icon: Calendar, color: "text-emerald-500", label: "Reuniao" },
-  follow_up: { icon: Clock, color: "text-amber-500", label: "Follow-up" },
-  send_proposal: { icon: FileText, color: "text-primary", label: "Proposta" },
-  escalate: { icon: AlertCircle, color: "text-red-500", label: "Escalar" },
-  other: { icon: MoreHorizontal, color: "text-muted-foreground", label: "Outro" },
+  call: { icon: Phone, color: "bg-insights/10 text-insights", label: "Ligar" },
+  email: { icon: Mail, color: "bg-silver/15 text-silver", label: "E-mail" },
+  meeting: { icon: Calendar, color: "bg-success/10 text-success", label: "Reunião" },
+  follow_up: { icon: Clock, color: "bg-warning/15 text-warning-strong", label: "Follow-up" },
+  send_proposal: { icon: FileText, color: "bg-primary-soft text-primary-soft-foreground", label: "Proposta" },
+  escalate: { icon: AlertCircle, color: "bg-destructive/10 text-destructive", label: "Escalar" },
+  other: { icon: MoreHorizontal, color: "bg-muted text-muted-foreground", label: "Outro" },
 };
+
+/** Cabeçalho de cartão do V5: ícone em chip, título 15 px, contador opcional. */
+function PanelTitle({ count, muted = false }: { count?: number; muted?: boolean }) {
+  return (
+    <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+      <span
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center rounded-[10px]",
+          muted ? "bg-muted text-foreground/60" : "bg-primary-soft text-primary-soft-foreground",
+        )}
+      >
+        <Zap className="h-4 w-4" strokeWidth={2.2} />
+      </span>
+      Próximas ações
+      {typeof count === "number" && (
+        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+          {count} pendente{count !== 1 ? "s" : ""}
+        </span>
+      )}
+    </CardTitle>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -59,14 +82,11 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Proximas acoes
-          </CardTitle>
+          <PanelTitle />
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 w-full" />
+            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
           ))}
         </CardContent>
       </Card>
@@ -77,16 +97,15 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4 text-muted-foreground" />
-            Proximas acoes
-          </CardTitle>
+          <PanelTitle muted />
         </CardHeader>
         <CardContent>
-          <div className="text-center py-6">
-            <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Nenhuma acao recomendada no momento.
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-semibold">
+              Nenhuma ação recomendada no momento.
             </p>
           </div>
         </CardContent>
@@ -97,15 +116,7 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Proximas acoes
-          </span>
-          <Badge variant="outline" className="text-xs font-normal">
-            {actions.length} pendente{actions.length !== 1 ? "s" : ""}
-          </Badge>
-        </CardTitle>
+        <PanelTitle count={actions.length} />
       </CardHeader>
       <CardContent>
         <div className={cn("space-y-2", !compact && "max-h-[500px] overflow-y-auto pr-1")}>
@@ -122,25 +133,25 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -100 }}
                   transition={{ delay: idx * 0.03 }}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/50 transition-colors"
+                  className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-3 transition-colors hover:bg-muted/40"
                 >
                   {/* Icon */}
-                  <div className={cn("p-2 rounded-lg bg-muted shrink-0", config.color)}>
-                    <Icon className="w-4 h-4" />
+                  <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-[10px]", config.color)}>
+                    <Icon className="h-4 w-4" />
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{action.title}</p>
+                        <p className="truncate text-sm font-semibold">{action.title}</p>
                         {action.lead_name && (
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
                             {action.lead_name}
                           </p>
                         )}
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">
+                      <Badge variant="soft" className="shrink-0 px-2 py-0 text-[10px]">
                         {config.label}
                       </Badge>
                     </div>
@@ -163,7 +174,7 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
                           </span>
                         )}
                         {action.priority >= 8 && (
-                          <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-500 border-red-500/20">
+                          <Badge variant="soft" className="bg-destructive/10 px-2 py-0 text-[10px] font-bold text-destructive">
                             Urgente
                           </Badge>
                         )}
@@ -174,8 +185,9 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
                           onClick={() => dismissAction.mutate(action.id)}
+                          aria-label="Dispensar"
                           disabled={dismissAction.isPending}
                           title="Dispensar"
                         >
@@ -184,8 +196,9 @@ export function NextBestActionsPanel({ limit = 10, compact = false }: NextBestAc
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-emerald-600 hover:text-emerald-500 hover:bg-emerald-500/10"
+                          className="h-7 w-7 rounded-lg text-success hover:bg-success/10 hover:text-success"
                           onClick={() => completeAction.mutate(action.id)}
+                          aria-label="Concluir"
                           disabled={completeAction.isPending}
                           title="Concluir"
                         >

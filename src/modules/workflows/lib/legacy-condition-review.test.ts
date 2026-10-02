@@ -18,6 +18,7 @@ describe("legacy condition review", () => {
       condition("text", { field: "name", operator: "contains", value: "ÁGUA" }),
       condition("empty", { field: "origin", operator: "is_empty", value: "texto ignorado" }),
       condition("zero", { field: "score", operator: "equals", value: "0" }),
+      condition("value", { field: "deal_value", operator: "equals", value: "0" }),
       condition("tag", { field: "tags", operator: "has_tag", value: "VIP" }),
       condition("custom", { field: "custom.Setor", operator: "equals", value: "Indústria" }),
       condition("stage", { field: "stage", operator: "in_stage", value: "proposta" }),
@@ -35,7 +36,8 @@ describe("legacy condition review", () => {
     expect(review.items.map(item => [item.nodeId, item.kind])).toEqual([
       ["text", "semantic_change"],
       ["empty", "semantic_change"],
-      ["zero", "semantic_change"],
+      ["zero", "unsupported"],
+      ["value", "semantic_change"],
       ["tag", "requires_mapping"],
       ["custom", "requires_mapping"],
       ["stage", "requires_mapping"],
@@ -43,7 +45,11 @@ describe("legacy condition review", () => {
       ["regex", "unsupported"],
       ["hours", "preserved_wait"],
     ]);
-    expect(review.items.find(item => item.nodeId === "zero")?.details).toContain("ausência como zero");
+    // Score do lead foi descontinuado (CTO, 02/10): a revisão não converte para
+    // um campo que não é mais oferecido — bloqueia e pede a troca explícita.
+    expect(review.items.find(item => item.nodeId === "zero")?.details).toContain("descontinuados");
+    expect(review.items.find(item => item.nodeId === "zero")?.blocksPublication).toBe(true);
+    expect(review.items.find(item => item.nodeId === "value")?.details).toContain("ausência como zero");
     expect(review.items.find(item => item.nodeId === "empty")?.details).toContain("Vazio continua distinto");
     expect(review.items.find(item => item.nodeId === "tag")?.details).toContain("nome não prova identidade");
     expect(review.items.find(item => item.nodeId === "hours")?.details).toContain("pausando");

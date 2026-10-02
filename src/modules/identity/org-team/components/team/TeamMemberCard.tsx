@@ -10,7 +10,7 @@ import {
   Target,
   Flame
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,25 +47,27 @@ interface TeamMemberCardProps {
   index?: number;
 }
 
-const roleConfig = {
+// V5: o papel vira tom de Badge — admin em ouro suave (igual à tabela da
+// Equipe), membro neutro, SDR/Closer informativos.
+const roleConfig: Record<string, { label: string; variant: BadgeProps["variant"]; icon: typeof Calendar }> = {
   sdr: {
     label: "Vendedor",
-    color: "bg-chart-5/10 text-chart-5 border-chart-5/20",
+    variant: "info",
     icon: Calendar,
   },
   closer: {
     label: "Vendedor",
-    color: "bg-primary/10 text-primary border-primary/20",
+    variant: "info",
     icon: DollarSign,
   },
   member: {
     label: "Membro",
-    color: "bg-muted text-muted-foreground border-border",
+    variant: "soft",
     icon: Calendar,
   },
   admin: {
     label: "Admin",
-    color: "bg-success/10 text-success border-success/20",
+    variant: "gold",
     icon: Star,
   },
 };
@@ -87,7 +89,7 @@ export function TeamMemberCard({
   onDelete,
   index = 0,
 }: TeamMemberCardProps) {
-  const config = roleConfig[member.role as keyof typeof roleConfig] || roleConfig.sdr;
+  const config = roleConfig[member.role] || roleConfig.sdr;
   const Icon = config.icon;
 
   const totalOTE = (Number(member.ote_base) || 0) + (Number(member.ote_bonus) || 0);
@@ -99,17 +101,17 @@ export function TeamMemberCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -2 }}
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-card p-5 transition-all",
-        isTopPerformer && "border-primary/50 shadow-lg shadow-primary/10",
+        "relative overflow-hidden rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo transition-shadow hover:shadow-relevo-alto",
+        isTopPerformer && "border-primary/50",
         !member.is_active && "opacity-60"
       )}
     >
       {/* Top performer badge */}
       {isTopPerformer && (
         <div className="absolute top-0 right-0">
-          <div className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-xl">
+          <div className="rounded-bl-xl bg-primary px-3 py-1 text-xs font-bold tabular-nums text-primary-foreground">
             #{stats?.ranking}
           </div>
         </div>
@@ -125,28 +127,28 @@ export function TeamMemberCard({
             size="lg"
             className="h-14 w-14 rounded-xl"
             fallbackClassName={cn(
-              "rounded-xl",
+              "rounded-xl font-bold",
               member.is_active
-                ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground"
+                ? "bg-primary-soft text-primary-soft-foreground"
                 : "bg-muted text-muted-foreground"
             )}
           />
 
           {/* Info */}
           <div>
-            <h3 className="font-semibold text-base flex items-center gap-2">
+            <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
               {member.name}
               {goalProgress >= 100 && (
                 <Trophy className="w-4 h-4 text-primary" />
               )}
             </h3>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className={config.color}>
+              <Badge variant={config.variant}>
                 <Icon className="w-3 h-3 mr-1" />
                 {config.label}
               </Badge>
               {!member.is_active && (
-                <Badge variant="outline" className="bg-muted text-muted-foreground">
+                <Badge variant="soft" className="text-muted-foreground">
                   Inativo
                 </Badge>
               )}
@@ -179,20 +181,20 @@ export function TeamMemberCard({
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="text-center p-2 rounded-lg bg-muted/50">
-            <p className="text-lg font-bold text-foreground">
+          <div className="rounded-xl bg-sunken p-2 text-center">
+            <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em] text-foreground">
               {(member as any).metric_type === "sales" ? formatCurrency(stats.sales) : stats.meetings}
             </p>
             <p className="text-xs text-muted-foreground">
               {(member as any).metric_type === "sales" ? "Vendas" : "Reuniões"}
             </p>
           </div>
-          <div className="text-center p-2 rounded-lg bg-muted/50">
-            <p className="text-lg font-bold text-foreground">{goalProgress}%</p>
+          <div className="rounded-xl bg-sunken p-2 text-center">
+            <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em] text-foreground">{goalProgress}%</p>
             <p className="text-xs text-muted-foreground">Meta</p>
           </div>
-          <div className="text-center p-2 rounded-lg bg-muted/50">
-            <p className="text-lg font-bold text-foreground">
+          <div className="rounded-xl bg-sunken p-2 text-center">
+            <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em] text-foreground">
               {formatCurrency(totalOTE)}
             </p>
             <p className="text-xs text-muted-foreground">OTE</p>
@@ -206,11 +208,11 @@ export function TeamMemberCard({
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground flex items-center gap-1">
               <Target className="w-3 h-3" />
-              Progresso da Meta
+              Progresso da meta
             </span>
             <span
               className={cn(
-                "font-medium",
+                "font-semibold tabular-nums",
                 goalProgress >= 100 ? "text-success" : "text-foreground"
               )}
             >
@@ -222,7 +224,7 @@ export function TeamMemberCard({
             className="h-2"
           />
           {goalProgress >= 80 && goalProgress < 100 && (
-            <div className="flex items-center gap-1 text-xs text-orange-500">
+            <div className="flex items-center gap-1 text-xs text-warning-strong">
               <Flame className="w-3 h-3" />
               <span>Quase lá!</span>
             </div>
@@ -235,11 +237,11 @@ export function TeamMemberCard({
         <div className="grid grid-cols-2 gap-4 text-xs">
           <div>
             <p className="text-muted-foreground">Comissão Rec.</p>
-            <p className="font-medium">{member.commission_mrr_percent || 0}%</p>
+            <p className="font-semibold tabular-nums">{member.commission_mrr_percent || 0}%</p>
           </div>
           <div>
             <p className="text-muted-foreground">Comissão Projeto</p>
-            <p className="font-medium">{member.commission_projeto_percent || 0}%</p>
+            <p className="font-semibold tabular-nums">{member.commission_projeto_percent || 0}%</p>
           </div>
         </div>
       </div>

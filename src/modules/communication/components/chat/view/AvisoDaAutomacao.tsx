@@ -61,10 +61,10 @@ export function AvisoDaAutomacao({ telefone, caixaAberta }: AvisoDaAutomacaoProp
 
   return (
     <div
-      className="flex items-start gap-2 border-b border-border/60 bg-amber-500/[0.06] px-4 py-2"
+      className="flex items-start gap-2 border-b border-warning/25 bg-warning/10 px-4 py-2"
       role="status"
     >
-      <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+      <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-strong" aria-hidden />
       <p className="text-[12px] leading-snug text-muted-foreground">
         Uma automação responderia a este contato por{" "}
         <span className="font-medium text-foreground">{automacao.instanceName}</span> — foi por

@@ -11,7 +11,7 @@ function GotoNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="goto"
-      icon={<CornerDownRight className="w-5 h-5 text-teal-500" />}
+      icon={<CornerDownRight />}
       title={nodeData.label || "Ir Para"}
       subtitle={nodeData.targetNodeLabel || "Selecione o nó destino"}
       selected={selected}

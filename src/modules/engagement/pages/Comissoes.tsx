@@ -12,6 +12,8 @@ import {
   Percent,
   Lock,
   Trophy,
+  CalendarCheck,
+  Hourglass,
 } from "lucide-react";
 import {
   Select,
@@ -24,6 +26,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiTile } from "@/components/ui/bento";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useCommissions, useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 import { useFeaturePermission } from "@/modules/identity";
@@ -60,8 +64,8 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
 
   if (isLoading) {
     return (
-      <Card className="glass-card">
-        <CardContent className="p-6">
+      <Card>
+        <CardContent className="p-5">
           <Skeleton className="h-4 w-32 mb-4" />
           <Skeleton className="h-8 w-24 mb-2" />
           <Skeleton className="h-3 w-full" />
@@ -70,7 +74,7 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
     );
   }
 
-  if (isError) return <Alert variant="destructive">
+  if (isError) return <Alert variant="destructive" className="rounded-2xl bg-destructive/5">
     <AlertTitle>Apuração indisponível</AlertTitle>
     <AlertDescription>Não foi possível apurar a comissão de {memberName}.</AlertDescription>
     <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>Tentar novamente</Button>
@@ -87,33 +91,33 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <Card className="glass-card h-full">
+      <Card className="h-full">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <UserAvatar
                 name={memberName}
                 avatarUrl={avatarUrl}
                 size="md"
-                fallbackClassName="bg-primary/10 text-primary"
+                fallbackClassName="bg-primary-soft text-primary-soft-foreground"
               />
-              <div>
-                <CardTitle className="text-base">{memberName}</CardTitle>
-                <Badge variant="outline" className="text-xs mt-0.5">
+              <div className="min-w-0">
+                <CardTitle className="truncate text-[15px] tracking-[-0.02em]">{memberName}</CardTitle>
+                <Badge variant="soft" className="text-xs mt-1">
                   {memberRole}
                 </Badge>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-success">
+            <div className="shrink-0 text-right">
+              <p className={summary.totalEarnings == null ? "text-sm font-bold text-warning-strong" : "text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-success"}>
                 {summary.totalEarnings == null ? "Apuração pendente" : formatCurrency(summary.totalEarnings)}
               </p>
-              <p className="text-xs text-muted-foreground">Total do mês</p>
+              <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Total do mês</p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {summary.commissionStatus === "pending" && <Alert role="status">
+          {summary.commissionStatus === "pending" && <Alert role="status" className="rounded-2xl border-warning/40 bg-warning/10">
             <AlertTitle>Comissão pendente de conferência</AlertTitle>
             <AlertDescription>{summary.pendingCount} venda(s), total de {formatCurrency(summary.pendingRevenue)}, aguardando conferência da comissão.</AlertDescription>
           </Alert>}
@@ -121,27 +125,27 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Progresso da Meta</span>
-              <span className="font-medium">{summary.goalConfigured ? `${summary.goalProgress.toFixed(0)}%` : "Meta não configurada"}</span>
+              <span className="font-bold tabular-nums">{summary.goalConfigured ? `${summary.goalProgress.toFixed(0)}%` : "Meta não configurada"}</span>
             </div>
             {summary.goalConfigured && <Progress value={Math.min(summary.goalProgress, 100)} className="h-2" />}
             <div className="flex items-center gap-2 text-xs">
-              {!summary.goalConfigured ? <span>Realizado no período: {summary.goalCurrent}. Configure a meta para apurar o bônus.</span> : summary.goalProgress >= 120 ? (
-                <Badge className="bg-success/20 text-success border-success/30">
+              {!summary.goalConfigured ? <span className="text-muted-foreground">Realizado no período: {summary.goalCurrent}. Configure a meta para apurar o bônus.</span> : summary.goalProgress >= 120 ? (
+                <Badge variant="success">
                   <TrendingUp className="w-3 h-3 mr-1" />
                   1.2x Bônus
                 </Badge>
               ) : summary.goalProgress >= 100 ? (
-                <Badge className="bg-primary/20 text-primary border-primary/30">
+                <Badge variant="gold">
                   <Check className="w-3 h-3 mr-1" />
                   1.0x Bônus
                 </Badge>
               ) : summary.goalProgress >= 70 ? (
-                <Badge className="bg-chart-5/20 text-chart-5 border-chart-5/30">
+                <Badge variant="warning">
                   <AlertCircle className="w-3 h-3 mr-1" />
                   0.7x Bônus
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-muted-foreground">
+                <Badge variant="soft" className="text-muted-foreground">
                   Abaixo de 70%
                 </Badge>
               )}
@@ -149,30 +153,30 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
           </div>
 
           {/* Breakdown */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+          <div className="grid grid-cols-2 gap-3 rounded-2xl bg-sunken p-3">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Wallet className="w-3 h-3" /> Base Fixa
               </p>
-              <p className="text-sm font-medium">{formatCurrency(summary.oteBase)}</p>
+              <p className="text-sm font-bold tabular-nums">{formatCurrency(summary.oteBase)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <PiggyBank className="w-3 h-3" /> {summary.goalConfigured ? `Bônus (${bonusMultiplier}x)` : "Bônus por meta"}
               </p>
-              <p className="text-sm font-medium">{!summary.goalConfigured && summary.oteBonus > 0 ? "Pendente de meta" : formatCurrency(summary.calculatedBonus)}</p>
+              <p className="text-sm font-bold tabular-nums">{!summary.goalConfigured && summary.oteBonus > 0 ? "Pendente de meta" : formatCurrency(summary.calculatedBonus)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Percent className="w-3 h-3" /> Comissão Rec.
               </p>
-              <p className="text-sm font-medium text-chart-3">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionMRR)}</p>
+              <p className="text-sm font-bold tabular-nums text-chart-3">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionMRR)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Percent className="w-3 h-3" /> Comissão Projeto
               </p>
-              <p className="text-sm font-medium text-chart-4">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionProjeto)}</p>
+              <p className="text-sm font-bold tabular-nums text-chart-4">{summary.commissionStatus === "pending" ? "Apuração pendente" : formatCurrency(summary.commissionProjeto)}</p>
             </div>
           </div>
 
@@ -180,18 +184,18 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
           {summary.campaignBonuses > 0 && (
             <div className="pt-2 border-t border-border">
               <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                <Trophy className="w-3 h-3 text-primary" /> Bônus de Campanhas
+                <Trophy className="w-3 h-3 text-primary-soft-foreground" /> Bônus de Campanhas
               </p>
               <div className="space-y-1">
                 {summary.campaignBonusList.map((cb, idx) => (
                   <div key={idx} className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground truncate max-w-[140px]">{cb.campaignName}</span>
-                    <span className="font-medium text-primary">{formatCurrency(cb.bonusValue)}</span>
+                    <span className="font-semibold tabular-nums text-primary-soft-foreground">{formatCurrency(cb.bonusValue)}</span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between text-sm font-semibold pt-1 border-t border-border/50">
+                <div className="flex items-center justify-between text-sm font-bold pt-1 border-t border-border/50">
                   <span>Total Campanhas</span>
-                  <span className="text-primary">{formatCurrency(summary.campaignBonuses)}</span>
+                  <span className="tabular-nums text-primary-soft-foreground">{formatCurrency(summary.campaignBonuses)}</span>
                 </div>
               </div>
             </div>
@@ -199,8 +203,8 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
 
           {/* Sales breakdown */}
           <div className="pt-2 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-2">Vendas do mês: {formatCurrency(summary.salesRevenue)}</p>
-            <div className="flex items-center gap-4 text-sm">
+            <p className="text-xs text-muted-foreground mb-2 tabular-nums">Vendas do mês: {formatCurrency(summary.salesRevenue)}</p>
+            <div className="flex items-center gap-4 text-sm font-semibold tabular-nums">
               <span className="text-chart-3">
                 Rec.: {formatCurrency(summary.totalMRR)}
               </span>
@@ -270,81 +274,100 @@ export default function Comissoes() {
   // Check if user has no team member record
   const hasNoAccess = !canViewAll && !currentMember && !isLoading;
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Comissões
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Acompanhe ganhos da equipe com OTE e comissões
-          </p>
-        </div>
+  const showVendasTab = canViewAll || (currentMember as any)?.metric_type === "sales";
+  const showReunioesTab = canViewAll || (currentMember as any)?.metric_type === "meetings";
 
-        <div className="flex items-center gap-2">
-          <Select 
-            value={selectedMonth.toString()} 
-            onValueChange={(v) => setSelectedMonth(Number(v))}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month, index) => (
-                <SelectItem key={index} value={(index + 1).toString()}>
-                  {month}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select 
-            value={selectedYear.toString()} 
-            onValueChange={(v) => setSelectedYear(Number(v))}
-          >
-            <SelectTrigger className="w-[100px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map(year => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  return (
+    // V5: a página inteira mora no <Tabs> para a pílula ir ao cabeçalho
+    // (Radix só exige lista e conteúdos sob o mesmo Root). Mesmos values e o
+    // mesmo `defaultValue` calculado por papel.
+    <Tabs defaultValue={defaultTab} className="w-full space-y-5">
+      <PageHeader
+        title="Comissões"
+        subtitle="Acompanhe ganhos da equipe com OTE e comissões"
+        actions={
+          <>
+            <Select 
+              value={selectedMonth.toString()} 
+              onValueChange={(v) => setSelectedMonth(Number(v))}
+            >
+              <SelectTrigger className="w-[140px]" aria-label="Mês">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month, index) => (
+                  <SelectItem key={index} value={(index + 1).toString()}>
+                    {month}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select 
+              value={selectedYear.toString()} 
+              onValueChange={(v) => setSelectedYear(Number(v))}
+            >
+              <SelectTrigger className="w-[100px]" aria-label="Ano">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map(year => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+        tabs={
+          // A lista fica mesmo com uma aba só ("Minha Comissão"): o
+          // `defaultValue` é decidido antes de o membro carregar, e o gatilho
+          // é a única saída de quem nasce na aba errada (ver relatório).
+          !hasNoAccess ? (
+            <TabsList variant="pill" aria-label="Comissões por time">
+              {showVendasTab && (
+                <TabsTrigger value="vendas">
+                  <Users className="h-3.5 w-3.5" />
+                  {canViewAll ? `Vendas (${visibleVendas.length})` : "Minha Comissão"}
+                </TabsTrigger>
+              )}
+              {showReunioesTab && (
+                <TabsTrigger value="reunioes">
+                  <Users className="h-3.5 w-3.5" />
+                  {canViewAll ? `Reuniões (${visibleReunioes.length})` : "Minha Comissão"}
+                </TabsTrigger>
+              )}
+            </TabsList>
+          ) : undefined
+        }
+      />
 
       {/* OTE Rules Card */}
-      <Card className="glass-card border-primary/20">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Target className="w-4 h-4 text-primary" />
+          <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Target className="h-4 w-4" strokeWidth={2.2} />
+            </span>
             Regras de OTE (On-Target Earnings)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-muted">{"< 70%"}</Badge>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm">
+            <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
+              <Badge variant="soft" className="tabular-nums">{"< 70%"}</Badge>
               <span className="text-muted-foreground">0x bônus</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-chart-5/20 text-chart-5 border-chart-5/30">70-99%</Badge>
+            <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
+              <Badge variant="warning" className="tabular-nums">70-99%</Badge>
               <span className="text-muted-foreground">0.7x bônus</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-primary/20 text-primary border-primary/30">100-119%</Badge>
+            <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
+              <Badge variant="gold" className="tabular-nums">100-119%</Badge>
               <span className="text-muted-foreground">1.0x bônus</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-success/20 text-success border-success/30">≥ 120%</Badge>
+            <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
+              <Badge variant="success" className="tabular-nums">≥ 120%</Badge>
               <span className="text-muted-foreground">1.2x bônus</span>
             </div>
           </div>
@@ -357,48 +380,46 @@ export default function Comissoes() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="stat-card"
+            className="min-w-0"
           >
-            <p className="stat-card-label">Total Vendas</p>
-            <p className="text-xl font-bold">{visibleVendas.length}</p>
+            <KpiTile className="h-full" label="Total Vendas" value={visibleVendas.length} icon={TrendingUp} tone="neutral" />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="stat-card"
+            className="min-w-0"
           >
-            <p className="stat-card-label">Total Reuniões</p>
-            <p className="text-xl font-bold">{visibleReunioes.length}</p>
+            <KpiTile className="h-full" label="Total Reuniões" value={visibleReunioes.length} icon={CalendarCheck} tone="neutral" />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="stat-card"
+            className="min-w-0"
           >
-            <p className="stat-card-label">Comissões Pagas</p>
-            <p className="text-xl font-bold text-success">{formatCurrency(totalPaidCommissions)}</p>
+            <KpiTile className="h-full" label="Comissões Pagas" value={formatCurrency(totalPaidCommissions)} icon={Wallet} tone="good" />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="stat-card"
+            className="min-w-0"
           >
-            <p className="stat-card-label">Comissões Pendentes</p>
-            <p className="text-xl font-bold text-chart-5">{formatCurrency(totalPendingCommissions)}</p>
+            <KpiTile className="h-full" label="Comissões Pendentes" value={formatCurrency(totalPendingCommissions)} icon={Hourglass} tone="info" />
           </motion.div>
         </div>
       )}
 
       {/* No access message */}
       {hasNoAccess && (
-        <Card className="glass-card border-destructive/30">
-          <CardContent className="py-12 text-center">
-            <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-lg font-medium mb-2">Acesso Restrito</p>
-            <p className="text-muted-foreground">
+        <Card className="border-destructive/30">
+          <CardContent className="flex flex-col items-center py-12 text-center">
+            <span className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+              <Lock className="h-5 w-5" />
+            </span>
+            <p className="mb-1 text-sm font-semibold">Acesso Restrito</p>
+            <p className="text-[13px] text-muted-foreground">
               Você não possui um registro de membro da equipe associado à sua conta.
             </p>
           </CardContent>
@@ -407,32 +428,17 @@ export default function Comissoes() {
 
       {/* Commission Cards by Role */}
       {!hasNoAccess && (
-        <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className={`grid w-full max-w-md ${canViewAll ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {(canViewAll || (currentMember as any)?.metric_type === "sales") && (
-              <TabsTrigger value="vendas" className="gap-2">
-                <Users className="w-4 h-4" />
-                {canViewAll ? `Vendas (${visibleVendas.length})` : "Minha Comissão"}
-              </TabsTrigger>
-            )}
-            {(canViewAll || (currentMember as any)?.metric_type === "meetings") && (
-              <TabsTrigger value="reunioes" className="gap-2">
-                <Users className="w-4 h-4" />
-                {canViewAll ? `Reuniões (${visibleReunioes.length})` : "Minha Comissão"}
-              </TabsTrigger>
-            )}
-          </TabsList>
-
-          <TabsContent value="vendas" className="mt-4">
+        <>
+          <TabsContent value="vendas" className="mt-0">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map(i => (
-                  <Skeleton key={i} className="h-[300px]" />
+                  <Skeleton key={i} className="h-[300px] rounded-card" />
                 ))}
               </div>
             ) : visibleVendas.length === 0 ? (
-              <Card className="glass-card">
-                <CardContent className="py-8 text-center text-muted-foreground">
+              <Card>
+                <CardContent className="py-8 text-center text-[13px] text-muted-foreground">
                   {canViewAll ? "Nenhum membro de vendas cadastrado" : "Sem dados de comissão"}
                 </CardContent>
               </Card>
@@ -453,16 +459,16 @@ export default function Comissoes() {
             )}
           </TabsContent>
 
-          <TabsContent value="reunioes" className="mt-4">
+          <TabsContent value="reunioes" className="mt-0">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map(i => (
-                  <Skeleton key={i} className="h-[300px]" />
+                  <Skeleton key={i} className="h-[300px] rounded-card" />
                 ))}
               </div>
             ) : visibleReunioes.length === 0 ? (
-              <Card className="glass-card">
-                <CardContent className="py-8 text-center text-muted-foreground">
+              <Card>
+                <CardContent className="py-8 text-center text-[13px] text-muted-foreground">
                   {canViewAll ? "Nenhum membro de reuniões cadastrado" : "Sem dados de comissão"}
                 </CardContent>
               </Card>
@@ -482,8 +488,8 @@ export default function Comissoes() {
               </div>
             )}
           </TabsContent>
-        </Tabs>
+        </>
       )}
-    </div>
+    </Tabs>
   );
 }

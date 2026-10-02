@@ -289,9 +289,11 @@ function ChatView({
 
   if ((!selectedContact && !selectedPhone) || !instanceId) {
     return (
-      <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
-        <WifiOff className="w-10 h-10 opacity-30" />
-        <p className="text-sm">Selecione uma conversa</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-sunken text-muted-foreground">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-card shadow-relevo">
+          <WifiOff className="h-5 w-5 opacity-60" />
+        </span>
+        <p className="text-sm font-semibold">Selecione uma conversa</p>
       </div>
     );
   }
@@ -330,15 +332,15 @@ function ChatView({
       {isWaitingHuman && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-300 shrink-0"
+          className="flex shrink-0 items-center justify-between gap-3 border-b border-warning/30 bg-warning/15 px-4 py-2 text-warning-strong"
         >
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <UserPlus className="w-4 h-4 shrink-0" aria-hidden />
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
             IA pediu ajuda. Assuma a conversa.
           </div>
           <button
             type="button"
-            className="text-xs font-semibold underline underline-offset-2 hover:no-underline shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 rounded"
+            className="h-8 shrink-0 rounded-full bg-tinta px-3.5 text-xs font-semibold text-tinta-foreground transition-colors hover:bg-tinta-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 dark:bg-foreground dark:text-background dark:hover:bg-foreground/90"
             onClick={() => { void markHumanActive(); }}
             disabled={takeoverMutating}
           >
@@ -1368,9 +1370,11 @@ export function ChatShellWithContext() {
   // Não é mais "nenhuma instância WhatsApp": uma org pode ter só Instagram.
   if (!boxes.length) {
     return (
-      <div className="flex h-full items-center justify-center flex-col gap-2 text-muted-foreground">
-        <WifiOff className="w-8 h-8 opacity-40" />
-        <p className="text-sm">Nenhuma caixa de entrada disponível</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-card shadow-relevo">
+          <WifiOff className="h-5 w-5 opacity-60" />
+        </span>
+        <p className="text-sm font-semibold">Nenhuma caixa de entrada disponível</p>
       </div>
     );
   }

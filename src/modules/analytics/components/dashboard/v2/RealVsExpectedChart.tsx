@@ -57,27 +57,29 @@ function RealVsExpectedChartBase({ dailySales, goalTarget, month, year }: RealVs
   }, [dailySales, goalTarget, month, year]);
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".25s" }}>
-      <div className="flex items-center justify-between">
-        <span className="flex items-baseline gap-1.5">
-          <span className="cmd-lbl">Real vs esperado — faturamento</span>
+    // Corpo da janela "Realizado versus esperado" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Faturamento</span>
           <span
-            className="text-[10px] font-semibold text-muted-foreground/50"
+            className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
             title="A meta segue mensal mesmo com período personalizado selecionado."
           >
-            · mês
+            mês
           </span>
         </span>
         <span
           className={cn(
-            "inline-flex items-center rounded-[7px] px-[7px] py-[2.5px] text-[11px] font-bold",
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
             deltaPp >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
           )}
         >
           {deltaPp >= 0 ? `+${deltaPp}pp à frente` : `${deltaPp}pp atrás`}
         </span>
       </div>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-3.5">
+      <div className="min-h-3 flex-1" aria-hidden />
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="shrink-0">
         <defs>
           <linearGradient id="cmd-rve-area" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="hsl(var(--primary))" stopOpacity=".22" />
@@ -98,13 +100,13 @@ function RealVsExpectedChartBase({ dailySales, goalTarget, month, year }: RealVs
               className="cmd-drawline"
               style={{ strokeDasharray: 700, strokeDashoffset: 700, animationDelay: ".5s" }}
             />
-            <circle cx={lastX} cy={lastY} r={4.5} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} className="cmd-fadein" style={{ animationDelay: "1.4s" }} />
-            <text x={Math.min(lastX + 7, W - 56)} y={Math.max(lastY - 8, 12)} className="fill-foreground" style={{ font: "800 11px Inter" }}>
+            <circle cx={lastX} cy={lastY} r={4.5} fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth={2} className="cmd-fadein" style={{ animationDelay: "1.4s" }} />
+            <text x={Math.min(lastX + 7, W - 56)} y={Math.max(lastY - 8, 12)} className="fill-foreground" style={{ font: "800 11px 'Plus Jakarta Sans', Inter, sans-serif" }}>
               {lastLabel}
             </text>
           </>
         )}
-        <text x={W - 96} y={Math.max(PAD + 22, 24)} className="fill-muted-foreground/70" style={{ font: "600 10px Inter" }}>
+        <text x={W - 96} y={Math.max(PAD + 22, 24)} className="fill-muted-foreground/70" style={{ font: "600 10px 'Plus Jakarta Sans', Inter, sans-serif" }}>
           linha esperada
         </text>
       </svg>

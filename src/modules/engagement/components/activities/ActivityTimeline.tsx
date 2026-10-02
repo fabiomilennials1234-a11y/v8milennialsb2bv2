@@ -34,12 +34,13 @@ const TYPE_CONFIG: Record<
   ActivityType,
   { icon: React.ElementType; label: string; color: string }
 > = {
-  call: { icon: Phone, label: "Ligacao", color: "bg-blue-500/20 text-blue-500" },
-  email: { icon: Mail, label: "Email", color: "bg-purple-500/20 text-purple-500" },
-  meeting: { icon: Calendar, label: "Reuniao", color: "bg-green-500/20 text-green-500" },
-  note: { icon: StickyNote, label: "Nota", color: "bg-yellow-500/20 text-yellow-500" },
-  task: { icon: CheckSquare, label: "Tarefa", color: "bg-orange-500/20 text-orange-500" },
-  whatsapp_msg: { icon: MessageSquare, label: "WhatsApp", color: "bg-emerald-500/20 text-emerald-500" },
+  // Só tokens: a cor separa o TIPO de relance e precisa valer no escuro.
+  call: { icon: Phone, label: "Ligação", color: "bg-insights/10 text-insights" },
+  email: { icon: Mail, label: "E-mail", color: "bg-silver/15 text-silver" },
+  meeting: { icon: Calendar, label: "Reunião", color: "bg-primary-soft text-primary-soft-foreground" },
+  note: { icon: StickyNote, label: "Nota", color: "bg-warning/15 text-warning-strong" },
+  task: { icon: CheckSquare, label: "Tarefa", color: "bg-foreground/[.07] text-foreground/80" },
+  whatsapp_msg: { icon: MessageSquare, label: "WhatsApp", color: "bg-success/10 text-success" },
   system: { icon: Cpu, label: "Sistema", color: "bg-muted text-muted-foreground" },
 };
 
@@ -101,7 +102,7 @@ function CreateForm({ contactId, companyId, dealId, leadId }: CreateFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-4 p-3 rounded-lg border border-border bg-muted/30 space-y-3">
+    <form onSubmit={handleSubmit} className="mb-4 space-y-3 rounded-2xl bg-sunken p-3">
       <div className="flex gap-1.5 flex-wrap">
         {FORM_TYPES.map((t) => {
           const cfg = TYPE_CONFIG[t];
@@ -112,8 +113,8 @@ function CreateForm({ contactId, companyId, dealId, leadId }: CreateFormProps) {
               type="button"
               onClick={() => setType(t)}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                type === t ? cn(cfg.color, "ring-1 ring-current") : "bg-muted text-muted-foreground hover:text-foreground"
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                type === t ? cn(cfg.color, "ring-1 ring-current") : "bg-card text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className="w-3 h-3" />
@@ -127,12 +128,12 @@ function CreateForm({ contactId, companyId, dealId, leadId }: CreateFormProps) {
         placeholder="Assunto"
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
-        className="h-8 text-sm"
+        className="h-9 text-sm"
         autoFocus
       />
 
       <Textarea
-        placeholder="Descricao (opcional)"
+        placeholder="Descrição (opcional)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         className="min-h-[60px] text-sm resize-none"
@@ -171,30 +172,30 @@ function ActivityItem({ activity, isLast }: { activity: ActivityWithNames; isLas
       {/* Content */}
       <div className={cn("flex-1 min-w-0", isLast ? "pb-0" : "pb-3")}>
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-medium text-sm truncate">{activity.subject || config.label}</p>
+          <p className="truncate text-sm font-semibold">{activity.subject || config.label}</p>
 
           {activity.type === "task" && isCompleted && (
-            <Badge variant="outline" className="text-[10px] gap-1 text-green-500 border-green-500/30">
-              <CheckCircle2 className="w-2.5 h-2.5" />
-              Concluida
+            <Badge variant="success" className="gap-1 px-2 py-0 text-[10px]">
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              Concluída
             </Badge>
           )}
 
           {activity.type === "task" && activity.due_date && !isCompleted && (
-            <Badge variant="outline" className="text-[10px] gap-1 text-orange-500 border-orange-500/30">
-              <Clock className="w-2.5 h-2.5" />
+            <Badge variant="warning" className="gap-1 px-2 py-0 text-[10px] tabular-nums">
+              <Clock className="h-2.5 w-2.5" />
               {format(new Date(activity.due_date), "dd/MM", { locale: ptBR })}
             </Badge>
           )}
 
           {activity.outcome && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="soft" className="px-2 py-0 text-[10px]">
               {activity.outcome}
             </Badge>
           )}
 
           {activity.type === "call" && activity.duration_sec != null && activity.duration_sec > 0 && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[10px] tabular-nums text-muted-foreground">
               {formatDuration(activity.duration_sec)}
             </span>
           )}
@@ -261,9 +262,12 @@ export function ActivityTimeline({
       )}
 
       {activities.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">
-          Nenhuma atividade registrada
-        </p>
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <Clock className="h-5 w-5" />
+          </span>
+          <p className="text-sm font-semibold">Nenhuma atividade registrada</p>
+        </div>
       ) : (
         <div className="border-l-2 border-border ml-4">
           <div className="space-y-0 -ml-4">

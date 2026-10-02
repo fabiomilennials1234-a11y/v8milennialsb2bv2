@@ -25,9 +25,9 @@ function DelayNodeComponent({ id, data, selected }: NodeProps) {
   }
 
   const icon = nodeData.randomized ? (
-    <Shuffle className="w-5 h-5 text-purple-500" />
+    <Shuffle />
   ) : (
-    <Clock className="w-5 h-5 text-purple-500" />
+    <Clock />
   );
 
   return (

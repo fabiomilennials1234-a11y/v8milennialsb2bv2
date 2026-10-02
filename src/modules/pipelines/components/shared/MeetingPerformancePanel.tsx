@@ -82,15 +82,19 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
     >
       {/* Filtro de período */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        <div className="inline-flex rounded-lg border border-border bg-background/40 p-0.5">
+        {/* Alternador claro do V5 (o mesmo desenho do `TabsList variant="segmented"`). */}
+        <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]" role="group" aria-label="Período">
           {PERIODS.map((p) => (
             <button
               key={p.key}
+              type="button"
+              aria-pressed={period === p.key}
               onClick={() => setPeriod(p.key)}
               className={cn(
-                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+                "rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 period === p.key
-                  ? "bg-primary/15 text-primary"
+                  ? "bg-card text-foreground shadow-relevo"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -104,14 +108,16 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="h-7 w-[140px] text-xs"
+              className="h-8 w-[140px] rounded-full text-xs"
+              aria-label="Início do período"
             />
             <span className="text-xs text-muted-foreground">até</span>
             <Input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="h-7 w-[140px] text-xs"
+              className="h-8 w-[140px] rounded-full text-xs"
+              aria-label="Fim do período"
             />
           </div>
         )}
@@ -119,13 +125,13 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
 
       <div className="mt-4">
         {period === "periodo" && !range ? (
-          <p className="text-sm text-muted-foreground py-8 text-center border border-dashed border-border/50 rounded-lg">
+          <p className="rounded-2xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
             Escolha as datas de início e fim do período.
           </p>
         ) : isLoading ? (
-          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center border border-dashed border-border/50 rounded-lg">
+          <p className="rounded-2xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
             Nenhuma reunião no período.
           </p>
         ) : (
@@ -143,10 +149,10 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
                 <TableRow key={r.sellerId ?? "__none__"}>
                   <TableCell className="pl-1 font-medium">{nameOf(r.sellerId)}</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">{r.marcadas}</TableCell>
-                  <TableCell className="text-right tabular-nums text-emerald-500">
+                  <TableCell className="text-right tabular-nums text-success">
                     {r.compareceram}
                   </TableCell>
-                  <TableCell className="pr-1 text-right tabular-nums text-red-500">
+                  <TableCell className="pr-1 text-right tabular-nums text-destructive">
                     {r.naoCompareceram}
                   </TableCell>
                 </TableRow>
@@ -154,10 +160,10 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
               <TableRow className="border-t-2 border-border">
                 <TableCell className="pl-1 font-semibold text-muted-foreground">Total</TableCell>
                 <TableCell className="text-right font-bold tabular-nums">{totals.marcadas}</TableCell>
-                <TableCell className="text-right font-bold tabular-nums text-emerald-500">
+                <TableCell className="text-right font-bold tabular-nums text-success">
                   {totals.compareceram}
                 </TableCell>
-                <TableCell className="pr-1 text-right font-bold tabular-nums text-red-500">
+                <TableCell className="pr-1 text-right font-bold tabular-nums text-destructive">
                   {totals.naoCompareceram}
                 </TableCell>
               </TableRow>

@@ -158,10 +158,10 @@ export function MasterSidebar() {
       <div className="space-y-2 border-t border-sidebar-border p-3">
         <Button
           variant="ghost"
-          className="w-full justify-start border border-sidebar-border bg-white/5 text-sidebar-foreground hover:bg-white/10 hover:text-sidebar-foreground"
+          className="w-full justify-start rounded-xl border border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
           onClick={() => navigate("/")}
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4" />
           Voltar ao App
         </Button>
 

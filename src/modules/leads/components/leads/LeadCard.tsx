@@ -62,10 +62,12 @@ const corDaInicial = (nome?: string | null): string => {
   return `hsl(${h % 360} 55% 55%)`;
 };
 
+// Escala de urgência em TOKENS (V5): vermelho → âmbar → ouro suave → neutro.
+// Era vermelho/laranja/amarelo cru do Tailwind, que não seguia o tema escuro.
 const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
-  imediato:    { label: "Imediato",   className: "bg-red-500/10 text-red-600 border-red-500/30" },
-  "1-mes":     { label: "1 mês",      className: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
-  "2-3-meses": { label: "2-3 meses",  className: "bg-yellow-500/10 text-yellow-600 border-yellow-500/30" },
+  imediato:    { label: "Imediato",   className: "bg-destructive/10 text-destructive border-destructive/30" },
+  "1-mes":     { label: "1 mês",      className: "bg-warning/15 text-warning-strong border-warning/35" },
+  "2-3-meses": { label: "2-3 meses",  className: "bg-primary-soft text-primary-soft-foreground border-primary/25" },
   "6-meses":   { label: "6+ meses",   className: "bg-muted text-muted-foreground border-border" },
 };
 
@@ -274,16 +276,16 @@ function getDateIndicator(date: Date | null) {
     if (hours <= 2 && hours > 0) {
       return { label: `Em ${hours}h`, className: "bg-destructive/15 text-destructive border-destructive/30 animate-pulse" };
     }
-    return { label: "Hoje", className: "bg-orange-500/15 text-orange-600 border-orange-500/30" };
+    return { label: "Hoje", className: "bg-warning/15 text-warning-strong border-warning/35" };
   }
   if (isTomorrow(date)) {
-    return { label: "Amanhã", className: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30" };
+    return { label: "Amanhã", className: "bg-primary-soft text-primary-soft-foreground border-primary/25" };
   }
   if (days <= 3) {
-    return { label: `D-${days}`, className: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30" };
+    return { label: `D-${days}`, className: "bg-primary-soft text-primary-soft-foreground border-primary/25" };
   }
   if (days <= 7) {
-    return { label: `${days} dias`, className: "bg-blue-500/15 text-blue-600 border-blue-500/30" };
+    return { label: `${days} dias`, className: "bg-insights/10 text-insights border-insights/30" };
   }
   return { label: `${days} dias`, className: "bg-muted text-muted-foreground border-border" };
 }
@@ -517,7 +519,7 @@ export const LeadCard = memo(function LeadCard({
             className={cn(
               "ml-auto pl-3 text-[10px] font-semibold tabular-nums",
               lead.metrics!.checklistsCompleted === lead.metrics!.checklistsTotal
-                ? "text-emerald-500"
+                ? "text-success"
                 : "text-muted-foreground",
             )}
           >
@@ -645,7 +647,8 @@ export const LeadCard = memo(function LeadCard({
                 phone={lead.phone}
                 variant="ghost"
                 size="icon"
-                className="size-[26px] rounded-md p-0 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366]"
+                // Verde do WhatsApp é cor de MARCA — fica literal de propósito.
+                className="size-[26px] rounded-lg p-0 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366]"
                 title="Abrir WhatsApp"
               >
                 <MessageCircle className="size-[15px]" />
@@ -674,11 +677,13 @@ export const LeadCard = memo(function LeadCard({
         data-lead-id={lead.id}
         className={cn(
           "kanban-card group cursor-pointer relative",
+          // V5: mesmo cartão de bento do card compacto (ver LeadCardCompact).
+          "rounded-2xl border-card-border bg-card shadow-relevo before:opacity-0 hover:shadow-relevo-alto",
           lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
           lead.isInactive && "opacity-60",
-          selected && "ring-2 ring-primary/50",
-          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",
-          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-amber-500/50",
+          selected && "ring-2 ring-primary/60",
+          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-success/50",
+          !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-warning/60",
         )}
         onClick={onClick}
       >
@@ -825,9 +830,9 @@ export const LeadCard = memo(function LeadCard({
               {lead.stageEnteredAt && (() => {
                 const days = Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000);
                 if (days < 3) return null;
-                const cls = days >= 14 ? "bg-red-500/10 text-red-500 border-red-500/30"
-                  : days >= 7 ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
-                  : "bg-blue-500/10 text-blue-500 border-blue-500/30";
+                const cls = days >= 14 ? "bg-destructive/10 text-destructive border-destructive/30"
+                  : days >= 7 ? "bg-warning/15 text-warning-strong border-warning/35"
+                  : "bg-insights/10 text-insights border-insights/30";
                 return (
                   <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", cls)}>
                     {days}d
@@ -860,7 +865,7 @@ export const LeadCard = memo(function LeadCard({
               {config.showValue && (lead.faturamento || lead.value != null) && (
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="text-muted-foreground">{lead.value != null ? "Valor" : "Faturamento"}</span>
-                  <span className="font-semibold text-emerald-500 text-right">
+                  <span className="font-bold tabular-nums text-success text-right">
                     {lead.value != null
                       ? formatCurrency(lead.value)
                       : formatFaturamento(lead.faturamento)}
@@ -883,7 +888,7 @@ export const LeadCard = memo(function LeadCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-insights hover:underline"
             >
               <Video className="w-3 h-3 shrink-0" /> Entrar no Google Meet
             </a>
@@ -900,8 +905,8 @@ export const LeadCard = memo(function LeadCard({
                         variant="outline"
                         className={cn(
                           "text-[9px] px-1 py-0 h-4 shrink-0",
-                          p.type === "mrr" ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                            : p.type === "unitario" ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          p.type === "mrr" ? "bg-insights/10 text-insights border-insights/20"
+                            : p.type === "unitario" ? "bg-warning/15 text-warning-strong border-warning/30"
                             : "bg-primary/10 text-primary border-primary/20",
                         )}
                       >
@@ -910,7 +915,7 @@ export const LeadCard = memo(function LeadCard({
                     )}
                     <span className="truncate">{p.name}</span>
                   </div>
-                  <span className="font-medium text-emerald-500 shrink-0">{formatCurrency(p.value)}</span>
+                  <span className="font-semibold tabular-nums text-success shrink-0">{formatCurrency(p.value)}</span>
                 </div>
               ))}
               {lead.products.length > 3 && (
@@ -935,7 +940,8 @@ export const LeadCard = memo(function LeadCard({
                 <AbrirConversaButton
                   leadId={lead.id}
                   phone={lead.phone}
-                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 h-auto rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
+                  // Verde do WhatsApp é cor de MARCA — fica literal de propósito.
+                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 h-auto rounded-full bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-semibold transition-colors"
                   title="Abrir WhatsApp"
                 >
                   <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
@@ -1032,8 +1038,8 @@ function getPotencialClass(potencial: string): string {
   switch (potencial) {
     case "baixo": return "bg-muted text-muted-foreground border-border";
     case "medio": return "bg-primary/10 text-primary border-primary/20";
-    case "alto": return "bg-green-500/10 text-green-600 border-green-500/20";
-    case "estrategico": return "bg-purple-500/10 text-purple-600 border-purple-500/20";
+    case "alto": return "bg-success/10 text-success border-success/20";
+    case "estrategico": return "bg-insights/10 text-insights border-insights/20";
     default: return "bg-muted text-muted-foreground border-border";
   }
 }

@@ -148,7 +148,7 @@ export function AttachmentGallery({ attachments, className, canDelete, ticketId 
                       {avisaFormula(a.mime) && (
                         <>
                           {" · "}
-                          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                          <span className="inline-flex items-center gap-1 text-warning-strong">
                             <ShieldAlert className="h-3 w-3" aria-hidden />
                             confira antes de abrir na planilha
                           </span>

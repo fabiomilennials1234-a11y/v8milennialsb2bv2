@@ -3,7 +3,7 @@
  *
  * Página estática (sem backend) alimentada por `faq-data.ts`. Busca em tempo
  * real sobre pergunta + resposta + keywords, com filtro por categoria.
- * Acessível via botão amarelo "FAQ" na top bar (rota /faq).
+ * Rota /faq.
  */
 
 import { useMemo, useState } from "react";
@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Accordion,
   AccordionContent,
@@ -95,37 +96,34 @@ export default function Faq() {
   const hasResults = filtered.length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      {/* Header */}
-      <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-yellow-400/10 ring-1 ring-yellow-400/30">
-            <HelpCircle className="h-6 w-6 text-yellow-500" />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Central de Ajuda</h1>
-            <p className="text-sm text-muted-foreground">
+    // Largura de leitura: perguntas e respostas são texto corrido.
+    <div className="mx-auto w-full max-w-4xl space-y-8">
+      <div className="space-y-5">
+        <PageHeader
+          title="Central de Ajuda"
+          subtitle={
+            <>
               Respostas rápidas para as dúvidas mais comuns do Torque
               {totalQuestions > 0 && ` · ${totalQuestions} perguntas`}
-            </p>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Busca */}
-        <div className="relative mt-6">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar uma dúvida... (ex.: conectar WhatsApp, importar leads)"
-            className="h-11 rounded-xl pl-10 text-sm"
+            className="h-11 rounded-full pl-10 text-sm shadow-relevo"
             autoFocus
           />
         </div>
 
         {/* Filtro de categorias */}
         {FAQ_CATEGORIES.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             <CategoryChip
               label="Todos"
               icon={LifeBuoy}
@@ -145,11 +143,11 @@ export default function Faq() {
             ))}
           </div>
         )}
-      </header>
+      </div>
 
       {/* Conteúdo */}
       {!hasResults ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 py-16 text-center">
+        <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-border py-16 text-center">
           <Search className="mb-3 h-7 w-7 text-muted-foreground/50" />
           <p className="text-sm font-medium">
             {FAQ_CATEGORIES.length === 0
@@ -168,10 +166,12 @@ export default function Faq() {
             const Icon = FAQ_ICON_MAP[cat.icon] ?? HelpCircle;
             return (
               <section key={cat.id} id={cat.id} className="scroll-mt-24">
-                <div className="mb-3 flex items-center gap-2.5">
-                  <Icon className="h-5 w-5 text-yellow-500" />
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                    <Icon className="h-4 w-4" />
+                  </span>
                   <div>
-                    <h2 className="text-base font-semibold leading-tight">
+                    <h2 className="text-base font-bold leading-tight tracking-tight">
                       {cat.title}
                     </h2>
                     <p className="text-xs text-muted-foreground">
@@ -182,15 +182,15 @@ export default function Faq() {
                 <Accordion
                   type="single"
                   collapsible
-                  className="rounded-2xl border border-border/60 bg-card/40 px-4"
+                  className="rounded-card border border-card-border bg-card px-5 shadow-relevo"
                 >
                   {cat.items.map((item, idx) => (
                     <AccordionItem
                       key={idx}
                       value={`${cat.id}-${idx}`}
-                      className="border-border/50 last:border-b-0"
+                      className="border-border/60 last:border-b-0"
                     >
-                      <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">
+                      <AccordionTrigger className="text-left text-sm font-semibold hover:no-underline">
                         {item.question}
                       </AccordionTrigger>
                       <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
@@ -223,11 +223,13 @@ function CategoryChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-600 dark:text-yellow-400"
-          : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+          ? "bg-tinta text-tinta-foreground shadow-relevo-tinta [&>svg]:text-primary"
+          : "border border-card-border bg-card text-muted-foreground shadow-relevo hover:text-foreground",
       )}
     >
       <Icon className="h-3.5 w-3.5" />

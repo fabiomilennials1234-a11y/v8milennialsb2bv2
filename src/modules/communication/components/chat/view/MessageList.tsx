@@ -186,7 +186,7 @@ function DateSeparator({ label, iso }: { label: string; iso: string }) {
     <div className="flex justify-center py-3">
       <time
         dateTime={iso}
-        className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full"
+        className="rounded-full border border-border/60 bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground shadow-relevo"
       >
         {label}
       </time>
@@ -377,19 +377,19 @@ export function MessageList({
       return (
         <div
           key={`transfer-${item.id}`}
-          className="flex items-start gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-l-2 border-amber-400 mx-4 my-2 rounded-r"
+          className="mx-4 my-2 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-2"
         >
-          <UserPlus className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+          <UserPlus className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning-strong" />
           <div>
-            <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+            <p className="text-xs font-semibold text-warning-strong">
               Transferido para humano
             </p>
             {item.reason && (
-              <p className="text-xs text-amber-700 dark:text-amber-300">{item.reason}</p>
+              <p className="text-xs text-foreground/80">{item.reason}</p>
             )}
             <time
               dateTime={item.timestamp}
-              className="text-xs text-amber-500 mt-0.5 tabular-nums"
+              className="mt-0.5 text-xs tabular-nums text-muted-foreground"
             >
               {new Date(item.timestamp).toLocaleString("pt-BR", {
                 day: "2-digit",
@@ -456,7 +456,9 @@ export function MessageList({
   }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado]);
 
   return (
-    <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col relative">
+    // V5: a conversa corre num fundo afundado dentro do cartão — é o que faz a
+    // bolha de entrada (cartão) e a de saída (ouro) lerem como objeto.
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sunken">
       <ScrollArea
         ref={scrollAreaRef}
         className={cn(
@@ -472,7 +474,7 @@ export function MessageList({
         <div className="p-4 min-h-full">
           {(hasOlderMessages || !!olderError) && onLoadOlder && <div className="flex flex-col items-center gap-1 pb-3">
             <button type="button" onClick={loadOlder} disabled={isLoadingOlder}
-              className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+              className="rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-muted-foreground shadow-relevo transition-colors hover:text-foreground disabled:opacity-50">
               {isLoadingOlder ? "Carregando anteriores…" : "Carregar mensagens anteriores"}
             </button>
             {!!olderError && <p role="alert" className="text-xs text-destructive">Não foi possível carregar. Tente novamente.</p>}

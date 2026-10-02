@@ -35,13 +35,13 @@ export function ScheduledMessagesBanner({
 
   return (
     <>
-      <div className="mx-4 mb-2">
+      <div className="mx-3 my-2">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-sm transition-colors hover:bg-primary/10"
+          className="flex w-full items-center justify-between rounded-xl border border-insights/20 bg-insights/10 px-3 py-2 text-sm transition-colors hover:bg-insights/15"
         >
-          <span className="flex items-center gap-2 text-foreground/80">
-            <Clock className="w-3.5 h-3.5 text-primary" />
+          <span className="flex items-center gap-2 font-semibold text-insights">
+            <Clock className="h-3.5 w-3.5" />
             {scheduled.length} mensagem{scheduled.length > 1 ? "ns" : ""} agendada{scheduled.length > 1 ? "s" : ""}
           </span>
           {expanded ? (
@@ -56,14 +56,14 @@ export function ScheduledMessagesBanner({
             {scheduled.map((msg) => (
               <div
                 key={msg.id}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-card border border-border text-xs"
+                className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-1.5 text-xs shadow-relevo"
               >
                 <span className="flex-1 truncate text-muted-foreground">
                   {msg.message_content
                     ? msg.message_content.slice(0, 50) + (msg.message_content.length > 50 ? "..." : "")
                     : `[${msg.media_type || "midia"}]`}
                 </span>
-                <span className="text-muted-foreground/70 whitespace-nowrap">
+                <span className="whitespace-nowrap tabular-nums text-muted-foreground">
                   {format(new Date(msg.scheduled_at), "dd/MM HH:mm", { locale: ptBR })}
                 </span>
                 <button
@@ -71,7 +71,7 @@ export function ScheduledMessagesBanner({
                     e.stopPropagation();
                     setEditing(msg);
                   }}
-                  className="p-0.5 rounded hover:bg-muted"
+                  className="rounded-md p-1 hover:bg-muted"
                   title="Editar"
                 >
                   <Pencil className="w-3 h-3 text-muted-foreground" />
@@ -81,7 +81,7 @@ export function ScheduledMessagesBanner({
                     e.stopPropagation();
                     cancelMutation.mutate(msg.id);
                   }}
-                  className="p-0.5 rounded hover:bg-muted"
+                  className="rounded-md p-1 hover:bg-muted"
                   title="Cancelar"
                 >
                   <X className="w-3 h-3 text-muted-foreground" />

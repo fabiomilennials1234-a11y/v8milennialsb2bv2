@@ -109,15 +109,15 @@ export function OnbStepWhatsApp() {
     return (
       <div className="space-y-6 text-center max-w-sm">
         <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+          <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center">
+            <CheckCircle2 className="w-8 h-8 text-success" />
           </div>
         </div>
         <div>
           <h3 className="text-xl font-bold tracking-tight">WhatsApp conectado!</h3>
           <p className="text-sm text-muted-foreground mt-1">Preparando próximo passo...</p>
         </div>
-        <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
+        <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" />
       </div>
     );
   }

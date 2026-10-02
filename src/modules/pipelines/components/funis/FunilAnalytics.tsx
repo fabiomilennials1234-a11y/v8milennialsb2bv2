@@ -116,11 +116,11 @@ function GenericBlock({ metrics }: { metrics: FunilMetrics }) {
   const g = metrics.generic;
   if (!g) return null;
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
       <AnalyticsStatCard label="Negócios" value={String(g.total)} sub="no recorte" accent="gold" />
       <AnalyticsStatCard label="Em aberto" value={String(g.openCount)} sub="etapas abertas" accent="neutral" delay={0.05} />
-      <AnalyticsStatCard label="Ganhos" value={String(g.wonCount)} sub="etapas won" accent="success" tintValue delay={0.1} />
-      <AnalyticsStatCard label="Perdidos" value={String(g.lostCount)} sub="etapas lost" accent="neutral" delay={0.15} />
+      <AnalyticsStatCard label="Ganhos" value={String(g.wonCount)} sub="etapas de ganho" accent="success" tintValue delay={0.1} />
+      <AnalyticsStatCard label="Perdidos" value={String(g.lostCount)} sub="etapas de perda" accent="neutral" delay={0.15} />
       <AnalyticsStatCard
         label="Conversão"
         value={`${g.conversionRate.toFixed(1)}%`}
@@ -367,9 +367,9 @@ function PropostasBlock({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <AnalyticsStatCard
           label="Pipeline Ativo"
           value={formatCurrency(displayStats.inProgress)}
@@ -414,7 +414,7 @@ function PropostasBlock({
       </div>
 
       <Tabs value={analyticsTab} onValueChange={(v) => setAnalyticsTab(v as "propostas" | "produtos")}>
-        <TabsList className="bg-muted/50">
+        <TabsList variant="segmented">
           <TabsTrigger value="propostas" className="gap-1.5">
             <TrendingUp className="w-4 h-4" />
             {pipeline.name}
@@ -433,7 +433,7 @@ function PropostasBlock({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="grid md:grid-cols-2 gap-6"
+            className="grid gap-4 md:grid-cols-2"
           >
             <AnalyticsPanel title="Funil de Vendas" subtitle="Volume e valor por etapa">
               <ContinuousFunnel
@@ -478,33 +478,35 @@ function PropostasBlock({
               />
             </AnalyticsPanel>
 
-            <div className="glass-card p-6">
-              <h3 className="font-semibold mb-6 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-success" />
-                Vendas Recentes
+            <section className="min-w-0 rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo sm:p-6">
+              <h3 className="mb-5 flex items-center gap-2 text-base font-bold leading-tight tracking-tight">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-success/10 text-success">
+                  <TrendingUp className="h-4 w-4" aria-hidden />
+                </span>
+                Vendas recentes
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {soldSorted.map((sale) => (
                   <motion.div
                     key={sale.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-success/5 border-success/20"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-success/20 bg-success/5 p-3.5"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
-                        <TrendingUp className="w-5 h-5 text-success" />
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-success/10">
+                        <TrendingUp className="h-5 w-5 text-success" aria-hidden />
                       </div>
-                      <div>
-                        <p className="font-medium">{sale.lead?.name}</p>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{sale.lead?.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {sale.lead?.company}
                           {sale.closer?.name ? ` • ${sale.closer.name}` : ""}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-success">{formatCurrency(Number(sale.sale_value) || 0)}</p>
+                    <div className="shrink-0 text-right">
+                      <p className="font-extrabold tabular-nums tracking-[-0.02em] text-success">{formatCurrency(Number(sale.sale_value) || 0)}</p>
                       <p className="text-xs text-muted-foreground">
                         {sale.closed_at && format(new Date(sale.closed_at), "dd/MM/yyyy", { locale: ptBR })}
                       </p>
@@ -513,10 +515,10 @@ function PropostasBlock({
                 ))}
 
                 {soldSorted.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">Nenhuma venda fechada ainda</p>
+                  <p className="rounded-2xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">Nenhuma venda fechada ainda</p>
                 )}
               </div>
-            </div>
+            </section>
           </motion.div>
         ) : (
           <motion.div

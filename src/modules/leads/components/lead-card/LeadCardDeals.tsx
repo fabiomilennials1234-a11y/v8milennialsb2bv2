@@ -72,7 +72,7 @@ function MarcaDuplicado({ quantos, funil }: { quantos: number; funil: string }) 
       title={`Este lead tem ${quantos} negócios abertos em ${funil} ao mesmo tempo. Pode ser recompra — ou o mesmo formulário preenchido duas vezes.`}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5",
-        "border border-amber-500/30 bg-amber-500/10 text-amber-500",
+        "border border-warning/35 bg-warning/15 text-warning-strong",
         "text-[10.5px] font-medium leading-none",
       )}
     >
@@ -85,7 +85,7 @@ function MarcaDuplicado({ quantos, funil }: { quantos: number; funil: string }) 
 function Metrica({ valor, rotulo }: { valor: string; rotulo: string }) {
   return (
     <div className="flex flex-col items-center gap-0.5 px-1">
-      <span className="text-[13px] font-semibold leading-none tabular-nums">{valor}</span>
+      <span className="text-[13px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">{valor}</span>
       <span className="whitespace-nowrap text-[10px] text-muted-foreground">{rotulo}</span>
     </div>
   );
@@ -109,28 +109,28 @@ function LinhaAberta({
       onClick={() => onOpen(deal.id)}
       aria-current={atual ? "true" : undefined}
       className={cn(
-        "group flex w-full flex-col gap-2.5 rounded-lg border bg-card px-3 py-3 text-left",
-        "transition-[border-color,box-shadow] hover:shadow-sm",
+        "group flex w-full flex-col gap-2.5 rounded-2xl border bg-card px-3.5 py-3 text-left shadow-relevo",
+        "transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:shadow-relevo-alto",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         atual
-          ? "border-primary/45 bg-primary/[0.05]"
-          : "border-border hover:border-muted-foreground/35",
+          ? "border-primary/50 bg-primary-soft/50"
+          : "border-card-border",
       )}
     >
       <div className="flex items-center gap-2.5">
         <span
-          className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
+          className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-muted text-foreground/70"
           aria-hidden="true"
         >
           <ShoppingCart className="size-3.5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[13.5px] font-medium">{deal.titulo}</span>
+            <span className="truncate text-[13.5px] font-semibold">{deal.titulo}</span>
             {/* Sem esta marca, a lista mostra o negócio que já está aberto como
                 se fosse outro, e clicar nele parece não fazer nada. */}
             {atual && (
-              <span className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <span className="shrink-0 rounded-full bg-primary-soft px-1.5 text-[10px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground">
                 este
               </span>
             )}
@@ -162,8 +162,8 @@ function LinhaAberta({
           ⚠ Leitura pura, e continua sendo: editar produto é do painel do
           negócio, a um clique daqui. */}
       {deal.produtos.length > 0 && (
-        <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-muted/25 px-2.5 py-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+        <div className="flex flex-col gap-1 rounded-xl bg-sunken px-2.5 py-2">
+          <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             Produtos deste negócio
           </span>
           {deal.produtos.map((p, i) => (
@@ -260,8 +260,8 @@ export function LeadCardDeals({
           type="button"
           onClick={onNewDeal}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] font-medium text-primary",
-            "transition-colors hover:bg-primary/10",
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold text-primary-soft-foreground",
+            "transition-colors hover:bg-primary-soft",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
@@ -284,7 +284,7 @@ export function LeadCardDeals({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12.5px] text-muted-foreground">
+        <div className="rounded-2xl border border-dashed border-border px-3 py-4 text-center text-[12.5px] text-muted-foreground">
           Sem negócio aberto
         </div>
       )}
@@ -296,7 +296,7 @@ export function LeadCardDeals({
             onClick={() => setHistoricoAberto((v) => !v)}
             aria-expanded={historicoAberto}
             className={cn(
-              "flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[12.5px]",
+              "flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-[12.5px]",
               "transition-colors hover:border-muted-foreground/35 hover:bg-muted/30",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}

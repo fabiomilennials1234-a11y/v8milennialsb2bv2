@@ -15,6 +15,9 @@ import { useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { KpiTile } from "@/components/ui/bento";
+import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 import { AgendaFilterBar, ALL_OPTION } from "./AgendaFilterBar";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
 import { EventDetailPopover, type PopoverState } from "./EventDetailPopover";
@@ -117,29 +120,22 @@ const EVENTOS: UnifiedEvent[] = [
  */
 function PaginaDeBaixo() {
   return (
-    <div className="min-w-0 flex-1 px-6 py-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="mt-1 text-muted-foreground">
-        Visão geral do seu desempenho e atividades
-      </p>
-      <div className="mt-6 grid grid-cols-2 gap-4">
+    <div className="min-w-0 flex-1 space-y-5 px-6 py-6">
+      <PageHeader title="Dashboard" subtitle="Visão geral do seu desempenho e atividades" />
+      <div className="grid grid-cols-2 gap-4">
         {[
           { rotulo: "Total criados", valor: "R$ 0,00", nota: "21 negócios" },
           { rotulo: "Total ganhos", valor: "R$ 0,00", nota: "0 negócios" },
         ].map((c) => (
-          <div key={c.rotulo} className="stat-card">
-            <p className="stat-card-label">{c.rotulo}</p>
-            <p className="stat-card-value">{c.valor}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{c.nota}</p>
-          </div>
+          <KpiTile key={c.rotulo} label={c.rotulo} value={c.valor} note={c.nota} />
         ))}
       </div>
-      <div className="mt-4 rounded-lg border border-border bg-card p-4">
-        <p className="text-sm font-semibold">Dados diários</p>
+      <div className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
+        <p className="text-[15px] font-bold tracking-[-0.02em]">Dados diários</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Visualização por valor dos negócios
         </p>
-        <div className="mt-4 h-40 rounded bg-muted/40" />
+        <div className="mt-4 h-40 rounded-2xl bg-muted/50" />
       </div>
     </div>
   );
@@ -209,31 +205,37 @@ function TelaAtividades({
 
   return (
     // Espelha o painel sobreposto: lateral + página de baixo à mostra na
-    // esquerda, e a Agenda ocupando a direita.
+    // esquerda, e a Agenda flutuando à direita (mesma casca do `AgendaPanel`).
     <div className="relative flex h-screen bg-background">
       <div className="w-[68px] shrink-0 border-r border-sidebar-border bg-sidebar" />
       <PaginaDeBaixo />
-      <div className="absolute inset-y-0 right-0 flex w-[65%] min-w-[680px] max-w-[1280px] flex-col border-l border-border bg-card shadow-2xl">
+      <div className="absolute inset-y-3 right-3 flex w-[65%] min-w-[680px] max-w-[1280px] flex-col overflow-hidden rounded-panel border border-card-border bg-card shadow-relevo-alto">
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 lg:px-6 lg:py-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold">Atividades</h1>
-              <p className="mt-1 text-muted-foreground">
-                {admin
-                  ? "Crie, edite e gerencie as atividades da equipe."
-                  : "Crie, edite e gerencie suas atividades."}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button variant="ghost" size="icon" aria-label="Atualizar agenda">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Nova atividade
-              </Button>
-            </div>
-          </div>
+          {/* Mesmo cabeçalho de `AgendaAtividades` no painel: `PageHeader`
+              com o título no tamanho de painel. */}
+          <PageHeader
+            title="Atividades"
+            subtitle={
+              admin
+                ? "Crie, edite e gerencie as atividades da equipe."
+                : "Crie, edite e gerencie suas atividades."
+            }
+            className="[&_h1]:text-[1.375rem]"
+            actions={
+              <>
+                <Button variant="outline" size="icon" aria-label="Atualizar agenda">
+                  <RefreshCw />
+                </Button>
+                <Button>
+                  <Plus />
+                  Nova atividade
+                </Button>
+                <Button variant="ghost" size="icon" aria-label="Fechar Atividades">
+                  <X />
+                </Button>
+              </>
+            }
+          />
 
           <AgendaFilterBar
             status={status}
@@ -253,32 +255,34 @@ function TelaAtividades({
           />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1">
-              <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-foreground">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h2 className="truncate text-[15px] font-bold tracking-[-0.02em] text-foreground first-letter:uppercase">
                 agosto de 2026
               </h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                aria-label="Período anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                aria-label="Próximo período"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs">
-                Hoje
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  aria-label="Período anterior"
+                >
+                  <ChevronLeft />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  aria-label="Próximo período"
+                >
+                  <ChevronRight />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 px-3">
+                  Hoje
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs tabular-nums text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
                 {eventos.length} atividades
               </span>
               {/* DERIVADO, nunca cravado. A versão anterior escrevia 1 / 1 /
@@ -289,39 +293,42 @@ function TelaAtividades({
                   chamar a mesma função da tela é o que faz a história valer. */}
               {resumo.total > 0 && (
                 <div
-                  className="flex items-center gap-2.5 text-xs tabular-nums"
+                  className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums"
                   aria-label="Comparecimento no período"
                 >
-                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                  <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
                     <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
                     {resumo.compareceu}
                     <span className="sr-only">compareceram</span>
                   </span>
-                  <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+                  <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-red-700 dark:text-red-300">
                     <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
                     {resumo.naoCompareceu}
                     <span className="sr-only">não compareceram</span>
                   </span>
                   {resumo.semRegistro > 0 && (
-                    <span className="text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
                       {resumo.semRegistro} sem registro
                     </span>
                   )}
                 </div>
               )}
-              <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
-                <button
-                  type="button"
-                  className="rounded-full border border-border bg-card px-3 py-1 text-[12px] font-semibold text-foreground shadow-sm"
-                >
-                  Mês
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full px-3 py-1 text-[12px] font-medium text-foreground/80"
-                >
-                  Dia
-                </button>
+              <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
+                {(["Mês", "Dia"] as const).map((rotulo, i) => (
+                  <button
+                    key={rotulo}
+                    type="button"
+                    aria-pressed={i === 0}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-xs font-semibold",
+                      i === 0
+                        ? "bg-card text-foreground shadow-relevo"
+                        : "text-foreground/70",
+                    )}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -387,7 +394,7 @@ export const Resultado: Story = {
       {/* `w-72` é a largura real do `EventDetailPopover`, onde o par vive. */}
       <div className="flex flex-wrap gap-6">
         {([null, "compareceu", "nao_compareceu"] as const).map((v) => (
-          <div key={String(v)} className="w-72 rounded-xl border border-border bg-card p-3">
+          <div key={String(v)} className="w-72 rounded-2xl border border-card-border bg-card p-4 shadow-relevo-alto">
             <p className="mb-2 text-[11px] text-muted-foreground">
               {v === null ? "sem registro" : v}
             </p>

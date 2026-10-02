@@ -201,12 +201,12 @@ function ClusterGaugeBase({ currentPercent, expectedPercent, subtitle, statusTex
         ref={digitRef}
         x={CX} y={CY + 82}
         textAnchor="middle"
-        className="cmd-mono fill-foreground tabular-nums"
-        style={{ fontSize: 44, fontWeight: 800, letterSpacing: "-.02em" }}
+        className="fill-foreground tabular-nums"
+        style={{ fontSize: 46, fontWeight: 800, letterSpacing: "-.04em" }}
       >
         0
       </text>
-      <text x={CX + 58} y={CY + 82} textAnchor="start" className="fill-muted-foreground" style={{ fontSize: 11, fontWeight: 600 }}>
+      <text x={CX + 58} y={CY + 82} textAnchor="start" className="fill-muted-foreground" style={{ fontSize: 13, fontWeight: 700 }}>
         %
       </text>
       <text x={CX} y={CY + 104} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 11, fontWeight: 600 }}>
@@ -217,9 +217,8 @@ function ClusterGaugeBase({ currentPercent, expectedPercent, subtitle, statusTex
         x={CX} y={CY + 126}
         textAnchor="middle"
         opacity={0}
-        className="cmd-mono"
         style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: ".18em",
+          fontSize: 10.5, fontWeight: 700, letterSpacing: ".12em",
           fill: isAhead ? "hsl(var(--success))" : "hsl(var(--destructive))",
         }}
       >

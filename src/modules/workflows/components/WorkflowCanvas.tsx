@@ -170,10 +170,10 @@ export function WorkflowCanvas({
           color="hsl(var(--muted-foreground) / 0.2)"
         />
         <Controls
-          className="!bg-card !border-border !shadow-md [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-accent"
+          className="!overflow-hidden !rounded-xl !border !border-card-border !bg-card !shadow-relevo [&>button]:!border-border/60 [&>button]:!bg-card [&>button]:!text-foreground [&>button:hover]:!bg-muted"
         />
         <MiniMap
-          className="!bg-card !border-border !shadow-md"
+          className="!overflow-hidden !rounded-xl !border !border-card-border !bg-card !shadow-relevo"
           nodeColor="hsl(var(--primary) / 0.3)"
           maskColor="hsl(var(--background) / 0.7)"
         />

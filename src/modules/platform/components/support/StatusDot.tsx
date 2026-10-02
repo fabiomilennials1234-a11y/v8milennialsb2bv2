@@ -8,9 +8,9 @@ import type { TicketStatus } from "@/modules/platform/lib/support-ticket-draft";
  */
 const STATUS_STYLES: Record<TicketStatus, string> = {
   aberto: "bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.5)]",
-  em_andamento: "bg-sky-500",
-  aguardando_cliente: "bg-amber-500 animate-pulse",
-  resolvido: "bg-emerald-500",
+  em_andamento: "bg-insights",
+  aguardando_cliente: "bg-warning animate-pulse",
+  resolvido: "bg-success",
   fechado: "bg-muted-foreground/40",
 };
 

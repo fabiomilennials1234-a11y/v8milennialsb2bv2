@@ -154,7 +154,8 @@ for (const theme of themes) {
     page.on("requestfinished", (r) => inflight.delete(r));
     page.on("requestfailed", (r) => {
       inflight.delete(r);
-      if (!/realtime|hot-update|__vite/.test(r.url())) failed.push(`${r.method()} ${r.url().slice(0, 160)} — ${r.failure()?.errorText}`);
+      // ERR_ABORTED = request cancelled by the app (unmount / AbortController), not a failure
+      if (!/realtime|hot-update|__vite/.test(r.url()) && r.failure()?.errorText !== "net::ERR_ABORTED") failed.push(`${r.method()} ${r.url().slice(0, 160)} — ${r.failure()?.errorText}`);
     });
     page.on("console", (m) => {
       if (m.type() !== "error") return;

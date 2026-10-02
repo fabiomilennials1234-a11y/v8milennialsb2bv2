@@ -30,18 +30,18 @@ import {
 import { useTeamMembers } from "@/modules/identity";
 import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
 
-// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const EVENT_TYPE_OPTIONS: Array<{ value: MeetingEventType; label: string }> = [
-  { value: "meeting", label: "Reuniao" },
-  { value: "call", label: "Ligacao" },
+  { value: "meeting", label: "Reunião" },
+  { value: "call", label: "Ligação" },
   { value: "follow_up", label: "Follow-up" },
   { value: "task", label: "Tarefa" },
   { value: "other", label: "Outro" },
 ];
 
 const COLOR_OPTIONS = [
-  { value: "", label: "Padrao", hex: "hsl(47, 100%, 50%)" },
+  { value: "", label: "Padrão", hex: "hsl(47, 100%, 50%)" },
   { value: "#10B981", label: "Emerald", hex: "#10B981" },
   { value: "#3B82F6", label: "Blue", hex: "#3B82F6" },
   { value: "#8B5CF6", label: "Violet", hex: "#8B5CF6" },
@@ -52,7 +52,19 @@ const COLOR_OPTIONS = [
   { value: "#D50000", label: "Red", hex: "#D50000" },
 ];
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/**
+ * Vocabulário V5 do formulário — o mesmo do `EditMeetingDialog`.
+ * Rótulo de campo em rótulo micro; escolha (tipo, participante) em pílula, com
+ * o selecionado em ouro de SUPERFÍCIE (`primary-soft`), nunca ouro de texto.
+ */
+const ROTULO =
+  "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+const CHIP_ATIVO =
+  "border-primary/60 bg-primary-soft text-primary-soft-foreground";
+const CHIP_INATIVO =
+  "border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground";
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -134,10 +146,10 @@ const FORM_VAZIO: Omit<FormState, "start_at" | "end_at"> = {
  */
 function tituloSemeado(leadName: string | null | undefined): string {
   const nome = (leadName ?? "").trim();
-  return nome ? `Reuniao - ${nome}` : "";
+  return nome ? `Reunião - ${nome}` : "";
 }
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ─────────────────────────────────────────────────────────────────
 
 export function CreateMeetingDialog({
   open,
@@ -245,10 +257,10 @@ export function CreateMeetingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-              <Plus className="w-3.5 h-3.5 text-primary" />
-            </div>
+          <DialogTitle className="flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.02em]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Plus className="h-4 w-4" />
+            </span>
             Nova atividade
           </DialogTitle>
         </DialogHeader>
@@ -256,7 +268,7 @@ export function CreateMeetingDialog({
         <div className="space-y-4 pt-1">
           {/* Title */}
           <div className="space-y-1.5">
-            <Label htmlFor="meeting-title" className="text-xs text-muted-foreground">
+            <Label htmlFor="meeting-title" className={ROTULO}>
               Titulo *
             </Label>
             <Input
@@ -270,17 +282,17 @@ export function CreateMeetingDialog({
 
           {/* Event type */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Tipo</Label>
+            <Label className={ROTULO}>Tipo</Label>
             <div className="flex flex-wrap gap-1.5">
               {EVENT_TYPE_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => update("event_type", opt.value)}
-                  className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
                     form.event_type === opt.value
-                      ? "border-primary bg-primary/10 text-foreground font-medium"
-                      : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                      ? CHIP_ATIVO
+                      : CHIP_INATIVO
                   }`}
                 >
                   {opt.label}
@@ -290,8 +302,8 @@ export function CreateMeetingDialog({
           </div>
 
           {/* All day toggle + datetime */}
-          <div className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2">
-            <Label className="text-xs text-muted-foreground flex-1">Dia todo</Label>
+          <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5">
+            <Label className="flex-1 text-[13px] font-semibold text-foreground">Dia todo</Label>
             <Switch
               checked={form.all_day}
               onCheckedChange={(v) => update("all_day", v)}
@@ -302,7 +314,7 @@ export function CreateMeetingDialog({
             <div className="space-y-1.5">
               <Label
                 htmlFor="meeting-start"
-                className="text-xs text-muted-foreground"
+                className={ROTULO}
               >
                 Inicio *
               </Label>
@@ -326,7 +338,7 @@ export function CreateMeetingDialog({
             <div className="space-y-1.5">
               <Label
                 htmlFor="meeting-end"
-                className="text-xs text-muted-foreground"
+                className={ROTULO}
               >
                 Fim *
               </Label>
@@ -354,15 +366,15 @@ export function CreateMeetingDialog({
             </p>
           ) : endBeforeStart ? (
             <p className="text-[11px] text-destructive">
-              Fim deve ser depois do inicio
+              Fim deve ser depois do início
             </p>
           ) : null}
 
           {/* Location */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Local</Label>
+            <Label className={ROTULO}>Local</Label>
             <Input
-              placeholder="Endereco ou link"
+              placeholder="Endereço ou link"
               value={form.location}
               onChange={(e) => update("location", e.target.value)}
             />
@@ -370,7 +382,7 @@ export function CreateMeetingDialog({
 
           {/* Description */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Descricao</Label>
+            <Label className={ROTULO}>Descrição</Label>
             <Textarea
               placeholder="Notas sobre o evento..."
               rows={3}
@@ -399,7 +411,7 @@ export function CreateMeetingDialog({
           {/* Participants */}
           {teamMembers.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
+              <Label className={ROTULO}>
                 Participantes
               </Label>
               <div className="flex flex-wrap gap-1.5">
@@ -410,10 +422,8 @@ export function CreateMeetingDialog({
                       key={member.id}
                       type="button"
                       onClick={() => toggleParticipant(member.id)}
-                      className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all ${
-                        selected
-                          ? "border-primary bg-primary/10 text-foreground font-medium"
-                          : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                        selected ? CHIP_ATIVO : CHIP_INATIVO
                       }`}
                     >
                       {member.name}
@@ -426,7 +436,7 @@ export function CreateMeetingDialog({
 
           {/* Color */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Cor</Label>
+            <Label className={ROTULO}>Cor</Label>
             <div className="flex flex-wrap gap-2 pt-0.5">
               {COLOR_OPTIONS.map((opt) => (
                 <button
@@ -436,7 +446,7 @@ export function CreateMeetingDialog({
                   title={opt.label}
                   className={`w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 ${
                     form.color === opt.value
-                      ? "border-foreground scale-125 shadow-sm"
+                      ? "border-foreground scale-125 shadow-relevo"
                       : "border-transparent hover:scale-110"
                   }`}
                   style={{ backgroundColor: opt.hex }}
@@ -447,8 +457,8 @@ export function CreateMeetingDialog({
 
           {/* Meet link */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
-              Link da reuniao (Meet / Zoom / etc)
+            <Label className={ROTULO}>
+              Link da reunião (Meet / Zoom / etc)
             </Label>
             <Input
               placeholder="https://meet.google.com/..."

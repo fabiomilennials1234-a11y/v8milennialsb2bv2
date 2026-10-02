@@ -19,9 +19,9 @@ function KeyBadge({ children }: { children: string }) {
   return (
     <kbd
       className={cn(
-        "inline-flex items-center justify-center min-w-[24px] h-6 px-1.5",
-        "rounded border border-border bg-muted text-xs font-mono font-medium",
-        "text-muted-foreground shadow-sm"
+        "inline-flex h-6 min-w-[24px] items-center justify-center px-1.5",
+        "rounded-md border border-card-border bg-card font-mono text-xs font-semibold",
+        "text-foreground/75 shadow-relevo"
       )}
     >
       {children}
@@ -35,7 +35,7 @@ function renderKeys(keys: string) {
     <div className="flex items-center gap-1">
       {parts.map((part, i) => (
         <span key={i} className="flex items-center gap-0.5">
-          {i > 0 && <span className="text-[10px] text-muted-foreground mx-0.5">then</span>}
+          {i > 0 && <span className="mx-0.5 text-[10px] text-muted-foreground">depois</span>}
           <KeyBadge>{part.toUpperCase()}</KeyBadge>
         </span>
       ))}
@@ -61,21 +61,23 @@ export const KeyboardShortcutsHelp = memo(function KeyboardShortcutsHelp({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Keyboard className="w-5 h-5 text-primary" />
+            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/70">
+              <Keyboard className="h-4 w-4" />
+            </span>
             Atalhos de teclado
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 mt-2">
           {Object.entries(grouped).map(([scope, items]) => (
             <div key={scope}>
-              <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 {scope}
               </h3>
               <div className="space-y-1.5">
                 {items.map((shortcut) => (
                   <div
                     key={shortcut.keys}
-                    className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50"
+                    className="flex items-center justify-between rounded-xl px-2.5 py-1.5 hover:bg-muted/50"
                   >
                     <span className="text-sm">{shortcut.description}</span>
                     {renderKeys(shortcut.keys)}
@@ -85,7 +87,7 @@ export const KeyboardShortcutsHelp = memo(function KeyboardShortcutsHelp({
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground text-center mt-2">
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Pressione <KeyBadge>?</KeyBadge> para abrir/fechar
         </p>
       </DialogContent>

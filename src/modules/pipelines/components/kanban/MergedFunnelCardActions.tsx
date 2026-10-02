@@ -27,7 +27,7 @@ import { SetMeetingDateModal } from "./SetMeetingDateModal";
 import { LossReasonDialog } from "./LossReasonDialog";
 
 const SMALL_BTN =
-  "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-semibold transition-colors";
+  "flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export interface MergedFunnelCardActionsProps {
   entryId: string;
@@ -88,7 +88,7 @@ export function MergedFunnelCardActions({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setRescheduleOpen(true); }}
-          className={cn(SMALL_BTN, "w-full border-dashed border-amber-500/40 text-amber-600 hover:bg-amber-500/8")}
+          className={cn(SMALL_BTN, "w-full border-dashed border-warning/50 text-warning-strong hover:bg-warning/10")}
         >
           <CalendarPlus className="w-3.5 h-3.5" />
           Nova data → Agendado
@@ -112,7 +112,7 @@ export function MergedFunnelCardActions({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onMoveStage("remarcar"); }}
-            className={cn(SMALL_BTN, "border-amber-500/40 text-amber-600 hover:bg-amber-500/8")}
+            className={cn(SMALL_BTN, "border-warning/50 text-warning-strong hover:bg-warning/10")}
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Remarcar
@@ -121,7 +121,7 @@ export function MergedFunnelCardActions({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setLossOpen(true); }}
-              className={cn(SMALL_BTN, "border-destructive/40 text-destructive hover:bg-destructive/8")}
+              className={cn(SMALL_BTN, "border-destructive/40 text-destructive hover:bg-destructive/10")}
             >
               <XCircle className="w-3.5 h-3.5" />
               Perdido

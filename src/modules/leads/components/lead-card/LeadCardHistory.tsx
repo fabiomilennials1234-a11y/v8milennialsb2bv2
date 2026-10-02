@@ -56,23 +56,30 @@ const ICONE: Record<TipoDeEvento, typeof UserRound> = {
   automacao: Bot,
 };
 
-/** Cor por tipo — semântica, não decorativa: dá para varrer sem ler. */
+/**
+ * Cor por tipo — semântica, não decorativa: dá para varrer sem ler.
+ *
+ * Só tokens (V5). A paleta crua de antes (`sky-400`, `violet-400`…) era
+ * afinada para o escuro e some no claro (ícone `-400` sobre branco fica abaixo
+ * de 3:1). Pessoa em tinta neutra forte, negócio em verde (dinheiro), mensagem
+ * em azul, comentário em âmbar — o que alguém escreveu à mão precisa saltar.
+ */
 const COR: Record<TipoDeEvento, string> = {
-  lead: "bg-sky-500/15 text-sky-400 ring-sky-500/25",
-  negocio: "bg-emerald-500/15 text-emerald-400 ring-emerald-500/25",
+  lead: "bg-foreground/[0.07] text-foreground ring-foreground/15",
+  negocio: "bg-success/15 text-success ring-success/30",
   campo: "bg-muted text-muted-foreground ring-border",
-  mensagem: "bg-violet-500/15 text-violet-400 ring-violet-500/25",
-  comentario: "bg-amber-500/15 text-amber-400 ring-amber-500/25",
+  mensagem: "bg-insights/15 text-insights ring-insights/30",
+  comentario: "bg-warning/15 text-warning-strong ring-warning/35",
   automacao: "bg-muted text-muted-foreground ring-border",
 };
 
 /** Cor do fio que liga um evento ao próximo — herda o tipo do de cima. */
 const FIO: Record<TipoDeEvento, string> = {
-  lead: "bg-sky-500/35",
-  negocio: "bg-emerald-500/35",
+  lead: "bg-foreground/20",
+  negocio: "bg-success/35",
   campo: "bg-border",
-  mensagem: "bg-violet-500/35",
-  comentario: "bg-amber-500/35",
+  mensagem: "bg-insights/35",
+  comentario: "bg-warning/40",
   automacao: "bg-border",
 };
 
@@ -139,7 +146,7 @@ function Frase({ evento }: { evento: LeadCardEvent }) {
 }
 
 const CAMPO = cn(
-  "w-full resize-none rounded-lg border border-border bg-card px-3 py-2",
+  "w-full resize-none rounded-xl border border-input bg-card px-3 py-2",
   "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
   "transition-colors hover:border-muted-foreground/30",
   "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",
@@ -217,8 +224,8 @@ function CorpoDoComentario({
             onClick={() => void salvar()}
             disabled={ocupado || !rascunho.trim()}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 font-medium",
-              "transition-colors hover:border-primary/45 hover:text-primary",
+              "inline-flex items-center gap-1.5 rounded-full border border-input bg-card px-2.5 py-1 font-semibold shadow-relevo",
+              "transition-colors hover:border-foreground/20",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "disabled:pointer-events-none disabled:opacity-45",
             )}
@@ -319,8 +326,8 @@ export function LeadCardHistory({
               window.setTimeout(() => campo.current?.focus(), 0);
             }}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] font-medium text-primary",
-              "transition-colors hover:bg-primary/10",
+              "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold text-primary-soft-foreground",
+              "transition-colors hover:bg-primary-soft",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
@@ -331,7 +338,7 @@ export function LeadCardHistory({
       </div>
 
       {onComentar && escrevendo && (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-col gap-2 rounded-2xl border border-card-border bg-sunken p-3">
           <textarea
             ref={campo}
             value={texto}
@@ -368,11 +375,10 @@ export function LeadCardHistory({
                 onClick={() => void publicar()}
                 disabled={!texto.trim() || !!comentando}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5",
-                  "text-[12.5px] font-medium transition-colors",
-                  "hover:border-primary/45 hover:text-primary",
+                  "inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-primary-foreground shadow-brilho-ouro",
+                  "text-[12.5px] font-semibold transition-colors hover:bg-primary/90",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:pointer-events-none disabled:opacity-45",
+                  "disabled:pointer-events-none disabled:opacity-45 disabled:shadow-none",
                 )}
               >
                 {comentando ? (
@@ -400,11 +406,11 @@ export function LeadCardHistory({
               type="button"
               onClick={() => setFiltro(f.chave)}
               className={cn(
-                "rounded-full border px-2.5 py-[3px] text-[12px] transition-colors",
+                "rounded-full border px-2.5 py-[3px] text-[12px] font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 ativo
-                  ? "border-primary/45 bg-primary/10 font-medium text-primary"
-                  : "border-border text-muted-foreground hover:border-muted-foreground/35 hover:text-foreground",
+                  ? "border-transparent bg-tinta font-semibold text-tinta-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
               )}
             >
               {f.rotulo}
@@ -443,11 +449,11 @@ export function LeadCardHistory({
 
               <div
                 className={cn(
-                  "min-w-0 flex-1 overflow-hidden rounded-lg border bg-card",
+                  "min-w-0 flex-1 overflow-hidden rounded-xl border bg-card",
                   // O comentário ganha a borda âmbar do próprio tipo: numa
                   // parede de tráfego de WhatsApp, o que uma pessoa escreveu à
                   // mão precisa ser achável sem ler.
-                  e.comentario ? "border-amber-500/35" : "border-border",
+                  e.comentario ? "border-warning/45" : "border-border",
                 )}
               >
                 {e.comentario ? (
@@ -461,11 +467,11 @@ export function LeadCardHistory({
                     <Frase evento={e} />
                   </div>
                 )}
-                <div className="flex items-center gap-2 border-t border-border/70 bg-muted/40 px-3 py-1.5">
+                <div className="flex items-center gap-2 border-t border-border/70 bg-sunken px-3 py-1.5">
                   {e.autor ? (
                     <>
                       <span
-                        className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary"
+                        className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary-soft text-[10px] font-bold text-primary-soft-foreground"
                         aria-hidden="true"
                       >
                         {iniciais(e.autor)}
@@ -491,7 +497,7 @@ export function LeadCardHistory({
       </ol>
 
       {visiveis.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border py-8 text-center text-[13px] text-muted-foreground">
+        <p className="rounded-2xl border border-dashed border-border py-8 text-center text-[13px] text-muted-foreground">
           Nada deste tipo no histórico.
         </p>
       )}

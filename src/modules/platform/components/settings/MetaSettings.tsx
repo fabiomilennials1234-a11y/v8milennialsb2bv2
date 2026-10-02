@@ -146,7 +146,7 @@ function ConnectionSection({
                   toast.error(
                     err instanceof Error
                       ? err.message
-                      : "Erro ao iniciar conexao Meta"
+                      : "Erro ao iniciar conexão Meta"
                   );
                 },
               });
@@ -253,7 +253,7 @@ function ConnectionSection({
                   <AlertDialogHeader>
                     <AlertDialogTitle>{disconnectLabel}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Voce nao recebera mais mensagens desse canal ate
+                      Você não receberá mais mensagens desse canal até
                       reconectar.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -293,15 +293,15 @@ function ConnectionSection({
 
           {/* Empty Pages Warning */}
           {isConnected && pages.length === 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-medium text-amber-800">
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+              <p className="text-sm font-medium text-warning-strong">
                 {type === "instagram"
                   ? "Nenhuma conta Instagram vinculada"
-                  : "Nenhuma pagina vinculada"}
+                  : "Nenhuma página vinculada"}
               </p>
-              <p className="text-sm text-amber-700 mt-1">
-                Durante a conexao, nenhuma pagina foi selecionada ou voce nao tem
-                acesso de administrador a nenhuma pagina.
+              <p className="text-sm text-warning-strong mt-1">
+                Durante a conexão, nenhuma página foi selecionada ou você não tem
+                acesso de administrador a nenhuma página.
               </p>
               <Button
                 variant="outline"

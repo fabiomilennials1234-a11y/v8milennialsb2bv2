@@ -18,6 +18,7 @@ import { motion } from "framer-motion";
 import { Check, ArrowRight, Rocket, PartyPopper, Loader2, Youtube } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -43,7 +44,8 @@ function TutorialLink({ url, label }: { url: string; label: string }) {
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-red-500 transition-colors hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        // Vermelho do YouTube é a marca do link, não estado de erro — fica literal.
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-red-500 transition-colors hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title={`Ver tutorial: ${label}`}
         aria-label={`Ver tutorial em vídeo: ${label}`}
       >
@@ -53,7 +55,7 @@ function TutorialLink({ url, label }: { url: string; label: string }) {
   }
   return (
     <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/30"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground/30"
       title="Sem tutorial ainda"
       aria-hidden
     >
@@ -85,19 +87,19 @@ function TaskCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: index * 0.04, ease: "easeOut" }}
       className={cn(
-        "group flex items-center gap-4 rounded-xl border p-4 transition-colors",
+        "group flex items-center gap-4 rounded-card border p-4 transition-[transform,box-shadow,border-color]",
         done
-          ? "border-border/50 bg-card/40"
-          : "border-border bg-card hover:border-primary/40",
+          ? "border-border/50 bg-card/50"
+          : "border-card-border bg-card shadow-relevo hover:-translate-y-0.5 hover:shadow-relevo-alto",
       )}
     >
       {/* Status / icon tile */}
       <div
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition-colors",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors",
           done
-            ? "border-primary bg-primary text-primary-foreground"
-            : "border-border bg-background text-muted-foreground group-hover:text-primary group-hover:border-primary/40",
+            ? "bg-success/10 text-success"
+            : "bg-muted text-foreground/70 group-hover:bg-primary-soft group-hover:text-primary-soft-foreground",
         )}
         aria-hidden
       >
@@ -128,13 +130,14 @@ function TaskCard({
         <TutorialLink url={step.tutorialUrl} label={step.label} />
 
         {done ? (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
             <Check className="h-3.5 w-3.5" strokeWidth={3} />
             Concluído
           </span>
         ) : (
           <div className="flex items-center gap-3">
-            <Button asChild size="sm" className="h-8 gap-1.5">
+            {/* Ouro é escasso: a ação da linha é tinta, não o botão primário. */}
+            <Button asChild size="sm" variant="ink" className="h-8 gap-1.5">
               <Link to={step.href}>
                 Configurar
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -194,26 +197,25 @@ export function OnboardingHubView({
     <div className="mx-auto w-full max-w-2xl">
       {/* Header */}
       <header className="mb-8">
-        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
-          <Rocket className="h-3.5 w-3.5" />
-          Primeiros passos
-        </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Configure seu Torque
-        </h1>
-        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Complete os passos abaixo para deixar seu CRM pronto para vender.
-          Cada passo leva você direto à tela certa.
-        </p>
+        <PageHeader
+          eyebrow={
+            <span className="inline-flex items-center gap-1.5">
+              <Rocket className="h-3.5 w-3.5" aria-hidden />
+              Primeiros passos
+            </span>
+          }
+          title="Configure seu Torque"
+          subtitle="Complete os passos abaixo para deixar seu CRM pronto para vender. Cada passo leva você direto à tela certa."
+        />
 
         {/* Progress */}
-        <div className="mt-6">
+        <div className="mt-6 rounded-card border border-card-border bg-card p-4 shadow-relevo">
           <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-sm font-semibold text-foreground">
               <span className="tabular-nums">{done}</span> de{" "}
               <span className="tabular-nums">{total}</span> concluídos
             </span>
-            <span className="text-sm font-semibold tabular-nums text-primary">
+            <span className="text-[1.35rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums">
               {pct}%
             </span>
           </div>
@@ -227,9 +229,9 @@ export function OnboardingHubView({
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="mb-6 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"
+          className="mb-6 flex items-center gap-3 rounded-card bg-primary-soft p-4"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <PartyPopper className="h-5 w-5" />
           </div>
           <div>
@@ -254,14 +256,14 @@ export function OnboardingHubView({
             <section key={section.key}>
               <div className="mb-3 flex items-baseline justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-foreground">
+                  <h2 className="text-base font-bold tracking-tight text-foreground">
                     {section.label}
                   </h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {section.description}
                   </p>
                 </div>
-                <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                   {sectionDone}/{steps.length}
                 </span>
               </div>

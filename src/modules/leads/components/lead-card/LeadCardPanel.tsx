@@ -92,7 +92,7 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
   if (isMobile) {
     return (
       <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-        <SheetContent side="bottom" className="h-[92vh] p-0">
+        <SheetContent side="bottom" className="h-[92vh] overflow-hidden rounded-t-panel bg-card p-0">
           {conteudo}
         </SheetContent>
       </Sheet>

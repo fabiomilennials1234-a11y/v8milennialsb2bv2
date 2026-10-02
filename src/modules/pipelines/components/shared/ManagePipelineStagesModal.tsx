@@ -318,11 +318,11 @@ function SortableStageItem({
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Check className="w-4 h-4 text-green-500" />
+                <Check className="w-4 h-4 text-success" />
               )}
             </Button>
             <Button size="icon" variant="ghost" onClick={onCancelEdit}>
-              <X className="w-4 h-4 text-red-500" />
+              <X className="w-4 h-4 text-destructive" />
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -418,28 +418,28 @@ function SortableStageItem({
                 </span>
               )}
               {stage.suggested_stage_role && (
-                <span className="inline-flex items-center gap-1 text-xs border border-amber-500/30 bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-xs border border-warning/35 bg-warning/15 text-warning-strong px-2 py-0.5 rounded-full">
                   <Sparkles className="w-3 h-3" />
                   Sugestão: {STAGE_ROLE_META[stage.suggested_stage_role].label} · em revisão
                 </span>
               )}
               {stage.is_final_positive && (
-                <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                <span className="text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full">
                   Sucesso
                 </span>
               )}
               {stage.is_final_positive && stage.target_pipe_type && (
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                <span className="text-xs font-semibold text-insights bg-insights/10 px-2 py-0.5 rounded-full">
                   → {nomeDoPipeAlvo(stage.target_pipe_type)}
                 </span>
               )}
               {stage.is_final_positive && stage.target_pipeline_id && (
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                <span className="text-xs font-semibold text-insights bg-insights/10 px-2 py-0.5 rounded-full">
                   → {pipelines.find((p) => p.id === stage.target_pipeline_id)?.label ?? "Funil removido"}
                 </span>
               )}
               {stage.is_final_negative && (
-                <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                <span className="text-xs font-semibold text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
                   Perda
                 </span>
               )}
@@ -1062,9 +1062,9 @@ export function ManagePipelineStagesContent({
               </p>
             </div>
           ) : leadsInStageToDelete > 0 ? (
-            <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="space-y-2 rounded-2xl border border-warning/35 bg-warning/10 p-3">
               <div className="flex items-start gap-2 text-sm">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
                 <span>
                   Esta etapa tem{" "}
                   <strong>

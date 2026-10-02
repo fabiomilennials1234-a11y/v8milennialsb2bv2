@@ -17,6 +17,7 @@ import {
   Trash2,
   CheckCircle2,
   StickyNote,
+  ListTodo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +141,7 @@ export function RevisionItem({
   const isOverdue = !task.isCompleted && estaAtrasado(task.scheduledAt, timezone);
   const hasPhone = !!formatPhoneForWhatsApp(task.leadPhone ?? undefined);
   const isFollowUp = task.type === "follow-up";
+  const isMessage = task.type === "scheduled-message";
 
   const handleCompleteWithNotes = () => {
     onComplete(task.id, completionNotes || undefined);
@@ -176,43 +178,51 @@ export function RevisionItem({
     <>
       <div
         className={cn(
-          "group flex items-start gap-3 py-3 px-2 rounded-lg cursor-pointer transition-colors",
-          "hover:bg-muted/30",
+          "group flex cursor-pointer items-start gap-3 rounded-2xl px-3 py-3 transition-colors",
+          "hover:bg-muted/50",
+          expanded && !task.isCompleted && "bg-muted/40",
           task.isCompleted && "opacity-50"
         )}
         onClick={() => setExpanded(!expanded)}
       >
+        {/* Chip do tipo: a mesma informação do selo, para a lista ser lida
+            de relance — azul = mensagem agendada, âmbar = follow-up. */}
+        <span
+          aria-hidden
+          className={cn(
+            "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px]",
+            isMessage ? "bg-insights/10 text-insights" : "bg-warning/15 text-warning-strong",
+          )}
+        >
+          {isMessage ? <MessageSquare className="h-4 w-4" /> : <ListTodo className="h-4 w-4" />}
+        </span>
+
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={cn(
-              "text-sm font-medium truncate flex-1",
+              "flex-1 truncate text-sm font-semibold",
               task.isCompleted && "line-through"
             )}>
               {task.title}
             </span>
             <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] px-1.5 py-0 shrink-0",
-                task.type === "scheduled-message"
-                  ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                  : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-              )}
+              variant={isMessage ? "info" : "warning"}
+              className="shrink-0 px-2 py-0 text-[10px] font-bold"
             >
-              {task.type === "scheduled-message" ? "Mensagem" : "Follow-up"}
+              {isMessage ? "Mensagem" : "Follow-up"}
             </Badge>
           </div>
 
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[12px] text-muted-foreground/60 truncate">
+            <span className="truncate text-[12px] text-muted-foreground">
               {task.leadName}
               {task.leadCompany && ` · ${task.leadCompany}`}
             </span>
             <span className="ml-auto flex items-center gap-1.5 shrink-0">
               <span className={cn(
                 "text-[12px] tabular-nums",
-                isOverdue ? "text-destructive font-medium" : "text-muted-foreground/50"
+                isOverdue ? "font-semibold text-destructive" : "text-muted-foreground"
               )}>
                 {task.isCompleted && task.completedAt
                   ? `Concluído ${format(task.completedAt, "HH:mm")}`
@@ -223,8 +233,8 @@ export function RevisionItem({
           </div>
         </div>
 
-        <div className="pt-1 opacity-0 group-hover:opacity-40 transition-opacity">
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        <div className="pt-2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-70">
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </div>
       </div>
 
@@ -237,15 +247,16 @@ export function RevisionItem({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex items-center justify-between gap-3 mx-2 mb-2 px-4 py-2.5 rounded-lg bg-success/5 border border-success/20">
-              <span className="text-sm text-foreground/80">
+            <div className="mx-2 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-success/25 bg-success/10 px-4 py-2.5">
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <CheckCircle2 className="h-4 w-4 text-success" />
                 Concluído. Próximo passo?
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs gap-1"
+                  className="h-8 gap-1.5 text-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                     setScheduleFollowUpOpen(true);
@@ -259,7 +270,7 @@ export function RevisionItem({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs gap-1"
+                    className="h-8 gap-1.5 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       setScheduleModalOpen(true);
@@ -273,7 +284,7 @@ export function RevisionItem({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 text-xs"
+                  className="h-8 text-xs"
                   onClick={(e) => { e.stopPropagation(); setShowCompletionBanner(false); }}
                 >
                   Pular
@@ -293,13 +304,13 @@ export function RevisionItem({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="ml-4 mr-2 mb-3 p-3 rounded-lg bg-muted/20 border border-border/50 space-y-3">
+            <div className="mb-3 ml-14 mr-2 space-y-3 rounded-2xl bg-sunken p-4 max-sm:ml-2">
               {/* Description / Message content */}
               {isFollowUp && task.description && (
                 <p className="text-sm text-muted-foreground">{task.description}</p>
               )}
               {task.type === "scheduled-message" && task.messageContent && (
-                <div className="text-sm text-muted-foreground bg-background rounded-md p-2 border border-border/30">
+                <div className="rounded-xl border border-border/60 bg-card p-3 text-sm text-foreground/80">
                   {task.messageContent}
                 </div>
               )}
@@ -308,7 +319,7 @@ export function RevisionItem({
               )}
 
               {/* Meta info */}
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground/50">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
                 {task.assignedToName && <span>Responsável: {task.assignedToName}</span>}
                 {task.sourcePipe && (
                   <span className="flex items-center gap-1">
@@ -320,7 +331,7 @@ export function RevisionItem({
                   <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> Auto</span>
                 )}
                 {task.status === "failed" && (
-                  <span className="text-destructive font-medium">Falhou</span>
+                  <span className="font-semibold text-destructive">Falhou</span>
                 )}
               </div>
 
@@ -333,7 +344,7 @@ export function RevisionItem({
                       phone={task.leadPhone}
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
+                      className="h-8 gap-1.5 text-xs text-success hover:bg-success/10 hover:text-success"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       WhatsApp
@@ -346,7 +357,7 @@ export function RevisionItem({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 gap-1.5 text-xs"
+                          className="h-8 gap-1.5 text-xs"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <CalendarIcon className="w-3.5 h-3.5" />
@@ -370,7 +381,7 @@ export function RevisionItem({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs"
+                      className="h-8 gap-1.5 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleScheduleNew();
@@ -385,7 +396,7 @@ export function RevisionItem({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs"
+                      className="h-8 gap-1.5 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         onOpenLead(task.leadId);
@@ -400,7 +411,7 @@ export function RevisionItem({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         onArchive(task.id);
@@ -415,7 +426,7 @@ export function RevisionItem({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
                         onDelete(task.id);
@@ -437,14 +448,14 @@ export function RevisionItem({
                       phone={task.leadPhone}
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
+                      className="h-8 gap-1.5 text-xs text-success hover:bg-success/10 hover:text-success"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       WhatsApp
                     </AbrirConversaButton>
                   )}
                   {onCancel && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs"
+                    <Button size="sm" variant="ghost" className="h-8 text-xs"
                       onClick={(e) => { e.stopPropagation(); onCancel(task.id); }}>
                       Cancelar envio
                     </Button>
@@ -454,23 +465,23 @@ export function RevisionItem({
 
               {/* Completion Section (follow-ups only) */}
               {isFollowUp && (
-                <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                    <StickyNote className="w-3.5 h-3.5" />
-                    <span className="font-medium">Conclusão</span>
+                <div className="space-y-2 rounded-xl border border-border/60 bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                    <StickyNote className="h-3.5 w-3.5" />
+                    <span>Conclusão</span>
                   </div>
                   <Textarea
                     placeholder="Notas de conclusão (opcional)..."
                     value={completionNotes}
                     onChange={(e) => setCompletionNotes(e.target.value)}
-                    className="min-h-[60px] text-xs resize-none bg-background/50"
+                    className="min-h-[60px] resize-none text-xs"
                     onClick={(e) => e.stopPropagation()}
                   />
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant="default"
-                      className="h-7 text-xs gap-1.5"
+                      className="h-8 gap-1.5 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCompleteWithNotes();
@@ -483,7 +494,7 @@ export function RevisionItem({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs gap-1.5"
+                      className="h-8 gap-1.5 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCompleteWithoutNotes();
@@ -502,7 +513,7 @@ export function RevisionItem({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs gap-1.5"
+                    className="h-8 gap-1.5 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       onComplete(task.id);

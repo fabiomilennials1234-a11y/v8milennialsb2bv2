@@ -555,7 +555,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const negocio = (comLead: boolean) =>
     isLoading ? (
-      <div className="flex h-full flex-1 items-center justify-center bg-background">
+      <div className="flex h-full flex-1 items-center justify-center bg-card">
         <span className="text-[13px] text-muted-foreground">Carregando…</span>
       </div>
     ) : data ? (
@@ -608,7 +608,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         excluindo={excluindo}
       />
     ) : (
-      <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">
+      <div className="flex h-full flex-1 items-center justify-center bg-card px-6 text-center">
         <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
       </div>
     );
@@ -621,7 +621,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
    */
   const conteudo = (comLead: boolean) => (
-    <div ref={painelRef} className="relative flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+    // Sem moldura própria: a casca do V5 (diálogo/folha, raio 28) emoldura.
+    <div ref={painelRef} className="relative flex h-full min-h-0 overflow-hidden rounded-[inherit] bg-card">
       {camadaDaCelebracao}
       {/* A coluna da pessoa só existe quando há pessoa. Um negócio órfão de lead
           não deveria existir (ADR-0023 §2), mas se existir o painel abre com o
@@ -770,7 +771,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     return (
       <>
         <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-          <SheetContent side="bottom" className="h-[96dvh] overflow-hidden p-0">
+          <SheetContent side="bottom" className="h-[96dvh] overflow-hidden rounded-t-panel bg-card p-0">
             {conteudo(false)}
           </SheetContent>
         </Sheet>

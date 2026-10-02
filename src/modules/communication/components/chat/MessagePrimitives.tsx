@@ -112,10 +112,10 @@ export function formatMessageTime(timestamp: string): string {
 // ---------------------------------------------------------------------------
 
 export function MessageStatusIcon({ status, onInk = false }: { status: string; onInk?: boolean }) {
-  // onInk → ícone está sobre o gradiente laranja (bubble manual outgoing): usa
-  // tinta escura para legibilidade. Caso contrário, mantém os tons originais.
-  const muted = onInk ? "text-[#1c1c1c]/45" : "text-muted-foreground/40";
-  const readTone = onInk ? "text-[#1c1c1c]/70" : "text-blue-500/70";
+  // onInk → ícone está sobre o ouro (bolha manual de saída): usa a tinta do
+  // próprio ouro para legibilidade. Caso contrário, tons neutros + azul de lida.
+  const muted = onInk ? "text-primary-foreground/45" : "text-muted-foreground/60";
+  const readTone = onInk ? "text-primary-foreground/80" : "text-insights";
   switch (status) {
     case "pending":
       return <Clock className={cn("w-2.5 h-2.5", muted)} />;
@@ -273,8 +273,9 @@ export function MessageBubble({
   };
 
   // Bubble color tokens — C9.
-  // Manual/humano outgoing recebe o tratamento laranja da marca (gradient gold +
-  // texto ink + sombra). Copilot/workflow preservam as cores semânticas (IA/automação).
+  // V5: manual/humano outgoing é OURO SÓLIDO (era gradiente) com texto em tinta
+  // do ouro; a de entrada é o cartão branco. Copilot/automação preservam as
+  // cores semânticas (IA/automação) — é por elas que se lê quem escreveu.
   const isManualOutgoing = isOutgoing && sentSource === "manual";
   const bubbleColorClass =
     sentSource === "copilot"
@@ -282,8 +283,8 @@ export function MessageBubble({
       : sentSource === "workflow"
         ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
         : isManualOutgoing
-          ? "gradient-gold text-primary-foreground border-0 shadow-[0_4px_12px_hsl(var(--primary)/0.25)]"
-          : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
+          ? "bg-primary text-primary-foreground border border-transparent shadow-[0_6px_16px_-10px_hsl(var(--primary)/0.8)]"
+          : "bg-card text-card-foreground border border-border/70 shadow-relevo";
 
   const radiusClass = isOutgoing
     ? (isFirstInGroup && isLastInGroup
@@ -380,13 +381,13 @@ export function MessageBubble({
           <div className="flex items-center gap-1 mb-1">
             {sentSource === "workflow" ? (
               <>
-                <Zap className="h-3 w-3 text-[#a78bfa]/60" />
-                <span className="text-[10px] text-[#a78bfa]/70 font-medium">Automação</span>
+                <Zap className="h-3 w-3 text-bubble-workflow-foreground/70" />
+                <span className="text-[10px] font-bold text-bubble-workflow-foreground/80">Automação</span>
               </>
             ) : (
               <>
-                <Bot className="h-3 w-3 text-bubble-ai-foreground/60" />
-                <span className="text-[10px] text-bubble-ai-foreground/70 font-medium">Copilot</span>
+                <Bot className="h-3 w-3 text-bubble-ai-foreground/70" />
+                <span className="text-[10px] font-bold text-bubble-ai-foreground/80">Copilot</span>
               </>
             )}
           </div>
@@ -601,7 +602,13 @@ export function MessageBubble({
             {botoesDoTemplate.length > 0 && (
               <div className="-mx-3 -mb-2 mt-2 divide-y divide-border/30 border-t border-border/30">
                 {botoesDoTemplate.map((rotulo, i) => (
-                  <p key={i} className="py-1.5 text-center text-[13px] text-sky-500/90">
+                  <p
+                    key={i}
+                    className={cn(
+                      "py-1.5 text-center text-[13px] font-semibold",
+                      isManualOutgoing ? "text-primary-foreground" : "text-insights",
+                    )}
+                  >
                     {rotulo}
                   </p>
                 ))}
@@ -618,7 +625,7 @@ export function MessageBubble({
         )}
 
         {!isFailed && (message.retry_attempt ?? 0) > 0 && (
-          <p role="status" className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+          <p role="status" className="mt-1 text-[11px] text-warning-strong">
             Erro no envio, tentando novamente {message.retry_attempt}/10
           </p>
         )}
@@ -642,7 +649,7 @@ export function MessageBubble({
               dateTime={message.timestamp}
               className={cn(
                 "text-[10px] tabular-nums",
-                isManualOutgoing ? "text-primary-foreground/60" : "text-muted-foreground/50",
+                isManualOutgoing ? "text-primary-foreground/65" : "text-muted-foreground",
               )}
             >
               {formatMessageTime(message.timestamp)}

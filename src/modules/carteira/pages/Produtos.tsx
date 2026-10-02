@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode, Bot, Search, X } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
+import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode, Bot, Search, X, Download } from "lucide-react";
 import type { ProductType } from "@/modules/carteira/hooks/useProducts";
 import { useProductsWithVariants, useDeleteProduct, Product } from "@/modules/carteira/hooks/useProducts";
 import { useProductMaterialCounts } from "@/modules/carteira/hooks/useProductMaterials";
@@ -21,6 +23,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useFeaturePermission } from "@/modules/identity";
+
+const TYPE_FILTERS = [
+  { value: "all" as const, label: "Todos" },
+  { value: "mrr" as const, label: "Recorrência" },
+  { value: "projeto" as const, label: "Projeto" },
+  { value: "unitario" as const, label: "Unitário" },
+];
+
+/** Tom do tipo — o mesmo dado do badge de antes, agora em tom de token. */
+const TYPE_BADGE: Record<string, { variant: "gold" | "info" | "soft"; label: string }> = {
+  mrr: { variant: "gold", label: "Recorrência" },
+  projeto: { variant: "info", label: "Projeto" },
+  unitario: { variant: "soft", label: "Unitário" },
+};
+
+const microLabel = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
   const deleteProduct = useDeleteProduct();
@@ -66,91 +85,92 @@ export default function Produtos() {
 
   return (
     <>
-    <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Produtos</h1>
-            <p className="text-muted-foreground">
-              Gerencie seus produtos, variações e catálogo B2B
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href="/products_import_template.xlsx"
-              download="products_import_template.xlsx"
-              className="text-sm text-muted-foreground hover:text-primary hover:underline"
-            >
-              Baixar modelo
-            </a>
-            <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Importar
-            </Button>
-            <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canCreateProduct}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Produto
-            </Button>
-          </div>
-        </div>
+    <div className="space-y-5">
+        <PageHeader
+          title="Produtos"
+          subtitle="Gerencie seus produtos, variações e catálogo B2B"
+          actions={
+            <>
+              <Button asChild variant="ghost" className="text-muted-foreground">
+                <a href="/products_import_template.xlsx" download="products_import_template.xlsx">
+                  <Download />
+                  Baixar modelo
+                </a>
+              </Button>
+              <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                <FileSpreadsheet />
+                Importar
+              </Button>
+              <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canCreateProduct}>
+                <Plus />
+                Novo produto
+              </Button>
+            </>
+          }
+        />
 
         {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1 sm:max-w-md">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              aria-label="Buscar produtos"
               placeholder="Buscar por nome, SKU ou descrição..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-9"
+              className="rounded-full pl-9 pr-9"
             />
             {searchTerm && (
               <button
+                type="button"
+                aria-label="Limpar busca"
                 onClick={() => setSearchTerm("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
-            {([
-              { value: "all" as const, label: "Todos" },
-              { value: "mrr" as const, label: "Recorrência" },
-              { value: "projeto" as const, label: "Projeto" },
-              { value: "unitario" as const, label: "Unitário" },
-            ]).map((opt) => (
-              <Button
+          {/* Filtro por tipo — mesmos quatro botões, forma de segmentado. */}
+          <div className="inline-flex items-center gap-0.5 self-start rounded-full bg-muted p-[3px] sm:self-auto">
+            {TYPE_FILTERS.map((opt) => (
+              <button
                 key={opt.value}
-                variant={typeFilter === opt.value ? "default" : "outline"}
-                size="sm"
+                type="button"
+                aria-pressed={typeFilter === opt.value}
                 onClick={() => setTypeFilter(opt.value)}
-                className="text-xs"
+                className={cn(
+                  "inline-flex items-center whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  typeFilter === opt.value
+                    ? "bg-card text-foreground shadow-relevo"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {opt.label}
-              </Button>
+              </button>
             ))}
           </div>
         </div>
 
         {/* Products Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader className="h-24 bg-muted/50" />
-                <CardContent className="h-40" />
-              </Card>
+              <Card key={i} className="h-64 animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredProducts.map((product) => {
+              const typeBadge = TYPE_BADGE[product.type] ?? TYPE_BADGE.projeto;
+              const materials = materialCounts.get(product.id) || 0;
+              return (
               <Card
                 key={product.id}
                 role="button"
                 tabIndex={0}
-                className="group hover:shadow-lg transition-shadow cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group flex cursor-pointer flex-col transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto focus:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
                 onClick={() => setEditingProduct(product)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -160,69 +180,72 @@ export default function Produtos() {
                 }}
               >
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-3">
                       {product.logo_url ? (
                         <img
                           src={product.logo_url}
                           alt={product.name}
-                          className="w-12 h-12 rounded-lg object-cover"
+                          className="h-12 w-12 shrink-0 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Package className="h-6 w-6 text-primary" />
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+                          <Package className="h-6 w-6" />
                         </div>
                       )}
-                      <div>
-                        <CardTitle className="text-lg">{product.name}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge
-                            variant={product.type === "mrr" ? "default" : product.type === "unitario" ? "outline" : "secondary"}
-                          >
-                            {product.type === "mrr" ? "Recorrência" : product.type === "unitario" ? "Unitário" : "Projeto"}
-                          </Badge>
+                      <div className="min-w-0">
+                        <CardTitle className="truncate text-[17px] tracking-[-0.02em]">{product.name}</CardTitle>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Badge variant={typeBadge.variant}>{typeBadge.label}</Badge>
                           {product.has_variants && product.variants && product.variants.length > 0 && (
-                            <Badge variant="outline" className="text-xs gap-1">
+                            <Badge variant="soft" className="gap-1">
                               <Layers className="h-3 w-3" />
                               {product.variants.length} var.
                             </Badge>
                           )}
-                          {(materialCounts.get(product.id) || 0) > 0 && (
-                            <Badge variant="outline" className="text-xs gap-1 text-primary border-primary/30">
+                          {materials > 0 && (
+                            <Badge variant="info" className="gap-1">
                               <Bot className="h-3 w-3" />
-                              {materialCounts.get(product.id)} {materialCounts.get(product.id) === 1 ? "material" : "materiais"}
+                              {materials} {materials === 1 ? "material" : "materiais"}
                             </Badge>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Editar ${product.name}`}
+                        className="h-8 w-8"
                         disabled={!canEditProduct}
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingProduct(product);
                         }}
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Edit2 />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Excluir ${product.name}`}
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={!canDeleteProduct}
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeletingProductId(product.id);
                         }}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="flex flex-1 flex-col gap-4">
                   {/* SKU */}
                   {product.sku && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -233,28 +256,28 @@ export default function Produtos() {
 
                   {/* Description */}
                   {product.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">{product.description}</p>
                   )}
 
                   {/* Tickets - show only for products without variants */}
                   {!product.has_variants && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Ticket</p>
-                        <p className="font-semibold">{formatCurrency(product.ticket)}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-sunken px-3 py-2.5">
+                        <p className={microLabel}>Ticket</p>
+                        <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">{formatCurrency(product.ticket)}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Ticket Mínimo</p>
-                        <p className="font-semibold">{formatCurrency(product.ticket_minimo)}</p>
+                      <div className="rounded-xl bg-sunken px-3 py-2.5">
+                        <p className={microLabel}>Ticket mínimo</p>
+                        <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">{formatCurrency(product.ticket_minimo)}</p>
                       </div>
                     </div>
                   )}
 
                   {/* Variant price range */}
                   {product.has_variants && product.variants && product.variants.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Faixa de Preço (Variações)</p>
-                      <p className="font-semibold text-sm">
+                    <div className="rounded-xl bg-sunken px-3 py-2.5">
+                      <p className={microLabel}>Faixa de preço (variações)</p>
+                      <p className="mt-0.5 text-[15px] font-extrabold tabular-nums tracking-[-0.02em]">
                         {(() => {
                           const tickets = product.variants
                             .map((v) => v.ticket)
@@ -272,31 +295,31 @@ export default function Produtos() {
                   {/* Entregáveis */}
                   {product.entregaveis && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1">Entregáveis</p>
-                      <p className="text-sm line-clamp-2">{product.entregaveis}</p>
+                      <p className={cn(microLabel, "mb-1")}>Entregáveis</p>
+                      <p className="line-clamp-2 text-sm">{product.entregaveis}</p>
                     </div>
                   )}
 
                   {/* Links & Documents */}
-                  <div className="flex flex-wrap gap-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
+                  <div className="mt-auto flex flex-wrap gap-x-3 gap-y-2 border-t border-border/70 pt-3" onClick={(e) => e.stopPropagation()}>
                     {product.contrato_padrao_url && (
                       <a
                         href={product.contrato_padrao_url}
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary-soft-foreground hover:underline"
                       >
                         <FileText className="h-3 w-3" />
-                        Contrato Padrão
+                        Contrato padrão
                       </a>
                     )}
                     {product.contrato_minimo_url && (
                       <a
                         href={product.contrato_minimo_url}
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary-soft-foreground hover:underline"
                       >
                         <FileText className="h-3 w-3" />
-                        Contrato Mínimo
+                        Contrato mínimo
                       </a>
                     )}
                     {product.links && product.links.length > 0 && (
@@ -314,32 +337,35 @@ export default function Produtos() {
 
                   {/* Active Status */}
                   {!product.is_active && (
-                    <Badge variant="outline" className="text-muted-foreground">
+                    <Badge variant="soft" className="self-start">
                       Inativo
                     </Badge>
                   )}
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {/* Empty State — no products at all */}
         {!isLoading && products?.length === 0 && (
-          <Card className="p-12 text-center">
-            <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum produto cadastrado</h3>
-            <p className="text-muted-foreground mb-4">
+          <Card className="flex flex-col items-center p-12 text-center">
+            <span className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+              <Package className="h-7 w-7" />
+            </span>
+            <h3 className="mb-1 text-lg font-bold tracking-[-0.02em]">Nenhum produto cadastrado</h3>
+            <p className="mb-5 text-sm text-muted-foreground">
               Comece cadastrando seu primeiro produto
             </p>
             <div className="flex justify-center gap-2">
               <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                <FileSpreadsheet />
                 Importar
               </Button>
               <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canCreateProduct}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Produto
+                <Plus />
+                Novo produto
               </Button>
             </div>
           </Card>
@@ -347,10 +373,12 @@ export default function Produtos() {
 
         {/* Empty State — search/filter returned nothing */}
         {!isLoading && (products?.length ?? 0) > 0 && filteredProducts.length === 0 && (
-          <Card className="p-12 text-center">
-            <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum produto encontrado</h3>
-            <p className="text-muted-foreground mb-4">
+          <Card className="flex flex-col items-center p-12 text-center">
+            <span className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-muted text-muted-foreground">
+              <Search className="h-7 w-7" />
+            </span>
+            <h3 className="mb-1 text-lg font-bold tracking-[-0.02em]">Nenhum produto encontrado</h3>
+            <p className="mb-5 text-sm text-muted-foreground">
               Tente ajustar a busca ou os filtros
             </p>
             <Button
@@ -396,7 +424,12 @@ export default function Produtos() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground shadow-none hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

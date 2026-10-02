@@ -8,6 +8,8 @@ import {
   MessageSquare,
   Bot,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { FocusCard, FocusTile, KpiTile } from "@/components/ui/bento";
 import { useIdentity, useOrganization } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,9 +63,37 @@ import type { Json } from "@/integrations/supabase/types";
 
 type Props = { onContactSupport?: () => void };
 
+/*
+ * V5 (2026-10): mesma área, mesmos estados e mesmos textos. Abas internas em
+ * segmentado (a página de Configurações já tem a navegação dela), o plano
+ * contratado como o cartão de ouro da vista, limites como `KpiTile` com barra
+ * e avisos/FAQ em cartão branco de bento.
+ */
+const ALERT_CARD = "rounded-card border-card-border bg-card shadow-relevo";
+const ALERT_BAD = "rounded-card border-destructive/30 bg-destructive/5";
+
+/** Tom da situação da cobrança — o rótulo é o mesmo; o tom só reforça. */
+function paymentBadgeClass(status: string) {
+  switch (status.toUpperCase()) {
+    case "RECEIVED":
+    case "CONFIRMED":
+    case "PAID":
+      return "border-transparent bg-success/10 text-success";
+    case "OVERDUE":
+    case "FAILED":
+    case "CHARGEBACK_REQUESTED":
+      return "border-transparent bg-destructive/10 text-destructive";
+    case "PENDING":
+    case "REFUND_REQUESTED":
+      return "border-transparent bg-warning/15 text-warning-strong";
+    default:
+      return "border-transparent bg-muted text-foreground/75";
+  }
+}
+
 function ReadError({ retry }: { retry: () => void }) {
   return (
-    <Alert variant="destructive">
+    <Alert variant="destructive" className={ALERT_BAD}>
       <AlertTitle>Não foi possível carregar esta seção</AlertTitle>
       <AlertDescription>
         Os dados da sua assinatura permanecem preservados.
@@ -81,17 +111,27 @@ function Loading() {
       aria-label="Carregando dados de cobrança"
       className="grid gap-3"
     >
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-24 w-full rounded-card" />
+      <Skeleton className="h-40 w-full rounded-card" />
     </div>
   );
 }
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dt className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{label}</dt>
+      <dd className="font-semibold tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+/** Mesmo `Detail`, no cartão de ouro do plano. */
+function GoldDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <FocusTile className="flex flex-col gap-1">
+      <dt className="text-[11px] font-bold text-primary-foreground/70">{label}</dt>
+      <dd className="text-[15px] font-extrabold tabular-nums tracking-[-0.02em]">{value}</dd>
+    </FocusTile>
   );
 }
 function DocumentLink({
@@ -106,7 +146,7 @@ function DocumentLink({
     <Button variant="outline" size="sm" asChild>
       <a href={safe} target="_blank" rel="noopener noreferrer">
         {children}
-        <ExternalLink className="ml-2 size-3" />
+        <ExternalLink className="size-3" />
       </a>
     </Button>
   ) : null;
@@ -125,59 +165,72 @@ function Quotas({ value }: { value: Json | undefined }) {
   const quotas =
     value && typeof value === "object" && !Array.isArray(value) ? value : {};
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {resources.map((resource) => {
-        const item = quotas[resource.key];
-        const quota =
-          item && typeof item === "object" && !Array.isArray(item)
-            ? item
-            : null;
-        const used =
-          typeof quota?.current_usage === "number" ? quota.current_usage : null;
-        const limit =
-          typeof quota?.effective_limit === "number"
-            ? quota.effective_limit
-            : null;
-        const unlimited = quota?.is_unlimited === true;
-        const known = used !== null && limit !== null;
-        return (
-          <Card key={resource.key}>
-            <CardHeader>
-              <resource.icon className="size-5 text-muted-foreground" />
-              <CardTitle className="text-base">{resource.label}</CardTitle>
-              <CardDescription>
-                Limite disponível para esta organização
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <p className="text-2xl font-semibold">
-                {known
-                  ? `${used} / ${unlimited ? "ilimitado" : limit}`
-                  : "Não informado"}
-              </p>
-              {known && !unlimited && (
-                <Progress
-                  aria-label={`Uso de ${resource.label}`}
-                  value={
-                    limit > 0
-                      ? Math.min(100, (used / limit) * 100)
-                      : used > 0
-                        ? 100
-                        : 0
-                  }
-                />
-              )}
-              <p className="text-sm text-muted-foreground">
-                {!known
-                  ? "O limite ainda não está disponível."
-                  : unlimited
-                    ? "Sem limite de quantidade."
-                    : `${Math.max(0, limit - used)} disponíveis${used > limit ? " · Uso acima do limite" : ""}`}
-              </p>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className="flex flex-col gap-3">
+      <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+        Limites disponíveis para esta organização
+      </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        {resources.map((resource) => {
+          const item = quotas[resource.key];
+          const quota =
+            item && typeof item === "object" && !Array.isArray(item)
+              ? item
+              : null;
+          const used =
+            typeof quota?.current_usage === "number" ? quota.current_usage : null;
+          const limit =
+            typeof quota?.effective_limit === "number"
+              ? quota.effective_limit
+              : null;
+          const unlimited = quota?.is_unlimited === true;
+          const known = used !== null && limit !== null;
+          const over = known && !unlimited && used > limit;
+          return (
+            <KpiTile
+              key={resource.key}
+              label={resource.label}
+              icon={resource.icon}
+              tone={over ? "bad" : known ? "gold" : "neutral"}
+              value={
+                known ? (
+                  <span className={cn(over && "text-destructive")}>
+                    {used}
+                    <span className="text-[0.6em] font-bold tracking-normal text-muted-foreground">
+                      {" / "}
+                      {unlimited ? "ilimitado" : limit}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-lg text-muted-foreground">Não informado</span>
+                )
+              }
+            >
+              <div className="flex flex-col gap-2">
+                {known && !unlimited && (
+                  <Progress
+                    aria-label={`Uso de ${resource.label}`}
+                    className={cn("h-2 bg-muted", over && "[&>div]:bg-destructive")}
+                    value={
+                      limit > 0
+                        ? Math.min(100, (used / limit) * 100)
+                        : used > 0
+                          ? 100
+                          : 0
+                    }
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {!known
+                    ? "O limite ainda não está disponível."
+                    : unlimited
+                      ? "Sem limite de quantidade."
+                      : `${Math.max(0, limit - used)} disponíveis${used > limit ? " · Uso acima do limite" : ""}`}
+                </p>
+              </div>
+            </KpiTile>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -187,7 +240,7 @@ export function BillingSettings(props: Props) {
   const { isAdmin } = useIdentity();
   if (!isAdmin)
     return (
-      <Alert>
+      <Alert className={ALERT_CARD}>
         <AlertTitle>Acesso restrito</AlertTitle>
         <AlertDescription>
           Somente administradores podem consultar esta área.
@@ -197,7 +250,7 @@ export function BillingSettings(props: Props) {
   if (isLoading) return <Loading />;
   if (error)
     return (
-      <Alert variant="destructive">
+      <Alert variant="destructive" className={ALERT_BAD}>
         <AlertTitle>Organização indisponível</AlertTitle>
         <AlertDescription>
           Não foi possível identificar a organização atual. Tente selecioná-la
@@ -207,7 +260,7 @@ export function BillingSettings(props: Props) {
     );
   if (!organizationId)
     return (
-      <Alert>
+      <Alert className={ALERT_CARD}>
         <AlertTitle>Selecione uma organização</AlertTitle>
         <AlertDescription>
           A assinatura e as cobranças pertencem à organização selecionada.
@@ -247,11 +300,11 @@ function BillingAccount({
     account.isFetching || history.isFetching || quotas.isFetching;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Assinatura e cobrança</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-[17px] font-bold tracking-[-0.02em]">Assinatura e cobrança</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             {org?.name ?? "Sua organização"} · Plano, utilização e pagamentos em
             um só lugar.
           </p>
@@ -262,13 +315,13 @@ function BillingAccount({
           onClick={refresh}
           disabled={fetching}
         >
-          <RefreshCw className="mr-2 size-4" />
+          <RefreshCw className={cn(fetching && "animate-spin")} />
           {fetching ? "Atualizando…" : "Atualizar"}
         </Button>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="h-auto flex-wrap justify-start gap-x-6 gap-y-3">
+        <TabsList variant="segmented" className="max-w-full flex-wrap justify-start">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="usage">Plano e limites</TabsTrigger>
           <TabsTrigger value="history">Histórico de cobranças</TabsTrigger>
@@ -282,7 +335,7 @@ function BillingAccount({
           ) : (
             <div className="flex flex-col gap-4">
               {org?.billing_override && (
-                <Alert>
+                <Alert className={ALERT_CARD}>
                   <AlertTitle>Acesso liberado pela equipe Torque</AlertTitle>
                   <AlertDescription>
                     Esta liberação não representa confirmação de pagamento.
@@ -294,7 +347,7 @@ function BillingAccount({
                 ["overdue", "expired", "suspended", "cancelled"].includes(
                   org.subscription_status,
                 ) && (
-                  <Alert variant="destructive">
+                  <Alert variant="destructive" className={ALERT_BAD}>
                     <AlertTitle>
                       Assinatura{" "}
                       {subscriptionLabels[
@@ -307,52 +360,52 @@ function BillingAccount({
                     </AlertDescription>
                   </Alert>
                 )}
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle>
+              {/* O plano contratado é o foco desta vista: o cartão de ouro. */}
+              <FocusCard>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-primary-foreground/70">Plano atual</p>
+                    <h3 className="mt-0.5 text-[1.5rem] font-extrabold leading-tight tracking-[-0.035em]">
                       {account.data?.planName || "Plano não informado"}
-                    </CardTitle>
-                    <Badge variant="outline">
-                      {subscriptionLabels[org?.subscription_status ?? ""] ??
-                        "Situação não informada"}
-                    </Badge>
+                    </h3>
+                    <p className="mt-1 text-[13px] font-medium text-primary-foreground/75">
+                      {sub
+                        ? "Condições da assinatura contratada."
+                        : "Ainda não há um contrato de pagamento registrado nesta área."}
+                    </p>
                   </div>
-                  <CardDescription>
-                    {sub
-                      ? "Condições da assinatura contratada."
-                      : "Ainda não há um contrato de pagamento registrado nesta área."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <Detail
-                      label="Ciclo contratado"
-                      value={cycleLabel(sub?.billing_cycle)}
-                    />
-                    <Detail
-                      label="Valor mensal do contrato"
-                      value={money(sub ? sub.final_amount_cents / 100 : null)}
-                    />
-                    <Detail
-                      label="Acesso válido até"
-                      value={billingDate(org?.subscription_expires_at)}
-                    />
-                    <Detail
-                      label="Data prevista de renovação"
-                      value={billingDate(sub?.renews_at)}
-                    />
-                  </dl>
-                </CardContent>
+                  <Badge variant="ink" className="shrink-0 bg-primary-foreground text-primary">
+                    {subscriptionLabels[org?.subscription_status ?? ""] ??
+                      "Situação não informada"}
+                  </Badge>
+                </div>
+                <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <GoldDetail
+                    label="Ciclo contratado"
+                    value={cycleLabel(sub?.billing_cycle)}
+                  />
+                  <GoldDetail
+                    label="Valor mensal do contrato"
+                    value={money(sub ? sub.final_amount_cents / 100 : null)}
+                  />
+                  <GoldDetail
+                    label="Acesso válido até"
+                    value={billingDate(org?.subscription_expires_at)}
+                  />
+                  <GoldDetail
+                    label="Data prevista de renovação"
+                    value={billingDate(sub?.renews_at)}
+                  />
+                </dl>
                 {onContactSupport && (
-                  <CardFooter>
-                    <Button variant="outline" onClick={onContactSupport}>
+                  <div>
+                    <Button variant="ink" onClick={onContactSupport}>
                       Falar sobre minha assinatura
                     </Button>
-                  </CardFooter>
+                  </div>
                 )}
-              </Card>
-              <Alert>
+              </FocusCard>
+              <Alert className={ALERT_CARD}>
                 <CreditCard className="size-4" />
                 <AlertTitle>Gestão de pagamentos em preparação</AlertTitle>
                 <AlertDescription>
@@ -375,7 +428,7 @@ function BillingAccount({
             )}
             <Card>
               <CardHeader>
-                <CardTitle>Precisa ampliar sua operação?</CardTitle>
+                <CardTitle className="text-[15px] tracking-[-0.02em]">Precisa ampliar sua operação?</CardTitle>
                 <CardDescription>
                   Converse com a equipe sobre mais pessoas, conexões de WhatsApp
                   ou agentes de IA.
@@ -405,7 +458,7 @@ function BillingAccount({
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>Histórico de cobranças</CardTitle>
+                <CardTitle className="text-[15px] tracking-[-0.02em]">Histórico de cobranças</CardTitle>
                 <CardDescription>
                   Pagamentos registrados para esta organização. Abra os detalhes
                   para consultar documentos disponíveis.
@@ -414,8 +467,10 @@ function BillingAccount({
               <CardContent>
                 {!history.data?.rows.length ? (
                   <div className="flex flex-col items-center gap-3 py-10 text-center">
-                    <Receipt className="size-8 text-muted-foreground" />
-                    <p className="font-medium">Nenhuma cobrança registrada</p>
+                    <span className="grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                      <Receipt className="size-6" />
+                    </span>
+                    <p className="font-bold">Nenhuma cobrança registrada</p>
                     <p className="text-sm text-muted-foreground">
                       Isso não significa que há uma dívida ou que seu acesso foi
                       interrompido.
@@ -437,14 +492,14 @@ function BillingAccount({
                     <TableBody>
                       {history.data.rows.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell className="whitespace-nowrap">
+                          <TableCell className="whitespace-nowrap tabular-nums">
                             {billingDate(row.created_at)}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap">
+                          <TableCell className="whitespace-nowrap font-semibold tabular-nums">
                             {money(row.amount)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
+                            <Badge variant="outline" className={paymentBadgeClass(row.status)}>
                               {paymentLabels[row.status.toUpperCase()] ??
                                 "Em análise"}
                             </Badge>
@@ -467,8 +522,8 @@ function BillingAccount({
                 )}
               </CardContent>
               {!!history.data?.count && (
-                <CardFooter className="flex flex-wrap justify-between gap-3">
-                  <span className="text-sm text-muted-foreground">
+                <CardFooter className="flex flex-wrap justify-between gap-3 border-t border-border/70 pt-4">
+                  <span className="text-sm tabular-nums text-muted-foreground">
                     Página {page + 1} de{" "}
                     {Math.ceil(history.data.count / BILLING_PAGE_SIZE)} ·{" "}
                     {history.data.count} cobranças
@@ -502,13 +557,13 @@ function BillingAccount({
           <div className="flex flex-col gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Forma de pagamento</CardTitle>
+                <CardTitle className="text-[15px] tracking-[-0.02em]">Forma de pagamento</CardTitle>
                 <CardDescription>
                   Informações do contrato atual.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                <p>
+                <p className="text-lg font-extrabold tracking-[-0.02em]">
                   {account.isError
                     ? "Não foi possível consultar a forma de pagamento."
                     : account.isPending
@@ -529,46 +584,48 @@ function BillingAccount({
                 </CardFooter>
               )}
             </Card>
-            <Accordion type="single" collapsible>
-              <AccordionItem value="change">
-                <AccordionTrigger>
-                  Como alterar ou cancelar meu plano?
-                </AccordionTrigger>
-                <AccordionContent>
-                  Use o atendimento nesta página. A equipe confere as condições
-                  do seu contrato e orienta a alteração. Abrir o atendimento não
-                  cancela nem modifica sua assinatura.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="renewal">
-                <AccordionTrigger>
-                  A data prevista significa cobrança automática?
-                </AccordionTrigger>
-                <AccordionContent>
-                  Não. A data vem do contrato registrado e não confirma uma
-                  cobrança futura. A renovação automática depende da forma de
-                  pagamento e da ativação desse serviço.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="documents">
-                <AccordionTrigger>Onde encontro comprovantes?</AccordionTrigger>
-                <AccordionContent>
-                  Abra os detalhes de uma cobrança no histórico. Links para a
-                  cobrança e o comprovante aparecem quando esses documentos
-                  estão disponíveis.
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="scope">
-                <AccordionTrigger>
-                  Estas são as vendas da minha empresa?
-                </AccordionTrigger>
-                <AccordionContent>
-                  Não. Esta área reúne a assinatura da sua organização no
-                  Torque. Os pedidos e as vendas dos seus clientes continuam na
-                  Carteira e nos negócios.
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+            <Card className="px-5 py-1">
+              <Accordion type="single" collapsible className="[&>*:last-child]:border-b-0">
+                <AccordionItem value="change">
+                  <AccordionTrigger>
+                    Como alterar ou cancelar meu plano?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Use o atendimento nesta página. A equipe confere as condições
+                    do seu contrato e orienta a alteração. Abrir o atendimento não
+                    cancela nem modifica sua assinatura.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="renewal">
+                  <AccordionTrigger>
+                    A data prevista significa cobrança automática?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Não. A data vem do contrato registrado e não confirma uma
+                    cobrança futura. A renovação automática depende da forma de
+                    pagamento e da ativação desse serviço.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="documents">
+                  <AccordionTrigger>Onde encontro comprovantes?</AccordionTrigger>
+                  <AccordionContent>
+                    Abra os detalhes de uma cobrança no histórico. Links para a
+                    cobrança e o comprovante aparecem quando esses documentos
+                    estão disponíveis.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="scope">
+                  <AccordionTrigger>
+                    Estas são as vendas da minha empresa?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Não. Esta área reúne a assinatura da sua organização no
+                    Torque. Os pedidos e as vendas dos seus clientes continuam na
+                    Carteira e nos negócios.
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>

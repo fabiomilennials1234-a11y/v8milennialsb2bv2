@@ -66,7 +66,7 @@ function Linha({
       className={cn(
         // O rótulo cede espaço na coluna do negócio e mantém o teto de 180px
         // na ficha inteira. O valor pode quebrar linha sem alargar a coluna.
-        "group grid grid-cols-[minmax(104px,min(38%,180px))_minmax(0,1fr)] items-baseline gap-4 rounded-md px-2 py-[7px] -mx-2",
+        "group grid grid-cols-[minmax(104px,min(38%,180px))_minmax(0,1fr)] items-baseline gap-4 rounded-lg px-2 py-[7px] -mx-2",
         "transition-colors hover:bg-muted/40",
       )}
     >
@@ -93,7 +93,7 @@ function Linha({
             if (e.key === "Escape") cancel();
           }}
           className={cn(
-            "min-w-0 rounded border border-primary/50 bg-background px-1.5 py-0.5 text-[13.5px]",
+            "min-w-0 rounded-md border border-primary/50 bg-card px-1.5 py-0.5 text-[13.5px]",
             "focus:outline-none focus:ring-1 focus:ring-primary/30",
           )}
         />
@@ -139,7 +139,7 @@ export function LeadCardFields({
         return (
           <section key={grupo.titulo} className="flex flex-col gap-1.5">
             <div className="flex items-baseline gap-2.5 pb-1">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+              <h3 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 {grupo.titulo}
               </h3>
               {/* Contador discreto: dá noção de completude sem transformar o

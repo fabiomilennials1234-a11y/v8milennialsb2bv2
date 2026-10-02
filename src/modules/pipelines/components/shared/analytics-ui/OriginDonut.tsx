@@ -52,8 +52,8 @@ export function OriginDonut({ slices, unit }: OriginDonutProps) {
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-[26px] font-extrabold tabular-nums tracking-tight">{total}</span>
-          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{unit}</span>
+          <span className="text-[26px] font-extrabold tabular-nums tracking-[-0.04em]">{total}</span>
+          <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{unit}</span>
         </div>
       </div>
       <div className="flex-1 w-full space-y-3 min-w-0">

@@ -51,7 +51,7 @@ export function SupportFab() {
           title="Ajuda"
           className={cn(
             "relative grid h-14 w-14 place-items-center rounded-full bg-primary text-primary-foreground transition",
-            "shadow-xl shadow-primary/40 hover:scale-105",
+            "shadow-brilho-ouro hover:scale-105",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             isOpen && "ring-2 ring-primary/60 ring-offset-2 ring-offset-background",
           )}
@@ -61,7 +61,7 @@ export function SupportFab() {
           {attention && (
             <span
               aria-hidden
-              className="absolute -right-0.5 -top-0.5 grid h-5 min-w-[20px] place-items-center rounded-full border-2 border-background bg-emerald-500 px-1 text-[10px] font-bold text-white"
+              className="absolute -right-0.5 -top-0.5 grid h-5 min-w-[20px] place-items-center rounded-full border-2 border-background bg-success px-1 text-[10px] font-bold text-success-foreground"
             >
               {total > 9 ? "9+" : total}
             </span>

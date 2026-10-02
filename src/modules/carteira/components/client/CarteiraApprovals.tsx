@@ -1,4 +1,4 @@
-import { CheckCircle2 } from "lucide-react";
+import { CheckCheck, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -34,7 +34,7 @@ export function CarteiraApprovals() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+      <div className="flex items-center justify-center rounded-card border border-card-border bg-card py-20 text-sm text-muted-foreground shadow-relevo" role="status">
         Carregando pedidos…
       </div>
     );
@@ -42,9 +42,11 @@ export function CarteiraApprovals() {
 
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <CheckCircle2 className="w-10 h-10 text-emerald-500/60" />
-        <p className="text-sm text-muted-foreground">Nenhum pedido pendente</p>
+      <div className="flex flex-col items-center justify-center gap-3 rounded-card border border-card-border bg-card py-20 shadow-relevo">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-success/10 text-success">
+          <CheckCircle2 className="h-6 w-6" />
+        </span>
+        <p className="text-sm font-bold text-foreground">Nenhum pedido pendente</p>
       </div>
     );
   }
@@ -52,20 +54,21 @@ export function CarteiraApprovals() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-foreground">
-          <span className="font-semibold">{orders.length} pedidos</span>
+          <span className="font-bold tabular-nums">{orders.length} pedidos</span>
           {" pendentes — "}
-          <span className="text-muted-foreground">{totalStr} total</span>
+          <span className="tabular-nums text-muted-foreground">{totalStr} total</span>
         </p>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
               size="sm"
               variant="ghost"
-              className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+              className="bg-success/10 text-success hover:bg-success/15 hover:text-success"
               disabled={bulkApprove.isPending}
             >
+              <CheckCheck />
               Aprovar todos ({orders.length})
             </Button>
           </AlertDialogTrigger>

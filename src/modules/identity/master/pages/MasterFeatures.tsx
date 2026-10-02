@@ -7,7 +7,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import {
-  Flag,
   Plus,
   Edit,
   Trash2,
@@ -15,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -43,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface FeatureFlag {
   id: string;
@@ -160,39 +160,30 @@ export default function MasterFeatures() {
   );
 
   const getCategoryBadge = (category: string) => {
-    const colors: Record<string, string> = {
-      ai: "bg-purple-500",
-      integrations: "bg-blue-500",
-      analytics: "bg-green-500",
-      sales: "bg-orange-500",
-      engagement: "bg-pink-500",
-      branding: "bg-yellow-500",
+    // Paleta categórica em tons do V5 (não é status): só distingue a categoria.
+    const tones: Record<string, BadgeProps["variant"]> = {
+      ai: "gold",
+      integrations: "info",
+      analytics: "success",
+      sales: "warning",
+      engagement: "ink",
+      branding: "outline",
     };
-    return (
-      <Badge className={colors[category] || "bg-muted text-muted-foreground"}>
-        {category}
-      </Badge>
-    );
+    return <Badge variant={tones[category] ?? "soft"}>{category}</Badge>;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Flag className="w-6 h-6" />
-            Feature Flags
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie as features disponíveis no sistema
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Feature
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Feature Flags"
+        subtitle="Gerencie as features disponíveis no sistema"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Nova Feature
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -253,9 +244,9 @@ export default function MasterFeatures() {
                     <TableCell>{getCategoryBadge(feature.category)}</TableCell>
                     <TableCell>
                       {feature.default_enabled ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
+                        <Badge variant="success">Ativo</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
                     <TableCell>

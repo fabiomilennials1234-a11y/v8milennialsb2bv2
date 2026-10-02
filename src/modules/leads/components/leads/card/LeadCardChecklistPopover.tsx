@@ -94,7 +94,7 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
                   "flex items-center gap-1 px-1 py-px rounded cursor-pointer select-none transition-colors duration-150",
                   "data-[state=open]:bg-muted/70 data-[state=open]:text-foreground",
                   done
-                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                    ? "bg-success/15 text-success hover:bg-success/25"
                     : "text-foreground/70 hover:bg-muted/70 hover:text-foreground",
                 ),
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-card",
@@ -161,7 +161,7 @@ function ChecklistPopoverBody({
           Checklists
         </span>
         {done && (
-          <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400">
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-success">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Tudo pronto
           </span>
@@ -172,13 +172,13 @@ function ChecklistPopoverBody({
               value={progress}
               className={cn(
                 "h-px w-12 bg-muted/60",
-                done && "[&>div]:bg-emerald-500",
+                done && "[&>div]:bg-success",
               )}
             />
             <span
               className={cn(
                 "text-[11px] tabular-nums",
-                done ? "text-emerald-400" : "text-muted-foreground",
+                done ? "text-success" : "text-muted-foreground",
               )}
             >
               {completed}/{total}
@@ -363,7 +363,7 @@ function ChecklistGroup({ checklist, leadId }: ChecklistGroupProps) {
         <span
           className={cn(
             "text-[10px] tabular-nums shrink-0",
-            groupDone ? "text-emerald-400" : "text-muted-foreground",
+            groupDone ? "text-success" : "text-muted-foreground",
           )}
         >
           {checklist.completed_items}/{checklist.total_items}
@@ -441,7 +441,7 @@ const ChecklistItemsList = memo(function ChecklistItemsList({
           <Checkbox
             checked={item.is_completed}
             onCheckedChange={() => handleToggle(item)}
-            className="size-3.5 rounded-[4px] shrink-0 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 data-[state=checked]:text-white"
+            className="size-3.5 rounded-[4px] shrink-0 data-[state=checked]:border-success data-[state=checked]:bg-success data-[state=checked]:text-success-foreground"
           />
           <span
             className={cn(

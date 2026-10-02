@@ -1,5 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { ListChecks } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useChecklists } from "@/modules/engagement/hooks/useChecklists";
 import { ChecklistCard } from "@/modules/engagement/components/checklists/ChecklistCard";
 import { CreateChecklistDialog } from "@/modules/engagement/components/checklists/CreateChecklistDialog";
@@ -7,34 +9,33 @@ import { CreateChecklistDialog } from "@/modules/engagement/components/checklist
 export default function ChecklistPage() {
   const { data: checklists = [], isLoading } = useChecklists();
 
+  // Sem `p-6`/`max-w-*` próprios: o <main> do layout já dá o respiro da página.
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Templates de Checklist</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Crie templates para vincular a leads via card ou automação
-          </p>
-        </div>
-        <CreateChecklistDialog />
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Templates de Checklist"
+        subtitle="Crie templates para vincular a leads via card ou automação"
+        actions={<CreateChecklistDialog />}
+      />
 
-      {/* Content */}
       {isLoading ? (
-        <div className="text-center py-12">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground mt-2">Carregando checklists...</p>
+        <div className="space-y-3" aria-busy="true">
+          <span className="sr-only">Carregando checklists...</span>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[86px] rounded-card" />
+          ))}
         </div>
       ) : checklists.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center py-16"
+          className="flex flex-col items-center gap-1.5 rounded-card border border-card-border bg-card px-6 py-14 text-center shadow-relevo"
         >
-          <ListChecks className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-muted-foreground">Nenhum template ainda</h3>
-          <p className="text-sm text-muted-foreground/70 mt-1">
+          <span className="mb-2 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <ListChecks className="h-5 w-5" />
+          </span>
+          <h3 className="text-sm font-semibold">Nenhum template ainda</h3>
+          <p className="text-[13px] text-muted-foreground">
             Crie seu primeiro template de checklist
           </p>
         </motion.div>

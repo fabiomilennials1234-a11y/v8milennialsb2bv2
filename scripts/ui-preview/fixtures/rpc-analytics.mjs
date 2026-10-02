@@ -217,6 +217,55 @@ export function analyticsRpcs(threads) {
     get_dashboard_metrics: dashboardMetrics,
     get_sales_metrics: dashboardMetrics,
     get_comando_agenda_events: agendaEvents,
+    get_agenda_events_scoped: agendaEvents,
+    // ── carteira (/upsell) ──
+    get_portfolio_kpis: (_a, fx) => {
+      const cs = fx.db.upsell_clients.filter((c) => c.is_active !== false);
+      const seg = { ouro: 0, prata: 0, novo: 0, resgate: 0, dormindo: 0 };
+      for (const c of fx.db.upsell_clients) if (c.segment in seg) seg[c.segment]++;
+      const overdue = cs.filter((c) => c.next_order_expected && c.next_order_expected < new Date(fx.NOW).toISOString());
+      const week = new Date(fx.NOW + 7 * 864e5).toISOString();
+      return {
+        total_clients: fx.db.upsell_clients.length,
+        // monthly recurring revenue of repeat buyers (rendered as R$)
+        total_recurring: cs.filter((c) => (c.order_count ?? 0) > 2).reduce((s, c) => s + Math.round((c.avg_ticket ?? 0) * (30 / Math.max(15, c.reorder_cycle_days ?? 30))), 0),
+        overdue_count: overdue.length,
+        overdue_revenue: overdue.reduce((s, c) => s + (c.avg_ticket ?? 0), 0),
+        avg_health: Math.round(cs.reduce((s, c) => s + (c.health_score ?? 0), 0) / Math.max(1, cs.length)),
+        avg_ticket: Math.round(cs.reduce((s, c) => s + (c.avg_ticket ?? 0), 0) / Math.max(1, cs.length)),
+        expected_this_week: cs.filter((c) => c.next_order_expected && c.next_order_expected <= week && c.next_order_expected >= new Date(fx.NOW).toISOString()).length,
+        segment_counts: seg,
+      };
+    },
+    get_portfolio_clients: (a, fx) => {
+      let rows = fx.db.upsell_clients.map((c) => ({
+        id: c.id,
+        name: c.name,
+        company: c.company,
+        phone: c.phone,
+        health_score: c.health_score,
+        health_status: c.health_status,
+        segment: c.segment,
+        avg_ticket: c.avg_ticket,
+        days_since_last_order: c.days_since_last_order,
+        reorder_cycle_days: c.reorder_cycle_days,
+        next_order_expected: c.next_order_expected,
+        order_count: c.order_count,
+        lifetime_value: c.lifetime_value,
+        lead_id: c.lead_id,
+        trend: c.trend,
+        churn_probability: c.churn_probability,
+        external_id: c.external_id ?? null,
+      }));
+      if (a.p_filter && a.p_filter !== "all") rows = rows.filter((r) => r.segment === a.p_filter || r.health_status === a.p_filter);
+      if (a.p_search) rows = rows.filter((r) => `${r.name} ${r.company}`.toLowerCase().includes(String(a.p_search).toLowerCase()));
+      const col = a.p_sort_by ?? "name";
+      const dir = a.p_sort_dir === "desc" ? -1 : 1;
+      rows.sort((x, y) => (x[col] ?? 0) > (y[col] ?? 0) ? dir : (x[col] ?? 0) < (y[col] ?? 0) ? -dir : 0);
+      const size = Number(a.p_page_size ?? 50);
+      const page = Number(a.p_page ?? 1);
+      return { rows: rows.slice((page - 1) * size, page * size), total: rows.length, page, page_size: size, total_pages: Math.max(1, Math.ceil(rows.length / size)) };
+    },
     get_agenda_events: agendaEvents,
     get_conversations_awaiting_human_reply: (a, fx) => awaiting(a, fx, threads),
     get_funnel_health: (a, fx) => {

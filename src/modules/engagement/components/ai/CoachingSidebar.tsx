@@ -32,11 +32,11 @@ import { cn } from "@/lib/utils";
 // ── Suggestion type config ────────────────────────────────────
 
 const SUGGESTION_CONFIG: Record<SuggestionType, { icon: typeof Brain; color: string; label: string }> = {
-  response: { icon: MessageSquare, color: "text-blue-500", label: "Resposta" },
-  objection_handling: { icon: Shield, color: "text-purple-500", label: "Objecao" },
-  tone_alert: { icon: AlertTriangle, color: "text-amber-500", label: "Tom" },
-  battle_card: { icon: Swords, color: "text-red-500", label: "Battlecard" },
-  upsell_opportunity: { icon: TrendingUp, color: "text-emerald-500", label: "Upsell" },
+  response: { icon: MessageSquare, color: "text-foreground/70", label: "Resposta" },
+  objection_handling: { icon: Shield, color: "text-insights", label: "Objeção" },
+  tone_alert: { icon: AlertTriangle, color: "text-warning-strong", label: "Tom" },
+  battle_card: { icon: Swords, color: "text-destructive", label: "Battlecard" },
+  upsell_opportunity: { icon: TrendingUp, color: "text-success", label: "Upsell" },
 };
 
 // ── Types ─────────────────────────────────────────────────────
@@ -66,16 +66,18 @@ export function CoachingSidebar({ conversationId, isOpen, onToggle }: CoachingSi
   if (!isOpen) {
     return (
       <button
+        type="button"
         onClick={onToggle}
         className={cn(
-          "flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/50 bg-card hover:bg-muted transition-colors",
-          suggestions.length > 0 && "border-primary/30"
+          "flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-xl border border-card-border bg-card px-2.5 shadow-relevo transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          suggestions.length > 0 && "ring-1 ring-primary/40"
         )}
         title="Abrir coaching IA"
+        aria-label="Abrir coaching IA"
       >
-        <Brain className="w-4 h-4 text-primary" />
+        <Brain className="h-4 w-4 text-primary-soft-foreground" />
         {suggestions.length > 0 && (
-          <Badge variant="default" className="h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+          <Badge variant="default" className="flex h-5 w-5 items-center justify-center p-0 text-[10px] font-extrabold">
             {suggestions.length}
           </Badge>
         )}
@@ -89,20 +91,22 @@ export function CoachingSidebar({ conversationId, isOpen, onToggle }: CoachingSi
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="border-l border-border bg-card flex flex-col h-full overflow-hidden"
+      className="ml-2 flex h-full flex-col overflow-hidden rounded-panel border border-card-border bg-card shadow-relevo md:ml-3"
     >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+      <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
         <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Coaching IA</span>
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary-soft text-primary-soft-foreground">
+            <Brain className="h-4 w-4" />
+          </span>
+          <span className="text-sm font-bold tracking-tight">Coaching IA</span>
           {suggestions.length > 0 && (
             <Badge variant="outline" className="text-[10px]">
               {suggestions.length}
             </Badge>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onToggle} aria-label="Fechar coaching IA">
           <ChevronRight className="w-4 h-4" />
         </Button>
       </div>
@@ -114,7 +118,7 @@ export function CoachingSidebar({ conversationId, isOpen, onToggle }: CoachingSi
             <div className="text-center py-8">
               <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
               <p className="text-xs text-muted-foreground">
-                Nenhuma sugestao no momento. Continue a conversa.
+                Nenhuma sugestão no momento. Continue a conversa.
               </p>
             </div>
           ) : (
@@ -131,7 +135,7 @@ export function CoachingSidebar({ conversationId, isOpen, onToggle }: CoachingSi
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: 50 }}
-                    className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2"
+                    className="space-y-2 rounded-2xl border border-border/60 bg-sunken p-3"
                   >
                     {/* Type badge */}
                     <div className="flex items-center justify-between">

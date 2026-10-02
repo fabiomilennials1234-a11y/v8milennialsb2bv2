@@ -102,10 +102,10 @@ export function CodeJavascriptPanel({ data, onUpdate }: CodeJavascriptPanelProps
       </div>
 
       {/* Aviso de fase 1 — o nó é autorável, mas o executor pula (SPEC §4.3) */}
-      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+      <div className="rounded-xl border border-warning/30 bg-warning/[.08] p-3">
         <div className="flex gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-          <p className="text-xs text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-warning-strong mt-0.5" />
+          <p className="text-xs text-foreground/80">
             <strong>Este nó ainda não executa no servidor.</strong> Nesta versão você
             escreve o código e o Torque guarda tudo junto do workflow. Na execução, o nó
             é registrado como "pulado" e o fluxo segue para o próximo nó. A execução
@@ -138,8 +138,8 @@ export function CodeJavascriptPanel({ data, onUpdate }: CodeJavascriptPanelProps
       </div>
 
       {/* 6. Explicação */}
-      <div className="p-3 rounded-lg bg-sky-50 dark:bg-sky-950 border border-sky-200 dark:border-sky-800">
-        <p className="text-xs text-sky-700 dark:text-sky-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Guarda um JavaScript junto da automação. Quando a execução isolada entrar no
           ar, o retorno do código vai para a variável de saída e fica disponível nos nós
           seguintes. Até lá, use o teste no navegador para conferir a lógica.

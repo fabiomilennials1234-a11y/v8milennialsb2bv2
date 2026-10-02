@@ -29,10 +29,11 @@ export function MetaConversationListItem({ conversation, selected, onClick }: Pr
     <button
       type="button"
       onClick={() => onClick(conversation.id)}
+      data-selected={selected}
       className={cn(
-        "flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition-colors",
-        "hover:bg-muted/60",
-        selected && "bg-muted"
+        // V5: mesma linha do inbox de WhatsApp — a selecionada vira ouro.
+        "group/linha flex w-full items-start gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        selected ? "bg-primary text-primary-foreground shadow-brilho-ouro" : "hover:bg-muted/60",
       )}
     >
       <div className="relative">
@@ -47,20 +48,20 @@ export function MetaConversationListItem({ conversation, selected, onClick }: Pr
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-medium">{display}</span>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+          <span className="truncate text-sm font-bold">{display}</span>
+          <span className="whitespace-nowrap text-[11px] font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
             {conversation.last_message_at &&
               formatDistanceToNow(new Date(conversation.last_message_at), { addSuffix: false, locale: ptBR })}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">{conversation.last_message_preview}</span>
+          <span className="truncate text-xs text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/75">{conversation.last_message_preview}</span>
           {conversation.unread_count > 0 && (
-            <Badge className="h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">{conversation.unread_count}</Badge>
+            <Badge className="h-5 min-w-[20px] rounded-full px-1.5 text-[10px] font-extrabold tabular-nums group-data-[selected=true]/linha:bg-primary-foreground group-data-[selected=true]/linha:text-primary">{conversation.unread_count}</Badge>
           )}
         </div>
         {lead?.name && (
-          <span className="mt-1 inline-block rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+          <span className="mt-1 inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground">
             {lead.name}
           </span>
         )}

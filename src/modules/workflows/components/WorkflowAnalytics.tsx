@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { KpiTile } from "@/components/ui/bento";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
@@ -126,18 +127,10 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold">Analytics</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <AnalyticsTitle />
+        <div className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <Skeleton className="h-4 w-20 mb-2" />
-                <Skeleton className="h-8 w-16" />
-              </CardContent>
-            </Card>
+            <Skeleton key={i} className="h-[88px] rounded-card" />
           ))}
         </div>
       </div>
@@ -147,15 +140,10 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
   if (!stats || stats.total === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold">Analytics</h3>
+        <AnalyticsTitle />
+        <div className="flex items-center justify-center rounded-card border border-dashed border-border bg-sunken py-12">
+          <p className="text-sm text-muted-foreground">Nenhuma execução registrada</p>
         </div>
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <p className="text-sm text-muted-foreground">Nenhuma execucao registrada</p>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -165,36 +153,18 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <BarChart3 className="h-5 w-5 text-primary" />
-        <h3 className="text-lg font-semibold">Analytics</h3>
-      </div>
+      <AnalyticsTitle />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <StatCard
-          icon={<Users className="h-4 w-4 text-muted-foreground" />}
-          label="Total execucoes"
-          value={String(stats.total)}
-        />
-        <StatCard
-          icon={<Clock className="h-4 w-4 text-blue-400" />}
-          label="Em andamento"
-          value={String(stats.running + stats.waiting)}
-        />
-        <StatCard
-          icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-          label="Concluidos"
-          value={`${stats.completed} (${completionRate})`}
-        />
-        <StatCard
-          icon={<XCircle className="h-4 w-4 text-red-500" />}
-          label="Falhas"
-          value={`${stats.failed} (${failureRate})`}
-        />
-        <StatCard
-          icon={<TrendingUp className="h-4 w-4 text-amber-500" />}
-          label="Tempo medio"
+      <div className="grid grid-cols-2 gap-3">
+        <KpiTile icon={Users} tone="neutral" label="Total execuções" value={String(stats.total)} />
+        <KpiTile icon={Clock} tone="info" label="Em andamento" value={String(stats.running + stats.waiting)} />
+        <KpiTile icon={CheckCircle2} tone="good" label="Concluídos" value={stats.completed} note={completionRate} />
+        <KpiTile icon={XCircle} tone="bad" label="Falhas" value={stats.failed} note={failureRate} />
+        <KpiTile
+          icon={TrendingUp}
+          tone="gold"
+          label="Tempo médio"
           value={stats.avgDurationMs != null ? formatDuration(stats.avgDurationMs) : "--"}
         />
       </div>
@@ -203,7 +173,7 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
       {nodeStats.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Desempenho por no</CardTitle>
+            <CardTitle className="text-sm">Desempenho por nó</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -220,7 +190,7 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
                       <span className="tabular-nums">{node.executions_count}x</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant="secondary" className="text-xs tabular-nums">
+                      <Badge variant="success" className="text-xs tabular-nums">
                         {node.success_count} ok
                       </Badge>
                       {node.error_count > 0 && (
@@ -245,16 +215,13 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function AnalyticsTitle() {
   return (
-    <Card>
-      <CardContent className="p-4 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          {icon}
-        </div>
-        <p className="text-xl font-bold tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2.5">
+      <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
+        <BarChart3 className="h-4 w-4" />
+      </span>
+      <h3 className="text-base font-bold tracking-tight">Analytics</h3>
+    </div>
   );
 }

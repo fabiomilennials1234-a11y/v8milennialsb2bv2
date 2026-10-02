@@ -53,7 +53,7 @@ export function LeadMobileSortBar({
       aria-label="Ordenar a lista"
       data-testid="lead-mobile-sort"
     >
-      <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground/70">
+      <span className="shrink-0 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         Ordenar
       </span>
 
@@ -75,8 +75,8 @@ export function LeadMobileSortBar({
               "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               ativa
-                ? "border-primary/40 bg-primary/10 font-semibold text-primary"
-                : "border-border text-muted-foreground active:bg-muted/60",
+                ? "border-transparent bg-tinta font-semibold text-tinta-foreground"
+                : "border-border bg-card text-muted-foreground active:bg-muted/60",
             )}
           >
             {rotulos[chave]}

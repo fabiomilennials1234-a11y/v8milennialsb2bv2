@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TRIGGER_CATEGORIES } from "@/types/workflow";
+import { TRIGGER_CATEGORIES, TRIGGER_LABELS, isDiscontinuedTrigger } from "@/types/workflow";
+import { DiscontinuedNotice } from "../DiscontinuedNotice";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
@@ -79,7 +80,6 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                     {t === "lead_created" ? "Lead Criado" :
                      t === "stage_changed" ? "Mudança de Etapa" :
                      t === "tag_added" ? "Tag Adicionada" :
-                     t === "score_reached" ? "Score Atingido" :
                      t === "cron" ? "Agendamento (Cron)" :
                      t === "lead_replied" ? "Lead Respondeu" :
                      t === "lead_no_reply" ? "Lead Não Respondeu" :
@@ -108,8 +108,19 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                 ))}
               </SelectGroup>
             ))}
+            {/* Gatilho descontinuado (score) só aparece quando já é o salvo —
+                sem ele o seletor ficaria em branco num workflow de produção. */}
+            {isDiscontinuedTrigger(data.triggerType) && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Descontinuado
+                </SelectLabel>
+                <SelectItem value={data.triggerType}>{TRIGGER_LABELS[data.triggerType]}</SelectItem>
+              </SelectGroup>
+            )}
           </SelectContent>
         </Select>
+        {isDiscontinuedTrigger(data.triggerType) && <DiscontinuedNotice />}
       </div>
 
       {/* ── lead_created ── */}
@@ -129,22 +140,17 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
           <Input
             value={(cfg.tag_name as string) || ""}
             onChange={(e) => updateConfig({ tag_name: e.target.value })}
-            placeholder="Ex: quente"
+            placeholder="Ex: cliente-vip"
           />
         </div>
       )}
 
-      {/* ── score_reached ── */}
-      {data.triggerType === "score_reached" && (
-        <div className="space-y-2">
-          <Label>Score mínimo</Label>
-          <Input
-            type="number"
-            value={(cfg.min_score as number) ?? ""}
-            onChange={(e) => updateConfig({ min_score: Number(e.target.value) })}
-            placeholder="Ex: 50"
-          />
-        </div>
+      {/* ── score_reached (descontinuado) ── sem campo de edição: o valor salvo
+          só é mostrado para quem precisa reconstruir o gatilho por outro. */}
+      {data.triggerType === "score_reached" && typeof cfg.min_score === "number" && (
+        <p className="text-xs text-muted-foreground">
+          Configuração salva: score mínimo <span className="font-semibold tabular-nums text-foreground">{cfg.min_score}</span>
+        </p>
       )}
 
       {/* ── cron ── */}

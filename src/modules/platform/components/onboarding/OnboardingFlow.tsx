@@ -23,7 +23,7 @@ export function OnboardingFlow({ currentState }: Props) {
     <div className="min-h-screen bg-background flex flex-col">
       <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-amber-400 to-amber-600" />
+          <div className="w-7 h-7 rounded-md bg-primary shadow-brilho-ouro" />
           <span className="font-bold text-sm tracking-tight">Torque CRM</span>
         </div>
         <span className="text-xs text-muted-foreground">Configuração inicial</span>
@@ -36,7 +36,7 @@ export function OnboardingFlow({ currentState }: Props) {
               key={step.key}
               className={cn(
                 "flex-1 h-1 rounded-full transition-colors",
-                i <= currentIndex ? "bg-amber-500" : "bg-muted",
+                i <= currentIndex ? "bg-primary" : "bg-muted",
               )}
             />
           ))}
@@ -47,7 +47,7 @@ export function OnboardingFlow({ currentState }: Props) {
               key={step.key}
               className={cn(
                 "text-[11px]",
-                i <= currentIndex ? "text-amber-500 font-semibold" : "text-muted-foreground",
+                i <= currentIndex ? "font-semibold text-foreground" : "text-muted-foreground",
               )}
             >
               {step.label}

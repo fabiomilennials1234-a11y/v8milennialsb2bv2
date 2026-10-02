@@ -12,11 +12,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Bug, CheckCircle2, ChevronDown, ChevronRight, Hand, LifeBuoy, Loader2, RotateCw, Send, X } from "lucide-react";
+import { Bug, CheckCircle2, ChevronDown, ChevronRight, Hand, Loader2, RotateCw, Send, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Select,
   SelectContent,
@@ -83,10 +84,10 @@ const RESOLVED_STATUSES: TicketStatus[] = ["resolvido", "fechado"];
 const isResolved = (t: MasterSupportTicket) => RESOLVED_STATUSES.includes(t.status);
 
 const SEVERIDADE_TONE: Record<TicketSeveridade, string> = {
-  baixa: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-  media: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  alta: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  critica: "bg-red-500/10 text-red-400 border-red-500/20",
+  baixa: "border-transparent bg-muted text-muted-foreground",
+  media: "border-transparent bg-insights/10 text-insights",
+  alta: "border-transparent bg-warning/15 text-warning-strong",
+  critica: "border-transparent bg-destructive/10 text-destructive",
 };
 
 /**
@@ -94,8 +95,8 @@ const SEVERIDADE_TONE: Record<TicketSeveridade, string> = {
  * severidade — nunca o contrário.
  */
 const IMPACTO_TONE: Record<string, string> = {
-  parado: "text-red-400",
-  contorno: "text-amber-400",
+  parado: "text-destructive",
+  contorno: "text-warning-strong",
   incomodo: "text-muted-foreground",
 };
 
@@ -114,23 +115,17 @@ export default function MasterSupportTickets() {
   const toggle = (id: string) => setExpanded((cur) => (cur === id ? null : id));
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <LifeBuoy className="h-6 w-6 text-primary" aria-hidden />
-            Suporte
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Chamados de todas as organizações. Você deriva a severidade; o cliente declara o
-            impacto.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RotateCw className={cn("mr-2 h-4 w-4", isFetching && "animate-spin")} aria-hidden />
-          Atualizar
-        </Button>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        title="Suporte"
+        subtitle="Chamados de todas as organizações. Você deriva a severidade; o cliente declara o impacto."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RotateCw className={cn("h-4 w-4", isFetching && "animate-spin")} aria-hidden />
+            Atualizar
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect
@@ -152,7 +147,7 @@ export default function MasterSupportTickets() {
           onChange={(v) => setFilters((f) => ({ ...f, severidade: v as TicketSeveridade }))}
         />
         <Button
-          variant={filters.unassigned ? "default" : "outline"}
+          variant={filters.unassigned ? "ink" : "outline"}
           size="sm"
           onClick={() => setFilters((f) => ({ ...f, unassigned: f.unassigned ? undefined : true }))}
         >
@@ -186,14 +181,14 @@ export default function MasterSupportTickets() {
 
       {resolved.length > 0 && (
         <section className="space-y-2">
-          <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-400">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-success">
             <CheckCircle2 className="h-4 w-4" aria-hidden />
             Resolvidos
             <span className="text-xs font-normal text-muted-foreground">
               {resolved.length} chamado{resolved.length > 1 ? "s" : ""}
             </span>
           </h2>
-          <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
+          <Card className="border-success/20 bg-success/[0.03]">
             <CardContent className="p-0">
               <TicketTable
                 tickets={resolved}
@@ -379,7 +374,7 @@ function TicketRow({
       <TableRow
         className={cn(
           "cursor-pointer",
-          resolved ? "hover:bg-emerald-500/10" : "hover:bg-accent/40",
+          resolved ? "hover:bg-success/10" : "hover:bg-accent/40",
         )}
         onClick={onToggle}
       >
@@ -411,10 +406,7 @@ function TicketRow({
               {ticket.title}
             </p>
             {ticket.author_gestor_id && (
-              <Badge
-                variant="outline"
-                className="mt-0.5 shrink-0 border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-400"
-              >
+              <Badge variant="info" className="mt-0.5 shrink-0 text-[10px] font-medium">
                 Gestor
               </Badge>
             )}
@@ -424,7 +416,7 @@ function TicketRow({
             <span aria-hidden> · </span>
             {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: ptBR })}
             {ticket.reopen_count > 0 && (
-              <span className="ml-2 text-amber-400">reaberto {ticket.reopen_count}×</span>
+              <span className="ml-2 text-warning-strong">reaberto {ticket.reopen_count}×</span>
             )}
             <OverdueTag ticket={ticket} />
           </p>
@@ -518,7 +510,7 @@ function TicketRow({
 
       {isExpanded && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7} className={cn("p-0", resolved ? "bg-emerald-500/[0.04]" : "bg-muted/20")}>
+          <TableCell colSpan={7} className={cn("p-0", resolved ? "bg-success/[0.04]" : "bg-muted/20")}>
             <TicketDetail ticket={ticket} />
           </TableCell>
         </TableRow>
@@ -548,7 +540,7 @@ function useTicketClock(ticket: MasterSupportTicket) {
 function OverdueTag({ ticket }: { ticket: MasterSupportTicket }) {
   const clock = useTicketClock(ticket);
   if (clock.responded || !clock.isOverdue) return null;
-  return <span className="ml-2 font-medium text-red-400">atrasado</span>;
+  return <span className="ml-2 font-medium text-destructive">atrasado</span>;
 }
 
 function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
@@ -609,7 +601,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
         {ticket.description && (
-          <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-3">
+          <div className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
             {/* O que o cliente anexou ao abrir: pertence ao Chamado, não a um
                 turno da conversa. */}
@@ -626,14 +618,14 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             <div
               key={c.id}
               className={cn(
-                "rounded-lg border p-3 text-sm",
+                "rounded-xl border p-3 text-sm",
                 c.is_internal
-                  ? "border-amber-500/30 bg-amber-500/5"
+                  ? "border-warning/40 bg-warning/10"
                   : "border-border/50 bg-background/50",
               )}
             >
               {c.is_internal && (
-                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-amber-500">
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-[.06em] text-warning-strong">
                   Nota interna · o cliente não vê
                 </p>
               )}
@@ -660,7 +652,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             onChange={(e) => setBody(e.target.value)}
             rows={3}
             placeholder={isInternal ? "Nota interna (o cliente não vê)…" : "Responder ao cliente…"}
-            className={cn("resize-none", isInternal && "border-amber-500/40")}
+            className={cn("resize-none", isInternal && "border-warning/40")}
           />
           <AttachmentPicker
             files={files}
@@ -670,7 +662,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
             label={isInternal ? "Anexar à nota" : "Anexar"}
           />
           {isInternal && files.length > 0 && (
-            <p className="text-[11px] text-amber-500">
+            <p className="text-[11px] text-warning-strong">
               Estes arquivos entram como nota interna — o cliente não os vê.
             </p>
           )}
@@ -683,7 +675,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
               variant={isInternal ? "default" : "outline"}
               size="sm"
               onClick={() => setIsInternal((v) => !v)}
-              className={cn("text-xs", isInternal && "bg-amber-500 text-black hover:bg-amber-500/90")}
+              className={cn("text-xs", isInternal && "bg-warning text-warning-foreground shadow-none hover:bg-warning/90")}
             >
               Nota interna
             </Button>
@@ -706,7 +698,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
 
       {/* Support Context — a evidência que o cliente não teve que reproduzir. */}
       <aside className="space-y-3 text-xs">
-        <h3 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Contexto capturado
         </h3>
         <dl className="space-y-1.5">
@@ -730,16 +722,16 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
 
         {clientErrors.length > 0 && (
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
               Erros no browser dele
             </h4>
             <ul className="space-y-1">
               {clientErrors.slice(-5).map((e, i) => (
                 <li
                   key={i}
-                  className="rounded border border-border/50 bg-background/50 p-2 font-mono text-[11px] leading-relaxed"
+                  className="rounded-lg border border-border/50 bg-background/50 p-2 font-mono text-[11px] leading-relaxed"
                 >
-                  <span className="text-red-400">{e.name}</span> {e.message}
+                  <span className="text-destructive">{e.name}</span> {e.message}
                 </li>
               ))}
             </ul>
@@ -772,7 +764,7 @@ function ClockRow({ ticket }: { ticket: MasterSupportTicket }) {
   return (
     <div className="flex gap-2">
       <dt className="w-[76px] shrink-0 text-muted-foreground">Responder</dt>
-      <dd className={cn("min-w-0 flex-1", clock.isOverdue && "font-medium text-red-400")}>
+      <dd className={cn("min-w-0 flex-1", clock.isOverdue && "font-medium text-destructive")}>
         {clock.isOverdue ? "atrasado desde " : "até "}
         {format(clock.deadline, "dd/MM HH:mm", { locale: ptBR })}
       </dd>
@@ -806,7 +798,7 @@ function DefectField({ ticket }: { ticket: MasterSupportTicket }) {
 
   return (
     <div className="space-y-1.5">
-      <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         Defeito (GitHub)
       </h4>
       <Input

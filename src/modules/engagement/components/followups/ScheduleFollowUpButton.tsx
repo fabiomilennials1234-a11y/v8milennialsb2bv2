@@ -37,7 +37,8 @@ export function ScheduleFollowUpButton({
             <Button
               size="icon"
               variant="ghost"
-              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:bg-primary-soft hover:text-primary-soft-foreground"
+              aria-label="Agendar Follow Up"
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(true);
@@ -54,7 +55,6 @@ export function ScheduleFollowUpButton({
         <Button
           size={size}
           variant="outline"
-          className="gap-1.5"
           onClick={(e) => {
             e.stopPropagation();
             setOpen(true);

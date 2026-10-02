@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { KpiTile } from "@/components/ui/bento";
 import {
   FlaskConical,
   Users,
@@ -97,12 +98,14 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
       {/* Header row */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <FlaskConical className="h-5 w-5 text-purple-600" />
-          <h3 className="text-lg font-semibold">Split A/B — Experimento</h3>
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-pink-500/15 text-pink-700 dark:text-pink-400">
+            <FlaskConical className="h-4 w-4" />
+          </span>
+          <h3 className="text-[17px] font-bold tracking-[-0.02em]">Split A/B — Experimento</h3>
         </div>
         {nodes.length > 1 && (
           <Select value={selectedNodeId} onValueChange={setSelectedNodeId}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[200px] rounded-full">
               <SelectValue placeholder="Selecionar node" />
             </SelectTrigger>
             <SelectContent>
@@ -137,7 +140,7 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
         <Card>
           <CardContent className="flex items-center justify-center py-12">
             <p className="text-muted-foreground">
-              Nenhuma execucao registrada para este split ainda.
+              Nenhuma execução registrada para este split ainda.
             </p>
           </CardContent>
         </Card>
@@ -146,54 +149,17 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
       {/* Data loaded */}
       {!isLoadingMetrics && metrics.length > 0 && (
         <>
-          {/* Summary row */}
+          {/* Summary row — mesmos três números de antes. */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total de leads
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totals.leads}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total de execucoes
-                </CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totals.executions}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-green-200 bg-green-50/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Melhor variante
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                {bestVariant ? (
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {bestVariant.variant_label}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {pct(getCompletionRate(bestVariant))} taxa de conclusao
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">—</div>
-                )}
-              </CardContent>
-            </Card>
+            <KpiTile label="Total de leads" icon={Users} tone="neutral" value={totals.leads.toLocaleString("pt-BR")} />
+            <KpiTile label="Total de execuções" icon={MessageSquare} tone="neutral" value={totals.executions.toLocaleString("pt-BR")} />
+            <KpiTile
+              label="Melhor variante"
+              icon={TrendingUp}
+              tone="good"
+              value={bestVariant ? bestVariant.variant_label : "—"}
+              note={bestVariant ? `${pct(getCompletionRate(bestVariant))} taxa de conclusão` : undefined}
+            />
           </div>
 
           {/* Variant comparison cards */}
@@ -208,7 +174,7 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
                 <Card
                   key={v.variant_id}
                   className={
-                    isBest ? "border-green-300 ring-1 ring-green-200" : ""
+                    isBest ? "ring-2 ring-success/40" : ""
                   }
                 >
                   <CardHeader className="pb-2">
@@ -218,25 +184,22 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
                       </CardTitle>
                       <div className="flex items-center gap-1">
                         {isBest && (
-                          <Badge
-                            variant="default"
-                            className="bg-success text-success-foreground"
-                          >
+                          <Badge variant="success">
                             Melhor
                           </Badge>
                         )}
-                        <Badge variant="outline">{pct(trafficShare)}</Badge>
+                        <Badge variant="soft" className="tabular-nums">{pct(trafficShare)}</Badge>
                       </div>
                     </div>
                     <CardDescription>
-                      {v.total_leads} leads | {v.total_executions} execucoes
+                      {v.total_leads} leads · {v.total_executions} execuções
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {/* Messages sent */}
                     <FunnelRow
                       icon={
-                        <MessageSquare className="h-4 w-4 text-blue-500" />
+                        <MessageSquare className="h-4 w-4 text-insights" />
                       }
                       label="Mensagens enviadas"
                       count={v.messages_sent}
@@ -244,28 +207,28 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
                     {/* Completed */}
                     <FunnelRow
                       icon={
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                       }
-                      label="Concluidos"
+                      label="Concluídos"
                       count={v.completed}
                       rate={pct(getCompletionRate(v))}
                     />
                     {/* Failed */}
                     <FunnelRow
-                      icon={<XCircle className="h-4 w-4 text-red-500" />}
+                      icon={<XCircle className="h-4 w-4 text-destructive" />}
                       label="Falhas"
                       count={v.failed}
                       rate={pct(getFailureRate(v))}
                     />
                     {/* Waiting response */}
                     <FunnelRow
-                      icon={<Clock className="h-4 w-4 text-yellow-500" />}
+                      icon={<Clock className="h-4 w-4 text-warning-strong" />}
                       label="Aguardando resposta"
                       count={v.waiting_response}
                     />
                     {/* In progress */}
                     <FunnelRow
-                      icon={<Clock className="h-4 w-4 text-blue-400" />}
+                      icon={<Clock className="h-4 w-4 text-muted-foreground" />}
                       label="Em andamento"
                       count={v.in_progress}
                     />
@@ -297,7 +260,7 @@ function FunnelRow({
         {icon}
         <span>{label}</span>
       </div>
-      <div className="flex items-center gap-1.5 font-medium">
+      <div className="flex items-center gap-1.5 font-semibold tabular-nums">
         <span>{count}</span>
         {rate && (
           <span className="text-xs text-muted-foreground">({rate})</span>

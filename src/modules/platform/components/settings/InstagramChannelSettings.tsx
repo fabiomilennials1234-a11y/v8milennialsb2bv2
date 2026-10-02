@@ -90,7 +90,7 @@ export function InstagramChannelSettings() {
             {instagramChannels.some((channel) => channel.status === "connected") && (
               <Badge
                 variant="outline"
-                className="border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400"
+                className="border-success/30 bg-success/10 text-success"
               >
                 <CheckCircle2 className="mr-1 h-3 w-3" />
                 Conectado

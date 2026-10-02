@@ -31,9 +31,11 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
 
   if (todayMeetings.length === 0 && tomorrowMeetings.length === 0) {
     return (
-      <Card className="p-6 text-center">
-        <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-        <p className="text-muted-foreground">Nenhuma reunião agendada para hoje ou amanhã</p>
+      <Card className="flex flex-col items-center px-6 py-12 text-center">
+        <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <Calendar className="h-5 w-5" aria-hidden />
+        </span>
+        <p className="text-sm text-muted-foreground">Nenhuma reunião agendada para hoje ou amanhã</p>
       </Card>
     );
   }
@@ -55,11 +57,12 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: idx * 0.1 }}
         className={cn(
-          "relative flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md",
-          isPastMeeting && "bg-muted/50 border-border opacity-60",
-          isImminent && "bg-destructive/5 border-destructive/30 ring-1 ring-destructive/20",
-          isSoon && "bg-warning/5 border-warning/30",
-          !isPastMeeting && !isImminent && !isSoon && "bg-card border-border hover:border-primary/30"
+          "group relative flex cursor-pointer items-center gap-4 rounded-2xl border p-4 shadow-relevo",
+          "transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-relevo-alto motion-reduce:hover:translate-y-0",
+          isPastMeeting && "border-border bg-card opacity-60",
+          isImminent && "border-destructive/30 bg-card ring-1 ring-destructive/20 [background-image:linear-gradient(hsl(var(--destructive)/0.05),hsl(var(--destructive)/0.05))]",
+          isSoon && "border-warning/40 bg-card [background-image:linear-gradient(hsl(var(--warning)/0.07),hsl(var(--warning)/0.07))]",
+          !isPastMeeting && !isImminent && !isSoon && "border-card-border bg-card"
         )}
         onClick={() => onMeetingClick?.(meeting)}
       >
@@ -68,18 +71,18 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
           "flex flex-col items-center min-w-[60px]",
           isPastMeeting && "text-muted-foreground",
           isImminent && "text-destructive",
-          isSoon && "text-warning"
+          isSoon && "text-warning-strong"
         )}>
-          <span className="text-2xl font-bold">
+          <span className="text-2xl font-extrabold tabular-nums tracking-[-0.04em]">
             {format(meetingTime, "HH:mm")}
           </span>
           {isImminent && (
-            <span className="text-xs font-medium animate-pulse">
+            <span className="text-xs font-semibold animate-pulse">
               Em {minutesUntil}min
             </span>
           )}
           {isSoon && (
-            <span className="text-xs font-medium">
+            <span className="text-xs font-semibold">
               Em {minutesUntil}min
             </span>
           )}
@@ -97,9 +100,9 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h4 className="font-semibold truncate">{lead?.name || "Lead"}</h4>
+            <h4 className="truncate font-bold tracking-[-0.01em]">{lead?.name || "Lead"}</h4>
             {isImminent && (
-              <Badge variant="destructive" className="text-xs animate-pulse">
+              <Badge variant="destructive" className="animate-pulse text-[11px]">
                 <AlertCircle className="w-3 h-3 mr-1" />
                 Iminente
               </Badge>
@@ -129,22 +132,22 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
         </div>
 
         {/* Action */}
-        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
       </motion.div>
     );
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Today's Meetings */}
       {todayMeetings.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Calendar className="w-4 h-4 text-primary" />
-            </div>
-            <h3 className="font-semibold">Hoje</h3>
-            <Badge variant="secondary" className="ml-auto">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+              <Calendar className="h-4 w-4" aria-hidden />
+            </span>
+            <h3 className="text-base font-bold tracking-tight">Hoje</h3>
+            <Badge variant="soft" className="ml-auto tabular-nums">
               {todayMeetings.length} {todayMeetings.length === 1 ? "reunião" : "reuniões"}
             </Badge>
           </div>
@@ -158,11 +161,11 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
       {tomorrowMeetings.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-chart-2/10">
-              <Clock className="w-4 h-4 text-chart-2" />
-            </div>
-            <h3 className="font-semibold">Amanhã</h3>
-            <Badge variant="secondary" className="ml-auto">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-muted text-foreground/70">
+              <Clock className="h-4 w-4" aria-hidden />
+            </span>
+            <h3 className="text-base font-bold tracking-tight">Amanhã</h3>
+            <Badge variant="soft" className="ml-auto tabular-nums">
               {tomorrowMeetings.length} {tomorrowMeetings.length === 1 ? "reunião" : "reuniões"}
             </Badge>
           </div>

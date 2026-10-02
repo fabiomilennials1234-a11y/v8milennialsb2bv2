@@ -17,6 +17,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingUp, PieChart as PieChartIcon, BarChart3 } from "lucide-react";
 
+// Tooltip do recharts no vocabulário V5: superfície de cartão, raio de 12 px.
+const TOOLTIP_STYLE = {
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--card-border))",
+  borderRadius: "12px",
+  boxShadow: "var(--relevo)",
+  color: "hsl(var(--card-foreground))",
+};
+
 interface CommissionBreakdownProps {
   data: {
     mrr: number;
@@ -37,10 +46,12 @@ export function CommissionBreakdown({ data }: CommissionBreakdownProps) {
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Card className="glass-card">
+    <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <PieChartIcon className="w-4 h-4 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            <PieChartIcon className="h-4 w-4" strokeWidth={2.2} />
+          </span>
           Composição dos Ganhos
         </CardTitle>
       </CardHeader>
@@ -67,11 +78,7 @@ export function CommissionBreakdown({ data }: CommissionBreakdownProps) {
                     `R$ ${value.toLocaleString('pt-BR')}`,
                     ''
                   ]}
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={TOOLTIP_STYLE}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -87,7 +94,7 @@ export function CommissionBreakdown({ data }: CommissionBreakdownProps) {
                   <span className="text-sm text-muted-foreground">{item.name}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-bold tabular-nums">
                     R$ {item.value.toLocaleString('pt-BR')}
                   </span>
                   <span className="text-xs text-muted-foreground ml-2">
@@ -113,10 +120,12 @@ interface MonthlyEarningsChartProps {
 
 export function MonthlyEarningsChart({ data }: MonthlyEarningsChartProps) {
   return (
-    <Card className="glass-card">
+    <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            <BarChart3 className="h-4 w-4" strokeWidth={2.2} />
+          </span>
           Evolução Mensal
         </CardTitle>
       </CardHeader>
@@ -124,7 +133,7 @@ export function MonthlyEarningsChart({ data }: MonthlyEarningsChartProps) {
         <div className="h-[220px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis 
                 dataKey="month" 
                 tick={{ fontSize: 12 }} 
@@ -136,11 +145,7 @@ export function MonthlyEarningsChart({ data }: MonthlyEarningsChartProps) {
                 tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}K`}
               />
               <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
+                contentStyle={TOOLTIP_STYLE}
                 formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
               />
               <Legend />
@@ -174,10 +179,12 @@ interface EarningsProjectionProps {
 
 export function EarningsProjection({ data }: EarningsProjectionProps) {
   return (
-    <Card className="glass-card">
+    <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            <TrendingUp className="h-4 w-4" strokeWidth={2.2} />
+          </span>
           Projeção de Ganhos
         </CardTitle>
       </CardHeader>
@@ -195,7 +202,7 @@ export function EarningsProjection({ data }: EarningsProjectionProps) {
                   <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis 
                 dataKey="month" 
                 tick={{ fontSize: 12 }} 
@@ -207,11 +214,7 @@ export function EarningsProjection({ data }: EarningsProjectionProps) {
                 tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}K`}
               />
               <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
+                contentStyle={TOOLTIP_STYLE}
                 formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
               />
               <Legend />

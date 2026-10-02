@@ -63,7 +63,7 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
   }
 
   return (
-    <div className="border-t p-3">
+    <div className="border-t border-border/60 bg-card p-3">
       <input
         type="file"
         ref={fileRef}
@@ -91,7 +91,7 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
           }}
           placeholder="Escreva sua mensagem..."
           disabled={!canSend || isPending}
-          className="min-h-[44px] max-h-[160px] resize-none"
+          className="min-h-[44px] max-h-[160px] resize-none rounded-[20px] bg-sunken focus-visible:bg-card"
         />
         <Button onClick={handleSend} disabled={!canSend || !text.trim() || isPending}>
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

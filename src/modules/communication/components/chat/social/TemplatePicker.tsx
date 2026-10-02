@@ -283,7 +283,7 @@ export function TemplatePicker({
                     {midia ? "Trocar arquivo" : "Escolher arquivo"}
                   </Button>
                   {midia && (
-                    <span className="truncate text-[11px] text-emerald-400">
+                    <span className="truncate text-[11px] font-semibold text-success">
                       {midia === midiaDeExemploDoCabecalho(escolhido)
                         ? "usando a imagem do template"
                         : "arquivo pronto"}
@@ -341,7 +341,7 @@ export function TemplatePicker({
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Como o cliente vê</p>
               <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                <div className="overflow-hidden rounded-xl rounded-tr-sm bg-emerald-600/15">
+                <div className="overflow-hidden rounded-xl rounded-tr-sm bg-success/15">
                   <p className="whitespace-pre-wrap p-3 text-sm text-foreground/90">
                     {previewDoTemplate(escolhido, valores)}
                   </p>
@@ -351,7 +351,7 @@ export function TemplatePicker({
                   {botoes.length > 0 && (
                     <div className="divide-y divide-border/40 border-t border-border/40">
                       {botoes.map((rotulo, i) => (
-                        <p key={i} className="py-2 text-center text-[13px] text-sky-500">
+                        <p key={i} className="py-2 text-center text-[13px] font-semibold text-insights">
                           {rotulo}
                         </p>
                       ))}

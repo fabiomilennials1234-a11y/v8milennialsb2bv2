@@ -87,7 +87,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
       />
 
       {draft.numbers.length === 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-card p-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border/70 bg-sunken p-4 text-sm text-muted-foreground">
           <Smartphone className="h-4 w-4 shrink-0" />
           Nenhum número de WhatsApp conectado. Conecte um número em Configurações para disparar.
         </div>
@@ -109,7 +109,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
             <div
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-                n.selected ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                n.selected ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-muted-foreground",
               )}
             >
               <Smartphone className="h-4 w-4" />
@@ -122,13 +122,13 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
                       permite (#1722, critério 1). É ele que decide o passo
                       seguinte: texto livre no Chip, Template aprovado aqui. */}
                   {n.regime === "oficial" && (
-                    <span className="ml-2 rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 align-middle text-[10px] font-medium text-primary">
+                    <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 align-middle text-[10px] font-semibold text-primary-soft-foreground">
                       Canal Oficial · Template
                     </span>
                   )}
                 </p>
                 {n.isNew && (
-                  <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-500">
+                  <span className="shrink-0 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning-strong">
                     número novo · cuidado
                   </span>
                 )}
@@ -136,7 +136,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
               <p className="text-xs text-muted-foreground">
                 até <span className="tabular-nums">{n.cap}</span> envios/dia
                 {n.isNew && draft.capPerNumber > n.cap && (
-                  <span className="text-amber-500"> (protegido)</span>
+                  <span className="text-warning-strong"> (protegido)</span>
                 )}
               </p>
             </div>
@@ -153,12 +153,12 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
       </div>
 
       {/* Per-number daily cap — the safety control */}
-      <div className="rounded-xl border border-border/70 bg-card p-5">
+      <div className="rounded-2xl border border-border/60 bg-sunken p-5">
         <div className="flex items-baseline justify-between">
           <label className="text-sm font-medium text-foreground">
             Limite por número, por dia
           </label>
-          <span className="text-2xl font-semibold tabular-nums text-foreground">
+          <span className="text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-foreground">
             {draft.capPerNumber}
           </span>
         </div>
@@ -167,7 +167,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
           {/* zone track behind the slider: green up to recommended, red after */}
           <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full">
             <div
-              className="absolute inset-y-0 left-0 bg-emerald-500/30"
+              className="absolute inset-y-0 left-0 bg-success/30"
               style={{ width: `${safeZonePct}%` }}
             />
             <div
@@ -192,7 +192,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
         </div>
 
         {risk === "safe" ? (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2 text-xs text-emerald-500">
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-success/30 bg-success/[0.06] px-3 py-2 text-xs text-success">
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span>
               <span className="font-medium tabular-nums">{draft.capPerNumber}/dia</span> por número —
@@ -212,22 +212,22 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
 
       {/* Live pace readout — the load-bearing feedback of this step */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-border/70 bg-card p-4">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-2xl border border-border/60 bg-sunken p-4">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             <Gauge className="h-3.5 w-3.5" />
             Capacidade
           </div>
-          <p className="mt-1.5 text-2xl font-semibold tabular-nums text-foreground">
+          <p className="mt-1.5 text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-foreground">
             {capacity.toLocaleString("pt-BR")}
             <span className="ml-1 text-sm font-normal text-muted-foreground">/dia</span>
           </p>
         </div>
-        <div className="rounded-xl border border-border/70 bg-card p-4">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-2xl border border-border/60 bg-sunken p-4">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             <CalendarRange className="h-3.5 w-3.5" />
             Duração
           </div>
-          <p className="mt-1.5 text-2xl font-semibold tabular-nums text-foreground">
+          <p className="mt-1.5 text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-foreground">
             {plan.dayCount > 0 ? (
               <>
                 {plan.dayCount}

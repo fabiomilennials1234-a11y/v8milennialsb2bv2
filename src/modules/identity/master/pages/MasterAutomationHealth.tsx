@@ -14,9 +14,11 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiTile } from "@/components/ui/bento";
 import {
   AlertTriangle,
   Activity,
@@ -26,6 +28,7 @@ import {
   Bell,
   History,
   RefreshCw,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -61,24 +64,22 @@ export default function MasterAutomationHealth() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Automation Health</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Visibility de saúde das automações + reprocess de jobs falhados
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetchHealth()}
-          disabled={healthLoading}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${healthLoading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Automation Health"
+        subtitle="Visibility de saúde das automações + reprocess de jobs falhados"
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetchHealth()}
+            disabled={healthLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${healthLoading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <SummaryCard
@@ -113,8 +114,9 @@ export default function MasterAutomationHealth() {
         />
       </div>
 
-      <Tabs defaultValue="lag" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-9 gap-1 h-auto">
+      {/* Navegação da página fica abaixo do resumo: KPIs primeiro, detalhe depois. */}
+      <Tabs defaultValue="lag" className="w-full space-y-5">
+        <TabsList variant="pill">
           <TabsTrigger value="lag">Atraso</TabsTrigger>
           <TabsTrigger value="config">Configuração</TabsTrigger>
           <TabsTrigger value="dead-letter">Dead-Letter</TabsTrigger>
@@ -126,31 +128,31 @@ export default function MasterAutomationHealth() {
           <TabsTrigger value="engine">Engine</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="lag">
+        <TabsContent value="lag" className="mt-0">
           <AutomationLagTab />
         </TabsContent>
-        <TabsContent value="config">
+        <TabsContent value="config" className="mt-0">
           <WorkflowConfigTab />
         </TabsContent>
-        <TabsContent value="dead-letter">
+        <TabsContent value="dead-letter" className="mt-0">
           <DeadLetterTab onReprocess={handleReprocess} />
         </TabsContent>
-        <TabsContent value="workflows">
+        <TabsContent value="workflows" className="mt-0">
           <WorkflowsTab onReprocess={handleReprocess} />
         </TabsContent>
-        <TabsContent value="stuck">
+        <TabsContent value="stuck" className="mt-0">
           <StuckTab onReprocess={handleReprocess} />
         </TabsContent>
-        <TabsContent value="webhooks">
+        <TabsContent value="webhooks" className="mt-0">
           <WebhooksTab />
         </TabsContent>
-        <TabsContent value="alerts">
+        <TabsContent value="alerts" className="mt-0">
           <AlertsTab />
         </TabsContent>
-        <TabsContent value="audit">
+        <TabsContent value="audit" className="mt-0">
           <AuditTab />
         </TabsContent>
-        <TabsContent value="engine">
+        <TabsContent value="engine" className="mt-0">
           <EngineTab />
         </TabsContent>
       </Tabs>
@@ -161,31 +163,29 @@ export default function MasterAutomationHealth() {
 // ─── Summary Card ────────────────────────────────────────────────────────────
 
 function SummaryCard({
-  icon: Icon,
+  icon,
   label,
   value,
   severity,
 }: {
-  icon: React.ElementType;
+  icon: LucideIcon;
   label: string;
   value: number;
   severity: "info" | "warning" | "error";
 }) {
-  const colorMap = {
-    info: "text-muted-foreground",
-    warning: "text-amber-500",
-    error: "text-red-500",
+  // KpiTile não tem tom de aviso: o chip fica neutro e o número carrega a cor.
+  const valueColor = {
+    info: "",
+    warning: "text-warning-strong",
+    error: "text-destructive",
   } as const;
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <Icon className={`w-5 h-5 ${colorMap[severity]}`} />
-          <span className={`text-2xl font-semibold ${colorMap[severity]}`}>{value}</span>
-        </div>
-        <p className="text-sm text-muted-foreground mt-2">{label}</p>
-      </CardContent>
-    </Card>
+    <KpiTile
+      icon={icon}
+      label={label}
+      tone={severity === "error" ? "bad" : "neutral"}
+      value={<span className={valueColor[severity]}>{value}</span>}
+    />
   );
 }
 
@@ -426,7 +426,7 @@ function AuditTab() {
         </CardTitle>
         <div className="flex gap-2">
           <select
-            className="border rounded px-2 py-1 text-sm bg-background"
+            className="h-9 rounded-xl border border-input bg-card px-2.5 text-sm"
             value={tableFilter ?? ""}
             onChange={(e) => setTableFilter(e.target.value || undefined)}
           >
@@ -437,7 +437,7 @@ function AuditTab() {
             <option value="workflow_executions">workflow_executions</option>
           </select>
           <select
-            className="border rounded px-2 py-1 text-sm bg-background"
+            className="h-9 rounded-xl border border-input bg-card px-2.5 text-sm"
             value={opFilter ?? ""}
             onChange={(e) => setOpFilter((e.target.value as any) || undefined)}
           >
@@ -503,7 +503,7 @@ function EngineTab() {
             Hoje funcionalmente idênticos. Toggle prepara A/B futura.
           </p>
         </div>
-        <Badge variant={v2Count > 0 ? "default" : "outline"}>
+        <Badge variant={v2Count > 0 ? "gold" : "outline"}>
           {v2Count}/{data.length} em v2
         </Badge>
       </div>
@@ -522,7 +522,7 @@ function EngineTab() {
                 <TableRow key={org.id}>
                   <TableCell className="font-medium">{org.name}</TableCell>
                   <TableCell>
-                    <Badge variant={org.copilot_engine_version === "v2" ? "default" : "outline"}>
+                    <Badge variant={org.copilot_engine_version === "v2" ? "gold" : "outline"}>
                       {org.copilot_engine_version}
                     </Badge>
                   </TableCell>
@@ -578,9 +578,9 @@ function relativeTime(iso: string | null): string {
   }
 }
 
-function severityVariant(s: SystemAlert["severity"]): "default" | "secondary" | "destructive" | "outline" {
+function severityVariant(s: SystemAlert["severity"]): BadgeProps["variant"] {
   if (s === "critical" || s === "error") return "destructive";
-  if (s === "warning") return "secondary";
+  if (s === "warning") return "warning";
   return "outline";
 }
 

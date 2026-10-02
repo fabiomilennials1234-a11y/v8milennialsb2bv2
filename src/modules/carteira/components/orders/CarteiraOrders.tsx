@@ -69,7 +69,7 @@ export function CarteiraOrders({ searchQuery = "" }: CarteiraOrdersProps) {
       {/* Resumo — espelha CarteiraApprovals.tsx:56-60. */}
       {!isLoading && total > 0 && (
         <p className="text-sm text-foreground">
-          <span className="font-semibold">
+          <span className="font-bold tabular-nums">
             {total} {total === 1 ? "pedido" : "pedidos"}
           </span>
           {` — ${formatBRL(pageValue, 0)} em vendas`}

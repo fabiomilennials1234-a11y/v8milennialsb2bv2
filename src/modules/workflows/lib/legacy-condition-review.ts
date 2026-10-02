@@ -125,7 +125,15 @@ function classify(node: WorkflowNode): LegacyConditionReviewItem {
         : "Confirme a identidade atual da pessoa; o nome exibido não substitui o UUID.",
       blocksPublication: true };
   }
-  if (data.field === "score" || data.field === "deal_value") {
+  // Score e rating do lead saíram do produto (CTO, 02/10). A revisão não
+  // converte para um campo descontinuado: aponta e exige a troca explícita.
+  // A condição legada salva continua rodando no executor até lá.
+  if (data.field === "score" || data.field === "rating") {
+    return { ...base, kind: "unsupported", after: "Trocar por outra informação",
+      details: "Score e rating do lead foram descontinuados e não são mais oferecidos. Remova esta condição ou troque por Qualificação.",
+      blocksPublication: true };
+  }
+  if (data.field === "deal_value") {
     if (!NUMBER_OPERATORS[data.operator]
       || (!noValueOperator(data.operator) && !Number.isFinite(Number(data.value)))) {
       return { ...base, kind: "unsupported", after: "Escolher comparação numérica",
@@ -133,7 +141,7 @@ function classify(node: WorkflowNode): LegacyConditionReviewItem {
         blocksPublication: true };
     }
     return { ...base, kind: "semantic_change",
-      after: data.field === "score" ? "Pontuação de qualificação tipada" : "Valor do negócio exato do gatilho",
+      after: "Valor do negócio exato do gatilho",
       details: "O legado tratava ausência como zero. A nova regra distingue vazio de zero e usa comparação numérica tipada.",
       blocksPublication: false };
   }
@@ -211,8 +219,6 @@ function convertNode(node: WorkflowNode, item: LegacyConditionReviewItem, genera
     guidedCondition = ({ version: 1, id,
       field: data.field === "sale_responsible_id" ? "lead.sale_responsible_id" : "lead.pre_sale_responsible_id",
       operator: data.operator }) as GuidedConditionDraft;
-  } else if (data.field === "score") {
-    guidedCondition = numericRule(id, "lead.qualification_score", data.operator, data.value);
   } else if (data.field === "deal_value") {
     guidedCondition = numericRule(id, "business.trigger.value", data.operator, data.value);
   } else {

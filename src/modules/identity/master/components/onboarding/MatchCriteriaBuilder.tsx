@@ -65,7 +65,7 @@ export function MatchCriteriaBuilder({ value, onChange }: Props) {
       {fields.map((field) => (
         <div key={field} className="p-2.5 rounded-lg border border-border/40 space-y-2">
           <div className="flex items-center justify-between">
-            <code className="text-xs font-mono text-amber-500">{field}</code>
+            <code className="text-xs font-mono text-warning-strong">{field}</code>
             <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => removeField(field)}>
               <X className="w-3 h-3" />
             </Button>

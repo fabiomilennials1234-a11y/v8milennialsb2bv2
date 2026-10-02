@@ -33,7 +33,7 @@ export function OnbStepPipelines() {
   if (!applied) {
     return (
       <div className="space-y-4 text-center max-w-sm">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" />
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
         <div>
           <h3 className="text-lg font-semibold">Configurando funis...</h3>
           <p className="text-sm text-muted-foreground mt-1">
@@ -47,8 +47,8 @@ export function OnbStepPipelines() {
   return (
     <div className="space-y-6 max-w-md w-full">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-          <Workflow className="w-5 h-5 text-amber-500" />
+        <div className="w-10 h-10 rounded-xl bg-primary-soft flex items-center justify-center">
+          <Workflow className="w-5 h-5 text-primary-soft-foreground" />
         </div>
         <div>
           <h3 className="text-lg font-semibold">Funis configurados!</h3>
@@ -62,7 +62,7 @@ export function OnbStepPipelines() {
         {pipelines.map((p, i) => (
           <div key={i} className="p-4 rounded-xl border border-border/60 bg-muted/20">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-success" />
               <span className="text-sm font-medium">{p.name}</span>
             </div>
             {p.stages && (
@@ -92,7 +92,7 @@ export function OnbStepPipelines() {
           // State already advanced by apply_pipelines — just trigger refetch
           advance.reset();
         }}
-        className="w-full py-3 px-4 rounded-xl bg-amber-500 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-amber-600 transition-all"
+        className="w-full py-3 px-4 rounded-full bg-primary text-primary-foreground shadow-brilho-ouro font-medium text-sm flex items-center justify-center gap-2 hover:bg-primary/90 transition-all"
       >
         Continuar
         <ArrowRight className="w-4 h-4" />

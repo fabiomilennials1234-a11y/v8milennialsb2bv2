@@ -204,7 +204,7 @@ export function ChatRestrictionCard() {
                     Medindo esta organização...
                   </div>
                 ) : (
-                  <div className="space-y-4 rounded-xl bg-muted p-4">
+                  <div className="space-y-4 rounded-xl border border-border/60 bg-sunken p-4">
                     <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
                       <Stat value={total} label="conversas no chat" />
                       <Stat value={restritas} label="ficam só para admin" tone="warning" />

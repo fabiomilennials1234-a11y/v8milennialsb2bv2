@@ -128,21 +128,27 @@ function DroppableColumn<T extends DraggableItem>({
         // `p-0` anula o `p-4` que `.kanban-column` aplica no CSS global. O
         // recheio agora é por faixa (cabeçalho `px-3`, corpo `px-2.5`); somados
         // davam 26px de cada lado e o card caía pra 240px dentro de 292px.
-        "kanban-column w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex flex-col p-0",
-        "rounded-xl bg-muted/25 overflow-hidden transition-all duration-200",
-        isOver && "ring-2 ring-primary/50 bg-primary/5",
+        //
+        // V5: a coluna é uma raia AFUNDADA (`bg-sunken`) — um degrau entre a
+        // bancada e o cartão, nos dois temas — e os cards brancos de bento
+        // assentam sobre ela. Raio de cartão, contorno fino; o alvo do arrasto
+        // acende em ouro suave.
+        "kanban-column flex w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex-col p-0",
+        "overflow-hidden rounded-card border border-border/60 bg-sunken transition-[background-color,box-shadow] duration-200",
+        isOver && "bg-primary-soft/50 ring-2 ring-primary/60",
         className
       )}
     >
-      <div className="flex items-center gap-2 shrink-0 px-3 pt-3 pb-2">
+      <div className="flex shrink-0 items-center gap-2 px-3.5 pb-2.5 pt-3">
         <div
-          className="size-2.5 shrink-0 rounded-full"
+          className="size-2.5 shrink-0 rounded-full ring-2 ring-card"
           style={{ backgroundColor: column.color }}
+          aria-hidden
         />
-        <h3 className="text-[12.5px] font-semibold tracking-[-0.01em] truncate">
+        <h3 className="truncate text-[13px] font-bold tracking-[-0.01em]">
           {column.title}
         </h3>
-        <span className="rounded-full bg-muted px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
           {column.totalCount ?? column.items.length}
         </span>
         {renderColumnExtra && renderColumnExtra(column)}
@@ -150,8 +156,13 @@ function DroppableColumn<T extends DraggableItem>({
           {(onExportStage || onDeleteAllLeads || onSortChange) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:text-foreground"
+                  aria-label={`Ações da etapa ${column.title}`}
+                >
+                  <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -211,8 +222,8 @@ function DroppableColumn<T extends DraggableItem>({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            <button className="rounded-lg p-1.5 transition-colors hover:bg-card">
+              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
         </div>
@@ -222,7 +233,7 @@ function DroppableColumn<T extends DraggableItem>({
 
       {sortKey && sortKey !== DEFAULT_COLUMN_SORT && column.hasMore && <PartialSortNotice />}
 
-      <div className="flex-1 min-h-[100px] space-y-2 overflow-y-auto px-2.5 pb-2.5">
+      <div className="min-h-[100px] flex-1 space-y-2.5 overflow-y-auto px-2.5 pb-2.5">
         {children}
         {column.hasMore && column.onLoadMore && (
           <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
@@ -243,9 +254,9 @@ function DroppableColumn<T extends DraggableItem>({
           data-testid={`column-create-${column.id}`}
           className={cn(
             "mx-2.5 mb-2.5 flex shrink-0 items-center justify-center gap-1.5",
-            "rounded-lg border border-dashed border-border px-2 py-2",
-            "text-[11.5px] font-medium text-muted-foreground",
-            "transition-colors duration-150 hover:border-primary hover:text-primary",
+            "rounded-xl border border-dashed border-border px-2 py-2",
+            "text-xs font-semibold text-muted-foreground",
+            "transition-colors duration-150 hover:border-primary/60 hover:bg-card hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
@@ -469,7 +480,9 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       <div
         ref={scrollRef}
         onScroll={handleMainScroll}
-        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide"
+        // 280 e não 220: o cabeçalho V5 do funil ganhou a fileira da pílula de
+        // visões — sem descontar, o quadro passaria da dobra e a página rolaria.
+        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-280px)] scrollbar-hide"
       >
         {columns.map((column) => {
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
@@ -506,7 +519,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
 
       <DragOverlay>
         {activeItem ? (
-          <div className="rotate-3 scale-105">
+          <div className="rotate-2 scale-[1.03] cursor-grabbing [&>*]:shadow-relevo-alto">
             {renderCard(activeItem, true)}
           </div>
         ) : null}

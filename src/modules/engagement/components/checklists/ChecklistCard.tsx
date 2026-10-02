@@ -76,19 +76,21 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-border bg-card overflow-hidden"
+      className="overflow-hidden rounded-card border border-card-border bg-card text-card-foreground shadow-relevo"
     >
       {/* Header */}
       <div
-        className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="cursor-pointer px-5 py-4 transition-colors hover:bg-muted/40"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-3">
-          {expanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          )}
+          <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </span>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -99,21 +101,24 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
                   onBlur={handleSaveTitle}
                   onKeyDown={handleTitleKeyDown}
                   onClick={(e) => e.stopPropagation()}
-                  className="h-7 text-sm font-semibold"
+                  className="h-8 text-sm font-semibold"
                   autoFocus
                 />
               ) : (
-                <h3 className="font-semibold text-sm truncate">{checklist.title}</h3>
+                <h3 className="truncate text-[15px] font-bold tracking-[-0.02em]">{checklist.title}</h3>
               )}
             </div>
 
             {checklist.description && !expanded && (
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">{checklist.description}</p>
+              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{checklist.description}</p>
             )}
 
-            <div className="flex items-center gap-3 mt-2">
-              <Progress value={progress} className="h-1.5 flex-1" />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
+            <div className="mt-2.5 flex items-center gap-3">
+              <Progress
+                value={progress}
+                className={cn("h-1.5 flex-1 bg-muted", progress === 100 && "[&>div]:bg-success")}
+              />
+              <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                 {checklist.completed_items}/{checklist.total_items}
               </span>
             </div>
@@ -124,18 +129,20 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8 rounded-[10px] text-muted-foreground hover:text-foreground"
               onClick={() => setIsEditingTitle(true)}
+              aria-label="Renomear template"
             >
-              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+              <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               onClick={() => deleteChecklist.mutate(checklist.id)}
+              aria-label="Excluir template"
             >
-              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
@@ -151,9 +158,9 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 border-t border-border pt-3">
+            <div className="border-t border-border/60 px-5 pb-5 pt-4">
               {checklist.description && (
-                <p className="text-xs text-muted-foreground mb-3">{checklist.description}</p>
+                <p className="mb-3 text-[13px] text-muted-foreground">{checklist.description}</p>
               )}
 
               {/* Items list */}
@@ -172,21 +179,20 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
               </div>
 
               {/* Add item input */}
-              <div className="flex items-center gap-2 mt-3">
-                <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <div className="mt-3 flex items-center gap-2 rounded-2xl bg-sunken p-2">
+                <Plus className="ml-1.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 <Input
                   placeholder="Adicionar item..."
                   value={newItemTitle}
                   onChange={(e) => setNewItemTitle(e.target.value)}
                   onKeyDown={handleAddItemKeyDown}
-                  className="h-8 text-sm"
+                  className="h-9 text-sm"
                 />
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="outline"
                   onClick={handleAddItem}
                   disabled={!newItemTitle.trim()}
-                  className="h-8 px-3"
                 >
                   Adicionar
                 </Button>

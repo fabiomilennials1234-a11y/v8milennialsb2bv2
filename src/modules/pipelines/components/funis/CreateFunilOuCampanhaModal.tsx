@@ -220,10 +220,10 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-[540px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle className="text-lg font-bold tracking-tight">
-              {step === "templates" ? "Criar Funil" : "Configurar Funil"}
+        <DialogContent className="overflow-hidden p-0 sm:max-w-[560px]">
+          <DialogHeader className="px-6 pb-2 pt-6">
+            <DialogTitle className="text-xl font-extrabold tracking-[-0.03em]">
+              {step === "templates" ? "Criar funil" : "Configurar funil"}
             </DialogTitle>
           </DialogHeader>
 
@@ -234,28 +234,32 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                 Escolha um template ou comece do zero.
               </p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {TEMPLATES.map((template) => {
                   const Icon = template.icon;
                   return (
                     <button
                       key={template.id}
                       onClick={() => handleSelectTemplate(template)}
-                      className="group flex flex-col items-start gap-2 p-4 rounded-xl border-2 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
+                      className={cn(
+                        "group flex flex-col items-start gap-2.5 rounded-2xl border border-border bg-card p-4 text-left",
+                        "transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-relevo",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0",
+                      )}
                     >
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: `${template.color}15` }}
+                        className="grid h-10 w-10 place-items-center rounded-[14px]"
+                        style={{ backgroundColor: `color-mix(in srgb, ${template.color} 14%, transparent)` }}
                       >
-                        <Icon className="w-5 h-5" style={{ color: template.color }} />
+                        <Icon className="h-5 w-5" style={{ color: template.color }} aria-hidden />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold">{template.label}</p>
+                        <p className="text-sm font-bold tracking-[-0.01em]">{template.label}</p>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                           {template.description}
                         </p>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity self-end" />
+                      <ArrowRight className="h-4 w-4 self-end text-muted-foreground opacity-0 transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
                     </button>
                   );
                 })}
@@ -268,11 +272,13 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                     onOpenChange(false);
                     setShowActivateHidden(true);
                   }}
-                  className="mt-4 w-full flex items-center gap-3 p-3 rounded-lg border border-dashed border-green-500/30 hover:border-green-500/60 hover:bg-green-500/5 transition-all text-left"
+                  className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-dashed border-success/40 p-3 text-left transition-colors hover:border-success/70 hover:bg-success/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <Eye className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Ativar funil oculto</p>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-success/10 text-success">
+                    <Eye className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold">Ativar funil oculto</p>
                     <p className="text-[11px] text-muted-foreground">
                       {hiddenPipes.map((p) => p.display_name).join(", ")}
                     </p>
@@ -286,9 +292,9 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
               {/* Back */}
               <button
                 onClick={() => setStep("templates")}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="-ml-1 inline-flex items-center gap-1 rounded-full px-1 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
+                <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
                 Voltar
               </button>
 
@@ -297,9 +303,9 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Template:</span>
                   <span
-                    className="font-medium px-2 py-0.5 rounded-md"
+                    className="rounded-full px-2.5 py-0.5 font-semibold"
                     style={{
-                      backgroundColor: `${selectedTemplate.color}15`,
+                      backgroundColor: `color-mix(in srgb, ${selectedTemplate.color} 14%, transparent)`,
                       color: selectedTemplate.color,
                     }}
                   >
@@ -342,14 +348,17 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                       <button
                         key={item.name}
                         onClick={() => setSelectedIcon(item.name)}
+                        type="button"
+                        aria-pressed={selectedIcon === item.name}
                         className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all",
+                          "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           selectedIcon === item.name
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:border-primary/50"
+                            ? "border-transparent bg-primary-soft text-primary-soft-foreground"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                         )}
                       >
-                        <Icon className="w-3.5 h-3.5" />
+                        <Icon className="h-3.5 w-3.5" aria-hidden />
                         {item.label}
                       </button>
                     );
@@ -360,16 +369,20 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
               {/* Color */}
               <div className="space-y-1.5">
                 <Label>Cor</Label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {PIPELINE_COLORS.map((color) => (
                     <button
                       key={color}
+                      type="button"
+                      aria-label={`Cor ${color}`}
+                      aria-pressed={selectedColor === color}
                       onClick={() => setSelectedColor(color)}
                       className={cn(
-                        "w-7 h-7 rounded-full border-2 transition-all",
+                        "h-7 w-7 rounded-full ring-offset-2 ring-offset-card transition-transform",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         selectedColor === color
-                          ? "border-foreground scale-110"
-                          : "border-transparent hover:scale-105"
+                          ? "scale-110 ring-2 ring-foreground"
+                          : "hover:scale-105"
                       )}
                       style={{ backgroundColor: color }}
                     />
@@ -378,12 +391,14 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
               </div>
 
               {/* ── Temporal toggle ── */}
-              <div className="border-t border-border/50 pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-muted-foreground" />
+              <div className="rounded-2xl bg-muted/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-card text-foreground/70 shadow-relevo">
+                      <Target className="h-4 w-4" aria-hidden />
+                    </span>
                     <div>
-                      <p className="text-sm font-medium">Definir prazo e metas</p>
+                      <p className="text-sm font-bold tracking-[-0.01em]">Definir prazo e metas</p>
                       <p className="text-xs text-muted-foreground">
                         Adicionar data limite, metas e bônus para a equipe
                       </p>
@@ -392,11 +407,12 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                   <Switch
                     checked={hasTemporal}
                     onCheckedChange={setHasTemporal}
+                    aria-label="Definir prazo e metas"
                   />
                 </div>
 
                 {hasTemporal && (
-                  <div className="mt-4 space-y-3 pl-6 border-l-2 border-primary/20">
+                  <div className="mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
                     {/* Dates */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
@@ -489,9 +505,9 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                   disabled={!name.trim() || (hasTemporal && !endsAt) || createPipeline.isPending}
                 >
                   {createPipeline.isPending && (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="animate-spin" />
                   )}
-                  Criar Funil
+                  Criar funil
                 </Button>
               </DialogFooter>
             </div>
@@ -534,8 +550,10 @@ function ActivateHiddenFunnelDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
-            <Eye className="w-5 h-5 text-green-500" />
+          <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-success/10 text-success">
+              <Eye className="h-4 w-4" aria-hidden />
+            </span>
             Ativar funil oculto
           </DialogTitle>
         </DialogHeader>
@@ -549,15 +567,15 @@ function ActivateHiddenFunnelDialog({
             {hiddenPipes.map((pipe) => (
               <div
                 key={pipe.pipe_type}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/50 bg-muted/30"
+                className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3 pl-4"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{pipe.display_name}</p>
+                  <p className="truncate text-sm font-semibold">{pipe.display_name}</p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-shrink-0 border-green-500/50 text-green-600 hover:bg-green-500/10 hover:text-green-600"
+                  className="shrink-0 border-success/50 text-success hover:bg-success/10 hover:text-success"
                   onClick={() => handleActivate(pipe.pipe_type, pipe.display_name)}
                   disabled={enablePipe.isPending}
                 >
@@ -565,7 +583,7 @@ function ActivateHiddenFunnelDialog({
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <Check className="w-4 h-4 mr-1" />
+                      <Check />
                       Ativar
                     </>
                   )}

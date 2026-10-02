@@ -163,7 +163,7 @@ function SocialChatHeader({
   const gradient = getAvatarGradient(contact.external_user_id || name);
 
   return (
-    <header className="flex items-center gap-3 px-4 py-3 border-b border-border/60 bg-background shrink-0">
+    <header className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-card px-4 py-3">
       {isMobile && (
         <Button
           variant="ghost"
@@ -180,13 +180,14 @@ function SocialChatHeader({
           <img
             src={contact.avatar_url}
             alt=""
-            className="w-10 h-10 rounded-full border-2 border-background shadow-sm object-cover"
+            className="h-10 w-10 rounded-full object-cover"
           />
         ) : (
           <div
             className={cn(
-              "w-10 h-10 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-              gradient.ink ? "text-[#1c1c1c]" : "text-white",
+              "flex h-10 w-10 select-none items-center justify-center rounded-full text-sm font-bold",
+              // Letra escura/clara conforme o gradiente (cor do dado, não do tema).
+              gradient.ink ? "text-tinta" : "text-tinta-foreground",
             )}
             style={{ background: gradient.background }}
             aria-hidden
@@ -447,9 +448,9 @@ function SocialComposer({
   };
 
   return (
-    <div className="shrink-0 border-t border-border/60 bg-background px-4 py-3">
+    <div className="shrink-0 border-t border-border/60 bg-card px-3 pb-3 pt-2.5">
       {anexo && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/60 bg-sunken px-3 py-2">
           <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-xs text-foreground">{anexo.filename}</span>
           <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -471,7 +472,7 @@ function SocialComposer({
           Mostrar o trecho, e não só "respondendo", é o que evita citar a
           mensagem errada num histórico longo. */}
       {respondendoA && (
-        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-primary/60 bg-muted/40 px-2.5 py-1.5">
+        <div className="mb-2 flex items-start gap-2 rounded-xl border-l-2 border-primary/60 bg-sunken px-2.5 py-1.5">
           <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
             {respondendoA.texto?.trim() || "Mensagem sem texto"}
@@ -605,14 +606,14 @@ function SocialComposer({
                 : "Responder no Direct…"
           }
           rows={1}
-          className="min-h-[42px] max-h-32 resize-none"
+          className="min-h-[42px] max-h-32 resize-none rounded-[20px] bg-sunken focus-visible:bg-card"
           disabled={enviar.isPending}
         />
         <Button
           onClick={() => void submeter()}
           disabled={(!texto.trim() && !anexo) || enviar.isPending || subindo}
           size="sm"
-          className="h-[42px] px-3 shrink-0"
+          className="h-[42px] w-[42px] shrink-0 rounded-full px-0"
           aria-label="Enviar"
         >
           {enviar.isPending
@@ -625,7 +626,7 @@ function SocialComposer({
         <p
           className={cn(
             "mt-1.5 text-[11px]",
-            janela.open ? "text-muted-foreground" : "text-amber-500",
+            janela.open ? "text-muted-foreground" : "font-semibold text-warning-strong",
           )}
         >
           {janela.open

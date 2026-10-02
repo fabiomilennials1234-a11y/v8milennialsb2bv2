@@ -169,9 +169,9 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="baixo">Baixo</SelectItem>
-                  <SelectItem value="medio">Medio</SelectItem>
+                  <SelectItem value="medio">Médio</SelectItem>
                   <SelectItem value="alto">Alto</SelectItem>
-                  <SelectItem value="estrategico">Estrategico</SelectItem>
+                  <SelectItem value="estrategico">Estratégico</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import { motion, LayoutGroup, AnimatePresence } from "framer-motion";
+import { ArrowDown, ArrowUp, Crown, Flame, Sparkles } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
 
@@ -52,63 +53,64 @@ function formatValue(value: number, metricType: string) {
   return `R$ ${value.toLocaleString("pt-BR")}`;
 }
 
+// Faixas de progresso da meta — estado, então token: bateu (success), perto
+// (warning), meio do caminho (insights), longe (destructive).
 function progressColor(progress: number): string {
-  if (progress >= 100) return "bg-emerald-500";
-  if (progress >= 80) return "bg-orange-400";
-  if (progress >= 50) return "bg-blue-500";
-  return "bg-red-500";
+  if (progress >= 100) return "bg-success";
+  if (progress >= 80) return "bg-warning";
+  if (progress >= 50) return "bg-insights";
+  return "bg-destructive";
 }
 
 function progressTrackColor(progress: number): string {
-  if (progress >= 100) return "bg-emerald-500/20";
-  if (progress >= 80) return "bg-orange-400/20";
-  if (progress >= 50) return "bg-blue-500/20";
-  return "bg-red-500/20";
+  if (progress >= 100) return "bg-success/20";
+  if (progress >= 80) return "bg-warning/20";
+  if (progress >= 50) return "bg-insights/20";
+  return "bg-destructive/20";
 }
 
 // ---------------------------------------------------------------------------
 // Position config
 // ---------------------------------------------------------------------------
 
+// V5: ouro = `primary`, prata = `silver`, bronze = `warning`. Sem degradê cru
+// (não tinha par no escuro). `ring` é o aro do avatar; `pedestal*` pinta o
+// bloco do prêmio; `valueText` é o número abaixo do nome.
 const POSITION_CONFIG = {
   1: {
     avatarSize: "2xl" as const,
     avatarClassName: "h-[88px] w-[88px]",
-    borderGradient: "from-yellow-400 to-orange-500",
-    shadowGlow: "shadow-[0_0_30px_rgba(251,191,36,0.35)]",
+    ring: "bg-primary",
+    shadowGlow: "shadow-brilho-ouro",
     pedestalHeight: "h-[110px]",
-    pedestalGradient:
-      "bg-gradient-to-t from-yellow-500/25 via-yellow-400/12 to-transparent",
-    pedestalBorder: "border-yellow-400/30",
-    textGradient:
-      "bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-transparent",
-    badgeColor: "bg-yellow-400 text-yellow-950",
+    pedestalFill: "bg-primary-soft",
+    pedestalBorder: "border-primary/40",
+    valueText: "text-primary-soft-foreground",
+    badgeColor: "bg-primary text-primary-foreground",
     ringOffset: 3,
   },
   2: {
     avatarSize: "xl" as const,
     avatarClassName: "h-[72px] w-[72px]",
-    borderGradient: "from-slate-300 to-slate-500",
-    shadowGlow: "shadow-[0_0_15px_rgba(148,163,184,0.15)]",
+    ring: "bg-silver",
+    shadowGlow: "shadow-relevo",
     pedestalHeight: "h-[80px]",
-    pedestalGradient:
-      "bg-gradient-to-t from-slate-400/18 via-slate-300/8 to-transparent",
-    pedestalBorder: "border-slate-400/25",
-    textGradient: "text-foreground",
-    badgeColor: "bg-slate-300 text-slate-800",
+    pedestalFill: "bg-silver/15",
+    pedestalBorder: "border-silver/40",
+    valueText: "text-foreground",
+    badgeColor: "bg-silver text-silver-foreground",
     ringOffset: 3,
   },
   3: {
     avatarSize: "xl" as const,
     avatarClassName: "h-[68px] w-[68px]",
-    borderGradient: "from-amber-600 to-amber-800",
-    shadowGlow: "shadow-[0_0_15px_rgba(180,83,9,0.15)]",
+    ring: "bg-warning",
+    shadowGlow: "shadow-relevo",
     pedestalHeight: "h-[60px]",
-    pedestalGradient:
-      "bg-gradient-to-t from-amber-700/20 via-amber-600/8 to-transparent",
-    pedestalBorder: "border-amber-600/25",
-    textGradient: "text-amber-700 dark:text-amber-200",
-    badgeColor: "bg-amber-600 text-foreground",
+    pedestalFill: "bg-warning/15",
+    pedestalBorder: "border-warning/40",
+    valueText: "text-warning-strong",
+    badgeColor: "bg-warning text-warning-foreground",
     ringOffset: 3,
   },
 } as const;
@@ -120,8 +122,8 @@ const POSITION_CONFIG = {
 function RadialGlow() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute left-1/2 top-[10%] h-[320px] w-[320px] -translate-x-1/2 rounded-full bg-yellow-500/10 blur-[100px]" />
-      <div className="absolute left-1/2 top-[25%] h-[200px] w-[200px] -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-[80px]" />
+      <div className="absolute left-1/2 top-[10%] h-[320px] w-[320px] -translate-x-1/2 rounded-full bg-primary/10 blur-[100px]" />
+      <div className="absolute left-1/2 top-[25%] h-[200px] w-[200px] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-[80px]" />
     </div>
   );
 }
@@ -129,11 +131,11 @@ function RadialGlow() {
 function CrownBadge() {
   return (
     <motion.span
-      className="block text-3xl leading-none"
+      className="block leading-none text-primary"
       animate={{ scale: [1, 1.06, 1], rotate: [0, 3, -3, 0] }}
       transition={{ repeat: Infinity, duration: 3, ease: [0.4, 0, 0.2, 1] }}
     >
-      👑
+      <Crown className="h-7 w-7 fill-primary/25" strokeWidth={2.2} aria-label="Líder" />
     </motion.span>
   );
 }
@@ -143,7 +145,7 @@ function PositionBadge({ position }: { position: number }) {
   return (
     <span
       className={cn(
-        "absolute -top-2 -right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold shadow-lg",
+        "absolute -top-2 -right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold tabular-nums shadow-relevo ring-2 ring-card",
         cfg?.badgeColor ?? "bg-muted text-foreground",
       )}
     >
@@ -161,9 +163,10 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
         initial={{ opacity: 0, scale: 0.5, y: -10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ delay: 1, type: "spring", stiffness: 300, damping: 15 }}
-        className="mb-1 rounded-full bg-yellow-500/20 border border-yellow-500/40 px-3 py-1 text-xs font-bold text-yellow-600 dark:text-yellow-300"
+        className="mb-1 inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary-soft px-3 py-1 text-[10px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground"
       >
-        👑 NOVO LÍDER
+        <Crown className="h-3 w-3" aria-hidden />
+        Novo líder
       </motion.div>
     );
   }
@@ -174,9 +177,10 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.2, type: "spring" }}
-        className="mb-1 rounded-full bg-blue-500/20 border border-blue-500/40 px-2.5 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-300"
+        className="mb-1 inline-flex items-center gap-1 rounded-full border border-insights/30 bg-insights/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[.06em] text-insights"
       >
-        ✨ NOVO
+        <Sparkles className="h-3 w-3" aria-hidden />
+        Novo
       </motion.div>
     );
   }
@@ -190,13 +194,15 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 1, type: "spring", stiffness: 250, damping: 15 }}
       className={cn(
-        "mb-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border",
+        "mb-1 inline-flex items-center gap-0.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold tabular-nums",
         movedUp
-          ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300"
-          : "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300",
+          ? "border-success/30 bg-success/10 text-success"
+          : "border-destructive/30 bg-destructive/10 text-destructive",
       )}
+      aria-label={movedUp ? `Subiu ${positions}` : `Caiu ${positions}`}
     >
-      {movedUp ? `↑${positions}` : `↓${positions}`}
+      {movedUp ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
+      {positions}
     </motion.div>
   );
 });
@@ -226,16 +232,17 @@ function GoalProgressBar({
         />
       </div>
       <div className="mt-1 flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[11px] tabular-nums text-muted-foreground">
           {progress}% da meta{progress >= 100 ? " \u2713" : ""}
         </span>
         {progress >= 100 && (
-          <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
-            🔥 META BATIDA
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[.04em] text-success">
+            <Flame className="h-3 w-3" aria-hidden />
+            Meta batida
           </span>
         )}
         {progress >= 80 && progress < 100 && (
-          <span className="text-sm leading-none">🔥</span>
+          <Flame className="h-3.5 w-3.5 text-warning-strong" aria-label="Perto da meta" />
         )}
       </div>
     </div>
@@ -259,20 +266,20 @@ function Pedestal({
     <div
       className={cn(
         cfg.pedestalHeight,
-        "relative w-full overflow-hidden rounded-t-xl border-x border-t",
+        "relative w-full overflow-hidden rounded-t-2xl border-x border-t",
         cfg.pedestalBorder,
-        cfg.pedestalGradient,
+        cfg.pedestalFill,
       )}
     >
       <div className="flex h-full flex-col items-center justify-center px-2 text-center">
         <span className="text-base leading-none">
           {prize ? prize.prize_icon : "\u2014"}
         </span>
-        <p className="mt-1 max-w-full truncate text-[11px] font-semibold text-foreground">
+        <p className="mt-1 max-w-full truncate text-[11px] font-bold text-foreground">
           {prize ? prize.prize_name : "\u2014"}
         </p>
         {prize?.prize_value != null ? (
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] tabular-nums text-muted-foreground">
             R$ {prize.prize_value.toLocaleString("pt-BR")}
           </p>
         ) : prize ? (
@@ -282,7 +289,7 @@ function Pedestal({
 
       {/* Shimmer */}
       <motion.div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.04] to-transparent"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-card/40 to-transparent"
         animate={{ x: ["-100%", "200%"] }}
         transition={{
           repeat: Infinity,
@@ -355,12 +362,12 @@ function PodiumSlot({
         <PositionBadge position={pos} />
         <div
           className={cn(
-            "rounded-full bg-gradient-to-br p-[3px]",
-            cfg.borderGradient,
+            "rounded-full p-[3px]",
+            cfg.ring,
             cfg.shadowGlow,
           )}
         >
-          <div className="rounded-full bg-background p-[2px]">
+          <div className="rounded-full bg-card p-[2px]">
             <UserAvatar
               name={user.name}
               avatarUrl={user.avatarUrl}
@@ -375,7 +382,7 @@ function PodiumSlot({
       {/* Name */}
       <p
         className={cn(
-          "mt-2 truncate text-center font-bold text-foreground",
+          "mt-2 truncate text-center font-bold tracking-[-0.01em] text-foreground",
           isFirst ? "max-w-[160px] text-sm" : "max-w-[130px] text-xs",
         )}
       >
@@ -384,7 +391,7 @@ function PodiumSlot({
 
       {/* Value */}
       <motion.span
-        className={cn("mt-0.5 font-extrabold", isFirst ? cn("text-lg", cfg.textGradient) : cn("text-sm", cfg.textGradient))}
+        className={cn("mt-0.5 font-extrabold tabular-nums tracking-[-0.03em]", isFirst ? cn("text-lg", cfg.valueText) : cn("text-sm", cfg.valueText))}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: animDelay + 0.25 }}
@@ -435,7 +442,7 @@ function SingleUserCard({
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "spring", stiffness: 180, damping: 16 }}
-      className="mx-auto flex w-[220px] flex-col items-center rounded-2xl border border-yellow-400/30 bg-gradient-to-b from-yellow-400/10 via-slate-900/80 to-slate-900/90 p-6 shadow-[0_0_40px_rgba(251,191,36,0.25)]"
+      className="mx-auto flex w-[220px] flex-col items-center p-4"
     >
       <CrownBadge />
 
@@ -443,12 +450,12 @@ function SingleUserCard({
         <PositionBadge position={1} />
         <div
           className={cn(
-            "rounded-full bg-gradient-to-br p-[3px]",
-            cfg.borderGradient,
+            "rounded-full p-[3px]",
+            cfg.ring,
             cfg.shadowGlow,
           )}
         >
-          <div className="rounded-full bg-background p-[2px]">
+          <div className="rounded-full bg-card p-[2px]">
             <UserAvatar
               name={user.name}
               avatarUrl={user.avatarUrl}
@@ -460,10 +467,10 @@ function SingleUserCard({
         </div>
       </div>
 
-      <p className="mt-3 text-base font-bold text-foreground">{user.name}</p>
+      <p className="mt-3 text-base font-bold tracking-[-0.01em] text-foreground">{user.name}</p>
 
       <motion.span
-        className="mt-1 bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-xl font-extrabold text-transparent"
+        className="mt-1 text-xl font-extrabold tabular-nums tracking-[-0.03em] text-primary-soft-foreground"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
@@ -476,13 +483,13 @@ function SingleUserCard({
       </div>
 
       {prize && (
-        <div className="mt-4 w-full rounded-xl border border-yellow-400/20 bg-yellow-400/5 py-2.5 text-center">
+        <div className="mt-4 w-full rounded-2xl border border-primary/30 bg-primary-soft py-2.5 text-center">
           <span className="text-lg">{prize.prize_icon}</span>
-          <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-200">
+          <p className="text-xs font-bold text-primary-soft-foreground">
             {prize.prize_name}
           </p>
           {prize.prize_value != null && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[10px] tabular-nums text-muted-foreground">
               R$ {prize.prize_value.toLocaleString("pt-BR")}
             </p>
           )}
@@ -565,7 +572,7 @@ function CompetitionPodiumV2Base({
   // Edge case: single user
   if (top3.length === 1) {
     return (
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-muted/50 via-background to-muted/30 px-4 py-8">
+      <div className="relative overflow-hidden rounded-card border border-card-border bg-card px-4 py-8 shadow-relevo">
         <RadialGlow />
         <SingleUserCard
           user={top3[0]}
@@ -610,7 +617,7 @@ function CompetitionPodiumV2Base({
   const visualSlots = buildVisualSlots(displayUsers);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-muted/50 via-background to-muted/30 px-2 pb-2 pt-6 sm:px-4">
+    <div className="relative w-full overflow-hidden rounded-card border border-card-border bg-card px-2 pb-0 pt-6 shadow-relevo sm:px-4">
       <RadialGlow />
 
       <LayoutGroup>

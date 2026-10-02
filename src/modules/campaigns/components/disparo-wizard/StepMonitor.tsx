@@ -123,11 +123,11 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 text-primary"
+          className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary-soft-foreground"
         >
           {failed > 0 ? <AlertTriangle className="h-7 w-7 text-destructive" /> : <Clock3 className="h-7 w-7" />}
         </motion.div>
-        <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
+        <h2 className="mt-5 text-2xl font-extrabold tracking-[-0.03em] text-foreground">
           {blastOutcome(plan?.status ?? "active", progress).title}
         </h2>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -137,7 +137,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
 
       {/* In-progress card */}
       {!terminal && (
-        <div className="rounded-2xl border border-border/70 bg-card p-5">
+        <div className="rounded-2xl border border-border/60 bg-sunken p-5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-foreground">
               Lote {batchCurrent} de {batchTotal}
@@ -145,7 +145,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                paused ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500",
+                paused ? "bg-warning/10 text-warning-strong" : "bg-success/10 text-success",
               )}
             >
               {paused ? "Pausado" : "Enviando"}
@@ -209,8 +209,8 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
       )}
 
       {/* Transparent report — real recipient outcomes */}
-      <div className="rounded-2xl border border-border/70 bg-card p-5">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Relatório</p>
+      <div className="rounded-2xl border border-border/60 bg-sunken p-5">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Relatório</p>
         <ul className="mt-3 space-y-2.5 text-sm">
           <ReportRow icon={Clock3} tone="muted" label="Aceitos para envio" value={sent} />
           <ReportRow icon={AlertTriangle} tone="error" label="Falhas no envio" value={failed} />
@@ -223,9 +223,9 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
       </div>
 
       {/* Pessoa a pessoa — a resposta para "quem recebeu?" */}
-      <div className="rounded-2xl border border-border/70 bg-card p-5">
+      <div className="rounded-2xl border border-border/60 bg-sunken p-5">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             Pessoa a pessoa
           </p>
           <span className="text-[11px] text-muted-foreground/70">
@@ -282,7 +282,7 @@ function ReportRow({
   hint?: string;
 }) {
   const toneClass =
-    tone === "error" ? "text-destructive" : tone === "ok" ? "text-emerald-500" : tone === "accent" ? "text-primary" : "text-muted-foreground";
+    tone === "error" ? "text-destructive" : tone === "ok" ? "text-success" : tone === "accent" ? "text-primary" : "text-muted-foreground";
   return (
     <div className="flex items-center gap-2.5">
       <Icon className={cn("h-4 w-4 shrink-0", toneClass)} />

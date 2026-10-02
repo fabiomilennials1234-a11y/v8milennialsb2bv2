@@ -22,7 +22,7 @@ interface InboxEnrichmentNoticeProps {
 export function InboxEnrichmentNotice({ onRetry, onClear }: InboxEnrichmentNoticeProps) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <AlertTriangle className="mb-4 h-10 w-10 text-amber-500/70" />
+      <AlertTriangle className="mb-3 h-10 w-10 text-warning-strong" />
       <p className="text-sm font-medium text-foreground">Não deu pra aplicar o filtro</p>
       <p className="mt-1.5 max-w-[26rem] text-xs leading-relaxed text-muted-foreground">
         Os dados que o filtro usa — funil, etapa, vendedor, etiqueta — não carregaram,

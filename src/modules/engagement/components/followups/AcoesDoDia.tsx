@@ -23,7 +23,6 @@ import {
   ChevronRight,
   Clock,
   AlertTriangle,
-  Flame,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -122,12 +121,9 @@ export function AcoesDoDia() {
     () => (priorities?.followups_vencidos || []).filter((f) => !existingFollowUpIds.has(f.id)),
     [priorities?.followups_vencidos, existingFollowUpIds],
   );
-  const filteredLeadsQuentes = useMemo(
-    () => (priorities?.leads_quentes || []).filter((l) => !existingLeadIds.has(l.id)),
-    [priorities?.leads_quentes, existingLeadIds],
-  );
-
-  const totalSuggestions = filteredLeadsSemAcao.length + filteredFollowUpsVencidos.length + filteredLeadsQuentes.length;
+  // "Lead quente" (score >= 70) saiu das sugestões — o score do lead não é mais
+  // usado (CTO, 02/10). A edge ainda devolve `leads_quentes`; aqui não se lê.
+  const totalSuggestions = filteredLeadsSemAcao.length + filteredFollowUpsVencidos.length;
 
   const handleAddSuggestion = async (leadId: string, title: string, followUpId?: string) => {
     setAddingLeadId(leadId);
@@ -202,24 +198,25 @@ export function AcoesDoDia() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, x: -100 }}
         className={cn(
-          "group flex flex-col gap-2 p-3 rounded-lg border transition-all",
+          "group flex flex-col gap-2 rounded-2xl border p-3 transition-colors",
           isCompleted
-            ? "bg-muted/30 border-muted opacity-60"
-            : "bg-card hover:border-primary/30"
+            ? "border-transparent bg-muted/40 opacity-60"
+            : "border-border/60 bg-card hover:border-foreground/15"
         )}
       >
         {/* WhatsApp and contact info at the top */}
         {leadInfo?.phone && !isCompleted && (
           <div className="flex items-center gap-2 pb-2 border-b border-border/50">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Phone className="w-4 h-4 text-green-500 shrink-0" />
+              <Phone className="h-4 w-4 shrink-0 text-success" />
               <span className="text-sm font-medium truncate">{leadInfo.phone}</span>
             </div>
             <Button
               size="icon"
               variant="ghost"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
               onClick={() => copyToClipboard(leadInfo.phone!)}
+              aria-label="Copiar telefone"
             >
               <Copy className="w-3.5 h-3.5" />
             </Button>
@@ -232,7 +229,7 @@ export function AcoesDoDia() {
                 phone={leadInfo.phone}
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                className="h-7 w-7 rounded-lg text-success hover:bg-success/10 hover:text-success"
                 title="Abrir conversa"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -255,7 +252,7 @@ export function AcoesDoDia() {
             className={cn(
               "flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
               isCompleted
-                ? "bg-success border-success text-white"
+                ? "border-success bg-success text-success-foreground"
                 : "border-muted-foreground/30 hover:border-success"
             )}
           >
@@ -302,11 +299,11 @@ export function AcoesDoDia() {
             {/* Linked item badges */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {acao.proposta && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <Package className="w-3 h-3" />
+                <Badge variant="soft" className="gap-1 text-xs">
+                  <Package className="h-3 w-3" />
                   Proposta
                   {acao.proposta.sale_value && (
-                    <span className="text-success font-medium">
+                    <span className="font-semibold tabular-nums text-success">
                       {formatCurrency(acao.proposta.sale_value)}
                     </span>
                   )}
@@ -314,15 +311,15 @@ export function AcoesDoDia() {
               )}
 
               {acao.confirmacao && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <Calendar className="w-3 h-3" />
+                <Badge variant="soft" className="gap-1 text-xs">
+                  <Calendar className="h-3 w-3" />
                   Reunião
                 </Badge>
               )}
 
               {acao.follow_up && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <MessageSquare className="w-3 h-3" />
+                <Badge variant="soft" className="gap-1 text-xs">
+                  <MessageSquare className="h-3 w-3" />
                   {acao.follow_up.title}
                 </Badge>
               )}
@@ -355,20 +352,22 @@ export function AcoesDoDia() {
   };
 
   return (
-    <div className="glass-card p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo">
+      <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Target className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold">Ações do Dia</h2>
-          <Badge variant="secondary" className="text-xs">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+            <Target className="h-4 w-4" strokeWidth={2.2} />
+          </span>
+          <h2 className="text-[15px] font-bold tracking-[-0.02em]">Ações do Dia</h2>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
             {pendingAcoes.length}
-          </Badge>
+          </span>
         </div>
 
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <Plus className="w-4 h-4" />
+            <Button size="sm" variant="outline">
+              <Plus />
               Nova Ação
             </Button>
           </DialogTrigger>
@@ -432,7 +431,7 @@ export function AcoesDoDia() {
                             <div className="flex items-center gap-2">
                               <span>{p.lead?.name}</span>
                               {p.sale_value && (
-                                <span className="text-success text-xs">
+                                <span className="text-xs tabular-nums text-success">
                                   {formatCurrency(p.sale_value)}
                                 </span>
                               )}
@@ -490,13 +489,15 @@ export function AcoesDoDia() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-center py-8"
+                className="flex flex-col items-center gap-1 py-8 text-center"
               >
-                <Target className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
+                <span className="mb-1.5 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                  <Target className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-semibold">
                   Nenhuma ação para hoje
                 </p>
-                <p className="text-xs text-muted-foreground/70">
+                <p className="text-[13px] text-muted-foreground">
                   Adicione tarefas ou arraste follow-ups
                 </p>
               </motion.div>
@@ -506,17 +507,19 @@ export function AcoesDoDia() {
 
                 {completedAcoes.length > 0 && (
                   <>
-                    <div className="flex items-center justify-between pt-3 mt-3 border-t">
+                    <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
                       <button
+                        type="button"
                         onClick={() => setShowCompleted(!showCompleted)}
-                        className="flex items-center gap-2 hover:text-foreground transition-colors"
+                        aria-expanded={showCompleted}
+                        className="flex items-center gap-2 transition-colors hover:text-foreground"
                       >
-                        <CheckCircle2 className="w-4 h-4 text-success" />
-                        <span className="text-xs text-muted-foreground font-medium">
-                          Concluídas ({completedAcoes.length})
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                          Concluídas <span className="tabular-nums">({completedAcoes.length})</span>
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {showCompleted ? "▼" : "▶"}
+                        <span className="text-muted-foreground">
+                          {showCompleted ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         </span>
                       </button>
                       {showCompleted && (
@@ -551,19 +554,21 @@ export function AcoesDoDia() {
 
           {/* Sugestões para hoje */}
           {(totalSuggestions > 0 || isPrioritiesLoading) && (
-            <div className="pt-3 mt-3 border-t">
+            <div className="mt-3 border-t border-border/60 pt-3">
               <button
+                type="button"
                 onClick={() => setSuggestionsOpen(!suggestionsOpen)}
-                className="flex items-center gap-2 hover:text-foreground transition-colors w-full"
+                aria-expanded={suggestionsOpen}
+                className="flex w-full items-center gap-2 transition-colors hover:text-foreground"
               >
-                <Lightbulb className="w-4 h-4 text-amber-500" />
-                <span className="text-xs font-medium text-muted-foreground">
+                <Lightbulb className="h-4 w-4 text-warning-strong" />
+                <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                   Sugestões para hoje
                 </span>
                 {totalSuggestions > 0 && (
-                  <Badge variant="secondary" className="text-xs h-5 px-1.5">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                     {totalSuggestions}
-                  </Badge>
+                  </span>
                 )}
                 <span className="text-xs text-muted-foreground ml-auto">
                   {suggestionsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -588,7 +593,7 @@ export function AcoesDoDia() {
                     {filteredLeadsSemAcao.map((lead) => (
                       <SuggestionRow
                         key={`sem-acao-${lead.id}`}
-                        icon={<Clock className="w-3.5 h-3.5 text-orange-500" />}
+                        icon={<Clock className="h-3.5 w-3.5 text-warning-strong" />}
                         leadName={lead.name}
                         reason={
                           lead.last_action_at
@@ -605,7 +610,7 @@ export function AcoesDoDia() {
                     {filteredFollowUpsVencidos.map((fu) => (
                       <SuggestionRow
                         key={`fu-${fu.id}`}
-                        icon={<AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                        icon={<AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
                         leadName={fu.lead?.name || "Lead"}
                         reason={
                           fu.days_overdue > 0
@@ -625,18 +630,6 @@ export function AcoesDoDia() {
                       />
                     ))}
 
-                    {/* Leads quentes */}
-                    {filteredLeadsQuentes.map((lead) => (
-                      <SuggestionRow
-                        key={`quente-${lead.id}`}
-                        icon={<Flame className="w-3.5 h-3.5 text-emerald-500" />}
-                        leadName={lead.name}
-                        reason={`Score ${lead.qualification_score}`}
-                        company={lead.company}
-                        isAdding={addingLeadId === lead.id}
-                        onAdd={() => handleAddSuggestion(lead.id, `Contatar ${lead.name}`)}
-                      />
-                    ))}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -668,7 +661,7 @@ function SuggestionRow({
   onAdd: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 p-2 rounded-md bg-muted/40 hover:bg-muted/60 transition-colors">
+    <div className="flex items-center gap-2 rounded-xl bg-sunken p-2 transition-colors hover:bg-muted/60">
       <div className="shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
@@ -687,7 +680,7 @@ function SuggestionRow({
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 text-xs shrink-0 gap-1 text-primary hover:text-primary"
+        className="h-7 shrink-0 gap-1 text-xs"
         onClick={onAdd}
         disabled={isAdding}
       >

@@ -195,9 +195,9 @@ export function ProductMaterialsSection({ productId }: Props) {
               >
                 <div className={cn(
                   "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-                  isImage ? "bg-purple-500/10" : "bg-blue-500/10"
+                  isImage ? "bg-primary-soft" : "bg-insights/10"
                 )}>
-                  <Icon className={cn("w-4 h-4", isImage ? "text-purple-500" : "text-blue-500")} />
+                  <Icon className={cn("w-4 h-4", isImage ? "text-primary-soft-foreground" : "text-insights")} />
                 </div>
 
                 <div className="flex-1 min-w-0">

@@ -15,7 +15,9 @@ export function MetaMessageBubble({ message }: Props) {
       <div
         className={cn(
           "max-w-[70%] rounded-2xl px-3 py-2 text-sm",
-          isOutgoing ? "bg-primary text-primary-foreground" : "bg-muted"
+          isOutgoing
+            ? "bg-primary text-primary-foreground shadow-[0_6px_16px_-10px_hsl(var(--primary)/0.8)]"
+            : "border border-border/70 bg-card text-card-foreground shadow-relevo"
         )}
       >
         {message.media_url && message.message_type === "image" && (

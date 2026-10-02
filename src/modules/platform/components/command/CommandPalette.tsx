@@ -130,7 +130,7 @@ export function CommandPalette() {
               aria-label="Paleta de comandos"
               className={cn(
                 "w-full max-w-[640px]",
-                "rounded-xl border shadow-2xl",
+                "rounded-panel border shadow-relevo-alto",
                 "bg-[hsl(var(--command-palette-bg))]",
                 "border-[hsl(var(--command-palette-border))]",
                 "overflow-hidden"
@@ -204,17 +204,17 @@ export function CommandPalette() {
                   className={cn(
                     "flex items-center gap-4 px-4 py-2",
                     "border-t border-border/40",
-                    "text-[10px] text-muted-foreground/70"
+                    "text-[11px] text-muted-foreground/80"
                   )}
                 >
                   <span>
-                    <kbd className="font-mono">↑↓</kbd> navegar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">↑↓</kbd> navegar
                   </span>
                   <span>
-                    <kbd className="font-mono">↵</kbd> selecionar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">↵</kbd> selecionar
                   </span>
                   <span>
-                    <kbd className="font-mono">esc</kbd> fechar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">esc</kbd> fechar
                   </span>
                 </div>
               </Command>

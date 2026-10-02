@@ -198,11 +198,11 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
             return (
               <div
                 key={win.id}
-                className="rounded-md border border-dashed border-amber-400/60 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-3"
+                className="space-y-3 rounded-xl border border-dashed border-warning/50 bg-warning/[.06] p-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Lock className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+                    <Lock className="w-3.5 h-3.5 shrink-0 text-warning-strong" />
                     <span className="text-sm font-medium truncate">{win.name}</span>
                   </div>
                   <Badge variant="outline" className="shrink-0 text-[10px]">Bloqueio (legado)</Badge>
@@ -216,7 +216,7 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
                   {win.start}–{win.end}
                 </div>
 
-                <p className="text-xs text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-foreground/80">
                   Esta janela foi desenhada como <strong>bloqueio</strong>: o fluxo dorme durante
                   ela e aguarda a próxima janela da saída padrão. O destino “{role.arg}” é uma
                   referência antiga e não escolhe a janela de retomada. Esta configuração
@@ -327,9 +327,9 @@ export function WaitBusinessWindowPanel({ data, onUpdate }: WaitBusinessWindowPa
         </Button>
       </div>
 
-      <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 p-3 space-y-1">
-        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Como funciona</p>
-        <ul className="text-xs text-amber-700/80 dark:text-amber-400/80 space-y-0.5 list-disc list-inside">
+      <div className="space-y-1 rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs font-semibold text-foreground/80">Como funciona</p>
+        <ul className="list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
           <li>Este nó <strong>libera o fluxo</strong>. Para enviar uma mensagem, conecte um nó de envio depois dele.</li>
           <li>Dentro do horário, segue somente pela saída escolhida para aquela janela.</li>
           <li>Fora dos horários, aguarda a próxima janela da saída padrão. Se houver apenas saídas nomeadas, aguarda a próxima delas.</li>

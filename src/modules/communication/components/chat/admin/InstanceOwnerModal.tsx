@@ -255,7 +255,7 @@ export function InstanceOwnerModal({
             <p className="text-[13px] text-muted-foreground leading-relaxed max-w-[36ch] mb-4">
               Esta organização ainda não tem números de WhatsApp configurados.
             </p>
-            <Button asChild className="gradient-primary text-white border-0">
+            <Button asChild>
               <a href="/configuracoes">Ir para WhatsApp</a>
             </Button>
           </div>
@@ -442,7 +442,6 @@ export function InstanceOwnerModal({
                     type="button"
                     onClick={handlePrimaryAction}
                     disabled={!selected || setOwnerMutation.isPending}
-                    className="gradient-primary text-white border-0"
                   >
                     {setOwnerMutation.isPending ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin motion-reduce:animate-none motion-reduce:opacity-70" />

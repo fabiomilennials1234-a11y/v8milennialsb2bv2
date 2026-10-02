@@ -98,7 +98,7 @@ export function OnbStepAutomacoes() {
   if (loading) {
     return (
       <div className="space-y-4 text-center max-w-sm">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" />
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
         <p className="text-sm text-muted-foreground">Carregando automações...</p>
       </div>
     );
@@ -107,8 +107,8 @@ export function OnbStepAutomacoes() {
   return (
     <div className="space-y-6 max-w-lg w-full">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-          <Zap className="w-5 h-5 text-violet-500" />
+        <div className="w-10 h-10 rounded-xl bg-primary-soft flex items-center justify-center">
+          <Zap className="w-5 h-5 text-primary-soft-foreground" />
         </div>
         <div>
           <h3 className="text-lg font-semibold">Ative suas automações</h3>
@@ -129,7 +129,7 @@ export function OnbStepAutomacoes() {
               className={cn(
                 "p-4 rounded-xl border transition-all",
                 sel.enabled
-                  ? "border-violet-500/40 bg-violet-500/5"
+                  ? "border-primary/50 bg-primary-soft/60"
                   : "border-border/40 bg-muted/10 opacity-60",
               )}
             >
@@ -173,7 +173,7 @@ export function OnbStepAutomacoes() {
       <button
         onClick={handleActivate}
         disabled={enabledCount === 0 || advance.isPending}
-        className="w-full py-3 px-4 rounded-xl bg-violet-600 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-violet-700 disabled:opacity-50 transition-all"
+        className="w-full py-3 px-4 rounded-full bg-primary text-primary-foreground shadow-brilho-ouro font-medium text-sm flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-50 transition-all"
       >
         {advance.isPending ? (
           <><Loader2 className="w-4 h-4 animate-spin" /> Ativando...</>

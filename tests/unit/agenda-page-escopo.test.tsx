@@ -13,6 +13,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+// V5: o cabeçalho é o `PageHeader`, que chama `useNavigate` (botão de voltar).
+// Na aplicação a tela sempre vive dentro do roteador — na rota `/agenda` e no
+// `AgendaPanel` montado pela lateral —, então o teste monta o mesmo contexto.
+import { MemoryRouter } from "react-router-dom";
 
 import type { AgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
 
@@ -143,7 +147,7 @@ beforeEach(() => {
 
 describe("Agenda — moldura da tela", () => {
   it("é uma página do sistema: título, descrição e ação no topo", () => {
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(
       screen.getByRole("heading", { level: 1, name: "Atividades" }),
     ).toBeInTheDocument();
@@ -154,7 +158,7 @@ describe("Agenda — moldura da tela", () => {
   });
 
   it("traz as abas de estado e a navegação do mês", () => {
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByRole("tab", { name: "Pendentes" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Todas atividades" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Finalizadas" })).toBeInTheDocument();
@@ -166,7 +170,7 @@ describe("Agenda — moldura da tela", () => {
   });
 
   it("abre na grade do mês, não numa lista de um dia só", () => {
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByText("Segunda-feira")).toBeInTheDocument();
   });
 });
@@ -183,7 +187,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
@@ -202,7 +206,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
@@ -221,7 +225,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByText(/Ligar amanhã/)).toBeInTheDocument();
   });
 
@@ -238,7 +242,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByText(/Retornar ligação/)).toBeInTheDocument();
   });
 
@@ -254,24 +258,24 @@ describe("Agenda — quem vê o quê", () => {
     );
 
     // Sem a participação registrada, o convite não é dele.
-    const { unmount } = render(<Agenda />);
+    const { unmount } = render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.queryByText(/Reunião com a Ana/)).not.toBeInTheDocument();
     unmount();
 
     participacoes.add("conv-1");
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByText(/Reunião com a Ana/)).toBeInTheDocument();
   });
 
   it("quem vê a operação inteira recebe o filtro de atendente", () => {
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.getByLabelText("Filtrar por atendente")).toBeInTheDocument();
     expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
   });
 
   it("quem está recortado NÃO recebe o filtro de atendente", () => {
     permissao.podeVerTodos = false;
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.queryByLabelText("Filtrar por atendente")).toBeNull();
     // O filtro de tipo continua para todos.
     expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
@@ -294,7 +298,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
@@ -313,7 +317,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
   });
 
@@ -327,7 +331,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
   });
 });
@@ -347,7 +351,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
       rpcEvent({ id: "c", title: "Aberta", status: "scheduled" }),
     );
 
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     const contagem = screen.getByLabelText("Comparecimento no período");
     expect(contagem).toHaveTextContent("1");
@@ -358,13 +362,13 @@ describe("Agenda — registrar o resultado do compromisso", () => {
     agendaEvents.push(
       rpcEvent({ id: "fu", source: "follow_up", event_type: "follow_up", title: "Ligar" }),
     );
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
     expect(screen.queryByLabelText("Comparecimento no período")).toBeNull();
   });
 
   it("registrar 'Compareceu' grava completed na linha certa", async () => {
     agendaEvents.push(rpcEvent({ id: "abc-1", title: "Reunião X" }));
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     await abrirEvento(/Reunião X/);
     const user = userEvent.setup();
@@ -375,7 +379,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
 
   it("registrar 'Não compareceu' grava no_show", async () => {
     agendaEvents.push(rpcEvent({ id: "abc-2", title: "Reunião Y" }));
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     await abrirEvento(/Reunião Y/);
     const user = userEvent.setup();
@@ -388,7 +392,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
     agendaEvents.push(
       rpcEvent({ id: "abc-3", title: "Reunião Z", status: "completed" }),
     );
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     await abrirEvento(/Reunião Z/);
     const user = userEvent.setup();
@@ -406,7 +410,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
         title: "Ligar amanhã",
       }),
     );
-    render(<Agenda />);
+    render(<Agenda />, { wrapper: MemoryRouter });
 
     await abrirEvento(/Ligar amanhã/);
     expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
@@ -430,7 +434,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
       agendaEvents.push(
         rpcEvent({ id: `id-${tipo}`, title: `Item ${tipo}`, event_type: tipo }),
       );
-      const { unmount } = render(<Agenda />);
+      const { unmount } = render(<Agenda />, { wrapper: MemoryRouter });
 
       await abrirEvento(new RegExp(`Item ${tipo}`));
       const user = userEvent.setup();

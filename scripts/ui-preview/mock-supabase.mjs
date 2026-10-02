@@ -176,7 +176,8 @@ async function handleRest(req, res, table, url) {
     const headers = { "Content-Range": contentRange(offset, page.length, total), "Range-Unit": "items" };
     if (countExact) headers["Preference-Applied"] = "count=exact";
     if (wantsObject(req)) {
-      if (page.length === 0) record({ kind: "single0", method: "GET", name: table, miss: true, note: ".single() on 0 rows → 406", query: url.search.slice(0, 300) });
+      // master_users: a 406 here is how prod says "not a master" (useMasterAuth) — expected.
+      if (page.length === 0) record({ kind: "single0", method: "GET", name: table, miss: table !== "master_users", note: ".single() on 0 rows → 406", query: url.search.slice(0, 300) });
       if (page.length === 0)
         return send(req, res, 406, { code: "PGRST116", details: "The result contains 0 rows", hint: null, message: "JSON object requested, multiple (or no) rows returned" }, headers);
       return send(req, res, 200, page[0], headers);

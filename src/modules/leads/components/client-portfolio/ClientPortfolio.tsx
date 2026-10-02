@@ -26,6 +26,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import {
@@ -138,60 +139,59 @@ export function ClientPortfolio({
   return (
     <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_330px] xl:grid-cols-[minmax(0,1fr)_350px] 2xl:grid-cols-[minmax(0,1fr)_460px]">
       <div className="min-w-0 space-y-4">
+        {/* Os quatro números da carteira — mesmos valores e mesma fonte
+            (`client_portfolio_page`), agora no cartão de número do V5. Erro
+            vira "—", nunca zero fabricado. */}
         <div
-          className="grid grid-cols-2 rounded-xl border border-border bg-card p-1 sm:grid-cols-4"
+          role="group"
+          className="grid grid-cols-2 gap-4 2xl:grid-cols-4"
           aria-label="Indicadores da carteira"
         >
-          {[
+          {([
             {
               icon: Users,
+              tone: "neutral",
               value: total?.toLocaleString("pt-BR") ?? "—",
               label: "Clientes",
               scope: "No recorte atual",
             },
             {
               icon: TrendingUp,
+              tone: "good",
               value: summary ? formatBRL(summary.monthlyRevenue) : "—",
               label: "Receita no mês",
               scope: "No recorte atual",
             },
             {
               icon: RotateCw,
+              tone: "info",
               value: summary?.expectedCount ?? "—",
               label: "Recompras previstas",
               scope: "Próximos 7 dias",
             },
             {
               icon: Clock3,
+              tone: (summary?.overdueCount ?? 0) > 0 ? "bad" : "neutral",
               value: summary?.overdueCount ?? "—",
               label: "Em atraso",
               scope: "No recorte atual",
             },
-          ].map(({ icon: Icon, value, label, scope }, i) => (
-            <div
-              key={label}
-              className={cn(
-                "flex items-start gap-3 px-3 py-4",
-                i > 0 && "sm:border-l sm:border-border",
-              )}
-            >
-              <Icon
-                className="mt-1 hidden size-5 shrink-0 text-muted-foreground 2xl:block"
-                aria-hidden="true"
+          ] as const).map(({ icon, tone, value, label, scope }) => {
+            const exibido = loading ? "·" : error ? "—" : value;
+            return (
+              <KpiTile
+                key={label}
+                label={label}
+                icon={icon}
+                tone={tone}
+                loading={loading}
+                // Receita cheia ("R$ 1.234.567") não cabe num quarto da coluna:
+                // o número trunca com o valor inteiro no `title`, nunca estoura.
+                value={<span className="block truncate" title={String(exibido)}>{exibido}</span>}
+                note={scope}
               />
-              <div className="min-w-0">
-                {loading ? (
-                  <Skeleton className="mb-2 h-6 w-16" />
-                ) : (
-                  <p className="truncate text-lg font-semibold tracking-tight tabular-nums">
-                    {error ? "—" : value}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-1 text-[9px] text-muted-foreground">{scope}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         {compact && selected && !loading && !error && (
           <Button variant="outline" className="w-full justify-between" onClick={() => setMobileDetail(true)}>
@@ -202,11 +202,11 @@ export function ClientPortfolio({
           <div className="relative min-w-44 flex-1">
             <Search
               aria-hidden="true"
-              className="absolute left-3 top-3 size-4 text-muted-foreground"
+              className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             />
             <Input
               aria-label="Buscar cliente"
-              placeholder="Buscar cliente..."
+              placeholder="Buscar cliente…"
               value={search}
               onChange={(e) => onSearch(e.target.value)}
               className="h-10 bg-card pl-9"
@@ -267,7 +267,8 @@ export function ClientPortfolio({
           <p className="text-xs text-muted-foreground">
             Faixa e recompra aplicadas à carteira inteira.{" "}
             <button
-              className="underline"
+              type="button"
+              className="font-semibold text-foreground underline underline-offset-2"
               onClick={() => {
                 onSegment("all");
                 onReorder("all");
@@ -278,11 +279,11 @@ export function ClientPortfolio({
           </p>
         )}
         <section
-          className="overflow-hidden rounded-xl border border-border bg-card"
+          className="overflow-hidden rounded-card border border-card-border bg-card shadow-relevo"
           aria-label="Carteira de clientes"
         >
           <div className="px-5 pb-4 pt-5">
-            <h2 className="text-lg font-semibold tracking-tight">
+            <h2 className="text-base font-bold tracking-tight">
               Carteira de clientes
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -304,7 +305,7 @@ export function ClientPortfolio({
               className="space-y-1 px-4 pb-4"
             >
               {Array.from({ length: 6 }, (_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded" />
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
               ))}
             </div>
           ) : visible.length === 0 ? (
@@ -321,7 +322,7 @@ export function ClientPortfolio({
             <div className="relative overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-border text-[10px] font-medium text-muted-foreground">
+                  <tr className="border-b border-border text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                     {[
                       "Cliente",
                       "Faixa",
@@ -335,7 +336,7 @@ export function ClientPortfolio({
                         key={i}
                         scope="col"
                         className={cn(
-                          "whitespace-nowrap px-3 py-3 font-medium",
+                          "whitespace-nowrap px-3 py-3 font-bold",
                           i === 0 && "pl-5",
                         )}
                       >
@@ -355,7 +356,7 @@ export function ClientPortfolio({
                         className={cn(
                           "border-b border-border/70 transition-colors hover:bg-muted/30",
                           selectedId === client.id &&
-                            "bg-primary/[0.07] shadow-[inset_3px_0_0_hsl(var(--primary))]",
+                            "bg-primary-soft/60 shadow-[inset_3px_0_0_hsl(var(--primary))]",
                         )}
                       >
                         <td className="py-3 pl-5 pr-3">
@@ -367,7 +368,7 @@ export function ClientPortfolio({
                               onSelect(client.id);
                               setMobileDetail(compact);
                             }}
-                            className="flex w-full items-center gap-3 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="flex w-full items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             <ClientAvatar
                               name={client.company || client.name}
@@ -411,7 +412,7 @@ export function ClientPortfolio({
                         </td>
                         <td className="px-3">
                           {openCount ? (
-                            <span className="whitespace-nowrap rounded-md border border-border px-2 py-1 text-[10px]">
+                            <span className="whitespace-nowrap rounded-full bg-muted px-2 py-1 text-[11px] font-semibold">
                               {openCount}{" "}
                               {openCount === 1 ? "aberto" : "abertos"}
                             </span>
@@ -423,7 +424,7 @@ export function ClientPortfolio({
                           <Button
                             size="icon"
                             variant="outline"
-                            className="size-7"
+                            className="size-8 rounded-lg"
                             disabled={!canCreate}
                             aria-label={`Novo negócio para ${client.company || client.name}`}
                             onClick={() => onNewDeal(client.id)}
@@ -445,8 +446,8 @@ export function ClientPortfolio({
         {!compact && !loading && !error && detail ? (
           detail
         ) : (
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h2 className="text-[10px] font-semibold uppercase tracking-[0.24em]">
+          <div className="rounded-card border border-card-border bg-card p-6 shadow-relevo">
+            <h2 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
               Cliente 360
             </h2>
             <p className="mt-6 text-sm text-muted-foreground">

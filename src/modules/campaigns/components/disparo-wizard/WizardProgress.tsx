@@ -24,9 +24,9 @@ export function WizardProgress({ index, furthest, onJump }: WizardProgressProps)
     <div className="w-full">
       {/* Rail */}
       <div className="relative">
-        <div className="absolute left-0 right-0 top-[11px] h-px bg-border/70" />
+        <div className="absolute left-0 right-0 top-[10px] h-[3px] rounded-full bg-muted" />
         <motion.div
-          className="absolute left-0 top-[11px] h-px bg-primary"
+          className="absolute left-0 top-[10px] h-[3px] rounded-full bg-primary"
           initial={false}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -45,24 +45,25 @@ export function WizardProgress({ index, furthest, onJump }: WizardProgressProps)
                   onClick={() => onJump(i)}
                   aria-current={isActive ? "step" : undefined}
                   className={cn(
-                    "relative flex h-[22px] w-[22px] items-center justify-center rounded-full border bg-background transition-colors duration-200",
-                    isActive && "border-primary text-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.12)]",
-                    isDone && "border-primary bg-primary text-primary-foreground",
-                    !isActive && !isDone && "border-border text-muted-foreground/60",
-                    isReached && i !== index && "cursor-pointer hover:border-primary/60",
+                    "relative flex h-[22px] w-[22px] items-center justify-center rounded-full border bg-card transition-colors duration-200",
+                    // V5: o passo atual é o ouro; os feitos ficam em tinta.
+                    isActive && "border-primary bg-primary text-primary-foreground shadow-brilho-ouro",
+                    isDone && "border-transparent bg-tinta text-tinta-foreground dark:bg-foreground dark:text-background",
+                    !isActive && !isDone && "border-border text-muted-foreground",
+                    isReached && i !== index && "cursor-pointer hover:ring-2 hover:ring-primary/40",
                     !isReached && "cursor-default",
                   )}
                 >
                   {isDone ? (
                     <Check className="h-3 w-3" strokeWidth={3} />
                   ) : (
-                    <span className="text-[11px] font-semibold tabular-nums">{i + 1}</span>
+                    <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>
                   )}
                 </button>
                 <span
                   className={cn(
-                    "text-[11px] font-medium tracking-tight transition-colors duration-200 sm:text-xs",
-                    isActive ? "text-foreground" : "text-muted-foreground/70",
+                    "text-[11px] tracking-tight transition-colors duration-200 sm:text-xs",
+                    isActive ? "font-bold text-foreground" : "font-semibold text-muted-foreground",
                   )}
                 >
                   {step.label}

@@ -13,8 +13,8 @@ export function ClientPurchaseHistory({ name, purchases, open: controlledOpen, o
     <DialogTrigger asChild><Button variant="link" className="h-auto p-0 text-xs">Ver todas <span aria-hidden="true" className="ml-1">→</span></Button></DialogTrigger>
     <DialogContent className="z-[60] max-w-lg" overlayClassName="z-[60]" onEscapeKeyDown={event => { event.preventDefault(); event.stopPropagation(); setOpen(false); }}>
       <DialogHeader><DialogTitle>Compras de {name}</DialogTitle><DialogDescription>{purchases.length} compras registradas. Vendas estornadas não aparecem.</DialogDescription></DialogHeader>
-      <div className="max-h-[55vh] overflow-y-auto rounded-md border border-border">
-        <table className="w-full text-left text-sm"><thead><tr className="border-b border-border"><th className="p-3">Data</th><th>Origem</th><th className="p-3 text-right">Valor</th></tr></thead>
+      <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-border">
+        <table className="w-full text-left text-sm"><thead><tr className="border-b border-border text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground"><th className="p-3 font-bold">Data</th><th className="font-bold">Origem</th><th className="p-3 text-right font-bold">Valor</th></tr></thead>
           <tbody>{purchases.slice(page * pageSize, (page + 1) * pageSize).map(p => <tr key={p.id} className="border-b border-border last:border-0"><td className="p-3">{portfolioDate(p.date)} {p.date.slice(0, 4)}</td><td>{p.source}</td><td className="p-3 text-right tabular-nums">{formatBRL(p.value)}</td></tr>)}</tbody>
         </table>
       </div>

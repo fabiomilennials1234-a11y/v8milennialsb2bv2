@@ -46,21 +46,19 @@ const TEMP_MODES = [
     value: "criativo" as const,
     label: "Criativo",
     desc: "Respostas variadas e expressivas",
-    color:
-      "bg-purple-500/10 text-purple-600 border-purple-300",
+    color: "bg-insights/10 text-insights",
   },
   {
     value: "balanceado" as const,
     label: "Balanceado",
-    desc: "Equilibrio entre criatividade e precisao",
-    color: "bg-blue-500/10 text-blue-600 border-blue-300",
+    desc: "Equilíbrio entre criatividade e precisão",
+    color: "bg-primary-soft text-primary-soft-foreground",
   },
   {
     value: "preciso" as const,
     label: "Preciso",
     desc: "Respostas consistentes e diretas",
-    color:
-      "bg-green-500/10 text-green-600 border-green-300",
+    color: "bg-success/10 text-success",
   },
 ];
 
@@ -70,7 +68,7 @@ const DAYS = [
   { value: "wed", label: "Qua" },
   { value: "thu", label: "Qui" },
   { value: "fri", label: "Sex" },
-  { value: "sat", label: "Sab" },
+  { value: "sat", label: "Sáb" },
   { value: "sun", label: "Dom" },
 ];
 
@@ -100,14 +98,17 @@ export function PlaygroundComportamento({
   }) => (
     <button
       type="button"
-      className="flex items-center justify-between w-full px-4 py-3 hover:bg-muted/50 transition-colors"
+      className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      aria-expanded={!!openSections[id]}
       onClick={() => toggleSection(id)}
     >
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{title}</span>
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
+          <Icon className="w-4 h-4" />
+        </span>
+        <span className="text-sm font-bold tracking-tight">{title}</span>
         {badge && (
-          <Badge variant="secondary" className="text-xs px-1.5 py-0">
+          <Badge variant="soft" className="text-[11px]">
             {badge}
           </Badge>
         )}
@@ -121,7 +122,7 @@ export function PlaygroundComportamento({
   );
 
   return (
-    <div className="border rounded-lg divide-y">
+    <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70">
       {/* ===== Disponibilidade ===== */}
       <div>
         <SectionHeader
@@ -131,7 +132,7 @@ export function PlaygroundComportamento({
           badge={
             state.availability.mode === "always"
               ? "Sempre ativo"
-              : "Horario programado"
+              : "Horário programado"
           }
         />
         {openSections.availability && (
@@ -154,7 +155,7 @@ export function PlaygroundComportamento({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="always">Sempre ativo</SelectItem>
-                  <SelectItem value="scheduled">Horario programado</SelectItem>
+                  <SelectItem value="scheduled">Horário programado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -166,10 +167,11 @@ export function PlaygroundComportamento({
                     <button
                       key={day.value}
                       type="button"
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      aria-pressed={state.availability.days.includes(day.value)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                         state.availability.days.includes(day.value)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background hover:bg-muted border-border"
+                          ? "border-tinta bg-tinta text-tinta-foreground"
+                          : "border-border bg-card hover:border-foreground/20"
                       }`}
                       onClick={() => {
                         const days = state.availability.days.includes(day.value)
@@ -204,7 +206,7 @@ export function PlaygroundComportamento({
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs">Ate</Label>
+                    <Label className="text-xs">Até</Label>
                     <Input
                       type="time"
                       value={state.availability.end}
@@ -243,7 +245,7 @@ export function PlaygroundComportamento({
                   <Timer className="w-3.5 h-3.5" />
                   Delay de resposta
                 </Label>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs font-bold tabular-nums text-foreground/80">
                   {(state.responseDelayMs / 1000).toFixed(1)}s
                 </span>
               </div>
@@ -268,7 +270,8 @@ export function PlaygroundComportamento({
                   <button
                     key={mode.value}
                     type="button"
-                    className={`p-2 rounded-lg border text-center transition-all ${
+                    aria-pressed={state.llmTemperatureMode === mode.value}
+                    className={`rounded-xl border p-2.5 text-center transition-all ${
                       state.llmTemperatureMode === mode.value
                         ? `${mode.color} border-current ring-1 ring-current`
                         : "border-border hover:bg-muted"
@@ -277,7 +280,7 @@ export function PlaygroundComportamento({
                       onChange({ llmTemperatureMode: mode.value })
                     }
                   >
-                    <p className="text-xs font-medium">{mode.label}</p>
+                    <p className="text-xs font-bold">{mode.label}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
                       {mode.desc}
                     </p>
@@ -294,7 +297,7 @@ export function PlaygroundComportamento({
         <SectionHeader
           id="behavior"
           icon={Sparkles}
-          title="Comportamento por horario (Time-Aware)"
+          title="Comportamento por horário (Time-Aware)"
           badge={
             hasFullBehaviorCoverage(state.behaviorWindows)
               ? `${state.behaviorWindows.length} janela(s) - 24/7`

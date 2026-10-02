@@ -157,7 +157,7 @@ export function ContextPanelTabInfo({
         <Button
           variant="outline"
           size="sm"
-          className="mt-3 h-8 text-xs"
+          className="mt-3 h-9 text-xs"
           onClick={() => setLeadModalOpen(true)}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -214,7 +214,7 @@ function SectionHeader({
         !last && "border-t border-border/40 first:border-t-0",
       )}
     >
-      <p className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70">
+      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         <Icon className="w-3 h-3" />
         {label}
       </p>
@@ -742,9 +742,9 @@ function NotesBlock({
       {/* Composer */}
       <div
         className={cn(
-          "relative rounded-lg border transition-colors",
+          "relative rounded-xl border transition-colors",
           expanded
-            ? "border-border bg-muted/20"
+            ? "border-border bg-sunken"
             : "border-border/60 bg-transparent hover:border-border",
         )}
       >
@@ -823,7 +823,7 @@ function NotesBlock({
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18 }}
-                  className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2"
+                  className="rounded-xl border border-border/60 bg-sunken px-3 py-2"
                 >
                   <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground mb-1">
                     <Avatar className="h-4 w-4 shrink-0">

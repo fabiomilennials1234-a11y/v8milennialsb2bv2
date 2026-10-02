@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUfHeatmap, useLeadsByUf, type UfHeatmapRow } from "@/modules/analytics/hooks/useUfMap";
 import { UF_NAMES } from "@/shared/format/br-uf";
@@ -92,56 +93,51 @@ function TabMapaBase() {
   const selectedRank = selectedUf ? ranked.findIndex(([uf]) => uf === selectedUf) + 1 : 0;
 
   if (isLoading) {
-    return (
-      <div className="mt-3.5 grid grid-cols-[1fr_360px] gap-3.5">
-        <Skeleton className="h-[620px] rounded-2xl" />
-        <Skeleton className="h-[620px] rounded-2xl" />
-      </div>
-    );
+    return <Skeleton className="h-full min-h-[320px] rounded-2xl" />;
   }
 
   return (
-    <div className={`mt-3.5 grid gap-3.5 ${selectedUf ? "grid-cols-[1fr_360px]" : "grid-cols-1"}`}>
+    // Corpo da janela "Mapa de clientes" — o título mora na moldura. O mapa
+    // fica numa superfície de tinta: a paleta do coroplético e o traço dos
+    // estados (`.tabmapa-svg`, index.css) foram desenhados para fundo escuro,
+    // e assim leem igual nos dois temas.
+    <div className={`grid h-full min-h-0 gap-4 ${selectedUf ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1"}`}>
       {/* Mapa */}
-      <div
-        className="cmd-cell cmd-rise p-5"
-        style={{ background: "radial-gradient(700px 420px at 35% 40%, hsl(var(--primary)/.05), transparent 70%), hsl(var(--card))" }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="cmd-lbl">Mapa — onde está sua base</span>
-            <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground/60">
-              base completa, independente do mês · clique num estado pra ver os leads
-            </div>
-          </div>
-          <span className="rounded-full bg-primary/15 px-[9px] py-[3px] text-[10.5px] font-extrabold text-primary tabular-nums">
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            base completa, independente do mês · clique num estado pra ver os leads
+          </p>
+          <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
             {totalMapped.toLocaleString("pt-BR")} leads mapeados
           </span>
         </div>
 
-        <div ref={mapRef} className="tabmapa-svg relative mx-auto mt-3 flex max-w-[640px] justify-center">
-          <div dangerouslySetInnerHTML={{ __html: brazilSvg.substring(brazilSvg.indexOf("<svg")) }} />
-          {tooltip && (
-            <div
-              className="pointer-events-none absolute z-10 whitespace-nowrap rounded-[10px] border border-border bg-[hsl(35_10%_15%)] px-3 py-2 shadow-[0_14px_34px_hsl(0_0%_0%/.55)]"
-              style={{ left: tooltip.x, top: tooltip.y }}
-            >
-              <b className="block text-[12.5px]">{UF_NAMES[tooltip.uf] ?? tooltip.uf} · {tooltip.count} lead{tooltip.count === 1 ? "" : "s"}</b>
-              <span className="text-[11px] text-muted-foreground">clique pra ver o relatório</span>
-            </div>
-          )}
-        </div>
+        <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-2xl bg-tinta px-4 pb-4 pt-5 text-tinta-foreground">
+          <div ref={mapRef} className="tabmapa-svg relative mx-auto flex w-full max-w-[600px] justify-center">
+            <div dangerouslySetInnerHTML={{ __html: brazilSvg.substring(brazilSvg.indexOf("<svg")) }} />
+            {tooltip && (
+              <div
+                className="pointer-events-none absolute z-10 whitespace-nowrap rounded-xl border border-tinta-line bg-tinta-3 px-3 py-2 text-tinta-foreground shadow-relevo-tinta"
+                style={{ left: tooltip.x, top: tooltip.y }}
+              >
+                <b className="block text-[13px]">{UF_NAMES[tooltip.uf] ?? tooltip.uf} · {tooltip.count} lead{tooltip.count === 1 ? "" : "s"}</b>
+                <span className="text-[11px] text-tinta-muted">clique pra ver o relatório</span>
+              </div>
+            )}
+          </div>
 
-        <div className="mt-3.5 flex items-center justify-center gap-2.5 text-[10.5px] font-semibold text-muted-foreground/60">
-          <span>menos leads</span>
-          <span className="flex gap-[3px]">
-            {["hsl(35 8% 18%)", "hsl(46 45% 26%)", "hsl(46 70% 34%)", "hsl(46 90% 44%)", "hsl(47 100% 52%)"].map((c) => (
-              <i key={c} className="h-2.5 w-5 rounded-[3px]" style={{ background: c }} />
-            ))}
-          </span>
-          <span>mais leads</span>
+          <div className="mt-4 flex items-center justify-center gap-2.5 text-[11px] font-semibold text-tinta-muted">
+            <span>menos leads</span>
+            <span className="flex gap-[3px]">
+              {["hsl(35 8% 18%)", "hsl(46 45% 26%)", "hsl(46 70% 34%)", "hsl(46 90% 44%)", "hsl(47 100% 52%)"].map((c) => (
+                <i key={c} className="h-2.5 w-5 rounded-[3px]" style={{ background: c }} />
+              ))}
+            </span>
+            <span>mais leads</span>
+          </div>
         </div>
-        <div className="mt-3.5 flex justify-between border-t border-border/70 pt-3 text-[11px] font-semibold text-muted-foreground/60">
+        <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
           <span>Estado vem da resposta do lead ou do DDD do telefone</span>
           <span><b className="text-foreground">{unmapped.toLocaleString("pt-BR")} leads</b> sem estado identificado</span>
         </div>
@@ -149,83 +145,79 @@ function TabMapaBase() {
 
       {/* Drawer do estado */}
       {selectedUf && (
-        <div className="cmd-rise flex flex-col overflow-hidden rounded-2xl border border-[hsl(47_60%_35%/.4)] bg-card shadow-[0_24px_60px_hsl(0_0%_0%/.45)]">
-          <div className="border-b border-border/70 p-[18px] pb-3.5" style={{ background: "linear-gradient(165deg, hsl(47 70% 16%/.45), transparent)" }}>
+        <div className="cmd-rise flex min-h-0 flex-col overflow-hidden rounded-2xl bg-sunken">
+          <div className="border-b border-border/60 p-4">
             <div className="flex items-center gap-3">
-              <span className="cmd-mono flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(40_95%_42%)] text-[16px] font-extrabold text-[hsl(30_18%_12%)]">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-[16px] font-extrabold text-primary-foreground shadow-brilho-ouro">
                 {selectedUf}
               </span>
-              <div>
-                <h3 className="text-[17px] font-extrabold tracking-[-0.02em]">{UF_NAMES[selectedUf] ?? selectedUf}</h3>
+              <div className="min-w-0">
+                <h3 className="truncate text-[17px] font-extrabold tracking-[-0.03em]">{UF_NAMES[selectedUf] ?? selectedUf}</h3>
                 {selectedRank > 0 && (
-                  <div className="text-[11px] font-semibold text-muted-foreground">{selectedRank}º estado da sua base</div>
+                  <div className="text-xs font-semibold text-muted-foreground">{selectedRank}º estado da sua base</div>
                 )}
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedUf(null)}
-                className="ml-auto self-start p-1 text-muted-foreground/50 hover:text-foreground"
+                className="ml-auto grid h-8 w-8 shrink-0 place-items-center self-start rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Fechar"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="mt-3.5 grid grid-cols-3 gap-2">
-              <div className="rounded-[10px] border border-border/70 bg-background/70 px-1.5 py-2 text-center">
-                <b className="block text-[16px] font-extrabold tabular-nums">{Number(selectedRow?.leads_count ?? 0)}</b>
-                <span className="text-[9.5px] font-bold uppercase tracking-[.05em] text-muted-foreground/60">Leads</span>
+              <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
+                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] tabular-nums">{Number(selectedRow?.leads_count ?? 0)}</b>
+                <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Leads</span>
               </div>
-              <div className="rounded-[10px] border border-border/70 bg-background/70 px-1.5 py-2 text-center">
-                <b className="block text-[16px] font-extrabold text-success tabular-nums">{Number(selectedRow?.clients_count ?? 0)}</b>
-                <span className="text-[9.5px] font-bold uppercase tracking-[.05em] text-muted-foreground/60">Clientes</span>
+              <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
+                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-success tabular-nums">{Number(selectedRow?.clients_count ?? 0)}</b>
+                <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Clientes</span>
               </div>
-              <div className="rounded-[10px] border border-border/70 bg-background/70 px-1.5 py-2 text-center">
-                <b className="block text-[16px] font-extrabold text-primary tabular-nums">{formatK(Number(selectedRow?.total_sold ?? 0))}</b>
-                <span className="text-[9.5px] font-bold uppercase tracking-[.05em] text-muted-foreground/60">Vendido</span>
+              <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
+                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-primary-soft-foreground tabular-nums">{formatK(Number(selectedRow?.total_sold ?? 0))}</b>
+                <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendido</span>
               </div>
             </div>
           </div>
 
-          <div className="max-h-[420px] flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {leadsLoading && <Skeleton className="h-40 rounded-xl" />}
             {!leadsLoading && (ufLeads ?? []).length === 0 && (
-              <p className="py-8 text-center text-[12.5px] text-muted-foreground">Nenhum lead neste estado.</p>
+              <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhum lead neste estado.</p>
             )}
             {(ufLeads ?? []).map((lead) => (
               <button
                 key={lead.id}
                 type="button"
                 onClick={() => navigate(`/leads?lead=${lead.id}`)}
-                className="grid w-full grid-cols-[1fr_auto] items-center gap-2.5 rounded-[10px] px-2 py-[9px] text-left transition-colors hover:bg-[hsl(0_0%_100%/.03)]"
+                className="grid w-full grid-cols-[1fr_auto] items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-card"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-[12.5px] font-bold">{lead.name}</span>
-                  <span className="mt-[1px] flex items-center gap-1.5 text-[10.5px] font-semibold text-muted-foreground/60">
+                  <span className="block truncate text-[13px] font-bold">{lead.name}</span>
+                  <span className="mt-[1px] flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                     {lead.company && <span className="truncate">{lead.company}</span>}
                     {lead.uf_source === "ddd" && (
-                      <span className="rounded border border-border px-1 text-[8px] font-extrabold uppercase tracking-[.04em] text-muted-foreground/60">via DDD</span>
+                      <span className="rounded border border-border px-1 text-[9px] font-bold uppercase tracking-[.04em] text-muted-foreground">via DDD</span>
                     )}
                   </span>
                 </span>
                 {lead.is_client ? (
-                  <span className="rounded-[5px] bg-success/10 px-1.5 py-[2px] text-[8.5px] font-extrabold uppercase tracking-[.03em] text-success">
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.03em] text-success">
                     Cliente{Number(lead.sold_value) > 0 ? ` · ${formatK(Number(lead.sold_value))}` : ""}
                   </span>
                 ) : (
-                  <span className="rounded-[5px] bg-[hsl(0_0%_100%/.06)] px-1.5 py-[2px] text-[8.5px] font-extrabold uppercase tracking-[.03em] text-muted-foreground">Lead</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.03em] text-muted-foreground">Lead</span>
                 )}
               </button>
             ))}
           </div>
 
-          <div className="border-t border-border/70 p-3">
-            <button
-              type="button"
-              onClick={() => navigate(`/leads?uf=${selectedUf}`)}
-              className="flex h-[38px] w-full items-center justify-center gap-2 rounded-[11px] bg-primary text-[12.5px] font-extrabold text-primary-foreground shadow-[0_5px_16px_hsl(var(--primary)/.2)] transition-[filter] hover:brightness-105"
-            >
+          <div className="border-t border-border/60 p-3">
+            <Button className="w-full" onClick={() => navigate(`/leads?uf=${selectedUf}`)}>
               Abrir os {Number(selectedRow?.leads_count ?? 0)} em Leads →
-            </button>
+            </Button>
           </div>
         </div>
       )}

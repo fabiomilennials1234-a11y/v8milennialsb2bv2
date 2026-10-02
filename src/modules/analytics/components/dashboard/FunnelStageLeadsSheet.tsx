@@ -26,11 +26,12 @@ interface FunnelStageLeadsSheetProps {
 }
 
 const TIER_BADGE: Record<string, string> = {
-  diamante: "bg-cyan-400/15 text-cyan-300",
-  ouro: "bg-primary/15 text-primary",
-  prata: "bg-zinc-400/15 text-zinc-300",
-  bronze: "bg-orange-700/20 text-orange-400",
-  desqualificado: "bg-red-500/15 text-red-400",
+  // V5: tons em token — o ciano/zinco/laranja crus só liam no escuro.
+  diamante: "bg-insights/10 text-insights",
+  ouro: "bg-primary-soft text-primary-soft-foreground",
+  prata: "bg-silver/15 text-silver",
+  bronze: "bg-warning/15 text-warning-strong",
+  desqualificado: "bg-destructive/10 text-destructive",
 };
 
 const BRL = new Intl.NumberFormat("pt-BR", {
@@ -56,19 +57,19 @@ function leadWhereabouts(
   if (l.proposta_stage === "vendido") {
     return {
       label: l.sale_value ? `Vendido · ${BRL.format(l.sale_value)}` : "Vendido",
-      cls: "text-primary font-semibold",
+      cls: "text-primary-soft-foreground font-semibold",
     };
   }
   if (l.proposta_stage) {
-    return { label: `Em ${nomePropostas} · ${humanizeStageKey(l.proposta_stage)}`, cls: "text-primary" };
+    return { label: `Em ${nomePropostas} · ${humanizeStageKey(l.proposta_stage)}`, cls: "text-primary-soft-foreground" };
   }
   if (l.held_at) {
-    return { label: `Compareceu · ${format(new Date(l.held_at), "dd/MM")}`, cls: "text-emerald-500" };
+    return { label: `Compareceu · ${format(new Date(l.held_at), "dd/MM")}`, cls: "text-success" };
   }
   if (l.meeting_date) {
     return {
       label: `Reunião marcada · ${format(new Date(l.meeting_date), "dd/MM")}`,
-      cls: "text-emerald-500",
+      cls: "text-success",
     };
   }
   if (l.whatsapp_stage) {
@@ -118,20 +119,20 @@ export function FunnelStageLeadsSheet({
   return (
     <Sheet open={stage !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
-        <SheetHeader className="border-b border-border px-6 pb-4 pt-6">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+        <SheetHeader className="border-b border-border/60 px-6 pb-4 pt-6">
+          <div className="text-[11px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground">
             Leads da etapa
           </div>
-          <SheetTitle className="flex items-baseline gap-2.5 text-[22px] font-extrabold tracking-tight">
+          <SheetTitle className="flex items-baseline gap-2.5 text-[22px] font-extrabold tracking-[-0.035em]">
             {label}
-            <span className="text-primary tabular-nums">{count}</span>
+            <span className="text-primary-soft-foreground tabular-nums">{count}</span>
           </SheetTitle>
           <SheetDescription className="text-xs">
             {description} Leads que entraram {periodLabel}.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex items-center gap-2 border-b border-border px-6 py-3">
+        <div className="flex items-center gap-2 border-b border-border/60 px-6 py-3">
           <Input
             placeholder="Buscar lead..."
             value={query}
@@ -143,7 +144,7 @@ export function FunnelStageLeadsSheet({
             onClick={() => setTierFilter(null)}
             className={cn(
               "rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground",
-              tierFilter === null && "border-primary/50 bg-primary/10 text-foreground"
+              tierFilter === null && "border-transparent bg-primary-soft text-primary-soft-foreground"
             )}
           >
             Todos
@@ -155,7 +156,7 @@ export function FunnelStageLeadsSheet({
               onClick={() => setTierFilter(tierFilter === tier ? null : tier)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground tabular-nums",
-                tierFilter === tier && "border-primary/50 bg-primary/10 text-foreground"
+                tierFilter === tier && "border-transparent bg-primary-soft text-primary-soft-foreground"
               )}
               title={tier}
             >
@@ -192,9 +193,9 @@ export function FunnelStageLeadsSheet({
                   key={l.id}
                   type="button"
                   onClick={() => onOpenLead(l.id)}
-                  className="group flex w-full items-center gap-3 border-b border-border/40 px-6 py-3 text-left transition-colors hover:bg-primary/5"
+                  className="group flex w-full items-center gap-3 border-b border-border/40 px-6 py-3 text-left transition-colors hover:bg-muted/60"
                 >
-                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-border bg-muted text-[11px] font-bold text-primary">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-primary-soft text-[11px] font-bold text-primary-soft-foreground">
                     {initials}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -225,7 +226,7 @@ export function FunnelStageLeadsSheet({
                       entrou {format(new Date(l.created_at), "dd/MM")}
                     </span>
                   </span>
-                  <span className="hidden flex-none rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[10.5px] font-semibold text-primary group-hover:inline-flex">
+                  <span className="hidden flex-none rounded-full bg-tinta px-2.5 py-1 text-[11px] font-semibold text-tinta-foreground group-hover:inline-flex">
                     Abrir lead ↗
                   </span>
                 </button>
@@ -234,7 +235,7 @@ export function FunnelStageLeadsSheet({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border bg-card px-6 py-3 text-xs text-muted-foreground tabular-nums">
+        <div className="flex items-center justify-between border-t border-border/60 bg-card px-6 py-3 text-xs text-muted-foreground tabular-nums">
           <span>
             {filtered.length} de {leads?.length ?? 0} leads
             {(leads?.length ?? 0) === 500 && " · mostrando os 500 mais recentes"}

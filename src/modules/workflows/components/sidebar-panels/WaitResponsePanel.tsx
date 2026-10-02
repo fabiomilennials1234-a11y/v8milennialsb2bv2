@@ -63,8 +63,8 @@ export function WaitResponsePanel({ data, onUpdate }: WaitResponsePanelProps) {
         </div>
       </div>
 
-      <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
-        <p className="text-xs text-orange-700 dark:text-orange-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           O workflow pausa aqui até o lead responder. Se não responder dentro do timeout,
           segue pela saída "Timeout". Se responder, segue pela saída "Respondeu".
         </p>

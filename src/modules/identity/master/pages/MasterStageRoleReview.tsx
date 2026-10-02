@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import {
   STAGE_ROLES_ATRIBUIVEIS,
@@ -71,7 +73,7 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
   const busy = review.isPending;
 
   return (
-    <div className="group flex flex-wrap items-center gap-3 px-4 py-3 border-t border-border/50 first:border-t-0 hover:bg-muted/30 transition-colors">
+    <div className="group flex flex-wrap items-center gap-3 px-5 py-3 border-t border-border/50 first:border-t-0 hover:bg-muted/30 transition-colors">
       {/* Etapa */}
       <div className="flex items-center gap-3 min-w-0 flex-1 basis-64">
         <span
@@ -107,8 +109,10 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
 
       {/* Ações */}
       <div className="flex items-center gap-2 shrink-0 ml-auto">
+        {/* Tinta, não ouro: a fila tem um "Aprovar" por linha e o ouro é escasso. */}
         <Button
           size="sm"
+          variant="ink"
           className="h-8"
           disabled={busy || !STAGE_ROLES_ATRIBUIVEIS.includes(row.suggested_stage_role)}
           title="Ganho e perda são definidos no negócio, não na etapa"
@@ -165,41 +169,29 @@ export default function MasterStageRoleReview() {
   const total = rows?.length ?? 0;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-            Refundação de métricas · ADR-0017
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Revisão de etapas Won / Lost
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-xl">
-            O classifier sugeriu roles de venda para etapas custom das
-            organizações. Won e Lost movem dinheiro — nada é aplicado sem a sua
-            confirmação.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <CircleDollarSign className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold leading-none tabular-nums">{total}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              pendente{total === 1 ? "" : "s"} · {groups.length} org
-              {groups.length === 1 ? "" : "s"}
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Refundação de métricas · ADR-0017"
+        title="Revisão de etapas Won / Lost"
+        subtitle="O classifier sugeriu roles de venda para etapas custom das organizações. Won e Lost movem dinheiro — nada é aplicado sem a sua confirmação."
+        actions={
+          <KpiTile
+            className="min-w-[200px]"
+            label={total === 1 ? "Pendente" : "Pendentes"}
+            icon={CircleDollarSign}
+            tone="gold"
+            loading={isLoading}
+            value={total}
+            note={`${groups.length} org${groups.length === 1 ? "" : "s"}`}
+          />
+        }
+      />
 
       {/* Fila */}
       {isLoading ? (
         <div className="space-y-4">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="rounded-xl border bg-card p-4 space-y-3">
+            <div key={i} className="rounded-card border border-card-border bg-card p-5 space-y-3 shadow-relevo">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
@@ -210,13 +202,13 @@ export default function MasterStageRoleReview() {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-dashed bg-card/50 py-16 flex flex-col items-center gap-3 text-center"
+          className="rounded-card border border-dashed border-border bg-card/50 py-16 flex flex-col items-center gap-3 text-center"
         >
-          <div className="p-3 rounded-full bg-emerald-500/10">
-            <BadgeCheck className="w-7 h-7 text-emerald-400" />
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-success/10 text-success">
+            <BadgeCheck className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-medium">Fila limpa</p>
+            <p className="font-semibold">Fila limpa</p>
             <p className="text-sm text-muted-foreground max-w-sm">
               Nenhuma sugestão de Won/Lost aguardando revisão. Novas etapas
               custom entram aqui automaticamente quando o classifier rodar.
@@ -231,13 +223,13 @@ export default function MasterStageRoleReview() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.04 }}
-              className="rounded-xl border bg-card overflow-hidden"
+              className="rounded-card border border-card-border bg-card shadow-relevo overflow-hidden"
             >
-              <header className="flex items-center justify-between px-4 py-3 bg-muted/40">
-                <h2 className="font-semibold text-sm">{group.orgName}</h2>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {group.suggestions.length} sugestão
-                  {group.suggestions.length === 1 ? "" : "es"}
+              <header className="flex items-center justify-between px-5 py-3 bg-muted/40">
+                <h2 className="text-[15px] font-bold tracking-[-0.02em]">{group.orgName}</h2>
+                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+                  {group.suggestions.length}{" "}
+                  {group.suggestions.length === 1 ? "sugestão" : "sugestões"}
                 </span>
               </header>
               <div>

@@ -107,7 +107,7 @@ function DensityToggle({
   onDensityChange: (d: DensityMode) => void;
 }) {
   return (
-    <div className="hidden lg:flex items-center gap-0.5 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
+    <div className="hidden lg:flex items-center gap-0.5 shrink-0 rounded-full bg-muted p-[3px]" role="group" aria-label="Modo de densidade das mensagens">
       {DENSITY_OPTIONS.map(({ mode, icon: Icon, label }) => (
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
@@ -115,10 +115,10 @@ function DensityToggle({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 w-7 p-0",
+                "h-7 w-7 rounded-full p-0",
                 density === mode
-                  ? "ring-2 ring-ring ring-offset-1 ring-offset-background bg-muted/60"
-                  : "opacity-50 hover:opacity-100",
+                  ? "bg-card text-foreground shadow-relevo hover:bg-card"
+                  : "text-muted-foreground hover:bg-transparent hover:text-foreground",
               )}
               onClick={() => onDensityChange(mode)}
               aria-pressed={density === mode}
@@ -210,7 +210,7 @@ export function ChatHeader({
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   return (
-    <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0">
+    <div className="flex min-w-0 shrink-0 items-center gap-3 border-b border-border/60 bg-card px-4 py-3">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
         <ArrowLeft className="w-5 h-5" />
       </Button>
@@ -219,7 +219,7 @@ export function ChatHeader({
       <div
         role={onOpenLeadModal ? "button" : undefined}
         tabIndex={onOpenLeadModal ? 0 : undefined}
-        className="flex items-center gap-3 flex-1 min-w-[11rem] cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex items-center gap-3 flex-1 min-w-[11rem] cursor-pointer hover:bg-muted/60 -m-2 p-2 rounded-xl transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal?.(); }}
         onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal?.(); }}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal?.(); } }}
@@ -227,8 +227,9 @@ export function ChatHeader({
         <div className="relative shrink-0">
           <div
             className={cn(
-              "w-10 h-10 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-              avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+              "flex h-10 w-10 select-none items-center justify-center rounded-full text-sm font-bold",
+              // Letra escura/clara conforme o gradiente (cor do dado, não do tema).
+              avatarGradient.ink ? "text-tinta" : "text-tinta-foreground",
             )}
             style={{ background: avatarGradient.background }}
             aria-hidden
@@ -242,18 +243,15 @@ export function ChatHeader({
               direita dele. Com `flex-wrap`, o "Ao vivo" caía para baixo do
               avatar, por trás do botão de ligar. */}
           <div className="flex items-center gap-2 flex-nowrap min-w-0">
-            <h3 className="font-display font-semibold truncate min-w-0 text-foreground">{contactName}</h3>
+            <h3 className="truncate min-w-0 text-[15px] font-bold tracking-tight text-foreground">{contactName}</h3>
             <RealtimeStatusBadge organizationId={organizationId} className="shrink-0" />
             {!hasLead && (
-              <Badge
-                variant="secondary"
-                className="text-xs shrink-0 text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40 border-0"
-              >
+              <Badge variant="warning" className="shrink-0 text-xs">
                 Sem lead
               </Badge>
             )}
           </div>
-          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+          <p className="flex items-center gap-1 truncate text-[13px] text-muted-foreground">
             <Phone className="w-3 h-3 shrink-0" />
             {legendaDoTelefone(phoneNumber)}
           </p>
@@ -270,9 +268,9 @@ export function ChatHeader({
         {/* Botão ver / criar lead */}
         {onOpenLeadModal && <Button
           type="button"
-          variant={hasLead ? "ghost" : "outline"}
+          variant={hasLead ? "outline" : "ink"}
           size="sm"
-          className={cn("shrink-0 gap-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
+          className="shrink-0 gap-0"
           onClick={(e) => { e.stopPropagation(); onOpenLeadModal?.(); }}
           onPointerDown={(e) => e.stopPropagation()}
           title={hasLead ? "Ver dados do lead e funis" : "Criar lead para este contato"}
@@ -304,7 +302,7 @@ export function ChatHeader({
       {limitsWarning && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Badge variant="outline" className="border-amber-400 text-amber-500 gap-1 text-xs shrink-0">
+            <Badge variant="warning" className="shrink-0 gap-1 text-xs">
               <AlertTriangle className="h-3 w-3" />
               {newChatsRestricted ? "Restrição WhatsApp" : `${limits?.current}/${limits?.limit}`}
             </Badge>
@@ -327,14 +325,14 @@ export function ChatHeader({
       {/* AI Toggle — desktop only */}
       <div
         className={cn(
-          "hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full border border-border/40 shrink-0",
-          aiDisabled ? "bg-muted/30" : "bg-primary/8"
+          "hidden md:flex items-center gap-1.5 rounded-full py-1 pl-2.5 pr-1.5 shrink-0",
+          aiDisabled ? "bg-muted" : "bg-primary-soft"
         )}
         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <Bot className={cn("w-3.5 h-3.5", aiDisabled ? "text-muted-foreground/50" : "text-primary/70")} />
-        <span className="text-[11px] text-muted-foreground/70 hidden sm:inline">IA</span>
+        <Bot className={cn("h-3.5 w-3.5", aiDisabled ? "text-muted-foreground" : "text-primary-soft-foreground")} />
+        <span className={cn("hidden text-[11px] font-bold sm:inline", aiDisabled ? "text-muted-foreground" : "text-primary-soft-foreground")}>IA</span>
         <div onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={!aiDisabled}
@@ -355,13 +353,13 @@ export function ChatHeader({
 
       {/* Transfer / AI state badges — desktop only */}
       {hasLead && leadId && isWaitingHuman && (
-        <Badge variant="outline" className="hidden md:inline-flex border-amber-400 text-amber-600 gap-1.5 text-xs">
+        <Badge variant="warning" className="hidden md:inline-flex gap-1.5 text-xs">
           <UserPlus className="h-3 w-3" />
           Aguardando humano
         </Badge>
       )}
       {aiDisabled && !isWaitingHuman && !humanPaused && (
-        <Badge variant="outline" className="hidden md:inline-flex text-muted-foreground gap-1.5 text-xs">
+        <Badge variant="soft" className="hidden md:inline-flex gap-1.5 text-xs text-muted-foreground">
           IA desativada
         </Badge>
       )}

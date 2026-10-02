@@ -46,7 +46,7 @@ export function HelpSection({ onOpenArticle }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar na central de ajuda…"
-            className="h-9 pl-9 text-sm"
+            className="h-9 rounded-full pl-9 text-sm"
             aria-label="Buscar na central de ajuda"
           />
         </div>
@@ -73,7 +73,7 @@ export function HelpSection({ onOpenArticle }: Props) {
                   onClick={() => onOpenArticle(article)}
                   className="flex w-full items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-muted/40"
                 >
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border/60 bg-muted/30">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted">
                     <BookOpen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">

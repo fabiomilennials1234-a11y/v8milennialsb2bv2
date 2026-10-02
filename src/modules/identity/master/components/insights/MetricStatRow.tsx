@@ -39,13 +39,13 @@ function StatCard({ label, value, kind, mode, tooltip }: StatCardProps) {
   const animated = useCountUp(value, 600);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5">
+    <div className="relative overflow-hidden rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-[18px] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none">
       <span
         className="absolute inset-y-0 left-0 w-[3px] bg-insights"
         aria-hidden="true"
       />
       <div className="flex items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           {label}
         </p>
         {tooltip && (
@@ -65,12 +65,12 @@ function StatCard({ label, value, kind, mode, tooltip }: StatCardProps) {
           </Tooltip>
         )}
         {mode === "projecao" && (
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-warning">
+          <span className="rounded-full bg-warning/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-[.06em] text-warning-strong">
             meta
           </span>
         )}
       </div>
-      <p className="mt-2 font-display text-2xl tabular-nums tracking-[-0.02em] text-foreground">
+      <p className="mt-2 text-[1.65rem] font-extrabold leading-[1.05] tabular-nums tracking-[-0.04em] text-foreground">
         {formatStat(animated, kind)}
       </p>
     </div>
@@ -96,7 +96,7 @@ export function MetricStatRow({
   return (
     <div className="space-y-2.5">
       {isDados && periodLabel && (
-        <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Coorte · {periodLabel}
         </p>
       )}

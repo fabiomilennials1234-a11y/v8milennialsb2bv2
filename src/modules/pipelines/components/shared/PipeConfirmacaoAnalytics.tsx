@@ -88,7 +88,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
   }, [items, responsibleMembers]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" />
@@ -117,7 +117,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
       </div>
 
       {/* Gráficos */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-4 md:grid-cols-2">
         <AnalyticsPanel title="Funil de Comparecimento" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="reuniões" />
         </AnalyticsPanel>
