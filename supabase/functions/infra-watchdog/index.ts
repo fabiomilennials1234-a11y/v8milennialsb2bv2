@@ -17,6 +17,10 @@
  *      caso 2. **Detectar não é alertar**, e é por isso que
  *      `checkExposedTables` mora aqui: sem consumidor, o detector seria mais
  *      uma feature construída e nunca ligada.
+ *   4. 2026-10-01 — duas requisições em laço infinito ocuparam a CPU do banco
+ *      por 5 h e o app ficou preso na tela de abertura. Este watchdog rodou o
+ *      tempo todo e não viu: vigiava conexões (61/90, abaixo do teto), não CPU.
+ *      Daí `checkCpu`.
  *
  * O segundo caso ensina a regra de ouro deste arquivo: **um alerta que depende
  * do canal que ele vigia não é alerta.** Por isso o watchdog usa secrets
@@ -35,6 +39,14 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
+import {
+  buildCpuAlertText,
+  parseCpuCounters,
+  parseCpuState,
+  parseMemoryPct,
+  stepCpu,
+} from "../_shared/cpu-alert.ts";
+import { resolveSupportSender, sendSupportText } from "../_shared/support-channel.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -136,9 +148,11 @@ async function checkSupportNotifyHealth(supabase: SupabaseClient): Promise<Alert
       `🔴 *Aviso de Chamado não está entregando*\n\n` +
       `As últimas ${NOTIFY_FAILURE_STREAK} tentativas falharam.\n` +
       `Erro: ${detail}\n\n` +
-      `Chamado de cliente está entrando sem ninguém ser avisado.\n` +
-      `Se for 401, o token da instância de suporte foi revogado — ` +
-      `renovar SUPPORT_UAZAPI_TOKEN.`,
+      `Chamado de cliente está entrando sem ninguém ser avisado.\n\n` +
+      `A credencial vem da instância conectada apontada em cron_config ` +
+      `(support_sender_org_id / support_sender_instance_id). 401 = token da ` +
+      `instância revogado; 503 "session is not reconnectable" = a linha ` +
+      `deslogou e precisa ser repareada no Uazapi.`,
   };
 }
 
@@ -272,32 +286,121 @@ async function checkExposedTables(supabase: any): Promise<Alert | null> {
   };
 }
 
-async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
-  // Secrets próprias primeiro. O fallback para as do suporte existe para o
-  // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
-  // ele o watchdog fica cego para a falha do próprio canal de suporte, que é
-  // exatamente um dos casos que ele deveria pegar.
-  const token = Deno.env.get("WATCHDOG_UAZAPI_TOKEN") ?? Deno.env.get("SUPPORT_UAZAPI_TOKEN");
-  const jid = Deno.env.get("WATCHDOG_WHATSAPP_JID") ?? Deno.env.get("SUPPORT_WHATSAPP_GROUP_JID");
+// Teto e duração. 85% por 5 leituras (10 min a cada 2) separa incidente de pico:
+// em 01/10 a CPU ficou em 98-99% por 5 h com as conexões em 61/90 — a sonda de
+// pressão acima não disparava porque olhava a coisa errada.
+const CPU_ALERT_PCT_DEFAULT = 85;
+const CPU_ALERT_READINGS = 5;
+const CPU_STATE_KEY = "watchdog_cpu_state";
+// Sonda cega é um problema por si: avisa, mas uma vez por dia.
+const CPU_PROBE_DOWN_COOLDOWN_MINUTES = 24 * 60;
+
+/**
+ * CPU do banco alta de forma sustentada. Lógica e motivo em `_shared/cpu-alert.ts`.
+ *
+ * A leitura vem do endpoint de métricas da Supabase (node exporter), autenticado
+ * com a service role. Se ele não responder, a sonda diz que está cega em vez de
+ * ficar em silêncio: silêncio aqui pareceria "CPU normal".
+ */
+async function checkCpu(supabase: SupabaseClient): Promise<Alert | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  let prom: string;
+  try {
+    const resp = await fetch(`${supabaseUrl.replace(/\/$/, "")}/customer/v1/privileged/metrics`, {
+      headers: { Authorization: `Basic ${btoa(`service_role:${serviceRoleKey}`)}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`metrics ${resp.status}`);
+    prom = await resp.text();
+  } catch (err) {
+    return cpuProbeDown(err instanceof Error ? err.message : String(err));
+  }
+
+  const sample = parseCpuCounters(prom);
+  if (!sample) return cpuProbeDown("node_cpu_seconds_total ausente nas métricas");
+
+  const { data: rows } = await supabase
+    .from("cron_config")
+    .select("key, value")
+    .in("key", [CPU_STATE_KEY, "cpu_alert_pct"]);
+  const valor = (k: string) => rows?.find((r: { key: string }) => r.key === k)?.value;
+  const threshold = Number(valor("cpu_alert_pct")) || CPU_ALERT_PCT_DEFAULT;
+
+  const step = stepCpu(parseCpuState(valor(CPU_STATE_KEY)), sample, Date.now(), threshold, CPU_ALERT_READINGS);
+  await supabase
+    .from("cron_config")
+    .upsert({ key: CPU_STATE_KEY, value: JSON.stringify(step.state) }, { onConflict: "key" });
+
+  if (!step.alert || step.pct === null) return null;
+  return {
+    key: "cpu_high",
+    text: buildCpuAlertText({
+      pct: step.pct,
+      minutes: step.state.streak * 2,
+      thresholdPct: threshold,
+      memPct: parseMemoryPct(prom),
+    }),
+    logPayload: { pct: step.pct, streak: step.state.streak },
+  };
+}
+
+function cpuProbeDown(detail: string): Alert {
+  return {
+    key: "cpu_probe_down",
+    cooldownMinutes: CPU_PROBE_DOWN_COOLDOWN_MINUTES,
+    text:
+      `🟡 *Sonda de CPU do banco está cega*\n\n` +
+      `Não consegui ler as métricas da Supabase: ${detail.slice(0, 160)}\n\n` +
+      `Enquanto isso, CPU alta não gera aviso — foi a falta deste aviso que ` +
+      `deixou o incidente de 01/10 durar 5 h.`,
+    logPayload: { detail },
+  };
+}
+
+/**
+ * Por onde o aviso sai.
+ *
+ * Secrets PRÓPRIAS primeiro (`WATCHDOG_UAZAPI_TOKEN` / `WATCHDOG_WHATSAPP_JID`).
+ * Sem elas, cai no canal de suporte — resolvido do banco, não mais da secret
+ * estática que morreu em 14/07 e de novo em 02/09.
+ *
+ * A queda de 02/09 provou o custo desse fallback: as três tentativas do alerta
+ * `support_notify` saíram pela mesma instância morta que o alerta denunciava, e
+ * as três tomaram o mesmo 503. O vigia virou cúmplice, exatamente como o
+ * cabeçalho deste arquivo previa. Enquanto as secrets próprias não existirem, o
+ * `selfBlind` abaixo carimba isso no `runtime_logs` — o remédio é um segundo
+ * número, e o rastro é o que impede a lacuna de sumir de vista de novo.
+ */
+async function resolveChannel(
+  supabase: SupabaseClient,
+): Promise<
+  | { ok: true; send: (text: string) => Promise<{ ok: boolean; detail?: string }>; selfBlind: boolean }
+  | { ok: false; detail: string }
+> {
+  const ownToken = Deno.env.get("WATCHDOG_UAZAPI_TOKEN");
+  const ownJid = Deno.env.get("WATCHDOG_WHATSAPP_JID");
   const baseUrl = Deno.env.get("UAZAPI_BASE_URL");
 
-  if (!token || !jid || !baseUrl) return { ok: false, detail: "secrets ausentes" };
-
-  try {
-    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/send/text`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", token },
-      body: JSON.stringify({ number: jid, text }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!resp.ok) {
-      const detail = await resp.text().catch(() => "");
-      return { ok: false, detail: `uazapi ${resp.status}: ${detail.slice(0, 200)}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  if (ownToken && ownJid && baseUrl) {
+    const sender = {
+      token: ownToken,
+      baseUrl,
+      groupJid: ownJid,
+      source: "env" as const,
+    };
+    return { ok: true, send: (text: string) => sendSupportText(sender, text), selfBlind: false };
   }
+
+  const resolved = await resolveSupportSender(supabase, (k) => Deno.env.get(k));
+  if (!resolved.ok) return { ok: false, detail: resolved.reason };
+
+  return {
+    ok: true,
+    send: (text: string) => sendSupportText(resolved.sender, text),
+    selfBlind: true,
+  };
 }
 
 Deno.serve(
@@ -329,6 +432,7 @@ Deno.serve(
       checkSupportNotifyHealth(supabase),
       checkRunawayBackfill(supabase),
       checkExposedTables(supabase),
+      checkCpu(supabase),
     ]);
 
     const alerts = results
@@ -340,20 +444,32 @@ Deno.serve(
     const suppressed: string[] = [];
     const failed: string[] = [];
 
+    const channel = await resolveChannel(supabase);
+
     for (const alert of alerts) {
       if (!(await shouldAlert(supabase, alert.key, alert.cooldownMinutes))) {
         suppressed.push(alert.key);
         continue;
       }
 
-      const res = await sendWhatsApp(alert.text);
+      const res = channel.ok
+        ? await channel.send(alert.text)
+        : { ok: false, detail: channel.detail };
       if (res.ok) {
         sent.push(alert.key);
         await logRuntime({
           module: "job_monitor",
           action: "watchdog_alert",
           status: "success",
-          payloadSnapshot: { alert: alert.key, ...(alert.logPayload ?? {}) },
+          // `self_blind` vai no caminho de SUCESSO também, e não só no de erro:
+          // sem ele, um aviso entregue não diz por qual canal saiu, e o dia em
+          // que as secrets próprias forem provisionadas fica indistinguível do
+          // dia em que alguém as apagar sem querer.
+          payloadSnapshot: {
+            alert: alert.key,
+            self_blind: channel.ok ? channel.selfBlind : null,
+            ...(alert.logPayload ?? {}),
+          },
         });
       } else {
         failed.push(alert.key);
@@ -372,12 +488,16 @@ Deno.serve(
           payloadSnapshot: {
             alert: alert.key,
             message_preview: alert.text.slice(0, 200),
+            // `true` quando o watchdog está usando o canal de suporte por não ter
+            // o próprio: se o alerta que falhou for o `support_notify`, esta
+            // linha é a explicação de por que ninguém foi avisado.
+            self_blind: channel.ok ? channel.selfBlind : null,
             ...(alert.logPayload ?? {}),
           },
         });
       }
     }
 
-    return json({ ok: true, checked: 4, sent, suppressed, failed });
+    return json({ ok: true, checked: results.length, sent, suppressed, failed });
   })
 );
