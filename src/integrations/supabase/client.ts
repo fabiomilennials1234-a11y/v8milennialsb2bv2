@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { createTracedFetch } from '@/core/trace/request-trace';
+import { createAnonFallbackGuard, hasPersistedSupabaseSession } from '@/core/auth/anon-fallback-guard';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
@@ -18,6 +19,11 @@ export const supabase = createClient<Database>(SUPABASE_URL || 'https://placehol
   // Carimba x-torque-session-id / x-torque-request-id em toda saída (PostgREST,
   // RPC, Storage, functions.invoke). Ver src/core/trace/request-trace.ts.
   global: {
-    fetch: createTracedFetch(),
+    // O guard fica por fora: se a renovação do token falhar, o supabase-js cai
+    // na chave anônima e o banco responde 42501 em tudo. Ver anon-fallback-guard.ts.
+    fetch: createAnonFallbackGuard(createTracedFetch(), {
+      anonKey: SUPABASE_PUBLISHABLE_KEY,
+      hasPersistedSession: hasPersistedSupabaseSession,
+    }),
   },
 });
