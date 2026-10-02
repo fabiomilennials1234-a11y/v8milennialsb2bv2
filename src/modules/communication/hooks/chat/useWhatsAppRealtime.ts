@@ -28,6 +28,7 @@ import {
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
 import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
+import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
@@ -49,6 +50,13 @@ export function useWhatsAppMessagesRealtime(
       const { eventType } = payload;
       const message = (payload.new || payload.old) as WhatsAppMessage | undefined;
       if (!message) return;
+
+      // Mensagem de cliente muda as contagens de não-lidas (badge e ponto por
+      // caixa). Pelo throttle — ver `unreadRefresh.ts`: rajada de mensagem não
+      // pode virar rajada de RPC.
+      if (eventType === "INSERT" && message.direction === "incoming") {
+        pedirAtualizacaoDeNaoLidas(queryClient);
+      }
 
       const messagePhone = message.phone_number ?? "";
       const currentPhone = phoneNumberRef.current;

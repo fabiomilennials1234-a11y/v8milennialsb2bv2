@@ -162,4 +162,5 @@ owner: claude-agent
 - [[2026-09-24-whatsapp-direct-ingress-https|WhatsApp direto — HTTPS preparado, migração pendente]]
 - [[2026-09-24-whatsapp-ingress-readiness|WhatsApp ingress — preparação e piloto de fila]]
 - [[2026-09-24-whatsapp-ingress-writer-guard|2026-09-24-whatsapp-ingress-writer-guard]]
+- [[2026-10-02-chat-nao-lidas-e-aguardando-por-evento|Não-lidas por evento + aguardando resposta em 1 RPC]]
 - [[2026-10-02-crons-escalonados-por-fase|Crons de prod escalonados por fase (anti-rajada)]]

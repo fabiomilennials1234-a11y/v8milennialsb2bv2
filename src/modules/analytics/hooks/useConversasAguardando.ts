@@ -1,5 +1,6 @@
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { reportError, toAppError } from "@/shared/errors";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useWhatsAppInstancesForUser } from "@/modules/communication";
 import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
@@ -18,12 +19,28 @@ import {
  * "a última mensagem é 'incoming'") esvaziaria o card justamente nas orgs mais
  * movimentadas.
  *
- * ⚠️ FAN-OUT POR CHIP, não uma query só. A RPC exige `p_instance` e o expande
- * para o chip (instância viva + apagadas do mesmo número). Ler
- * `whatsapp_conversation_summary` direto resolveria tudo numa query e está
- * PROIBIDO: a RLS daquela tabela não conhece `chat_restrict_to_owner`, que só
- * existe dentro da RPC — o cabeçalho da migration 20270819100000 conta que esse
- * exato descasamento já vazou o inbox inteiro uma vez.
+ * ─── UMA CHAMADA PARA TODAS AS CAIXAS (incidente 2026-10-02) ─────────────────
+ *
+ * Até 2026-10-02 este hook fazia FAN-OUT POR CHIP (`useQueries`): uma RPC
+ * `get_conversations_awaiting_human_reply` por caixa. Na Alamaster (57 caixas)
+ * eram 57 chamadas por abertura do Comando, cada uma medida em 12,4 s no
+ * auto_explain — e o banco caiu no pico das 12:46 UTC. Agora é UMA chamada a
+ * `get_conversations_awaiting_human_reply_multi`, que expande os chips no
+ * servidor (mesma partição da lista multi do /chat), devolve `instance_id` por
+ * linha e aplica o LIMIT sobre a união. Medido em prod: 57 caixas em 176 ms.
+ *
+ * Janela de 7 dias (default da RPC; era 30). Decisão delegada pelo CTO: o card
+ * mostra o topo mais recente; o que encolhe é só o "e mais N".
+ *
+ * Ler `whatsapp_conversation_summary` direto continua PROIBIDO: a RLS daquela
+ * tabela não conhece `chat_restrict_to_owner`, que só existe dentro da RPC — o
+ * cabeçalho da migration 20270819100000 conta que esse descasamento já vazou o
+ * inbox inteiro uma vez.
+ *
+ * Expand/contract: se a RPC multi ainda não estiver no banco (front sobe antes
+ * da migration — PostgREST responde PGRST202), cai na RPC por chip, o
+ * comportamento antigo, e relata ao Sentry. SÓ PGRST202: qualquer outro erro da
+ * multi é defeito dela e sobe como erro do card, nunca vira fan-out silencioso.
  *
  * ─── Escopo por usuário (2026-08-24) ────────────────────────────────────────
  *
@@ -95,6 +112,8 @@ export interface ConversasAguardandoResult {
 }
 
 interface AwaitingRow {
+  /** Só na RPC multi: a CAIXA da linha (nunca um uuid histórico do chip). */
+  instance_id?: string;
   phone_number: string | null;
   normalized_phone: string;
   push_name: string | null;
@@ -130,6 +149,18 @@ interface InstanceQueryResult {
   degraded: boolean;
 }
 
+/** O resultado da fila inteira — uma chamada, todas as caixas. */
+interface FilaResult extends InstanceQueryResult {
+  /** Caixas que falharam no caminho por chip. Na RPC multi é sempre 0. */
+  chipsComErro: number;
+}
+
+/** O que o hook sabe de cada caixa: só o nome, para rotular a linha. */
+interface ChipRef {
+  id: string;
+  instance_name: string;
+}
+
 /** Nome + responsável de um lead, para o caminho degradado. */
 interface DadosDeLead {
   nome: string | null;
@@ -138,9 +169,25 @@ interface DadosDeLead {
 }
 
 /**
- * A função não existe neste banco ainda. PostgREST devolve PGRST202 quando não
- * acha a função no schema cache; o Postgres devolve 42883 quando a chamada
- * chega. Tratamos os dois como "ainda não migrado", não como falha.
+ * A RPC multi NÃO está no schema cache do PostgREST — e só isso.
+ *
+ * Deliberadamente MAIS ESTREITO que `isMissingFunctionError`: `42883` também é
+ * erro de RUNTIME (um helper chamado com assinatura errada dentro do corpo), e a
+ * regex `does not exist` casa `42703` (coluna) e relation. Qualquer um desses
+ * vindo da multi é DEFEITO dela, e cair no fan-out por chip esconderia o defeito
+ * atrás de N × 12 s de banco — o padrão exato do crash de 2026-10-02. Só a
+ * ausência declarada da função (PGRST202) autoriza o caminho antigo; o resto
+ * sobe e o card mostra erro.
+ */
+function isMultiAusenteDoSchema(error: unknown): boolean {
+  return (error as PgLikeError | null)?.code === "PGRST202";
+}
+
+/**
+ * Caminho por chip (fan-out antigo), alcançável só depois que a multi já caiu
+ * por PGRST202: a RPC por instância não existe neste banco. PostgREST devolve
+ * PGRST202 quando não acha a função no schema cache; o Postgres devolve 42883
+ * quando a chamada chega. Aqui os dois significam "ainda não migrado".
  */
 function isMissingFunctionError(error: unknown): boolean {
   const e = error as PgLikeError;
@@ -156,6 +203,11 @@ function isMissingFunctionError(error: unknown): boolean {
 type AwaitingRpc = (
   fn: "get_conversations_awaiting_human_reply",
   args: { p_org: string; p_instance: string; p_limit: number },
+) => PromiseLike<{ data: AwaitingRow[] | null; error: PgLikeError | null }>;
+
+type AwaitingMultiRpc = (
+  fn: "get_conversations_awaiting_human_reply_multi",
+  args: { p_org: string; p_instances: string[]; p_limit: number },
 ) => PromiseLike<{ data: AwaitingRow[] | null; error: PgLikeError | null }>;
 
 /**
@@ -196,6 +248,57 @@ async function dadosDeLead(ids: string[], organizationId: string): Promise<Map<s
   return mapa;
 }
 
+/**
+ * Linhas da RPC → `ConversaAguardando`. Uma implementação só para a RPC multi e
+ * para a por chip: as duas devolvem a mesma linha, a multi só acrescenta
+ * `instance_id`. `caixaDe` diz de qual caixa a linha é.
+ */
+async function mapearLinhas(
+  linhas: AwaitingRow[],
+  organizationId: string,
+  caixaDe: (linha: AwaitingRow) => { id: string; nome: string },
+): Promise<{ rows: ConversaAguardando[]; total: number }> {
+  // A RPC já resolve nome de perfil e responsável. Só buscamos o lead
+  // quando algum fallback será usado.
+  // Preservar null e undefined: ambos acionam os fallbacks abaixo, inclusive
+  // em bancos sem as colunas de responsável. String vazia não é null.
+  const ids = [
+    ...new Set(linhas
+      .filter((r) => r.push_name == null || r.owner_team_member_id == null)
+      .map((r) => r.lead_id)
+      .filter((id): id is string => !!id)),
+  ];
+  const leads = await dadosDeLead(ids, organizationId);
+  return {
+    total: linhas[0]?.waiting_total ?? 0,
+    rows: linhas.map((r) => {
+      const caixa = caixaDe(r);
+      return {
+        key: `${caixa.id}:${r.normalized_phone}`,
+        phoneNumber: r.phone_number ?? r.normalized_phone,
+        normalizedPhone: r.normalized_phone,
+        displayName:
+          r.push_name ??
+          (r.lead_id ? leads.get(r.lead_id)?.nome ?? undefined : undefined) ??
+          r.phone_number ??
+          r.normalized_phone,
+        leadId: r.lead_id,
+        instanceId: caixa.id,
+        instanceName: caixa.nome,
+        lastClientMessage: r.last_client_message,
+        lastClientMessageAt: r.last_client_message_at,
+        aiReplied: r.ai_replied,
+        aiRepliedAt: r.ai_replied_at,
+        // A RPC é a fonte; o fallback pelo lead só cobre banco sem a migration.
+        ownerTeamMemberId:
+          r.owner_team_member_id ??
+          (r.lead_id ? leads.get(r.lead_id)?.ownerId ?? null : null),
+        ownerName: r.owner_name ?? null,
+      };
+    }),
+  };
+}
+
 async function buscarPorInstancia(
   organizationId: string,
   instanceId: string,
@@ -212,45 +315,12 @@ async function buscarPorInstancia(
   );
 
   if (!error) {
-    const linhas = data ?? [];
-    // A RPC já resolve nome de perfil e responsável. Só buscamos o lead
-    // quando algum fallback será usado; antes cada chip fazia uma segunda
-    // consulta mesmo quando descartava todos os campos retornados.
-    // Preservar null e undefined: ambos acionam os fallbacks abaixo, inclusive
-    // em bancos sem as colunas de responsável. String vazia não é null.
-    const ids = [
-      ...new Set(linhas
-        .filter((r) => r.push_name == null || r.owner_team_member_id == null)
-        .map((r) => r.lead_id)
-        .filter((id): id is string => !!id)),
-    ];
-    const leads = await dadosDeLead(ids, organizationId);
-    return {
-      total: linhas[0]?.waiting_total ?? 0,
-      degraded: false,
-      rows: linhas.map((r) => ({
-        key: `${instanceId}:${r.normalized_phone}`,
-        phoneNumber: r.phone_number ?? r.normalized_phone,
-        normalizedPhone: r.normalized_phone,
-        displayName:
-          r.push_name ??
-          (r.lead_id ? leads.get(r.lead_id)?.nome ?? undefined : undefined) ??
-          r.phone_number ??
-          r.normalized_phone,
-        leadId: r.lead_id,
-        instanceId,
-        instanceName,
-        lastClientMessage: r.last_client_message,
-        lastClientMessageAt: r.last_client_message_at,
-        aiReplied: r.ai_replied,
-        aiRepliedAt: r.ai_replied_at,
-        // A RPC é a fonte; o fallback pelo lead só cobre banco sem a migration.
-        ownerTeamMemberId:
-          r.owner_team_member_id ??
-          (r.lead_id ? leads.get(r.lead_id)?.ownerId ?? null : null),
-        ownerName: r.owner_name ?? null,
-      })),
-    };
+    const { rows, total } = await mapearLinhas(
+      data ?? [],
+      organizationId,
+      () => ({ id: instanceId, nome: instanceName }),
+    );
+    return { rows, total, degraded: false };
   }
 
   if (!isMissingFunctionError(error)) throw error;
@@ -309,6 +379,74 @@ async function buscarPorInstancia(
 }
 
 /**
+ * A fila inteira numa chamada: `get_conversations_awaiting_human_reply_multi`.
+ *
+ * Banco sem a RPC multi (SÓ PGRST202 — ver `isMultiAusenteDoSchema`) cai no
+ * caminho por chip — o antigo —
+ * com a mesma regra de antes para erro parcial: um chip que falha não apaga os
+ * outros, e só é erro quando TODOS falham.
+ */
+export async function buscarFilaAguardando(
+  organizationId: string,
+  chips: readonly ChipRef[],
+  limit: number,
+  escopo: ComandoEscopo,
+  meuTeamMemberId: string | null,
+): Promise<FilaResult> {
+  const nomePorCaixa = new Map(chips.map((c) => [c.id, c.instance_name]));
+  const chamarMulti = supabase.rpc.bind(supabase) as unknown as AwaitingMultiRpc;
+  const { data, error } = await chamarMulti(
+    "get_conversations_awaiting_human_reply_multi",
+    { p_org: organizationId, p_instances: chips.map((c) => c.id), p_limit: limit },
+  );
+
+  if (!error) {
+    const { rows, total } = await mapearLinhas(data ?? [], organizationId, (r) => {
+      // A RPC multi sempre devolve a caixa. Sem ela (contrato quebrado) a linha
+      // não tem como dizer por qual número responder — melhor rotular vazio do
+      // que atribuir à caixa errada.
+      const id = r.instance_id ?? "";
+      return { id, nome: nomePorCaixa.get(id) ?? "" };
+    });
+    return { rows, total, degraded: false, chipsComErro: 0 };
+  }
+
+  if (!isMultiAusenteDoSchema(error)) throw error;
+
+  // ── Expand/contract: RPC multi ainda não aplicada neste banco ──────────────
+  // Relatado para sabermos, pelo Sentry, quando nenhum cliente cai mais aqui —
+  // é esse o sinal para aposentar este ramo e a RPC por chip.
+  reportError(toAppError(error), {
+    source: "comando",
+    feature: "conversas-aguardando",
+    fallback: "awaiting-multi-ausente",
+  });
+  const resultados = await Promise.allSettled(
+    chips.map((chip) =>
+      buscarPorInstancia(
+        organizationId,
+        chip.id,
+        chip.instance_name,
+        limit,
+        escopo,
+        meuTeamMemberId,
+      ),
+    ),
+  );
+  const ok = resultados.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const falhas = resultados.filter((r) => r.status === "rejected");
+  if (chips.length > 0 && ok.length === 0) {
+    throw (falhas[0] as PromiseRejectedResult).reason;
+  }
+  return {
+    rows: ok.flatMap((r) => r.rows),
+    total: ok.reduce((acc, r) => acc + r.total, 0),
+    degraded: ok.some((r) => r.degraded),
+    chipsComErro: falhas.length,
+  };
+}
+
+/**
  * @param limite quantas conversas mostrar depois de juntar todos os chips.
  */
 export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
@@ -328,71 +466,64 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
   // card em varredura.
   const limiteBusca = Math.min(limite * 3, 60);
 
-  const resultado = useQueries({
-    queries: chips.map((chip) => ({
-      // `escopo` entra na chave: admin e vendedor não podem compartilhar cache,
-      // senão um troca-troca de conta serve a lista errada.
-      queryKey: [
-        "comando",
-        "conversas-aguardando",
-        organizationId,
-        chip.id,
+  // Ordenado: a mesma seleção em outra ordem é a MESMA pergunta (uma entrada
+  // de cache, não duas).
+  const chipIds = chips.map((c) => c.id).sort().join(",");
+
+  const fila = useQuery({
+    // `escopo` entra na chave: admin e vendedor não podem compartilhar cache,
+    // senão um troca-troca de conta serve a lista errada.
+    queryKey: [
+      "comando",
+      "conversas-aguardando",
+      organizationId,
+      chipIds,
+      limiteBusca,
+      escopo,
+      meuTeamMemberId,
+    ],
+    queryFn: () =>
+      buscarFilaAguardando(
+        organizationId as string,
+        chips,
         limiteBusca,
         escopo,
         meuTeamMemberId,
-      ],
-      queryFn: () =>
-        buscarPorInstancia(
-          organizationId as string,
-          chip.id,
-          chip.instance_name,
-          limiteBusca,
-          escopo,
-          meuTeamMemberId,
-        ),
-      // Espera a identidade resolver. Sem isso o primeiro fetch sairia com
-      // `escopo: "meu"` para um admin, e o resultado errado ficaria em cache
-      // sob uma chave que nunca mais é pedida.
-      enabled: !!organizationId && isReady,
-      staleTime: 30_000,
-    })),
-    combine: (resultados): Omit<ConversasAguardandoResult, "refetch"> => {
-      // Só conversa com LEAD cadastrado (decisão do CTO em 2026-09-04): o card
-      // é uma fila de trabalho sobre gente conhecida. Número solto continua no
-      // /chat — some daqui, não do produto. A regra vive em lib para ser
-      // testada sem React nem banco.
-      const comLead = filaComLead(resultados.flatMap((r) => r.data?.rows ?? []));
-
-      return {
-        items: comLead.slice(0, limite),
-        // O total é o das linhas COM LEAD, e não o `waiting_total` do banco:
-        // aquele conta a fila inteira, e o contador do cabeçalho ficaria maior
-        // que a lista que ele encima.
-        total: comLead.length,
-        // Enquanto a identidade não resolve não há query nenhuma, e em React
-        // Query v5 query desabilitada reporta `isLoading: false` — sem esta
-        // linha o card afirmaria "ninguém esperando" durante o boot.
-        isLoading:
-          instLoading ||
-          identidadePendente ||
-          resultados.some((r) => r.isLoading),
-        // Um chip que falha não apaga os outros; só marca erro quando TODOS
-        // falharam (ou quando o único que existe falhou).
-        isError:
-          !!instError || (resultados.length > 0 && resultados.every((r) => r.isError)),
-        isDegraded: resultados.some((r) => r.data?.degraded === true),
-        semChips: !instLoading && !instError && !identidadePendente && chips.length === 0,
-        chipsComErro: resultados.filter((r) => r.isError).length,
-        isAdmin,
-      };
-    },
+      ),
+    // Espera a identidade resolver. Sem isso o primeiro fetch sairia com
+    // `escopo: "meu"` para um admin, e o resultado errado ficaria em cache
+    // sob uma chave que nunca mais é pedida. Sem chip não há pergunta a fazer.
+    enabled: !!organizationId && isReady && chips.length > 0,
+    staleTime: 30_000,
   });
+
+  // Só conversa com LEAD cadastrado (decisão do CTO em 2026-09-04): o card
+  // é uma fila de trabalho sobre gente conhecida. Número solto continua no
+  // /chat — some daqui, não do produto. A regra vive em lib para ser
+  // testada sem React nem banco.
+  const comLead = filaComLead(fila.data?.rows ?? []);
+
+  const resultado: Omit<ConversasAguardandoResult, "refetch"> = {
+    items: comLead.slice(0, limite),
+    // O total é o das linhas COM LEAD, e não o `waiting_total` do banco:
+    // aquele conta a fila inteira, e o contador do cabeçalho ficaria maior
+    // que a lista que ele encima.
+    total: comLead.length,
+    // Enquanto a identidade não resolve não há query nenhuma, e em React
+    // Query v5 query desabilitada reporta `isLoading: false` — sem esta
+    // linha o card afirmaria "ninguém esperando" durante o boot.
+    isLoading: instLoading || identidadePendente || fila.isLoading,
+    isError: !!instError || fila.isError,
+    isDegraded: fila.data?.degraded === true,
+    semChips: !instLoading && !instError && !identidadePendente && chips.length === 0,
+    chipsComErro: fila.data?.chipsComErro ?? 0,
+    isAdmin,
+  };
 
   return {
     ...resultado,
-    // `useQueries` não devolve refetch agregado, e sem ele o card mais
-    // importante da tela ficava sem "tentar de novo" — erro virava beco sem
-    // saída. Invalidar por prefixo relê todos os chips de uma vez.
+    // Sem "tentar de novo" o erro do card mais importante da tela vira beco
+    // sem saída. Invalidar por prefixo relê a fila (e as instâncias).
     refetch: () => {
       void refetchInstancias();
       void queryClient.invalidateQueries({

@@ -24,6 +24,7 @@ import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys } from "./shared/queryKeys";
+import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
 import type { ChatContact, WhatsAppMessage } from "./types";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
@@ -65,6 +66,11 @@ export function useChatBubbleContactsRealtime(
       const messagePhone = message.phone_number ?? "";
       const normPhone = normalizePhone(messagePhone);
       const isIncoming = message.direction === "incoming";
+
+      // Badge global de não-lidas: atualiza por evento, com teto de vazão
+      // (`unreadRefresh.ts`). Este canal monta em toda tela — é ele que tira o
+      // badge do polling de 60 s.
+      if (eventType === "INSERT" && isIncoming) pedirAtualizacaoDeNaoLidas(queryClient);
       const currentActive = activePhoneRef.current;
       const isCurrentConversation =
         !!currentActive && normalizePhone(currentActive) === normPhone;
