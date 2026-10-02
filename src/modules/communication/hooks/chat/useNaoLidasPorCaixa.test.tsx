@@ -212,4 +212,21 @@ describe("useNaoLidasPorCaixa", () => {
     expect(result.current.porCaixa.get(CHIP.id)?.naoLidas).toBe(1);
     expect(result.current.porCaixa.size).toBe(1);
   });
+
+  // Incidente 2026-10-02: polling de 60 s por aba, de até 14 s de banco cada.
+  it("não polla a cada 60 s: fallback ≥ 5 min, releitura no foco, nada em segundo plano", async () => {
+    const qc = newQc();
+    const { result } = renderHook(() => useNaoLidasPorCaixa([CHIP]), { wrapper: wrap(qc) });
+    await waitFor(() => expect(result.current.porCaixa.get(CHIP.id)?.estado).toBe("contada"));
+    const query = qc.getQueryCache().find({ queryKey: ["nao_lidas_por_caixa"], exact: false });
+    const opts = query!.options as {
+      refetchInterval?: unknown;
+      refetchOnWindowFocus?: unknown;
+      refetchIntervalInBackground?: unknown;
+    };
+    expect(opts.refetchInterval as number).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(opts.refetchOnWindowFocus).toBe(true);
+    expect(opts.refetchIntervalInBackground).not.toBe(true);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -295,4 +295,31 @@ describe("useChatBubbleContactsRealtime", () => {
     unmount();
     expect(mocks.supabaseMock.removeChannel).toHaveBeenCalledTimes(1);
   });
+
+  // Incidente 2026-10-02: o badge de não-lidas saiu do polling de 60 s e passou
+  // a ser relido por evento — com teto, porque rajada de mensagem não pode
+  // virar rajada de RPC.
+  it("rajada de INSERT incoming pede releitura do badge UMA vez; outgoing não pede", () => {
+    const qc = newQc();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    renderHook(() => useChatBubbleContactsRealtime(["i1"], null), {
+      wrapper: wrapper(qc),
+    });
+    const contarBadge = () =>
+      spy.mock.calls.filter(
+        (c) => (c[0] as { queryKey?: unknown[] } | undefined)?.queryKey?.[0] === "unread-total-server",
+      ).length;
+
+    const saida = payloadInsert("i1", "11999", "outgoing");
+    (saida.new as Record<string, unknown>).id = "out-1";
+    mocks.channelMock.trigger(saida);
+    expect(contarBadge()).toBe(0);
+
+    for (let i = 0; i < 30; i++) {
+      const p = payloadInsert("i1", `1199${i}`, "incoming");
+      (p.new as Record<string, unknown>).id = `in-${i}`;
+      mocks.channelMock.trigger(p);
+    }
+    expect(contarBadge()).toBe(1);
+  });
 });
