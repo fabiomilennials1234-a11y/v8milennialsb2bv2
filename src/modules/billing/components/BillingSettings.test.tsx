@@ -65,7 +65,7 @@ describe("área de assinatura", () => {
   });
   it("não transforma ausência de limite em ilimitado", async () => {
     render(<BillingSettings onContactSupport={vi.fn()} />);
-    await userEvent.click(screen.getByRole("tab", { name: "Plano e limites" }));
+    // Página única (V5): os limites já estão à vista, sem aba para abrir.
     expect(
       screen.getAllByText("O limite ainda não está disponível."),
     ).toHaveLength(3);
@@ -77,9 +77,7 @@ describe("área de assinatura", () => {
     render(<BillingSettings />);
     expect(screen.getByText(/não representa confirmação de pagamento/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Falar sobre minha assinatura" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Plano e limites" }));
     expect(screen.queryByRole("button", { name: "Solicitar alteração de plano" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Histórico de cobranças" }));
     expect(screen.queryByRole("button", { name: "Preciso de ajuda com um pagamento" })).not.toBeInTheDocument();
   });
   it("mostra falha de histórico em vez de dizer que não há cobranças", async () => {
@@ -89,9 +87,6 @@ describe("área de assinatura", () => {
       history: { ...data.history, isError: true },
     });
     render(<BillingSettings onContactSupport={vi.fn()} />);
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Histórico de cobranças" }),
-    );
     expect(
       screen.getByText("Não foi possível carregar esta seção"),
     ).toBeInTheDocument();

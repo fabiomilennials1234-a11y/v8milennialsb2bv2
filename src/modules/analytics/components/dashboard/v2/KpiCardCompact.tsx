@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowDown, ArrowUp, type LucideIcon } from "lucide-react";
+import { IconChip, type Tone } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { useCountUp } from "@/shared/hooks/useCountUp";
 
@@ -20,6 +22,9 @@ interface KpiCardCompactProps {
   quickActionTo: string;
   /** Sem efeito desde o V5: a entrada animada brigava com o levantar do hover. */
   delay?: number;
+  /** V5 (onda "mais perto do mockup"): o chip tintado do `KpiTile`. */
+  icon?: LucideIcon;
+  tone?: Tone;
 }
 
 function formatValue(value: number | null, format: KpiFormat): string {
@@ -48,7 +53,7 @@ function formatValue(value: number | null, format: KpiFormat): string {
  * para a tela do assunto.
  */
 function KpiCardCompactBase({
-  label, value, format, delta, caption, quickActionLabel, quickActionTo,
+  label, value, format, delta, caption, quickActionLabel, quickActionTo, icon, tone = "neutral",
 }: KpiCardCompactProps) {
   const navigate = useNavigate();
   const animated = useCountUp(value ?? 0, 1300, true);
@@ -64,23 +69,29 @@ function KpiCardCompactBase({
       )}
       aria-label={`${label}: ${formatValue(value, format)}. ${quickActionLabel}`}
     >
+      {/* Anatomia do KpiTile: rótulo + chip tintado no topo, número-herói, a
+          variação logo abaixo (seta + %) e o comparativo em texto. */}
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground/80">{label}</span>
-        {delta && (
-          <span
-            className={cn(
-              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
-              delta.tone === "up" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
-            )}
-          >
-            {delta.label}
-          </span>
-        )}
+        {icon && <IconChip icon={icon} tone={tone} size="sm" />}
       </div>
       <div className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
         {formatValue(value === null ? null : animated, format)}
       </div>
-      <div className="truncate text-xs text-muted-foreground">{caption}</div>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        {delta && (
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 font-bold tabular-nums",
+              delta.tone === "up" ? "text-success-strong" : "text-destructive",
+            )}
+          >
+            {delta.tone === "up" ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
+            {delta.label.replace(/^[+-]/, "")}
+          </span>
+        )}
+        <span className="min-w-0 truncate text-muted-foreground">{caption}</span>
+      </div>
       <div
         className="absolute inset-x-0 bottom-0 translate-y-full bg-primary-soft py-1.5 text-center text-[11px] font-bold text-primary-soft-foreground transition-transform duration-200 [transition-timing-function:cubic-bezier(.22,1,.36,1)] group-hover:translate-y-0 group-focus-visible:translate-y-0 motion-reduce:transition-none"
       >

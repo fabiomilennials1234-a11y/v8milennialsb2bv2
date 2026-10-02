@@ -130,9 +130,9 @@ export function CommandPalette() {
               aria-label="Paleta de comandos"
               className={cn(
                 "w-full max-w-[640px]",
-                "rounded-panel border shadow-relevo-alto",
-                "bg-[hsl(var(--command-palette-bg))]",
-                "border-[hsl(var(--command-palette-border))]",
+                // V5: o mesmo cartão de toda a interface (era um matiz frio,
+                // 220°, que destoava da bancada quente).
+                "rounded-panel border border-card-border bg-card shadow-relevo-alto",
                 "overflow-hidden"
               )}
             >
@@ -168,7 +168,7 @@ export function CommandPalette() {
                   <CommandEmpty className="py-10 text-center">
                     <p className="text-sm text-muted-foreground">Nenhum resultado</p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
-                      Tente &quot;leads&quot;, &quot;analytics&quot; ou o nome de um contato
+                      Tente &quot;leads&quot;, &quot;métricas&quot; ou o nome de um contato
                     </p>
                   </CommandEmpty>
 

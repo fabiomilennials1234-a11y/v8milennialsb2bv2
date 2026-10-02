@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlarmClock, AlertTriangle, CalendarCheck, FileText, Handshake, Percent, Receipt, Timer, UserPlus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTeamGoals, useFollowUps } from "@/modules/engagement";
 import {
@@ -240,7 +240,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       {show("kpis") && <>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Leads novos" value={m?.totalLeads ?? 0} format="int"
+          label="Leads novos" icon={UserPlus} tone="gold" value={m?.totalLeads ?? 0} format="int"
           delta={m && p ? deltaBadge(m.totalLeads, p.totalLeads) : undefined}
           caption={`${p?.totalLeads ?? 0} ${range.prevLabel}`}
           quickActionLabel="Ver leads do período →" quickActionTo={leadsPeriodLink} delay={0.14}
@@ -248,7 +248,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Reuniões" value={m?.reunioesMarcadas ?? 0} format="int"
+          label="Reuniões" icon={CalendarCheck} tone="info" value={m?.reunioesMarcadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.reunioesMarcadas, p.reunioesMarcadas) : undefined}
           caption={`${p?.reunioesMarcadas ?? 0} ${range.prevLabel}`}
           quickActionLabel="Abrir agenda →" quickActionTo="/agenda" delay={0.18}
@@ -256,7 +256,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Propostas" value={m?.propostasEnviadas ?? 0} format="int"
+          label="Propostas" icon={FileText} tone="neutral" value={m?.propostasEnviadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.propostasEnviadas, p.propostasEnviadas) : undefined}
           caption={`${p?.propostasEnviadas ?? 0} ${range.prevLabel}`}
           quickActionLabel="Ver propostas →" quickActionTo="/funis" delay={0.22}
@@ -264,7 +264,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Vendas" value={m?.novosClientes ?? 0} format="int"
+          label="Vendas" icon={Handshake} tone="good" value={m?.novosClientes ?? 0} format="int"
           delta={m && p ? deltaBadge(m.novosClientes, p.novosClientes) : undefined}
           caption={`${p?.novosClientes ?? 0} ${range.prevLabel}`}
           quickActionLabel="Ver fechamentos →" quickActionTo="/funis" delay={0.26}
@@ -272,7 +272,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Ticket" value={m?.ticketMedio ?? 0} format="currencyK"
+          label="Ticket" icon={Receipt} tone="neutral" value={m?.ticketMedio ?? 0} format="currencyK"
           delta={m && p ? deltaBadge(m.ticketMedio, p.ticketMedio) : undefined}
           caption={`${formatK(p?.ticketMedio ?? 0)} ${range.prevLabel}`}
           quickActionLabel="Por produto →" quickActionTo="/produtos" delay={0.3}
@@ -280,7 +280,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Resposta da equipe" value={response.isError ? null : response.data ?? null} format="minutes"
+          label="Resposta da equipe" icon={Timer} tone="info" value={response.isError ? null : response.data ?? null} format="minutes"
           delta={!response.isError && !prevResponse.isError && response.data != null && prevResponse.data != null ? deltaBadge(response.data, prevResponse.data, true) : undefined}
           caption={response.isError ? "Resposta temporariamente indisponível" : response.isPending ? "Carregando respostas…" : response.data == null ? "Sem respostas medidas no período" : "WhatsApp · recebida até a próxima resposta"}
           quickActionLabel="Abrir conversas →" quickActionTo="/chat-whatsapp" delay={0.34}
@@ -288,7 +288,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Conversão" value={m?.taxaConversao ?? 0} format="percent"
+          label="Conversão" icon={Percent} tone="gold" value={m?.taxaConversao ?? 0} format="percent"
           delta={
             convDeltaPp !== null && Math.round(convDeltaPp) !== 0
               ? { label: `${convDeltaPp > 0 ? "+" : ""}${Math.round(convDeltaPp)}pp`, tone: convDeltaPp > 0 ? "up" : "down" }
@@ -300,7 +300,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Follow-ups" value={overdueCount} format="int"
+          label="Follow-ups" icon={AlarmClock} tone="bad" value={overdueCount} format="int"
           delta={overdueCount > 0 ? { label: String(overdueCount), tone: "down" } : undefined}
           caption="atrasados agora"
           quickActionLabel="Resolver agora →" quickActionTo="/follow-ups" delay={0.42}

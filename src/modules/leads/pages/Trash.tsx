@@ -237,12 +237,12 @@ export default function Trash() {
                         </TableCell>
                         <TableCell>
                           <div className="flex min-w-0 items-center gap-2.5">
-                            <span className="grid size-[34px] shrink-0 place-items-center rounded-[10px] bg-muted text-muted-foreground">
+                            <span className="grid size-[34px] shrink-0 place-items-center rounded-[10px] bg-muted text-muted-foreground max-sm:hidden">
                               <UserRound className="size-4" aria-hidden />
                             </span>
                             <div className="min-w-0 leading-tight">
-                              <p className="max-w-[260px] truncate text-[13px] font-bold">{lead.name}</p>
-                              <p className="max-w-[260px] truncate text-[11px] text-muted-foreground">
+                              <p className="max-w-[150px] truncate text-[13px] font-bold sm:max-w-[260px]">{lead.name}</p>
+                              <p className="max-w-[150px] truncate text-[11px] text-muted-foreground sm:max-w-[260px]">
                                 {["Lead", lead.company].filter(Boolean).join(" · ")}
                               </p>
                               {/* No celular a coluna "Expira em" some — o prazo vem aqui. */}

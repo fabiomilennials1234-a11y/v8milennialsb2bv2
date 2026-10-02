@@ -9,7 +9,7 @@ import {
   Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FocusCard, FocusTile, KpiRow, KpiTile } from "@/components/ui/bento";
+import { FocusCard, FocusTile, InkPanel } from "@/components/ui/bento";
 import { useIdentity, useOrganization } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,6 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableHeader,
@@ -64,10 +63,10 @@ import type { Json } from "@/integrations/supabase/types";
 type Props = { onContactSupport?: () => void };
 
 /*
- * V5 (2026-10): mesma área, mesmos estados e mesmos textos. Abas internas em
- * segmentado (a página de Configurações já tem a navegação dela), o plano
- * contratado como o cartão de ouro da vista, limites como `KpiTile` com barra
- * e avisos/FAQ em cartão branco de bento.
+ * V5 (2026-10): mesma área, mesmos estados e mesmos textos. Onda "mais perto do
+ * mockup": as sub-abas viram uma página só — Visão geral em tinta (plano e
+ * limites em vidro) com a renovação no cartão de ouro, depois a grade de
+ * planos só para comparar, o histórico e pagamento e ajuda.
  */
 const ALERT_CARD = "rounded-card border-card-border bg-card shadow-relevo";
 const ALERT_BAD = "rounded-card border-destructive/30 bg-destructive/5";
@@ -164,73 +163,113 @@ const resources = [
 function Quotas({ value }: { value: Json | undefined }) {
   const quotas =
     value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  // V5: os limites viram vidros dentro do painel de tinta da Visão geral.
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-        Limites disponíveis para esta organização
-      </p>
-      <KpiRow cols={3}>
-        {resources.map((resource) => {
-          const item = quotas[resource.key];
-          const quota =
-            item && typeof item === "object" && !Array.isArray(item)
-              ? item
-              : null;
-          const used =
-            typeof quota?.current_usage === "number" ? quota.current_usage : null;
-          const limit =
-            typeof quota?.effective_limit === "number"
-              ? quota.effective_limit
-              : null;
-          const unlimited = quota?.is_unlimited === true;
-          const known = used !== null && limit !== null;
-          const over = known && !unlimited && used > limit;
-          return (
-            <KpiTile
-              key={resource.key}
-              label={resource.label}
-              icon={resource.icon}
-              tone={over ? "bad" : known ? "gold" : "neutral"}
-              value={
-                known ? (
-                  <span className={cn(over && "text-destructive")}>
-                    {used}
-                    <span className="text-[0.6em] font-bold tracking-normal text-muted-foreground">
-                      {" / "}
-                      {unlimited ? "ilimitado" : limit}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-lg text-muted-foreground">Não informado</span>
-                )
-              }
-            >
-              <div className="flex flex-col gap-2">
-                {known && !unlimited && (
-                  <Progress
-                    aria-label={`Uso de ${resource.label}`}
-                    className={cn("h-2 bg-muted", over && "[&>div]:bg-destructive")}
-                    value={
-                      limit > 0
-                        ? Math.min(100, (used / limit) * 100)
-                        : used > 0
-                          ? 100
-                          : 0
-                    }
-                  />
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {!known
-                    ? "O limite ainda não está disponível."
-                    : unlimited
-                      ? "Sem limite de quantidade."
-                      : `${Math.max(0, limit - used)} disponíveis${used > limit ? " · Uso acima do limite" : ""}`}
-                </p>
-              </div>
-            </KpiTile>
-          );
-        })}
-      </KpiRow>
+    <div className="grid gap-2 sm:grid-cols-3">
+      {resources.map((resource) => {
+        const item = quotas[resource.key];
+        const quota =
+          item && typeof item === "object" && !Array.isArray(item)
+            ? item
+            : null;
+        const used =
+          typeof quota?.current_usage === "number" ? quota.current_usage : null;
+        const limit =
+          typeof quota?.effective_limit === "number"
+            ? quota.effective_limit
+            : null;
+        const unlimited = quota?.is_unlimited === true;
+        const known = used !== null && limit !== null;
+        const over = known && !unlimited && used > limit;
+        const Icon = resource.icon;
+        return (
+          <div
+            key={resource.key}
+            className="flex min-w-0 flex-col gap-2 rounded-[22px] border border-tinta-line bg-tinta-2 p-4"
+          >
+            <p className="flex items-center gap-2 text-[12.5px] font-semibold text-tinta-muted">
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+              {resource.label}
+            </p>
+            {known ? (
+              <p className={cn("text-[1.9rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums", over && "text-destructive")}>
+                {used}
+                <span className="text-[0.55em] font-bold tracking-normal text-tinta-muted">
+                  {" / "}
+                  {unlimited ? "ilimitado" : limit}
+                </span>
+              </p>
+            ) : (
+              <p className="text-[15px] font-bold text-tinta-muted">Não informado</p>
+            )}
+            {known && !unlimited && (
+              <Progress
+                aria-label={`Uso de ${resource.label}`}
+                className={cn("h-1.5 bg-white/10", over ? "[&>div]:bg-destructive" : "[&>div]:bg-primary")}
+                value={
+                  limit > 0
+                    ? Math.min(100, (used / limit) * 100)
+                    : used > 0
+                      ? 100
+                      : 0
+                }
+              />
+            )}
+            <p className="text-[11.5px] text-tinta-muted">
+              {!known
+                ? "O limite ainda não está disponível."
+                : unlimited
+                  ? "Sem limite de quantidade."
+                  : `${Math.max(0, limit - used)} disponíveis${used > limit ? " · Uso acima do limite" : ""}`}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type PlanoDoCatalogo = {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  price_monthly: number | null;
+  included_users: number | null;
+  included_copilots: number | null;
+};
+
+/** Grade de planos SÓ para comparar — sem "mudar para", o checkout não existe. */
+function GradeDePlanos({ planos, atual }: { planos: PlanoDoCatalogo[]; atual: string | null | undefined }) {
+  if (!planos.length) return null;
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3">
+      {planos.map((p) => {
+        const meu = !!atual && (p.display_name === atual || p.name === atual);
+        return (
+          <div
+            key={p.id}
+            className={cn(
+              "flex min-w-0 flex-col gap-2 rounded-2xl border p-4",
+              meu ? "border-primary bg-primary-soft text-primary-soft-foreground" : "border-border bg-sunken",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <p className="min-w-0 flex-1 truncate text-[15px] font-extrabold tracking-[-0.02em]">{p.display_name}</p>
+              {meu && <Badge variant="ink">Seu plano</Badge>}
+            </div>
+            <p className="text-[1.35rem] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+              {p.price_monthly != null ? money(p.price_monthly) : "Sob consulta"}
+              {p.price_monthly != null && <span className="ml-1 text-[12px] font-semibold tracking-normal opacity-70">/mês</span>}
+            </p>
+            {p.description && <p className="line-clamp-2 text-[12.5px] opacity-80">{p.description}</p>}
+            <ul className="mt-auto space-y-0.5 text-[12px] font-semibold opacity-80">
+              {p.included_users != null && <li>{p.included_users} {p.included_users === 1 ? "pessoa incluída" : "pessoas incluídas"}</li>}
+              {p.included_copilots != null && <li>{p.included_copilots} {p.included_copilots === 1 ? "agente de IA" : "agentes de IA"}</li>}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -283,7 +322,7 @@ function BillingAccount({
 }: Props & { organizationId: string }) {
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { account, history, quotas } = useBillingAccount(
+  const { account, history, quotas, plans } = useBillingAccount(
     organizationId,
     true,
     page,
@@ -320,66 +359,83 @@ function BillingAccount({
         </Button>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList variant="segmented" className="max-w-full justify-start overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="overview">Visão geral</TabsTrigger>
-          <TabsTrigger value="usage">Plano e limites</TabsTrigger>
-          <TabsTrigger value="history">Histórico de cobranças</TabsTrigger>
-          <TabsTrigger value="payment">Pagamento e ajuda</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" className="mt-5">
-          {account.isPending ? (
-            <Loading />
-          ) : account.isError ? (
-            <ReadError retry={() => void account.refetch()} />
-          ) : (
-            <div className="flex flex-col gap-4">
-              {org?.billing_override && (
-                <Alert className={ALERT_CARD}>
-                  <AlertTitle>Acesso liberado pela equipe Torque</AlertTitle>
-                  <AlertDescription>
-                    Esta liberação não representa confirmação de pagamento.
-                    Consulte abaixo o plano e o histórico registrado.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {org &&
-                ["overdue", "expired", "suspended", "cancelled"].includes(
-                  org.subscription_status,
-                ) && (
-                  <Alert variant="destructive" className={ALERT_BAD}>
-                    <AlertTitle>
-                      Assinatura{" "}
-                      {subscriptionLabels[
-                        org.subscription_status
-                      ]?.toLowerCase()}
-                    </AlertTitle>
-                    <AlertDescription>
-                      Confira as cobranças registradas ou fale com a equipe para
-                      regularizar sua assinatura.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              {/* O plano contratado é o foco desta vista: o cartão de ouro. */}
-              <FocusCard>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-primary-foreground/70">Plano atual</p>
-                    <h3 className="mt-0.5 text-[1.5rem] font-extrabold leading-tight tracking-[-0.035em]">
-                      {account.data?.planName || "Plano não informado"}
+      {/* V5: as quatro sub-abas viraram UMA página com seções — Visão geral em
+          tinta com a renovação no ouro, depois limites e planos, histórico e
+          pagamento. Mesmos dados, mesmos textos. */}
+      {account.isPending ? (
+        <Loading />
+      ) : account.isError ? (
+        <ReadError retry={() => void account.refetch()} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {org?.billing_override && (
+            <Alert className={ALERT_CARD}>
+              <AlertTitle>Acesso liberado pela equipe Torque</AlertTitle>
+              <AlertDescription>
+                Esta liberação não representa confirmação de pagamento.
+                Consulte abaixo o plano e o histórico registrado.
+              </AlertDescription>
+            </Alert>
+          )}
+          {org &&
+            ["overdue", "expired", "suspended", "cancelled"].includes(
+              org.subscription_status,
+            ) && (
+              <Alert variant="destructive" className={ALERT_BAD}>
+                <AlertTitle>
+                  Assinatura{" "}
+                  {subscriptionLabels[
+                    org.subscription_status
+                  ]?.toLowerCase()}
+                </AlertTitle>
+                <AlertDescription>
+                  Confira as cobranças registradas ou fale com a equipe para
+                  regularizar sua assinatura.
+                </AlertDescription>
+              </Alert>
+            )}
+          <InkPanel
+            title="Visão geral"
+            count={subscriptionLabels[org?.subscription_status ?? ""] ?? "Situação não informada"}
+          >
+            <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
+              <div className="order-2 flex min-w-0 flex-col gap-4 px-1.5 lg:order-1">
+                <div>
+                  <p className="text-[12px] font-semibold text-tinta-muted">Plano atual</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                    <h3 className="text-[clamp(2rem,4vw,2.8rem)] font-extrabold leading-none tracking-[-0.045em]">
+                      {(plans?.data as PlanoDoCatalogo[] | undefined)?.find((p) => p.name === account.data?.planName)?.display_name ||
+                        account.data?.planName ||
+                        "Plano não informado"}
                     </h3>
-                    <p className="mt-1 text-[13px] font-medium text-primary-foreground/75">
-                      {sub
-                        ? "Condições da assinatura contratada."
-                        : "Ainda não há um contrato de pagamento registrado nesta área."}
-                    </p>
+                    {sub && (
+                      <span className="rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-bold">
+                        {cycleLabel(sub.billing_cycle)}
+                      </span>
+                    )}
                   </div>
-                  <Badge variant="ink" className="shrink-0 bg-primary-foreground text-primary">
-                    {subscriptionLabels[org?.subscription_status ?? ""] ??
-                      "Situação não informada"}
-                  </Badge>
+                  <p className="mt-2 text-[13px] text-tinta-muted">
+                    {sub
+                      ? "Condições da assinatura contratada."
+                      : "Ainda não há um contrato de pagamento registrado nesta área."}
+                  </p>
                 </div>
-                <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {quotas.isPending ? (
+                  <Skeleton className="h-28 rounded-2xl bg-white/[.07]" />
+                ) : quotas.isError ? (
+                  <div className="rounded-2xl bg-white/[.06] p-3 text-[12.5px] text-tinta-muted">
+                    Não foi possível carregar os limites.{" "}
+                    <button type="button" className="font-semibold text-tinta-foreground underline" onClick={() => void quotas.refetch()}>
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : (
+                  <Quotas value={quotas.data} />
+                )}
+              </div>
+              <FocusCard className="order-1 lg:order-2">
+                <Badge variant="ink" className="w-fit">Renovação</Badge>
+                <dl className="grid gap-2 sm:grid-cols-2">
                   <GoldDetail
                     label="Ciclo contratado"
                     value={cycleLabel(sub?.billing_cycle)}
@@ -398,59 +454,60 @@ function BillingAccount({
                   />
                 </dl>
                 {onContactSupport && (
-                  <div>
-                    <Button variant="ink" onClick={onContactSupport}>
+                  <div className="mt-auto">
+                    <Button
+                      variant="outline"
+                      onClick={onContactSupport}
+                      className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+                    >
                       Falar sobre minha assinatura
                     </Button>
                   </div>
                 )}
               </FocusCard>
-              <Alert className={ALERT_CARD}>
-                <CreditCard className="size-4" />
-                <AlertTitle>Gestão de pagamentos em preparação</AlertTitle>
-                <AlertDescription>
-                  A contratação e a renovação pelo checkout serão
-                  disponibilizadas aqui. Por enquanto, alterações de plano e
-                  cancelamento são tratados com a equipe Torque.
-                </AlertDescription>
-              </Alert>
             </div>
+          </InkPanel>
+          <Alert className={ALERT_CARD}>
+            <CreditCard className="size-4" />
+            <AlertTitle>Gestão de pagamentos em preparação</AlertTitle>
+            <AlertDescription>
+              A contratação e a renovação pelo checkout serão
+              disponibilizadas aqui. Por enquanto, alterações de plano e
+              cancelamento são tratados com a equipe Torque.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[15px] tracking-[-0.02em]">Planos</CardTitle>
+          <CardDescription>
+            Compare os planos disponíveis. Consultar esta tela não altera seu
+            plano nem gera cobranças.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {plans?.isError ? (
+            <p className="text-sm text-muted-foreground">Não foi possível carregar os planos.</p>
+          ) : plans?.data ? (
+            <GradeDePlanos planos={plans.data as PlanoDoCatalogo[]} atual={account.data?.planName} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Converse com a equipe sobre mais pessoas, conexões de WhatsApp
+              ou agentes de IA.
+            </p>
           )}
-        </TabsContent>
-        <TabsContent value="usage" className="mt-5">
-          <div className="flex flex-col gap-4">
-            {quotas.isPending ? (
-              <Loading />
-            ) : quotas.isError ? (
-              <ReadError retry={() => void quotas.refetch()} />
-            ) : (
-              <Quotas value={quotas.data} />
-            )}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-[15px] tracking-[-0.02em]">Precisa ampliar sua operação?</CardTitle>
-                <CardDescription>
-                  Converse com a equipe sobre mais pessoas, conexões de WhatsApp
-                  ou agentes de IA.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Os limites acima representam o acesso atual. Consultar esta
-                  tela não altera seu plano nem gera cobranças.
-                </p>
-              </CardContent>
-              {onContactSupport && (
-                <CardFooter>
-                  <Button variant="outline" onClick={onContactSupport}>
-                    Solicitar alteração de plano
-                  </Button>
-                </CardFooter>
-              )}
-            </Card>
-          </div>
-        </TabsContent>
-        <TabsContent value="history" className="mt-5">
+        </CardContent>
+        {onContactSupport && (
+          <CardFooter>
+            <Button variant="outline" onClick={onContactSupport}>
+              Solicitar alteração de plano
+            </Button>
+          </CardFooter>
+        )}
+      </Card>
+
           {history.isPending ? (
             <Loading />
           ) : history.isError ? (
@@ -552,8 +609,7 @@ function BillingAccount({
               )}
             </Card>
           )}
-        </TabsContent>
-        <TabsContent value="payment" className="mt-5">
+
           <div className="flex flex-col gap-4">
             <Card>
               <CardHeader>
@@ -627,8 +683,6 @@ function BillingAccount({
               </Accordion>
             </Card>
           </div>
-        </TabsContent>
-      </Tabs>
       <Dialog
         open={!!selected}
         onOpenChange={(open) => {

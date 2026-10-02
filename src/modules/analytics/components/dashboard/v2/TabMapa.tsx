@@ -13,7 +13,7 @@ function formatK(value: number): string {
   return `R$ ${Math.round(value).toLocaleString("pt-BR")}`;
 }
 
-/** Escala de calor gold — curva côncava realça a cauda (poucos leads ainda acendem). */
+/** Escala de calor gold — curva côncava realça a cauda (pouco valor ainda acende). */
 function heatColor(value: number, max: number): string {
   if (!value || max <= 0) return "hsl(35 8% 16%)";
   const t = Math.pow(value / max, 0.55);
@@ -27,6 +27,7 @@ function heatColor(value: number, max: number): string {
 interface TooltipState {
   uf: string;
   count: number;
+  sold: number;
   x: number;
   y: number;
 }
@@ -43,15 +44,23 @@ function TabMapaBase() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
 
-  const { byUf, maxCount, totalMapped, unmapped, ranked } = useMemo(() => {
+  // V5: o mapa pinta por RECEITA (o RPC já traz `total_sold`) e mostra os leads
+  // no balão. Base sem venda nenhuma volta a pintar por leads — mapa todo
+  // cinza não diria nada.
+  const { byUf, maxValue, porReceita, totalMapped, unmapped, ranked } = useMemo(() => {
     const byUf = new Map<string, UfHeatmapRow>();
     for (const row of heatmap ?? []) byUf.set(row.uf.trim(), row);
-    const counts = [...byUf.values()].map((r) => Number(r.leads_count));
-    const maxCount = counts.length ? Math.max(...counts) : 0;
+    const rows = [...byUf.values()];
+    const counts = rows.map((r) => Number(r.leads_count));
+    const sold = rows.map((r) => Number(r.total_sold));
+    const maxSold = sold.length ? Math.max(...sold) : 0;
+    const porReceita = maxSold > 0;
+    const valor = (r: UfHeatmapRow) => (porReceita ? Number(r.total_sold) : Number(r.leads_count));
+    const maxValue = porReceita ? maxSold : counts.length ? Math.max(...counts) : 0;
     const totalMapped = counts.reduce((a, b) => a + b, 0);
     const unmapped = heatmap?.[0] ? Number(heatmap[0].unmapped_count) : 0;
-    const ranked = [...byUf.entries()].sort((a, b) => Number(b[1].leads_count) - Number(a[1].leads_count));
-    return { byUf, maxCount, totalMapped, unmapped, ranked };
+    const ranked = [...byUf.entries()].sort((a, b) => valor(b[1]) - valor(a[1]));
+    return { byUf, maxValue, porReceita, totalMapped, unmapped, ranked };
   }, [heatmap]);
 
   // Pinta e liga interação nos paths do SVG injetado
@@ -65,13 +74,15 @@ function TabMapaBase() {
     const cleanups: Array<() => void> = [];
     paths.forEach((path) => {
       const uf = path.id.replace("BR", "");
-      const count = Number(byUf.get(uf)?.leads_count ?? 0);
-      path.setAttribute("fill", heatColor(count, maxCount));
+      const row = byUf.get(uf);
+      const count = Number(row?.leads_count ?? 0);
+      const sold = Number(row?.total_sold ?? 0);
+      path.setAttribute("fill", heatColor(porReceita ? sold : count, maxValue));
       path.classList.toggle("uf-sel", uf === selectedUf);
-      const enter = () => setTooltip({ uf, count, x: 0, y: 0 });
+      const enter = () => setTooltip({ uf, count, sold, x: 0, y: 0 });
       const move = (e: MouseEvent) => {
         const rect = host.getBoundingClientRect();
-        setTooltip({ uf, count, x: e.clientX - rect.left + 14, y: e.clientY - rect.top - 12 });
+        setTooltip({ uf, count, sold, x: e.clientX - rect.left + 14, y: e.clientY - rect.top - 12 });
       };
       const leave = () => setTooltip(null);
       const click = () => setSelectedUf(uf);
@@ -87,7 +98,7 @@ function TabMapaBase() {
       });
     });
     return () => cleanups.forEach((fn) => fn());
-  }, [byUf, maxCount, selectedUf, isLoading]);
+  }, [byUf, maxValue, porReceita, selectedUf, isLoading]);
 
   const selectedRow = selectedUf ? byUf.get(selectedUf) : null;
   const selectedRank = selectedUf ? ranked.findIndex(([uf]) => uf === selectedUf) + 1 : 0;
@@ -106,7 +117,7 @@ function TabMapaBase() {
       <div className="flex min-h-0 min-w-0 flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            base completa, independente do mês · clique num estado pra ver os leads
+            base completa, independente do mês · cor por {porReceita ? "receita" : "leads"} · clique num estado pra ver os leads
           </p>
           <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
             {totalMapped.toLocaleString("pt-BR")} leads mapeados
@@ -121,20 +132,25 @@ function TabMapaBase() {
                 className="pointer-events-none absolute z-10 whitespace-nowrap rounded-xl border border-tinta-line bg-tinta-3 px-3 py-2 text-tinta-foreground shadow-relevo-tinta"
                 style={{ left: tooltip.x, top: tooltip.y }}
               >
-                <b className="block text-[13px]">{UF_NAMES[tooltip.uf] ?? tooltip.uf} · {tooltip.count} lead{tooltip.count === 1 ? "" : "s"}</b>
-                <span className="text-[11px] text-tinta-muted">clique pra ver o relatório</span>
+                <b className="block text-[13px]">
+                  {UF_NAMES[tooltip.uf] ?? tooltip.uf}
+                  {porReceita ? ` · ${formatK(tooltip.sold)} vendido` : ""}
+                </b>
+                <span className="text-[11px] text-tinta-muted">
+                  {tooltip.count} lead{tooltip.count === 1 ? "" : "s"} · clique pra ver o relatório
+                </span>
               </div>
             )}
           </div>
 
           <div className="mt-4 flex items-center justify-center gap-2.5 text-[11px] font-semibold text-tinta-muted">
-            <span>menos leads</span>
+            <span>{porReceita ? "menos receita" : "menos leads"}</span>
             <span className="flex gap-[3px]">
               {["hsl(35 8% 18%)", "hsl(46 45% 26%)", "hsl(46 70% 34%)", "hsl(46 90% 44%)", "hsl(47 100% 52%)"].map((c) => (
                 <i key={c} className="h-2.5 w-5 rounded-[3px]" style={{ background: c }} />
               ))}
             </span>
-            <span>mais leads</span>
+            <span>{porReceita ? "mais receita" : "mais leads"}</span>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
