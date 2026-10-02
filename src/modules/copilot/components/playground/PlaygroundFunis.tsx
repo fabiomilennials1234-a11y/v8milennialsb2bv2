@@ -23,6 +23,7 @@ import {
 import { useCopilotFunnelOptions } from "../../hooks/usePipeTypeOptions";
 
 import { type FunisState } from "./funis-mapping";
+import { IconChip } from "@/components/ui/bento";
 
 // ── Props ──
 
@@ -118,9 +119,7 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-            <GitBranch className="w-4 h-4" />
-          </span>
+          <IconChip icon={GitBranch} tone="gold" />
           <h3 className="text-sm font-bold tracking-tight">Funis & Etapas</h3>
           {activeCount > 0 && (
             <Badge variant="gold" className="text-[11px] tabular-nums">

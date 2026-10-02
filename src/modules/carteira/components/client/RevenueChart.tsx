@@ -12,6 +12,7 @@ import { usePortfolioTrends } from "@/modules/carteira/hooks/usePortfolioTrends"
 import { formatRevenueData } from "@/lib/analytics-helpers";
 import { formatBRL } from "@/lib/format";
 import { TrendingUp } from "lucide-react";
+import { IconChip } from "@/components/ui/bento";
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -59,9 +60,7 @@ export function RevenueChart() {
   return (
     <section className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
       <div className="mb-4 flex items-center gap-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-          <TrendingUp className="h-4 w-4" />
-        </span>
+        <IconChip icon={TrendingUp} tone="gold" />
         <h3 className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Receita mensal</h3>
         <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
           últimos {chartData.length} meses

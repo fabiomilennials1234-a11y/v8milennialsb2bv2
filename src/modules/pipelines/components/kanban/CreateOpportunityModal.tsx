@@ -27,6 +27,7 @@ import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hook
 import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 // Origin labels and colors mapping (enum lead_origin).
 // V5: a cor da origem vira um PONTO dentro de uma pílula neutra (cor de
@@ -173,9 +174,7 @@ export function CreateOpportunityModal({
       <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Zap className="h-4 w-4" />
-            </span>
+            <IconChip icon={Zap} tone="gold" />
             {step === "select-lead" ? "Selecionar lead" : "Nova oportunidade"}
           </DialogTitle>
         </DialogHeader>

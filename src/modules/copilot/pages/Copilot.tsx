@@ -59,6 +59,7 @@ import type { CopilotAgentWithRelations } from "@/types/copilot";
 import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconChip } from "@/components/ui/bento";
 
 /** Rótulo micro do V5 — nome de campo dentro do cartão. */
 const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
@@ -207,9 +208,7 @@ export default function Copilot() {
       {builderEnabled && drafts.length > 0 && (
         <section className="flex flex-col gap-3 rounded-card border border-primary/25 bg-primary-soft/60 p-4 shadow-relevo">
           <div className="flex items-center gap-2.5 text-sm font-bold text-foreground">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Sparkles className="h-4 w-4" />
-            </span>
+            <IconChip icon={Sparkles} tone="gold" />
             {drafts.length === 1
               ? "Você tem um Copilot em construção"
               : `Você tem ${drafts.length} Copilots em construção`}

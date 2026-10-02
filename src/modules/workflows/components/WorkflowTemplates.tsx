@@ -21,6 +21,7 @@ import type { WorkflowTemplate } from "@/contracts/workflows/workflow-template";
 import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { canonicalizeTemplateFunnelRefs } from "@/modules/workflows/lib/canonicalizeTemplateFunnelRefs";
 import { countDiscontinuedSteps } from "@/modules/workflows/lib/discontinued-steps";
+import { IconChip } from "@/components/ui/bento";
 
 // Reexportado por compatibilidade: a interface agora é contrato compartilhado
 // (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
@@ -234,9 +235,7 @@ export function WorkflowTemplates() {
         onClick={() => setSelected(tpl)}
       >
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-            <CatIcon className="h-4 w-4" />
-          </span>
+          <IconChip icon={CatIcon} tone="gold" />
           <span className="min-w-0 text-sm font-bold leading-tight tracking-tight">{tpl.name}</span>
         </div>
         {tpl.description && (
@@ -273,9 +272,7 @@ export function WorkflowTemplates() {
     <section className="space-y-4 rounded-card border border-card-border bg-card p-5 shadow-relevo">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <LayoutTemplate className="h-4 w-4" />
-          </span>
+          <IconChip icon={LayoutTemplate} />
           <h3 className="text-base font-bold tracking-tight">Templates</h3>
         </div>
         <div className="relative w-64 max-w-full">

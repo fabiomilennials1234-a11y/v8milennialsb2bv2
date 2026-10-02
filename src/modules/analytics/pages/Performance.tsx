@@ -67,6 +67,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { resolveMeetingGoals } from "@/modules/engagement/lib/goal-progress";
 import badgeIcon from "@/assets/badge-icon.png";
+import { IconChip } from "@/components/ui/bento";
 
 // ============ CONSTANTS ============
 const months = [
@@ -1242,9 +1243,7 @@ export default function Performance() {
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-                            <TrendingUp className="h-4 w-4" strokeWidth={2.2} />
-                          </span>
+                          <IconChip icon={TrendingUp} />
                           Ranking Vendas
                         </CardTitle>
                       </CardHeader>
@@ -1263,9 +1262,7 @@ export default function Performance() {
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-                            <Calendar className="h-4 w-4" strokeWidth={2.2} />
-                          </span>
+                          <IconChip icon={Calendar} />
                           Ranking Reuniões
                         </CardTitle>
                       </CardHeader>
@@ -1291,9 +1288,7 @@ export default function Performance() {
           <TabsContent value="gestao" className="mt-0 space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2.5 text-[17px] font-bold tracking-[-0.02em]">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                  <Target className="h-4 w-4" strokeWidth={2.2} />
-                </span>
+                <IconChip icon={Target} tone="gold" />
                 Gestão de Metas
               </h2>
               <Button onClick={() => { setEditingGoal(null); setGoalDialogOpen(true); }}>
@@ -1306,9 +1301,7 @@ export default function Performance() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-                    <Users className="h-4 w-4" strokeWidth={2.2} />
-                  </span>
+                  <IconChip icon={Users} />
                   Metas do Time
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                     {teamGoalsFiltered.length}
@@ -1364,9 +1357,7 @@ export default function Performance() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-                    <Target className="h-4 w-4" strokeWidth={2.2} />
-                  </span>
+                  <IconChip icon={Target} />
                   Metas Individuais
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                     {individualGoalsFiltered.length}
@@ -1423,9 +1414,7 @@ export default function Performance() {
             {/* Competition Management */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2.5 text-[17px] font-bold tracking-[-0.02em]">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                  <Trophy className="h-4 w-4" strokeWidth={2.2} />
-                </span>
+                <IconChip icon={Trophy} tone="gold" />
                 Competição do Mês
               </h2>
               {!activeCompetition && (
@@ -1441,9 +1430,7 @@ export default function Performance() {
                 <CardHeader className="pb-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <CardTitle className="flex min-w-0 items-center gap-2 text-[15px] tracking-[-0.02em]">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-                        <Trophy className="h-4 w-4" strokeWidth={2.2} />
-                      </span>
+                      <IconChip icon={Trophy} />
                       <span className="truncate">{activeCompetition.name}</span>
                       <Badge variant="success" className="text-[10px] font-bold uppercase tracking-[.06em]">
                         Ativo

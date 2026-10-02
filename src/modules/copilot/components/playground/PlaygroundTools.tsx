@@ -36,6 +36,7 @@ import {
 import type { PlaygroundToolDef, PlaygroundToolState } from "./types";
 import { PLAYGROUND_TOOLS, isMoverCardAutoEnabled } from "./types";
 import { usePipeTypeOptions } from "../../hooks/usePipeTypeOptions";
+import { IconChip } from "@/components/ui/bento";
 
 const ICON_MAP: Record<string, any> = {
   UserCheck,
@@ -103,9 +104,7 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <Wrench className="w-4 h-4" />
-          </span>
+          <IconChip icon={Wrench} />
           <span className="text-sm font-bold tracking-tight">Tools</span>
           {activeCount > 0 && (
             <Badge variant="gold" className="text-[11px] tabular-nums">

@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 interface ShortcutDef {
   keys: string;
@@ -61,9 +62,7 @@ export const KeyboardShortcutsHelp = memo(function KeyboardShortcutsHelp({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/70">
-              <Keyboard className="h-4 w-4" />
-            </span>
+            <IconChip icon={Keyboard} />
             Atalhos de teclado
           </DialogTitle>
         </DialogHeader>

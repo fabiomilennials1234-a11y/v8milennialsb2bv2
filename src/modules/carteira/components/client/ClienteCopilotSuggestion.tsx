@@ -7,6 +7,7 @@ import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
 import { useRetentionSuggestion, useGenerateRetentionSuggestion } from "@/modules/carteira/hooks/useRetentionSuggestion";
 import type { Tables } from "@/integrations/supabase/types";
+import { IconChip } from "@/components/ui/bento";
 
 interface ClienteCopilotSuggestionProps {
   clientId?: string;
@@ -95,9 +96,7 @@ export function ClienteCopilotSuggestion({
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Sparkles size={15} />
-            </span>
+            <IconChip icon={Sparkles} tone="gold" />
             <span className="text-[15px] font-bold tracking-[-0.02em] text-card-foreground">
               {isAI ? "Sugestão IA" : "Sugestão Copilot"}
             </span>

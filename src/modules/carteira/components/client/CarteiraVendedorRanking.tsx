@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { IconChip } from "@/components/ui/bento";
 
 function initials(name: string): string {
   return name
@@ -58,9 +59,7 @@ export function CarteiraVendedorRanking({ onFilterByVendedor }: CarteiraVendedor
   return (
     <section className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-          <Crown className="h-4 w-4" />
-        </span>
+        <IconChip icon={Crown} tone="gold" />
         <h3 className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Ranking de vendedores</h3>
         <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
           {vendedores.length} vendedores

@@ -22,7 +22,7 @@ import {
   Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { IconChip, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -211,9 +211,7 @@ function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
 /** Ícone do título do cartão num chip neutro — o vocabulário do bento. */
 function TitleChip({ icon: Icon }: { icon: typeof Bot }) {
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-      <Icon className="h-4 w-4" />
-    </span>
+    <IconChip icon={Icon} />
   );
 }
 

@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import type { KnowledgeDocument, KnowledgeLink, KnowledgeFileType } from "./types";
+import { IconChip } from "@/components/ui/bento";
 
 interface ExistingDocument {
   id: string;
@@ -257,9 +258,7 @@ export function PlaygroundKnowledge({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <BookOpen className="w-4 h-4" />
-          </span>
+          <IconChip icon={BookOpen} />
           <span className="text-sm font-bold tracking-tight">Base de Conhecimento</span>
           {(docCount > 0 || linkCount > 0) && (
             <Badge variant="soft" className="text-[11px] tabular-nums">

@@ -36,6 +36,7 @@ import { useWhatsAppInstancesWithAgent } from "@/modules/communication/hooks/use
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
 import type { ConexaoState } from "./conexao-comportamento-mapping";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundConexaoProps {
   state: ConexaoState;
@@ -59,9 +60,7 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
       <Card className="rounded-2xl border-border/70 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-success/10 text-success">
-              <Smartphone className="w-4 h-4" />
-            </span>
+            <IconChip icon={Smartphone} tone="good" />
             Instância WhatsApp
           </CardTitle>
           <CardDescription className="text-xs">
@@ -169,9 +168,7 @@ export function PlaygroundConexao({ state, onChange, agentId }: PlaygroundConexa
         <Card className="rounded-2xl border-border/70 shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                <Shield className="w-4 h-4" />
-              </span>
+              <IconChip icon={Shield} tone="gold" />
               Retenção & Carteira
             </CardTitle>
             <CardDescription className="text-xs">

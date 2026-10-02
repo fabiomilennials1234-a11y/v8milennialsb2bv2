@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import { BadgeCard } from "./BadgeCard";
 import type { Badge, UserBadge } from "@/modules/engagement/hooks/useBadges";
+import { IconChip } from "@/components/ui/bento";
 
 interface BadgeGridProps {
   badges: Badge[];
@@ -20,9 +21,7 @@ export function BadgeGrid({ badges, userBadges, progressMap = {} }: BadgeGridPro
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-            <Trophy className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={Trophy} tone="gold" />
           <h3 className="text-[15px] font-bold tracking-[-0.02em]">Conquistas</h3>
           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
             {unlockedCount}/{totalCount}

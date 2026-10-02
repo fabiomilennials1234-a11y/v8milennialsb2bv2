@@ -11,6 +11,7 @@ import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 interface Props {
   open: boolean;
@@ -242,9 +243,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Trophy className="h-4 w-4" strokeWidth={2.2} />
-            </span>
+            <IconChip icon={Trophy} tone="gold" />
             {isEdit ? "Editar Competição" : "Nova Competição"}
           </DialogTitle>
         </DialogHeader>
@@ -400,9 +399,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
             <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <div className="rounded-2xl bg-sunken p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                    <Trophy className="h-4 w-4" strokeWidth={2.2} />
-                  </span>
+                  <IconChip icon={Trophy} tone="gold" />
                   <h3 className="text-[15px] font-bold tracking-[-0.02em]">{name}</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">

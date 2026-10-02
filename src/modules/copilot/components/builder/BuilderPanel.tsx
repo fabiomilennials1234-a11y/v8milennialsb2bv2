@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBuilderSession } from "@/modules/copilot/hooks/useBuilderSession";
+import { IconChip } from "@/components/ui/bento";
 
 interface BuilderPanelProps {
   agentId?: string;
@@ -68,9 +69,7 @@ export function BuilderPanel({
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
       <header className="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-            <Sparkles className="h-4 w-4" />
-          </span>
+          <IconChip icon={Sparkles} tone="gold" />
           <span className="text-sm font-bold tracking-tight">Criar com IA</span>
         </div>
         {onClose && (

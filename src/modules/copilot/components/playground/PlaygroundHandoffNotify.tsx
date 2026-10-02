@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import type { PlaygroundData } from "./types";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundHandoffNotifyProps {
   data: PlaygroundData;
@@ -80,9 +81,7 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
       {/* Header */}
       <div className="space-y-1">
         <h3 className="flex items-center gap-2.5 text-sm font-bold tracking-tight">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-success/10 text-success">
-            <Phone className="w-4 h-4" />
-          </span>
+          <IconChip icon={Phone} tone="good" />
           Notificação WhatsApp na Transferência
         </h3>
         <p className="text-xs text-muted-foreground">

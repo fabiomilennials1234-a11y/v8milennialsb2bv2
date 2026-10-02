@@ -25,6 +25,7 @@ import { useOraculoConversas, useOraculoTurnos } from "../hooks/useOraculoConver
 import { OraculoPropostaCard } from "../components/oraculo/OraculoPropostaCard";
 import { OraculoPerfilPerguntaCard } from "../components/oraculo/OraculoPerfilPerguntaCard";
 import { OraculoFeedbackControl } from "../components/oraculo/OraculoFeedbackControl";
+import { IconChip } from "@/components/ui/bento";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -177,9 +178,7 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
                   </div>
                 ) : (
                   <div key={m.id} className="flex gap-3">
-                    <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                      <Sparkles className="h-4 w-4" />
-                    </span>
+                    <IconChip icon={Sparkles} tone="gold" className="mt-0.5" />
                     <div className="min-w-0 flex-1 space-y-2 text-sm leading-relaxed text-foreground">
                       <p className="whitespace-pre-wrap">{m.content}</p>
                       {m.procedencia && m.procedencia.length > 0 && (
@@ -218,9 +217,7 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
 
               {oraculo.pensando && (
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </span>
+                  <IconChip icon={Loader2} tone="gold" iconClassName="animate-spin" />
                   Consultando os números…
                 </div>
               )}

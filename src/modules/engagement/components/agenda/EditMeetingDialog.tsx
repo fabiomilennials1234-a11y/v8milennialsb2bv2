@@ -41,6 +41,7 @@ import {
   type UpdateMeetingInput,
 } from "@/modules/engagement/hooks/useMeetings";
 import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -266,9 +267,7 @@ export function EditMeetingDialog({
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.02em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Pencil className="h-4 w-4" />
-            </span>
+            <IconChip icon={Pencil} tone="gold" />
             Editar evento
           </DialogTitle>
         </DialogHeader>

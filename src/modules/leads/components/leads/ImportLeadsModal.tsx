@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { KpiTile } from "@/components/ui/bento";
+import { IconChip, KpiTile } from "@/components/ui/bento";
 import {
   useImportLeads,
   parseFilePreview,
@@ -533,9 +533,7 @@ export function ImportLeadsModal({ open, onOpenChange }: ImportLeadsModalProps) 
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <FileSpreadsheet className="h-4 w-4" />
-            </span>
+            <IconChip icon={FileSpreadsheet} tone="gold" />
             Importar leads
           </DialogTitle>
         </DialogHeader>

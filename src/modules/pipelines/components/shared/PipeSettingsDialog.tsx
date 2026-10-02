@@ -28,6 +28,7 @@ import { PipeDistributionSection } from "./PipeDistributionSection";
 import { FunnelIdentitySection } from "./FunnelIdentitySection";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 // StageFamily, não PipelineType: este diálogo também veste a Carteira (via
 // slots) — as famílias upsell_* são resíduo D9, não funil (SCRUM-618).
@@ -117,9 +118,7 @@ export function PipeSettingsDialog({
       <DialogContent className="max-w-[900px]" style={{ maxHeight: '85vh', overflow: 'hidden' }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
-              <Settings2 className="h-4 w-4" aria-hidden />
-            </span>
+            <IconChip icon={Settings2} tone="gold" />
             Configurações — {titulo}
           </DialogTitle>
         </DialogHeader>

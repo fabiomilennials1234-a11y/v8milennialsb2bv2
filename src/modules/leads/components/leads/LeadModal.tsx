@@ -42,6 +42,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { BR_UFS } from "@/shared/format/br-uf";
+import { IconChip } from "@/components/ui/bento";
 
 interface LeadModalProps {
   open: boolean;
@@ -457,9 +458,7 @@ export function LeadModal({
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden p-0">
         <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <User className="h-4 w-4" />
-            </span>
+            <IconChip icon={User} tone="gold" />
             {isEditing ? "Editar Lead" : "Novo Lead"}
           </DialogTitle>
         </DialogHeader>

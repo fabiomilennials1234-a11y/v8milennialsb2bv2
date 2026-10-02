@@ -37,6 +37,7 @@ import { useTeamMembers, useCurrentTeamMember, useOrganization } from "@/modules
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { IconChip } from "@/components/ui/bento";
 
 /** Cartão de bento que segura uma lista da Revisão (itens ou estado vazio). */
 function ListaCard({ children }: { children: ReactNode }) {
@@ -311,9 +312,7 @@ function RevisaoInner() {
                   aria-expanded={suggestionsOpen}
                   className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-muted/40"
                 >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-                    <Lightbulb className="h-4 w-4" strokeWidth={2.2} />
-                  </span>
+                  <IconChip icon={Lightbulb} tone="gold" />
                   <span className="text-[15px] font-bold tracking-[-0.02em]">Sugestões</span>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                     {suggestionsCount}

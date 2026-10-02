@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { IconChip, KpiRow, KpiTile } from "@/components/ui/bento";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useCommissions, useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 import { useFeaturePermission } from "@/modules/identity";
@@ -348,9 +348,7 @@ export default function Comissoes() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Target className="h-4 w-4" strokeWidth={2.2} />
-            </span>
+            <IconChip icon={Target} tone="gold" />
             Regras de OTE (On-Target Earnings)
           </CardTitle>
         </CardHeader>

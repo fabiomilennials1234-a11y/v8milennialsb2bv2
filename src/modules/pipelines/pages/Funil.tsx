@@ -106,6 +106,7 @@ import {
   endOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { IconChip } from "@/components/ui/bento";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -729,9 +730,7 @@ function FunilPageInner() {
       {/* Indicador de período ativo (porte das páginas velhas) */}
       {viewMode !== "analytics" && periodRange && (
         <div className="flex items-center gap-3 rounded-2xl border border-card-border bg-card py-2 pl-2 pr-2 text-sm text-muted-foreground shadow-relevo">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
-            <CalendarIcon className="h-4 w-4" aria-hidden />
-          </span>
+          <IconChip icon={CalendarIcon} tone="gold" />
           <span className="min-w-0 flex-1">
             Exibindo cards criados em{" "}
             <span className="font-semibold text-foreground tabular-nums">{formatPeriodLabel(periodRange)}</span>

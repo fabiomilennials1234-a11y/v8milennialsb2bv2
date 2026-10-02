@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, isToday, isTomorrow, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { IconChip } from "@/components/ui/bento";
 
 interface MeetingTimelineProps {
   meetings: any[];
@@ -143,9 +144,7 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
       {todayMeetings.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
-              <Calendar className="h-4 w-4" aria-hidden />
-            </span>
+            <IconChip icon={Calendar} tone="gold" />
             <h3 className="text-base font-bold tracking-tight">Hoje</h3>
             <Badge variant="soft" className="ml-auto tabular-nums">
               {todayMeetings.length} {todayMeetings.length === 1 ? "reunião" : "reuniões"}
@@ -161,9 +160,7 @@ export function MeetingTimeline({ meetings, onMeetingClick }: MeetingTimelinePro
       {tomorrowMeetings.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-muted text-foreground/70">
-              <Clock className="h-4 w-4" aria-hidden />
-            </span>
+            <IconChip icon={Clock} />
             <h3 className="text-base font-bold tracking-tight">Amanhã</h3>
             <Badge variant="soft" className="ml-auto tabular-nums">
               {tomorrowMeetings.length} {tomorrowMeetings.length === 1 ? "reunião" : "reuniões"}

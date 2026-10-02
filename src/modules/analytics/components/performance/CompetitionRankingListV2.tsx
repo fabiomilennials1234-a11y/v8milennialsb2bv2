@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { motion, useAnimation, LayoutGroup } from "framer-motion";
 import { ArrowDown, ArrowUp, Flame, ListOrdered } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { IconChip } from "@/components/ui/bento";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -195,9 +196,7 @@ function CompetitionRankingListV2Base({
     <section className="rounded-card border border-card-border bg-card p-2 text-card-foreground shadow-relevo">
       {/* Section header */}
       <header className="flex items-center gap-2 px-3 pb-2 pt-2.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-          <ListOrdered className="h-4 w-4" strokeWidth={2.2} />
-        </span>
+        <IconChip icon={ListOrdered} />
         <h3 className="text-[15px] font-bold tracking-[-0.02em]">
           Ranking Completo
         </h3>

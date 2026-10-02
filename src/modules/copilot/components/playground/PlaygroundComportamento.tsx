@@ -35,6 +35,7 @@ import {
 } from "@/modules/copilot/components/BehaviorWindowsEditor";
 
 import type { ComportamentoState } from "./conexao-comportamento-mapping";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundComportamentoProps {
   state: ComportamentoState;
@@ -103,9 +104,7 @@ export function PlaygroundComportamento({
       onClick={() => toggleSection(id)}
     >
       <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
-          <Icon className="w-4 h-4" />
-        </span>
+        <IconChip icon={Icon} />
         <span className="text-sm font-bold tracking-tight">{title}</span>
         {badge && (
           <Badge variant="soft" className="text-[11px]">

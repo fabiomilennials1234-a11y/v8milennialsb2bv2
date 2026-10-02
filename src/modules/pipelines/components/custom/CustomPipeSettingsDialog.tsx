@@ -29,6 +29,7 @@ import { FunnelIdentitySection } from "../shared/FunnelIdentitySection";
 import { PipeDispatchRulesSection } from "../shared/PipeDispatchRulesSection";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
 import { ExportLeadsContent, useVentimaisExportDetails } from "@/modules/leads";
+import { IconChip } from "@/components/ui/bento";
 
 // ────────────────────────────────────────────────────────────
 // Dispatch Tab — Mensagens automáticas por etapa (SCRUM-629, D11)
@@ -129,9 +130,7 @@ export function CustomPipeSettingsDialog({
       <DialogContent className="max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
-              <Settings2 className="h-4 w-4" aria-hidden />
-            </span>
+            <IconChip icon={Settings2} tone="gold" />
             Configurações — {pipeline.name}
           </DialogTitle>
         </DialogHeader>

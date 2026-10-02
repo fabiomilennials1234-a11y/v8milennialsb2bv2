@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, History } from "lucide-react";
+import { IconChip } from "@/components/ui/bento";
 
 // Tooltip do recharts no vocabulário V5: superfície de cartão, raio de 12 px.
 const TOOLTIP_STYLE = {
@@ -26,9 +27,7 @@ export function RankingHistoryChart({ data, memberName }: RankingHistoryChartPro
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <History className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={History} />
           Histórico de {memberName}
         </CardTitle>
       </CardHeader>
@@ -116,9 +115,7 @@ export function MonthlyRankingComparison({ months }: MonthlyComparisonProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <TrendingUp className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={TrendingUp} />
           Comparativo Mensal
         </CardTitle>
       </CardHeader>

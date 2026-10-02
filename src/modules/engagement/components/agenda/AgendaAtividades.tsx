@@ -95,6 +95,7 @@ import { EditMeetingDialog } from "./EditMeetingDialog";
 // de `communication` (ver CLAUDE.md do módulo), e o barrel é o caminho que a
 // regra de boundaries permite.
 import { ScheduleMessageModal } from "@/modules/communication";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -688,9 +689,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
         >
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-destructive/10 text-destructive">
-              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-            </span>
+            <IconChip icon={AlertTriangle} tone="bad" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">
                 Não foi possível carregar a agenda.

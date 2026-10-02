@@ -29,6 +29,7 @@ import {
 } from "@/modules/engagement/hooks/useMeetings";
 import { useTeamMembers } from "@/modules/identity";
 import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -258,9 +259,7 @@ export function CreateMeetingDialog({
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.02em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Plus className="h-4 w-4" />
-            </span>
+            <IconChip icon={Plus} tone="gold" />
             Nova atividade
           </DialogTitle>
         </DialogHeader>

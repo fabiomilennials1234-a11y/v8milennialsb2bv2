@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { KpiTile } from "@/components/ui/bento";
+import { IconChip, KpiTile } from "@/components/ui/bento";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
@@ -218,9 +218,7 @@ export function WorkflowAnalytics({ workflowId }: WorkflowAnalyticsProps) {
 function AnalyticsTitle() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
-        <BarChart3 className="h-4 w-4" />
-      </span>
+      <IconChip icon={BarChart3} />
       <h3 className="text-base font-bold tracking-tight">Analytics</h3>
     </div>
   );

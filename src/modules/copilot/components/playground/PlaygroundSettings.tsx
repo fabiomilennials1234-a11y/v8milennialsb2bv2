@@ -11,6 +11,7 @@
 import { Users } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PlaygroundData } from "./types";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundSettingsProps {
   data: PlaygroundData;
@@ -24,9 +25,7 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
       <div>
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-              <Users className="w-4 h-4" />
-            </span>
+            <IconChip icon={Users} />
             <div className="min-w-0">
               <p className="text-sm font-semibold">Atender contatos sem lead</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">

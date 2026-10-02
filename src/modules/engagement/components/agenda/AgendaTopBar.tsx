@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { EventTypeKey, ViewType } from "./agenda-helpers";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "./agenda-helpers";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,9 +77,7 @@ export function AgendaTopBar({
     >
       {/* Icon + Title — chip tintado do V5 (ouro de superfície, não de texto) */}
       <div className="flex items-center gap-2 mr-1">
-        <div className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-          <CalendarDays className="w-4 h-4" />
-        </div>
+        <IconChip icon={CalendarDays} tone="gold" />
         <span className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Agenda</span>
       </div>
 

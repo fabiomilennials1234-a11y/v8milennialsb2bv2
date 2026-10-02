@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingUp, PieChart as PieChartIcon, BarChart3 } from "lucide-react";
+import { IconChip } from "@/components/ui/bento";
 
 // Tooltip do recharts no vocabulário V5: superfície de cartão, raio de 12 px.
 const TOOLTIP_STYLE = {
@@ -49,9 +50,7 @@ export function CommissionBreakdown({ data }: CommissionBreakdownProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <PieChartIcon className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={PieChartIcon} />
           Composição dos Ganhos
         </CardTitle>
       </CardHeader>
@@ -123,9 +122,7 @@ export function MonthlyEarningsChart({ data }: MonthlyEarningsChartProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <BarChart3 className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={BarChart3} />
           Evolução Mensal
         </CardTitle>
       </CardHeader>
@@ -182,9 +179,7 @@ export function EarningsProjection({ data }: EarningsProjectionProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
-            <TrendingUp className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={TrendingUp} />
           Projeção de Ganhos
         </CardTitle>
       </CardHeader>

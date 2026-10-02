@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText, Filter } from "lucide-react";
 import { useCanDo } from "@/modules/identity";
 import { useVentimaisExportDetails } from "../../hooks/useVentimaisExportDetails";
+import { IconChip } from "@/components/ui/bento";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
   { value: 500, label: "Os 500 mais recentes" },
@@ -158,9 +159,7 @@ export function ExportLeadsModal({ open, onOpenChange, listFilters }: ExportLead
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <FileDown className="h-4 w-4" />
-            </span>
+            <IconChip icon={FileDown} tone="gold" />
             Exportar leads
           </DialogTitle>
         </DialogHeader>

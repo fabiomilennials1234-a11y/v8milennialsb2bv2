@@ -17,15 +17,50 @@ import { cn } from "@/lib/utils";
  * por cabeçalho. O resto é cartão branco, tinta e cor semântica.
  */
 
-type Tone = "gold" | "good" | "bad" | "info" | "neutral";
+export type Tone = "gold" | "good" | "warn" | "bad" | "info" | "neutral";
 
 const toneChip: Record<Tone, string> = {
   gold: "bg-primary-soft text-primary-soft-foreground",
   good: "bg-success/10 text-success-strong",
+  warn: "bg-warning/15 text-warning-strong",
   bad: "bg-destructive/10 text-destructive",
   info: "bg-insights/10 text-insights",
   neutral: "bg-muted text-foreground/70",
 };
+
+const chipSize = {
+  /** KpiTile. */
+  sm: "h-[30px] w-[30px]",
+  /** Título de diálogo, cabeçalho de seção, linha de lista. */
+  md: "h-8 w-8",
+} as const;
+
+/**
+ * O quadradinho tintado com ícone — no KpiTile, no título dos diálogos, nos
+ * cabeçalhos de seção. Era copiado à mão em ~25 lugares, cada um com uma
+ * variação (`/60` vs `/70`, `rounded-xl` vs `[10px]`, verde que não passava
+ * AA). O tom diz o que o ícone significa; ouro só quando é a ação/identidade.
+ */
+export function IconChip({
+  icon: Icon,
+  tone = "neutral",
+  size = "md",
+  className,
+  iconClassName,
+}: {
+  /** Lucide ou qualquer componente que aceite `className`. */
+  icon: React.ElementType;
+  tone?: Tone;
+  size?: keyof typeof chipSize;
+  className?: string;
+  iconClassName?: string;
+}) {
+  return (
+    <span className={cn("grid shrink-0 place-items-center rounded-[10px]", chipSize[size], toneChip[tone], className)}>
+      <Icon className={cn("h-4 w-4", iconClassName)} aria-hidden />
+    </span>
+  );
+}
 
 export function DeltaChip({
   value,
@@ -77,11 +112,7 @@ export const KpiTile = React.forwardRef<HTMLDivElement, KpiTileProps>(
     >
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground/80">{label}</span>
-        {Icon && (
-          <span className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px]", toneChip[tone])}>
-            <Icon className="h-4 w-4" aria-hidden />
-          </span>
-        )}
+        {Icon && <IconChip icon={Icon} tone={tone} size="sm" />}
       </div>
       <div className={cn("text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums", loading && "animate-pulse text-muted-foreground")}>
         {value}

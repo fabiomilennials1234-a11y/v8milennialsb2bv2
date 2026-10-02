@@ -25,6 +25,7 @@ import {
   type ManualCallOutcome,
 } from "@/modules/engagement/hooks/useCallLogs";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 interface LogCallModalProps {
   open: boolean;
@@ -81,9 +82,7 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
-              <Phone className="h-4 w-4" />
-            </span>
+            <IconChip icon={Phone} />
             Registrar ligação
             {leadName && (
               <span className="text-sm font-normal text-muted-foreground">— {leadName}</span>

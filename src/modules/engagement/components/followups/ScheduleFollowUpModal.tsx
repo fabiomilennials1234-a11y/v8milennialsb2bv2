@@ -30,6 +30,7 @@ import { useCreateFollowUp } from "@/modules/engagement/hooks/useFollowUps";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useTeamMembers } from "@/modules/identity";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 interface ScheduleFollowUpModalProps {
   open: boolean;
@@ -99,9 +100,7 @@ export function ScheduleFollowUpModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Clock className="h-4 w-4" />
-            </span>
+            <IconChip icon={Clock} tone="gold" />
             Agendar Follow Up
           </DialogTitle>
         </DialogHeader>

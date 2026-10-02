@@ -17,6 +17,7 @@ import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { IconChip } from "@/components/ui/bento";
 
 interface ConditionRow {
   field: string;
@@ -141,9 +142,7 @@ export function ApprovalRulesConfig() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-[15px] font-bold tracking-[-0.02em]">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Shield className="h-4 w-4" strokeWidth={2.2} />
-            </span>
+            <IconChip icon={Shield} tone="gold" />
             Regras de aprovação
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">

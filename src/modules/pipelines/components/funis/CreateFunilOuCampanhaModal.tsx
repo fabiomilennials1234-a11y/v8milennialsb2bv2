@@ -43,6 +43,7 @@ import {
 } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { IconChip } from "@/components/ui/bento";
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -274,9 +275,7 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
                   }}
                   className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-dashed border-success/40 p-3 text-left transition-colors hover:border-success/70 hover:bg-success/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-success/10 text-success">
-                    <Eye className="h-4 w-4" aria-hidden />
-                  </span>
+                  <IconChip icon={Eye} tone="good" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold">Ativar funil oculto</p>
                     <p className="text-[11px] text-muted-foreground">
@@ -551,9 +550,7 @@ function ActivateHiddenFunnelDialog({
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-success/10 text-success">
-              <Eye className="h-4 w-4" aria-hidden />
-            </span>
+            <IconChip icon={Eye} tone="good" />
             Ativar funil oculto
           </DialogTitle>
         </DialogHeader>

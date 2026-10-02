@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { KpiTile } from "@/components/ui/bento";
+import { IconChip, KpiTile } from "@/components/ui/bento";
 import {
   FlaskConical,
   Users,
@@ -98,9 +98,7 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
       {/* Header row */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-pink-500/15 text-pink-700 dark:text-pink-400">
-            <FlaskConical className="h-4 w-4" />
-          </span>
+          <IconChip icon={FlaskConical} tone="info" />
           <h3 className="text-[17px] font-bold tracking-[-0.02em]">Split A/B — Experimento</h3>
         </div>
         {nodes.length > 1 && (

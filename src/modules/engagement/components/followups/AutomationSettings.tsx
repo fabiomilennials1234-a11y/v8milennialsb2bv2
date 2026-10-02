@@ -47,6 +47,7 @@ import {
   type FollowUpAutomation,
   type TriggerType,
 } from "@/modules/engagement/hooks/useFollowUps";
+import { IconChip } from "@/components/ui/bento";
 
 // SCRUM-641: o NOME do funil saiu daqui — vinha do seed congelado
 // ("Qualificação"/"Confirmacao"/"Propostas") e aparecia independente do que a
@@ -1076,9 +1077,7 @@ export function AutomationSettings() {
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-              <Settings2 className="h-4 w-4" />
-            </span>
+            <IconChip icon={Settings2} tone="gold" />
             Configurar Automações de Follow Up
           </DialogTitle>
         </DialogHeader>

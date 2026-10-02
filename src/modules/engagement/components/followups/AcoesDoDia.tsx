@@ -62,6 +62,7 @@ import {
   type PriorityLead,
   type PriorityFollowUp,
 } from "@/modules/engagement/hooks/useDailyPriorities";
+import { IconChip } from "@/components/ui/bento";
 
 export function AcoesDoDia() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -355,9 +356,7 @@ export function AcoesDoDia() {
     <div className="rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
-            <Target className="h-4 w-4" strokeWidth={2.2} />
-          </span>
+          <IconChip icon={Target} tone="gold" />
           <h2 className="text-[15px] font-bold tracking-[-0.02em]">Ações do Dia</h2>
           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
             {pendingAcoes.length}
