@@ -25,7 +25,11 @@ const tabControlClassName = cn(
 const listClassName: Record<TabsVariant, string> = {
   underline: "inline-flex items-center gap-6 border-b border-border text-muted-foreground",
   pill: cn(
-    "inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-tinta p-1 text-tinta-muted shadow-relevo-tinta scrollbar-hide",
+    "relative inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-tinta p-1 text-tinta-muted shadow-relevo-tinta scrollbar-hide",
+    // Borda que esconde aba esmaece — sem isso o corte parece defeito, não rolagem.
+    "data-[fade-end=true]:[mask-image:linear-gradient(to_right,black_calc(100%_-_36px),transparent)]",
+    "data-[fade-start=true]:[mask-image:linear-gradient(to_left,black_calc(100%_-_36px),transparent)]",
+    "data-[fade-start=true]:data-[fade-end=true]:[mask-image:linear-gradient(to_right,transparent,black_36px,black_calc(100%_-_36px),transparent)]",
   ),
   segmented: "inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px] text-muted-foreground",
 };
@@ -64,17 +68,68 @@ interface TabsListProps extends React.ComponentPropsWithoutRef<typeof TabsPrimit
   variant?: TabsVariant;
 }
 
+/**
+ * A pílula rola na horizontal quando as abas não cabem. Este efeito marca as
+ * bordas que escondem aba (`data-fade-start`/`data-fade-end`, lidas pelo CSS) e
+ * traz a aba ativa para dentro quando ela muda. Escreve no DOM direto: rolar
+ * não deve re-renderizar a lista.
+ */
+function useOverflowAffordance(ref: React.RefObject<HTMLElement>, enabled: boolean) {
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || !enabled) return;
+
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      el.dataset.fadeStart = String(el.scrollLeft > 1);
+      el.dataset.fadeEnd = String(el.scrollLeft < max - 1);
+    };
+    const revealActive = () => {
+      const active = el.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+      if (!active) return;
+      const left = active.offsetLeft;
+      const right = left + active.offsetWidth;
+      // Rola só o eixo da lista; scrollIntoView arrastaria a página junto.
+      if (left < el.scrollLeft) el.scrollLeft = left - 24;
+      else if (right > el.scrollLeft + el.clientWidth) el.scrollLeft = right - el.clientWidth + 24;
+    };
+
+    revealActive();
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    resize?.observe(el);
+    const mutation = new MutationObserver(() => {
+      revealActive();
+      update();
+    });
+    mutation.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-state"] });
+
+    return () => {
+      el.removeEventListener("scroll", update);
+      resize?.disconnect();
+      mutation.disconnect();
+    };
+  }, [ref, enabled]);
+}
+
 const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, TabsListProps>(
-  ({ className, variant = "underline", ...props }, ref) => (
-    <TabsVariantContext.Provider value={variant}>
-      <TabsPrimitive.List
-        ref={ref}
-        data-variant={variant}
-        className={cn(listClassName[variant], className)}
-        {...props}
-      />
-    </TabsVariantContext.Provider>
-  ),
+  ({ className, variant = "underline", ...props }, forwardedRef) => {
+    const innerRef = React.useRef<React.ElementRef<typeof TabsPrimitive.List>>(null);
+    React.useImperativeHandle(forwardedRef, () => innerRef.current as React.ElementRef<typeof TabsPrimitive.List>);
+    useOverflowAffordance(innerRef, variant === "pill");
+
+    return (
+      <TabsVariantContext.Provider value={variant}>
+        <TabsPrimitive.List
+          ref={innerRef}
+          data-variant={variant}
+          className={cn(listClassName[variant], className)}
+          {...props}
+        />
+      </TabsVariantContext.Provider>
+    );
+  },
 );
 TabsList.displayName = TabsPrimitive.List.displayName;
 

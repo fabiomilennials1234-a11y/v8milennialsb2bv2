@@ -45,7 +45,7 @@ import {
   type OrgActivityGroup,
 } from "../hooks/useMasterUserActivity";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 
 const WINDOW_OPTIONS = [
   { value: "60", label: "Última hora" },
@@ -100,7 +100,7 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
         <span
           className={cn(
             "text-xs tabular-nums shrink-0",
-            hasOnline ? "font-semibold text-success" : "text-muted-foreground",
+            hasOnline ? "font-semibold text-success-strong" : "text-muted-foreground",
           )}
         >
           {group.onlineCount} de {group.totalCount}
@@ -256,7 +256,7 @@ export default function MasterUsuariosAtivos() {
 
       {/* Resumo */}
       {!isLoading && !error && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:max-w-3xl">
+        <KpiRow cols={2} className="xl:max-w-3xl">
           <KpiTile
             label="Com atividade"
             icon={Users}
@@ -271,7 +271,7 @@ export default function MasterUsuariosAtivos() {
             value={totals.orgsOnline}
             note={windowLabel}
           />
-        </div>
+        </KpiRow>
       )}
 
       {/* Controles */}

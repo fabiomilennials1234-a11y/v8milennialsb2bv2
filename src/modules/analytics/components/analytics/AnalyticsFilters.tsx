@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarDays, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -50,17 +51,24 @@ export function AnalyticsFilters() {
   const dateLabel = `${format(new Date(filters.startDate), "dd MMM", { locale: ptBR })} — ${format(new Date(filters.endDate), "dd MMM yyyy", { locale: ptBR })}`;
 
   return (
-    <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-3 -mx-1 px-1 border-b border-border/20">
+    <div className="sticky top-0 z-10 -mx-1 border-b border-border/40 bg-card/85 px-1 py-3 backdrop-blur-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Time group — left */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/30 p-0.5">
+          {/* Alternador claro do V5 (segmented); mesmos botões, mesmo clique. */}
+          <div className="flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
             {PRESETS.map((p) => (
               <Button
                 key={p.value}
-                variant={filters.preset === p.value ? "default" : "ghost"}
+                variant="ghost"
                 size="sm"
-                className="h-7 px-3 text-xs rounded-md"
+                aria-pressed={filters.preset === p.value}
+                className={cn(
+                  "h-7 rounded-full px-3 text-xs hover:bg-transparent",
+                  filters.preset === p.value
+                    ? "bg-card text-foreground shadow-relevo hover:bg-card"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
                 onClick={() => setPreset(p.value)}
               >
                 {p.label}
@@ -68,7 +76,7 @@ export function AnalyticsFilters() {
             ))}
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-xs tabular-nums text-muted-foreground">
             <CalendarDays className="h-3.5 w-3.5" />
             {dateLabel}
           </div>

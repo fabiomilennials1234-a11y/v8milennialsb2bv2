@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -98,7 +98,7 @@ function OverviewTab() {
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiRow cols={4}>
           <KpiTile
             label={`Jobs Executados (${periodLabel[interval]})`}
             icon={Activity}
@@ -125,7 +125,7 @@ function OverviewTab() {
             tone="good"
             value={data?.orgs_active ?? 0}
           />
-        </div>
+        </KpiRow>
       )}
     </div>
   );
@@ -136,7 +136,7 @@ function OverviewTab() {
 // Os mapas abaixo pintam `<Badge variant="outline">` — a variante padrão (ouro)
 // vazaria o `hover:bg-primary` por cima do tom.
 const STATUS_BADGE: Record<string, { class: string; label: string }> = {
-  success: { class: "bg-success/10 text-success border-success/20", label: "success" },
+  success: { class: "bg-success/10 text-success-strong border-success/20", label: "success" },
   error: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "error" },
   skipped: { class: "bg-muted text-muted-foreground border-border", label: "skipped" },
 };
@@ -451,7 +451,7 @@ function UsageByOrgTab() {
 // `warning`. `retrying` vai para o ouro suave para continuar distinguível.
 const JOB_STATUS_BADGE: Record<string, { class: string; label: string }> = {
   running: { class: "bg-insights/10 text-insights border-insights/20", label: "running" },
-  success: { class: "bg-success/10 text-success border-success/20", label: "success" },
+  success: { class: "bg-success/10 text-success-strong border-success/20", label: "success" },
   failed: { class: "bg-warning/15 text-warning-strong border-warning/30", label: "failed" },
   retrying: { class: "bg-primary-soft text-primary-soft-foreground border-transparent", label: "retrying" },
   dead_letter: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "dead letter" },
@@ -556,13 +556,13 @@ function JobsTab() {
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <KpiRow cols={3} className="lg:grid-cols-6">
           <KpiTile label="Total" icon={Activity} tone="info" value={overview?.total ?? 0} />
           <KpiTile
             label="Sucesso"
             icon={CheckCircle2}
             tone="good"
-            value={<span className="text-success">{overview?.success ?? 0}</span>}
+            value={<span className="text-success-strong">{overview?.success ?? 0}</span>}
           />
           <KpiTile
             label="Falhados"
@@ -583,7 +583,7 @@ function JobsTab() {
             className={cn(hasDeadLetters && "border-destructive/40 bg-destructive/5")}
             value={<span className={cn(hasDeadLetters && "text-destructive")}>{overview?.dead_letter ?? 0}</span>}
           />
-        </div>
+        </KpiRow>
       )}
 
       {/* Filters */}

@@ -1,5 +1,5 @@
 import { AlarmClock, CalendarClock, HeartPulse, Receipt, Repeat, Users } from "lucide-react";
-import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
 
@@ -11,20 +11,21 @@ import { formatBRL } from "@/lib/format";
  * morar no chip do ícone; só o atraso continua vermelho no número, porque é o
  * único que pede ação.
  */
-const GRID = "grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5";
+/** Cinco colunas só a partir de xl — em lg a área útil ainda espreme o valor em reais. */
+const ROW_CLASS = "lg:grid-cols-3 xl:grid-cols-5";
 
 export function CarteiraKPIs() {
   const { data, isLoading } = usePortfolioKPIs();
 
   if (isLoading) {
     return (
-      <div className={GRID}>
+      <KpiRow cols={5} className={ROW_CLASS}>
         {["Receita recorrente", "Pedidos esperados", "Recompra atrasada", "Ticket médio", "Health score médio"].map(
           (label) => (
             <KpiTile key={label} label={label} value="·" loading />
           ),
         )}
-      </div>
+      </KpiRow>
     );
   }
 
@@ -52,7 +53,7 @@ export function CarteiraKPIs() {
   } = data;
 
   return (
-    <div className={GRID}>
+    <KpiRow cols={5} className={ROW_CLASS}>
       <KpiTile
         label="Receita recorrente"
         value={formatBRL(totalRecurring)}
@@ -101,6 +102,6 @@ export function CarteiraKPIs() {
         tone={avgHealth >= 70 ? "good" : avgHealth >= 50 ? "neutral" : "bad"}
         note="média da carteira"
       />
-    </div>
+    </KpiRow>
   );
 }

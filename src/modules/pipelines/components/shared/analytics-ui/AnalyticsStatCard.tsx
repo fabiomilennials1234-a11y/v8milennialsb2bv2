@@ -47,19 +47,14 @@ export function AnalyticsStatCard({
 }: AnalyticsStatCardProps) {
   // O card clicável abre o drilldown — então ele tem de ser alcançável por
   // teclado também, não só pelo mouse.
-  const interactive = onClick
-    ? {
-        role: "button" as const,
-        tabIndex: 0,
-        onClick,
-        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onClick();
-          }
-        },
+  const onKeyDown = onClick
+    ? (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
       }
-    : {};
+    : undefined;
 
   return (
     <motion.div
@@ -77,7 +72,10 @@ export function AnalyticsStatCard({
           onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
-        {...interactive}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
       />
     </motion.div>
   );

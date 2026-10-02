@@ -52,7 +52,7 @@ export function SandboxPanel() {
       </div>
 
       {isSandbox && (
-        <Card className="border-warning/40 bg-warning/10 shadow-none">
+        <Card className="rounded-xl border-warning/40 bg-warning/10 shadow-none">
           <CardContent className="flex items-center gap-3 p-4">
             <FlaskConical className="h-5 w-5 shrink-0 text-warning-strong" />
             <p className="text-sm">
@@ -62,7 +62,8 @@ export function SandboxPanel() {
         </Card>
       )}
 
-      <Card>
+      {/* Mora dentro do cartão da aba: tile plano, não cartão sobre cartão. */}
+      <Card className="rounded-xl border-border shadow-none">
         <CardContent className="space-y-4 p-5">
           <div className="flex items-center gap-4 rounded-xl border border-border p-4">
             <AlertTriangle className="h-5 w-5 shrink-0 text-warning-strong" />
@@ -80,19 +81,19 @@ export function SandboxPanel() {
             </h4>
             <ul className="space-y-1.5 text-sm">
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
                 Etapas e configurações dos funis
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
                 Tags e campos customizados
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
                 Agentes Copilot (configurações)
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
                 Workflows (estrutura)
               </li>
             </ul>

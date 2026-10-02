@@ -197,9 +197,9 @@ export function TakeoverControls({
             aria-label={ariaLabel}
             aria-haspopup="menu"
             className={cn(
-              "inline-flex items-center gap-1.5",
-              "h-7 pl-2 pr-1.5 rounded-full",
-              "border text-[11px] font-medium",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap",
+              "h-7 pl-2.5 pr-1.5 rounded-full",
+              "border text-[11px] font-semibold",
               "transition-all duration-150",
               "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               "focus-visible:ring-offset-background",

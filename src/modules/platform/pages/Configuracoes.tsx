@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense, type ElementType, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense, type ElementType, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePipelineDisplayConfig } from "@/modules/pipelines";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
@@ -678,6 +678,31 @@ export default function Configuracoes() {
     }
   }, [activeTab, location.pathname, location.search, navigate, searchParams]);
 
+  // Quinze pílulas não cabem numa linha: a fileira rola. Sem isto, abrir
+  // `/configuracoes/outros?tab=general` deixava a pílula ativa fora da vista.
+  // Rola só o eixo X da própria fileira — nunca a página.
+  const tabsListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = tabsListRef.current;
+    if (!list) return;
+    const centerActive = () => {
+      const active = list.querySelector<HTMLElement>('[data-state="active"]');
+      if (!active) return;
+      const listBox = list.getBoundingClientRect();
+      const activeBox = active.getBoundingClientRect();
+      if (activeBox.left >= listBox.left && activeBox.right <= listBox.right) return;
+      const target = list.scrollLeft + (activeBox.left - listBox.left) - (listBox.width - activeBox.width) / 2;
+      list.scrollTo?.({ left: Math.max(0, target) });
+    };
+    centerActive();
+    // A largura da fileira muda depois do primeiro desenho (o Pitstop abre ao
+    // lado e a estreita): recentra quando ela mudar de tamanho.
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(centerActive);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [activeTab.value]);
+
   return (
     // Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo registro
     // que alimenta o Pitstop — dois inventários divergiriam. Leitura da ajuda
@@ -700,7 +725,7 @@ export default function Configuracoes() {
         title="Configurações"
         subtitle="Gerencie as configurações do sistema"
         tabs={
-          <TabsList variant="pill" aria-label="Seções de configurações">
+          <TabsList ref={tabsListRef} variant="pill" aria-label="Seções de configurações">
             {tabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 <tab.icon className="h-4 w-4" aria-hidden />
@@ -847,15 +872,17 @@ function StatusCard({
   badge: string;
 }) {
   return (
-    <Card className="flex items-center gap-3 p-4">
+    <Card className="flex items-start gap-3 p-4">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
         <Icon className="h-4 w-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold tracking-tight">{title}</p>
-        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <p className="text-sm font-bold tracking-tight">{title}</p>
+          <Badge variant="success">{badge}</Badge>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
       </div>
-      <Badge variant="success">{badge}</Badge>
     </Card>
   );
 }

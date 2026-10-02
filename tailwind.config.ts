@@ -179,6 +179,14 @@ export default {
         'relevo-tinta': 'var(--relevo-tinta)',
         'brilho-ouro': 'var(--brilho-ouro)',
       },
+      // Curvas com nome. `ease-[cubic-bezier(...)]` NÃO funciona aqui: o
+      // tailwindcss-animate também aceita valor arbitrário em `ease-*`, a classe
+      // fica ambígua e o Tailwind não gera nada — a transição caía no padrão.
+      transitionTimingFunction: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        drawer: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

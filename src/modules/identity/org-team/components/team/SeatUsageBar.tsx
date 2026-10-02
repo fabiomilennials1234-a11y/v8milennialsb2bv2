@@ -40,7 +40,7 @@ export function SeatUsageBar({ usage }: SeatUsageBarProps) {
             <span className="font-extrabold tabular-nums tracking-[-0.02em] text-foreground">
               {usage.active_members} / {usage.paid_seats}
             </span>{" "}
-            seats
+            assentos
           </span>
         </div>
         {isAtLimit && (

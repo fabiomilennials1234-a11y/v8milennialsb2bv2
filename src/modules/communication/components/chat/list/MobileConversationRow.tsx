@@ -87,7 +87,7 @@ export function MobileConversationRow({
           {!isWhatsApp && contact.avatar_url && (
             <AvatarImage src={contact.avatar_url} alt="" />
           )}
-          <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+          <AvatarFallback className="bg-primary-soft text-sm font-bold text-primary-soft-foreground">
             {initials}
           </AvatarFallback>
         </Avatar>

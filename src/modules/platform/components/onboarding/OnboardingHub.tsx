@@ -98,7 +98,7 @@ function TaskCard({
         className={cn(
           "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors",
           done
-            ? "bg-success/10 text-success"
+            ? "bg-success/10 text-success-strong"
             : "bg-muted text-foreground/70 group-hover:bg-primary-soft group-hover:text-primary-soft-foreground",
         )}
         aria-hidden
@@ -130,7 +130,7 @@ function TaskCard({
         <TutorialLink url={step.tutorialUrl} label={step.label} />
 
         {done ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success-strong">
             <Check className="h-3.5 w-3.5" strokeWidth={3} />
             Concluído
           </span>

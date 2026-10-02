@@ -22,7 +22,7 @@ import {
   Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -276,7 +276,7 @@ export default function CopilotMetrics() {
       />
 
       {/* KPIs — mesmos quatro números de antes, da mesma consulta. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiRow cols={4}>
         <KpiTile
           label="Score Geral"
           icon={Star}
@@ -321,7 +321,7 @@ export default function CopilotMetrics() {
           value={kpi(agentSummaries.length)}
           note="Com avaliações no período"
         />
-      </div>
+      </KpiRow>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Scores por Agente */}

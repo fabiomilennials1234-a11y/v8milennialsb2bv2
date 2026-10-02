@@ -33,16 +33,16 @@ function formatNumber(value: number): string {
 
 function cplColor(value: number): string {
   if (value === 0) return "";
-  if (value <= 15) return "text-emerald-500";
-  if (value <= 40) return "text-yellow-500";
-  return "text-red-500";
+  if (value <= 15) return "text-success";
+  if (value <= 40) return "text-warning-strong";
+  return "text-destructive";
 }
 
 function cacColor(value: number): string {
   if (value === 0) return "";
-  if (value <= 100) return "text-emerald-500";
-  if (value <= 300) return "text-yellow-500";
-  return "text-red-500";
+  if (value <= 100) return "text-success";
+  if (value <= 300) return "text-warning-strong";
+  return "text-destructive";
 }
 
 export function UtmDataTable({ data, level, onDrillDown }: Props) {

@@ -142,7 +142,7 @@ export function TorqueCallsSettings() {
                 {sessao ? (
                   <>
                     {sessao.status === "open" ? (
-                      <Badge variant="outline" className="border-success/40 text-success">
+                      <Badge variant="outline" className="border-success/40 text-success-strong">
                         Voz ativa
                       </Badge>
                     ) : (

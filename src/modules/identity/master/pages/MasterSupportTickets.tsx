@@ -181,7 +181,7 @@ export default function MasterSupportTickets() {
 
       {resolved.length > 0 && (
         <section className="space-y-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-success">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-success-strong">
             <CheckCircle2 className="h-4 w-4" aria-hidden />
             Resolvidos
             <span className="text-xs font-normal text-muted-foreground">

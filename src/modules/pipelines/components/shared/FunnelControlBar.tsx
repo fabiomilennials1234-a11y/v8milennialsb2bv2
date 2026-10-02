@@ -83,7 +83,9 @@ export const FunnelControlBar = memo(function FunnelControlBar({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
           {/* O nome do funil é o título da página — e a porta para os outros. */}
-          <div className="min-w-0 max-w-full">
+          {/* O nome do funil é o título da página: ele cresce primeiro e só
+              trunca se for maior que a linha — os controles quebram para baixo. */}
+          <div className="min-w-[min(100%,18rem)] max-w-full flex-1">
             <h1 className="min-w-0">
               <FunnelSwitcher
                 currentKey={funnelKey}
@@ -98,7 +100,6 @@ export const FunnelControlBar = memo(function FunnelControlBar({
           </div>
 
           {/* Empurra os controles pra direita — o nome do funil ancora à esquerda. */}
-          <span className="ml-auto" />
 
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <div className="relative min-w-[180px] flex-1 sm:w-[240px] sm:flex-none">

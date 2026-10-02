@@ -166,11 +166,11 @@ export function ApiKeysPanel() {
         </Button>
       </div>
 
-      {/* Active keys */}
-      <Card>
+      {/* Active keys — tile plano: o painel mora dentro de um cartão. */}
+      <Card className="rounded-xl border-border shadow-none">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Shield className="h-4 w-4 text-success" />
+            <Shield className="h-4 w-4 text-success-strong" />
             Chaves ativas ({activeKeys.length})
           </CardTitle>
         </CardHeader>
@@ -236,7 +236,7 @@ export function ApiKeysPanel() {
 
       {/* Revoked keys */}
       {revokedKeys.length > 0 && (
-        <Card>
+        <Card className="rounded-xl border-border shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
               Chaves revogadas ({revokedKeys.length})
@@ -288,7 +288,7 @@ export function ApiKeysPanel() {
                   {newKey}
                 </code>
                 <Button variant="outline" size="icon" onClick={handleCopyKey}>
-                  {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4 text-success-strong" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
 

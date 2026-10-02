@@ -32,14 +32,14 @@ const STAGE_LABELS: Record<string, string> = {
 // Use aging buckets as weekly proxies:
 // healthy_count ~ this week, attention_count ~ last week, risk_count ~ 2w ago, critical_count ~ 3w+ ago
 const BUCKETS = [
-  { key: "healthy_count" as const, label: "Esta semana", positiveClass: "text-green-600 dark:text-green-400 font-semibold" },
-  { key: "attention_count" as const, label: "Semana passada", positiveClass: "text-orange-500 font-semibold" },
-  { key: "risk_count" as const, label: "2 semanas atrás", positiveClass: "text-red-500 font-semibold" },
-  { key: "critical_count" as const, label: "3+ semanas", positiveClass: "text-red-900 dark:text-red-400 font-semibold" },
+  { key: "healthy_count" as const, label: "Esta semana", positiveClass: "text-success font-semibold" },
+  { key: "attention_count" as const, label: "Semana passada", positiveClass: "text-warning-strong font-semibold" },
+  { key: "risk_count" as const, label: "2 semanas atrás", positiveClass: "text-destructive font-semibold" },
+  { key: "critical_count" as const, label: "3+ semanas", positiveClass: "text-destructive font-semibold" },
 ];
 
 function netClass(value: number): string {
-  if (value > 0) return "text-green-600 dark:text-green-400 font-semibold";
+  if (value > 0) return "text-success font-semibold";
   if (value < 0) return "text-destructive font-semibold";
   return "text-muted-foreground";
 }

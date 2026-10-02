@@ -65,7 +65,7 @@ export function StepAudience({ draft, patch }: StepAudienceProps) {
               className={cn(
                 "flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors",
                 active
-                  ? "border-primary/50 bg-primary/10 text-foreground"
+                  ? "border-primary/50 bg-primary-soft text-primary-soft-foreground"
                   : "border-border/70 text-muted-foreground hover:border-border hover:text-foreground",
               )}
             >

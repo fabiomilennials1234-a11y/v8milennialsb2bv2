@@ -51,10 +51,10 @@ const ACTION_LABELS: Record<string, string> = {
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
   scheduled: { icon: Clock, color: "text-warning-strong", label: "Agendado" },
   processing: { icon: Loader2, color: "text-warning-strong", label: "Processando" },
-  sent: { icon: CheckCircle2, color: "text-success", label: "Enviado" },
+  sent: { icon: CheckCircle2, color: "text-success-strong", label: "Enviado" },
   failed: { icon: XCircle, color: "text-destructive", label: "Falhou" },
   waiting_response: { icon: Hourglass, color: "text-insights", label: "Aguardando" },
-  response_received: { icon: CheckCircle2, color: "text-success", label: "Respondido" },
+  response_received: { icon: CheckCircle2, color: "text-success-strong", label: "Respondido" },
   timed_out: { icon: AlertTriangle, color: "text-warning-strong", label: "Timeout" },
   executed: { icon: ArrowRightLeft, color: "text-primary-soft-foreground", label: "Executado" },
   cancelled: { icon: Ban, color: "text-muted-foreground", label: "Cancelado" },

@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
 import { useCommissions, useCommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 import { useFeaturePermission } from "@/modules/identity";
@@ -93,7 +93,9 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
     >
       <Card className="h-full">
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
+          {/* Nome com a linha inteira; o total do mês vem logo abaixo — lado a
+              lado, o valor espremia o nome até virar reticências. */}
+          <div className="flex flex-col gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <UserAvatar
                 name={memberName}
@@ -108,11 +110,11 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
                 </Badge>
               </div>
             </div>
-            <div className="shrink-0 text-right">
+            <div className="flex items-baseline justify-between gap-3 rounded-2xl bg-sunken px-3.5 py-2.5">
+              <p className="whitespace-nowrap text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Total do mês</p>
               <p className={summary.totalEarnings == null ? "text-sm font-bold text-warning-strong" : "text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-success"}>
                 {summary.totalEarnings == null ? "Apuração pendente" : formatCurrency(summary.totalEarnings)}
               </p>
-              <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Total do mês</p>
             </div>
           </div>
         </CardHeader>
@@ -204,11 +206,11 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
           {/* Sales breakdown */}
           <div className="pt-2 border-t border-border">
             <p className="text-xs text-muted-foreground mb-2 tabular-nums">Vendas do mês: {formatCurrency(summary.salesRevenue)}</p>
-            <div className="flex items-center gap-4 text-sm font-semibold tabular-nums">
-              <span className="text-chart-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold tabular-nums">
+              <span className="whitespace-nowrap text-chart-3">
                 Rec.: {formatCurrency(summary.totalMRR)}
               </span>
-              <span className="text-chart-4">
+              <span className="whitespace-nowrap text-chart-4">
                 Projeto: {formatCurrency(summary.totalProjeto)}
               </span>
             </div>
@@ -353,22 +355,22 @@ export default function Comissoes() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm">
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
             <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
-              <Badge variant="soft" className="tabular-nums">{"< 70%"}</Badge>
-              <span className="text-muted-foreground">0x bônus</span>
+              <Badge variant="soft" className="shrink-0 whitespace-nowrap tabular-nums">{"< 70%"}</Badge>
+              <span className="whitespace-nowrap text-muted-foreground">0x bônus</span>
             </div>
             <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
-              <Badge variant="warning" className="tabular-nums">70-99%</Badge>
-              <span className="text-muted-foreground">0.7x bônus</span>
+              <Badge variant="warning" className="shrink-0 whitespace-nowrap tabular-nums">70-99%</Badge>
+              <span className="whitespace-nowrap text-muted-foreground">0.7x bônus</span>
             </div>
             <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
-              <Badge variant="gold" className="tabular-nums">100-119%</Badge>
-              <span className="text-muted-foreground">1.0x bônus</span>
+              <Badge variant="gold" className="shrink-0 whitespace-nowrap tabular-nums">100-119%</Badge>
+              <span className="whitespace-nowrap text-muted-foreground">1.0x bônus</span>
             </div>
             <div className="flex items-center gap-2 rounded-2xl bg-sunken px-3 py-2.5">
-              <Badge variant="success" className="tabular-nums">≥ 120%</Badge>
-              <span className="text-muted-foreground">1.2x bônus</span>
+              <Badge variant="success" className="shrink-0 whitespace-nowrap tabular-nums">≥ 120%</Badge>
+              <span className="whitespace-nowrap text-muted-foreground">1.2x bônus</span>
             </div>
           </div>
         </CardContent>
@@ -376,7 +378,7 @@ export default function Comissoes() {
 
       {/* Stats Cards - Only for users with view_all permission */}
       {canViewAll && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiRow cols={4}>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -408,7 +410,7 @@ export default function Comissoes() {
           >
             <KpiTile className="h-full" label="Comissões Pendentes" value={formatCurrency(totalPendingCommissions)} icon={Hourglass} tone="info" />
           </motion.div>
-        </div>
+        </KpiRow>
       )}
 
       {/* No access message */}

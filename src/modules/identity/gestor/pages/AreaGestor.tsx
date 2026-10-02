@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import {
@@ -188,7 +188,7 @@ export default function AreaGestor() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <KpiRow cols={3}>
                 {([
                   {
                     label: "Organizações vinculadas",
@@ -221,7 +221,7 @@ export default function AreaGestor() {
                     note={detail}
                   />
                 ))}
-              </div>
+              </KpiRow>
 
               {hasBlockedOrgs && (
                 <p className="text-sm text-muted-foreground">

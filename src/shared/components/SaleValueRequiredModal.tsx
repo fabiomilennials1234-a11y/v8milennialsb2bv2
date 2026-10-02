@@ -101,7 +101,7 @@ export function SaleValueRequiredModal({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 ring-1 ring-success/20">
-              <TrendingUp className="h-5 w-5 text-success" />
+              <TrendingUp className="h-5 w-5 text-success-strong" />
             </div>
             <div>
               <DialogTitle>Valor da venda</DialogTitle>
@@ -149,7 +149,7 @@ export function SaleValueRequiredModal({
               <p className="text-xs text-destructive">{errors.saleValue.message}</p>
             ) : preview ? (
               <p className="text-xs text-muted-foreground tabular-nums">
-                Registrando <span className="font-semibold text-success">{preview}</span>
+                Registrando <span className="font-semibold text-success-strong">{preview}</span>
               </p>
             ) : (
               <span />

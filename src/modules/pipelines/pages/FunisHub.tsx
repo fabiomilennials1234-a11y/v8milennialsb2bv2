@@ -119,7 +119,7 @@ export default function FunisHub() {
           espera dado nenhum, então ele não some enquanto a lista chega. */}
       {isLoading ? (
         <div
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))]"
           aria-busy="true"
           aria-label="Carregando funis"
         >
@@ -132,7 +132,7 @@ export default function FunisHub() {
           {/* Uma lista só. A linha abaixo do nome mostra apenas fatos do funil,
               como prazo, meta e estado. */}
           {allFunnels.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))]">
               {allFunnels.map((funil) => (
                 /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
                    de ações, e botão dentro de botão é HTML inválido (o menu nem
@@ -162,7 +162,9 @@ export default function FunisHub() {
                       <funil.icon className="h-5 w-5" style={{ color: funil.color }} aria-hidden />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-bold tracking-[-0.01em]">
+                      {/* Duas linhas antes de cortar: nome de funil costuma ser
+                          longo ("Recompra trimestral — distribuidores"). */}
+                      <span className="line-clamp-2 break-words text-[15px] font-bold leading-snug tracking-[-0.01em]" title={funil.name}>
                         {funil.name}
                       </span>
                       {funil.meta && (
@@ -205,7 +207,7 @@ export default function FunisHub() {
                 encerrado{endedTemporary.length > 1 ? "s" : ""}
               </button>
               {showEnded && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))]">
                   {endedTemporary.map((pipe) => {
                     const canonical = pipeById.get(pipe.id);
                     const displayName = canonical?.name ?? pipe.name;

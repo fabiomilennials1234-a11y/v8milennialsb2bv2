@@ -100,8 +100,8 @@ export function TeamResponseTimes({ data }: Props) {
         <div className="flex items-center gap-3 pt-2 border-t border-border flex-wrap">
           <span className="text-[10px] text-muted-foreground">Faixas:</span>
           {[
-            { label: "<4min", cls: "bg-green-500" },
-            { label: "4-7min", cls: "bg-yellow-500" },
+            { label: "<4min", cls: "bg-success" },
+            { label: "4-7min", cls: "bg-warning" },
             { label: ">7min", cls: "bg-destructive" },
           ].map(({ label, cls }) => (
             <div key={label} className="flex items-center gap-1">

@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen, GitBranch, Plug, SlidersHorizontal, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -671,14 +670,16 @@ export function CopilotPlayground() {
         <section className="flex w-[60%] min-h-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
             <div className="shrink-0 border-b border-border/60 px-4 py-3">
-              <TabsList variant="pill" aria-label="Seções do agente">
-                <TabsTrigger value="prompt"><FileText className="h-3.5 w-3.5" />Prompt</TabsTrigger>
-                <TabsTrigger value="tools"><Wrench className="h-3.5 w-3.5" />Tools</TabsTrigger>
-                <TabsTrigger value="funis"><GitBranch className="h-3.5 w-3.5" />Funis</TabsTrigger>
-                <TabsTrigger value="knowledge"><BookOpen className="h-3.5 w-3.5" />Conhecimento</TabsTrigger>
-                <TabsTrigger value="conexao"><Plug className="h-3.5 w-3.5" />Conexão</TabsTrigger>
-                <TabsTrigger value="comportamento"><SlidersHorizontal className="h-3.5 w-3.5" />Comportamento</TabsTrigger>
-                <TabsTrigger value="handoff-notify"><BellRing className="h-3.5 w-3.5" />Notificação</TabsTrigger>
+              {/* Sete seções numa coluna de ~600 px: só rótulo e respiro menor, senão a
+                  última aba some atrás do corte da pílula. */}
+              <TabsList variant="pill" aria-label="Seções do agente" className="[&>[role=tab]]:px-2.5">
+                <TabsTrigger value="prompt">Prompt</TabsTrigger>
+                <TabsTrigger value="tools">Tools</TabsTrigger>
+                <TabsTrigger value="funis">Funis</TabsTrigger>
+                <TabsTrigger value="knowledge">Conhecimento</TabsTrigger>
+                <TabsTrigger value="conexao">Conexão</TabsTrigger>
+                <TabsTrigger value="comportamento">Comportamento</TabsTrigger>
+                <TabsTrigger value="handoff-notify">Notificação</TabsTrigger>
               </TabsList>
             </div>
 

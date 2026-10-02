@@ -32,7 +32,7 @@ export function SupportRealtimeNudge({
     <div
       role="dialog"
       aria-label="Novidade: suporte ao vivo"
-      className="fixed bottom-[6.5rem] right-6 z-50 w-[320px] rounded-2xl border border-border bg-card/95 p-4 shadow-xl shadow-black/30 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-300"
+      className="fixed bottom-[6.25rem] right-6 z-50 w-[320px] max-w-[calc(100vw-2rem)] rounded-card border border-card-border bg-card/95 p-4 shadow-relevo-alto backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-300 max-md:bottom-[calc(9.25rem+env(safe-area-inset-bottom))] max-md:right-4"
     >
       <button
         type="button"
@@ -69,7 +69,7 @@ export function SupportRealtimeNudge({
       {/* Ponteiro para o dock de suporte, logo abaixo à direita. */}
       <span
         aria-hidden
-        className="absolute -bottom-1.5 right-8 h-3 w-3 rotate-45 border-b border-r border-border bg-card"
+        className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-b border-r border-card-border bg-card"
       />
     </div>
   );

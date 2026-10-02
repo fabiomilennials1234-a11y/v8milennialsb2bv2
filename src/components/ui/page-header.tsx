@@ -56,7 +56,9 @@ export function PageHeader({
             <ArrowLeft className="h-4 w-4" />
           </button>
         )}
-        <div className="min-w-0 flex-1">
+        {/* Piso de largura: sem ele, duas ações na mesma linha espremem o
+            título até sumir; com ele, as ações quebram para a linha de baixo. */}
+        <div className="min-w-[min(100%,14rem)] flex-1">
           {eyebrow && (
             <p className="mb-1 text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">{eyebrow}</p>
           )}

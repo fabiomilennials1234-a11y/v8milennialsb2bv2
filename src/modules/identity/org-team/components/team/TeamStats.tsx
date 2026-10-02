@@ -140,7 +140,7 @@ export function PerformanceOverview({ data }: PerformanceOverviewProps) {
         
         <div className="text-center">
           <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-            <DollarSign className="h-6 w-6 text-success" />
+            <DollarSign className="h-6 w-6 text-success-strong" />
           </div>
           <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em]">{formatCurrency(data.totalSales)}</p>
           <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendas totais</p>

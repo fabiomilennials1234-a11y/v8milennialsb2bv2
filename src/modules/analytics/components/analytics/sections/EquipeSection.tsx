@@ -31,7 +31,7 @@ export function EquipeSection() {
       />
 
       {(engError || comError) && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-4">
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive mb-4">
           <p className="font-medium">Erro ao carregar dados da equipe</p>
           <p className="text-xs text-muted-foreground mt-1">{engErr?.message || comErr?.message}</p>
         </div>

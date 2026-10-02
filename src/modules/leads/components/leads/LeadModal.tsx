@@ -68,36 +68,36 @@ interface FormData {
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
-  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  responsible_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsavel atribuido", color: "bg-green-500/20 text-green-600" },
+  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-insights/15 text-insights" },
+  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-warning/15 text-warning-strong" },
+  responsible_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-success/15 text-success-strong" },
   field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
-  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reuniao agendada", color: "bg-blue-500/20 text-blue-600" },
-  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
-  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Nao compareceu", color: "bg-red-500/20 text-red-600" },
-  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reuniao removida", color: "bg-red-500/20 text-red-600" },
-  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
-  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
-  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
-  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
-  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
-  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluida", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA", color: "bg-primary/20 text-primary" },
-  copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
+  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-insights/15 text-insights" },
+  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-success/15 text-success-strong" },
+  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-destructive/15 text-destructive" },
+  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-destructive/15 text-destructive" },
+  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-insights/15 text-insights" },
+  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-warning/15 text-warning-strong" },
+  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-destructive/15 text-destructive" },
+  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-insights/15 text-insights" },
+  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-insights/15 text-insights" },
+  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-success/15 text-success-strong" },
+  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA", color: "bg-primary-soft text-primary-soft-foreground" },
+  copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary-soft text-primary-soft-foreground" },
 };
 
 const FALLBACK_CONFIG = { icon: <Clock className="w-3.5 h-3.5" />, label: "", color: "bg-muted text-muted-foreground" };
 
 const SOURCE_BADGE_LM: Record<string, { label: string; className: string }> = {
-  agent: { label: "Copilot", className: "bg-purple-500/15 text-purple-600 border-purple-500/20" },
-  automation: { label: "Automação", className: "bg-blue-500/15 text-blue-600 border-blue-500/20" },
+  agent: { label: "Copilot", className: "bg-insights/10 text-insights border-insights/15" },
+  automation: { label: "Automação", className: "bg-insights/10 text-insights border-insights/15" },
   system: { label: "Sistema", className: "bg-muted text-muted-foreground border-border" },
 };
 
 const SOURCE_ICON_COLOR_LM: Record<string, string> = {
-  agent: "bg-purple-500/20 text-purple-600",
-  automation: "bg-blue-500/20 text-blue-600",
+  agent: "bg-insights/15 text-insights",
+  automation: "bg-insights/15 text-insights",
   system: "bg-muted text-muted-foreground",
 };
 
@@ -147,7 +147,7 @@ function SidebarSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -339,14 +339,14 @@ export function LeadModal({
         if (formData.phone !== (lead.phone || "")) changes.push("telefone");
         if (formData.segment !== (lead.segment || "")) changes.push("segmento");
         if (formData.uf !== (lead.uf || "")) changes.push("estado");
-        if (formData.notes !== (lead.notes || "")) changes.push("observacoes");
-        if (formData.responsible_id !== (lead.responsible_id || null)) changes.push("Responsavel");
+        if (formData.notes !== (lead.notes || "")) changes.push("observações");
+        if (formData.responsible_id !== (lead.responsible_id || null)) changes.push("responsável");
         if (changes.length > 0) {
           logAction({ leadId: lead.id, action: "field_updated", description: `Campos atualizados: ${changes.join(", ")}` });
         }
         if (formData.responsible_id !== (lead.responsible_id || null)) {
           const responsibleName = responsibleMembers.find(m => m.id === formData.responsible_id)?.name || "Nenhum";
-          logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsavel alterado para "${responsibleName}"` });
+          logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsável alterado para "${responsibleName}"` });
         }
       } else {
         // Dedup check: verify if lead with same phone/email already exists
@@ -456,8 +456,10 @@ export function LeadModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden p-0">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle className="flex items-center gap-2">
-            <User className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <User className="h-4 w-4" />
+            </span>
             {isEditing ? "Editar Lead" : "Novo Lead"}
           </DialogTitle>
         </DialogHeader>
@@ -469,7 +471,7 @@ export function LeadModal({
               {isEditing && (
                 <TabsTrigger value="history" className="gap-1">
                   <History className="w-3 h-3" />
-                  Historico
+                  Histórico
                 </TabsTrigger>
               )}
             </TabsList>
@@ -710,7 +712,7 @@ export function LeadModal({
                         </Select>
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="urgency" className="text-xs">Urgencia</Label>
+                        <Label htmlFor="urgency" className="text-xs">Urgência</Label>
                         <Input
                           id="urgency"
                           value={formData.urgency}
@@ -722,7 +724,7 @@ export function LeadModal({
                       {/* Indicacao para adicionar novos campos */}
                       <div className="col-span-2 flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
                         <Plus className="w-3 h-3" />
-                        <span>Gerencie campos em Configuracoes do Funil</span>
+                        <span>Gerencie campos em Configurações do Funil</span>
                       </div>
                     </div>
                   </div>
@@ -752,7 +754,7 @@ export function LeadModal({
 
                   {/* OBSERVACOES */}
                   <div>
-                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Observacoes</h3>
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Observações</h3>
                     <Textarea
                       id="notes"
                       value={formData.notes}
@@ -765,18 +767,18 @@ export function LeadModal({
 
                 {/* Coluna Direita - Sidebar de acoes (30%) */}
                 <div className="w-[200px] shrink-0 space-y-2">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Acoes</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Ações</p>
 
                   {/* Responsaveis */}
-                  <SidebarSection icon={Users} label="Responsavel">
+                  <SidebarSection icon={Users} label="Responsável">
                     <div className="grid gap-2">
-                      <Label>Responsavel</Label>
+                      <Label>Responsável</Label>
                       <Select
                         value={formData.responsible_id || "none"}
                         onValueChange={(v) => setFormData(prev => ({ ...prev, responsible_id: v === "none" ? null : v }))}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione o responsavel" />
+                          <SelectValue placeholder="Selecione o responsável" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
@@ -867,7 +869,7 @@ export function LeadModal({
                       {history.length > historyLimit && (
                         <button
                           onClick={() => setHistoryLimit((prev) => prev + 50)}
-                          className="w-full text-center text-sm text-primary hover:underline py-2"
+                          className="w-full py-2 text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline"
                         >
                           Carregar mais ({history.length - historyLimit} restantes)
                         </button>
@@ -877,7 +879,7 @@ export function LeadModal({
                     <div className="text-center py-8">
                       <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                       <p className="text-sm text-muted-foreground">
-                        Nenhum historico registrado.
+                        Nenhum histórico registrado.
                       </p>
                     </div>
                   )}
@@ -895,7 +897,7 @@ export function LeadModal({
             onClick={handleSubmit}
             disabled={createLead.isPending || updateLead.isPending}
           >
-            {isEditing ? "Salvar Alteracoes" : "Criar Lead"}
+            {isEditing ? "Salvar alterações" : "Criar Lead"}
           </Button>
         </div>
       </DialogContent>

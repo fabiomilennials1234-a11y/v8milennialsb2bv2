@@ -427,7 +427,16 @@ describe("Agenda — registrar o resultado do compromisso", () => {
    */
   const TETO_CINCO_MONTAGENS = 30_000;
 
-  it("funciona para os cinco tipos, com uma implementação só", async () => {
+  /**
+   * Presença é exclusiva de `event_type=meeting` desde a #2109 (reuniões
+   * canônicas, 14/09 — `podeRegistrarResultado` em agenda-helpers.ts e a nota
+   * do engagement/CLAUDE.md). Este caso nasceu em 24/08, quando QUALQUER tipo
+   * da tabela `meetings` registrava resultado, e passou a falhar na main com a
+   * #2109 sem que ninguém o atualizasse. Ele agora afirma a regra vigente nas
+   * duas pontas: reunião registra; ligação, follow-up, tarefa e "outro" — mesmo
+   * vindo da tabela `meetings` — não oferecem o controle.
+   */
+  it("presença é só de reunião: os outros quatro tipos não oferecem o controle", async () => {
     for (const tipo of ["meeting", "call", "follow_up", "task", "other"]) {
       agendaEvents.length = 0;
       updateMeeting.mockClear();
@@ -437,13 +446,21 @@ describe("Agenda — registrar o resultado do compromisso", () => {
       const { unmount } = render(<Agenda />, { wrapper: MemoryRouter });
 
       await abrirEvento(new RegExp(`Item ${tipo}`));
-      const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "Compareceu" }));
+      // Controle positivo: o detalhe ABRIU — a ausência do botão abaixo não
+      // pode ser só a ausência do popover.
+      expect(await screen.findByRole("button", { name: "Fechar detalhes" }), tipo).toBeInTheDocument();
 
-      expect(updateMeeting, tipo).toHaveBeenCalledWith({
-        id: `id-${tipo}`,
-        status: "completed",
-      });
+      if (tipo === "meeting") {
+        const user = userEvent.setup();
+        await user.click(screen.getByRole("button", { name: "Compareceu" }));
+        expect(updateMeeting, tipo).toHaveBeenCalledWith({
+          id: `id-${tipo}`,
+          status: "completed",
+        });
+      } else {
+        expect(screen.queryByRole("button", { name: "Compareceu" }), tipo).toBeNull();
+        expect(updateMeeting, tipo).not.toHaveBeenCalled();
+      }
       unmount();
     }
   }, TETO_CINCO_MONTAGENS);

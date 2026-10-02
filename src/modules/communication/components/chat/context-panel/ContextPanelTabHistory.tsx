@@ -49,7 +49,7 @@ export function ContextPanelTabHistory({ leadId }: ContextPanelTabHistoryProps) 
   }
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
       <div className="py-2 pr-2">
         {events.map((item, index) => (
           <TimelineItem

@@ -33,7 +33,7 @@ export function AutosaveIndicator({ status, onRetry }: AutosaveIndicatorProps) {
   if (status === "saved") {
     return (
       <span
-        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success"
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success-strong"
         role="status"
         aria-live="polite"
       >

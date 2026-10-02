@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Users, CalendarDays, UserCheck, X, type LucideIcon } from "lucide-react";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,7 +95,7 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <KpiRow cols={3}>
       {tiles.map((t, i) => {
         const clickable = !!t.filter;
         const active = !!t.filter?.active;
@@ -151,6 +151,6 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
           </KpiTile>
         );
       })}
-    </div>
+    </KpiRow>
   );
 }

@@ -167,7 +167,7 @@ export function LeadListRowV2({
       className={cn(
         GRID_COLS,
         "group relative min-h-[56px] cursor-pointer border-b border-border/70 px-4 py-2.5 last:border-b-0",
-        "transition-[background-color] duration-100 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-muted/40",
+        "transition-[background-color] duration-100 ease-standard hover:bg-muted/40",
         "focus-visible:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         // Época de recompra: a linha esverdeia, mesmo idioma da V1 — quem varre
         // a lista procurando quem ligar enxerga a faixa, não o anel.

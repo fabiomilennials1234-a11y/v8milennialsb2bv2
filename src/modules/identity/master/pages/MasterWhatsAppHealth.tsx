@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshCw, AlertTriangle, AlertCircle, ServerOff, Inbox, Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -55,7 +55,7 @@ type DlqRow = {
 
 function statusVariant(status: HealthCheck["status"]) {
   switch (status) {
-    case "healthy": return "bg-success/10 text-success border-success/30";
+    case "healthy": return "bg-success/10 text-success-strong border-success/30";
     case "warning": return "bg-warning/15 text-warning-strong border-warning/40";
     case "critical": return "bg-destructive/10 text-destructive border-destructive/30";
     case "rebind_triggered": return "bg-insights/10 text-insights border-insights/30";
@@ -152,7 +152,7 @@ export default function MasterWhatsAppHealth() {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <KpiRow cols={4}>
         <KpiTile label="Instâncias monitoradas" icon={Smartphone} value={summary.total} />
         <KpiTile
           label="Critical / rebind"
@@ -170,7 +170,7 @@ export default function MasterWhatsAppHealth() {
             <p className="text-xs font-medium text-destructive">+{dlq.data.exhausted} exhausted</p>
           )}
         </KpiTile>
-      </div>
+      </KpiRow>
 
       <Card>
         <CardHeader>

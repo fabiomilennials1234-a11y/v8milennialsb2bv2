@@ -345,7 +345,7 @@ export function TothSettings() {
               )}
             />
             {reading.verdict === "ok" && (
-              <p className="text-[11px] text-success flex items-center gap-1">
+              <p className="text-[11px] text-success-strong flex items-center gap-1">
                 <Lock className="w-3 h-3" />
                 Conexão criptografada com {reading.host}
               </p>

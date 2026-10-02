@@ -176,7 +176,10 @@ export function ContextPanelTabInfo({
   if (!lead || !activeLeadId) return null;
 
   return (
-    <ScrollArea className="h-full">
+    // O wrapper interno do Radix é `display: table; min-width: 100%` — o
+    // conteúdo decidia a largura e saía pela direita do cartão (telefone,
+    // avatares, chips de funil cortados). `block` devolve a largura à coluna.
+    <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
       <div className="flex flex-col">
         <SectionHeader icon={User} label="Campos padrão do sistema" />
         <StandardFields lead={lead} />
@@ -827,7 +830,7 @@ function NotesBlock({
                 >
                   <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground mb-1">
                     <Avatar className="h-4 w-4 shrink-0">
-                      <AvatarFallback className="text-[7.5px] bg-primary/15 text-primary font-bold">
+                      <AvatarFallback className="text-[7.5px] bg-primary-soft text-primary-soft-foreground font-bold">
                         {parsed.author.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>

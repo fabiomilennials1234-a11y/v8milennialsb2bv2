@@ -25,7 +25,7 @@ import {
 
 const VISUAL: Record<string, { icone: typeof MessageSquare; classe: string; borda: string }> = {
   lead_message: { icone: MessageSquare, classe: "text-chart-5", borda: "border-border" },
-  lead_new: { icone: UserPlus, classe: "text-success", borda: "border-success/40" },
+  lead_new: { icone: UserPlus, classe: "text-success-strong", borda: "border-success/40" },
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
 };

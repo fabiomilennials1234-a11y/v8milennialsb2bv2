@@ -46,7 +46,7 @@ export function ImportHistoryPanel() {
           <div
             key={batch.id}
             className={cn(
-              "rounded-lg border p-4 transition-colors",
+              "rounded-2xl border p-4 transition-colors",
               batch.rolled_back
                 ? "bg-muted/30 border-border/50 opacity-60"
                 : "bg-card border-border hover:border-primary/30"
@@ -56,11 +56,11 @@ export function ImportHistoryPanel() {
               <div className="flex items-center gap-3 min-w-0">
                 <div className={cn(
                   "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
-                  batch.rolled_back ? "bg-muted" : "bg-primary/10"
+                  batch.rolled_back ? "bg-muted" : "bg-primary-soft"
                 )}>
                   <FileSpreadsheet className={cn(
                     "w-4.5 h-4.5",
-                    batch.rolled_back ? "text-muted-foreground" : "text-primary"
+                    batch.rolled_back ? "text-muted-foreground" : "text-primary-soft-foreground"
                   )} />
                 </div>
                 <div className="min-w-0">
@@ -94,14 +94,14 @@ export function ImportHistoryPanel() {
               )}
             </div>
 
-            <div className="flex gap-4 mt-3 ml-12">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 ml-12">
               <Stat
-                icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                icon={<CheckCircle2 className="w-3.5 h-3.5 text-success-strong" />}
                 label="Importados"
                 value={batch.imported_count}
               />
               <Stat
-                icon={<AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
+                icon={<AlertCircle className="w-3.5 h-3.5 text-warning-strong" />}
                 label="Ignorados"
                 value={batch.skipped_count}
               />

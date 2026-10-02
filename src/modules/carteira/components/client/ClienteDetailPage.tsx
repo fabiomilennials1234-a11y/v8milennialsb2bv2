@@ -306,7 +306,7 @@ export default function ClienteDetailPage() {
       )}
 
       {/* ── Top row: Metrics + Reorder Timeline ────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[1fr_340px]">
         <ClienteMetrics client={client ?? {}} />
 
         <Card>

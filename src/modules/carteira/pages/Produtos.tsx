@@ -38,7 +38,16 @@ const TYPE_BADGE: Record<string, { variant: "gold" | "info" | "soft"; label: str
   unitario: { variant: "soft", label: "Unitário" },
 };
 
+/**
+ * Colunas pela largura disponível, não pela tela: com o Pitstop aberto ao lado
+ * a área encolhe ~280px e três colunas espremiam nome e preço.
+ */
+const PRODUCT_GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4";
+
 const microLabel = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+/** Rótulo de valor nos sub-blocos estreitos do cartão — sem caixa-alta, que quebrava a linha. */
+const tileLabel = "truncate text-[11px] font-semibold text-muted-foreground";
+const tileValue = "mt-0.5 truncate text-[15px] font-extrabold tabular-nums tracking-[-0.02em]";
 
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
@@ -155,13 +164,13 @@ export default function Produtos() {
 
         {/* Products Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={PRODUCT_GRID}>
             {[1, 2, 3].map((i) => (
               <Card key={i} className="h-64 animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={PRODUCT_GRID}>
             {filteredProducts.map((product) => {
               const typeBadge = TYPE_BADGE[product.type] ?? TYPE_BADGE.projeto;
               const materials = materialCounts.get(product.id) || 0;
@@ -194,7 +203,7 @@ export default function Produtos() {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <CardTitle className="truncate text-[17px] tracking-[-0.02em]">{product.name}</CardTitle>
+                        <CardTitle className="line-clamp-2 text-[17px] tracking-[-0.02em]">{product.name}</CardTitle>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <Badge variant={typeBadge.variant}>{typeBadge.label}</Badge>
                           {product.has_variants && product.variants && product.variants.length > 0 && (
@@ -262,13 +271,13 @@ export default function Produtos() {
                   {/* Tickets - show only for products without variants */}
                   {!product.has_variants && (
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl bg-sunken px-3 py-2.5">
-                        <p className={microLabel}>Ticket</p>
-                        <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">{formatCurrency(product.ticket)}</p>
+                      <div className="min-w-0 rounded-xl bg-sunken px-3 py-2.5">
+                        <p className={tileLabel}>Ticket</p>
+                        <p className={tileValue}>{formatCurrency(product.ticket)}</p>
                       </div>
-                      <div className="rounded-xl bg-sunken px-3 py-2.5">
-                        <p className={microLabel}>Ticket mínimo</p>
-                        <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">{formatCurrency(product.ticket_minimo)}</p>
+                      <div className="min-w-0 rounded-xl bg-sunken px-3 py-2.5">
+                        <p className={tileLabel}>Ticket mínimo</p>
+                        <p className={tileValue}>{formatCurrency(product.ticket_minimo)}</p>
                       </div>
                     </div>
                   )}
@@ -276,7 +285,7 @@ export default function Produtos() {
                   {/* Variant price range */}
                   {product.has_variants && product.variants && product.variants.length > 0 && (
                     <div className="rounded-xl bg-sunken px-3 py-2.5">
-                      <p className={microLabel}>Faixa de preço (variações)</p>
+                      <p className={tileLabel}>Faixa de preço (variações)</p>
                       <p className="mt-0.5 text-[15px] font-extrabold tabular-nums tracking-[-0.02em]">
                         {(() => {
                           const tickets = product.variants

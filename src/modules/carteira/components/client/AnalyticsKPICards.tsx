@@ -6,7 +6,7 @@ import {
   type DeltaDirection,
 } from "@/lib/analytics-helpers";
 import { formatBRL } from "@/lib/format";
-import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import {
   DollarSign,
   HeartPulse,
@@ -68,13 +68,13 @@ export function AnalyticsKPICards() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <KpiRow cols={3}>
         {["Receita recorrente", "Health médio", "Taxa de retenção", "Churn previsto", "Recompra atrasada", "Ticket médio"].map(
           (label) => (
             <KpiTile key={label} label={label} value="·" loading />
           ),
         )}
-      </div>
+      </KpiRow>
     );
   }
 
@@ -120,7 +120,7 @@ export function AnalyticsKPICards() {
   const churnCount = trends?.churn_summary.count ?? 0;
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+    <KpiRow cols={3}>
       <KpiTile
         label="Receita recorrente"
         value={formatBRL(kpis.total_recurring)}
@@ -194,6 +194,6 @@ export function AnalyticsKPICards() {
       >
         {ticketValues.length >= 2 && <Sparkline points={ticketValues} color={TOKEN.gold} />}
       </KpiTile>
-    </div>
+    </KpiRow>
   );
 }

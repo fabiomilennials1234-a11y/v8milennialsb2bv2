@@ -104,7 +104,7 @@ export function MasterOnlineIndicator({
         {!collapsed && (
           <>
             <span className="flex-1 truncate text-left">Ativos agora</span>
-            <span className="shrink-0 text-xs font-medium tabular-nums text-success">
+            <span className="shrink-0 text-xs font-medium tabular-nums text-success-strong">
               {label}
             </span>
           </>
@@ -117,7 +117,7 @@ export function MasterOnlineIndicator({
     <Button
       variant="outline"
       size="sm"
-      className="gap-1.5 border-success/30 px-2.5 text-success hover:bg-success/10 hover:text-success"
+      className="gap-1.5 border-success/30 px-2.5 text-success-strong hover:bg-success/10 hover:text-success-strong"
       onClick={() => navigate("/master/usuarios-ativos")}
       title={titulo}
       aria-label={`Usuários ativos: ${label}`}

@@ -58,7 +58,7 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
           title="Copiar URL"
         >
           {copied ? (
-            <Check className="h-4 w-4 text-success" />
+            <Check className="h-4 w-4 text-success-strong" />
           ) : (
             <Copy className="w-4 h-4" />
           )}

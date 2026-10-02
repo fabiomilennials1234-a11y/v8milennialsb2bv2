@@ -253,8 +253,10 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem, mode 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {mode === "schedule" ? <CalendarIcon className="w-5 h-5 text-primary" /> : <RefreshCw className="w-5 h-5 text-primary" />}
+          <DialogTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              {mode === "schedule" ? <CalendarIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+            </span>
             {copy.title}
           </DialogTitle>
           <DialogDescription>
@@ -305,9 +307,9 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem, mode 
 
           {/* Preview: where the card will land */}
           {meetingDate && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+            <div className="rounded-2xl border border-primary/25 bg-primary-soft p-3 text-center">
               <p className="text-xs text-muted-foreground mb-1">O lead será movido para</p>
-              <p className="text-sm font-semibold text-primary">
+              <p className="text-sm font-semibold text-primary-soft-foreground">
                 {(() => {
                   const [h, m] = meetingTime.split(":");
                   const dt = new Date(meetingDate);
@@ -326,17 +328,17 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem, mode 
                 })()}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {format(meetingDate, "EEEE, dd 'de' MMMM", { locale: ptBR })} as {meetingTime}
+                {format(meetingDate, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {meetingTime}
               </p>
             </div>
           )}
 
           {/* Google Calendar */}
           {hasCalendars && (
-            <div className="rounded-lg border border-border/50 p-3 space-y-3 bg-muted/20">
+            <div className="rounded-2xl bg-sunken p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-primary" />
+                  <Video className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Google Calendar</span>
                 </div>
                 <Switch checked={createGoogleEvent} onCheckedChange={setCreateGoogleEvent} />
@@ -366,7 +368,7 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem, mode 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting || !meetingDate} className="gradient-gold">
+            <Button onClick={handleSubmit} disabled={isSubmitting || !meetingDate}>
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {isSubmitting ? copy.submitting : copy.submitButton}
             </Button>

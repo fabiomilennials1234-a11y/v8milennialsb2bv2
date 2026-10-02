@@ -67,14 +67,14 @@ export function WinLossAnalysis() {
           <div className="space-y-4">
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-center">
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-center">
                 <TrendingDown className="h-4 w-4 text-destructive mx-auto mb-1" />
                 <div className={`${AT.valueMd} text-destructive`}>{totalLost}</div>
                 <div className="text-[10px] text-muted-foreground">Deals Perdidos</div>
               </div>
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-center">
-                <TrendingUp className="h-4 w-4 text-amber-500 mx-auto mb-1" />
-                <div className={`${AT.valueMd} text-amber-500`}>{formatCurrency(totalLostValue)}</div>
+              <div className="rounded-2xl border border-warning/30 bg-warning/5 p-3 text-center">
+                <TrendingUp className="h-4 w-4 text-warning-strong mx-auto mb-1" />
+                <div className={`${AT.valueMd} text-warning-strong`}>{formatCurrency(totalLostValue)}</div>
                 <div className="text-[10px] text-muted-foreground">Valor Perdido</div>
               </div>
             </div>

@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import {
   useMasterAuditLogs,
   useMasterAuditActions,
@@ -83,7 +83,7 @@ export default function MasterAuditLogs() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <KpiRow cols={3}>
         <KpiTile label="Ações hoje" icon={Activity} value={stats?.totalToday || 0} />
         <KpiTile label="Últimos 7 dias" icon={CalendarDays} value={stats?.totalWeek || 0} />
         <KpiTile
@@ -91,7 +91,7 @@ export default function MasterAuditLogs() {
           icon={ListFilter}
           value={Object.keys(stats?.byAction || {}).length || 0}
         />
-      </div>
+      </KpiRow>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">

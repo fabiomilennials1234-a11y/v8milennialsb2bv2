@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { AlarmClock, ListChecks, MessageSquareDot } from "lucide-react";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { useAcoesDoDia } from "@/modules/engagement";
 import { useOrganization } from "@/modules/identity";
 import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
@@ -105,7 +105,7 @@ export function TabProximosPassos() {
 
       {/* V5: o resumo do topo vira número. Mesmos três valores da frase de
           antes, do mesmo cache — o cartão nunca discorda da lista abaixo. */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <KpiRow cols={3}>
         <KpiTile
           label="Clientes esperando"
           value={valor(aguardando, convError)}
@@ -130,7 +130,7 @@ export function TabProximosPassos() {
           loading={taskLoading}
           note={atrasadasCount > 0 ? "Passaram do prazo" : "Nada passou do prazo"}
         />
-      </div>
+      </KpiRow>
 
       {/* Herói: quem falou e não foi respondido — o único bloco que é dinheiro
           escapando. Embaixo, à esquerda, metas (precisam de largura para a

@@ -1,7 +1,6 @@
 import { memo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Info } from "lucide-react";
-import { useTheme } from "next-themes";
 import {
   Tooltip,
   TooltipContent,
@@ -43,8 +42,6 @@ const EXPLANATION = `Como calculamos:
 • Eficiência (10%) — Relação LTV/CAC. Acima de 3x = nota máxima.`;
 
 function HealthScoreRingBase({ score }: HealthScoreRingProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const clamped = Math.min(Math.max(score, 0), 100);
   const zone = getScoreZone(clamped);
 
@@ -61,10 +58,10 @@ function HealthScoreRingBase({ score }: HealthScoreRingProps) {
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4, delay: 0.3 }}
-      className="bg-card rounded-lg border border-border p-5 flex flex-col items-center"
+      className="rounded-card border border-card-border bg-card p-5 shadow-relevo flex flex-col items-center"
     >
       <div className="flex items-center justify-between w-full mb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Saúde Comercial
         </p>
         <TooltipProvider>
@@ -88,7 +85,7 @@ function HealthScoreRingBase({ score }: HealthScoreRingProps) {
           cy={SIZE / 2}
           r={R}
           fill="none"
-          stroke={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)"}
+          stroke="hsl(var(--foreground) / .07)"
           strokeWidth={STROKE}
         />
         {/* Progress */}
@@ -113,10 +110,10 @@ function HealthScoreRingBase({ score }: HealthScoreRingProps) {
           y={SIZE / 2}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={isDark ? "#fafafa" : "#1a1a1a"}
+          fill="hsl(var(--foreground))"
           fontSize="28"
-          fontWeight="900"
-          fontFamily="-apple-system, system-ui, sans-serif"
+          fontWeight="800"
+          letterSpacing="-1"
         >
           {Math.round(clamped)}
         </text>

@@ -34,7 +34,7 @@ export function ProfileSettings() {
     : user?.email?.substring(0, 2).toUpperCase() || "??";
 
   const roleLabels: Record<string, { label: string; color: string }> = {
-    admin: { label: "Administrador", color: "bg-success/10 text-success border-success/30" },
+    admin: { label: "Administrador", color: "bg-success/10 text-success-strong border-success/30" },
     sdr: { label: "Vendedor", color: "bg-chart-5/10 text-chart-5 border-chart-5/30" },
     closer: { label: "Vendedor", color: "bg-primary/10 text-primary border-primary/30" },
     member: { label: "Membro", color: "bg-muted text-muted-foreground border-border" },

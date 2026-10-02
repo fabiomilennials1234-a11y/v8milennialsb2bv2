@@ -250,7 +250,7 @@ export default function Upsell() {
               </div>
             )}
 
-            <div className="relative ml-auto w-full max-w-[320px] sm:w-[280px]">
+            <div className="relative w-full sm:ml-auto sm:w-[240px]">
               <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
               <Input
                 aria-label={carteiraView === "pedidos" ? "Buscar pedidos" : "Buscar clientes"}

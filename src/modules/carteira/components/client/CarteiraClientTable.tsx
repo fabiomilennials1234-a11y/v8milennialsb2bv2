@@ -226,7 +226,7 @@ function iconBtnClass(onGold: boolean) {
 }
 
 const thBase =
-  "h-auto border-b border-tinta-line py-2.5 text-[11px] font-bold uppercase tracking-[.06em]";
+  "h-auto whitespace-nowrap border-b border-tinta-line py-2.5 text-[11px] font-bold uppercase tracking-[.06em]";
 
 /** Linha da tabela no vocabulário do InkRow: sem divisória, cantos de pílula. */
 const rowBase =
@@ -483,8 +483,8 @@ export function CarteiraClientTable({
                   isSelected
                     ? "[&>td]:bg-primary [&>td]:text-primary-foreground"
                     : bulkChecked
-                      ? "[&>td]:bg-white/[.07] hover:[&>td]:bg-white/[.09]"
-                      : "hover:[&>td]:bg-white/[.04]",
+                      ? "[&>td]:bg-white/[.07] [&:hover>td]:bg-white/[.09]"
+                      : "[&:hover>td]:bg-white/[.04]",
                 )}
               >
                 {bulk && (

@@ -9,7 +9,7 @@ import {
   Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FocusCard, FocusTile, KpiTile } from "@/components/ui/bento";
+import { FocusCard, FocusTile, KpiRow, KpiTile } from "@/components/ui/bento";
 import { useIdentity, useOrganization } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,7 +169,7 @@ function Quotas({ value }: { value: Json | undefined }) {
       <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         Limites disponíveis para esta organização
       </p>
-      <div className="grid gap-4 md:grid-cols-3">
+      <KpiRow cols={3}>
         {resources.map((resource) => {
           const item = quotas[resource.key];
           const quota =
@@ -230,7 +230,7 @@ function Quotas({ value }: { value: Json | undefined }) {
             </KpiTile>
           );
         })}
-      </div>
+      </KpiRow>
     </div>
   );
 }
@@ -321,7 +321,7 @@ function BillingAccount({
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList variant="segmented" className="max-w-full flex-wrap justify-start">
+        <TabsList variant="segmented" className="max-w-full justify-start overflow-x-auto scrollbar-hide">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="usage">Plano e limites</TabsTrigger>
           <TabsTrigger value="history">Histórico de cobranças</TabsTrigger>

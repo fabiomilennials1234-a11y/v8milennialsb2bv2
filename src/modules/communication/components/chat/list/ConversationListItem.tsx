@@ -132,7 +132,10 @@ function ContactContextMenu({
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="rounded-md p-1 transition-colors hover:bg-muted/80 group-data-[selected=true]/linha:hover:bg-primary-foreground/10"
+            // Recolhido (largura zero, invisível) até a linha ter mouse ou foco,
+            // ou o menu estar aberto — assim não rouba espaço do nome. Continua
+            // no DOM e alcançável por teclado (o foco o expande).
+            className="-mr-1 w-0 shrink-0 overflow-hidden rounded-md p-0 opacity-0 transition-[width,opacity] duration-150 hover:bg-muted/80 focus-visible:w-6 focus-visible:p-1 focus-visible:opacity-100 group-hover/linha:w-6 group-hover/linha:p-1 group-hover/linha:opacity-100 group-focus-within/linha:w-6 group-focus-within/linha:p-1 group-focus-within/linha:opacity-100 data-[state=open]:w-6 data-[state=open]:p-1 data-[state=open]:opacity-100 group-data-[selected=true]/linha:hover:bg-primary-foreground/10"
             aria-label="Opções da conversa"
           >
             <MoreVertical className="h-3.5 w-3.5 text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70" />
@@ -367,67 +370,72 @@ export function ConversationListItem({
           <ChannelBadge channel={contact.channel} size={18} overlay />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="flex min-w-0 items-center gap-1 truncate text-sm font-bold">
-              <span className="truncate">{displayName}</span>
-              {isWhatsApp && (
-                <ContactContextMenu
-                  contact={contact}
-                  activeTab={activeTab}
-                  isAdmin={isAdmin}
-                  instanceId={instanceId}
-                  organizationId={organizationId}
-                  allTags={allTags}
-                  onMarkUnread={onMarkUnread}
-                    onArchive={onArchive}
-                  onUnarchive={onUnarchive}
-                  onDelete={onDelete}
-                  onAddTag={onAddTag}
-                  onRemoveTag={onRemoveTag}
-                />
+          {/* Linha 1 — o NOME tem prioridade: ele é o que a pessoa procura ao
+              varrer a lista. Ele cresce até o espaço disponível e nunca cai
+              abaixo de ~7 caracteres; as etiquetas é que cedem (uma visível +
+              "+N", truncando). O ⋮ fica no canto, depois da hora, e só ocupa
+              espaço sob o mouse, no foco ou com o menu aberto. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "shrink truncate text-sm font-bold",
+                // Piso de ~7 caracteres só para nome longo — nome curto já cabe
+                // inteiro e não deve empurrar as etiquetas com um vão.
+                displayName.length > 8 && "min-w-[6.5rem]",
               )}
-              {/* "Sem lead ainda" é informação onde o vínculo é possível — e
-                  desde que a conversa de Instagram pode virar lead pelo painel,
-                  isso passou a valer para os dois canais. O ponto some assim que
-                  alguém vincula, nos dois. */}
-              {!contact.lead_id && (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-primary/70 group-data-[selected=true]/linha:bg-primary-foreground/60" title="Novo" />
-              )}
-              {/* No WhatsApp o nome do lead JÁ é o título da linha
-                  (`contactDisplayName`). No Instagram o título é o @handle —
-                  que é o que a pessoa vê no app — então o lead vinculado só
-                  aparece se ganhar espaço próprio. */}
-              {!isWhatsApp && contact.lead_name && (
-                <span
-                  className={cn(CHIP_NEUTRO, "max-w-[104px] truncate")}
-                  title={`Lead: ${contact.lead_name}`}
-                >
-                  {contact.lead_name}
-                </span>
-              )}
-              {contact.tags.slice(0, 2).map((tag) => (
-                <span
-                  key={tag.id}
-                  className="text-[10px] px-1.5 py-0.5 rounded-full leading-none shrink-0 whitespace-nowrap"
-                  style={{
-                    backgroundColor: `${tag.color}20`,
-                    color: tag.color,
-                    border: `1px solid ${tag.color}40`,
-                  }}
-                >
-                  {tag.name}
-                </span>
-              ))}
-              {contact.tags.length > 2 && (
-                <span className="shrink-0 text-[10px] text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
-                  +{contact.tags.length - 2}
-                </span>
-              )}
+            >
+              {displayName}
             </span>
+            {/* "Sem lead ainda" é informação onde o vínculo é possível — e
+                desde que a conversa de Instagram pode virar lead pelo painel,
+                isso passou a valer para os dois canais. O ponto some assim que
+                alguém vincula, nos dois. */}
+            {!contact.lead_id && (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-primary/70 group-data-[selected=true]/linha:bg-primary-foreground/60" title="Novo" />
+            )}
+            {/* No WhatsApp o nome do lead JÁ é o título da linha
+                (`contactDisplayName`). No Instagram o título é o @handle —
+                que é o que a pessoa vê no app — então o lead vinculado só
+                aparece se ganhar espaço próprio. */}
+            {!isWhatsApp && contact.lead_name && (
+              <span
+                className={cn(CHIP_NEUTRO, "min-w-0 max-w-[104px] shrink truncate")}
+                title={`Lead: ${contact.lead_name}`}
+              >
+                {contact.lead_name}
+              </span>
+            )}
+            {contact.tags.length > 0 && (
+              <span
+                // Encolhe antes do nome (fator 999), com um piso que ainda mostra
+                // o começo da etiqueta ou o "+N".
+                className="flex min-w-[2.25rem] shrink-[999] items-center gap-1 overflow-hidden"
+                title={contact.tags.map((t) => t.name).join(", ")}
+              >
+                {contact.tags.slice(0, 1).map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="min-w-0 truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] leading-none"
+                    style={{
+                      backgroundColor: `${tag.color}20`,
+                      color: tag.color,
+                      border: `1px solid ${tag.color}40`,
+                    }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+                {contact.tags.length > 1 && (
+                  <span className="shrink-0 text-[10px] font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
+                    +{contact.tags.length - 1}
+                  </span>
+                )}
+              </span>
+            )}
             <time
               dateTime={contact.last_message_time || ""}
               className={cn(
-                "shrink-0 whitespace-nowrap text-[11px] tabular-nums",
+                "ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums",
                 contact.unread_count > 0 && !isSelected
                   ? "font-bold text-primary"
                   : "font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70",
@@ -435,6 +443,22 @@ export function ConversationListItem({
             >
               {formatContactTime(contact.last_message_time)}
             </time>
+            {isWhatsApp && (
+              <ContactContextMenu
+                contact={contact}
+                activeTab={activeTab}
+                isAdmin={isAdmin}
+                instanceId={instanceId}
+                organizationId={organizationId}
+                allTags={allTags}
+                onMarkUnread={onMarkUnread}
+                onArchive={onArchive}
+                onUnarchive={onUnarchive}
+                onDelete={onDelete}
+                onAddTag={onAddTag}
+                onRemoveTag={onRemoveTag}
+              />
+            )}
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
             <p
@@ -452,7 +476,7 @@ export function ConversationListItem({
                   duas derivações dariam duas cores para a mesma caixa. */}
               {caixa && (
                 <span
-                  className="flex items-center gap-1 shrink-0 max-w-[132px]"
+                  className="flex min-w-0 max-w-[132px] shrink items-center gap-1"
                   title={`Caixa: ${caixa.nome}`}
                 >
                   <span
@@ -471,7 +495,7 @@ export function ConversationListItem({
                   altura de linha variável quebra a lista virtualizada. */}
               {tambemEm && tambemEm.length > 0 && (
                 <span
-                  className="flex shrink-0 items-center gap-0.5 text-[10px] leading-none opacity-80"
+                  className="flex min-w-0 shrink items-center gap-0.5 text-[10px] leading-none opacity-80"
                   title={`O mesmo contato também tem conversa em: ${tambemEm
                     .map((c) => c.nome)
                     .join(", ")}`}
@@ -486,7 +510,7 @@ export function ConversationListItem({
               )}
               {stageLabel && (
                 <span
-                  className={CHIP_NEUTRO}
+                  className={cn(CHIP_NEUTRO, "max-w-[7.5rem] truncate")}
                   title={`Etapa: ${stageLabel}`}
                 >
                   {stageLabel}
@@ -508,7 +532,7 @@ export function ConversationListItem({
                   Você:
                 </span>
               )}
-              <span className="truncate min-w-0">{contact.last_message || "Sem mensagens"}</span>
+              <span className="min-w-[3.5rem] flex-1 truncate">{contact.last_message || "Sem mensagens"}</span>
             </p>
             {contact.unread_count > 0 && !isSelected && (
               <Badge

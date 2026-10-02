@@ -113,8 +113,8 @@ function TabMapaBase() {
           </span>
         </div>
 
-        <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-2xl bg-tinta px-4 pb-4 pt-5 text-tinta-foreground">
-          <div ref={mapRef} className="tabmapa-svg relative mx-auto flex w-full max-w-[600px] justify-center">
+        <div className="mt-3 flex shrink-0 flex-col rounded-2xl bg-tinta px-4 pb-4 pt-5 text-tinta-foreground">
+          <div ref={mapRef} className="tabmapa-svg relative mx-auto flex w-full max-w-[500px] justify-center">
             <div dangerouslySetInnerHTML={{ __html: brazilSvg.substring(brazilSvg.indexOf("<svg")) }} />
             {tooltip && (
               <div

@@ -53,9 +53,11 @@ export function CompareceuModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-green-500" />
-            Confirmar Comparecimento
+          <DialogTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-success/10 text-success-strong">
+              <UserCheck className="h-4 w-4" />
+            </span>
+            Confirmar comparecimento
           </DialogTitle>
         </DialogHeader>
 
@@ -98,7 +100,6 @@ export function CompareceuModal({
           <Button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="bg-green-500 hover:bg-green-600"
           >
             {isLoading ? (
               <>

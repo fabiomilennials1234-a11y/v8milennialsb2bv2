@@ -123,7 +123,9 @@ export default function Faq() {
 
         {/* Filtro de categorias */}
         {FAQ_CATEGORIES.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          // No celular, 14 chips em várias linhas empurravam as perguntas para
+          // fora da tela: lá a fileira rola na horizontal.
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
             <CategoryChip
               label="Todos"
               icon={LifeBuoy}
@@ -225,10 +227,10 @@ function CategoryChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "bg-tinta text-tinta-foreground shadow-relevo-tinta [&>svg]:text-primary"
+          ? "bg-tinta text-tinta-foreground shadow-relevo-tinta dark:bg-foreground dark:text-background [&>svg]:text-primary"
           : "border border-card-border bg-card text-muted-foreground shadow-relevo hover:text-foreground",
       )}
     >

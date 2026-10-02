@@ -180,7 +180,7 @@ function ConnectionSection({
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   {isConnected ? (
-                    <Badge className="bg-success/20 text-success border-success/30 gap-1">
+                    <Badge className="bg-success/20 text-success-strong border-success/30 gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Conectado
                     </Badge>

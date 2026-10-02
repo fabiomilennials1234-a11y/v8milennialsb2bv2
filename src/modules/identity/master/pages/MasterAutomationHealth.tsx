@@ -18,7 +18,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import {
   AlertTriangle,
   Activity,
@@ -81,7 +81,7 @@ export default function MasterAutomationHealth() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <KpiRow cols={5}>
         <SummaryCard
           icon={AlertTriangle}
           label="Dead-letter (24h)"
@@ -112,7 +112,7 @@ export default function MasterAutomationHealth() {
           value={health?.unresolved_alerts ?? 0}
           severity={(health?.unresolved_alerts ?? 0) > 0 ? "error" : "info"}
         />
-      </div>
+      </KpiRow>
 
       {/* Navegação da página fica abaixo do resumo: KPIs primeiro, detalhe depois. */}
       <Tabs defaultValue="lag" className="w-full space-y-5">

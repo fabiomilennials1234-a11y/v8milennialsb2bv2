@@ -62,7 +62,7 @@ export function OnbStepPipelines() {
         {pipelines.map((p, i) => (
           <div key={i} className="p-4 rounded-xl border border-border/60 bg-muted/20">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-4 h-4 text-success" />
+              <CheckCircle2 className="w-4 h-4 text-success-strong" />
               <span className="text-sm font-medium">{p.name}</span>
             </div>
             {p.stages && (

@@ -97,7 +97,7 @@ export function ImportWorkflowDialog({ onClose }: Props) {
                   <div className="flex gap-1 mt-0.5">
                     <span className="text-[10px] text-muted-foreground">{wf.trigger_type}</span>
                     {wf.is_active && (
-                      <span className="text-[10px] text-success">ativo</span>
+                      <span className="text-[10px] text-success-strong">ativo</span>
                     )}
                   </div>
                 </div>

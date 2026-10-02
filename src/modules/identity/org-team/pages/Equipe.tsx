@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   Table,
@@ -721,21 +721,21 @@ export default function Equipe() {
       )}
 
       {/* Stats — mesmos quatro números de antes, agora em KpiTile. */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <KpiRow cols={4}>
         <KpiTile label="Total de membros" value={members.length} icon={Users} tone="neutral" />
         <KpiTile
           label="Reuniões"
           value={meetingsCount}
           icon={CalendarCheck}
           tone="info"
-          note="Ativos medidos por reuniões"
+          note="Membros ativos"
         />
         <KpiTile
           label="Vendas"
           value={salesCount}
           icon={Handshake}
           tone="gold"
-          note="Ativos medidos por vendas"
+          note="Membros ativos"
         />
         <KpiTile
           label="Folha OTE total"
@@ -744,7 +744,7 @@ export default function Equipe() {
           tone="good"
           note="Base + bônus dos ativos"
         />
-      </div>
+      </KpiRow>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -754,11 +754,11 @@ export default function Equipe() {
             placeholder="Buscar membro..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="rounded-full pl-9"
           />
         </div>
         <Select value={filterRole} onValueChange={setFilterRole}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[190px] rounded-full">
             <SelectValue placeholder="Função" />
           </SelectTrigger>
           <SelectContent>
@@ -803,8 +803,8 @@ export default function Equipe() {
             ) : (
               filteredMembers.map((member) => (
                 <TableRow key={member.id}>
-                  <TableCell className="font-semibold">{member.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground" title="ID do piloto (use no n8n round robin)">
+                  <TableCell className="whitespace-nowrap font-semibold">{member.name}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground" title="ID do piloto (use no n8n round robin)">
                     {member.id}
                   </TableCell>
                   <TableCell>

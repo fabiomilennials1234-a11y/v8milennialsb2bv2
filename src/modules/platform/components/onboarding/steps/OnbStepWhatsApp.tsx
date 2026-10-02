@@ -110,7 +110,7 @@ export function OnbStepWhatsApp() {
       <div className="space-y-6 text-center max-w-sm">
         <div className="flex justify-center">
           <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center">
-            <CheckCircle2 className="w-8 h-8 text-success" />
+            <CheckCircle2 className="w-8 h-8 text-success-strong" />
           </div>
         </div>
         <div>

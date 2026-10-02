@@ -718,24 +718,49 @@ function LeadsInner() {
         subtitle="Da primeira conversa à próxima compra."
         // Ações da lista de leads; a carteira (aba Clientes) tem as suas.
         actions={!portfolioActive && <>
-          {isV2 ? (
-            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)}>
-              <History />
-              Importações
+          {/* No celular as três ações de arquivo cabem num menu: em pílula,
+              ocupavam duas linhas antes da lista. */}
+          <div className="hidden items-center gap-2 sm:flex">
+            {isV2 ? (
+              <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)}>
+                <History />
+                Importações
+              </Button>
+            ) : (
+              <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
+                <History />
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport}>
+              <FileUp />
+              Importar
             </Button>
-          ) : (
-            <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-              <History />
+            <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport}>
+              <FileDown />
+              Exportar
             </Button>
-          )}
-          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport}>
-            <FileUp />
-            Importar
-          </Button>
-          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport}>
-            <FileDown />
-            Exportar
-          </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="sm:hidden" aria-label="Mais ações de leads">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setIsImportHistoryOpen(true)}>
+                <History />
+                Importações
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsImportModalOpen(true)} disabled={!canImport}>
+                <FileUp />
+                Importar
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsExportModalOpen(true)} disabled={!canExport}>
+                <FileDown />
+                Exportar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
             <Plus />
             Novo lead
@@ -822,7 +847,7 @@ function LeadsInner() {
             os dois com a mesma transição pra linha inteira se acomodar junto. */}
         <div
           className={cn(
-            "relative flex-1 transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+            "relative flex-1 transition-[max-width] duration-300 ease-standard",
             searchFocused ? "max-w-xl" : "max-w-sm",
           )}
         >
@@ -836,8 +861,12 @@ function LeadsInner() {
             className="pl-9"
           />
         </div>
+        {/* No celular os filtros viram uma faixa que rola (largura do próprio
+            rótulo); no desktop o invólucro some (`sm:contents`) e eles voltam
+            a ser itens da linha. Empilhados, eram três linhas antes da lista. */}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide [&>*]:shrink-0 sm:contents">
         <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-          <SelectTrigger className="w-[170px]" aria-label="Origem">
+          <SelectTrigger className="w-auto shrink-0 gap-2 sm:w-[170px]" aria-label="Origem">
             <SelectValue placeholder="Origem" />
           </SelectTrigger>
           <SelectContent>
@@ -848,7 +877,7 @@ function LeadsInner() {
           </SelectContent>
         </Select>
         <Select value={filterQualification} onValueChange={setFilterQualification}>
-          <SelectTrigger className="w-[190px]" aria-label="Qualificação">
+          <SelectTrigger className="w-auto shrink-0 gap-2 sm:w-[13.5rem]" aria-label="Qualificação">
             <SelectValue placeholder="Qualificação" />
           </SelectTrigger>
           <SelectContent>
@@ -876,7 +905,7 @@ function LeadsInner() {
         {/* Dono da conta — casa exatamente o que a coluna homônima da lista
             mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
         <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-          <SelectTrigger className="w-[180px]" aria-label="Dono da conta">
+          <SelectTrigger className="w-auto shrink-0 gap-2 sm:w-[180px]" aria-label="Dono da conta">
             <SelectValue placeholder="Dono da conta" />
           </SelectTrigger>
           <SelectContent>
@@ -900,6 +929,7 @@ function LeadsInner() {
           activeViewId={activeViewId}
           onActiveViewChange={handleActiveViewChange}
         />
+        </div>
         {/* Contagem do recorte junto dos filtros — o rodapé só aparece com
             mais de uma página, e o número é a resposta que o filtro dá.
             Some enquanto a busca está focada, cedendo o espaço da expansão. */}
@@ -907,7 +937,7 @@ function LeadsInner() {
           <span
             className={cn(
               "self-center overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground",
-              "transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+              "transition-[opacity,max-width] duration-300 ease-standard",
               searchFocused ? "max-w-0 opacity-0" : "max-w-[220px] opacity-100",
             )}
             aria-hidden={searchFocused}
@@ -975,7 +1005,7 @@ function LeadsInner() {
             <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{Object.entries(originLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={filterQualification} onValueChange={setFilterQualification}>
-            <SelectTrigger className="w-44" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[13.5rem]" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">Todas as qualificações</SelectItem><SelectItem value="none">Sem qualificação</SelectItem>{QUALIFICATION_TIERS.map(tier => <SelectItem key={tier} value={tier}>{QUALIFICATION_TIER_CONFIG[tier].label}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={filterResponsible} onValueChange={setFilterResponsible}>

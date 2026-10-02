@@ -253,7 +253,7 @@ export function AITimeline({ leadId, hideHeader = false }: AITimelineProps) {
       )}
 
       {!isLoading && !error && events.length > 0 && (
-        <ScrollArea className={hideHeader ? "h-full" : "max-h-[320px]"}>
+        <ScrollArea className={cn(hideHeader ? "h-full" : "max-h-[320px]", "[&_[data-radix-scroll-area-viewport]>div]:!block")}>
           <ol>
             <AnimatePresence initial={false}>
               {events.map((event, index) => (

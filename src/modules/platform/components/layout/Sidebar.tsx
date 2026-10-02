@@ -145,7 +145,7 @@ export function Sidebar() {
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
-        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
+        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta transition-[width] duration-200 ease-drawer motion-reduce:transition-none"
       >
         <div ref={topoRef} data-medida="topo" className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:

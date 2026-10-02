@@ -5,13 +5,15 @@ import { AT } from "./analytics-tokens";
 import { AnalyticsEmptyState } from "./AnalyticsEmptyState";
 
 function pctToColor(pct: number): string {
-  if (pct >= 90) return "bg-purple-700 text-white";
-  if (pct >= 75) return "bg-purple-600 text-white";
-  if (pct >= 60) return "bg-purple-500 text-white";
-  if (pct >= 45) return "bg-purple-400 text-white";
-  if (pct >= 30) return "bg-purple-300 text-purple-900";
-  if (pct >= 15) return "bg-purple-200 text-purple-800";
-  if (pct > 0) return "bg-purple-100 text-purple-700";
+  // V5: rampa de ouro (o mesmo matiz ganhando força) — o roxo cru não
+  // existia no sistema e lia diferente em cada tema.
+  if (pct >= 90) return "bg-primary text-primary-foreground";
+  if (pct >= 75) return "bg-primary/80 text-primary-foreground";
+  if (pct >= 60) return "bg-primary/65 text-foreground";
+  if (pct >= 45) return "bg-primary/50 text-foreground";
+  if (pct >= 30) return "bg-primary/35 text-foreground";
+  if (pct >= 15) return "bg-primary/20 text-foreground";
+  if (pct > 0) return "bg-primary/10 text-foreground";
   return "bg-muted text-muted-foreground";
 }
 
@@ -128,10 +130,10 @@ export function CohortAnalysis() {
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Intensidade:</span>
           {[
-            { label: ">=90%", cls: "bg-purple-700" },
-            { label: ">=60%", cls: "bg-purple-500" },
-            { label: ">=30%", cls: "bg-purple-300" },
-            { label: "<30%", cls: "bg-purple-100" },
+            { label: ">=90%", cls: "bg-primary" },
+            { label: ">=60%", cls: "bg-primary/65" },
+            { label: ">=30%", cls: "bg-primary/35" },
+            { label: "<30%", cls: "bg-primary/10" },
           ].map(({ label, cls }) => (
             <div key={label} className="flex items-center gap-1">
               <div className={`w-3 h-3 rounded ${cls}`} />

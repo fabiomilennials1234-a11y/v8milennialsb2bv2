@@ -42,7 +42,7 @@ export function MenuPreview({ type, text, choices, footer, listButtonLabel }: Pr
                 key={idx}
                 className={cn(
                   "text-xs rounded border border-border/40 px-2 py-1.5 flex items-center gap-2",
-                  type === "button" && "justify-center text-primary font-medium",
+                  type === "button" && "justify-center text-insights font-medium",
                   type === "list" && "justify-between",
                   type === "poll" && "text-foreground/90",
                   type === "carousel" && "min-w-[100px] justify-center"
@@ -58,7 +58,7 @@ export function MenuPreview({ type, text, choices, footer, listButtonLabel }: Pr
           </div>
         )}
 
-        {type === "list" && <p className="text-xs text-primary text-center font-medium pt-2">{listButtonLabel || "Ver opções"}</p>}
+        {type === "list" && <p className="text-xs text-insights text-center font-medium pt-2">{listButtonLabel || "Ver opções"}</p>}
 
         {footer && (
           <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-2">

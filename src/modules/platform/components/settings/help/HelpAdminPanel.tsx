@@ -581,7 +581,7 @@ export function HelpAdminPanel() {
                       >
                         <div className="flex items-center gap-2">
                           {art.is_published ? (
-                            <Eye className="w-3.5 h-3.5 text-success" />
+                            <Eye className="w-3.5 h-3.5 text-success-strong" />
                           ) : (
                             <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
                           )}

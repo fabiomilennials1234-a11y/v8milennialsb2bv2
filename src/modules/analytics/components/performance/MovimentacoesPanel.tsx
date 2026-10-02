@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { DateRange as RDPDateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -265,7 +265,7 @@ export function MovimentacoesPanel() {
             <Skeleton className="h-[92px] rounded-card" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <KpiRow cols={3}>
             <MovimentacaoTile
               label="Marcadas"
               value={marcadas}
@@ -290,7 +290,7 @@ export function MovimentacoesPanel() {
               subValue={{ caption: "Receita ·", amount: receitaFormatada }}
               delay={0.12}
             />
-          </div>
+          </KpiRow>
         )}
       </div>
     </motion.section>

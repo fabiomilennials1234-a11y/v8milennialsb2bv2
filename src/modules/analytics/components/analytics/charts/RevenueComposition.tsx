@@ -50,7 +50,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-md text-xs">
+    <div className="rounded-xl border border-border/60 bg-popover px-3 py-2 shadow-relevo-alto text-xs">
       <p className="font-medium mb-1">{TYPE_LABELS[item.product_type] ?? item.product_type}</p>
       <p className="text-muted-foreground">{formatCurrency(item.total_revenue)}</p>
       <p className="text-muted-foreground">{item.pct}% do total</p>

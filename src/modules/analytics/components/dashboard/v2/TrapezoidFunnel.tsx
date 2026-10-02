@@ -79,7 +79,12 @@ function TrapezoidFunnelBase({ stages, deltaPp, prevLabel }: TrapezoidFunnelProp
               >
                 <span className="text-[17px] font-extrabold tracking-[-0.03em] tabular-nums">{stage.value}</span>
                 <span className="ml-2 text-[10.5px] font-bold uppercase tracking-[.06em] opacity-80">{stage.label}</span>
-                <span className="absolute right-3.5 text-[10.5px] font-bold opacity-70 tabular-nums">
+                {/* A porcentagem acompanha a borda inclinada (meio da altura),
+                    senão o recorte do trapézio a engole nos níveis estreitos. */}
+                <span
+                  className="absolute text-[10.5px] font-bold opacity-70 tabular-nums"
+                  style={{ right: `calc(${(parseFloat(st.inset) + parseFloat(st.insetB)) / 2}% + 10px)` }}
+                >
                   {Math.round(shares[i])}%
                 </span>
               </div>

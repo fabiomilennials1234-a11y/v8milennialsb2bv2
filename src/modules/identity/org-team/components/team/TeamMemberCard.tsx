@@ -213,7 +213,7 @@ export function TeamMemberCard({
             <span
               className={cn(
                 "font-semibold tabular-nums",
-                goalProgress >= 100 ? "text-success" : "text-foreground"
+                goalProgress >= 100 ? "text-success-strong" : "text-foreground"
               )}
             >
               {goalProgress}%

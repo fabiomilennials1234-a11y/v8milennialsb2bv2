@@ -52,7 +52,7 @@ export function MobileChatThreadHeader({
         }}
       >
         <Avatar className="w-8 h-8 shrink-0">
-          <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+          <AvatarFallback className="bg-primary-soft text-sm font-bold text-primary-soft-foreground">
             {initial}
           </AvatarFallback>
         </Avatar>

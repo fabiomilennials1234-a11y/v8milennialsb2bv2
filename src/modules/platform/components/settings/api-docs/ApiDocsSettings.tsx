@@ -126,10 +126,13 @@ export function ApiDocsSettings() {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Three-panel docs layout */}
-      <div className="flex flex-col xl:flex-row min-h-[600px]">
+      {/* Três painéis. V5: a tela agora divide largura com a lateral e o
+          Pitstop; com três colunas a partir de xl o texto do meio ficava com
+          ~140px. Em xl o código desce para baixo do conteúdo; lado a lado só
+          em 2xl. */}
+      <div className="grid min-h-[600px] grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_420px]">
         {/* Sidebar - desktop */}
-        <div className="hidden xl:block w-[240px] shrink-0 border-r border-border">
+        <div className="hidden border-r border-border xl:row-span-2 xl:block 2xl:row-span-1">
           <ApiDocsSidebar
             categories={apiCategories}
             selectedEndpointId={selectedEndpointId}
@@ -152,12 +155,12 @@ export function ApiDocsSettings() {
         )}
 
         {/* Content panel */}
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-hidden">
           <ApiDocsContent endpoint={selectedEndpoint} baseUrl={baseUrl} />
         </div>
 
         {/* Code panel */}
-        <div className="shrink-0 p-3 xl:w-[420px] xl:pl-0">
+        <div className="min-w-0 p-3 xl:col-start-2 xl:pt-0 2xl:col-start-auto 2xl:pl-0 2xl:pt-3">
           <ApiCodePanel endpoint={selectedEndpoint} orgContext={orgContext} />
         </div>
       </div>

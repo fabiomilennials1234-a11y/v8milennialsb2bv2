@@ -2,7 +2,7 @@ import {
   Users, TrendingUp, UserCheck, UserX, Trophy, Heart,
   AlertTriangle, CalendarDays, type LucideIcon,
 } from "lucide-react";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { useUpsellMetrics } from "@/modules/carteira/hooks/useUpsellMetrics";
 
 interface UpsellStatsProps {
@@ -99,10 +99,8 @@ export function UpsellStats({ view }: UpsellStatsProps) {
   ];
 
   const stats = view === "base" ? baseStats : gestaoStats;
-  const gridCols = view === "base" ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4";
-
   return (
-    <div className={`grid grid-cols-2 gap-4 ${gridCols}`}>
+    <KpiRow cols={view === "base" ? 5 : 4} className={view === "base" ? "lg:grid-cols-3 xl:grid-cols-5" : undefined}>
       {stats.map((stat) => (
         <KpiTile
           key={stat.label}
@@ -113,6 +111,6 @@ export function UpsellStats({ view }: UpsellStatsProps) {
           note={stat.subtitle}
         />
       ))}
-    </div>
+    </KpiRow>
   );
 }

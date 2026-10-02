@@ -204,7 +204,7 @@ export default function MasterStageRoleReview() {
           animate={{ opacity: 1, y: 0 }}
           className="rounded-card border border-dashed border-border bg-card/50 py-16 flex flex-col items-center gap-3 text-center"
         >
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-success/10 text-success">
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-success/10 text-success-strong">
             <BadgeCheck className="h-5 w-5" />
           </div>
           <div>

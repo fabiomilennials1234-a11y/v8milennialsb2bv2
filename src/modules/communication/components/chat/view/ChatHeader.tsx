@@ -210,7 +210,11 @@ export function ChatHeader({
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-3 border-b border-border/60 bg-card px-4 py-3">
+    // V5: a coluna da conversa é um cartão e pode ficar estreita (três colunas
+    // redimensionáveis). Os rótulos respondem ao viewport (`lg`), não à coluna;
+    // por isso a raiz QUEBRA em duas linhas em vez de empurrar os controles de
+    // IA para fora do cartão. O que não pode quebrar é a linha do NOME.
+    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 bg-card px-4 py-3">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
         <ArrowLeft className="w-5 h-5" />
       </Button>

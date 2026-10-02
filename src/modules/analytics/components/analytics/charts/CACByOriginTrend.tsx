@@ -11,17 +11,17 @@ interface Props {
 function cacColor(cac: number, minCac: number, maxCac: number): string {
   if (maxCac === minCac) return "text-primary";
   const normalized = (cac - minCac) / (maxCac - minCac);
-  if (normalized <= 0.33) return "text-green-600";
-  if (normalized <= 0.66) return "text-yellow-600";
+  if (normalized <= 0.33) return "text-success";
+  if (normalized <= 0.66) return "text-warning-strong";
   return "text-destructive";
 }
 
 function cacBg(cac: number, minCac: number, maxCac: number): string {
   if (maxCac === minCac) return "bg-muted";
   const normalized = (cac - minCac) / (maxCac - minCac);
-  if (normalized <= 0.33) return "bg-green-50 dark:bg-green-950/20";
-  if (normalized <= 0.66) return "bg-yellow-50 dark:bg-yellow-950/20";
-  return "bg-red-50 dark:bg-red-950/20";
+  if (normalized <= 0.33) return "bg-success/10";
+  if (normalized <= 0.66) return "bg-warning/10";
+  return "bg-destructive/10";
 }
 
 export function CACByOriginTrend({ data }: Props) {
@@ -88,15 +88,15 @@ export function CACByOriginTrend({ data }: Props) {
         </p>
         <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-green-100 border border-green-600" />
+            <span className="w-2 h-2 rounded-sm bg-success/15 border border-success" />
             Baixo
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-600" />
+            <span className="w-2 h-2 rounded-sm bg-warning/20 border border-warning" />
             Médio
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-red-100 border border-red-600" />
+            <span className="w-2 h-2 rounded-sm bg-destructive/15 border border-destructive" />
             Alto
           </span>
         </div>

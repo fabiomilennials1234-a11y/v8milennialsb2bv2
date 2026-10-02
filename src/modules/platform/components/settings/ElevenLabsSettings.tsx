@@ -79,7 +79,7 @@ export function ElevenLabsSettings() {
           </p>
         </div>
         {hasKey && (
-          <Badge variant="outline" className="ml-auto text-success border-success/40">
+          <Badge variant="outline" className="ml-auto text-success-strong border-success/40">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Configurado
           </Badge>

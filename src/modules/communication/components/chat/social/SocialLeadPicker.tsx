@@ -114,7 +114,7 @@ export function SocialLeadPicker({
                       isSubmitting && !isPending && "opacity-50",
                     )}
                   >
-                    <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-primary-soft text-primary-soft-foreground flex items-center justify-center shrink-0">
                       {isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (

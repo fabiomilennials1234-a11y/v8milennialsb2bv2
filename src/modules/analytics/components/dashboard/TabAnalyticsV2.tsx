@@ -76,7 +76,7 @@ const DEEP_TABS = [
 function SectionLoader() {
   return (
     <div className="flex items-center justify-center py-16">
-      <Loader2 className="w-7 h-7 animate-spin text-primary" />
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   );
 }
@@ -173,7 +173,7 @@ export function TabAnalyticsV2() {
 
       {/* Error banner */}
       {(overviewError || engajamentoError) && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           <p className="font-medium">Erro ao carregar métricas</p>
           <p className="text-xs text-muted-foreground mt-1">
             {overviewErr?.message || "Verifique a conexão e tente novamente."}
@@ -278,7 +278,9 @@ export function TabAnalyticsV2() {
       {/* ─── DEEP-DIVE SECTIONS ───────────────────────────────────────────────── */}
 
       <Tabs value={activeSection} onValueChange={setActiveSection}>
-        <TabsList>
+        {/* Seções de aprofundamento DENTRO do diálogo: alternador claro
+            (segmented), não a pílula de navegação de página. */}
+        <TabsList variant="segmented" className="max-w-full overflow-x-auto scrollbar-hide">
           {DEEP_TABS.map((tab) => {
             const TabIcon = tab.icon;
             return (

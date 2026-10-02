@@ -44,7 +44,7 @@ import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 
 const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string }> = {
   lead_message: { icone: MessageSquare, classe: "text-chart-5", fundo: "bg-chart-5/10" },
-  lead_new: { icone: UserPlus, classe: "text-success", fundo: "bg-success/10" },
+  lead_new: { icone: UserPlus, classe: "text-success-strong", fundo: "bg-success/10" },
   meeting_booked: { icone: Calendar, classe: "text-primary-soft-foreground", fundo: "bg-primary-soft/60" },
   meeting_soon: { icone: Zap, classe: "text-chart-5", fundo: "bg-chart-5/10" },
   follow_up_due: { icone: Clock, classe: "text-warning-strong", fundo: "bg-warning/10" },
@@ -169,13 +169,13 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
               className={cn(
                 "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors",
                 familia === chave
-                  ? "bg-tinta text-tinta-foreground"
+                  ? "bg-tinta text-tinta-foreground dark:bg-foreground dark:text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {nomeDaFamilia}
               {contagem[chave] > 0 && (
-                <span className={cn("ml-1.5 tabular-nums", familia === chave ? "text-tinta-muted" : "text-muted-foreground")}>{contagem[chave]}</span>
+                <span className={cn("ml-1.5 tabular-nums", familia === chave ? "text-tinta-muted dark:text-background/60" : "text-muted-foreground")}>{contagem[chave]}</span>
               )}
             </button>
           ))}
@@ -244,7 +244,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
           </div>
         ) : (
           <div className="p-8 text-center">
-            <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/30" />
+            <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success-strong/30" />
             <p className="text-sm text-muted-foreground">
               {familia === "tudo"
                 ? "Tudo em dia! Nenhuma notificação pendente."

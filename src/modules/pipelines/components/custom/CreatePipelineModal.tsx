@@ -130,7 +130,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-all",
                       selectedIcon === item.name
-                        ? "border-primary bg-primary/10 text-primary"
+                        ? "border-primary bg-primary-soft text-primary-soft-foreground"
                         : "border-border hover:border-primary/50"
                     )}
                   >

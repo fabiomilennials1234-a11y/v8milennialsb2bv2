@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -122,7 +123,7 @@ export function SlaConfigPanel() {
       </div>
 
       {configs.length === 0 ? (
-        <Card className="border-dashed shadow-none">
+        <Card className="rounded-xl border-dashed border-border shadow-none">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Timer className="h-8 w-8 text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">Nenhum SLA configurado</p>
@@ -131,7 +132,7 @@ export function SlaConfigPanel() {
       ) : (
         <div className="space-y-3">
           {configs.map((config) => (
-            <Card key={config.id} className={!config.is_active ? "opacity-50" : ""}>
+            <Card key={config.id} className={cn("rounded-xl border-border shadow-none", !config.is_active && "opacity-50")}>
               <CardHeader className="px-4 py-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

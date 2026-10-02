@@ -236,7 +236,7 @@ export default function MasterOrganizations() {
                           {org.id.slice(0, 8)}...
                         </code>
                         {copiedId === org.id ? (
-                          <Check className="w-3 h-3 text-success" />
+                          <Check className="w-3 h-3 text-success-strong" />
                         ) : (
                           <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                         )}

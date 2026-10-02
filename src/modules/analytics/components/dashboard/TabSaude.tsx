@@ -3,7 +3,7 @@ import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { BadgeCheck, CalendarX, HeartPulse, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -297,11 +297,11 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
         {/* ───── Main: KPIs + mesa + matriz ───── */}
         <div className="flex min-w-0 flex-col gap-4">
           <motion.div
-            className="grid grid-cols-2 gap-4 xl:grid-cols-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
+            <KpiRow cols={2}>
             <KpiTile
               label="Leads no período"
               value={cohort}
@@ -330,6 +330,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
               tone="bad"
               note="não aconteceram"
             />
+            </KpiRow>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>

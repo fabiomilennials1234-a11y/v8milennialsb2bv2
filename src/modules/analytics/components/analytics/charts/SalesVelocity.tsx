@@ -62,7 +62,7 @@ export function SalesVelocity({ data }: Props) {
                 <div key={i} className="flex items-center">
                   {/* Stage node */}
                   <div
-                    className={`flex flex-col items-center rounded-lg px-3 py-2 border ${
+                    className={`flex flex-col items-center rounded-xl px-3 py-2 border ${
                       isBottleneck
                         ? "border-destructive bg-destructive/10"
                         : "border-border bg-muted/40"
@@ -98,7 +98,7 @@ export function SalesVelocity({ data }: Props) {
                   </div>
                   {/* Last node */}
                   {i === transitions.length - 1 && (
-                    <div className="flex flex-col items-center rounded-lg px-3 py-2 border border-success bg-success/10">
+                    <div className="flex flex-col items-center rounded-xl px-3 py-2 border border-success bg-success/10">
                       <span className="text-xs font-semibold text-success">
                         {t.to_stage}
                       </span>
@@ -112,14 +112,14 @@ export function SalesVelocity({ data }: Props) {
 
         {/* Metric Cards */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-border bg-card p-3">
+          <div className="rounded-2xl bg-sunken p-3">
             <div className="text-xs text-muted-foreground mb-1">Ciclo Médio Total</div>
             <div className="text-xl font-bold tabular-nums">
               {total_cycle_days.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">dias</span>
             </div>
           </div>
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
             <div className="text-xs text-muted-foreground mb-1">Gargalo</div>
             <div className="text-sm font-bold text-destructive leading-tight">
               {bottleneck_stage}
@@ -128,14 +128,14 @@ export function SalesVelocity({ data }: Props) {
               {bottleneck_pct.toFixed(0)}% do ciclo
             </div>
           </div>
-          <div className="rounded-lg border border-border bg-card p-3">
+          <div className="rounded-2xl bg-sunken p-3">
             <div className="text-xs text-muted-foreground mb-1">Pipeline Velocity</div>
             <div className="text-xl font-bold tabular-nums">
               {formatCurrency(pipeline_velocity_per_day)}
               <span className="text-xs font-normal text-muted-foreground ml-1">/dia</span>
             </div>
           </div>
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <div className="rounded-2xl bg-primary-soft p-3 text-primary-soft-foreground">
             <div className="text-xs text-muted-foreground mb-1">Forecast 30d</div>
             <div className="text-xl font-bold tabular-nums text-primary">
               {formatCurrency(forecast_30d)}

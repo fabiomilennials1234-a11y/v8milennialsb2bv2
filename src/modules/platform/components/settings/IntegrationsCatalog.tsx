@@ -495,7 +495,7 @@ function IntegrationCard({
 
         {/* Status */}
         {status.connected ? (
-          <div className="inline-flex items-center gap-1 self-start rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-bold text-success">
+          <div className="inline-flex items-center gap-1 self-start rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-bold text-success-strong">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Conectado
           </div>
@@ -664,7 +664,7 @@ export default function IntegrationsCatalog() {
       "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       active
-        ? "bg-tinta text-tinta-foreground shadow-relevo-tinta"
+        ? "bg-tinta text-tinta-foreground shadow-relevo-tinta dark:bg-foreground dark:text-background"
         : "border border-card-border bg-card text-muted-foreground shadow-relevo hover:text-foreground",
     );
 
@@ -721,7 +721,7 @@ export default function IntegrationsCatalog() {
           onClick={() => setFilterCategory("all")}
           className={chipClass(false)}
         >
-          <CheckCircle2 className="h-3 w-3 text-success" />
+          <CheckCircle2 className="h-3 w-3 text-success-strong" />
           Conectadas
         </button>
       </div>

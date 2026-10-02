@@ -126,7 +126,7 @@ function ApiCard({ result }: { result: ApiHealthResult }) {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-xl ${
-              result.status === "connected" ? "bg-success/10 text-success" :
+              result.status === "connected" ? "bg-success/10 text-success-strong" :
               result.status === "error" ? "bg-destructive/10 text-destructive" :
               "bg-muted text-muted-foreground"
             }`}>
@@ -246,7 +246,7 @@ export function ApiStatusTab() {
         <div className="flex items-center gap-4">
           {results.length > 0 && (
             <>
-              <Badge variant="outline" className="gap-1 text-success border-success/30">
+              <Badge variant="outline" className="gap-1 text-success-strong border-success/30">
                 <CheckCircle2 className="w-3 h-3" />
                 {connected} conectadas
               </Badge>

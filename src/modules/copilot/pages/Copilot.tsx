@@ -9,7 +9,7 @@
  * - Deletar agentes
  */
 
-import { useState } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -58,6 +58,7 @@ import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Rótulo micro do V5 — nome de campo dentro do cartão. */
 const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
@@ -369,7 +370,7 @@ export default function Copilot() {
                   </div>
 
                   {canManageCopilot && (
-                    <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border/60 px-5 py-3.5">
+                    <div className="mt-auto flex items-center gap-2 border-t border-border/60 px-5 py-3.5">
                       <Button
                         variant="outline"
                         size="sm"
@@ -382,20 +383,6 @@ export default function Copilot() {
                         Configurar
                       </Button>
 
-                      {builderEnabled && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/copilot/${agent.id}/editar?builder=1`);
-                          }}
-                        >
-                          <Sparkles className="text-primary" />
-                          Revisar com IA
-                        </Button>
-                      )}
-
                       <Button
                         variant="outline"
                         size="sm"
@@ -406,34 +393,46 @@ export default function Copilot() {
                         {agent.is_active ? "Desativar" : "Ativar"}
                       </Button>
 
-                      {!agent.is_default && agent.is_active && (
-                        <Button
-                          variant="outline"
-                          size="sm"
+                      {/* Ações secundárias viram ícone: com rótulo, o rodapé quebrava
+                          em duas linhas desiguais conforme o estado do agente. */}
+                      <div className="ml-auto flex items-center gap-1">
+                        {builderEnabled && (
+                          <FooterIconAction
+                            label="Revisar com IA"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/copilot/${agent.id}/editar?builder=1`);
+                            }}
+                          >
+                            <Sparkles className="text-primary" />
+                          </FooterIconAction>
+                        )}
+
+                        {!agent.is_default && agent.is_active && (
+                          <FooterIconAction
+                            label="Tornar padrão"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDefault.mutate(agent.id);
+                            }}
+                            disabled={setDefault.isPending}
+                          >
+                            <Star />
+                          </FooterIconAction>
+                        )}
+
+                        <FooterIconAction
+                          label={`Excluir ${agent.name}`}
+                          tone="destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDefault.mutate(agent.id);
+                            setAgentToDelete(agent.id);
                           }}
-                          disabled={setDefault.isPending}
+                          disabled={deleteAgent.isPending}
                         >
-                          <Star />
-                          Padrão
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Excluir ${agent.name}`}
-                        className="ml-auto h-9 w-9 rounded-xl p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAgentToDelete(agent.id);
-                        }}
-                        disabled={deleteAgent.isPending}
-                      >
-                        <Trash2 />
-                      </Button>
+                          <Trash2 />
+                        </FooterIconAction>
+                      </div>
                     </div>
                   )}
                 </Card>
@@ -531,5 +530,40 @@ export default function Copilot() {
       </AlertDialog>
 
     </div>
+  );
+}
+
+function FooterIconAction({
+  label,
+  tone = "default",
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  tone?: "default" | "destructive";
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={label}
+          className={cn(
+            "h-9 w-9 text-muted-foreground",
+            tone === "destructive" && "hover:bg-destructive/10 hover:text-destructive",
+          )}
+          onClick={onClick}
+          disabled={disabled}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }

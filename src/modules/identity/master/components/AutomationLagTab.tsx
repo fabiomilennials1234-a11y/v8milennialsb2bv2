@@ -22,7 +22,7 @@ import {
 
 const SEV_LABEL = { bom: "Bom", atencao: "Atenção", ruim: "Ruim" } as const;
 const SEV_CLASS = {
-  bom: "bg-success/10 text-success border-success/20",
+  bom: "bg-success/10 text-success-strong border-success/20",
   atencao: "bg-warning/15 text-warning-strong border-warning/40",
   ruim: "bg-destructive/10 text-destructive border-destructive/20",
 } as const;
@@ -163,7 +163,7 @@ export default function AutomationLagTab() {
             </Table>
           )}
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-            Faixas: até 1 minuto é <span className="text-success">bom</span>; até 5 minutos é{" "}
+            Faixas: até 1 minuto é <span className="text-success-strong">bom</span>; até 5 minutos é{" "}
             <span className="text-warning-strong">atenção</span>; acima disso é{" "}
             <span className="text-destructive">ruim</span> e o vendedor percebe como “não disparou”.
           </p>

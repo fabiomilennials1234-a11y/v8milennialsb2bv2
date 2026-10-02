@@ -75,7 +75,7 @@ export function BlastBreakdown({
       <div className="flex items-start gap-3">
         <span
           className={cn(
-            "flex items-center justify-center rounded-md bg-primary/12 text-primary",
+            "flex items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground",
             inline ? "h-9 w-9" : "h-9 w-9",
           )}
         >

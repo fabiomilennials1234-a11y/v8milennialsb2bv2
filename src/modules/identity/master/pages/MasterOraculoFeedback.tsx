@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -76,11 +76,11 @@ export default function MasterOraculoFeedback() {
         subtitle="Feedback reproduzível, com o rastro exato das consultas."
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <KpiRow cols={3}>
         <Metric icon={MessageSquareText} label="Avaliações" value={cases.length} />
         <Metric icon={AlertTriangle} label="Negativas" value={negative} tone="warning" />
         <Metric icon={Sparkles} label="Possível invenção" value={invented} tone="danger" />
-      </div>
+      </KpiRow>
 
       {list.isError && (
         <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm">

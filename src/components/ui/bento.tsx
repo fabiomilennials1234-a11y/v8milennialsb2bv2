@@ -178,3 +178,39 @@ export const FocusTile = React.forwardRef<HTMLDivElement, React.HTMLAttributes<H
   ),
 );
 FocusTile.displayName = "FocusTile";
+
+/**
+ * Fileira de KPIs. No desktop é grade; no celular vira carrossel com snap —
+ * três ou quatro cartões empilhados ocupavam a tela inteira antes do conteúdo.
+ * O sangramento lateral (`-mx-4 px-4`) casa com o padding do <main> no celular.
+ */
+const kpiCols = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-2 lg:grid-cols-4",
+  5: "sm:grid-cols-3 lg:grid-cols-5",
+} as const;
+
+export function KpiRow({
+  cols = 3,
+  className,
+  children,
+}: {
+  cols?: keyof typeof kpiCols;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 scrollbar-hide",
+        "[&>*]:min-w-[78%] [&>*]:snap-start",
+        "sm:mx-0 sm:grid sm:scroll-px-0 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 sm:[&>*]:min-w-0",
+        kpiCols[cols],
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}

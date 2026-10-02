@@ -18,6 +18,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import type { DateRange as RDPDateRange } from "react-day-picker";
+import { KpiRow } from "@/components/ui/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -219,7 +220,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
       </div>
 
       {/* 4 counts */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <KpiRow cols={4}>
         {CARDS.map((card) => {
           const Icon = card.icon;
           const value = data ? data[card.key] : 0;
@@ -257,7 +258,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
             </button>
           );
         })}
-      </div>
+      </KpiRow>
 
       <p className="text-[12px] text-muted-foreground tabular-nums">
         Período: {rangeLabel}

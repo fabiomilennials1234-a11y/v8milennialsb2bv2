@@ -6,7 +6,7 @@ import {
   Calendar,
   HeartPulse,
 } from "lucide-react";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateShort } from "@/lib/format";
 
@@ -57,7 +57,7 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
   const score = client.health_score ?? 0;
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+    <KpiRow cols={3}>
       <KpiTile
         label="LTV"
         value={client.lifetime_value != null ? formatBRL(client.lifetime_value) : "—"}
@@ -122,6 +122,6 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
           />
         </div>
       </KpiTile>
-    </div>
+    </KpiRow>
   );
 }

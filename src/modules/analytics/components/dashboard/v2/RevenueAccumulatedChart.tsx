@@ -122,61 +122,67 @@ function RevenueAccumulatedChartBase({
           </span>
         </div>
       </div>
-      <div className="min-h-3 flex-1" aria-hidden />
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="shrink-0">
-        <defs>
-          <linearGradient id="cmd-rev-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="hsl(var(--primary))" stopOpacity=".22" />
-            <stop offset="1" stopColor="hsl(var(--primary))" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {prevPts && (
-          <polyline
-            points={prevPts}
-            fill="none"
-            stroke="hsl(var(--muted-foreground) / .45)"
-            strokeWidth={2}
-            className="cmd-drawline"
-            style={{ strokeDasharray: 900, strokeDashoffset: 900, animationDelay: ".9s" }}
-          />
-        )}
-        {areaPts && (
-          <polygon points={areaPts} fill="url(#cmd-rev-area)" className="cmd-fadein" style={{ animationDelay: "1.7s" }} />
-        )}
+      {/* O gráfico ocupa a altura que a janela der. A geometria continua no
+          sistema W×H; o traço não escala (`non-scaling-stroke`) e o ponto
+          final é HTML, para não virar elipse quando a proporção muda. O
+          tracejado de desenho é longo (2400) porque, sem escala, o comprimento
+          da linha passa a ser medido em pixels da tela. */}
+      <div className="relative mt-3 min-h-[128px] flex-1">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden>
+          <defs>
+            <linearGradient id="cmd-rev-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="hsl(var(--primary))" stopOpacity=".22" />
+              <stop offset="1" stopColor="hsl(var(--primary))" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {prevPts && (
+            <polyline
+              points={prevPts}
+              fill="none"
+              stroke="hsl(var(--muted-foreground) / .45)"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+              className="cmd-drawline"
+              style={{ strokeDasharray: 2400, strokeDashoffset: 2400, animationDelay: ".9s" }}
+            />
+          )}
+          {areaPts && (
+            <polygon points={areaPts} fill="url(#cmd-rev-area)" className="cmd-fadein" style={{ animationDelay: "1.7s" }} />
+          )}
+          {currentPts && (
+            <polyline
+              points={currentPts}
+              fill="none"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              className="cmd-drawline"
+              style={{ strokeDasharray: 2400, strokeDashoffset: 2400, animationDelay: ".7s" }}
+            />
+          )}
+          {projPts && (
+            <polyline
+              points={projPts}
+              fill="none"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+              strokeDasharray="3 6"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.6}
+              className="cmd-fadein"
+              style={{ animationDelay: "2.1s" }}
+            />
+          )}
+        </svg>
         {currentPts && (
-          <polyline
-            points={currentPts}
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            className="cmd-drawline"
-            style={{ strokeDasharray: 900, strokeDashoffset: 900, animationDelay: ".7s" }}
+          <span
+            aria-hidden
+            className="cmd-fadein absolute h-[13px] w-[13px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-primary"
+            style={{ left: `${(lastX / W) * 100}%`, top: `${(lastY / H) * 100}%`, animationDelay: "2.1s" }}
           />
         )}
-        {projPts && (
-          <polyline
-            points={projPts}
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            strokeDasharray="3 6"
-            opacity={0.6}
-            className="cmd-fadein"
-            style={{ animationDelay: "2.1s" }}
-          />
-        )}
-        {currentPts && (
-          <circle
-            cx={lastX} cy={lastY} r={4.5}
-            fill="hsl(var(--primary))"
-            stroke="hsl(var(--card))"
-            strokeWidth={2}
-            className="cmd-fadein"
-            style={{ animationDelay: "2.1s" }}
-          />
-        )}
-      </svg>
+      </div>
     </div>
   );
 }

@@ -20,7 +20,7 @@ function healthColor(ratio: number): {
   label: string;
 } {
   if (ratio >= 3) return { bg: "bg-success/10", text: "text-success", label: "Saudável" };
-  if (ratio >= 1.5) return { bg: "bg-yellow-500/10", text: "text-yellow-600", label: "Atenção" };
+  if (ratio >= 1.5) return { bg: "bg-warning/10", text: "text-warning-strong", label: "Atenção" };
   return { bg: "bg-destructive/10", text: "text-destructive", label: "Crítico" };
 }
 
@@ -86,7 +86,7 @@ export function UnitEconomicsCards({ data }: Props) {
           {cards.map((card) => (
             <div
               key={card.label}
-              className="rounded-lg border border-border bg-card p-3 flex flex-col gap-1"
+              className="rounded-2xl bg-sunken p-3 flex flex-col gap-1"
             >
               <div className="flex items-center justify-between gap-1 flex-wrap">
                 <span className={AT.metricLabel}>{card.label}</span>

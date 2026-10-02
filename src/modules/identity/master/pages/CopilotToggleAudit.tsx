@@ -268,7 +268,7 @@ function DriftTab() {
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-5 h-5 text-success" />
+                  <ShieldCheck className="w-5 h-5 text-success-strong" />
                   <div>
                     <p className="font-semibold text-sm">Sem drift detectado</p>
                     <p className="text-xs text-muted-foreground">phone_ai_preferences ↔ leads.ai_disabled coerentes</p>

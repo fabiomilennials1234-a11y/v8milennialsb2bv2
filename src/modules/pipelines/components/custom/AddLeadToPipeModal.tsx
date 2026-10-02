@@ -182,7 +182,7 @@ export function AddLeadToPipeModal({
                     className={cn(
                       "w-full text-left p-2 rounded-md transition-colors",
                       selectedLeadId === lead.id
-                        ? "bg-primary/10 border border-primary/30"
+                        ? "bg-primary-soft border border-primary/30"
                         : "hover:bg-muted"
                     )}
                   >
@@ -213,8 +213,8 @@ export function AddLeadToPipeModal({
 
           {/* Lead selecionado */}
           {selectedLead && (
-            <div className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded-lg">
-              <UserCheck className="w-4 h-4 text-primary shrink-0" />
+            <div className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary-soft p-2">
+              <UserCheck className="w-4 h-4 text-primary-soft-foreground shrink-0" />
               <div className="text-sm">
                 <span className="font-medium">{selectedLead.name}</span>
                 {selectedLead.company && (

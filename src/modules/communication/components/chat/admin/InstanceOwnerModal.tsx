@@ -343,7 +343,7 @@ export function InstanceOwnerModal({
                             </span>
                           )}
                           {isCurrent && (
-                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary-soft text-primary-soft-foreground border border-transparent">
                               Atual
                             </span>
                           )}

@@ -146,7 +146,7 @@ export function GoogleCalendarSettings() {
           </p>
         </div>
         {status?.connected && (
-          <Badge className="bg-success/20 text-success border-success/30">
+          <Badge className="bg-success/20 text-success-strong border-success/30">
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Conectado
           </Badge>
@@ -319,19 +319,19 @@ export function GoogleCalendarSettings() {
         <h5 className="text-sm font-medium mb-2">O que acontece ao conectar?</h5>
         <ul className="text-xs text-muted-foreground space-y-1">
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success" />
+            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success-strong" />
             Reuniões são criadas automaticamente no seu calendário
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success" />
+            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success-strong" />
             Verificamos sua disponibilidade antes de agendar
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success" />
+            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success-strong" />
             Você recebe notificações normalmente pelo Google
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success" />
+            <CheckCircle2 className="w-3 h-3 mt-0.5 text-success-strong" />
             Pode desconectar a qualquer momento
           </li>
         </ul>

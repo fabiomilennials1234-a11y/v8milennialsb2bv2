@@ -87,7 +87,7 @@ export default function WorkflowConfigTab() {
               Não consegui varrer: {(error as Error).message}
             </p>
           ) : !problemas?.length ? (
-            <p className="flex items-center gap-2 py-6 text-sm text-success">
+            <p className="flex items-center gap-2 py-6 text-sm text-success-strong">
               <CheckCircle2 className="h-4 w-4" />
               Nenhum workflow ativo com nó incompleto. Nada a consertar.
             </p>

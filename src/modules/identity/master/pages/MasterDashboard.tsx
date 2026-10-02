@@ -19,7 +19,7 @@ import { useMasterAuditStats } from "../hooks/useMasterAuditLogs";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/ui/page-header";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 
 const kpiLinkClass =
   "block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -38,7 +38,7 @@ export default function MasterDashboard() {
       />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <KpiRow cols={4}>
         <Link to="/master/organizations" className={kpiLinkClass}>
           <KpiTile
             label="Organizações"
@@ -98,7 +98,7 @@ export default function MasterDashboard() {
             note={`${auditStats?.totalWeek || 0} na última semana`}
           />
         </Link>
-      </div>
+      </KpiRow>
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

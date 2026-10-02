@@ -40,8 +40,17 @@ const MONTH_LONG = [
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 
-/** Faixa de KPIs: 4 por linha quando há largura, 2 no estreito (rola dentro da janela). */
-const KPI_GRID = "grid h-full auto-rows-fr grid-cols-2 gap-4 lg:grid-cols-4";
+/**
+ * Faixa de KPIs: grade de 4 (ou 2) por linha. No celular vira carrossel com
+ * snap, o mesmo gesto do `KpiRow` — mas em DUAS linhas, porque a janela tem
+ * altura fixa: empilhados, os oito cartões abriam uma rolagem vertical dentro
+ * da janela, dentro da rolagem do painel; numa linha só, sobrava meia janela
+ * vazia. Altura natural dos cartões: esticá-los cortava a legenda em Edição.
+ */
+const KPI_GRID = cn(
+  "grid auto-cols-[78%] grid-flow-col grid-rows-2 snap-x snap-mandatory gap-3 overflow-x-auto scrollbar-hide [&>*]:snap-start",
+  "sm:auto-cols-auto sm:grid-flow-row sm:grid-cols-2 sm:grid-rows-none sm:gap-4 sm:overflow-visible lg:grid-cols-4",
+);
 const CARTAO_AVULSO = "rounded-card border border-card-border bg-card p-5 shadow-relevo";
 const ROTULO = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
 

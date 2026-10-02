@@ -90,7 +90,7 @@ const StageRailCollapsed = memo(function StageRailCollapsed({
         "group flex w-full items-center gap-3 h-9 px-2.5 rounded-lg",
         "bg-muted/15 hover:bg-muted/35",
         "border border-transparent hover:border-border/40",
-        "transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        "transition-all duration-200 ease-out-expo",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         disabled && "opacity-60 cursor-not-allowed",
       )}
@@ -277,7 +277,7 @@ const StageRailExpanded = memo(function StageRailExpanded({
                 className={cn(
                   "relative flex-1 min-w-0 h-7 px-2.5 rounded-md text-[11px] font-medium leading-none",
                   "flex items-center justify-center",
-                  "transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                  "transition-all duration-150 ease-out-expo",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                   stateClasses,
                   isPending && "motion-safe:animate-pulse",
