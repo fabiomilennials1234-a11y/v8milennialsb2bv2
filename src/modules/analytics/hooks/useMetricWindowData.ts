@@ -27,7 +27,8 @@ import { headValueFromMeasure, type MetricSeriesPoint } from "@/modules/analytic
  *
  * 3. G4 do grill: o comparativo exige uma SEGUNDA chamada, com a referência
  *    deslocada. Ela é sempre no recorte `total` — comparar fatia a fatia é
- *    outra pergunta, e mais cara.
+ *    outra pergunta, e mais cara. Fotografias da base atual não a fazem:
+ *    consultar outra data devolveria a mesma base de hoje, não seu histórico.
  *
  * O comparativo NÃO bloqueia a janela: `isLoading` observa só a consulta
  * principal. O número aparece assim que existe, e a setinha entra depois.
@@ -117,6 +118,7 @@ export function useMetricWindowData(
   const now = useStudioClock();
   const atual = periodoAtual(period, now, range, timezone ?? "UTC");
   const anterior = periodoAnterior(period, now, range, timezone ?? "UTC");
+  const comparaPeriodoAnterior = metric.comparaPeriodoAnterior !== false;
 
   const principal = useMetricMeasure({
     measureRef: metric.measureRef,
@@ -136,6 +138,7 @@ export function useMetricWindowData(
     start: anterior.start,
     end: anterior.end,
     filters: metric.filtrosFixos,
+    enabled: comparaPeriodoAnterior,
   });
 
   const medida = principal.data ?? null;
@@ -154,14 +157,15 @@ export function useMetricWindowData(
     medida,
     series,
     cobertura: coberturaDaMedida(medida),
-    valorAnterior: headValueFromMeasure(comparativo.data ?? null),
+    // Query desabilitada pode ainda devolver cache; ele também não é histórico.
+    valorAnterior: comparaPeriodoAnterior ? headValueFromMeasure(comparativo.data ?? null) : null,
     meta,
     atingimento: percentualDaMeta(headValueFromMeasure(medida), meta),
     isLoading: principal.isLoading,
     isError: principal.isError,
     refetch: () => {
       void principal.refetch();
-      void comparativo.refetch();
+      if (comparaPeriodoAnterior) void comparativo.refetch();
     },
   };
 }

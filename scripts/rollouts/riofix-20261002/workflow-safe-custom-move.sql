@@ -15,7 +15,7 @@ begin
  then raise exception 'Funil ou lead fora do escopo' using errcode='22023';end if;
  select * into target from public.pipeline_stages
  where organization_id=p_organization_id and pipeline_id=p_pipeline_id and is_active
- and (id::text=p_target_stage or stage_key=p_target_stage);
+ and (id::text=p_target_stage or stage_key=p_target_stage) for share nowait;
  if not found or target.stage_role is distinct from 'open' or target.is_final_positive is true or target.is_final_negative is true
  then raise exception 'Destino deve ser etapa aberta do mesmo funil' using errcode='22023';end if;
 
@@ -40,8 +40,10 @@ begin
  or not exists(select 1 from public.pipeline_stages where id=entry.stage_id and organization_id=p_organization_id and pipeline_id=p_pipeline_id and stage_role='open')
  then return jsonb_build_object('status','skipped','reason','stage_changed_or_closed','entry_id',entry.id);end if;
  if entry.deal_id is not null then
+ -- A venda manual bloqueia deal antes do card. Não esperar aqui evita ciclo
+ -- entry -> deal -> entry; 55P03 faz somente a automação recuar e tentar depois.
  perform 1 from public.deals where id=entry.deal_id and organization_id=p_organization_id
- and source_lead_id=p_lead_id and deleted_at is null and outcome='open' for update;
+ and source_lead_id=p_lead_id and deleted_at is null and outcome='open' for update nowait;
  if not found then return jsonb_build_object('status','skipped','reason','deal_closed_or_missing','entry_id',entry.id);end if;
  end if;
  update public.pipeline_entries set stage_id=target.id,stage_key=target.stage_key,stage_changed_at=clock_timestamp(),updated_at=clock_timestamp()

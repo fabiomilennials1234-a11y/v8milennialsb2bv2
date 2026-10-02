@@ -43,10 +43,10 @@ describe("opt-in exact custom entry movement", () => {
     expect(await moveCustomStageSafely({ ...m.input, params })).toMatchObject({ success: false, retryable: false });
     expect(m.getRpcCalls()).toEqual([]);
   });
-  it.each(["22023", "42501", "40P01"])("does not fall back to legacy writes after RPC error %s", async code => {
+  it.each(["22023", "42501", "40P01", "55P03"])("does not fall back to legacy writes after RPC error %s", async code => {
     const m = setup();
     vi.spyOn(m.sb, "rpc").mockResolvedValue({ data: null, error: { code, message: "failed" } });
-    expect(await moveCustomStageSafely(m.input)).toMatchObject({ success: false, retryable: code === "40P01" });
+    expect(await moveCustomStageSafely(m.input)).toMatchObject({ success: false, retryable: ["40P01", "55P03"].includes(code) });
     expect(m.getUpdated("pipeline_entries")).toEqual([]);
     expect(moveStage).not.toHaveBeenCalled();
   });
