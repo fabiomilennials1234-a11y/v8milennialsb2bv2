@@ -55,7 +55,7 @@ export function CartaoDoNegocio({
         <Linha icone={User} rotulo="Responsável">
           {n.dono ?? <span className="italic text-muted-foreground/60">Sem responsável</span>}
         </Linha>
-        <Linha icone={CalendarDays} rotulo="Criado em">
+        <Linha icone={CalendarDays} rotulo={n.vendaHistorica ? "Venda em" : "Criado em"}>
           {formatDateSafe(n.criadoEm)}
         </Linha>
       </dl>

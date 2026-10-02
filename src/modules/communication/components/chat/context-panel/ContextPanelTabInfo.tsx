@@ -194,7 +194,7 @@ export function ContextPanelTabInfo({
           <>
             <SectionHeader icon={Briefcase} label="Negócios" />
             <div className="px-4 pb-4">
-              <ContextPanelNegocios leadId={activeLeadId} />
+              <ContextPanelNegocios key={`${organizationId}:${activeLeadId}`} leadId={activeLeadId} />
             </div>
           </>
         )}

@@ -28,11 +28,14 @@ export function useNegociosDoLeadNoChat(leadId: string | null, enabled: boolean)
   const ativo = enabled && !!leadId && !!organizationId;
 
   const ids = useMemo(() => (ativo && leadId ? [leadId] : []), [ativo, leadId]);
-  const { data: dealsMap, isLoading: carregandoNegocios } = useLeadsDeals(ids);
-  const { data: equipe = [] } = useTeamMembers();
+  const negociosQuery = useLeadsDeals(ids);
+  const equipeQuery = useTeamMembers();
+  const { data: dealsMap } = negociosQuery;
+  const { data: equipe = [] } = equipeQuery;
 
   const detalhes = useQuery({
-    queryKey: ["chat-negocios-do-lead", organizationId, leadId],
+    // Participa das invalidações já emitidas pelos editores do Card do Negócio.
+    queryKey: ["leads-deals", organizationId, "chat-resumo", leadId],
     enabled: ativo,
     staleTime: 60_000,
     queryFn: async () => {
@@ -53,8 +56,10 @@ export function useNegociosDoLeadNoChat(leadId: string | null, enabled: boolean)
 
       const [negociosRes, itensRes] = dealIds.length
         ? await Promise.all([
-            supabase.from("deals").select("id, value, created_at").in("id", dealIds),
-            supabase.from("deal_items").select("deal_id, total").in("deal_id", dealIds),
+            supabase.from("deals").select("id, value, created_at")
+              .eq("organization_id", organizationId!).in("id", dealIds),
+            supabase.from("deal_items").select("deal_id, total")
+              .eq("organization_id", organizationId!).in("deal_id", dealIds),
           ])
         : [{ data: [], error: null }, { data: [], error: null }];
       if (negociosRes.error) throw negociosRes.error;
@@ -129,6 +134,8 @@ export function useNegociosDoLeadNoChat(leadId: string | null, enabled: boolean)
 
   return {
     negocios,
-    isLoading: ativo && (carregandoNegocios || detalhes.isLoading),
+    isLoading: ativo && (negociosQuery.isLoading || detalhes.isLoading || equipeQuery.isLoading),
+    isError: ativo && (negociosQuery.isError || detalhes.isError || equipeQuery.isError),
+    refetch: () => Promise.all([negociosQuery.refetch(), detalhes.refetch(), equipeQuery.refetch()]),
   };
 }

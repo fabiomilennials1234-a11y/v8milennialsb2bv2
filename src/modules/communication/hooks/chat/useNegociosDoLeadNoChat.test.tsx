@@ -1,5 +1,5 @@
 import React from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,9 @@ const state = vi.hoisted(() => ({
   itens: [] as Record<string, unknown>[],
   deals: [] as Record<string, unknown>[],
   leadsDealsIds: [] as string[][],
+  filters: [] as { table: string; field: string; value: unknown }[],
+  failingTable: "",
+  baseError: false,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -20,9 +23,15 @@ vi.mock("@/integrations/supabase/client", () => ({
         tabela === "pipeline_entries" ? state.entradas : tabela === "deals" ? state.negocios : state.itens;
       const chain = {
         select: () => chain,
-        eq: () => chain,
+        eq: (field: string, value: unknown) => {
+          state.filters.push({ table: tabela, field, value });
+          return chain;
+        },
         in: () => chain,
-        then: (ok: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(ok),
+        then: (ok: (v: unknown) => unknown) => Promise.resolve({
+          data: state.failingTable === tabela ? null : data,
+          error: state.failingTable === tabela ? new Error("Falha de leitura") : null,
+        }).then(ok),
       };
       return chain;
     },
@@ -35,7 +44,7 @@ vi.mock("@/modules/identity", () => ({
 vi.mock("@/modules/leads", () => ({
   useLeadsDeals: (ids: string[]) => {
     state.leadsDealsIds.push(ids);
-    return { data: ids.length ? { lead: state.deals } : undefined, isLoading: false };
+    return { data: ids.length ? { lead: state.deals } : undefined, isLoading: false, isError: state.baseError };
   },
   dealBoardPath: (d: { pipelineSlug: string }) => (d.pipelineSlug ? `/funil/${d.pipelineSlug}` : null),
 }));
@@ -56,6 +65,9 @@ const base = {
 beforeEach(() => {
   state.queries = [];
   state.leadsDealsIds = [];
+  state.filters = [];
+  state.failingTable = "";
+  state.baseError = false;
   state.entradas = [
     { id: "e1", assigned_to: "u-thiago", deal_id: "d1" },
     { id: "e2", assigned_to: null, deal_id: null },
@@ -87,5 +99,37 @@ describe("useNegociosDoLeadNoChat", () => {
     expect(result.current.negocios).toEqual([]);
     expect(state.queries).toEqual([]);
     expect(state.leadsDealsIds.every((ids) => ids.length === 0)).toBe(true);
+  });
+
+  it("filtra todas as consultas pela organização ativa", async () => {
+    const { result } = renderHook(() => useNegociosDoLeadNoChat("lead", true), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBeFalsy());
+    for (const table of ["pipeline_entries", "deals", "deal_items"]) {
+      expect(state.filters).toContainEqual({ table, field: "organization_id", value: "org-riofix" });
+    }
+  });
+
+  it("atualiza o resumo quando o editor do negócio invalida os dados", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useNegociosDoLeadNoChat("lead", true), {
+      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    await waitFor(() => expect(result.current.negocios[0]?.valor).toBe(84739));
+    state.itens = [{ deal_id: "d1", total: 1200 }];
+    state.entradas = [{ id: "e1", assigned_to: null, deal_id: "d1" }];
+    await act(() => client.invalidateQueries({ queryKey: ["leads-deals"] }));
+    await waitFor(() => expect(result.current.negocios[0]).toMatchObject({ valor: 1200, dono: null }));
+  });
+
+  it.each(["pipeline_entries", "deals", "deal_items"])("expõe falha de %s sem tratar como dado ausente", async (table) => {
+    state.failingTable = table;
+    const { result } = renderHook(() => useNegociosDoLeadNoChat("lead", true), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+
+  it("expõe falha da lista principal de negócios", async () => {
+    state.baseError = true;
+    const { result } = renderHook(() => useNegociosDoLeadNoChat("lead", true), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

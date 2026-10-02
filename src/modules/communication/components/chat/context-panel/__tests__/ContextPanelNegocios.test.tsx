@@ -8,6 +8,9 @@ const state = vi.hoisted(() => ({
   org: "36971ff5-fd73-4f30-a733-04bf8c90e5b6",
   openDeal: vi.fn(),
   negocios: [] as unknown[],
+  isError: false,
+  refetch: vi.fn(),
+  panelMounts: 0,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
@@ -33,13 +36,16 @@ vi.mock("@/modules/leads", () => {
     QualificationSlot: () => null,
     LeadPanelProvider: Pass,
     DealPanelProvider: Pass,
-    DealCardPanel: () => <div data-testid="deal-card-panel" />,
+    DealCardPanel: () => {
+      const [mountId] = React.useState(() => ++state.panelMounts);
+      return <div data-testid="deal-card-panel" data-mount={mountId} />;
+    },
     LeadCardPanel: () => null,
     useDealSheet: () => ({ openDeal: state.openDeal }),
   };
 });
 vi.mock("@/modules/communication/hooks/chat/useNegociosDoLeadNoChat", () => ({
-  useNegociosDoLeadNoChat: () => ({ negocios: state.negocios, isLoading: false }),
+  useNegociosDoLeadNoChat: () => ({ negocios: state.negocios, isLoading: false, isError: state.isError, refetch: state.refetch }),
 }));
 
 import { ContextPanelTabInfo } from "../ContextPanelTabInfo";
@@ -48,18 +54,23 @@ const LEAD = { id: "lead", phone: "+5521966418551", organization_id: state.org }
 
 function renderPainel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
-  return render(
+  const view = (id: string) => (
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <ContextPanelTabInfo lead={LEAD} activeLeadId="lead" />
+        <ContextPanelTabInfo lead={{ ...LEAD, id }} activeLeadId={id} />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const rendered = render(view("lead"));
+  return { ...rendered, mudarLead: (id: string) => rendered.rerender(view(id)) };
 }
 
 beforeEach(() => {
   state.org = "36971ff5-fd73-4f30-a733-04bf8c90e5b6";
   state.openDeal.mockReset();
+  state.isError = false;
+  state.refetch.mockReset();
+  state.panelMounts = 0;
   state.negocios = [
     {
       id: "entry-1", leadId: "lead", titulo: "Ricardo POSSEBON", estado: "aberto",
@@ -102,5 +113,24 @@ describe("Negócios no painel do chat", () => {
     renderPainel();
     expect(screen.getByText("Ricardo POSSEBON")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Abrir negócio/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Venda em")).toBeInTheDocument();
+    expect(screen.queryByText("Criado em")).not.toBeInTheDocument();
+  });
+
+  it("informa falha e permite tentar novamente sem afirmar que o lead não tem negócio", () => {
+    state.isError = true;
+    state.negocios = [];
+    renderPainel();
+    expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar os negócios.");
+    expect(screen.queryByText("Lead sem negócio")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    expect(state.refetch).toHaveBeenCalledOnce();
+  });
+
+  it("descarta o card da conversa anterior ao mudar o lead", () => {
+    const { mudarLead } = renderPainel();
+    const originalMount = screen.getByTestId("deal-card-panel").getAttribute("data-mount");
+    mudarLead("outro-lead");
+    expect(screen.getByTestId("deal-card-panel").getAttribute("data-mount")).not.toBe(originalMount);
   });
 });

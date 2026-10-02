@@ -38,8 +38,19 @@ export function ContextPanelNegocios({ leadId }: ContextPanelNegociosProps) {
 }
 
 function ListaDeNegocios({ leadId }: { leadId: string }) {
-  const { negocios, isLoading } = useNegociosDoLeadNoChat(leadId, true);
+  const { negocios, isLoading, isError, refetch } = useNegociosDoLeadNoChat(leadId, true);
   const { openDeal } = useDealSheet();
+
+  if (isError) {
+    return (
+      <div role="alert" className="space-y-2 py-4 text-center text-xs text-muted-foreground">
+        <p>Não foi possível carregar os negócios.</p>
+        <button type="button" className="text-primary underline" onClick={() => void refetch()}>
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
