@@ -341,6 +341,7 @@ export function DealCardMoney({
   onEditarItem,
   onRemoverItem,
   onEditarValor,
+  onRegistrarVenda,
   versaoDoNegocio = null,
 }: {
   itens: DealCardItem[];
@@ -354,23 +355,43 @@ export function DealCardMoney({
   /** Idem para a lixeira de cada linha. */
   onRemoverItem?: (itemId: string) => Promise<void>;
   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
+  /**
+   * Card em etapa de ganho SEM negócio: o valor entra JUNTO com a venda, não
+   * antes (ver `acao-do-valor.ts`). Quem decide qual dos dois
+   * callbacks desce é o `DealCard`; se os dois chegarem, este vence.
+   */
+  onRegistrarVenda?: (valor: number) => Promise<void>;
   versaoDoNegocio?: string | null;
 }) {
   const [editandoValor, setEditandoValor] = useState(false);
   const [rascunhoValor, setRascunhoValor] = useState("");
   const [salvandoValor, setSalvandoValor] = useState(false);
   const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
+  const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
+  const registrandoVenda = !!onRegistrarVenda;
+  /**
+   * Na venda, valor que já existe NÃO se digita de novo. `definir_desfecho_da_entrada`
+   * grava `COALESCE(value, p_valor)` — só preenche lacuna —, e o negócio que
+   * ele materializa nasce com `metadata.sale_value`, que é o `valorDoFunil` e
+   * portanto o `total` daqui. Um campo editável nesse caso aceitaria um número
+   * que o banco jogaria fora em silêncio.
+   */
+  const valorTravado = registrandoVenda && temValor;
   const salvarValor = async () => {
-    if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
+    if (salvandoValor) return;
+    if (!valorTravado && !rascunhoValor.trim()) return;
     setSalvandoValor(true);
     try {
-      await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
+      if (onRegistrarVenda) {
+        await onRegistrarVenda(valorTravado ? total : parseCurrencyInput(rascunhoValor));
+      } else if (onEditarValor) {
+        await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
+      }
       setEditandoValor(false);
     } catch {
       // O chamador informa o erro; preservar a edição para corrigir/tentar novamente.
     } finally { setSalvandoValor(false); }
   };
-  const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
 
@@ -482,7 +503,33 @@ export function DealCardMoney({
             {temValor ? formatBRL(total, 2) : "—"}
           </span>
         </div>
-        {!temItens && onEditarValor && (
+        {!temItens && registrandoVenda && (
+          <div className="flex items-center gap-2 pt-2" data-summary-pending={editandoValor || undefined}>
+            {editandoValor ? <>
+              {valorTravado ? (
+                <span className="text-[12.5px] text-muted-foreground">
+                  Venda de <span className="tabular-nums text-foreground">{formatBRL(total, 2)}</span>
+                </span>
+              ) : (
+                // Começa VAZIO, ao contrário do "Definir valor": aqui não há
+                // número gravado para partir, e um "R$ 0,00" pré-preenchido
+                // viraria venda de zero com um clique distraído.
+                <input aria-label="Valor da venda" inputMode="numeric" placeholder="R$ 0,00"
+                  className={cn(ENTRADA, "max-w-40")}
+                  value={rascunhoValor} disabled={salvandoValor} autoFocus
+                  onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
+              )}
+              <button type="button" className="text-sm text-primary disabled:opacity-40"
+                disabled={salvandoValor || (!valorTravado && !rascunhoValor.trim())}
+                onClick={salvarValor}>Confirmar venda</button>
+              <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
+            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
+              setRascunhoValor("");
+              setEditandoValor(true);
+            }}>Registrar venda</button>}
+          </div>
+        )}
+        {!temItens && !registrandoVenda && onEditarValor && (
           <div className="flex items-center gap-2 pt-2" data-summary-pending={editandoValor || undefined}>
             {editandoValor ? <>
               <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}

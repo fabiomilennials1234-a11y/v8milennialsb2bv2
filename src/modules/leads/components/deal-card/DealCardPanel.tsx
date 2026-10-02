@@ -47,6 +47,7 @@ import {
   dispararEfeitoDeDesfecho,
 } from "../../lib/card-effects";
 import { useRenomearNegocio } from "./useRenomearNegocio";
+import { registrarVendaPor } from "./acao-do-valor";
 import {
   useAtualizarItemDoNegocio,
   useEditarValorProposta,
@@ -257,9 +258,14 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const painelRef = useRef<HTMLDivElement>(null);
   const { origemDo, celebrar, camada: camadaDaCelebracao } = useCelebracaoDoDesfecho(painelRef);
 
+  /**
+   * Devolve `true` só quando o desfecho foi gravado. Quem chama pelo cabeçalho
+   * ignora o retorno; o "Registrar venda" do bloco de valor usa para decidir se
+   * fecha o campo ou preserva o que a pessoa digitou.
+   */
   const definirDesfecho = useCallback(
-    async (desfecho: "open" | "won" | "lost", valor?: number) => {
-      if (!entryId || decidindo) return;
+    async (desfecho: "open" | "won" | "lost", valor?: number): Promise<boolean> => {
+      if (!entryId || decidindo) return false;
       setDecidindo(true);
       const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
@@ -286,7 +292,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           if (isMissingSchemaError(error)) {
             if (desfecho === "open") {
               toast.error("Não foi possível reabrir o negócio. A atualização do funil precisa estar disponível.");
-              return;
+              return false;
             }
             const papel = desfecho === "won" ? "ganho" : "perdido";
             const terminal = data?.etapas.find((e) => e.papel === papel);
@@ -294,19 +300,19 @@ export const DealCardPanel = memo(function DealCardPanel() {
               await moverEtapa(terminal.chave);
               dispararEfeitoDeDesfecho(entryId, desfecho);
               celebrar(desfecho, origem);
-              return;
+              return true;
             }
             // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
             // Dizer o que falta é melhor que um erro de banco cru.
             toast.error("Disponível assim que a atualização do funil for aplicada.");
-            return;
+            return false;
           }
           // ── A trava de valor ────────────────────────────────────────────
           // Não é erro do usuário nem falha: é a única informação que falta.
           // Abre o campo em vez de despejar a mensagem do banco num toast.
           if (isSaleValueRequiredError(error)) {
             setPedindoValor(true);
-            return;
+            return false;
           }
           throw new Error(error.message);
         }
@@ -325,14 +331,29 @@ export const DealCardPanel = memo(function DealCardPanel() {
         for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
+        return true;
       } catch (e) {
         notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
+        return false;
       } finally {
         setDecidindo(false);
       }
     },
     [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar],
   );
+
+  /**
+   * "Registrar venda" do bloco de valor — o card parado em etapa de ganho sem
+   * negócio (ver `acao-do-valor.ts`). NÃO é um segundo caminho de
+   * escrita: é o mesmo `definirDesfecho("won", valor)` do botão Ganho, com a
+   * mesma celebração e as mesmas invalidações. O valor vai na mesma chamada,
+   * então a trava de `fn_exige_valor_no_negocio` já chega satisfeita e o
+   * `SaleValueRequiredModal` não abre por cima.
+   *
+   * O erro já virou toast lá dentro; `registrarVendaPor` converte o `false`
+   * em `throw` para o campo não fechar e apagar o número digitado.
+   */
+  const registrarVenda = useMemo(() => registrarVendaPor(definirDesfecho), [definirDesfecho]);
 
   /**
    * ── Excluir o negócio ─────────────────────────────────────────────────────
@@ -590,6 +611,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         onEditarItem={dealIdParaProduto ? editarItem : undefined}
         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
         onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
+        onRegistrarVenda={registrarVenda}
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}

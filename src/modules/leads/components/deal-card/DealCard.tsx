@@ -18,6 +18,7 @@ import { DealCardMoney } from "./DealCardMoney";
 import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { contaDoNegocio } from "./conta-do-negocio";
+import { acaoDoValor } from "./acao-do-valor";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
@@ -284,6 +285,7 @@ export function DealCard({
   ajustesPedido = [],
   onRemoverItem,
   onEditarValor,
+  onRegistrarVenda,
   movendo,
   comentarios = [],
   onComentar,
@@ -334,6 +336,11 @@ export function DealCard({
   }>;
   onRemoverItem?: (itemId: string) => Promise<void>;
   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
+  /**
+   * Registrar a venda COM o valor — o caminho do desfecho, não o de editar.
+   * Qual dos dois o bloco de valor recebe é `acaoDoValor` quem decide.
+   */
+  onRegistrarVenda?: (valor: number) => Promise<void>;
   movendo?: string | null;
   /**
    * ── Comentários entram por FORA de `negocio` ──────────────────────────
@@ -445,6 +452,7 @@ export function DealCard({
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
+  const acaoValor = acaoDoValor(negocio);
   const [ajustandoPedido, setAjustandoPedido] = useState(false);
   useEffect(() => setAjustandoPedido(false), [negocio.id, negocio.estado]);
   const estagnado =
@@ -816,7 +824,8 @@ export function DealCard({
                       onAdicionarProduto={negocio.estado === "ganho" ? undefined : onAdicionarProduto}
                       onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
                       onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
-                      onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
+                      onEditarValor={acaoValor === "editar" ? onEditarValor : undefined}
+                      onRegistrarVenda={acaoValor === "registrar-venda" ? onRegistrarVenda : undefined}
                     />
                   )}
                   {ajustesPedido.length > 0 && (
