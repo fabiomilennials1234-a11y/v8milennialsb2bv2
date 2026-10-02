@@ -14,7 +14,7 @@ const badgeVariants = cva(
         outline: "text-foreground",
         // V5: tons de estado — fundo tintado, texto do mesmo matiz
         soft: "border-transparent bg-muted text-foreground/80",
-        success: "border-transparent bg-success/10 text-success",
+        success: "border-transparent bg-success/10 text-success-strong",
         warning: "border-transparent bg-warning/15 text-warning-strong",
         info: "border-transparent bg-insights/10 text-insights",
         gold: "border-transparent bg-primary-soft text-primary-soft-foreground",

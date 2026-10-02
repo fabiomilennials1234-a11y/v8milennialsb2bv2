@@ -21,7 +21,7 @@ type Tone = "gold" | "good" | "bad" | "info" | "neutral";
 
 const toneChip: Record<Tone, string> = {
   gold: "bg-primary-soft text-primary-soft-foreground",
-  good: "bg-success/10 text-success",
+  good: "bg-success/10 text-success-strong",
   bad: "bg-destructive/10 text-destructive",
   info: "bg-insights/10 text-insights",
   neutral: "bg-muted text-foreground/70",
@@ -44,7 +44,7 @@ export function DeltaChip({
   const good = invert ? value <= 0 : value >= 0;
   const Icon = value >= 0 ? ArrowUp : ArrowDown;
   return (
-    <span className={cn("inline-flex items-center gap-1 text-xs font-bold tabular-nums", good ? "text-success" : "text-destructive", className)}>
+    <span className={cn("inline-flex items-center gap-1 text-xs font-bold tabular-nums", good ? "text-success-strong" : "text-destructive", className)}>
       <Icon className="h-3 w-3" aria-hidden />
       {format(value)}
       {label && <span className="font-medium text-muted-foreground">{label}</span>}

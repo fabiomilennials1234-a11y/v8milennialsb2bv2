@@ -63,6 +63,9 @@
     /* Success - Gamification Green */
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
+    /* V5: par legível do verde para TEXTO e ícone sobre cartão. --success
+       (142 70% 45%) dá ~2,5:1 sobre branco e reprova AA; é o preenchimento. */
+    --success-strong: 142 72% 27%;
 
     /* Warning */
     --warning: 38 92% 50%;
@@ -281,6 +284,7 @@
 
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
+    --success-strong: 142 62% 58%;
 
     --warning: 38 92% 55%;
     --warning-foreground: 30 18% 10%;
@@ -692,26 +696,6 @@
 
   .metric-card {
     @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
-  }
-
-  /* ─── Copilot: gold hover treatment ──────────────────────────────
-     Scoped to .copilot-surface (applied on the copilot screens' roots).
-     Every enabled button "lights up" gold on hover — a discreet gold glow
-     + subtle lift. Single source of truth for the effect across all copilot
-     buttons. Excludes toggles/switches/radios and the active pill (which
-     keeps its own solid gold fill). Portaled surfaces (dialogs, dropdowns,
-     selects) render outside .copilot-surface and are intentionally untouched. */
-  .copilot-surface button:not([data-gradient]) {
-    transition-property: color, background-color, border-color, box-shadow, transform;
-    transition-duration: 180ms;
-    transition-timing-function: ease-out;
-  }
-
-  .copilot-surface button:not(:disabled):not([data-disabled]):not([data-state="active"]):not([role="switch"]):not([role="checkbox"]):not([role="radio"]):not([data-gradient]):hover {
-    transform: translateY(-1px);
-    box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.14),
-      0 3px 12px -5px hsl(var(--primary) / 0.20);
   }
 
   .kanban-column {

@@ -34,7 +34,7 @@ report has one entry per shot with:
 - failed requests
 - **mock misses**: tables and RPCs the screen asked for that the fixtures do not cover
 
-A full run (50 routes × 4 variants) takes about 13 minutes.
+Each shot takes 3 to 4 seconds, so a full run (50 routes × 4 variants) takes about 12 minutes. A route that throws is recorded as `error` in the report and the run goes on. If the mock or the app stops answering, the run stops, after first writing the partial report. `/tmp` can be cleaned between sessions, so copy shots elsewhere (`--out`) if you need to keep them.
 
 ### `shoot.mjs` options
 
@@ -133,6 +133,8 @@ To use real time instead:
 - **Métricas:** the 4 template panels (`metrics_studio_panels`) read from `src/modules/analytics/lib/metrics-studio-templates.json`.
 
 ## Coverage (verified with Playwright, 2026-10-02)
+
+Last check: `shoot.mjs verify` covered dashboard, leads, funil-vendas, chat-whatsapp (inbox and open thread), copilot, equipe and upsell in all 4 variants. That is 32 shots with no error boundary, no page error and no blank frame. The only console error was the expected `master_users` 406. The other routes below come from the full dark-1440 sweep.
 
 **Render with data**, 4 variants each:
 - `/dashboard` (Comando), `/leads`, `/funil/vendas` (plus `prospeccao` and `recompra`), `/chat-whatsapp`, and `/chat-whatsapp?instance=…&phone=…` (thread and lead panel open)

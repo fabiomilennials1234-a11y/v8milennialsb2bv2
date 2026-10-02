@@ -103,7 +103,8 @@ export function BaseNode({
         )}
         {discontinued && (
           <div className="mt-2 space-y-1">
-            <DiscontinuedBadge />
+            {/* Na tinta, o âmbar escuro do selo some — usa o âmbar de preenchimento. */}
+            <DiscontinuedBadge className={ink ? "bg-warning/20 text-warning" : undefined} />
             <p className={cn("text-[11px] leading-snug", ink ? "text-tinta-muted" : "text-muted-foreground")}>
               {DISCONTINUED_STEP_HINT}
             </p>

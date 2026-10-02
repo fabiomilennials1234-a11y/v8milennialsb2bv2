@@ -17,7 +17,6 @@ interface LeadQualificationProps {
   qualificationScore?: number | null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function LeadQualification(_props: LeadQualificationProps) {
   return null;
 }

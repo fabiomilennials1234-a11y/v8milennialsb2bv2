@@ -14,6 +14,7 @@ O que é tela real e o que era só ideia do mockup está em
 | Cartão | `--card`, `--card-border`, `--relevo`, `--radius-card` | `rounded-card border border-card-border bg-card shadow-relevo` |
 | Tinta (lateral, painel-herói, pílula, tooltip) | `--ink`, `--ink-2`, `--ink-3`, `--ink-line`, `--ink-foreground`, `--ink-muted` | `bg-tinta text-tinta-foreground`, `text-tinta-muted`, `border-tinta-line` |
 | Ouro (marca, foco, ativo) | `--primary`, `--gold-soft` | `bg-primary`, `bg-primary-soft text-primary-soft-foreground` |
+| Verde legível (texto/ícone sobre cartão) | `--success-strong` (o `--success` é preenchimento; como texto reprova AA no claro) | `text-success-strong` |
 | Sombras | `--relevo`, `--relevo-alto`, `--relevo-tinta`, `--brilho-ouro` | `shadow-relevo`, `shadow-relevo-alto`, `shadow-relevo-tinta`, `shadow-brilho-ouro` |
 | Raios | `--radius` (14 px), `--radius-card` (22 px), `--radius-panel` (28 px) | `rounded-lg`/`md`, `rounded-card`, `rounded-panel` |
 | Fonte | Plus Jakarta Sans | `font-sans` (padrão) |

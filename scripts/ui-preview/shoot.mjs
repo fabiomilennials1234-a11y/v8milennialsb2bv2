@@ -167,6 +167,7 @@ for (const theme of themes) {
 
     for (const route of routes) {
       const t0 = Date.now();
+      try {
       // Fresh app per route: no state, blocker or error boundary leaks between routes.
       if (DIRECT) {
         consoleErrors = [];
@@ -216,6 +217,24 @@ for (const theme of themes) {
         result.consoleErrors.length && `${result.consoleErrors.length} console.error`,
       ].filter(Boolean);
       console.log(`${theme}-${width} ${route.name.padEnd(24)} ${String(result.ms).padStart(5)}ms ${flags.join(" ")}`);
+      } catch (e) {
+        // One bad route must not lose the run; but if a server died, stop.
+        const msg = String(e?.message ?? e).split("\n")[0];
+        report.results.push({ route: route.name, path: route.path, theme, width, error: msg, ms: Date.now() - t0 });
+        console.log(`${theme}-${width} ${route.name.padEnd(24)} FAILED: ${msg}`);
+        if (!(await health())) {
+          console.error(`✖ mock at ${MOCK_URL} stopped answering — aborting.`);
+          writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
+          process.exit(2);
+        }
+        try {
+          await fetch(APP_URL);
+        } catch {
+          console.error(`✖ app at ${APP_URL} stopped answering — aborting.`);
+          writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
+          process.exit(2);
+        }
+      }
     }
     await context.close();
   }
@@ -224,6 +243,6 @@ for (const theme of themes) {
 await browser.close();
 report.finishedAt = new Date().toISOString();
 writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
-const bad = report.results.filter((r) => r.errorBoundary || r.envMissing || r.login || r.pageErrors.length);
+const bad = report.results.filter((r) => r.error || r.errorBoundary || r.envMissing || r.login || r.pageErrors?.length);
 console.log(`\n${report.results.length} screenshots → ${OUT}`);
 console.log(`report: ${join(OUT, "report.json")}${bad.length ? `  (${bad.length} with errors)` : ""}`);
