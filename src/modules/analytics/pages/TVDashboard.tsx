@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -8,6 +8,11 @@ import {
   Zap, ArrowUpRight, ArrowDownRight, Trophy
 } from "lucide-react";
 import { useTVDashboardData } from "@/modules/analytics/hooks/useTVDashboardData";
+import { useCommandMetrics } from "@/modules/analytics/hooks/useCommandMetrics";
+import { studioInterval } from "@/modules/analytics/lib/metrics-studio-interval";
+import { mesDeReferencia } from "@/modules/analytics/lib/metrics-studio-mes-referencia";
+import { useTeamGoals } from "@/modules/engagement/hooks/useGoals";
+import { useOrganization } from "@/modules/identity";
 import { useTVKPIs } from "@/modules/analytics/hooks/useTVKPIs";
 import { AICoachSection } from "@/modules/analytics/components/tv/AICoachSection";
 import { SalesFunnel } from "@/modules/analytics/components/tv/SalesFunnel";
@@ -62,6 +67,18 @@ function TVDashboardInner() {
   const kpiValues = useTVKPIs(range);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { timezone, isReady } = useOrganization();
+  const tz = timezone ?? "UTC";
+  const { month, year } = mesDeReferencia(currentTime, tz);
+  // Same company goal, revenue source and calendar boundaries as the monthly
+  // goal card in Metrics Studio. Personal TV metrics keep their own scope.
+  const monthlyRange = useMemo(() => studioInterval("month", currentTime, tz), [currentTime, tz]);
+  const monthlyMetrics = useCommandMetrics(monthlyRange, null);
+  const monthlyGoals = useTeamGoals(month, year);
+  const refreshMonthlyGoal = () => {
+    void monthlyMetrics.refetch();
+    void monthlyGoals.refetch();
+  };
 
   // Competition + ranking (slot rotativo Coach/Ranking)
   const now = new Date();
@@ -139,9 +156,9 @@ function TVDashboardInner() {
   }
 
   // Termômetro Meta — SEMPRE mês civil (não rotaciona)
-  const meta = data?.metaVendasMes || 60000;
-  const atual = data?.vendasRealizadas || 0;
-  const ondeDeveria = data?.ondeDeveriamEstar || 0;
+  const meta = monthlyGoals.data?.find(goal => goal.type === "faturamento" && goal.target_value > 0)?.target_value ?? 0;
+  const atual = monthlyMetrics.data?.vendaTotal ?? 0;
+  const ondeDeveria = meta * monthlyRange.dayOfPeriod / monthlyRange.daysTotal;
   const percentage = meta > 0 ? (atual / meta) * 100 : 0;
   const isAhead = atual >= ondeDeveria;
   const quantoFalta = Math.max(0, meta - atual);
@@ -173,7 +190,8 @@ function TVDashboardInner() {
           </div>
           <Button
             variant="ghost" size="icon"
-            onClick={() => refetch()}
+            aria-label="Atualizar dashboard"
+            onClick={() => { void refetch(); refreshMonthlyGoal(); }}
             className="w-7 h-7 rounded-lg text-[#8a857a] hover:text-[#f8f5e7] hover:bg-white/5"
             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
@@ -197,7 +215,14 @@ function TVDashboardInner() {
         {/* Coluna esquerda — Termômetro (mês civil, fixo) */}
         <div className="col-span-3 flex flex-col gap-3">
           <TVCard className="flex-1 relative overflow-hidden">
-            <Thermometer
+            {monthlyGoals.isError || monthlyMetrics.isError ? (
+              <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-[#f8f5e7]">
+                <p>Não foi possível carregar a meta do mês.</p>
+                <Button variant="outline" onClick={refreshMonthlyGoal}>Tentar novamente</Button>
+              </div>
+            ) : !isReady || monthlyGoals.isPending || monthlyMetrics.isPending ? (
+              <p role="status" className="flex h-full items-center justify-center text-sm text-white/60">Carregando meta do mês...</p>
+            ) : meta > 0 ? <Thermometer
               meta={meta}
               atual={atual}
               ondeDeveria={ondeDeveria}
@@ -205,8 +230,10 @@ function TVDashboardInner() {
               isAhead={isAhead}
               quantoFalta={quantoFalta}
               diferenca={diferenca}
-              currentTime={currentTime}
-            />
+              currentTime={new Date(year, month - 1, 1)}
+            /> : (
+              <p className="flex h-full items-center justify-center text-center text-sm text-white/60">Meta de faturamento não configurada para este mês.</p>
+            )}
           </TVCard>
         </div>
 
