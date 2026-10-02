@@ -13,7 +13,9 @@ import {
   Sparkles,
   CalendarRange,
   Hourglass,
+  SlidersHorizontal,
 } from "lucide-react";
+import { FilterChip } from "@/shared/components/FilterChip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -322,25 +324,14 @@ export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelPro
 
   return (
     <>
-      {/* Trigger Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn(
-          "gap-1.5",
-          activeCount > 0 &&
-            "border-primary/40 bg-primary-soft text-primary-soft-foreground hover:bg-primary-soft",
-        )}
+      {/* Gatilho — chip do V5; a contagem de filtros ativos vai no chip tinta. */}
+      <FilterChip
+        icon={SlidersHorizontal}
+        count={activeCount > 0 ? activeCount : undefined}
         onClick={() => setOpen(true)}
       >
-        <Filter />
         Filtros
-        {activeCount > 0 && (
-          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold tabular-nums text-primary-foreground">
-            {activeCount}
-          </span>
-        )}
-      </Button>
+      </FilterChip>
 
       {/* Sheet Panel */}
       <Sheet open={open} onOpenChange={setOpen} modal={false}>

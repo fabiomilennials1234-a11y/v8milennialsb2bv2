@@ -85,6 +85,7 @@ const Funil = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Funil
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
+const Pitstop = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Pitstop")));
 // Área do Gestor (ADR-0021) — hub do Gestor de Portfólio + página master de gestores.
 const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
 const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
@@ -679,6 +680,18 @@ function AppRoutes() {
       {/* Rota antiga do funil custom — redirect permanente pra página nova.
           A página CustomPipeline.tsx segue no repo (morre na SCRUM-637). */}
       <Route path="/pipe/custom/:slug" element={<RedirectPipeCustomParaFunil />} />
+      {/* V5: o Pitstop virou página-hub. Cada atalho dentro dela carrega o
+          próprio gate (permissão/plano) na rota de destino. */}
+      <Route
+        path="/pitstop"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Pitstop />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/agenda"
         element={

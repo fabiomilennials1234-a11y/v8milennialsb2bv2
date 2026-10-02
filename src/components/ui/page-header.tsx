@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -28,6 +29,15 @@ import { cn } from "@/lib/utils";
  * ou quatro delas ocupavam duas linhas antes do conteúdo. `actions` fica para
  * o que é sempre visível (o primário em ouro, no máximo um `ink`).
  */
+/**
+ * Onde a pílula da página mora. No V5 a navegação da página sobe para o centro
+ * da barra superior (`TopBar`), que publica o elemento-alvo aqui. Sem barra
+ * (TV, rotas de tela cheia, testes) o contexto é `null` e a pílula fica logo
+ * abaixo do título, como antes.
+ */
+const PageTabsSlotContext = React.createContext<HTMLElement | null>(null);
+export const PageTabsSlotProvider = PageTabsSlotContext.Provider;
+
 export interface PageHeaderAction {
   label: string;
   icon?: LucideIcon;
@@ -64,6 +74,7 @@ export function PageHeader({
   ...props
 }: PageHeaderProps) {
   const hasSecondary = !!secondaryActions?.length;
+  const tabsSlot = React.useContext(PageTabsSlotContext);
   const navigate = useNavigate();
   const onBack = React.useCallback(() => {
     if (typeof back === "string") navigate(back);
@@ -125,7 +136,12 @@ export function PageHeader({
           </div>
         )}
       </div>
-      {tabs && <div className="flex min-w-0 max-w-full">{tabs}</div>}
+      {tabs &&
+        (tabsSlot ? (
+          createPortal(<div className="flex min-w-0 max-w-full">{tabs}</div>, tabsSlot)
+        ) : (
+          <div className="flex min-w-0 max-w-full">{tabs}</div>
+        ))}
     </header>
   );
 }

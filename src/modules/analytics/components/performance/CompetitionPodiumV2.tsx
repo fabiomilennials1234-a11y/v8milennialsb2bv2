@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useMemo } from "react";
-import { motion, LayoutGroup, AnimatePresence } from "framer-motion";
+import { motion, LayoutGroup } from "framer-motion";
 import { ArrowDown, ArrowUp, Crown, Flame, Sparkles } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,10 @@ export interface PodiumUser {
   goalProgress: number;
   position: number;
   avatarUrl?: string;
+  /** Cargo, abaixo do nome. */
+  sub?: string;
+  /** Nº de vendas (só quando a métrica é venda). */
+  count?: number;
 }
 
 export interface PodiumPrize {
@@ -47,86 +51,67 @@ interface CompetitionPodiumV2Props {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatValue(value: number, metricType: string) {
-  if (metricType === "meetings") return `${value} reuniões`;
-  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}K`;
-  return `R$ ${value.toLocaleString("pt-BR")}`;
-}
-
-// Faixas de progresso da meta — estado, então token: bateu (success), perto
-// (warning), meio do caminho (insights), longe (destructive).
-function progressColor(progress: number): string {
-  if (progress >= 100) return "bg-success";
-  if (progress >= 80) return "bg-warning";
-  if (progress >= 50) return "bg-insights";
-  return "bg-destructive";
-}
-
-function progressTrackColor(progress: number): string {
-  if (progress >= 100) return "bg-success/20";
-  if (progress >= 80) return "bg-warning/20";
-  if (progress >= 50) return "bg-insights/20";
-  return "bg-destructive/20";
+/** "R$ 94,8 mil" — o número do bloco; a unidade fica menor. */
+function ValorPodio({ value, metricType, className }: { value: number; metricType: string; className?: string }) {
+  if (metricType === "meetings") {
+    return (
+      <span className={className}>
+        {value.toLocaleString("pt-BR")}
+        <small className="ml-1 text-[0.5em] font-bold opacity-70">{value === 1 ? "reunião" : "reuniões"}</small>
+      </span>
+    );
+  }
+  if (value >= 1000) {
+    return (
+      <span className={className}>
+        R$ {(value / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+        <small className="ml-0.5 text-[0.55em] font-bold opacity-70">mil</small>
+      </span>
+    );
+  }
+  return <span className={className}>R$ {value.toLocaleString("pt-BR")}</span>;
 }
 
 // ---------------------------------------------------------------------------
-// Position config
+// Position config — V5 na tinta: o 1º é o bloco de ouro, 2º e 3º são vidro.
 // ---------------------------------------------------------------------------
 
-// V5: ouro = `primary`, prata = `silver`, bronze = `warning`. Sem degradê cru
-// (não tinha par no escuro). `ring` é o aro do avatar; `pedestal*` pinta o
-// bloco do prêmio; `valueText` é o número abaixo do nome.
 const POSITION_CONFIG = {
   1: {
     avatarSize: "2xl" as const,
-    avatarClassName: "h-[88px] w-[88px]",
+    avatarClassName: "h-[72px] w-[72px]",
     ring: "bg-primary",
-    shadowGlow: "shadow-brilho-ouro",
-    pedestalHeight: "h-[110px]",
-    pedestalFill: "bg-primary-soft",
-    pedestalBorder: "border-primary/40",
-    valueText: "text-primary-soft-foreground",
-    badgeColor: "bg-primary text-primary-foreground",
-    ringOffset: 3,
+    blockHeight: "min-h-[188px]",
+    block: "bg-primary text-primary-foreground shadow-brilho-ouro",
+    pill: "bg-tinta text-tinta-foreground",
+    sub: "text-primary-foreground/70",
+    value: "text-[clamp(1.6rem,2.6vw,2.1rem)]",
   },
   2: {
     avatarSize: "xl" as const,
-    avatarClassName: "h-[72px] w-[72px]",
+    avatarClassName: "h-14 w-14",
     ring: "bg-silver",
-    shadowGlow: "shadow-relevo",
-    pedestalHeight: "h-[80px]",
-    pedestalFill: "bg-silver/15",
-    pedestalBorder: "border-silver/40",
-    valueText: "text-foreground",
-    badgeColor: "bg-silver text-silver-foreground",
-    ringOffset: 3,
+    blockHeight: "min-h-[148px]",
+    block: "border border-tinta-line bg-tinta-2 text-tinta-foreground",
+    pill: "bg-white/10 text-tinta-foreground",
+    sub: "text-tinta-muted",
+    value: "text-[1.45rem]",
   },
   3: {
     avatarSize: "xl" as const,
-    avatarClassName: "h-[68px] w-[68px]",
+    avatarClassName: "h-14 w-14",
     ring: "bg-warning",
-    shadowGlow: "shadow-relevo",
-    pedestalHeight: "h-[60px]",
-    pedestalFill: "bg-warning/15",
-    pedestalBorder: "border-warning/40",
-    valueText: "text-warning-strong",
-    badgeColor: "bg-warning text-warning-foreground",
-    ringOffset: 3,
+    blockHeight: "min-h-[118px]",
+    block: "border border-tinta-line bg-tinta-2 text-tinta-foreground",
+    pill: "bg-white/10 text-tinta-foreground",
+    sub: "text-tinta-muted",
+    value: "text-[1.45rem]",
   },
 } as const;
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function RadialGlow() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute left-1/2 top-[10%] h-[320px] w-[320px] -translate-x-1/2 rounded-full bg-primary/10 blur-[100px]" />
-      <div className="absolute left-1/2 top-[25%] h-[200px] w-[200px] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-[80px]" />
-    </div>
-  );
-}
 
 function CrownBadge() {
   return (
@@ -135,22 +120,8 @@ function CrownBadge() {
       animate={{ scale: [1, 1.06, 1], rotate: [0, 3, -3, 0] }}
       transition={{ repeat: Infinity, duration: 3, ease: [0.4, 0, 0.2, 1] }}
     >
-      <Crown className="h-7 w-7 fill-primary/25" strokeWidth={2.2} aria-label="Líder" />
+      <Crown className="h-6 w-6 fill-primary/25" strokeWidth={2.2} aria-label="Líder" />
     </motion.span>
-  );
-}
-
-function PositionBadge({ position }: { position: number }) {
-  const cfg = POSITION_CONFIG[position as 1 | 2 | 3];
-  return (
-    <span
-      className={cn(
-        "absolute -top-2 -right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold tabular-nums shadow-relevo ring-2 ring-card",
-        cfg?.badgeColor ?? "bg-muted text-foreground",
-      )}
-    >
-      {position}
-    </span>
   );
 }
 
@@ -163,7 +134,7 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
         initial={{ opacity: 0, scale: 0.5, y: -10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ delay: 1, type: "spring", stiffness: 300, damping: 15 }}
-        className="mb-1 inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary-soft px-3 py-1 text-[10px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground"
+        className="mb-1 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[.06em] text-primary-foreground"
       >
         <Crown className="h-3 w-3" aria-hidden />
         Novo líder
@@ -177,7 +148,7 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.2, type: "spring" }}
-        className="mb-1 inline-flex items-center gap-1 rounded-full border border-insights/30 bg-insights/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[.06em] text-insights"
+        className="mb-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[.06em] text-tinta-foreground"
       >
         <Sparkles className="h-3 w-3" aria-hidden />
         Novo
@@ -194,10 +165,8 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 1, type: "spring", stiffness: 250, damping: 15 }}
       className={cn(
-        "mb-1 inline-flex items-center gap-0.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold tabular-nums",
-        movedUp
-          ? "border-success/30 bg-success/10 text-success"
-          : "border-destructive/30 bg-destructive/10 text-destructive",
+        "mb-1 inline-flex items-center gap-0.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold tabular-nums",
+        movedUp ? "bg-success/20 text-success-strong" : "bg-destructive/20 text-destructive",
       )}
       aria-label={movedUp ? `Subiu ${positions}` : `Caiu ${positions}`}
     >
@@ -207,103 +176,61 @@ const TransitionBadge = memo(function TransitionBadge({ change }: { change: Rank
   );
 });
 
-function GoalProgressBar({
-  progress,
-  delay,
-}: {
-  progress: number;
-  delay: number;
-}) {
-  const clampedWidth = Math.min(progress, 100);
-
-  return (
-    <div className="mt-2 w-full">
-      <div
-        className={cn(
-          "relative h-[5px] w-full overflow-hidden rounded-full",
-          progressTrackColor(progress),
-        )}
-      >
-        <motion.div
-          className={cn("absolute inset-y-0 left-0 rounded-full", progressColor(progress))}
-          initial={{ width: "0%" }}
-          animate={{ width: `${clampedWidth}%` }}
-          transition={{ duration: 0.8, delay, ease: "easeOut" }}
-        />
-      </div>
-      <div className="mt-1 flex items-center justify-between gap-1.5">
-        <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
-          {progress}% da meta{progress >= 100 ? " \u2713" : ""}
-        </span>
-        {progress >= 100 && (
-          <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[.04em] text-success">
-            <Flame className="h-3 w-3" aria-hidden />
-            Meta batida
-          </span>
-        )}
-        {progress >= 80 && progress < 100 && (
-          <Flame className="h-3.5 w-3.5 text-warning-strong" aria-label="Perto da meta" />
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Pedestal block
+// Bloco do pódio (o "degrau"): lugar, número, % da meta e o prêmio
 // ---------------------------------------------------------------------------
 
-function Pedestal({
+function BlocoPodio({
+  user,
   prize,
+  metricType,
   position,
 }: {
+  user: PodiumUser;
   prize: PodiumPrize | undefined;
+  metricType: string;
   position: 1 | 2 | 3;
 }) {
   const cfg = POSITION_CONFIG[position];
-
+  const contagem =
+    metricType === "sales" && user.count != null
+      ? `${user.count} ${user.count === 1 ? "venda" : "vendas"} · `
+      : "";
   return (
     <div
       className={cn(
-        cfg.pedestalHeight,
-        "relative w-full overflow-hidden rounded-t-2xl border-x border-t",
-        cfg.pedestalBorder,
-        cfg.pedestalFill,
+        "flex w-full flex-col items-center justify-center gap-1.5 rounded-t-[22px] px-3 py-4 text-center",
+        cfg.blockHeight,
+        cfg.block,
       )}
     >
-      <div className="flex h-full flex-col items-center justify-center px-2 text-center">
-        <span className="text-base leading-none">
-          {prize ? prize.prize_icon : "\u2014"}
-        </span>
-        <p className="mt-1 max-w-full truncate text-[11px] font-bold text-foreground">
-          {prize ? prize.prize_name : "\u2014"}
-        </p>
-        {prize?.prize_value != null ? (
-          <p className="text-[10px] tabular-nums text-muted-foreground">
-            R$ {prize.prize_value.toLocaleString("pt-BR")}
-          </p>
-        ) : prize ? (
-          <p className="text-[10px] text-muted-foreground/60">&mdash;</p>
-        ) : null}
-      </div>
-
-      {/* Shimmer */}
-      <motion.div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-card/40 to-transparent"
-        animate={{ x: ["-100%", "200%"] }}
-        transition={{
-          repeat: Infinity,
-          duration: 3.5,
-          delay: position * 0.6,
-          ease: "linear",
-        }}
+      <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold", cfg.pill)}>{position}º lugar</span>
+      <ValorPodio
+        value={user.value}
+        metricType={metricType}
+        className={cn("font-extrabold leading-none tracking-[-0.04em] tabular-nums", cfg.value)}
       />
+      <span className={cn("text-[11.5px] font-semibold tabular-nums", cfg.sub)}>
+        {contagem}
+        {Math.round(user.goalProgress)}% da meta
+      </span>
+      {position === 1 && user.goalProgress >= 100 && (
+        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary-foreground/10 px-2.5 py-0.5 text-[11px] font-bold">
+          <Flame className="h-3 w-3" aria-hidden />
+          Meta batida
+        </span>
+      )}
+      {prize && (
+        <span className={cn("mt-1 max-w-full truncate text-[11px] font-semibold", cfg.sub)}>
+          {prize.prize_icon} {prize.prize_name}
+        </span>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PodiumSlot (avatar + info + pedestal for one user)
+// PodiumSlot (avatar + nome + bloco de um colocado)
 // ---------------------------------------------------------------------------
 
 function PodiumSlot({
@@ -326,175 +253,31 @@ function PodiumSlot({
 
   return (
     <motion.div
-      className={cn(
-        "flex flex-col items-center",
-        isFirst ? "w-[170px] sm:w-[185px]" : "w-[145px] sm:w-[155px]",
-        !isFirst && "mt-6",
-      )}
-      initial={
-        isFirst
-          ? { opacity: 0, scale: 0.8 }
-          : { opacity: 0, y: 40 }
-      }
-      animate={
-        isFirst
-          ? { opacity: 1, scale: 1 }
-          : { opacity: 1, y: 0 }
-      }
-      transition={
-        isFirst
-          ? { delay: animDelay, type: "spring", stiffness: 200, damping: 14 }
-          : { delay: animDelay, type: "spring", stiffness: 160, damping: 18 }
-      }
+      className="flex w-full min-w-0 flex-col items-center"
+      initial={isFirst ? { opacity: 0, scale: 0.9 } : { opacity: 0, y: 30 }}
+      animate={isFirst ? { opacity: 1, scale: 1 } : { opacity: 1, y: 0 }}
+      transition={{ delay: animDelay, type: "spring", stiffness: isFirst ? 200 : 160, damping: isFirst ? 14 : 18 }}
     >
-      {/* Transition badge (↑2, NOVO LÍDER, etc.) */}
       <TransitionBadge change={change} />
-
-      {/* Crown for 1st */}
       {isFirst && (
         <div className="mb-1">
           <CrownBadge />
         </div>
       )}
-
-      {/* Avatar with gradient border */}
-      <div className="relative">
-        <PositionBadge position={pos} />
-        <div
-          className={cn(
-            "rounded-full p-[3px]",
-            cfg.ring,
-            cfg.shadowGlow,
-          )}
-        >
-          <div className="rounded-full bg-card p-[2px]">
-            <UserAvatar
-              name={user.name}
-              avatarUrl={user.avatarUrl}
-              size={cfg.avatarSize}
-              className={cfg.avatarClassName}
-              fallbackClassName="bg-muted text-foreground font-bold"
-            />
-          </div>
+      <div className={cn("rounded-full p-[2px]", cfg.ring)}>
+        <div className="rounded-full bg-tinta p-[2px]">
+          <UserAvatar
+            name={user.name}
+            avatarUrl={user.avatarUrl}
+            size={cfg.avatarSize}
+            className={cfg.avatarClassName}
+            fallbackClassName="bg-tinta-2 text-tinta-foreground font-bold"
+          />
         </div>
       </div>
-
-      {/* Name */}
-      <p
-        className={cn(
-          "mt-2 truncate text-center font-bold tracking-[-0.01em] text-foreground",
-          isFirst ? "max-w-[160px] text-sm" : "max-w-[130px] text-xs",
-        )}
-      >
-        {user.name}
-      </p>
-
-      {/* Value */}
-      <motion.span
-        className={cn("mt-0.5 font-extrabold tabular-nums tracking-[-0.03em]", isFirst ? cn("text-lg", cfg.valueText) : cn("text-sm", cfg.valueText))}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: animDelay + 0.25 }}
-      >
-        {formatValue(user.value, metricType)}
-      </motion.span>
-
-      {/* Goal progress */}
-      <div className="w-full px-1">
-        <GoalProgressBar progress={user.goalProgress} delay={animDelay + 0.35} />
-      </div>
-
-      {/* Pedestal */}
-      <motion.div
-        className="mt-3 w-full"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          delay: animDelay + 0.15,
-          type: "spring",
-          stiffness: 160,
-          damping: 18,
-        }}
-      >
-        <Pedestal prize={prize} position={pos} />
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Single user card (edge case: only 1 user)
-// ---------------------------------------------------------------------------
-
-function SingleUserCard({
-  user,
-  prize,
-  metricType,
-}: {
-  user: PodiumUser;
-  prize: PodiumPrize | undefined;
-  metricType: string;
-}) {
-  const cfg = POSITION_CONFIG[1];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.85 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: "spring", stiffness: 180, damping: 16 }}
-      className="mx-auto flex w-[220px] flex-col items-center p-4"
-    >
-      <CrownBadge />
-
-      <div className="relative mt-3">
-        <PositionBadge position={1} />
-        <div
-          className={cn(
-            "rounded-full p-[3px]",
-            cfg.ring,
-            cfg.shadowGlow,
-          )}
-        >
-          <div className="rounded-full bg-card p-[2px]">
-            <UserAvatar
-              name={user.name}
-              avatarUrl={user.avatarUrl}
-              size="2xl"
-              className="h-[88px] w-[88px]"
-              fallbackClassName="bg-muted text-foreground font-bold"
-            />
-          </div>
-        </div>
-      </div>
-
-      <p className="mt-3 text-base font-bold tracking-[-0.01em] text-foreground">{user.name}</p>
-
-      <motion.span
-        className="mt-1 text-xl font-extrabold tabular-nums tracking-[-0.03em] text-primary-soft-foreground"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        {formatValue(user.value, metricType)}
-      </motion.span>
-
-      <div className="w-full px-1">
-        <GoalProgressBar progress={user.goalProgress} delay={0.5} />
-      </div>
-
-      {prize && (
-        <div className="mt-4 w-full rounded-2xl border border-primary/30 bg-primary-soft py-2.5 text-center">
-          <span className="text-lg">{prize.prize_icon}</span>
-          <p className="text-xs font-bold text-primary-soft-foreground">
-            {prize.prize_name}
-          </p>
-          {prize.prize_value != null && (
-            <p className="text-[10px] tabular-nums text-muted-foreground">
-              R$ {prize.prize_value.toLocaleString("pt-BR")}
-            </p>
-          )}
-        </div>
-      )}
+      <p className="mt-2 max-w-full truncate text-center text-[14px] font-bold text-tinta-foreground">{user.name}</p>
+      <p className="mb-3 h-4 max-w-full truncate text-center text-[11.5px] text-tinta-muted">{user.sub ?? ""}</p>
+      <BlocoPodio user={user} prize={prize} metricType={metricType} position={pos} />
     </motion.div>
   );
 }
@@ -569,15 +352,16 @@ function CompetitionPodiumV2Base({
 
   if (top3.length === 0) return null;
 
-  // Edge case: single user
+  // Um só colocado: o bloco de ouro sozinho, centrado.
   if (top3.length === 1) {
     return (
-      <div className="relative overflow-hidden rounded-card border border-card-border bg-card px-4 py-8 shadow-relevo">
-        <RadialGlow />
-        <SingleUserCard
-          user={top3[0]}
+      <div className="mx-auto w-full max-w-[240px] pt-4">
+        <PodiumSlot
+          user={{ ...top3[0], position: 1 }}
           prize={prizeMap.get(1)}
           metricType={metricType}
+          animDelay={0}
+          isFirst
         />
       </div>
     );
@@ -616,42 +400,41 @@ function CompetitionPodiumV2Base({
 
   const visualSlots = buildVisualSlots(displayUsers);
 
+  // V5: o pódio mora dentro do painel de tinta (quem chama dá o InkPanel).
+  // Três colunas iguais, 2º · 1º · 3º, alinhadas pela base dos blocos.
   return (
-    <div className="relative w-full overflow-hidden rounded-card border border-card-border bg-card px-2 pb-0 pt-6 shadow-relevo sm:px-4">
-      <RadialGlow />
+    <LayoutGroup>
+      <div className="grid grid-cols-3 items-end gap-2 pt-4 sm:gap-3">
+        {visualSlots.map((user, i) => {
+          if (!user) return <div key={`vazio-${i}`} />;
 
-      <LayoutGroup>
-        <div className="relative z-10 flex items-end justify-center gap-3 sm:gap-5">
-          {visualSlots.map((user) => {
-            if (!user) return null;
+          const pos = user.position as 1 | 2 | 3;
+          const isFirst = pos === 1;
+          const animDelay = isFirst ? 0.15 : pos === 2 ? 0.35 : 0.45;
 
-            const pos = user.position as 1 | 2 | 3;
-            const isFirst = pos === 1;
-            const animDelay = isFirst ? 0.15 : pos === 2 ? 0.35 : 0.45;
-
-            return (
-              <motion.div
-                key={user.id}
-                layoutId={`podium-${user.id}`}
-                layout
-                transition={{
-                  layout: { type: "spring", stiffness: 120, damping: 18, duration: 0.8 },
-                }}
-              >
-                <PodiumSlot
-                  user={user}
-                  prize={prizeMap.get(pos)}
-                  metricType={metricType}
-                  animDelay={phase === "old" ? animDelay : 0}
-                  isFirst={isFirst}
-                  change={showBadges ? changeMap.get(user.id) : undefined}
-                />
-              </motion.div>
-            );
-          })}
-        </div>
-      </LayoutGroup>
-    </div>
+          return (
+            <motion.div
+              key={user.id}
+              layoutId={`podium-${user.id}`}
+              layout
+              className="min-w-0"
+              transition={{
+                layout: { type: "spring", stiffness: 120, damping: 18, duration: 0.8 },
+              }}
+            >
+              <PodiumSlot
+                user={user}
+                prize={prizeMap.get(pos)}
+                metricType={metricType}
+                animDelay={phase === "old" ? animDelay : 0}
+                isFirst={isFirst}
+                change={showBadges ? changeMap.get(user.id) : undefined}
+              />
+            </motion.div>
+          );
+        })}
+      </div>
+    </LayoutGroup>
   );
 }
 

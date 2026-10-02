@@ -1,41 +1,32 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { Gauge, GitBranch, Send, Settings, Trophy, Wallet, Zap } from "lucide-react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { Gauge } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { NavigationModel } from "@/modules/platform/hooks/useNavigationModel";
-import type { NavNode, PitstopGroup } from "@/modules/platform/lib/navigation-model";
 import { Sidebar } from "./Sidebar";
 
 /**
- * O slot do Oráculo dentro da lateral MONTADA.
+ * O Oráculo no trilho do V5.
  *
- * `slot-do-oraculo.test.ts` prova a aritmética do degrau e
- * `useDegrauDoSlot.test.tsx` prova que a medição sai da lateral e não da
- * janela. Nenhum dos dois prova que os elementos medidos são o topo, o rodapé e
- * a navegação REAIS — nos dois as referências são passadas à mão. É o que este
- * arquivo cobre: se alguém pendurar a referência no elemento errado, os outros
- * seguem verdes e este fica vermelho.
- *
- * jsdom não faz layout, então `offsetHeight` nasce 0 em tudo. O harness abaixo
- * devolve altura para os elementos que a lateral marcou com `data-medida`, que
- * são exatamente os que o hook lê.
+ * Antes era um "slot" no meio da lateral larga, com a manchete do briefing à
+ * vista e um painel por cima da tela. No trilho de 76 px ele é um ícone: a
+ * manchete vai para o nome acessível/tooltip, o briefing novo vira um ponto
+ * de ouro, e o clique leva à PÁGINA do Oráculo — já na conversa do briefing,
+ * quando há um.
  */
 
-vi.mock("./OrgSwitcher", () => ({ OrgSwitcher: () => <div data-testid="org-switcher" /> }));
-vi.mock("./SidebarMasterLinks", () => ({
-  SidebarMasterLinks: () => <div data-testid="master-links" />,
-}));
-vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div data-testid="user-menu" /> }));
-vi.mock("@/modules/platform/components/notifications/AlertsDropdown", () => ({
-  AlertsDropdown: () => <div data-testid="alerts" />,
-}));
-vi.mock("@/shared/components/UpgradeModal", () => ({
-  UpgradeModal: () => <div data-testid="upgrade-modal" />,
-}));
+vi.mock("./SidebarMasterLinks", () => ({ SidebarMasterLinks: () => <div /> }));
+vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div /> }));
+vi.mock("@/shared/components/UpgradeModal", () => ({ UpgradeModal: () => <div /> }));
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
-const briefingRef: { current: null | { id: string; headline: string } } = { current: null };
+vi.mock("@/modules/identity", () => ({
+  useMasterAuth: () => ({ isMaster: false, isOutbounder: false }),
+  useOrganizationSettings: () => ({ settings: null }),
+}));
+
+const briefingRef: { current: null | { id: string; headline: string; status: string } } = { current: null };
 const openBriefing = vi.fn(async () => ({ conversa_id: "conversa-briefing" }));
 vi.mock("@/modules/copilot", () => ({
   useOraculoBriefing: () => ({
@@ -45,231 +36,75 @@ vi.mock("@/modules/copilot", () => ({
     open: openBriefing,
   }),
 }));
-// A conversa é dublada: o que importa aqui é o painel MONTÁ-LA. O conteúdo
-// dela tem teste próprio em `OraculoConversa.test.tsx`, e o de verdade puxaria
-// sessão e rede.
-vi.mock("@/modules/copilot/components/oraculo/OraculoConversa", () => ({
-  OraculoConversa: () => <div data-testid="conversa-do-oraculo" />,
-}));
 
-const modelRef: { current: NavigationModel } = { current: null as never };
 vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
-  useNavigationModel: () => modelRef.current,
-}));
-
-const node = (label: string, path: string, icon = Gauge, children?: NavNode[]): NavNode => ({
-  label,
-  icon,
-  path,
-  ...(children ? { children } : {}),
-});
-
-const PRIMARY: NavNode[] = [
-  node("Comando", "/dashboard"),
-  node("Chat", "/chat-whatsapp", Zap),
-  node("Disparos", "/disparos", Send),
-  node("Funis", "/funis", GitBranch),
-  node("Carteira", "/upsell", Wallet),
-  node("Turbo", "/turbo", Zap),
-];
-
-const PITSTOP: PitstopGroup[] = [
-  { id: "gestao", title: "Gestão", hint: "", items: [node("Ranking", "/performance", Trophy)] },
-];
-
-function makeModel(): NavigationModel {
-  return {
-    primary: PRIMARY,
-    pitstopGroups: PITSTOP,
-    agenda: node("Agenda", "/agenda"),
-    pitstop: node("Pitstop", "/configuracoes", Settings),
+  useNavigationModel: (): NavigationModel => ({
+    primary: [{ label: "Comando", icon: Gauge, path: "/dashboard" }],
+    pitstopGroups: [],
+    agenda: null,
+    pitstop: null,
     isOutboundMember: false,
     isLocked: () => false,
     featureKeyFor: () => undefined,
     canViewRoute: () => true,
-    isActive: (path: string) => path === "/dashboard",
+    isActive: () => false,
     isPitstopRoute: false,
-  };
+  }),
+}));
+
+function Onde() {
+  const l = useLocation();
+  return <p data-testid="onde">{l.pathname + l.search}</p>;
 }
-
-/**
- * Harness de pixel: dá altura aos elementos que a lateral marcou para medição.
- * Devolver 0 para o resto é de propósito — se o hook ler um elemento não
- * marcado, a conta desanda e o teste acusa.
- */
-const alturas = new Map<string, number>();
-let offsetHeightOriginal: PropertyDescriptor | undefined;
-
-function fixarAlturas(medidas: Record<string, number>) {
-  alturas.clear();
-  for (const [chave, valor] of Object.entries(medidas)) alturas.set(chave, valor);
-}
-
-beforeAll(() => {
-  offsetHeightOriginal = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    "offsetHeight",
-  );
-  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-    configurable: true,
-    get(this: HTMLElement) {
-      const chave = this.getAttribute("data-medida");
-      return chave ? (alturas.get(chave) ?? 0) : 0;
-    },
-  });
-});
-
-afterAll(() => {
-  if (offsetHeightOriginal) {
-    Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeightOriginal);
-  }
-});
-
-beforeEach(() => {
-  window.localStorage.clear();
-  briefingRef.current = null;
-  openBriefing.mockClear();
-});
 
 function renderSidebar() {
-  modelRef.current = makeModel();
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/dashboard"]}>
       <TooltipProvider>
         <Sidebar />
+        <Routes>
+          <Route path="*" element={<Onde />} />
+        </Routes>
       </TooltipProvider>
     </MemoryRouter>,
   );
 }
 
-describe("Sidebar — slot do Oráculo", () => {
-  it("a 900px de lateral, a porta do Oráculo existe — como linha, porque ainda não há briefing", () => {
-    // Recorte (a): o card exige conteúdo e nenhum produtor de briefing existe
-    // ainda, então o degrau alto disponível é a linha. O que importa aqui é que
-    // a porta EXISTE — antes desta fatia não havia link nenhum para /oraculo.
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
+beforeEach(() => {
+  briefingRef.current = null;
+  openBriefing.mockClear();
+});
 
+describe("Sidebar — Oráculo no trilho", () => {
+  it("sem briefing, é a porta da página do Oráculo", async () => {
+    const user = userEvent.setup();
     renderSidebar();
-
-    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "linha");
+    await user.click(screen.getByRole("button", { name: "Oráculo" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/oraculo");
+    expect(openBriefing).not.toHaveBeenCalled();
   });
 
-  it("com briefing e altura ampla, mostra card e abre a conversa contextual", async () => {
-    const user = userEvent.setup();
-    briefingRef.current = { id: "briefing-1", headline: "Receita vazando em Propostas" };
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-
+  it("a manchete do briefing viaja no nome do ícone", () => {
+    briefingRef.current = { id: "b1", headline: "3 propostas paradas há 4 dias", status: "seen" };
     renderSidebar();
-    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "card");
-    expect(screen.getByText("Receita vazando em Propostas")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-
-    expect(openBriefing).toHaveBeenCalledWith("briefing-1");
-    expect(await screen.findByTestId("painel-do-oraculo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Oráculo — 3 propostas paradas há 4 dias" })).toBeInTheDocument();
   });
 
-  it("falha ao abrir briefing mantém painel fechado sem rejeição solta", async () => {
+  it("com briefing, abre a página já na conversa do briefing", async () => {
     const user = userEvent.setup();
-    briefingRef.current = { id: "briefing-1", headline: "Receita vazando em Propostas" };
-    openBriefing.mockRejectedValueOnce(new Error("indisponivel"));
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-
+    briefingRef.current = { id: "b1", headline: "Gargalo na proposta", status: "new" };
     renderSidebar();
     await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-
-    expect(openBriefing).toHaveBeenCalledWith("briefing-1");
-    expect(screen.queryByTestId("painel-do-oraculo")).not.toBeInTheDocument();
+    expect(openBriefing).toHaveBeenCalledWith("b1");
+    await waitFor(() => expect(screen.getByTestId("onde")).toHaveTextContent("/oraculo?conversa=conversa-briefing"));
   });
 
-  it("a 560px com menu comprido, degrada para o ícone", () => {
-    // Este caso é o que acusa referência pendurada no elemento errado: se o
-    // rodapé não for medido, sobram 464px em vez de 284px e o degrau vira
-    // "linha". Nos testes de unidade isso passaria despercebido.
-    fixarAlturas({ lateral: 560, topo: 96, rodape: 180, nav: 400 });
-
-    renderSidebar();
-
-    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "icone");
-  });
-
-  it("em tela baixa demais o slot some e a navegação recupera a altura", () => {
-    fixarAlturas({ lateral: 420, topo: 96, rodape: 180, nav: 400 });
-
-    renderSidebar();
-
-    expect(screen.queryByTestId("slot-do-oraculo")).not.toBeInTheDocument();
-    // O rodapé continua montado: o slot cede espaço, nunca empurra o rodapé
-    // para fora da tela.
-    expect(screen.getByTestId("user-menu")).toBeInTheDocument();
-  });
-
-  it("recolher a lateral não perde o acesso: resta o ícone", async () => {
+  it("se abrir o briefing falhar, ainda leva à página — sem rejeição solta", async () => {
     const user = userEvent.setup();
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-
-    renderSidebar();
-    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "linha");
-
-    await user.click(screen.getByRole("button", { name: "Recolher menu" }));
-
-    expect(screen.getByTestId("slot-do-oraculo")).toHaveAttribute("data-degrau", "icone");
-  });
-
-  it("clicar abre o painel por cima e NÃO navega — a página de baixo continua a mesma", async () => {
-    const user = userEvent.setup();
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-
-    renderSidebar();
-    expect(screen.queryByTestId("painel-do-oraculo")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-
-    expect(await screen.findByTestId("painel-do-oraculo")).toBeInTheDocument();
-    // A lateral continua montada e clicável: com o painel aberto ainda dá para
-    // ir para outra tela num clique só, mesmo contrato da Agenda.
-    expect(screen.getByRole("link", { name: /Comando/ })).toBeInTheDocument();
-  });
-
-  it("o capturador de clique começa DEPOIS da lateral, e acompanha quando ela recolhe", async () => {
-    // O link continuar no documento não prova que dá para clicar nele: jsdom
-    // não faz layout, então uma camada por cima não removeria elemento nenhum.
-    // O que prova é a borda esquerda do capturador.
-    const user = userEvent.setup();
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-
+    openBriefing.mockRejectedValueOnce(new Error("rede"));
+    briefingRef.current = { id: "b1", headline: "Gargalo", status: "new" };
     renderSidebar();
     await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-
-    // V5: a lateral flutua com 12px de margem dos dois lados — o capturador
-    // começa depois da lateral E do respiro: 248 + 12 + 12.
-    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("272px");
-
-    await user.click(screen.getByRole("button", { name: "Recolher menu" }));
-
-    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("88px");
-  });
-
-  it("fecha pelo Esc e pelo botão", async () => {
-    const user = userEvent.setup();
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-    renderSidebar();
-
-    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-    await user.keyboard("{Escape}");
-    expect(screen.queryByTestId("painel-do-oraculo")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-    await user.click(screen.getByRole("button", { name: "Fechar o Oráculo" }));
-    expect(screen.queryByTestId("painel-do-oraculo")).not.toBeInTheDocument();
-  });
-
-  it("o painel traz a conversa dentro, e não um atalho para outra tela", async () => {
-    const user = userEvent.setup();
-    fixarAlturas({ lateral: 900, topo: 96, rodape: 180, nav: 320 });
-    renderSidebar();
-
-    await user.click(screen.getByRole("button", { name: /Oráculo/ }));
-
-    expect(await screen.findByTestId("conversa-do-oraculo")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("onde")).toHaveTextContent("/oraculo"));
   });
 });

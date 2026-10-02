@@ -56,6 +56,9 @@ function describeToolCall(
   return `ENVIAR_DOCUMENTO → ⚠️ id não encontrado na base ("${id.slice(0, 60)}") — nada seria enviado`;
 }
 
+/** Frases de lead para começar o teste — atalho, não conteúdo do agente. */
+const PREVIEW_SUGGESTIONS = ["Olá, quero saber mais", "Qual o preço?", "Como funciona?"];
+
 // ─── Media card in message bubbles ─────────────────────
 
 const MEDIA_PATTERN = /\[(video|imagem|documento|image|doc)\]\s*(.+?)(?:\n|$)/gi;
@@ -499,20 +502,6 @@ export function LivePreviewChat({
                     ? "Clique em Simular ou envie uma mensagem"
                     : "Envie uma mensagem como se fosse um lead"}
                 </p>
-                <div className="flex flex-wrap gap-1.5 justify-center mt-1">
-                  {["Olá, quero saber mais", "Qual o preço?", "Como funciona?"].map(
-                    (s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium shadow-relevo transition-colors hover:border-foreground/20"
-                        onClick={() => setInputValue(s)}
-                      >
-                        {s}
-                      </button>
-                    )
-                  )}
-                </div>
               </>
             )}
           </div>
@@ -653,8 +642,25 @@ export function LivePreviewChat({
         </div>
       )}
 
+      {/* Sugestões — sempre à mão, não só na conversa vazia */}
+      {canTest && (
+        <div className="flex gap-1.5 overflow-x-auto border-t border-border/60 px-3 pt-2.5 scrollbar-hide">
+          {PREVIEW_SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold shadow-relevo transition-colors hover:border-foreground/20 disabled:opacity-50"
+              onClick={() => setInputValue(s)}
+              disabled={isSending || isSimulating}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
-      <div className="flex gap-2 border-t border-border/60 p-3">
+      <div className={`flex gap-2 p-3 ${canTest ? "" : "border-t border-border/60"}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -701,6 +707,9 @@ export function LivePreviewChat({
           )}
         </Button>
       </div>
+      <p className="border-t border-border/60 px-4 py-2 text-[11px] leading-snug text-muted-foreground">
+        Simulação: usa o prompt e as ferramentas desta tela, mesmo antes de salvar. Nada é enviado ao lead.
+      </p>
     </div>
   );
 }

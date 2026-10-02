@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,6 +50,12 @@ interface MovimentacaoTileProps {
   hero?: boolean;
   delay?: number;
   emptyCaption?: string;
+  /** Nota fixa abaixo do número (ex.: "% de comparecimento"). */
+  caption?: ReactNode;
+  /** Mini-visual no pé do tile (barra). */
+  children?: ReactNode;
+  /** O número-herói é a RECEITA (R$), não a contagem. */
+  money?: boolean;
 }
 
 function MovimentacaoTileBase({
@@ -61,13 +67,16 @@ function MovimentacaoTileBase({
   hero = false,
   delay = 0,
   emptyCaption,
+  caption,
+  children,
+  money = false,
 }: MovimentacaoTileProps) {
   const reduceMotion = useReducedMotion();
   const animated = useCountUp(value, 1200, !reduceMotion);
   const display = reduceMotion ? value : animated;
 
   const note =
-    (hero && subValue) || emptyCaption ? (
+    (hero && subValue) || emptyCaption || caption ? (
       <>
         {hero && subValue && (
           <>
@@ -75,6 +84,7 @@ function MovimentacaoTileBase({
             <span className="font-bold tabular-nums text-foreground/90">{subValue.amount}</span>
           </>
         )}
+        {caption}
         {emptyCaption}
       </>
     ) : undefined;
@@ -91,11 +101,13 @@ function MovimentacaoTileBase({
       <KpiTile
         className="h-full"
         label={label}
-        value={Math.round(display).toLocaleString("pt-BR")}
+        value={money ? `R$ ${Math.round(display).toLocaleString("pt-BR")}` : Math.round(display).toLocaleString("pt-BR")}
         icon={Icon}
         tone={hero ? "gold" : "neutral"}
         note={note}
-      />
+      >
+        {children}
+      </KpiTile>
     </motion.div>
   );
 }
@@ -193,23 +205,41 @@ function PeriodRangeControl({ state, onChange }: PeriodRangeControlProps) {
 // ────────────────────────────────────────────────────────────────────────
 // MovimentacoesPanel
 // ────────────────────────────────────────────────────────────────────────
-export function MovimentacoesPanel() {
+interface MovimentacoesPanelProps {
+  /**
+   * Período unificado com o cabeçalho da página (Ranking: mês/ano). Quando
+   * vem, o seletor próprio some — dois seletores de período na mesma tela
+   * davam dois números de "Vendido" para o mesmo mês.
+   */
+  mesAno?: { month: number; year: number; label: string };
+  /** 4º tile (ex.: "Meta do time"), na mesma fileira. */
+  extra?: ReactNode;
+}
+
+export function MovimentacoesPanel({ mesAno, extra }: MovimentacoesPanelProps = {}) {
   const reduceMotion = useReducedMotion();
   const [period, setPeriod] = usePersistedState<MovimentacoesPeriodState>(
     "perf-movimentacoes-period",
     DEFAULT_MOVIMENTACOES_PERIOD,
   );
 
-  const range = useMemo(
-    () => resolveMovimentacoesRange(period.preset, customRangeFromState(period)),
-    [period],
-  );
+  const range = useMemo(() => {
+    if (mesAno) {
+      // Mesmas fronteiras UTC do preset "Mês", no mês escolhido no cabeçalho.
+      return {
+        start: new Date(Date.UTC(mesAno.year, mesAno.month - 1, 1)),
+        end: new Date(Date.UTC(mesAno.year, mesAno.month, 0, 23, 59, 59, 999)),
+      };
+    }
+    return resolveMovimentacoesRange(period.preset, customRangeFromState(period));
+  }, [period, mesAno]);
 
   const { marcadas, comparecidas, vendidoCount, vendidoReceita, isLoading, isError, refetch } =
     useMovimentacoesPeriodo(range?.start ?? null, range?.end ?? null);
 
   const isEmpty = !isLoading && !isError && marcadas === 0 && comparecidas === 0 && vendidoCount === 0;
   const receitaFormatada = `R$ ${vendidoReceita.toLocaleString("pt-BR")}`;
+  const comparecimento = marcadas > 0 ? Math.round((comparecidas / marcadas) * 1000) / 10 : null;
 
   return (
     <motion.section
@@ -222,7 +252,7 @@ export function MovimentacoesPanel() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <h2 className="text-[15px] font-bold tracking-[-0.02em]">
-            Movimentações no período
+            {mesAno ? `Movimentações de ${mesAno.label}` : "Movimentações no período"}
           </h2>
           <TooltipProvider>
             <Tooltip>
@@ -242,7 +272,7 @@ export function MovimentacoesPanel() {
           </TooltipProvider>
         </div>
 
-        <PeriodRangeControl state={period} onChange={setPeriod} />
+        {!mesAno && <PeriodRangeControl state={period} onChange={setPeriod} />}
       </div>
 
       <div>
@@ -259,13 +289,14 @@ export function MovimentacoesPanel() {
             </Button>
           </div>
         ) : isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={cn("grid grid-cols-1 gap-4", extra ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
             <Skeleton className="h-[92px] rounded-card" />
             <Skeleton className="h-[92px] rounded-card" />
             <Skeleton className="h-[92px] rounded-card" />
+            {extra && <Skeleton className="h-[92px] rounded-card" />}
           </div>
         ) : (
-          <KpiRow cols={3}>
+          <KpiRow cols={extra ? 4 : 3}>
             <MovimentacaoTile
               label="Marcadas"
               value={marcadas}
@@ -280,16 +311,31 @@ export function MovimentacoesPanel() {
               icon={CalendarCheck2}
               ariaLabel={`Comparecidas: ${comparecidas} ${comparecidas === 1 ? "reunião" : "reuniões"}`}
               delay={0.06}
-            />
+              caption={comparecimento != null ? `${comparecimento.toLocaleString("pt-BR")}% de comparecimento` : undefined}
+            >
+              {comparecimento != null && (
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                  <div className="h-full rounded-full bg-success" style={{ width: `${Math.min(comparecimento, 100)}%` }} />
+                </div>
+              )}
+            </MovimentacaoTile>
+            {/* V5: o número-herói do Vendido é a receita; a contagem vira nota. */}
             <MovimentacaoTile
               label="Vendido"
-              value={vendidoCount}
+              value={vendidoReceita}
+              money
               icon={CircleDollarSign}
               hero
               ariaLabel={`Vendido: ${vendidoCount} ${vendidoCount === 1 ? "venda" : "vendas"}, ${receitaFormatada} de receita`}
-              subValue={{ caption: "Receita ·", amount: receitaFormatada }}
+              caption={
+                <>
+                  <span className="font-bold tabular-nums text-foreground/90">{vendidoCount}</span>{" "}
+                  {vendidoCount === 1 ? "venda" : "vendas"}
+                </>
+              }
               delay={0.12}
             />
+            {extra}
           </KpiRow>
         )}
       </div>

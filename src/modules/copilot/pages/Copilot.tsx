@@ -9,24 +9,23 @@
  * - Deletar agentes
  */
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Plus,
   Sparkles,
   Bot,
-  Power,
   Trash2,
   Star,
   Lock,
-  Settings,
-  GitBranch,
-  BarChart3,
   AlertTriangle,
+  CalendarCheck,
+  CheckCircle2,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
@@ -58,11 +57,16 @@ import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { IconChip } from "@/components/ui/bento";
+import { IconChip, InkRow, InkSplit, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { useWhatsAppInstances } from "@/modules/communication";
+import { useAgentMetrics } from "@/modules/copilot/hooks/useAgentMetrics";
+import { AgentFocusCard } from "@/modules/copilot/components/AgentFocusCard";
+import { CopilotTabs } from "@/modules/copilot/components/CopilotTabs";
+import { AGENT_TYPE_ORDER, agentTypeLabel } from "@/modules/copilot/lib/agent-labels";
+import { FilterChip } from "@/shared/components/FilterChip";
+import { FilterRow } from "@/shared/components/PillSearch";
 
-/** Rótulo micro do V5 — nome de campo dentro do cartão. */
-const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+const initialOf = (name: string) => (name.trim().charAt(0) || "?").toUpperCase();
 
 export default function Copilot() {
   const navigate = useNavigate();
@@ -84,6 +88,33 @@ export default function Copilot() {
   const { checkLimit } = useOrgFeatures();
   const { getQuota } = useOrgQuotas();
   const copilotQuota = getQuota("max_copilot_agents");
+  const { data: instances = [] } = useWhatsAppInstances();
+
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [stateFilter, setStateFilter] = useState<"all" | "active" | "inactive">("all");
+  const [focusId, setFocusId] = useState<string | null>(null);
+
+  const activeAgents = agents?.filter((a) => a.is_active).length ?? 0;
+  const typeCounts = AGENT_TYPE_ORDER.map((t) => [t, agents?.filter((a) => a.template_type === t).length ?? 0] as const)
+    .filter(([, n]) => n > 0);
+  const visibleAgents = (agents ?? []).filter((a) => {
+    if (typeFilter !== "all" && a.template_type !== typeFilter) return false;
+    if (stateFilter === "active" && !a.is_active) return false;
+    if (stateFilter === "inactive" && a.is_active) return false;
+    return true;
+  });
+  const focus = visibleAgents.find((a) => a.id === focusId) ?? visibleAgents[0] ?? null;
+
+  // Reuniões, qualificações e mensagens da IA são números DA ORGANIZAÇÃO no
+  // `useAgentMetrics` (a consulta filtra por org, não por agente). Uma chamada
+  // basta — a do primeiro agente, chave estável enquanto o foco muda.
+  const { data: orgMetrics, isLoading: orgMetricsLoading } = useAgentMetrics(agents?.[0]?.id, "30d");
+
+  const connectionLabel = (instanceId: string | null) => {
+    if (!instanceId) return null;
+    const i = instances.find((x) => x.id === instanceId);
+    return i ? i.instance_name || i.phone_number || "Número conectado" : null;
+  };
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
     navigate(`/copilot/${agent.id}/editar`);
@@ -143,8 +174,7 @@ export default function Copilot() {
     }
   };
 
-  const handleToggleAgent = (agent: CopilotAgentWithRelations, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggleAgent = (agent: CopilotAgentWithRelations) => {
     const activating = !agent.is_active;
     const hasNoPipes = !((agent.active_pipes as string[]) || []).length;
     if (activating && hasNoPipes) {
@@ -162,7 +192,8 @@ export default function Copilot() {
     <div className="space-y-5">
       <PageHeader
         title="Copilot"
-        subtitle="Configure e gerencie seus agentes de IA personalizados."
+        subtitle="Agentes de IA que atendem, qualificam e marcam reuniões no WhatsApp."
+        tabs={<CopilotTabs active="agentes" agentId={focus?.id ?? null} count={agents?.length} />}
         actions={
           <>
             {!copilotQuota.is_unlimited && (
@@ -170,10 +201,6 @@ export default function Copilot() {
                 {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
               </Badge>
             )}
-            <Button variant="outline" onClick={() => navigate("/copilot/metricas")}>
-              <BarChart3 />
-              Métricas LLM
-            </Button>
             {canManageCopilot && builderEnabled && (
               <Button
                 onClick={handleCreateWithAI}
@@ -194,16 +221,12 @@ export default function Copilot() {
         }
       />
 
-      <div className="-mt-1 max-w-2xl space-y-1 text-xs leading-relaxed text-muted-foreground">
-        <p>
-          Admin ou membros com a permissão habilitada podem criar copilots e vinculá-los a números em Configurações → WhatsApp. Qualquer membro pode ativar ou desativar a IA em cada conversa.
+      {!canManageCopilot && (
+        <p className="-mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          Admin ou membros com a permissão habilitada criam copilots e os vinculam a números em Configurações → WhatsApp.
+          Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot;.
         </p>
-        {!canManageCopilot && (
-          <p className="text-muted-foreground/80">
-            Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot; nas configurações de permissões.
-          </p>
-        )}
-      </div>
+      )}
 
       {builderEnabled && drafts.length > 0 && (
         <section className="flex flex-col gap-3 rounded-card border border-primary/25 bg-primary-soft/60 p-4 shadow-relevo">
@@ -276,169 +299,195 @@ export default function Copilot() {
         </motion.div>
       )}
 
-      {/* Agents List */}
+      {/* Agentes — resumo, filtro por tipo e a lista em tinta com o foco em ouro */}
       {agents && agents.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent, index) => {
-            const pipes = (agent.active_pipes as string[]) || [];
-            return (
-              <motion.div
-                key={agent.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(index, 8) * 0.05 }}
+        <>
+          <KpiRow cols={4}>
+            <KpiTile
+              label="Agentes ativos"
+              icon={Bot}
+              tone="gold"
+              value={
+                <>
+                  {activeAgents}
+                  <ValueUnit>de {agents.length}</ValueUnit>
+                </>
+              }
+              note={`${agents.length - activeAgents} ${agents.length - activeAgents === 1 ? "inativo" : "inativos"}`}
+            >
+              <div className="flex -space-x-1.5">
+                {agents.slice(0, 6).map((a) => (
+                  <span
+                    key={a.id}
+                    className={cn(
+                      "grid h-7 w-7 place-items-center rounded-[9px] border-2 border-card text-[11px] font-extrabold",
+                      a.is_active ? "bg-tinta text-primary" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {initialOf(a.name)}
+                  </span>
+                ))}
+              </div>
+            </KpiTile>
+            <KpiTile
+              label="Reuniões marcadas pela IA"
+              icon={CalendarCheck}
+              tone="info"
+              loading={orgMetricsLoading}
+              value={orgMetricsLoading ? "—" : (orgMetrics?.meetingsScheduled ?? 0).toLocaleString("pt-BR")}
+              delta={orgMetrics && orgMetrics.trends.meetings.previous > 0 ? orgMetrics.trends.meetings.percentChange : undefined}
+              deltaLabel="vs. 30 dias antes"
+              note="30 dias · toda a organização"
+            />
+            <KpiTile
+              label="Qualificações pela IA"
+              icon={CheckCircle2}
+              tone="good"
+              loading={orgMetricsLoading}
+              value={orgMetricsLoading ? "—" : (orgMetrics?.leadsQualified ?? 0).toLocaleString("pt-BR")}
+              delta={orgMetrics && orgMetrics.trends.qualified.previous > 0 ? orgMetrics.trends.qualified.percentChange : undefined}
+              deltaLabel="vs. 30 dias antes"
+              note="30 dias · toda a organização"
+            />
+            <KpiTile
+              label="Mensagens enviadas pela IA"
+              icon={MessageSquare}
+              tone="neutral"
+              loading={orgMetricsLoading}
+              value={orgMetricsLoading ? "—" : (orgMetrics?.messagesSent ?? 0).toLocaleString("pt-BR")}
+              note="30 dias · toda a organização"
+            />
+          </KpiRow>
+
+          <FilterRow>
+            <span className="mr-1 shrink-0 text-[13px] font-bold text-foreground/80">Tipo de agente</span>
+            <FilterChip active={typeFilter === "all"} aria-pressed={typeFilter === "all"} count={agents.length} onClick={() => setTypeFilter("all")}>
+              Todos
+            </FilterChip>
+            {typeCounts.map(([type, count]) => (
+              <FilterChip
+                key={type}
+                active={typeFilter === type}
+                aria-pressed={typeFilter === type}
+                count={count}
+                onClick={() => setTypeFilter(type)}
               >
-                <Card
-                  className="group flex h-full cursor-pointer flex-col transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
-                  onClick={() => handleOpenConfig(agent)}
-                >
-                  <div className="flex items-start gap-3 p-5 pb-4">
-                    <span
+                {agentTypeLabel(type)}
+              </FilterChip>
+            ))}
+          </FilterRow>
+
+          {focus ? (
+            <InkSplit
+              title="Seus agentes"
+              count={`${visibleAgents.filter((a) => a.is_active).length} ${visibleAgents.filter((a) => a.is_active).length === 1 ? "ativo" : "ativos"}`}
+              actions={
+                <div role="radiogroup" aria-label="Estado do agente" className="inline-flex rounded-full bg-white/[.07] p-[3px]">
+                  {(
+                    [
+                      ["all", "Todos"],
+                      ["active", "Ativos"],
+                      ["inactive", "Inativos"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={stateFilter === key}
+                      onClick={() => setStateFilter(key)}
                       className={cn(
-                        "grid h-11 w-11 shrink-0 place-items-center rounded-2xl",
-                        agent.is_active ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/60",
+                        "rounded-full px-3 py-1 text-[11.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        stateFilter === key ? "bg-tinta-foreground text-tinta" : "text-tinta-muted hover:text-tinta-foreground",
                       )}
                     >
-                      <Bot className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <CardTitle className="truncate">{agent.name}</CardTitle>
-                        {agent.is_default && (
-                          <Star
-                            className="h-3.5 w-3.5 shrink-0 fill-primary text-primary"
-                            aria-label="Agente padrão"
-                          />
-                        )}
-                      </div>
-                      <p className="mt-0.5 truncate text-xs capitalize text-muted-foreground">
-                        {agent.template_type}
-                      </p>
-                    </div>
-                    {agent.is_active ? (
-                      <Badge variant="success" className="shrink-0 gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-                        Ativo
-                      </Badge>
-                    ) : (
-                      <Badge variant="soft" className="shrink-0">Inativo</Badge>
-                    )}
-                  </div>
-
-                  <div className="flex flex-1 flex-col gap-4 px-5 pb-5">
-                    <div>
-                      <span className={MICRO_LABEL}>Personalidade</span>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        <Badge variant="soft" className="text-[11px]">{agent.personality_tone}</Badge>
-                        <Badge variant="soft" className="text-[11px]">{agent.personality_style}</Badge>
-                        <Badge variant="soft" className="text-[11px]">{agent.personality_energy}</Badge>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className={MICRO_LABEL}>Habilidades</span>
-                      <p className="mt-1 text-sm">
-                        <span className="font-extrabold tabular-nums tracking-[-0.02em]">
-                          {agent.skills?.length || 0}
-                        </span>{" "}
-                        <span className="text-muted-foreground">configuradas</span>
-                      </p>
-                    </div>
-
-                    {/* Pipeline Info */}
-                    <div>
-                      <span className={cn(MICRO_LABEL, "flex items-center gap-1")}>
-                        <GitBranch className="h-3 w-3" />
-                        Funis ativos
-                      </span>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {pipes.length > 0 ? (
-                          pipes.map((pipe) => (
-                            <Badge key={pipe} variant="info" className="text-[11px] capitalize">
-                              {labelForRef(pipe)}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning-strong">
-                            <AlertTriangle className="h-3 w-3" />
-                            Nenhum funil — configure antes de ativar
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              }
+              listClassName="lg:max-h-[620px] lg:overflow-y-auto"
+              list={
+                <>
+                  {visibleAgents.map((agent) => {
+                    const selected = agent.id === focus.id;
+                    return (
+                      <InkRow key={agent.id} selected={selected} onClick={() => setFocusId(agent.id)}>
+                        <span className="relative shrink-0">
+                          <span
+                            className={cn(
+                              "grid h-[38px] w-[38px] place-items-center rounded-[12px] text-[15px] font-extrabold",
+                              selected ? "bg-primary-foreground text-primary" : "bg-white/[.07] text-primary",
+                            )}
+                          >
+                            {initialOf(agent.name)}
                           </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {canManageCopilot && (
-                    <div className="mt-auto flex items-center gap-2 border-t border-border/60 px-5 py-3.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenConfig(agent);
-                        }}
-                      >
-                        <Settings />
-                        Configurar
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => handleToggleAgent(agent, e)}
-                        disabled={toggleAgent.isPending}
-                      >
-                        <Power />
-                        {agent.is_active ? "Desativar" : "Ativar"}
-                      </Button>
-
-                      {/* Ações secundárias viram ícone: com rótulo, o rodapé quebrava
-                          em duas linhas desiguais conforme o estado do agente. */}
-                      <div className="ml-auto flex items-center gap-1">
-                        {builderEnabled && (
-                          <FooterIconAction
-                            label="Revisar com IA"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/copilot/${agent.id}/editar?builder=1`);
-                            }}
-                          >
-                            <Sparkles className="text-primary" />
-                          </FooterIconAction>
-                        )}
-
-                        {!agent.is_default && agent.is_active && (
-                          <FooterIconAction
-                            label="Tornar padrão"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDefault.mutate(agent.id);
-                            }}
-                            disabled={setDefault.isPending}
-                          >
-                            <Star />
-                          </FooterIconAction>
-                        )}
-
-                        <FooterIconAction
-                          label={`Excluir ${agent.name}`}
-                          tone="destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAgentToDelete(agent.id);
-                          }}
-                          disabled={deleteAgent.isPending}
+                          {agent.is_active && (
+                            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-tinta bg-success" aria-hidden />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-[13px] font-bold">{agent.name}</span>
+                            {agent.is_default && <Star className="h-3 w-3 shrink-0 fill-current" aria-label="Agente padrão" />}
+                          </span>
+                          <span className={cn("mt-0.5 block truncate text-[11px]", selected ? "text-primary-foreground/70" : "text-tinta-muted")}>
+                            {agentTypeLabel(agent.template_type)}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
+                            selected
+                              ? "bg-primary-foreground text-primary"
+                              : agent.is_active
+                                ? "bg-success/15 text-success"
+                                : "bg-white/10 text-tinta-muted",
+                          )}
                         >
-                          <Trash2 />
-                        </FooterIconAction>
-                      </div>
-                    </div>
+                          {agent.is_active ? "Ativo" : "Inativo"}
+                        </span>
+                      </InkRow>
+                    );
+                  })}
+                  {canManageCopilot && (
+                    <button
+                      type="button"
+                      onClick={handleCreateAgent}
+                      disabled={!copilotQuota.can_add}
+                      className="mt-1.5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 px-3 py-3.5 text-[13px] font-semibold text-tinta-muted transition-colors hover:border-white/25 hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Novo Copilot
+                    </button>
                   )}
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
+                </>
+              }
+              detail={
+                <AgentFocusCard
+                  agent={focus}
+                  canManage={canManageCopilot}
+                  builderEnabled={builderEnabled}
+                  pipeLabels={((focus.active_pipes as string[]) || []).map((p) => labelForRef(p))}
+                  connectionLabel={connectionLabel(focus.whatsapp_instance_id)}
+                  togglePending={toggleAgent.isPending}
+                  setDefaultPending={setDefault.isPending}
+                  deletePending={deleteAgent.isPending}
+                  onToggle={() => handleToggleAgent(focus)}
+                  onSetDefault={() => setDefault.mutate(focus.id)}
+                  onConfigure={() => handleOpenConfig(focus)}
+                  onReviewWithBuilder={() => navigate(`/copilot/${focus.id}/editar?builder=1`)}
+                  onDelete={() => setAgentToDelete(focus.id)}
+                />
+              }
+            />
+          ) : (
+            <div className="rounded-card border border-dashed border-border bg-card/60 px-6 py-12 text-center">
+              <p className="text-sm font-bold text-foreground">Nenhum agente com esses filtros</p>
+              <p className="mt-1 text-sm text-muted-foreground">Troque o tipo ou o estado.</p>
+            </div>
+          )}
+        </>
       ) : (
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
           <Card>
@@ -529,40 +578,5 @@ export default function Copilot() {
       </AlertDialog>
 
     </div>
-  );
-}
-
-function FooterIconAction({
-  label,
-  tone = "default",
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string;
-  tone?: "default" | "destructive";
-  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
-  disabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={label}
-          className={cn(
-            "h-9 w-9 text-muted-foreground",
-            tone === "destructive" && "hover:bg-destructive/10 hover:text-destructive",
-          )}
-          onClick={onClick}
-          disabled={disabled}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   );
 }

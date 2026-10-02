@@ -18,16 +18,26 @@ import { StepHeader } from "./StepHeader";
 import { AudienceByStage } from "./AudienceByStage";
 import { AudienceBySpreadsheet } from "./AudienceBySpreadsheet";
 import type { AudienceSourceType, DisparoDraft } from "./wizard-machine";
-import { kickerDoPasso } from "./wizard-machine";
+import { eyebrowDoPasso } from "./wizard-machine";
 
 interface StepAudienceProps {
   draft: DisparoDraft;
   patch: (p: Partial<DisparoDraft>) => void;
 }
 
-const SOURCES: { id: AudienceSourceType; label: string; icon: React.ElementType }[] = [
-  { id: "estagio", label: "Por etapa do funil", icon: Users },
-  { id: "planilha", label: "Subir planilha", icon: FileSpreadsheet },
+const SOURCES: { id: AudienceSourceType; label: string; description: string; icon: React.ElementType }[] = [
+  {
+    id: "estagio",
+    label: "Por etapa do funil",
+    description: "Escolha o funil e a etapa. Quem está lá agora recebe.",
+    icon: Users,
+  },
+  {
+    id: "planilha",
+    label: "Subir planilha",
+    description: "Lista de feira, base antiga ou evento. Contato novo vira lead no funil que você escolher.",
+    icon: FileSpreadsheet,
+  },
 ];
 
 export function StepAudience({ draft, patch }: StepAudienceProps) {
@@ -48,29 +58,51 @@ export function StepAudience({ draft, patch }: StepAudienceProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker={kickerDoPasso("audience")}
-        title="Pra quem você vai enviar?"
+        kicker={eyebrowDoPasso("audience")}
+        title="Pra quem vai o disparo?"
         subtitle="Escolha por etapa do funil ou suba uma planilha. O grupo é congelado agora — quem entrar depois não recebe este disparo."
       />
 
-      {/* Source toggle */}
-      <div className="grid grid-cols-2 gap-2">
-        {SOURCES.map(({ id, label, icon: Icon }) => {
+      {/* Origem — cartões-opção com rádio */}
+      <div role="radiogroup" aria-label="Origem do público" className="grid gap-3 sm:grid-cols-2">
+        {SOURCES.map(({ id, label, description, icon: Icon }) => {
           const active = source === id;
           return (
             <button
               key={id}
               type="button"
+              role="radio"
+              aria-checked={active}
               onClick={() => selectSource(id)}
               className={cn(
-                "flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors",
+                "flex items-start gap-3.5 rounded-[18px] border p-4 text-left transition-[background-color,border-color,box-shadow] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 active
-                  ? "border-primary/50 bg-primary-soft text-primary-soft-foreground"
-                  : "border-border/70 text-muted-foreground hover:border-border hover:text-foreground",
+                  ? "border-primary bg-primary-soft/70 shadow-[0_0_0_1px_hsl(var(--primary))]"
+                  : "border-card-border bg-card hover:border-foreground/20",
               )}
             >
-              <Icon className="h-4 w-4" />
-              {label}
+              <span
+                className={cn(
+                  "grid h-9 w-9 shrink-0 place-items-center rounded-[11px]",
+                  active ? "bg-primary text-primary-foreground" : "bg-muted text-foreground/70",
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-bold text-foreground">{label}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{description}</span>
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border-2",
+                  active ? "border-primary-soft-foreground" : "border-border",
+                )}
+              >
+                {active && <span className="h-2 w-2 rounded-full bg-primary-soft-foreground" />}
+              </span>
             </button>
           );
         })}

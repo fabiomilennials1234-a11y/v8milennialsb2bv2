@@ -9,6 +9,8 @@ import {
   OriginDonut,
 } from "./analytics-ui";
 import { MeetingPerformancePanel } from "./MeetingPerformancePanel";
+import { UserPlus, ClipboardCheck, ThumbsUp, CalendarClock, CalendarCheck } from "lucide-react";
+import { KpiRow } from "@/components/ui/bento";
 import { useFunnelHealth } from "@/modules/analytics";
 
 interface PipeWhatsappAnalyticsProps {
@@ -70,10 +72,11 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
   return (
     <div className="space-y-5">
       {/* Stat cards — uma por etapa do funil de Saúde */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <AnalyticsStatCard label="Entraram" value={entraram} sub="no período" accent="neutral" />
+      <KpiRow cols={5}>
+        <AnalyticsStatCard label="Entraram" value={entraram} sub="no período" accent="neutral" icon={UserPlus} />
         <AnalyticsStatCard
           label="Avaliados"
+          icon={ClipboardCheck}
           value={avaliados}
           sub={pct(avaliados, entraram) && `${pct(avaliados, entraram)} dos que entraram`}
           accent="blue"
@@ -81,6 +84,7 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
         />
         <AnalyticsStatCard
           label="Bons leads"
+          icon={ThumbsUp}
           value={bons}
           sub={pct(bons, avaliados) && `${pct(bons, avaliados)} dos avaliados`}
           accent="success"
@@ -88,6 +92,7 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
         />
         <AnalyticsStatCard
           label="Reunião marcada"
+          icon={CalendarClock}
           value={reuniao}
           sub={pct(reuniao, bons) && `${pct(reuniao, bons)} dos bons`}
           accent="gold"
@@ -95,13 +100,14 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
         />
         <AnalyticsStatCard
           label="Compareceram"
+          icon={CalendarCheck}
           value={compareceram}
           sub={pct(compareceram, reuniao) && `${pct(compareceram, reuniao)} das reuniões`}
           accent="gold"
           tintValue
           delay={0.2}
         />
-      </div>
+      </KpiRow>
 
       <div className="grid gap-4 md:grid-cols-2">
         <AnalyticsPanel title="Saúde do Funil" subtitle="Volume por etapa e perda entre etapas">

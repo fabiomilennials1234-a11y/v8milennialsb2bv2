@@ -26,18 +26,7 @@ import { isPipelineVisible } from "@/modules/pipelines";
  * "Continuar" stays enabled (CTO decision).
  */
 import { useEffect, useState } from "react";
-import { AlertTriangle, Layers, Loader2, Lock, Users } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { AlertTriangle, KanbanSquare, Layers, Loader2, Lock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudienceConditionsControls } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads";
@@ -178,120 +167,90 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
           "Contatos congelados neste disparo · quem está em vários funis conta uma vez"
         : "Contatos congelados neste disparo";
 
-  return (
-    <div className="space-y-7">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Funnel — "Todos os funis" is a SCOPE, not one more funnel, so it sits
-            above the separator and the funnels themselves live under a label. */}
-        <div className="space-y-1.5">
-          <Label className="text-sm">Funil</Label>
-          <Select value={funnelSelectValue(sel)} onValueChange={onFunnelChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Escolha um funil" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_FUNNELS_VALUE} className="font-medium">
-                <span className="flex w-full items-center gap-2">
-                  <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span>{ALL_FUNNELS_LABEL}</span>
-                  <span className="ml-auto pl-3 text-[11px] tabular-nums text-muted-foreground">
-                    {totalFunis} {plural(totalFunis, "funil", "funis")}
-                  </span>
-                </span>
-              </SelectItem>
-              <SelectSeparator />
-              <SelectGroup>
-                {/* pl-8 is required: SelectItem reserves `left-2 w-3.5` for the
-                    check mark, so a label without it sits 24px to the left. */}
-                <SelectLabel className="px-2 pl-8 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Funis
-                </SelectLabel>
-                {funnels.map((p) => (
-                  <SelectItem key={p.id} value={p.id} disabled={!isPipelineVisible(p)}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
+  const stageValue = stageSelectValue(sel);
+  const funnelValue = funnelSelectValue(sel);
 
-        {/* Stage — locked (never blank) while the funnel axis spans everything. */}
-        <div className="space-y-1.5">
-          <Label className="text-sm">Etapa</Label>
-          <Select
-            value={stageSelectValue(sel)}
-            onValueChange={onStageChange}
-            disabled={allFunnels || stagesLoading}
+  return (
+    <div className="space-y-6">
+      {/* Funil — "Todos os funis" é um ESCOPO, não mais um funil: vem primeiro,
+          separado dos funis da org. */}
+      <div className="space-y-2">
+        <p id="funil-label" className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+          Funil
+        </p>
+        <div role="radiogroup" aria-labelledby="funil-label" className="flex flex-wrap gap-2">
+          <FunnelChip
+            active={funnelValue === ALL_FUNNELS_VALUE}
+            onSelect={() => onFunnelChange(ALL_FUNNELS_VALUE)}
+            icon={Layers}
           >
-            <SelectTrigger
-              className={cn(
-                allFunnels &&
-                  // The primitive's `disabled:opacity-50` is exactly what makes a
-                  // locked control look broken — override it and state the reason
-                  // in visible text instead.
-                  "disabled:cursor-default disabled:border-border/50 disabled:bg-muted/40 disabled:text-muted-foreground disabled:opacity-100",
-              )}
-              aria-describedby={allFunnels ? "etapa-travada-hint" : undefined}
+            {ALL_FUNNELS_LABEL}
+            <span className="text-[11px] font-semibold tabular-nums opacity-60">
+              {totalFunis} {plural(totalFunis, "funil", "funis")}
+            </span>
+          </FunnelChip>
+          {funnels.map((p) => (
+            <FunnelChip
+              key={p.id}
+              active={funnelValue === p.id}
+              disabled={!isPipelineVisible(p)}
+              onSelect={() => onFunnelChange(p.id)}
+              icon={KanbanSquare}
             >
-              {allFunnels ? (
-                <span className="flex items-center gap-2">
-                  <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  {ALL_STAGES_LABEL}
-                </span>
-              ) : (
-                <SelectValue
-                  placeholder={
-                    stagesLoading
-                      ? "Carregando etapas…"
-                      : stages.length === 0
-                        ? "Sem etapas"
-                        : "Escolha uma etapa"
-                  }
-                />
-              )}
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_STAGES_VALUE} className="font-medium">
-                <span className="flex w-full items-center gap-2">
-                  <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span>{ALL_STAGES_LABEL}</span>
-                  <span className="ml-auto pl-3 text-[11px] tabular-nums text-muted-foreground">
-                    {stages.length} {plural(stages.length, "etapa", "etapas")}
-                  </span>
-                </span>
-              </SelectItem>
-              {stages.length > 0 && (
-                <>
-                  <SelectSeparator />
-                  <SelectGroup>
-                    <SelectLabel className="px-2 pl-8 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Etapas
-                    </SelectLabel>
-                    {stages.map((s) => (
-                      <SelectItem key={s.key} value={`stage:${s.key}`}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </>
-              )}
-            </SelectContent>
-          </Select>
-          {/* Space reserved so the grid does not jump when the funnel changes.
-              Visible text, not a tooltip: Radix drops a disabled trigger from the
-              tab order, so a tooltip there is unreachable by keyboard and by SR. */}
-          <div className="min-h-[1.25rem]">
-            {allFunnels && (
-              <p
-                id="etapa-travada-hint"
-                className="text-[11px] leading-snug text-muted-foreground"
-              >
-                Com todos os funis, não dá pra escolher etapa — cada funil tem as suas.
-              </p>
+              {p.label}
+            </FunnelChip>
+          ))}
+        </div>
+      </div>
+
+      {/* Etapa — travada (nunca em branco) enquanto o funil cobre tudo. */}
+      <div className="space-y-2">
+        <p id="etapa-label" className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+          Etapa
+        </p>
+        {allFunnels ? (
+          // Texto visível, não tooltip: o motivo da trava precisa ser lido.
+          <div
+            id="etapa-travada-hint"
+            className="flex items-center gap-2.5 rounded-2xl border border-border/60 bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground"
+          >
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              <span className="font-semibold text-foreground">{ALL_STAGES_LABEL}</span> — com todos os funis, não dá
+              pra escolher etapa: cada funil tem as suas.
+            </span>
+          </div>
+        ) : stagesLoading ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-border/60 px-4 py-3 text-[13px] text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Carregando etapas…
+          </div>
+        ) : (
+          <div
+            role="radiogroup"
+            aria-labelledby="etapa-label"
+            className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70 bg-card"
+          >
+            <StageOption
+              active={stageValue === ALL_STAGES_VALUE}
+              onSelect={() => onStageChange(ALL_STAGES_VALUE)}
+              label={ALL_STAGES_LABEL}
+              meta={`${stages.length} ${plural(stages.length, "etapa", "etapas")}`}
+              strong
+            />
+            {stages.map((s) => (
+              <StageOption
+                key={s.key}
+                active={stageValue === `stage:${s.key}`}
+                onSelect={() => onStageChange(`stage:${s.key}`)}
+                label={s.name}
+              />
+            ))}
+            {stages.length === 0 && (
+              <p className="px-4 py-3 text-[13px] text-muted-foreground">Este funil ainda não tem etapas.</p>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Conditions — narrow the chosen target by tag / qualification / origin.
@@ -304,12 +263,12 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
         disabled={!ready}
       />
 
-      {/* Live count — the load-bearing feedback of this step. The breadth warning
-          is its header, sharing one border: one piece, one focus. */}
+      {/* Público do disparo — o retorno que sustenta este passo. O aviso de
+          amplitude é o CABEÇALHO do número: uma peça, um foco. */}
       <div
         className={cn(
-          "overflow-hidden rounded-xl border bg-card transition-colors duration-200",
-          broad ? "border-warning/45" : "border-border/70",
+          "overflow-hidden rounded-[18px] border transition-colors duration-200",
+          broad ? "border-warning/45 bg-card" : "border-transparent bg-muted/50",
         )}
       >
         {broad && (
@@ -335,59 +294,126 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            {/* Gold leaves the piece while the warning is up, so exactly one
-                meaning wears amber on this screen. */}
-            <div
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200",
-                broad ? "bg-warning/15 text-warning-strong" : "bg-primary-soft text-primary-soft-foreground",
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">Público do disparo</p>
+            <div className="mt-1 flex items-baseline gap-1.5">
+              {resolved.isError ? (
+                <AlertTriangle className="h-6 w-6 text-destructive" />
+              ) : resolved.isLoading ? (
+                <>
+                  <span
+                    className={cn(
+                      "text-[2.2rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums",
+                      lastCount === null ? "text-muted-foreground" : "text-foreground opacity-40",
+                    )}
+                  >
+                    {lastCount === null ? "—" : lastCount.toLocaleString("pt-BR")}
+                  </span>
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </>
+              ) : (
+                <>
+                  <span
+                    className={cn(
+                      "text-[2.2rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums",
+                      resolved.count === 0 ? "text-muted-foreground" : "text-foreground",
+                    )}
+                  >
+                    {resolved.count.toLocaleString("pt-BR")}
+                  </span>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {plural(resolved.count, "contato", "contatos")}
+                  </span>
+                </>
               )}
-            >
-              <Users className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">
-                {ready ? audienceLabel : "Escolha uma etapa"}
-              </p>
-              <p className="text-xs leading-snug text-muted-foreground">{subtitle}</p>
             </div>
           </div>
-
-          <div className="shrink-0 text-right">
-            {resolved.isError ? (
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-            ) : resolved.isLoading ? (
-              <div className="flex items-center justify-end gap-2">
-                <span
-                  className={cn(
-                    "block text-xl font-semibold tabular-nums",
-                    lastCount === null ? "text-muted-foreground" : "text-foreground opacity-40",
-                  )}
-                >
-                  {lastCount === null ? "—" : lastCount.toLocaleString("pt-BR")}
-                </span>
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <>
-                <span
-                  className={cn(
-                    "block text-xl font-semibold tabular-nums",
-                    resolved.count === 0 ? "text-muted-foreground" : "text-foreground",
-                  )}
-                >
-                  {resolved.count.toLocaleString("pt-BR")}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  {plural(resolved.count, "contato", "contatos")}
-                </span>
-              </>
-            )}
+          <div className="min-w-0 max-w-[340px] text-right max-sm:text-left">
+            <p className="flex items-center justify-end gap-1.5 text-[13px] font-semibold text-foreground max-sm:justify-start">
+              <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{ready ? audienceLabel : "Escolha uma etapa"}</span>
+            </p>
+            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{subtitle}</p>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function FunnelChip({
+  active,
+  disabled,
+  onSelect,
+  icon: Icon,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[13px] font-semibold transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
+        active
+          ? "border-tinta bg-tinta text-tinta-foreground shadow-relevo-tinta"
+          : "border-input bg-card text-foreground/80 hover:border-foreground/20 hover:text-foreground",
+      )}
+    >
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
+      {children}
+    </button>
+  );
+}
+
+function StageOption({
+  active,
+  onSelect,
+  label,
+  meta,
+  strong,
+}: {
+  active: boolean;
+  onSelect: () => void;
+  label: string;
+  meta?: string;
+  strong?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center gap-3 px-4 py-3 text-left text-[13.5px] transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        active ? "bg-primary-soft/60" : "hover:bg-muted/40",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border-2",
+          active ? "border-primary-soft-foreground" : "border-border",
+        )}
+      >
+        {active && <span className="h-2 w-2 rounded-full bg-primary-soft-foreground" />}
+      </span>
+      <span className={cn("min-w-0 flex-1 truncate", strong || active ? "font-semibold text-foreground" : "text-foreground/85")}>
+        {label}
+      </span>
+      {meta && <span className="shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">{meta}</span>}
+    </button>
   );
 }

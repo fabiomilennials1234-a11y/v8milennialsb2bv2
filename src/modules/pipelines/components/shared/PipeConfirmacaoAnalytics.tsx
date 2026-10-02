@@ -9,6 +9,8 @@ import {
   OriginDonut,
   MemberLeaderboard,
 } from "./analytics-ui";
+import { CalendarClock, CalendarCheck, CheckCircle2, Percent } from "lucide-react";
+import { KpiRow } from "@/components/ui/bento";
 
 interface PipeConfirmacaoAnalyticsProps {
   items: any[];
@@ -90,10 +92,11 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
   return (
     <div className="space-y-5">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" />
+      <KpiRow cols={4}>
+        <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" icon={CalendarClock} />
         <AnalyticsStatCard
           label="Confirmadas"
+          icon={CheckCircle2}
           value={counts.confirmadas}
           sub={counts.total > 0 ? `${((counts.confirmadas / counts.total) * 100).toFixed(0)}% das marcadas` : undefined}
           accent="blue"
@@ -101,6 +104,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
         />
         <AnalyticsStatCard
           label="Compareceram"
+          icon={CalendarCheck}
           value={counts.compareceram}
           accent="success"
           tintValue
@@ -108,13 +112,14 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
         />
         <AnalyticsStatCard
           label="Show rate"
+          icon={Percent}
           value={`${counts.showRate.toFixed(1)}%`}
           sub="compareceram / marcadas"
           accent="gold"
           tintValue
           delay={0.15}
         />
-      </div>
+      </KpiRow>
 
       {/* Gráficos */}
       <div className="grid gap-4 md:grid-cols-2">

@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiTile, type Tone } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,6 +16,14 @@ const ACCENT_VALUE: Record<string, string> = {
   neutral: "text-foreground",
 };
 
+/** Tom do chip do ícone, derivado do accent (mockup: ícone tintado no cartão). */
+const ACCENT_TONE: Record<string, Tone> = {
+  gold: "gold",
+  success: "good",
+  blue: "info",
+  neutral: "neutral",
+};
+
 interface AnalyticsStatCardProps {
   label: string;
   value: ReactNode;
@@ -26,6 +35,10 @@ interface AnalyticsStatCardProps {
   onClick?: () => void;
   delay?: number;
   className?: string;
+  /** Ícone no chip tintado do `KpiTile` (V5). */
+  icon?: LucideIcon;
+  /** Tom do chip quando o accent não diz (ex.: perda em vermelho). */
+  tone?: Tone;
 }
 
 /**
@@ -44,6 +57,8 @@ export function AnalyticsStatCard({
   onClick,
   delay = 0,
   className,
+  icon,
+  tone,
 }: AnalyticsStatCardProps) {
   // O card clicável abre o drilldown — então ele tem de ser alcançável por
   // teclado também, não só pelo mouse.
@@ -65,6 +80,8 @@ export function AnalyticsStatCard({
     >
       <KpiTile
         label={label}
+        icon={icon}
+        tone={tone ?? ACCENT_TONE[accent]}
         value={<span className={cn("whitespace-nowrap", tintValue && ACCENT_VALUE[accent])}>{value}</span>}
         note={sub}
         className={cn(

@@ -1,10 +1,10 @@
 /**
- * WizardProgress — the top step rail for the Disparos Wizard Linear (#904).
+ * WizardProgress — o trilho de passos do Wizard Linear de Disparos (#904).
  *
- * Pra quem · Mensagem · Velocidade · Revisão · Acompanhar. The active step
- * carries the gold accent; reached steps are clickable to step back; future
- * steps stay quiet. A single connecting line fills to the current progress —
- * the one load-bearing motion cue, calm Linear/Stripe.
+ * Forma V5 (mockup "Novo disparo"): seis botões-passo em linha, cada um com o
+ * rótulo micro "PASSO N" e o nome. O atual em tinta com o número em ouro; os
+ * feitos com ✓; os futuros quietos. Um trilho ouro de 3 px embaixo enche até o
+ * passo atual. Passos já alcançados são clicáveis para voltar.
  */
 import { Check } from "lucide-react";
 import { motion } from "framer-motion";
@@ -18,60 +18,69 @@ interface WizardProgressProps {
 }
 
 export function WizardProgress({ index, furthest, onJump }: WizardProgressProps) {
-  const pct = LAST_STEP_INDEX > 0 ? (index / LAST_STEP_INDEX) * 100 : 0;
+  const pct = LAST_STEP_INDEX > 0 ? ((index + 1) / (LAST_STEP_INDEX + 1)) * 100 : 0;
 
   return (
     <div className="w-full">
-      {/* Rail */}
-      <div className="relative">
-        <div className="absolute left-0 right-0 top-[10px] h-[3px] rounded-full bg-muted" />
+      <ol className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 scrollbar-hide">
+        {DISPARO_STEPS.map((step, i) => {
+          const isActive = i === index;
+          const isDone = i < index;
+          const isReached = i <= furthest;
+          return (
+            <li key={step.id} className="min-w-[132px] flex-1">
+              <button
+                type="button"
+                disabled={!isReached || i === index}
+                onClick={() => onJump(i)}
+                aria-current={isActive ? "step" : undefined}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-3 text-left transition-colors duration-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                  isActive && "bg-tinta text-tinta-foreground shadow-relevo-tinta",
+                  !isActive && isReached && "hover:bg-muted/60",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-extrabold tabular-nums",
+                    isActive && "border-transparent bg-primary text-primary-foreground",
+                    isDone && "border-transparent bg-primary-soft text-primary-soft-foreground",
+                    !isActive && !isDone && "border-border text-muted-foreground",
+                  )}
+                >
+                  {isDone ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      "block text-[9.5px] font-bold uppercase tracking-[.1em]",
+                      isActive ? "text-tinta-muted" : "text-muted-foreground",
+                    )}
+                  >
+                    Passo {i + 1}
+                  </span>
+                  <span
+                    className={cn(
+                      "block truncate text-[13px] font-bold leading-tight",
+                      isActive ? "text-tinta-foreground" : isReached ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {step.label}
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="relative mt-3 h-[3px] w-full overflow-hidden rounded-full bg-muted">
         <motion.div
-          className="absolute left-0 top-[10px] h-[3px] rounded-full bg-primary"
+          className="absolute inset-y-0 left-0 rounded-full bg-primary"
           initial={false}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         />
-
-        <ol className="relative flex items-start justify-between">
-          {DISPARO_STEPS.map((step, i) => {
-            const isActive = i === index;
-            const isDone = i < index;
-            const isReached = i <= furthest;
-            return (
-              <li key={step.id} className="flex flex-col items-center gap-2">
-                <button
-                  type="button"
-                  disabled={!isReached || i === index}
-                  onClick={() => onJump(i)}
-                  aria-current={isActive ? "step" : undefined}
-                  className={cn(
-                    "relative flex h-[22px] w-[22px] items-center justify-center rounded-full border bg-card transition-colors duration-200",
-                    // V5: o passo atual é o ouro; os feitos ficam em tinta.
-                    isActive && "border-primary bg-primary text-primary-foreground shadow-brilho-ouro",
-                    isDone && "border-transparent bg-tinta text-tinta-foreground dark:bg-foreground dark:text-background",
-                    !isActive && !isDone && "border-border text-muted-foreground",
-                    isReached && i !== index && "cursor-pointer hover:ring-2 hover:ring-primary/40",
-                    !isReached && "cursor-default",
-                  )}
-                >
-                  {isDone ? (
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  ) : (
-                    <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>
-                  )}
-                </button>
-                <span
-                  className={cn(
-                    "text-[11px] tracking-tight transition-colors duration-200 sm:text-xs",
-                    isActive ? "font-bold text-foreground" : "font-semibold text-muted-foreground",
-                  )}
-                >
-                  {step.label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
       </div>
     </div>
   );

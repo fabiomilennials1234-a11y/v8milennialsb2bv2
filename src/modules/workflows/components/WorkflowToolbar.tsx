@@ -30,7 +30,9 @@ import {
   Download,
   CalendarClock,
   UserRoundPlus,
-  Settings2,
+  BarChart3,
+  Repeat,
+  Rocket,
   Braces,
   SquareCode,
   Network,
@@ -53,24 +55,29 @@ interface WorkflowToolbarProps {
   isNew: boolean;
   workflowId?: string;
   onExport?: () => void;
-  onOpenSettings?: () => void;
+  /** Abre o Sheet de configurações já na aba pedida. */
+  onOpenSettings?: (tab: "reenrollment" | "analytics") => void;
   /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
   hiddenNodeTypes?: WorkflowNodeType[];
   questionButtonsEnabled?: boolean;
 }
 
-interface NodeOption {
+export interface NodeOption {
   type: WorkflowNodeType;
   label: string;
   icon: React.ElementType;
 }
 
-interface NodeOptionGroup {
+export interface NodeOptionGroup {
   label: string;
   options: NodeOption[];
 }
 
-const ADD_NODE_GROUPS: NodeOptionGroup[] = [
+/**
+ * Os blocos que o autor pode adicionar — a MESMA lista serve o menu
+ * "Adicionar Nó" (telas estreitas) e a paleta fixa do editor (`WorkflowPalette`).
+ */
+export const ADD_NODE_GROUPS: NodeOptionGroup[] = [
   {
     label: "Básico",
     options: [
@@ -113,6 +120,20 @@ const ADD_NODE_GROUPS: NodeOptionGroup[] = [
   },
 ];
 
+/**
+ * Grupos visíveis: tira o que está oculto (ex.: JavaScript sem sandbox) e o que
+ * depende de flag. Um grupo que perdeu todas as opções some inteiro — sobraria
+ * um cabeçalho solto.
+ */
+export function visibleNodeGroups(hiddenNodeTypes: WorkflowNodeType[] = [], questionButtonsEnabled = false): NodeOptionGroup[] {
+  return ADD_NODE_GROUPS
+    .map((group) => ({
+      ...group,
+      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
+    }))
+    .filter((group) => group.options.length > 0);
+}
+
 export function WorkflowToolbar({
   name,
   onNameChange,
@@ -133,19 +154,12 @@ export function WorkflowToolbar({
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
-  // Um grupo que perdeu todas as opções para o filtro não pode render o rótulo
-  // nem o separador — sobraria um cabeçalho solto no menu.
-  const visibleGroups = ADD_NODE_GROUPS
-    .map((group) => ({
-      ...group,
-      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
-    }))
-    .filter((group) => group.options.length > 0);
+  const visibleGroups = visibleNodeGroups(hiddenNodeTypes, questionButtonsEnabled);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-card px-4 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-card-border bg-card px-3 py-2.5 shadow-relevo">
       {/* Left */}
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <button
           type="button"
           onClick={() => navigate("/automacoes")}
@@ -156,25 +170,38 @@ export function WorkflowToolbar({
         </button>
 
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-tinta text-primary">
             <Zap className="h-4 w-4" />
           </span>
           <Input
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             aria-label="Nome do workflow"
-            className="h-9 w-64 max-w-full rounded-xl border-transparent bg-transparent text-base font-bold tracking-[-0.01em] hover:border-border focus:border-border"
+            className="h-9 w-64 max-w-full rounded-full border-input bg-card text-[15px] font-bold tracking-[-0.01em]"
             placeholder="Nome do workflow"
+          />
+        </div>
+
+        {/* Active toggle — pílula com o switch */}
+        <div className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-input bg-muted/40 pl-3 pr-1.5">
+          <Label htmlFor="workflow-active" className="text-[13px] font-bold text-foreground/80">
+            {isActive ? "Ativo" : "Inativo"}
+          </Label>
+          <Switch
+            id="workflow-active"
+            disabled={isToggleDisabled}
+            checked={isActive}
+            onCheckedChange={onToggleActive}
           />
         </div>
       </div>
 
       {/* Right */}
-      <div className="flex shrink-0 items-center gap-2">
-        {/* Add Node */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Add Node — a paleta fixa cobre isto a partir de xl */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ink" size="sm">
+            <Button variant="ink" size="sm" className="xl:hidden">
               <Plus />
               Adicionar Nó
             </Button>
@@ -208,19 +235,17 @@ export function WorkflowToolbar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Settings (enrollment, reenrollment) */}
-        {onOpenSettings && (
-          <Button variant="outline" size="sm" onClick={onOpenSettings}>
-            <Settings2 />
-            Config
+        {/* Configurações — as duas abas do Sheet, cada uma com seu botão */}
+        {onOpenSettings && !isNew && workflowId && (
+          <Button variant="outline" size="sm" onClick={() => onOpenSettings("analytics")}>
+            <BarChart3 />
+            Analytics
           </Button>
         )}
-
-        {/* Export */}
-        {!isNew && onExport && (
-          <Button variant="outline" size="sm" onClick={onExport}>
-            <Download />
-            Exportar
+        {onOpenSettings && (
+          <Button variant="outline" size="sm" onClick={() => onOpenSettings("reenrollment")}>
+            <Repeat />
+            Re-inscrição
           </Button>
         )}
 
@@ -236,26 +261,16 @@ export function WorkflowToolbar({
           </Button>
         )}
 
-        <div className="mx-1 h-6 w-px bg-border" />
+        {/* Export */}
+        {!isNew && onExport && (
+          <Button variant="outline" size="sm" onClick={onExport}>
+            <Download />
+            Exportar
+          </Button>
+        )}
 
-        {/* Active toggle */}
-        <div className="flex items-center gap-2">
-          <Label htmlFor="workflow-active" className="text-sm font-semibold text-muted-foreground">
-            {isActive ? "Ativo" : "Inativo"}
-          </Label>
-          <Switch
-            id="workflow-active"
-            disabled={isToggleDisabled}
-            checked={isActive}
-            onCheckedChange={onToggleActive}
-          />
-        </div>
+        <div className="mx-0.5 h-6 w-px bg-border" />
 
-        {/* Um primário só: com publicação, Publicar é o ouro e Salvar (rascunho) vira contorno. */}
-        {onPublish && <Button onClick={onPublish} disabled={isSaving || isPublishing} size="sm">
-          {isPublishing && <Loader2 className="animate-spin" />}
-          Publicar
-        </Button>}
         {/* Save */}
         <Button onClick={onSave} disabled={isSaving || isPublishing} size="sm" variant={onPublish ? "outline" : "default"}>
           {isSaving ? (
@@ -263,8 +278,13 @@ export function WorkflowToolbar({
           ) : (
             <Save />
           )}
-          {isNew ? "Criar" : "Salvar"}
+          {isNew ? "Criar" : onPublish ? "Salvar rascunho" : "Salvar"}
         </Button>
+        {/* Um primário só: com publicação, Publicar é o ouro e Salvar (rascunho) vira contorno. */}
+        {onPublish && <Button onClick={onPublish} disabled={isSaving || isPublishing} size="sm">
+          {isPublishing ? <Loader2 className="animate-spin" /> : <Rocket />}
+          Publicar
+        </Button>}
       </div>
     </div>
   );

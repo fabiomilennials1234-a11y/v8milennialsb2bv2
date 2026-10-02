@@ -32,7 +32,19 @@ import { useAuth, useGestor, useIdentity, useJobTitle, useMasterAuth, useUserRol
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
-export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
+/**
+ * `variant`:
+ * - `"rail"` — avatar de 40 px no pé do trilho de ícones (V5);
+ * - `"chip"` — avatar + primeiro nome + papel, na barra superior (V5);
+ * - padrão — o bloco largo de antes (gaveta do celular).
+ */
+export function SidebarUserMenu({
+  collapsed = false,
+  variant,
+}: {
+  collapsed?: boolean;
+  variant?: "rail" | "chip";
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
@@ -94,7 +106,42 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
     }
   };
 
-  const trigger = (
+  const primeiroNome = name.split(" ")[0];
+
+  const trigger = variant === "rail" ? (
+    <button
+      type="button"
+      aria-label={`Menu de ${name}`}
+      className="grid h-10 w-10 place-items-center rounded-full ring-offset-sidebar transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <UserAvatar
+        name={name}
+        avatarUrl={currentAvatarUrl}
+        size="md"
+        fallbackClassName="bg-primary text-primary-foreground text-xs font-bold"
+      />
+    </button>
+  ) : variant === "chip" ? (
+    <button
+      type="button"
+      aria-label={`Menu de ${name}`}
+      className="inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="relative">
+        <UserAvatar
+          name={name}
+          avatarUrl={currentAvatarUrl}
+          size="sm"
+          fallbackClassName="bg-primary text-primary-foreground text-[11px] font-bold"
+        />
+        <span aria-hidden className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-background bg-success" />
+      </span>
+      <span className="hidden min-w-0 text-left leading-tight min-[1200px]:block">
+        <span className="block max-w-[120px] truncate text-[13px] font-bold text-foreground">{primeiroNome}</span>
+        <span className="block max-w-[120px] truncate text-[11px] text-muted-foreground">{roleLabel}</span>
+      </span>
+    </button>
+  ) : (
     <button
       type="button"
       className={cn(
@@ -125,7 +172,14 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          {collapsed ? (
+          {variant === "rail" ? (
+            <Tooltip delayDuration={120}>
+              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+              <TooltipContent side="right" sideOffset={14}>
+                {name}
+              </TooltipContent>
+            </Tooltip>
+          ) : collapsed ? (
             <Tooltip delayDuration={120}>
               <TooltipTrigger asChild>{trigger}</TooltipTrigger>
               <TooltipContent side="right" sideOffset={10}>
@@ -137,7 +191,12 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
           )}
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent side="top" align="start" className="w-56 rounded-xl p-1.5">
+        <DropdownMenuContent
+          side={variant === "rail" ? "right" : variant === "chip" ? "bottom" : "top"}
+          align={variant === "chip" ? "end" : "start"}
+          sideOffset={variant === "rail" ? 14 : 6}
+          className="w-56 rounded-xl p-1.5"
+        >
           <DropdownMenuLabel className="px-3 py-2.5">
             <p className="truncate text-sm font-medium">{name}</p>
             <p className="text-xs text-muted-foreground">{roleLabel}</p>

@@ -1,5 +1,5 @@
-import { useParams } from "react-router-dom";
-import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useWorkflowButtonHistory, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
+import { useNavigate, useParams } from "react-router-dom";
+import { useWorkflows, useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useWorkflowButtonHistory, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Activity, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw, LockKeyhole, Ban } from "lucide-react";
-import { KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutomacoesTabs } from "@/modules/workflows/components/AutomacoesTabs";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
@@ -75,7 +77,10 @@ function errorLabel(code: string | null): string {
 
 export default function AutomacoesExecucoes() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: workflow, isLoading: isLoadingWorkflow } = useWorkflow(id);
+  // Seletor de workflow (D17): execuções são POR workflow — a RPC exige o id.
+  const { data: allWorkflows } = useWorkflows();
   const { data: executions, isLoading: isLoadingExecutions } = useWorkflowExecutions(id);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
   const [retryTargetId, setRetryTargetId] = useState<string | null>(null);
@@ -117,10 +122,27 @@ export default function AutomacoesExecucoes() {
         back={`/automacoes/${id}`}
         eyebrow="Histórico de execuções"
         title={workflow.name}
+        tabs={<AutomacoesTabs active="execucoes" workflowId={id ?? null} count={allWorkflows?.length} />}
+        actions={
+          (allWorkflows?.length ?? 0) > 1 ? (
+            <Select value={id} onValueChange={(next) => next !== id && navigate(`/automacoes/${next}/execucoes`)}>
+              <SelectTrigger aria-label="Trocar de workflow" className="h-10 w-64 max-w-full rounded-full">
+                <SelectValue placeholder="Workflow" />
+              </SelectTrigger>
+              <SelectContent>
+                {allWorkflows!.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : undefined
+        }
       />
 
       {/* Stats summary — os mesmos cinco números de antes, da mesma lista. */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <KpiRow cols={5}>
         <KpiTile
           label="Total"
           icon={Activity}
@@ -131,7 +153,7 @@ export default function AutomacoesExecucoes() {
           label="Concluídos"
           icon={CheckCircle2}
           tone="good"
-          value={<span className="text-success">{(executions?.filter(e => e.status === "completed").length ?? 0).toLocaleString("pt-BR")}</span>}
+          value={<span className="text-success-strong">{(executions?.filter(e => e.status === "completed").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
         <KpiTile
           label="Falharam"
@@ -151,7 +173,7 @@ export default function AutomacoesExecucoes() {
           tone="info"
           value={<span className="text-insights">{(executions?.filter(e => e.status === "running" || e.status === "processing" || e.status === "paused" || e.status === "waiting_response").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
-      </div>
+      </KpiRow>
 
       {/* Split A/B Analytics */}
       {id && <SplitAbAnalytics workflowId={id} />}

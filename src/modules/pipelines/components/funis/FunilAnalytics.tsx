@@ -19,11 +19,23 @@
  * velhas paginadas liam.
  */
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Package } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  TrendingUp,
+  Package,
+  Briefcase,
+  CircleDot,
+  Trophy,
+  CircleX,
+  Percent,
+  CircleDollarSign,
+  Repeat,
+} from "lucide-react";
+import { IconChip, KpiRow } from "@/components/ui/bento";
+import { useWinLossAnalysis } from "@/modules/analytics";
+import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CustomPipelineStage, StageRole } from "@/contracts/pipe";
 import type { DateRange } from "@/lib/metrics-period";
 import type { Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
@@ -107,29 +119,130 @@ export function FunilAnalytics({
       />
     );
   }
-  return <GenericBlock metrics={metrics} />;
+  return <GenericBlock metrics={metrics} stages={stages} periodRange={periodRange} />;
 }
 
 // ── Genérico: o cabeçalho que funil custom nunca teve (SCRUM-633) ───────────
 
-function GenericBlock({ metrics }: { metrics: FunilMetrics }) {
+function GenericBlock({
+  metrics,
+  stages,
+  periodRange,
+}: {
+  metrics: FunilMetrics;
+  stages: CustomPipelineStage[];
+  periodRange: DateRange | null;
+}) {
   const g = metrics.generic;
   if (!g) return null;
+  // Contagem por etapa vem do motor (`get_pipeline_stage_counts_by_id`) — o
+  // funil inteiro, não só os cards carregados. Perda fica fora das barras: ela
+  // tem o próprio cartão (motivos).
+  const funnelStages = stages
+    .filter((s) => roleDe(s) !== "lost")
+    .map((s) => ({
+      key: s.stage_key,
+      label: s.name,
+      count: g.byStageKey[s.stage_key] ?? 0,
+      tone: roleDe(s) === "won" ? ("gold" as const) : undefined,
+    }));
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-      <AnalyticsStatCard label="Negócios" value={String(g.total)} sub="no recorte" accent="gold" />
-      <AnalyticsStatCard label="Em aberto" value={String(g.openCount)} sub="etapas abertas" accent="neutral" delay={0.05} />
-      <AnalyticsStatCard label="Ganhos" value={String(g.wonCount)} sub="etapas de ganho" accent="success" tintValue delay={0.1} />
-      <AnalyticsStatCard label="Perdidos" value={String(g.lostCount)} sub="etapas de perda" accent="neutral" delay={0.15} />
-      <AnalyticsStatCard
-        label="Conversão"
-        value={`${g.conversionRate.toFixed(1)}%`}
-        sub="ganhos / total"
-        accent="gold"
-        tintValue
-        delay={0.2}
-      />
+    <div className="space-y-4">
+      <KpiRow cols={5}>
+        <AnalyticsStatCard label="Negócios" value={String(g.total)} sub="no recorte" accent="blue" icon={Briefcase} />
+        <AnalyticsStatCard label="Em aberto" value={String(g.openCount)} sub="etapas abertas" accent="neutral" icon={CircleDot} delay={0.05} />
+        <AnalyticsStatCard label="Ganhos" value={String(g.wonCount)} sub="etapas de ganho" accent="success" tintValue icon={Trophy} delay={0.1} />
+        <AnalyticsStatCard label="Perdidos" value={String(g.lostCount)} sub="etapas de perda" accent="neutral" tone="bad" icon={CircleX} delay={0.15} />
+        <AnalyticsStatCard
+          label="Conversão"
+          value={`${g.conversionRate.toFixed(1)}%`}
+          sub="ganhos / total"
+          accent="gold"
+          tintValue
+          icon={Percent}
+          delay={0.2}
+        />
+      </KpiRow>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <AnalyticsPanel title="Funil" subtitle="Negócios por etapa · passagem entre etapas">
+          <ContinuousFunnel unit="negócios" stages={funnelStages} />
+        </AnalyticsPanel>
+        <LossReasonsPanel periodRange={periodRange} />
+      </div>
     </div>
+  );
+}
+
+/** "sem_budget" → "Sem budget" quando a org não tem o motivo cadastrado. */
+function humanizeSlug(slug: string): string {
+  const t = slug.replace(/[_-]+/g, " ").trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : "Sem motivo";
+}
+
+/**
+ * Motivos de perda — DA ORGANIZAÇÃO (decisão do líder): `get_win_loss_analysis`
+ * não recorta por funil, então o cartão diz isso no subtítulo em vez de
+ * fingir que é deste funil. Nomes vêm do cadastro de motivos da org.
+ */
+function LossReasonsPanel({ periodRange }: { periodRange: DateRange | null }) {
+  const { start, end, label } = useMemo(() => {
+    if (periodRange) {
+      return { start: periodRange.startStr, end: periodRange.endStr, label: formatPeriodLabel(periodRange) };
+    }
+    const now = new Date();
+    const from = new Date(now.getTime() - 30 * 86_400_000);
+    return { start: from.toISOString(), end: now.toISOString(), label: "últimos 30 dias" };
+  }, [periodRange]);
+  const { data: losses = [], isLoading } = useWinLossAnalysis(start, end);
+  const { data: reasons = [] } = useLossReasons();
+
+  const rows = useMemo(() => {
+    const nameBySlug = new Map((reasons as { slug?: string; name?: string }[]).map((r) => [r.slug, r.name]));
+    const list = losses
+      .map((l) => ({ key: l.loss_reason, label: nameBySlug.get(l.loss_reason) ?? humanizeSlug(l.loss_reason ?? ""), count: l.count }))
+      .sort((a, b) => b.count - a.count);
+    const total = list.reduce((acc, l) => acc + l.count, 0);
+    return { list: list.slice(0, 6), total };
+  }, [losses, reasons]);
+
+  return (
+    <AnalyticsPanel title="Motivos de perda" subtitle={`Da organização · ${label}`}>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-6 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      ) : rows.list.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+          Nenhuma perda registrada no período
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-[1.65rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums">
+            {rows.total.toLocaleString("pt-BR")}
+            <span className="ml-1.5 text-xs font-semibold tracking-normal text-muted-foreground">perdidos</span>
+          </p>
+          <ul className="space-y-2.5">
+            {rows.list.map((r) => {
+              const pct = rows.total > 0 ? (r.count / rows.total) * 100 : 0;
+              return (
+                <li key={r.key} className="space-y-1">
+                  <div className="flex items-baseline gap-2 text-[13px]">
+                    <span className="min-w-0 flex-1 truncate font-semibold">{r.label}</span>
+                    <span className="font-bold tabular-nums">{r.count}</span>
+                    <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-destructive/70" style={{ width: `${pct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </AnalyticsPanel>
   );
 }
 
@@ -196,7 +309,6 @@ function PropostasBlock({
   periodRange,
   responsibleMembers,
 }: FunilAnalyticsProps) {
-  const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
   const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const { openLead } = useLeadSheet();
 
@@ -369,8 +481,9 @@ function PropostasBlock({
   return (
     <div className="space-y-5">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <KpiRow cols={5}>
         <AnalyticsStatCard
+          icon={Briefcase}
           label="Pipeline Ativo"
           value={formatCurrency(displayStats.inProgress)}
           sub={`${displayStats.inProgressCount} propostas`}
@@ -378,6 +491,7 @@ function PropostasBlock({
           onClick={() => setDrilldownMetric("pipeline_ativo")}
         />
         <AnalyticsStatCard
+          icon={CircleDollarSign}
           label="Vendas Total"
           value={formatCurrency(displayStats.sold)}
           sub={`${displayStats.soldCount} vendas`}
@@ -387,6 +501,7 @@ function PropostasBlock({
           onClick={() => setDrilldownMetric("vendas_total")}
         />
         <AnalyticsStatCard
+          icon={Repeat}
           label="Rec. Vendida"
           value={formatCurrency(displayStats.mrr)}
           sub="valor vendido /mês"
@@ -395,6 +510,7 @@ function PropostasBlock({
           onClick={() => setDrilldownMetric("rec_vendida")}
         />
         <AnalyticsStatCard
+          icon={Package}
           label="Projetos Vendidos"
           value={formatCurrency(displayStats.projeto)}
           sub="valor vendido"
@@ -404,6 +520,7 @@ function PropostasBlock({
         />
         <AnalyticsStatCard
           label="Taxa de Conversão"
+          icon={Percent}
           value={`${displayStats.conversionRate.toFixed(1)}%`}
           sub="vendas / total no pipe"
           accent="gold"
@@ -411,30 +528,11 @@ function PropostasBlock({
           delay={0.2}
           onClick={() => setDrilldownMetric("taxa_conversao")}
         />
-      </div>
+      </KpiRow>
 
-      <Tabs value={analyticsTab} onValueChange={(v) => setAnalyticsTab(v as "propostas" | "produtos")}>
-        <TabsList variant="segmented">
-          <TabsTrigger value="propostas" className="gap-1.5">
-            <TrendingUp className="w-4 h-4" />
-            {pipeline.name}
-          </TabsTrigger>
-          <TabsTrigger value="produtos" className="gap-1.5">
-            <Package className="w-4 h-4" />
-            Produtos
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      <AnimatePresence mode="wait">
-        {analyticsTab === "propostas" ? (
-          <motion.div
-            key="propostas-analytics"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="grid gap-4 md:grid-cols-2"
-          >
+      {/* As abas "funil / Produtos" viraram seções (mockup V5): o que estava
+          escondido atrás do segmentado fica à vista, na ordem de leitura. */}
+      <div className="grid gap-4 md:grid-cols-2">
             <AnalyticsPanel title="Funil de Vendas" subtitle="Volume e valor por etapa">
               <ContinuousFunnel
                 unit="propostas"
@@ -519,18 +617,16 @@ function PropostasBlock({
                 )}
               </div>
             </section>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="produtos-analytics"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <ProductAnalyticsChart data={productData} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <LossReasonsPanel periodRange={periodRange} />
+      </div>
+
+      <section className="space-y-3">
+        <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
+          <IconChip icon={Package} />
+          Produtos
+        </h3>
+        <ProductAnalyticsChart data={productData} />
+      </section>
 
       {/* A página velha passava props que o componente NÃO tem (open/onOpenChange
           — erro de tipo no baseline do tsc): o sheet nunca abria. Aqui a fiação

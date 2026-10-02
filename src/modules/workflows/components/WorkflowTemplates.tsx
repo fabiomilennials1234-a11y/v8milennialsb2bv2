@@ -22,6 +22,8 @@ import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { canonicalizeTemplateFunnelRefs } from "@/modules/workflows/lib/canonicalizeTemplateFunnelRefs";
 import { countDiscontinuedSteps } from "@/modules/workflows/lib/discontinued-steps";
 import { IconChip } from "@/components/ui/bento";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { TRIGGER_LABELS } from "@/types/workflow";
 
 // Reexportado por compatibilidade: a interface agora é contrato compartilhado
 // (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
@@ -162,7 +164,25 @@ function useWorkflowTemplates() {
   });
 }
 
-export function WorkflowTemplates() {
+/**
+ * Templates de workflow — forma V5 (mockup "Automações"): uma fileira compacta
+ * "Comece por um template" com os cinco primeiros e "Ver todos", que abre a
+ * galeria completa (categorias, busca, grupos por funil) num `Sheet`. Antes a
+ * galeria inteira ocupava o topo da página.
+ *
+ * O `Sheet` é controlado por quem monta (o botão "Templates" do cabeçalho
+ * abre a mesma galeria).
+ */
+export function WorkflowTemplates({
+  galleryOpen,
+  onGalleryOpenChange,
+}: {
+  galleryOpen?: boolean;
+  onGalleryOpenChange?: (open: boolean) => void;
+} = {}) {
+  const [ownGalleryOpen, setOwnGalleryOpen] = useState(false);
+  const isGalleryOpen = galleryOpen ?? ownGalleryOpen;
+  const setGalleryOpen = onGalleryOpenChange ?? setOwnGalleryOpen;
   const { data: templates = [], isLoading } = useWorkflowTemplates();
   const { data: pipelines, isLoading: pipelinesLoading } = useFunisDaOrg();
   const { data: stages = [], isLoading: stagesLoading } = useAllPipelineStages();
@@ -260,21 +280,83 @@ export function WorkflowTemplates() {
     { key: "funil_b", label: "Funil B", items: FUNIL_B_TEMPLATES.filter((t) => matchesSearch(t) && countDiscontinuedSteps(t.definition) === 0) },
   ];
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+  const strip = offered.slice(0, 5);
+
+  const triggerOf = (tpl: WorkflowTemplate) => {
+    const trigger = (tpl.definition as { nodes?: Array<{ type?: string; data?: { triggerType?: string } }> })?.nodes?.find(
+      (n) => n.type === "trigger",
     );
-  }
+    const t = trigger?.data?.triggerType;
+    return t ? TRIGGER_LABELS[t as keyof typeof TRIGGER_LABELS] ?? t : null;
+  };
+
+  const renderCompact = (tpl: WorkflowTemplate) => {
+    const CatIcon = CATEGORY_ICONS[tpl.category] ?? Zap;
+    const nodeCount = (tpl.definition as { nodes?: unknown[] })?.nodes?.length ?? 0;
+    const trigger = triggerOf(tpl);
+    return (
+      <button
+        key={tpl.id}
+        type="button"
+        onClick={() => setSelected(tpl)}
+        className="group flex min-w-[220px] flex-1 flex-col gap-2 rounded-[18px] border border-card-border bg-card p-4 text-left transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:border-foreground/20 hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-w-0"
+      >
+        <span className="flex items-center justify-between gap-2">
+          <IconChip icon={CatIcon} tone="gold" />
+          <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+            {nodeCount} nós
+          </span>
+        </span>
+        <span className="mt-1 line-clamp-1 text-[15px] font-bold tracking-tight text-foreground">{tpl.name}</span>
+        {tpl.description && (
+          <span className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{tpl.description}</span>
+        )}
+        {trigger && (
+          <span className="mt-auto flex items-center gap-1.5 pt-1 text-[11px] font-medium text-muted-foreground">
+            <Zap className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="truncate">{trigger}</span>
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
+    <>
     <section className="space-y-4 rounded-card border border-card-border bg-card p-5 shadow-relevo">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <IconChip icon={LayoutTemplate} />
-          <h3 className="text-base font-bold tracking-tight">Templates</h3>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold tracking-tight">Comece por um template</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Fluxos prontos — você ajusta mensagens, prazos e responsáveis depois.
+          </p>
         </div>
+        <Button variant="outline" size="sm" onClick={() => setGalleryOpen(true)}>
+          Ver todos
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : strip.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">Nenhum template disponível agora.</p>
+      ) : (
+        <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 scrollbar-hide sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 xl:grid-cols-5">
+          {strip.map(renderCompact)}
+        </div>
+      )}
+    </section>
+
+    {/* Galeria completa */}
+    <Sheet open={isGalleryOpen} onOpenChange={setGalleryOpen}>
+      <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
+        <SheetHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6">
+          <SheetTitle className="flex items-center gap-2.5">
+            <IconChip icon={LayoutTemplate} />
+            Templates
+          </SheetTitle>
+          <SheetDescription>Escolha um ponto de partida. O workflow nasce desativado para você revisar.</SheetDescription>
         <div className="relative w-64 max-w-full">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -285,8 +367,8 @@ export function WorkflowTemplates() {
             className="h-9 rounded-full pl-9"
           />
         </div>
-      </div>
-
+        </SheetHeader>
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
       {/* Category tabs */}
       <Tabs value={category} onValueChange={setCategory}>
         <TabsList variant="segmented" className="max-w-full overflow-x-auto scrollbar-hide">
@@ -332,6 +414,10 @@ export function WorkflowTemplates() {
         ),
       )}
 
+        </div>
+      </SheetContent>
+    </Sheet>
+
       {/* Preview + Use dialog */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="sm:max-w-md">
@@ -375,6 +461,6 @@ export function WorkflowTemplates() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </>
   );
 }

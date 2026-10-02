@@ -1,4 +1,5 @@
-import { AlarmClock, CalendarClock, HeartPulse, Receipt, Repeat, Users } from "lucide-react";
+import { AlarmClock, CalendarClock, Filter, HeartPulse, Receipt, Repeat, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
@@ -6,21 +7,21 @@ import { formatBRL } from "@/lib/format";
 /**
  * Resumo da carteira — os cinco números de sempre, do mesmo `get_portfolio_kpis`.
  *
- * V5 (2026-10): vira fileira de `KpiTile`. Nenhum número novo: a cor deixa de
- * pintar o valor inteiro (ouro em letra reprova contraste no claro) e passa a
- * morar no chip do ícone; só o atraso continua vermelho no número, porque é o
- * único que pede ação.
+ * V5 (mockup, 02/10): ordem Receita · Ticket · Health · Pedidos esperados ·
+ * Recompra atrasada, e só na aba Clientes. O banner amarelo de recompra
+ * atrasada saiu: o número dele (clientes + R$ em risco) mora no último cartão,
+ * com a mesma ação ("Ver clientes" liga o filtro de atrasados).
  */
 /** Cinco colunas só a partir de xl — em lg a área útil ainda espreme o valor em reais. */
 const ROW_CLASS = "lg:grid-cols-3 xl:grid-cols-5";
 
-export function CarteiraKPIs() {
+export function CarteiraKPIs({ onViewOverdue }: { onViewOverdue?: () => void } = {}) {
   const { data, isLoading } = usePortfolioKPIs();
 
   if (isLoading) {
     return (
       <KpiRow cols={5} className={ROW_CLASS}>
-        {["Receita recorrente", "Pedidos esperados", "Recompra atrasada", "Ticket médio", "Health score médio"].map(
+        {["Receita recorrente", "Ticket médio", "Health score médio", "Pedidos esperados", "Recompra atrasada"].map(
           (label) => (
             <KpiTile key={label} label={label} value="·" loading />
           ),
@@ -48,6 +49,7 @@ export function CarteiraKPIs() {
     total_recurring: totalRecurring,
     expected_this_week: expectedThisWeek,
     overdue_count: overdueCount,
+    overdue_revenue: overdueRevenue,
     avg_health: avgHealth,
     avg_ticket: avgTicket,
   } = data;
@@ -63,31 +65,11 @@ export function CarteiraKPIs() {
       />
 
       <KpiTile
-        label="Pedidos esperados"
-        value={expectedThisWeek.toLocaleString("pt-BR")}
-        icon={CalendarClock}
-        tone="info"
-        note="próximos 7 dias"
-      />
-
-      <KpiTile
-        label="Recompra atrasada"
-        value={
-          <span className={overdueCount > 0 ? "text-destructive" : undefined}>
-            {overdueCount.toLocaleString("pt-BR")}
-          </span>
-        }
-        icon={AlarmClock}
-        tone={overdueCount > 0 ? "bad" : "good"}
-        note={overdueCount > 0 ? "clientes em atraso" : "tudo em dia"}
-      />
-
-      <KpiTile
         label="Ticket médio"
         value={formatBRL(avgTicket)}
         icon={Receipt}
-        tone="neutral"
-        note={`${totalClients} clientes ativos`}
+        tone="info"
+        note={`${totalClients.toLocaleString("pt-BR")} clientes ativos`}
       />
 
       <KpiTile
@@ -102,6 +84,33 @@ export function CarteiraKPIs() {
         tone={avgHealth >= 70 ? "good" : avgHealth >= 50 ? "neutral" : "bad"}
         note="média da carteira"
       />
+
+      <KpiTile
+        label="Pedidos esperados"
+        value={expectedThisWeek.toLocaleString("pt-BR")}
+        icon={CalendarClock}
+        tone="neutral"
+        note="próximos 7 dias"
+      />
+
+      <KpiTile
+        label="Recompra atrasada"
+        value={
+          <span className={overdueCount > 0 ? "text-destructive" : undefined}>
+            {overdueCount.toLocaleString("pt-BR")}
+          </span>
+        }
+        icon={AlarmClock}
+        tone={overdueCount > 0 ? "bad" : "good"}
+        note={overdueCount > 0 ? `${formatBRL(overdueRevenue)} em risco` : "tudo em dia"}
+      >
+        {overdueCount > 0 && onViewOverdue && (
+          <Button variant="ink" size="sm" className="h-[30px]" onClick={onViewOverdue}>
+            <Filter />
+            Ver clientes
+          </Button>
+        )}
+      </KpiTile>
     </KpiRow>
   );
 }

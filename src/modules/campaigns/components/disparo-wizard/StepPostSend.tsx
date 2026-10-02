@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { useFunnelStageOptions } from "./use-funnel-stage-options";
 import { StepHeader } from "./StepHeader";
 import type { DisparoDraft } from "./wizard-machine";
-import { kickerDoPasso } from "./wizard-machine";
+import { eyebrowDoPasso } from "./wizard-machine";
 
 interface StepPostSendProps {
   draft: DisparoDraft;
@@ -133,7 +133,7 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker={kickerDoPasso("postsend")}
+        kicker={eyebrowDoPasso("postsend")}
         title="E depois do envio?"
         subtitle="Se quiser, mova cada contato pra uma etapa do funil assim que a mensagem dele for enviada. O disparo pode levar dias — o contato só muda de etapa na vez dele."
       />

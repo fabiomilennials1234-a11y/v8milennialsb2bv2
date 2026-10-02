@@ -1,106 +1,106 @@
 /**
- * Navegação lateral — substitui a top bar.
+ * Navegação lateral — V5: trilho de ícones de 76 px (decisão do CTO, 02/10).
  *
- * Seis portas na lateral e quatro no rodapé (Agenda, Notificações, Ajuda,
- * Pitstop). O menu "Mais" deixou de existir: o que vivia nele mora agora dentro
- * do Pitstop, que abre como coluna aninhada ao lado da lateral.
+ * Sem rótulos e sem expandir: o nome de cada porta mora no tooltip, e o que
+ * antes ocupava a lateral larga foi para onde o olho já está —
+ * organização, busca, notificações, tema e usuário na barra superior
+ * (`TopBar`); a troca de funil na própria página do funil.
+ *
+ * De cima para baixo: marca · Comando, Métricas, Chat, Disparos, Funis, Leads ·
+ * Copilot, Automações (o grupo "Turbo" achatado) · Oráculo · e no rodapé
+ * Agenda, Master, Ajuda, Pitstop e o avatar.
+ *
+ * Agenda, Oráculo e Pitstop deixaram de abrir painel por cima da tela: são
+ * páginas (`/agenda`, `/oraculo`, `/pitstop`). Os componentes de painel
+ * continuam no repositório — só não são montados aqui.
  *
  * O componente não decide visibilidade — isso é `useNavigationModel`. Aqui só
- * se decide forma: recolhida ou não, expandida ou não, tooltip ou rótulo.
+ * se decide forma.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
-import { ChevronLeft, ChevronRight, HelpCircle, Settings } from "lucide-react";
+import { forwardRef, useCallback, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Bot, CalendarDays, HelpCircle, Settings, Shield, Sparkles, Workflow } from "lucide-react";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { usePrefetchPipes } from "@/modules/pipelines";
 import { useOraculoBriefing } from "@/modules/copilot";
-import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
+import { useMasterAuth, useOrganizationSettings } from "@/modules/identity";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
-import { useSidebarCollapsed } from "@/modules/platform/hooks/useSidebarCollapsed";
-import {
-  SIDEBAR_GUTTER,
-  SIDEBAR_WIDTH,
-  SIDEBAR_WIDTH_COLLAPSED,
-} from "@/modules/platform/lib/navigation-model";
+import { PITSTOP_HUB_PATH, RAIL_WIDTH, type NavNode } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
-import { useDegrauDoSlot } from "@/modules/platform/hooks/useDegrauDoSlot";
-import { OrgSwitcher } from "./OrgSwitcher";
 import { SidebarBrand } from "./SidebarBrand";
-import { SlotDoOraculo } from "./SlotDoOraculo";
-import { OraculoPanel } from "./OraculoPanel";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
-import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
 
-/**
- * O painel da Agenda entra por caminho fundo, e NÃO pelo barril de
- * `engagement` — como já fazem `QuickBlastProgressPanel` e `SessionDeadBanner`
- * em `MainLayout`. Exportá-lo no barril fecha um ciclo dinâmico
- * (`engagement/index` → `AgendaPanel` → `AgendaAtividades` → `leads` →
- * `engagement/index`) e o `dep-cruise-ratchet` reprova com 7 violações
- * `no-circular-dynamic` — seis delas em arquivos que esta branch nem toca, o
- * que torna a causa difícil de enxergar depois. `lazy` mantém a Agenda fora do
- * chunk do layout.
- */
-const AgendaPanel = lazy(() =>
-  import("@/modules/engagement/components/agenda/AgendaPanel").then((m) => ({
-    default: m.AgendaPanel,
-  })),
-);
+const ICONE_DO_TURBO: Record<string, React.ElementType> = {
+  "/copilot": Bot,
+  "/automacoes": Workflow,
+};
 
-/** Dia de hoje dentro do ícone da Agenda — mesmo gesto do calendário nativo. */
-function AgendaDateChip() {
-  const now = new Date();
-  const dia = now.getDate();
-  const mes = now.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
-  return (
-    <span className="flex h-[26px] w-[26px] shrink-0 flex-col items-center justify-center rounded-md border-[1.5px] border-primary font-mono leading-none text-primary">
-      <span className="text-[11px] tabular-nums">{dia}</span>
-      <span className="mt-px text-[6.5px] uppercase tracking-wider">{mes}</span>
-    </span>
-  );
+/** Fio de 28 px entre os grupos do trilho. */
+function Separador() {
+  return <span aria-hidden className="my-1 h-px w-7 shrink-0 bg-sidebar-border" />;
 }
+
+/** Botão do trilho que não é link de rota simples (Oráculo, Master). */
+type RailButtonProps = {
+  label: string;
+  active?: boolean;
+  children: React.ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>;
+
+// forwardRef: o escudo do Master é gatilho de Popover, que ancora pela ref.
+const RailButton = forwardRef<HTMLButtonElement, RailButtonProps>(function RailButton(
+  { label, active = false, children, className, ...rest },
+  ref,
+) {
+  return (
+    <Tooltip delayDuration={120}>
+      <TooltipTrigger asChild>
+        <button
+          ref={ref}
+          type="button"
+          aria-label={label}
+          className={cn(
+            "group relative grid h-[42px] w-[46px] shrink-0 place-items-center rounded-[14px] transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+            active
+              ? "bg-sidebar-accent text-primary"
+              : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            className,
+          )}
+          {...rest}
+        >
+          {active && (
+            <span
+              aria-hidden
+              className="absolute -left-[15px] top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/.65)]"
+            />
+          )}
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={14} className="max-w-[260px]">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+});
 
 export function Sidebar() {
   const model = useNavigationModel();
   const prefetchPipes = usePrefetchPipes();
-  const [collapsed, toggleCollapsed] = useSidebarCollapsed();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [pitstopOpen, setPitstopOpen] = useState(false);
-  const [agendaOpen, setAgendaOpen] = useState(false);
-  // Fica `true` no primeiro clique e nunca volta — ver o bloco de montagem.
-  const [agendaJaAberta, setAgendaJaAberta] = useState(false);
-  const [oraculoAberto, setOraculoAberto] = useState(false);
-  const [oraculoConversaInicial, setOraculoConversaInicial] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const briefing = useOraculoBriefing();
+  const { isMaster, isOutbounder } = useMasterAuth();
+  const { settings } = useOrganizationSettings();
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
-
-  // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
-  // ou de um deep link, o usuário precisa ver onde está.
-  useEffect(() => {
-    if (model.isPitstopRoute) setPitstopOpen(true);
-  }, [model.isPitstopRoute]);
-
-  const toggleExpand = useCallback(
-    (label: string) => {
-      // Recolhida não há onde desenhar o submenu (`isOpen` exige `!collapsed`).
-      // Um grupo que não navega precisa abrir a lateral primeiro, senão o
-      // clique não produz nada visível — botão morto.
-      if (collapsed) {
-        toggleCollapsed();
-        setExpanded((prev) => ({ ...prev, [label]: true }));
-        return;
-      }
-      setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
-    },
-    [collapsed, toggleCollapsed],
-  );
 
   const openUpgrade = useCallback(
     (path: string) => {
@@ -110,253 +110,142 @@ export function Sidebar() {
     [model],
   );
 
-  // As quatro referências que o slot do Oráculo mede. `data-medida` no JSX
-  // marca os mesmos elementos, para o teste da lateral montada saber quais são.
-  const lateralRef = useRef<HTMLElement>(null);
-  const topoRef = useRef<HTMLDivElement>(null);
-  const rodapeRef = useRef<HTMLDivElement>(null);
-  const navRef = useRef<HTMLElement>(null);
+  // Funis no trilho abre o funil PADRÃO da org (o hub virou a aba "Todos os
+  // funis" dentro da página). Sem padrão, cai no hub.
+  const funilPadrao = settings?.default_pipeline_id ? `/funil/${settings.default_pipeline_id}` : "/funis";
 
-  const degrauDoOraculo = useDegrauDoSlot({
-    lateralRef,
-    topoRef,
-    rodapeRef,
-    navRef,
-    colapsada: collapsed,
-    temBriefing: briefing.briefing !== null,
-  });
+  const principais = model.primary.filter((item) => item.path !== "/turbo");
+  const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];
 
-  const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
-  // V5: a lateral flutua a 12px da borda. O que abre ao lado dela (Oráculo,
-  // Agenda, Pitstop em overlay) começa depois da margem dos dois lados.
-  const panelLeft = width + SIDEBAR_GUTTER * 2;
+  const renderItem = (item: NavNode, overrides?: Partial<NavNode>) => (
+    <SidebarNavItem
+      key={item.path}
+      rail
+      collapsed
+      item={{ ...item, children: undefined, expandOnly: undefined, ...overrides }}
+      active={model.isActive(item.path)}
+      locked={model.isLocked(item.path)}
+      onLockedClick={() => openUpgrade(item.path)}
+      onHoverPrefetch={item.path === "/funis" ? prefetchPipes : undefined}
+    />
+  );
+
+  const atual = briefing.briefing;
+  const oraculoAtivo = location.pathname.startsWith("/oraculo");
+  const abrirOraculo = () => {
+    if (!atual) {
+      navigate("/oraculo");
+      return;
+    }
+    // O briefing abre a conversa contextual dele, agora na página do Oráculo.
+    void briefing
+      .open(atual.id)
+      .then((opened) => navigate(`/oraculo?conversa=${opened.conversa_id}`))
+      .catch(() => navigate("/oraculo"));
+  };
 
   return (
     <>
-      {/* `text-sidebar-foreground` no <aside> não é decoração. A lateral é ESCURA
-          nos DOIS temas (`--sidebar-background` = 36 20% 18% no claro), mas quem
-          não declarava cor própria herdava `--foreground` — que no tema claro é
-          30 18% 16%, praticamente o mesmo tom do fundo: 1.10:1, invisível. Era o
-          que apagava o nome da org. Ancorar a cor aqui conserta a herança de todo
-          descendente, não só a do seletor. */}
+      {/* `text-sidebar-foreground` no <aside> não é decoração: a lateral é ESCURA
+          nos dois temas, e quem não declarava cor herdava `--foreground`
+          (quase o tom do fundo no tema claro, 1.10:1). */}
       <aside
-        ref={lateralRef}
-        data-medida="lateral"
         data-testid="sidebar"
         aria-label="Navegação principal"
-        style={{ width }}
-        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta transition-[width] duration-200 ease-drawer motion-reduce:transition-none"
+        style={{ width: RAIL_WIDTH }}
+        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden rounded-panel border border-sidebar-border bg-sidebar pb-3 pt-3.5 text-sidebar-foreground shadow-relevo-tinta scrollbar-hide"
       >
-        <div ref={topoRef} data-medida="topo" className="flex flex-col gap-3 px-3 pb-2 pt-4">
-          {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
-              na borda ele cobria o título do Pitstop quando o painel abria. */}
-          <div className="flex h-7 items-center gap-2">
-            <SidebarBrand collapsed={collapsed} />
-            {!collapsed && (
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                aria-label="Recolher menu"
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          {collapsed && (
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              aria-label="Expandir menu"
-              className="grid h-7 w-full place-items-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          )}
-
-          {!collapsed && <OrgSwitcher />}
+        <div className="grid h-11 w-11 shrink-0 place-items-center">
+          <SidebarBrand collapsed />
         </div>
 
-        <ScrollArea className="flex-1">
-          <nav ref={navRef} data-medida="nav" className="flex flex-col gap-0.5 px-2.5 pb-3 pt-1">
-            {model.primary.map((item) => {
-              const hasChildren = (item.children?.length ?? 0) > 0;
-              const isOpen = !collapsed && hasChildren && !!expanded[item.label];
-              const locked = model.isLocked(item.path);
-
-              return (
-                <div key={item.path}>
-                  <SidebarNavItem
-                    item={item}
-                    active={model.isActive(item.path)}
-                    collapsed={collapsed}
-                    locked={locked}
-                    expanded={hasChildren ? !!expanded[item.label] : undefined}
-                    onToggleExpand={hasChildren ? () => toggleExpand(item.label) : undefined}
-                    onLockedClick={() => openUpgrade(item.path)}
-                    onHoverPrefetch={item.path === "/funis" ? prefetchPipes : undefined}
-                  />
-
-                  {isOpen && (
-                    <div className="ml-[19px] mt-0.5 flex flex-col gap-px border-l border-sidebar-border pl-2">
-                      {item.children?.map((child) => {
-                        const childLocked = model.isLocked(child.path);
-                        return (
-                          <div key={child.path}>
-                            <SidebarNavItem
-                              item={child}
-                              active={model.isActive(child.path)}
-                              collapsed={false}
-                              locked={childLocked}
-                              onLockedClick={() => openUpgrade(child.path)}
-                              compact
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
-        </ScrollArea>
-
-        {degrauDoOraculo !== "ausente" && (
-          <SlotDoOraculo
-            degrau={degrauDoOraculo}
-            gargalo={briefing.briefing?.headline ?? null}
-            novo={briefing.briefing?.status === "new"}
-            onAbrir={() => {
-              const atual = briefing.briefing;
-              if (!atual) {
-                setOraculoConversaInicial(null);
-                setOraculoAberto(true);
-                return;
-              }
-              void briefing.open(atual.id).then((opened) => {
-                setOraculoConversaInicial(opened.conversa_id);
-                setOraculoAberto(true);
-              }).catch(() => undefined);
-            }}
-          />
-        )}
-
-        <div
-          ref={rodapeRef}
-          data-medida="rodape"
-          className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5"
-        >
-          {/* A Agenda não navega: abre painel por cima da tela atual, deixando
-              a página de baixo à mostra. Por isso o "ativo" vem do estado do
-              painel, e não da rota — que continua existindo para o celular e
-              para link direto. O botão, o chip de data e a posição no rodapé
-              são exatamente os mesmos. */}
-          {model.agenda && (
-            <SidebarNavItem
-              item={model.agenda}
-              active={agendaOpen || model.isActive(model.agenda.path)}
-              collapsed={collapsed}
-              leading={<AgendaDateChip />}
-              onActivate={() => {
-                setAgendaJaAberta(true);
-                setAgendaOpen((v) => !v);
-              }}
-              activateExpanded={agendaOpen}
-            />
+        <nav aria-label="Telas" className="flex flex-col items-center gap-1.5">
+          {principais.map((item) =>
+            item.path === "/funis" ? renderItem(item, { path: funilPadrao }) : renderItem(item),
           )}
 
-          {/* A palavra "Notificações" era um <span> inerte ao lado do sino:
-              clicar nela não fazia nada, e é onde a mão vai primeiro. Agora o
-              rótulo faz parte do próprio gatilho. */}
-          <div
-            className={cn(
-              "flex items-center rounded-lg text-sm text-sidebar-foreground/70",
-              collapsed && "justify-center",
-            )}
+          {turbo.length > 0 && <Separador />}
+          {turbo.map((item) => renderItem(item, { icon: ICONE_DO_TURBO[item.path] ?? item.icon }))}
+
+          <Separador />
+          <RailButton
+            label={atual?.headline ? `Oráculo — ${atual.headline}` : "Oráculo"}
+            active={oraculoAtivo}
+            onClick={abrirOraculo}
           >
-            <AlertsDropdown rotulo={collapsed ? undefined : "Notificações"} />
-          </div>
+            <Sparkles className="h-[19px] w-[19px]" strokeWidth={1.7} />
+            {atual?.status === "new" && (
+              <span
+                aria-hidden
+                className="absolute right-[7px] top-[7px] h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-primary"
+              />
+            )}
+          </RailButton>
+        </nav>
 
-          {/* Master, Gestor e "Ativos agora" — só para quem é master. Vieram do
-              topo, de dentro do `OrgSwitcher`, onde a linha transbordava a
-              largura da barra e invadia o conteúdo. Aqui eles recolhem junto
-              com o menu, o que no topo não acontecia. */}
-          <SidebarMasterLinks collapsed={collapsed} />
+        <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
+          {model.agenda && renderItem(model.agenda, { icon: CalendarDays })}
 
-          {collapsed ? (
-            <Tooltip delayDuration={120}>
-              <TooltipTrigger asChild>
-                <NavLink
-                  to="/faq"
-                  className="flex items-center justify-center rounded-lg py-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          {/* Master, Gestor e "Ativos agora" moram num popover do escudo — no
+              trilho não há largura para três linhas. */}
+          {isMaster && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <RailButton
+                  label={isOutbounder ? "Painel Outbound" : "Master"}
+                  active={location.pathname.startsWith("/master") || location.pathname.startsWith("/insights")}
                 >
-                  <HelpCircle className="h-[17px] w-[17px]" />
-                </NavLink>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={10}>
-                Ajuda
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <NavLink
-              to="/faq"
-              className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <HelpCircle className="h-[17px] w-[17px] shrink-0" />
-              <span className="flex-1 truncate">Ajuda</span>
-            </NavLink>
+                  <Shield className="h-[19px] w-[19px] text-destructive" strokeWidth={1.7} />
+                </RailButton>
+              </PopoverTrigger>
+              <PopoverContent
+                side="right"
+                align="end"
+                sideOffset={14}
+                className="w-56 border-sidebar-border bg-sidebar p-2 text-sidebar-foreground"
+              >
+                <SidebarMasterLinks collapsed={false} />
+              </PopoverContent>
+            </Popover>
           )}
+
+          <Tooltip delayDuration={120}>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/faq"
+                aria-label="Ajuda"
+                className={({ isActive }) =>
+                  cn(
+                    "relative grid h-[42px] w-[46px] place-items-center rounded-[14px] transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive
+                      ? "bg-sidebar-accent text-primary"
+                      : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  )
+                }
+              >
+                <HelpCircle className="h-[19px] w-[19px]" strokeWidth={1.7} />
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={14}>
+              Ajuda
+            </TooltipContent>
+          </Tooltip>
 
           {model.pitstop && model.pitstopGroups.length > 0 && (
-            <PitstopTrigger
-              collapsed={collapsed}
-              open={pitstopOpen}
-              active={pitstopOpen || model.isPitstopRoute}
-              onToggle={() => setPitstopOpen((v) => !v)}
+            <SidebarNavItem
+              rail
+              collapsed
+              item={{ label: "Pitstop", icon: Settings, path: PITSTOP_HUB_PATH }}
+              active={model.isPitstopRoute}
             />
           )}
 
-          <div className="pt-1">
-            <SidebarUserMenu collapsed={collapsed} />
+          <div className="pt-1.5">
+            <SidebarUserMenu variant="rail" />
           </div>
         </div>
       </aside>
-
-      <PitstopPanel
-        open={pitstopOpen}
-        onClose={() => setPitstopOpen(false)}
-        groups={model.pitstopGroups}
-        isActive={model.isActive}
-        overlayLeft={panelLeft}
-      />
-
-      {/* Monta na PRIMEIRA abertura e não desmonta mais. As duas metades
-          importam: antes do primeiro clique o `lazy` nem pede o chunk; depois
-          dele, o painel precisa continuar montado para o `AnimatePresence`
-          dele conseguir animar a SAÍDA — desmontar junto com o `open` arranca
-          a camada da tela sem transição.
-          `sidebarWidth` mantém a lateral fora do capturador de clique: com a
-          Agenda aberta ainda dá para ir para outra tela num clique só.
-          Sem `fallback`: o painel fechado não desenha nada, e ele já tem o
-          próprio Suspense para o conteúdo. */}
-      {agendaJaAberta && (
-        <Suspense fallback={null}>
-          <AgendaPanel
-            open={agendaOpen}
-            onClose={() => setAgendaOpen(false)}
-            sidebarWidth={panelLeft}
-          />
-        </Suspense>
-      )}
-
-      <OraculoPanel
-        open={oraculoAberto}
-        onClose={() => setOraculoAberto(false)}
-        sidebarWidth={panelLeft}
-        conversaInicial={oraculoConversaInicial}
-      />
 
       {upgradeFeature && (
         <UpgradeModal
@@ -366,52 +255,5 @@ export function Sidebar() {
         />
       )}
     </>
-  );
-}
-
-function PitstopTrigger({
-  collapsed,
-  open,
-  active,
-  onToggle,
-}: {
-  collapsed: boolean;
-  open: boolean;
-  active: boolean;
-  onToggle: () => void;
-}) {
-  const button = (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={cn(
-        "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active
-          ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground [&>svg:first-child]:text-primary"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-        collapsed && "justify-center px-0",
-      )}
-    >
-      <Settings className="h-[17px] w-[17px] shrink-0" />
-      {!collapsed && <span className="flex-1 truncate">Pitstop</span>}
-      {!collapsed && (
-        <ChevronRight
-          className={cn("h-3.5 w-3.5 shrink-0 opacity-40 transition-transform", open && "rotate-90")}
-        />
-      )}
-    </button>
-  );
-
-  if (!collapsed) return button;
-
-  return (
-    <Tooltip delayDuration={120}>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side="right" sideOffset={10}>
-        Pitstop
-      </TooltipContent>
-    </Tooltip>
   );
 }

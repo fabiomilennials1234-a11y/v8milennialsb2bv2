@@ -3,10 +3,10 @@
  *
  * Decisions: what the blast says, an optional single attachment, and whether
  * anti-ban protection is on (default yes). The attachment is validated live with
- * the real `validateBlastMedia` pure guard. The right-hand preview renders the
- * message as a real sample Lead will receive it (WhatsApp bubble), resolved by
- * the pure `resolvePreview`; the operator cycles the sample to spot-check
- * personalization. Video attachments surface a ban-risk note (decision Q13).
+ * the real `validateBlastMedia` pure guard. A prévia resolvida (bolha do
+ * WhatsApp com um exemplo ilustrativo) mora na coluna fixa do assistente
+ * (`DisparoPreview`), de pé em todos os passos. Video attachments surface a
+ * ban-risk note (decision Q13).
  */
 import { useRef, useState } from "react";
 import {
@@ -14,9 +14,7 @@ import {
   X,
   AlertTriangle,
   ShieldCheck,
-  RefreshCw,
   Check,
-  CheckCheck,
 } from "lucide-react";
 import {
   validateBlastMedia,
@@ -37,9 +35,7 @@ import {
   rotulosDosBotoes,
 } from "@/modules/communication";
 import { apenasAprovados } from "@/modules/communication/lib/templates-aprovados";
-import { kickerDoPasso } from "./wizard-machine";
-import { resolvePreview } from "./message-preview";
-import { MOCK_PREVIEW_SAMPLES } from "./mock-disparo-data";
+import { eyebrowDoPasso } from "./wizard-machine";
 
 const VARIABLES = ["{{primeiro_nome}}", "{{nome}}", "{{empresa}}", "{{segmento}}"];
 
@@ -59,9 +55,7 @@ interface StepMessageProps {
 
 export function StepMessage({ draft, patch }: StepMessageProps) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [sampleIdx, setSampleIdx] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const sample = MOCK_PREVIEW_SAMPLES[sampleIdx % MOCK_PREVIEW_SAMPLES.length];
 
   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,8 +107,6 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
       message: `${draft.message}${draft.message.endsWith(" ") || draft.message === "" ? "" : " "}${token} `,
     });
 
-  const preview = resolvePreview(draft.message, sample);
-
   // A Instance escolhida no passo anterior decide o REGIME, e o regime decide o
   // que este passo pede (ADR-0028 §1). No Chip, o editor de texto de sempre. No
   // Canal Oficial, um Template aprovado — porque quem recebe um Disparo está,
@@ -127,13 +119,13 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker={kickerDoPasso("message")}
+        kicker={eyebrowDoPasso("message")}
         title="O que você quer dizer?"
         subtitle="Escreva a mensagem. Use variáveis para personalizar cada contato pelo nome ou empresa."
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Composer */}
+      <div>
+        {/* Composer — a prévia resolvida mora na coluna fixa do assistente */}
         <div className="space-y-5">
           <div className="space-y-3">
             <Textarea
@@ -239,52 +231,6 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
           </div>
         </div>
 
-        {/* Live WhatsApp preview */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-              Como o cliente vai ver
-            </p>
-            <button
-              type="button"
-              onClick={() => setSampleIdx((i) => i + 1)}
-              className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <RefreshCw className="h-3 w-3" />
-              outro cliente
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-border/70 bg-[hsl(140_8%_12%)] p-4">
-            <p className="mb-3 text-xs font-medium text-foreground">
-              {sample.nome}
-              <span className="text-muted-foreground"> · {sample.empresa}</span>
-            </p>
-            <div className="flex justify-end">
-              <div className="relative max-w-[85%] rounded-xl rounded-tr-sm bg-[hsl(110_45%_28%)] px-3 py-2 text-sm text-white shadow-sm">
-                {draft.media && (
-                  <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-black/20 px-2 py-1 text-[11px] text-white/80">
-                    <Paperclip className="h-3 w-3" />
-                    {draft.media.type}
-                  </div>
-                )}
-                <p className="whitespace-pre-wrap break-words leading-snug">
-                  {preview || (
-                    <span className="text-white/50">sua mensagem aparece aqui…</span>
-                  )}
-                </p>
-                <span className="mt-1 flex items-center justify-end gap-0.5 text-[10px] text-white/60">
-                  10:32
-                  <CheckCheck className="h-3 w-3" />
-                </span>
-              </div>
-            </div>
-          </div>
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
-            <Check className="h-3 w-3" />
-            Pré-visualizando com um cliente real do seu público.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -322,7 +268,7 @@ function EscolhaDeTemplate({
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker={kickerDoPasso("message")}
+        kicker={eyebrowDoPasso("message")}
         title="Qual mensagem aprovada?"
         subtitle={
           numero

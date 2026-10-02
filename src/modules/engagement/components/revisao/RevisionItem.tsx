@@ -220,9 +220,14 @@ export function RevisionItem({
               {task.leadCompany && ` · ${task.leadCompany}`}
             </span>
             <span className="ml-auto flex items-center gap-1.5 shrink-0">
+              {/* V5: a hora vira pílula — vermelha se venceu, âmbar se é de hoje. */}
               <span className={cn(
-                "text-[12px] tabular-nums",
-                isOverdue ? "font-semibold text-destructive" : "text-muted-foreground"
+                "rounded-full px-2 py-0.5 text-[11.5px] font-semibold tabular-nums",
+                isOverdue
+                  ? "bg-destructive/10 text-destructive"
+                  : !task.isCompleted && isToday(task.scheduledAt)
+                    ? "bg-warning/15 text-warning-strong"
+                    : "bg-muted text-muted-foreground"
               )}>
                 {task.isCompleted && task.completedAt
                   ? `Concluído ${format(task.completedAt, "HH:mm")}`

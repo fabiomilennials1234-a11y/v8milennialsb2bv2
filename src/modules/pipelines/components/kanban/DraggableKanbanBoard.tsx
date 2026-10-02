@@ -17,9 +17,22 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { DraggableItem } from "@/contracts/pipe";
+import type { DraggableItem, StageRole } from "@/contracts/pipe";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, Trash2, FileDown, Loader2, ArrowUpDown, Check } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Trash2,
+  FileDown,
+  Loader2,
+  ArrowUpDown,
+  Check,
+  CalendarClock,
+  CalendarCheck,
+  Trophy,
+  CircleX,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -47,6 +60,8 @@ export interface KanbanColumn<T extends DraggableItem> {
   id: string;
   title: string;
   color: string;
+  /** Papel da etapa — ícone no cabeçalho e fundo das colunas de desfecho. */
+  role?: StageRole | null;
   items: T[];
   totalCount?: number;
   hasMore?: boolean;
@@ -86,6 +101,14 @@ function PartialSortNotice() {
     </p>
   );
 }
+
+/** Ícone por papel; etapa aberta fica com o quadradinho da cor dela. */
+const ROLE_ICON: Partial<Record<StageRole, { icon: LucideIcon; label: string; className: string }>> = {
+  meeting_booked: { icon: CalendarClock, label: "Etapa de reunião marcada", className: "text-foreground/70" },
+  meeting_held: { icon: CalendarCheck, label: "Etapa de reunião realizada", className: "text-foreground/70" },
+  won: { icon: Trophy, label: "Etapa de ganho", className: "text-success-strong" },
+  lost: { icon: CircleX, label: "Etapa de perda", className: "text-destructive" },
+};
 
 function DroppableColumn<T extends DraggableItem>({
   column,
@@ -133,22 +156,36 @@ function DroppableColumn<T extends DraggableItem>({
         // bancada e o cartão, nos dois temas — e os cards brancos de bento
         // assentam sobre ela. Raio de cartão, contorno fino; o alvo do arrasto
         // acende em ouro suave.
-        "kanban-column flex w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex-col p-0",
-        "overflow-hidden rounded-card border border-border/60 bg-sunken transition-[background-color,box-shadow] duration-200",
+        //
+        // V5 (mockup): 272 px de piso e cresce para dividir a largura quando
+        // há poucas etapas (`flex-[1_0_272px]`, teto de 380 px). Ganho e perda
+        // ganham fundo tintado — o desfecho se lê de longe.
+        "kanban-column flex min-w-[272px] max-w-[380px] flex-[1_0_272px] flex-col p-0",
+        "overflow-hidden rounded-card border border-border/60 transition-[background-color,box-shadow] duration-200",
+        column.role === "won" ? "bg-success/[.07]" : column.role === "lost" ? "bg-destructive/[.06]" : "bg-sunken",
         isOver && "bg-primary-soft/50 ring-2 ring-primary/60",
         className
       )}
     >
       <div className="flex shrink-0 items-center gap-2 px-3.5 pb-2.5 pt-3">
-        <div
-          className="size-2.5 shrink-0 rounded-full ring-2 ring-card"
-          style={{ backgroundColor: column.color }}
-          aria-hidden
-        />
-        <h3 className="truncate text-[13px] font-bold tracking-[-0.01em]">
+        {(() => {
+          const role = column.role ? ROLE_ICON[column.role] : undefined;
+          if (role) {
+            const Icon = role.icon;
+            return <Icon className={cn("size-4 shrink-0", role.className)} aria-label={role.label} />;
+          }
+          return (
+            <span
+              className="size-2 shrink-0 rounded-[3px]"
+              style={{ backgroundColor: column.color }}
+              aria-hidden
+            />
+          );
+        })()}
+        <h3 className="truncate text-xs font-extrabold tracking-[-0.01em]">
           {column.title}
         </h3>
-        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+        <span className="inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-card px-1.5 text-[10.5px] font-extrabold tabular-nums text-foreground shadow-relevo">
           {column.totalCount ?? column.items.length}
         </span>
         {renderColumnExtra && renderColumnExtra(column)}
@@ -252,16 +289,16 @@ function DroppableColumn<T extends DraggableItem>({
           type="button"
           onClick={() => onCreateInColumn(column.id, column.title)}
           data-testid={`column-create-${column.id}`}
+          aria-label={`Adicionar em ${column.title}`}
+          title={`Adicionar em ${column.title}`}
           className={cn(
-            "mx-2.5 mb-2.5 flex shrink-0 items-center justify-center gap-1.5",
-            "rounded-xl border border-dashed border-border px-2 py-2",
-            "text-xs font-semibold text-muted-foreground",
+            "mx-2.5 mb-2.5 flex min-h-[44px] shrink-0 items-center justify-center",
+            "rounded-2xl border-[1.5px] border-dashed border-border text-muted-foreground",
             "transition-colors duration-150 hover:border-primary/60 hover:bg-card hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
-          <Plus className="size-3.5" aria-hidden />
-          Novo negócio
+          <Plus className="size-4" aria-hidden />
         </button>
       )}
     </motion.div>
@@ -480,9 +517,9 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       <div
         ref={scrollRef}
         onScroll={handleMainScroll}
-        // 280 e não 220: o cabeçalho V5 do funil ganhou a fileira da pílula de
-        // visões — sem descontar, o quadro passaria da dobra e a página rolaria.
-        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-280px)] scrollbar-hide"
+        // O topo V5 do funil tem cabeçalho, pílula, faixa de funis e barra de
+        // controle; o quadro ocupa o resto da altura e rola por coluna.
+        className="flex gap-3 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-300px)] min-h-[420px] scrollbar-hide"
       >
         {columns.map((column) => {
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;

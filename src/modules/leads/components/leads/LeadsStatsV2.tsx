@@ -1,7 +1,9 @@
+import type * as React from "react";
 import type { KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Users, CalendarDays, UserCheck, X, type LucideIcon } from "lucide-react";
-import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { Users, UserPlus, UserCheck, UserX, X, type LucideIcon } from "lucide-react";
+import { KpiRow, KpiTile, ValueUnit, type Tone } from "@/components/ui/bento";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,7 +19,9 @@ import { cn } from "@/lib/utils";
  *   ganha anel dourado e o ícone vira um "×" pra desfazer.
  *
  * O cartão de rating saiu junto com o filtro de rating da página (main de
- * 2026-09); os três que ficam seguem `useLeadsStats` + `useLeadsCount`.
+ * 2026-09). Os quatro (V5, como no mockup) seguem `useLeadsStats` +
+ * `useLeadsCount`: "sem responsável" é `total − com dono`, a mesma conta que
+ * a nota do cartão anterior já fazia.
  */
 export interface LeadsStatsV2Props {
   total: number;
@@ -34,9 +38,9 @@ export interface LeadsStatsV2Props {
 interface Tile {
   key: string;
   label: string;
-  value: number;
+  value: React.ReactNode;
   icon: LucideIcon;
-  tone: "neutral" | "gold" | "good";
+  tone: Tone;
   /** Proporção 0–1 em relação ao total; `undefined` = sem barra. */
   share?: number;
   context: string;
@@ -53,8 +57,8 @@ function share(part: number, total: number): number | undefined {
 
 const EASE = [0.2, 0, 0, 1] as const;
 
-const BAR: Record<Tile["tone"], string> = {
-  neutral: "bg-foreground/60",
+const BAR: Partial<Record<Tone, string>> = {
+  info: "bg-insights",
   gold: "bg-primary",
   good: "bg-success",
 };
@@ -62,21 +66,23 @@ const BAR: Record<Tile["tone"], string> = {
 export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }: LeadsStatsV2Props) {
   const reduce = useReducedMotion();
   const semDono = Math.max(0, total - withOwner);
+  const comDonoPct = total ? Math.round((withOwner / total) * 100) : 0;
+  const unassigned = filters?.unassigned;
 
   const tiles: Tile[] = [
     {
       key: "total",
       label: "Total de leads",
-      value: total,
+      value: nf.format(total),
       icon: Users,
-      tone: "neutral",
+      tone: "info",
       context: "Na organização, com os filtros atuais",
     },
     {
       key: "mes",
       label: "Este mês",
-      value: thisMonth,
-      icon: CalendarDays,
+      value: nf.format(thisMonth),
+      icon: UserPlus,
       tone: "gold",
       share: share(thisMonth, total),
       context: total ? `${pf.format(thisMonth / total)} do total entraram este mês` : "Entraram este mês",
@@ -85,20 +91,35 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
     {
       key: "dono",
       label: "Com responsável",
-      value: withOwner,
+      // Percentual como no mockup; o absoluto vai na nota.
+      value: total ? (
+        <>
+          {comDonoPct}
+          <ValueUnit>%</ValueUnit>
+        </>
+      ) : (
+        "—"
+      ),
       icon: UserCheck,
       tone: "good",
       share: share(withOwner, total),
-      context: total ? `${nf.format(semDono)} sem dono` : "Nenhum sem dono",
-      filter: filters?.unassigned && { ...filters.unassigned, hint: "Mostrar só os sem dono" },
+      context: total ? `${nf.format(withOwner)} de ${nf.format(total)}` : "Nenhum lead no recorte",
+    },
+    {
+      key: "sem-dono",
+      label: "Leads sem responsável",
+      value: nf.format(semDono),
+      icon: UserX,
+      tone: semDono > 0 ? "bad" : "good",
+      context: semDono > 0 ? "Ninguém responde por eles" : "Todos têm dono",
     },
   ];
 
   return (
-    <KpiRow cols={3}>
+    <KpiRow cols={4}>
       {tiles.map((t, i) => {
         const clickable = !!t.filter;
-        const active = !!t.filter?.active;
+        const active = !!t.filter?.active || (t.key === "sem-dono" && !!unassigned?.active);
         const onKeyDown = clickable
           ? (e: KeyboardEvent<HTMLDivElement>) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -112,10 +133,10 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
           <KpiTile
             key={t.key}
             label={t.label}
-            value={isLoading ? "·" : nf.format(t.value)}
+            value={isLoading ? "·" : t.value}
             loading={isLoading}
             // Ativo: o ícone vira o "×" que desfaz, no chip de ouro.
-            icon={active ? X : t.icon}
+            icon={active && clickable ? X : t.icon}
             tone={active ? "gold" : t.tone}
             note={isLoading ? " " : t.context}
             // O cartão É o botão: `role` + teclado, sem envelopar <div> em
@@ -141,12 +162,26 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
                 aria-label={`${pf.format(t.share)} do total`}
               >
                 <motion.div
-                  className={cn("h-full rounded-full", BAR[t.tone])}
+                  className={cn("h-full rounded-full", BAR[t.tone] ?? "bg-foreground/60")}
                   initial={reduce ? false : { width: 0 }}
                   animate={{ width: `${(isLoading ? 0 : t.share) * 100}%` }}
                   transition={{ duration: 0.4, ease: EASE, delay: reduce ? 0 : 0.15 + i * 0.04 }}
                 />
               </div>
+            )}
+            {/* O filtro "sem dono" que já existia, agora com porta no número
+                que ele conta (o mockup tinha "Ligar distribuição", que no app
+                é configuração por funil — não cabe aqui). */}
+            {t.key === "sem-dono" && unassigned && (semDono > 0 || unassigned.active) && (
+              <Button
+                variant="ink"
+                size="sm"
+                className="h-[30px]"
+                aria-pressed={unassigned.active}
+                onClick={unassigned.toggle}
+              >
+                {unassigned.active ? "Ver todos" : "Ver sem dono"}
+              </Button>
             )}
           </KpiTile>
         );

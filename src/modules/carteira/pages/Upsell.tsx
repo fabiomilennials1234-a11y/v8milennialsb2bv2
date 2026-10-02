@@ -1,10 +1,32 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, LayoutGrid, List, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck, Send, Receipt } from "lucide-react";
+import {
+  Plus,
+  Search,
+  LayoutGrid,
+  List,
+  ShoppingCart,
+  Upload,
+  BarChart3,
+  Users,
+  ClipboardCheck,
+  Send,
+  Receipt,
+  Download,
+  Loader2,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FilterChip } from "@/shared/components/FilterChip";
+import { useOrganization } from "@/modules/identity";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { InkPanel } from "@/components/ui/bento";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -22,9 +44,12 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { CarteiraKPIs } from "@/modules/carteira/components/client/CarteiraKPIs";
-import { CarteiraAlertBanner } from "@/modules/carteira/components/client/CarteiraAlertBanner";
-import { CarteiraClientTable, type PortfolioClientRow } from "@/modules/carteira/components/client/CarteiraClientTable";
-import { CarteiraClientPreview } from "@/modules/carteira/components/client/CarteiraClientPreview";
+import {
+  CarteiraClientTable,
+  exportPortfolioCsv,
+  type PortfolioClientRow,
+} from "@/modules/carteira/components/client/CarteiraClientTable";
+import { CarteiraRadar } from "@/modules/carteira/components/client/CarteiraRadar";
 import { CarteiraBulkBar } from "@/modules/carteira/components/client/CarteiraBulkBar";
 import { AnalyticsKPICards } from "@/modules/carteira/components/client/AnalyticsKPICards";
 import { RevenueChart } from "@/modules/carteira/components/client/RevenueChart";
@@ -39,30 +64,31 @@ type ViewMode = "kanban" | "list";
 
 type CarteiraView = "clientes" | "analytics" | "aprovacoes" | "pedidos";
 
+// Ordem do mockup V5: Clientes · Pedidos · Aprovações · Analytics.
 const CARTEIRA_VIEWS = [
   { value: "clientes", label: "Clientes", Icon: Users },
-  { value: "analytics", label: "Analytics", Icon: BarChart3 },
-  { value: "aprovacoes", label: "Aprovações", Icon: ClipboardCheck },
   // Sem badge de contagem, de propósito: o badge de Aprovações significa
   // "aja em mim" e decai a zero. Pedidos é inventário — grande, nunca zero,
-  // não acionável. Um número ali roubaria o significado do vizinho. A
-  // contagem vive na linha de resumo do conteúdo.
+  // não acionável. Um número ali roubaria o significado do vizinho.
   { value: "pedidos", label: "Pedidos", Icon: Receipt },
+  { value: "aprovacoes", label: "Aprovações", Icon: ClipboardCheck },
+  { value: "analytics", label: "Analytics", Icon: BarChart3 },
 ] as const satisfies readonly {
   value: CarteiraView;
   label: string;
   Icon: typeof Users;
 }[];
 
+/** Recortes da tabela de clientes — os mesmos filtros da RPC, agora em chips. */
 const PORTFOLIO_TABS = [
-  { value: "all", label: "Todos" },
-  { value: "expected", label: "Pedido previsto" },
-  { value: "overdue", label: "Recompra atrasada", isRisk: true },
-  { value: "ouro", label: "Ouro" },
-  { value: "prata", label: "Prata" },
-  { value: "novo", label: "Novos" },
-  { value: "resgate", label: "Resgate" },
-  { value: "dormindo", label: "Dormindo" },
+  { value: "all", label: "Todos", swatch: null },
+  { value: "novo", label: "Novos", swatch: "hsl(var(--insights))" },
+  { value: "ouro", label: "Ouro", swatch: "hsl(var(--primary))" },
+  { value: "prata", label: "Prata", swatch: "hsl(var(--silver))" },
+  { value: "dormindo", label: "Dormindo", swatch: "hsl(var(--muted-foreground))" },
+  { value: "resgate", label: "Resgate", swatch: "hsl(var(--chart-5))" },
+  { value: "overdue", label: "Recompra atrasada", swatch: "hsl(var(--destructive))" },
+  { value: "expected", label: "Pedido previsto", swatch: "hsl(var(--success))" },
 ] as const;
 
 export default function Upsell() {
@@ -103,12 +129,25 @@ export default function Upsell() {
   const [disparoOpen, setDisparoOpen] = useState(false);
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
+  const { organizationId } = useOrganization();
+  const [exporting, setExporting] = useState(false);
+  const tableRef = useRef<HTMLElement>(null);
+  const radarRef = useRef<HTMLDivElement>(null);
+  const handleExport = async () => {
+    if (!organizationId) return;
+    setExporting(true);
+    try {
+      await exportPortfolioCsv(organizationId, carteiraFilter, carteiraSearch);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
   // "carteira_orders" entra aqui porque a aba Pedidos lê pela RPC
   // carteira_list_orders — sem esta chave, editar num aparelho não atualiza a
   // lista aberta em outro.
-  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders", "carteira_orders"]);
+  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders", "carteira_orders", "order-status-counts"]);
   const { data: pendingOrders = [] } = usePendingOrders();
   const pendingCount = pendingOrders.length;
 
@@ -132,9 +171,17 @@ export default function Upsell() {
   // Na visão Clientes, tabela + prévia viram o painel-herói: a lista em tinta,
   // a linha selecionada em ouro e a prévia como o cartão de ouro ao lado.
   if (isPortfolio) {
-    const kpiSubtitle = kpiData
-      ? `${kpiData.total_clients} clientes ativos · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(kpiData.total_recurring)}/mês recorrente`
-      : "Health score, recompra e gestão de carteira";
+    const openNewOrder = (clientId: string | null) => {
+      setQuickOrderClientId(clientId);
+      setNovaVendaOpen(true);
+    };
+    const secondary = [
+      { label: "Disparo", icon: Send, onSelect: () => setDisparoOpen(true), disabled: false },
+      { label: "Importar planilha", icon: Upload, onSelect: () => setImportOpen(true), disabled: false },
+      ...(carteiraView === "clientes"
+        ? [{ label: "Exportar clientes", icon: Download, onSelect: handleExport, disabled: exporting || !kpiData?.total_clients }]
+        : []),
+    ];
 
     return (
       <Tabs
@@ -144,168 +191,154 @@ export default function Upsell() {
       >
         <PageHeader
           title="Carteira de Clientes"
-          subtitle={kpiSubtitle}
-          secondaryActions={[
-            { label: "Disparo", icon: Send, iconClassName: "text-primary-soft-foreground", onSelect: () => setDisparoOpen(true) },
-            { label: "Importar planilha", icon: Upload, onSelect: () => setImportOpen(true) },
-          ]}
-          secondaryActionsLabel="Mais ações da carteira"
+          subtitle="Quem já compra, quando vai comprar de novo e quem está esfriando."
           actions={
             <>
-              <Button
-                onClick={() => {
-                  setQuickOrderClientId(null);
-                  setNovaVendaOpen(true);
-                }}
-                variant="ink"
-              >
-                <ShoppingCart />
-                Nova venda
-              </Button>
-              <Button onClick={() => setCreateClientOpen(true)}>
+              {/* Ações de apoio em ícone (mockup); no celular, um menu ⋯. */}
+              {secondary.map(({ label, icon: Icon, onSelect, disabled }) => (
+                <Button
+                  key={label}
+                  variant="outline"
+                  size="icon"
+                  className="max-sm:hidden"
+                  aria-label={label}
+                  title={label}
+                  onClick={onSelect}
+                  disabled={disabled}
+                >
+                  {label === "Exportar clientes" && exporting ? <Loader2 className="animate-spin" /> : <Icon />}
+                </Button>
+              ))}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="sm:hidden" aria-label="Mais ações da carteira">
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {secondary.map(({ label, icon: Icon, onSelect, disabled }) => (
+                    <DropdownMenuItem key={label} onSelect={onSelect} disabled={disabled}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" onClick={() => setCreateClientOpen(true)}>
                 <Plus />
                 Novo cliente
+              </Button>
+              <Button onClick={() => openNewOrder(null)}>
+                <ShoppingCart />
+                Nova venda
               </Button>
             </>
           }
           tabs={
             <TabsList variant="pill" aria-label="Visão da carteira">
-              {CARTEIRA_VIEWS.map((view) => (
-                <TabsTrigger key={view.value} value={view.value} className="group">
-                  <view.Icon className="h-3.5 w-3.5" />
-                  {view.label}
-                  {view.value === "aprovacoes" && pendingCount > 0 && (
-                    <span className="rounded-full bg-white/15 px-1.5 py-px text-[10px] font-bold tabular-nums group-data-[state=active]:bg-primary-foreground/15">
-                      {pendingCount}
-                    </span>
-                  )}
-                </TabsTrigger>
-              ))}
+              {CARTEIRA_VIEWS.map((view) => {
+                const n =
+                  view.value === "clientes"
+                    ? kpiData?.total_clients ?? 0
+                    : view.value === "aprovacoes"
+                      ? pendingCount
+                      : 0;
+                return (
+                  <TabsTrigger key={view.value} value={view.value} className="group">
+                    <view.Icon className="h-3.5 w-3.5" />
+                    {view.label}
+                    {n > 0 && (
+                      <span className="rounded-full bg-white/15 px-1.5 py-px text-[10px] font-bold tabular-nums group-data-[state=active]:bg-primary-foreground group-data-[state=active]:text-primary">
+                        {n.toLocaleString("pt-BR")}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           }
         />
 
-        {/* KPIs */}
-        <CarteiraKPIs />
+        <TabsContent value="clientes" className="mt-0 space-y-5">
+          {/* KPIs só nesta aba; o banner de atraso virou o último cartão. */}
+          <CarteiraKPIs
+            onViewOverdue={() => {
+              setCarteiraFilter("overdue");
+              setSelectedClient(null);
+              tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
 
-        {/* Alert banner */}
-        <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
+          {/* Herói: Radar de recompra — fila em tinta + cartão de ouro sempre aberto. */}
+          <div ref={radarRef} className="scroll-mt-4">
+            <CarteiraRadar
+              focusClient={selectedClient}
+              onFocusClient={setSelectedClient}
+              onViewDetail={(id) => navigate(`/carteira/${id}`)}
+              onNewOrder={openNewOrder}
+              counts={{ expected: kpiData?.expected_this_week, overdue: kpiData?.overdue_count }}
+            />
+          </div>
 
-        {/* Fileira de segmentos + busca. Os segmentos só existem na view
-            Clientes — `carteiraFilter` só é consumido por CarteiraClientTable,
-            então em analytics/aprovações/pedidos a fileira renderizava e não
-            fazia nada (UI morta pré-existente). A busca segue a mesma regra:
-            só aparece onde alguém a lê (Clientes e Pedidos). */}
-        {(carteiraView === "clientes" || carteiraView === "pedidos") && (
-          <div className="flex flex-wrap items-center gap-3">
-            {carteiraView === "clientes" && (
+          {/* A carteira inteira em cartão BRANCO: recortes em chips + busca. */}
+          <section
+            ref={tableRef}
+            className="scroll-mt-4 overflow-hidden rounded-card border border-card-border bg-card shadow-relevo"
+            aria-label="Clientes da carteira"
+          >
+            <div className="flex flex-col gap-3 border-b border-border px-4 py-3.5 lg:flex-row lg:items-center">
               <div
                 role="tablist"
                 aria-label="Filtro da carteira"
-                className="flex min-w-0 max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide"
+                className="-mx-4 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-4 py-1 scrollbar-hide lg:mx-0 lg:flex-wrap lg:px-0"
               >
                 {PORTFOLIO_TABS.map((tab) => {
                   const count = tabCounts[tab.value] ?? 0;
                   const active = carteiraFilter === tab.value;
-                  const isRisk = "isRisk" in tab && tab.isRisk;
                   return (
-                    <button
+                    <FilterChip
                       key={tab.value}
-                      type="button"
                       role="tab"
                       aria-selected={active}
+                      active={active}
+                      swatch={tab.swatch}
+                      count={count > 0 ? count.toLocaleString("pt-BR") : undefined}
                       onClick={() => {
                         setCarteiraFilter(tab.value);
                         setSelectedClient(null);
                       }}
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        active
-                          ? "bg-card text-foreground shadow-relevo"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
                     >
                       {tab.label}
-                      {count > 0 && (
-                        <span
-                          className={cn(
-                            "rounded-full px-1.5 py-px text-[10.5px] font-bold tabular-nums",
-                            isRisk
-                              ? "bg-destructive/10 text-destructive"
-                              : active
-                                ? "bg-primary-soft text-primary-soft-foreground"
-                                : "bg-foreground/[.06] text-muted-foreground",
-                          )}
-                        >
-                          {count}
-                        </span>
-                      )}
-                    </button>
+                    </FilterChip>
                   );
                 })}
               </div>
-            )}
-
-            <div className="relative w-full sm:ml-auto sm:w-[240px]">
-              <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
-              <Input
-                aria-label={carteiraView === "pedidos" ? "Buscar pedidos" : "Buscar clientes"}
-                placeholder={
-                  carteiraView === "pedidos"
-                    ? "Buscar cliente, produto…"
-                    : "Buscar cliente, empresa…"
-                }
-                value={carteiraSearch}
-                onChange={(e) => setCarteiraSearch(e.target.value)}
-                className="h-10 rounded-full pl-9 text-[13px]"
-              />
-            </div>
-          </div>
-        )}
-
-        <TabsContent value="clientes" className="mt-0 space-y-5">
-          {/* Herói: a lista em tinta e, quando há seleção, o cartão de ouro.
-              Abaixo de lg o cartão sobe para cima da lista (não fica escondido
-              depois de 50 linhas); a partir de lg ele fica ao lado e acompanha
-              a rolagem. */}
-          <InkPanel className="p-3">
-            <div
-              className={cn(
-                "grid items-start gap-3",
-                selectedClient && "lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]",
-              )}
-            >
-              <div className="order-2 min-w-0 lg:order-1">
-                <CarteiraClientTable
-                  selectedClientId={selectedClient?.id ?? null}
-                  onSelectClient={(client) => setSelectedClient(client)}
-                  onNewOrder={(id) => {
-                    setQuickOrderClientId(id);
-                    setNovaVendaOpen(true);
-                  }}
-                  onViewDetail={(id) => navigate(`/carteira/${id}`)}
-                  searchQuery={carteiraSearch}
-                  filter={carteiraFilter}
-                  bulk={bulk}
-                  onRowsChange={setCurrentRows}
+              <div className="relative w-full lg:w-[240px] lg:shrink-0">
+                <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
+                <Input
+                  aria-label="Buscar clientes"
+                  placeholder="Cliente, empresa…"
+                  value={carteiraSearch}
+                  onChange={(e) => setCarteiraSearch(e.target.value)}
+                  className="h-[38px] rounded-full pl-9 text-[13px] shadow-relevo"
                 />
               </div>
-
-              {selectedClient && (
-                <CarteiraClientPreview
-                  className="order-1 lg:sticky lg:top-4 lg:order-2"
-                  client={selectedClient}
-                  onClose={() => setSelectedClient(null)}
-                  onViewDetail={(id) => navigate(`/carteira/${id}`)}
-                  onNewOrder={(id) => {
-                    setQuickOrderClientId(id);
-                    setNovaVendaOpen(true);
-                  }}
-                />
-              )}
             </div>
-          </InkPanel>
+            <CarteiraClientTable
+              selectedClientId={selectedClient?.id ?? null}
+              onSelectClient={(client) => {
+                setSelectedClient(client);
+                // A linha põe o cliente no cartão de ouro, que mora no Radar acima.
+                if (client) radarRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
+              onNewOrder={(id) => openNewOrder(id)}
+              onViewDetail={(id) => navigate(`/carteira/${id}`)}
+              searchQuery={carteiraSearch}
+              filter={carteiraFilter}
+              bulk={bulk}
+              onRowsChange={setCurrentRows}
+            />
+          </section>
 
           {/* Bulk action bar */}
           <CarteiraBulkBar
@@ -314,23 +347,25 @@ export default function Upsell() {
           />
         </TabsContent>
 
-        <TabsContent value="analytics" className="mt-0 space-y-4">
-          <AnalyticsKPICards />
-          <RevenueChart />
-          <CarteiraCohortHeatmap />
-          <CarteiraVendedorRanking />
+        <TabsContent value="pedidos" className="mt-0">
+          {/* Sem gate em `organizationId`: o hook já espera o auth context
+              (`enabled: isReady && !!organizationId`) e mostra skeleton. */}
+          <CarteiraOrders
+            searchQuery={carteiraSearch}
+            onSearchChange={setCarteiraSearch}
+            onReviewQueue={() => setCarteiraView("aprovacoes")}
+          />
         </TabsContent>
 
         <TabsContent value="aprovacoes" className="mt-0">
           <CarteiraApprovals />
         </TabsContent>
 
-        <TabsContent value="pedidos" className="mt-0">
-          {/* Sem gate em `organizationId`: o hook já espera o auth context
-              (`enabled: isReady && !!organizationId`) e mostra skeleton. Gatear o
-              render aqui deixava a aba EM BRANCO — sem skeleton, sem empty
-              state — no intervalo até o contexto resolver. */}
-          <CarteiraOrders searchQuery={carteiraSearch} />
+        <TabsContent value="analytics" className="mt-0 space-y-4">
+          <AnalyticsKPICards />
+          <RevenueChart />
+          <CarteiraCohortHeatmap />
+          <CarteiraVendedorRanking />
         </TabsContent>
 
         {/* Shared modals */}

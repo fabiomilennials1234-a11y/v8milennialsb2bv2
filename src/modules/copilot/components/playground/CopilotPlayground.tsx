@@ -14,7 +14,12 @@ import { BuilderPanel } from "@/modules/copilot/components/builder/BuilderPanel"
 import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import { buildCapabilityManifest, buildBuilderToolDefs } from "@/modules/copilot/lib/capability-manifest";
 import { applyBuilderAction, type BuilderAction, type BuilderFormState } from "@/modules/copilot/lib/builder-form-reducer";
-import { Save, Loader2, ChevronLeft, Bot, Power, Star, AlertTriangle } from "lucide-react";
+import { Save, Loader2, ChevronLeft, Power, Star, AlertTriangle, Cpu } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { PageHeader } from "@/components/ui/page-header";
+import { CopilotTabs } from "@/modules/copilot/components/CopilotTabs";
+import { agentTypeLabel, temperatureLabel } from "@/modules/copilot/lib/agent-labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -568,30 +573,54 @@ export function CopilotPlayground() {
       animate={{ opacity: 1 }}
       className="flex flex-col flex-1 min-w-0 h-full gap-4"
     >
-      {/* ===== Header ===== */}
-      <header className="flex shrink-0 flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate("/copilot")}
-          aria-label="Voltar"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-card-border bg-card text-foreground shadow-relevo transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
-          <Bot className="w-5 h-5" />
-        </span>
-
-        <Input
-          value={data.name}
-          onChange={(e) => updateData({ name: e.target.value })}
-          placeholder="Nome do agente..."
-          aria-label="Nome do agente"
-          className="h-10 w-72 max-w-full rounded-xl text-base font-bold tracking-[-0.01em]"
-        />
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+      {/* ===== Cabeçalho da página — a pílula Agentes · Editor · Métricas LLM ===== */}
+      <PageHeader
+        title="Copilot"
+        tabs={<CopilotTabs active="editor" agentId={editId ?? null} count={allAgents?.length} />}
+        className="shrink-0 gap-3"
+      />
+      {/* ===== Main Content ===== */}
+      <div className="flex flex-1 min-h-0 gap-4">
+        {/* ===== Left Column: cabeçalho do agente + seções ===== */}
+        <section className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 px-4 py-3.5">
+            <button
+              type="button"
+              onClick={() => navigate("/copilot")}
+              aria-label="Voltar"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-card-border bg-card text-foreground shadow-relevo transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="relative grid h-[46px] w-[46px] shrink-0 place-items-center rounded-[14px] bg-tinta text-[19px] font-extrabold text-primary">
+              {(data.name.trim().charAt(0) || "?").toUpperCase()}
+              {currentAgent?.is_active && (
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-success" aria-hidden />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <Input
+                value={data.name}
+                onChange={(e) => updateData({ name: e.target.value })}
+                placeholder="Nome do agente..."
+                aria-label="Nome do agente"
+                className="h-9 w-80 max-w-full rounded-xl border-transparent bg-transparent px-2 text-[1.15rem] font-extrabold tracking-[-0.02em] hover:border-input focus:border-input"
+              />
+              {currentAgent && (
+                <p className="truncate px-2 text-xs text-muted-foreground">
+                  {[
+                    agentTypeLabel(currentAgent.template_type),
+                    currentAgent.system_prompt_version ? `versão ${currentAgent.system_prompt_version}` : null,
+                    currentAgent.updated_at
+                      ? `editado ${formatDistanceToNow(new Date(currentAgent.updated_at), { addSuffix: true, locale: ptBR })}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
           {/* Status badge + activate/deactivate + set-as-default (edit mode only) */}
           {isEditMode && currentAgent && (
             <>
@@ -653,7 +682,6 @@ export function CopilotPlayground() {
                 </Tooltip>
               )}
 
-              <div className="mx-1 h-6 w-px bg-border" />
             </>
           )}
 
@@ -661,18 +689,12 @@ export function CopilotPlayground() {
             {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
             {isSaving ? "Salvando..." : "Salvar"}
           </Button>
-        </div>
-      </header>
-
-      {/* ===== Main Content ===== */}
-      <div className="flex flex-1 min-h-0 gap-4">
-        {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
-        <section className="flex w-[60%] min-h-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+            </div>
+          </div>
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
             <div className="shrink-0 border-b border-border/60 px-4 py-3">
-              {/* Sete seções numa coluna de ~600 px: só rótulo e respiro menor, senão a
-                  última aba some atrás do corte da pílula. */}
-              <TabsList variant="pill" aria-label="Seções do agente" className="[&>[role=tab]]:px-2.5">
+              {/* Sete seções: alternador claro (V5). Rola na horizontal quando não cabe. */}
+              <TabsList variant="segmented" aria-label="Seções do agente" className="max-w-full overflow-x-auto scrollbar-hide">
                 <TabsTrigger value="prompt">Prompt</TabsTrigger>
                 <TabsTrigger value="tools">Tools</TabsTrigger>
                 <TabsTrigger value="funis">Funis</TabsTrigger>
@@ -694,6 +716,21 @@ export function CopilotPlayground() {
                   links={data.links}
                   isExpanded={isEditorExpanded}
                   onToggleExpand={() => setIsEditorExpanded(!isEditorExpanded)}
+                  meta={
+                    <>
+                      {currentAgent?.llm_model && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-tinta px-2.5 py-1 text-[11px] font-bold text-tinta-foreground">
+                          <Cpu className="h-3 w-3 text-primary" aria-hidden />
+                          {currentAgent.llm_model}
+                        </span>
+                      )}
+                      {data.llmTemperatureMode && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-input bg-card px-2.5 py-1 text-[11px] font-bold text-foreground/80">
+                          Estilo de resposta: {temperatureLabel(data.llmTemperatureMode)}
+                        </span>
+                      )}
+                    </>
+                  }
                 />
               </div>
               {!isEditorExpanded && (
@@ -783,7 +820,7 @@ export function CopilotPlayground() {
         </section>
 
         {/* ===== Right Column: Live Preview Chat (sempre visível) ===== */}
-        <div className="w-[40%] min-h-0">
+        <div className="w-[40%] min-h-0 shrink-0 xl:w-[360px]">
           <LivePreviewChat
             systemPrompt={systemPromptForPreview}
             agentName={data.name}

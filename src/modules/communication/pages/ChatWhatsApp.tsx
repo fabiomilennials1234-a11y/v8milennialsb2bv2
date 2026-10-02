@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { useEffect } from "react";
 import { ChatShellWithContext } from "@/modules/communication/components/chat/ChatShellWithContext";
-import { CoachingSidebar } from "@/modules/engagement/components/ai/CoachingSidebar";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 
+/**
+ * O Coach IA (`CoachingSidebar`) saiu desta tela — decisão do CTO, 02/10: ele
+ * abria sempre vazio, porque a conversa ativa nunca chegava até ele
+ * (`conversationId` ficava `null`). Volta quando estiver ligado à conversa
+ * aberta; o componente continua em `engagement/components/ai/`.
+ */
 export default function ChatWhatsApp() {
   const { organizationId } = useOrganization();
-  const [coachingOpen, setCoachingOpen] = useState(false);
-  // TODO: wire real conversationId from active chat selection
-  const [activeConversationId] = useState<string | null>(null);
 
   useEffect(() => { trackModuleVisit("chat_whatsapp", organizationId); }, [organizationId]);
 
@@ -21,26 +22,6 @@ export default function ChatWhatsApp() {
       <div className="flex flex-col flex-1 min-w-0">
         <ChatShellWithContext />
       </div>
-      <AnimatePresence>
-        {coachingOpen && (
-          <CoachingSidebar
-            conversationId={activeConversationId}
-            isOpen={coachingOpen}
-            onToggle={() => setCoachingOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-      {!coachingOpen && (
-        // Celular: o trilho custava ~55 px de 390 para um painel que hoje abre
-        // sempre vazio (`activeConversationId` nunca é preenchido — TODO acima).
-        <div className="hidden shrink-0 items-start pl-3 md:flex">
-          <CoachingSidebar
-            conversationId={activeConversationId}
-            isOpen={false}
-            onToggle={() => setCoachingOpen(true)}
-          />
-        </div>
-      )}
     </div>
   );
 }

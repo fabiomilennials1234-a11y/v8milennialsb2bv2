@@ -1,16 +1,15 @@
 import type { ReactNode } from "react";
-import { Phone, Mail } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Mail, UserRound } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
-import { ReorderCycleRing } from "./ReorderCycleRing";
 import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { erpLabel } from "@/shared/format/erp-code";
+import { QUALIFICATION_TIER_CONFIG } from "../lead-detail/modal/qualification-config";
+import type { QualificationTier } from "../lead-detail/modal/types";
 import {
   LeadAvatar,
-  SituacaoCell,
   SortableLabel,
   type LeadListItem,
   type LeadTagRef,
@@ -21,34 +20,23 @@ import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 
 /**
- * Lista de leads — versão "Depois".
+ * Lista de leads — V5, na composição do mockup: **uma linha por lead**.
  *
- * A versão anterior desenha cada lead como um cartão solto: borda, sombra,
- * raio e 10px de ar entre um e outro. Em 50 linhas isso vira 50 caixas — o
- * olho lê moldura, não dado. Aqui a lista é uma **tabela** no sentido Stripe:
- * um contêiner só, cabeçalho preso no topo, linhas separadas por hairline,
- * hover como superfície e não como elevação. A densidade sobe (~56px por
- * linha contra ~80px) sem apertar a tipografia.
+ * Cada coluna cabe numa linha só e diz uma coisa: contatos viram dois ícones
+ * (o número e o e-mail no `title`), Situação é relação + qualificação em
+ * pílula, Negócios é contagem + a etapa do negócio aberto mais avançado +
+ * valor, Recompra é a data esperada + o ciclo, Dono é o avatar. A versão
+ * anterior empilhava até três negócios e duas tags por linha — a lista virava
+ * colunas de alturas diferentes e o olho perdia a fileira.
  *
- * As colunas, a grade, a ordenação e a seleção são as MESMAS do `LeadListRow`
- * — só a pele muda. Se a grade divergir, o cabeçalho e a linha desencontram.
+ * Nada aqui é dado novo: tudo sai dos mesmos lotes que a página já carrega
+ * (`useLeadsDeals`, `useLeadsReorderCycle`, `deriveLeadStandings`).
  */
 const GRID_COLS =
-  // SEM rolagem lateral: a soma dos mínimos + gaps fica < ~1050px e o resto é
-  // fr com truncate. Pra isso a coluna Relação saiu da grade — vira selo junto
-  // ao nome (só quando é Cliente/Perdido; "Lead" era coluna gasta em 97% das
-  // linhas) — e a Recompra encolheu pra 52px (traço quando não há compra).
-  // A última coluna mantém o menu de ações sempre acessível na listagem.
-  "grid items-center gap-x-3 grid-cols-[30px_minmax(170px,1.5fr)_minmax(120px,0.9fr)_minmax(96px,0.8fr)_minmax(120px,1fr)_minmax(140px,1.1fr)_92px_minmax(84px,0.6fr)_minmax(72px,0.5fr)_32px]";
+  // Sem rolagem lateral: mínimos + gaps ≈ 1.000 px; o resto é fr com truncate.
+  "grid items-center gap-x-3 grid-cols-[24px_minmax(170px,1.25fr)_72px_minmax(150px,1.05fr)_minmax(120px,0.85fr)_minmax(190px,1.35fr)_minmax(76px,0.5fr)_32px_44px_32px]";
 
-/** Acima disso a coluna Negócios vira lista e a linha deixa de ser linha. */
-const MAX_DEALS_VISIVEIS = 2;
-
-/**
- * "hoje" · "ontem" · "há 3 dias" · "há 2 sem." · "há 4 meses" · null (>1 ano —
- * aí a data absoluta diz mais). O corte de dia é o do navegador; a data exata
- * fica no `title` cortada no fuso da org, como o resto da página.
- */
+/** "hoje" · "ontem" · "há 3 dias" · "há 2 sem." · "há 4 meses" — vai no `title`. */
 function relativeDay(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -64,11 +52,93 @@ function relativeDay(iso: string | null | undefined): string | null {
 }
 
 /**
- * A cor da origem chega como classe de badge ("bg-x/10 text-x border-x/20").
- * Na linha do nome só a tinta interessa — extrai o `text-*`.
+ * "dd/mm/aaaa" (já no fuso da org) → "dd/mm" no ano corrente, "dd/mm/aa" fora
+ * dele. A data exata segue inteira no `title`.
  */
+function shortDay(label: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(label);
+  if (!m) return label;
+  return m[3] === String(new Date().getFullYear()) ? `${m[1]}/${m[2]}` : `${m[1]}/${m[2]}/${m[3].slice(2)}`;
+}
+
+/** A cor da origem chega como classe de badge — na linha só a tinta interessa. */
 function originTextClass(badgeClass: string): string {
   return badgeClass.split(/\s+/).filter((c) => c.startsWith("text-")).join(" ") || "text-muted-foreground";
+}
+
+const brlCompact = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** "R$ 48 mil" — a coluna é estreita; o valor exato vai no `title`. */
+function compactBRL(value: number): string {
+  return value >= 10_000 ? brlCompact.format(value) : formatBRL(value);
+}
+
+/** Pílula 22 px do mockup (`.pill`). */
+const PILL = "inline-flex h-[22px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[11px] font-bold";
+
+/** O glifo do WhatsApp — o telefone do lead é o número de WhatsApp. */
+function WhatsAppGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.46-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.21 3.07.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.28-.2-.57-.35m-5.42 7.4h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.17-3.48-8.41z" />
+    </svg>
+  );
+}
+
+/** Ícone de contato 28 px: vivo quando há o dado, apagado quando falta. */
+function ContactIcon({ present, label, children, tone }: { present: boolean; label: string; children: ReactNode; tone?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        "grid size-7 shrink-0 place-items-center rounded-[9px] border border-input bg-card shadow-relevo",
+        present ? tone ?? "text-foreground/70" : "text-muted-foreground/40 shadow-none",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Recompra em texto: data esperada + ciclo, ou o atraso. */
+function RecompraCell({ ciclo }: { ciclo?: CicloDeRecompra }) {
+  if (!ciclo || ciclo.estado === "sem-compra") {
+    return <span className="text-[13px] text-muted-foreground/60" title="Sem compra registrada">—</span>;
+  }
+  if (ciclo.estado === "uma-compra" || ciclo.mediaDias == null || ciclo.diasRestantes == null) {
+    return (
+      <span
+        className="text-[11px] text-muted-foreground"
+        title="Uma compra registrada — ainda não há intervalo para calcular o ciclo"
+      >
+        1 compra
+      </span>
+    );
+  }
+  const atrasada = ciclo.diasRestantes < 0;
+  const esperada = new Date(Date.now() + ciclo.diasRestantes * 86_400_000);
+  const data = esperada.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const titulo = `Recompra a cada ${ciclo.mediaDias} dias · última há ${ciclo.diasDesdeUltima} dias`;
+  return (
+    <div className="min-w-0 leading-tight" title={titulo}>
+      <p
+        className={cn(
+          "truncate text-[12.5px] font-semibold tabular-nums",
+          atrasada ? "text-destructive" : ciclo.emEpoca ? "text-success-strong" : "text-foreground",
+        )}
+      >
+        {atrasada ? `atrasada ${Math.abs(ciclo.diasRestantes)} d` : data}
+      </p>
+      <p className="truncate text-[11px] tabular-nums text-muted-foreground">ciclo {ciclo.mediaDias} dias</p>
+    </div>
+  );
 }
 
 export function LeadListHeaderV2({
@@ -101,7 +171,7 @@ export function LeadListHeaderV2({
       <span>Tags</span>
       <span>Situação</span>
       <span>Negócios</span>
-      <span className="text-center">Recompra</span>
+      <span>Recompra</span>
       <span>Dono</span>
       {sortable("Criado", "created_at")}
       <span aria-hidden="true" />
@@ -147,10 +217,14 @@ export function LeadListRowV2({
   const owner =
     lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
   const avgTicket = metrics?.avgTicket ?? 0;
+  const tier = (lead.qualification_tier ?? null) as QualificationTier | null;
+  const tierCfg = tier ? QUALIFICATION_TIER_CONFIG[tier] : null;
 
+  // Negócio em destaque: o aberto mais avançado; sem aberto, o último ganho;
+  // só perdidos, o perdido. A contagem ao lado diz que há outros.
   const ganhos = deals.filter((d) => d.outcome === "won");
-  const emAndamento = deals.filter((d) => d.outcome !== "won");
-  const valorGanho = ganhos.reduce((soma, d) => soma + d.value, 0);
+  const destaque = standing?.maisAvancado ?? ganhos[0] ?? deals[0] ?? null;
+  const relativo = relativeDay(lead.created_at);
 
   return (
     <div
@@ -166,16 +240,15 @@ export function LeadListRowV2({
       aria-selected={selected}
       className={cn(
         GRID_COLS,
-        "group relative min-h-[56px] cursor-pointer border-b border-border/70 px-4 py-2.5 last:border-b-0",
+        "group relative h-[57px] cursor-pointer border-b border-border/70 px-4 last:border-b-0",
         "transition-[background-color] duration-100 ease-standard hover:bg-muted/40",
         "focus-visible:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-        // Época de recompra: a linha esverdeia, mesmo idioma da V1 — quem varre
-        // a lista procurando quem ligar enxerga a faixa, não o anel.
+        // Época de recompra: a linha esverdeia (decisão do CTO) — quem varre a
+        // lista procurando quem ligar enxerga a faixa.
         ciclo?.emEpoca && "bg-success/[0.05] hover:bg-success/[0.08]",
         selected && "bg-primary-soft/60 hover:bg-primary-soft",
       )}
     >
-      {/* trilho de seleção — a cor vai só onde há sinal */}
       <span
         aria-hidden="true"
         className={cn(
@@ -188,207 +261,178 @@ export function LeadListRowV2({
         <Checkbox checked={selected} onCheckedChange={onToggleSelect} aria-label={`Selecionar ${lead.name}`} />
       </div>
 
-      {/* nome — empresa e origem na segunda linha. A origem saiu da coluna Tags:
-          lá ela competia com etiqueta, segmento e botão, e virava sopa de badge. */}
-      <div className="flex min-w-0 items-center gap-3">
+      {/* nome — empresa e origem na segunda linha */}
+      <div className="flex min-w-0 items-center gap-2.5">
         <LeadAvatar name={lead.name} size="sm" />
         <div className="min-w-0 leading-tight">
-          <p className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-semibold tracking-[-0.01em] text-foreground">
-            <span className="truncate">{erpLabel(lead)}</span>
-            {/* Relação como selo, não coluna: só aparece quando diz algo.
-                Continua um fato separado da Situação (ADR-0023 §6) — mudou o
-                lugar, não a semântica. */}
-            {standing?.relacao === "cliente" && (
-              <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-soft px-1.5 py-px text-[10.5px] font-bold text-primary-soft-foreground"
-                title={
-                  relacaoPorCadastroErp
-                    ? "Cadastrado no ERP"
-                    : standing.prova === "ambas"
-                      ? "Comprou pelo funil e tem pedido no ERP"
-                      : standing.prova === "erp"
-                        ? "Tem pedido no ERP"
-                        : "Fechou negócio no funil"
-                }
-              >
-                <span className="size-1 rounded-full bg-current" />
-                Cliente
-              </span>
-            )}
-            {standing?.relacao === "perdido" && (
-              <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-px text-[10.5px] font-semibold text-destructive">
-                Perdido
-              </span>
-            )}
-          </p>
-          <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="truncate text-[13px] font-bold tracking-[-0.01em] text-foreground">{erpLabel(lead)}</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             {lead.company && <span className="truncate">{lead.company}</span>}
             {lead.company && <span aria-hidden="true" className="shrink-0 opacity-50">·</span>}
-            <span className={cn("shrink-0 inline-flex items-center gap-1", originTextClass(originClassName))}>
-              <span className="size-1.5 rounded-full bg-current opacity-80" />
-              {originLabel}
-            </span>
+            <span className={cn("shrink-0", originTextClass(originClassName))}>{originLabel}</span>
             {avgTicket > 0 && (
               <>
                 <span aria-hidden="true" className="shrink-0 opacity-50">·</span>
-                <span className="shrink-0 font-medium tabular-nums text-success">{formatBRL(avgTicket, 0)}</span>
+                <span className="shrink-0 font-medium tabular-nums text-success-strong" title="Ticket médio">
+                  {formatBRL(avgTicket, 0)}
+                </span>
               </>
             )}
           </p>
         </div>
       </div>
 
-      {/* contatos */}
-      <div className="flex min-w-0 flex-col gap-0.5 text-[12.5px] text-muted-foreground">
-        {lead.phone && (
-          <span className="flex items-center gap-1.5">
-            <Phone className="size-3 shrink-0 opacity-70" />
-            <span className="truncate tabular-nums">{lead.phone}</span>
-          </span>
-        )}
-        {lead.email && (
-          <span className="flex items-center gap-1.5">
-            <Mail className="size-3 shrink-0 opacity-70" />
-            <span className="truncate">{lead.email}</span>
-          </span>
-        )}
-        {!lead.phone && !lead.email && <span className="text-muted-foreground/60">—</span>}
+      {/* contatos — o dado mora no title; a linha abre o lead */}
+      <div className="flex items-center gap-1">
+        <ContactIcon
+          present={!!lead.phone}
+          label={lead.phone ? `WhatsApp: ${lead.phone}` : "Sem telefone"}
+          tone="text-success-strong"
+        >
+          <WhatsAppGlyph className="size-3.5" />
+        </ContactIcon>
+        <ContactIcon present={!!lead.email} label={lead.email ? `E-mail: ${lead.email}` : "Sem e-mail"}>
+          <Mail className="size-3.5" aria-hidden />
+        </ContactIcon>
       </div>
 
-      {/* tags — só etiquetas; origem foi pra linha do nome */}
-      <div className="flex flex-wrap items-center gap-1">
+      {/* tags — até duas em linha; o resto vira "+N" */}
+      <div className="relative flex min-w-0 items-center gap-1 overflow-hidden">
         {tags.slice(0, 2).map((tag) => (
-          <Badge key={tag.id} variant="soft" className="h-5 px-1.5 text-[11px] font-medium">
-            {tag.name}
-          </Badge>
+          <span
+            key={tag.id}
+            title={tag.name}
+            className="inline-flex h-[22px] min-w-0 max-w-[112px] shrink items-center gap-1.5 rounded-[7px] bg-muted px-2 text-[11px] font-bold text-foreground/75"
+          >
+            <span
+              aria-hidden
+              className="size-[7px] shrink-0 rounded-[2px] bg-muted-foreground/50"
+              style={tag.color ? { background: tag.color } : undefined}
+            />
+            <span className="truncate">{tag.name}</span>
+          </span>
         ))}
         {tags.length > 2 && (
-          <Badge variant="outline" className="h-5 px-1.5 text-[11px] text-muted-foreground">
+          <span className={cn(PILL, "bg-muted px-1.5 text-muted-foreground")} title={tags.slice(2).map((t) => t.name).join(", ")}>
             +{tags.length - 2}
-          </Badge>
+          </span>
         )}
-        <LeadEtiquetasPopover leadId={lead.id} quantidade={tags.length} rotulo={tags.length ? undefined : "etiqueta"} />
-        {metrics?.segment && (
-          <Badge variant="outline" className="h-5 gap-1 px-1.5 text-[11px] text-muted-foreground">
+        {tags.length < 2 && metrics?.segment && (
+          <span className={cn(PILL, "border border-border bg-transparent font-semibold text-muted-foreground")}>
             <span className="size-1.5 rounded-full bg-success" />
             {metrics.segment}
-          </Badge>
+          </span>
+        )}
+        {/* Com tags, a porta de editar só aparece no hover — por cima, sem
+            roubar largura das tags. Sem tags, ela é o conteúdo da célula. */}
+        <LeadEtiquetasPopover
+          leadId={lead.id}
+          quantidade={tags.length}
+          rotulo={tags.length ? undefined : "etiqueta"}
+          className={cn(
+            tags.length > 0 &&
+              "absolute right-0 top-1/2 h-[22px] -translate-y-1/2 border-solid bg-card px-2 opacity-0 shadow-relevo transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+          )}
+        />
+      </div>
+
+      {/* situação — relação (só quando diz algo) + qualificação */}
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+        {standing?.relacao === "cliente" && (
+          <span
+            className={cn(PILL, "bg-success/10 text-success-strong")}
+            title={
+              relacaoPorCadastroErp
+                ? "Cadastrado no ERP"
+                : standing.prova === "ambas"
+                  ? "Comprou pelo funil e tem pedido no ERP"
+                  : standing.prova === "erp"
+                    ? "Tem pedido no ERP"
+                    : "Fechou negócio no funil"
+            }
+          >
+            Cliente
+          </span>
+        )}
+        {standing?.relacao === "perdido" && (
+          <span className={cn(PILL, "bg-destructive/10 text-destructive")}>Perdido</span>
+        )}
+        {tierCfg ? (
+          <span className={cn(PILL, "min-w-0 shrink", tierCfg.bgClass, tierCfg.colorClass)} title={`Qualificação: ${tierCfg.label}`}>
+            <tierCfg.icon className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">{tierCfg.label}</span>
+          </span>
+        ) : (
+          standing?.relacao !== "cliente" &&
+          standing?.relacao !== "perdido" && <span className="text-[13px] text-muted-foreground/60">—</span>
         )}
       </div>
 
-      {/* situação — duas linhas, como Contatos: o que está acontecendo / onde */}
-      <div className="min-w-0 leading-tight">
-        {standing?.emNegociacao ? (
+      {/* negócios — contagem + etapa do negócio em destaque + valor */}
+      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        {destaque ? (
           <>
-            <p className="truncate text-[13px] text-foreground/90">Em negociação</p>
-            {standing.maisAvancado && (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ background: standing.maisAvancado.funnelColor ?? "hsl(var(--muted-foreground))" }}
-                />
-                <span className="truncate" title={standing.maisAvancado.funnelName}>
-                  {standing.maisAvancado.funnelName}
-                </span>
-              </p>
+            <span
+              className="inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-muted px-1.5 text-[10.5px] font-extrabold tabular-nums text-foreground"
+              title={`${deals.length} ${deals.length === 1 ? "negócio" : "negócios"}`}
+            >
+              {deals.length}
+            </span>
+            <span
+              className={cn(
+                PILL,
+                "min-w-0 shrink",
+                destaque.outcome === "won"
+                  ? "bg-success/10 text-success-strong"
+                  : destaque.outcome === "lost"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-muted text-foreground/80",
+              )}
+              title={destaque.funnelName ? `${destaque.funnelName} · ${destaque.stageName}` : destaque.stageName}
+            >
+              <span
+                aria-hidden
+                className="size-1.5 shrink-0 rounded-full"
+                style={destaque.outcome === "open" ? { background: destaque.funnelColor } : { background: "currentColor" }}
+              />
+              <span className="truncate">{destaque.stageName}</span>
+            </span>
+            {destaque.value > 0 && (
+              <b className="shrink-0 text-[12.5px] font-bold tabular-nums text-foreground" title={formatBRL(destaque.value)}>
+                {compactBRL(destaque.value)}
+              </b>
             )}
           </>
         ) : (
-          <SituacaoCell standing={standing} />
+          <span className="text-[12px] text-muted-foreground/70">sem negócio</span>
         )}
       </div>
 
-      {/* negócios — duas linhas por negócio: título / etapa · valor */}
-      <div className="min-w-0 leading-tight">
-        {deals.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            {emAndamento.slice(0, MAX_DEALS_VISIVEIS).map((deal) => {
-              // Título derivado costuma ser o próprio nome do lead — repetir na
-              // mesma linha é eco. Só mostra quando alguém o renomeou de verdade.
-              const tituloDizAlgo =
-                deal.title && deal.title.trim().toLowerCase() !== (lead.name ?? "").trim().toLowerCase();
-              return (
-                <div key={deal.id} className="min-w-0">
-                  {tituloDizAlgo && (
-                    <p className="truncate text-[13px] text-foreground/90" title={deal.title}>
-                      {deal.title}
-                    </p>
-                  )}
-                  <p className="flex min-w-0 items-center gap-1.5 text-xs">
-                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: deal.funnelColor }} />
-                    <span
-                      className={cn(
-                        "truncate",
-                        tituloDizAlgo ? "text-muted-foreground" : "text-[13px] text-foreground/90",
-                        deal.outcome === "lost" && "text-destructive/80",
-                      )}
-                      title={deal.funnelName ? `${deal.funnelName} · ${deal.stageName}` : deal.stageName}
-                    >
-                      {deal.stageName}
-                    </span>
-                    {deal.value > 0 && (
-                      <span className="shrink-0 font-medium tabular-nums text-foreground/80">· {formatBRL(deal.value)}</span>
-                    )}
-                  </p>
-                </div>
-              );
-            })}
-            {emAndamento.length > MAX_DEALS_VISIVEIS && (
-              <p className="text-xs text-muted-foreground">
-                +{emAndamento.length - MAX_DEALS_VISIVEIS} em andamento
-              </p>
-            )}
-            {ganhos.length > 0 && emAndamento.length < MAX_DEALS_VISIVEIS && (
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium text-success">
-                  Negócio fechado{ganhos.length > 1 && <span className="tabular-nums text-success/70"> ×{ganhos.length}</span>}
-                </p>
-                {valorGanho > 0 && (
-                  <p className="text-xs tabular-nums text-muted-foreground">{formatBRL(valorGanho)}</p>
-                )}
-              </div>
-            )}
-            {ganhos.length > 0 && emAndamento.length >= MAX_DEALS_VISIVEIS && (
-              <p className="text-xs font-medium text-success">
-                {ganhos.length} fechado{ganhos.length > 1 ? "s" : ""}
-                {valorGanho > 0 && <span className="tabular-nums text-success/70"> · {formatBRL(valorGanho)}</span>}
-              </p>
-            )}
-          </div>
-        ) : (
-          <span className="inline-block rounded-full border border-dashed border-border px-2 py-px text-[12px] text-muted-foreground">
-            sem negócio
-          </span>
-        )}
-      </div>
+      <RecompraCell ciclo={ciclo} />
 
-      {/* recompra — o anel sempre visível, como na V1 (pedido do CTO):
-          o próprio anel desenha o estado "sem compra". */}
-      <div className="flex justify-center">
-        {ciclo ? (
-          <ReorderCycleRing ciclo={ciclo} />
-        ) : (
-          <span className="inline-block size-[52px]" aria-hidden="true" />
-        )}
-      </div>
-
-      {/* dono */}
+      {/* dono — só o avatar; o nome no title */}
       <div>
         {owner ? (
-          <span className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground/90">
-            <span className="size-1.5 rounded-full bg-success" />
-            {owner.split(" ")[0]}
-          </span>
+          <div title={owner} aria-label={`Dono: ${owner}`} role="img" className="w-fit">
+            <LeadAvatar name={owner} size="xs" />
+          </div>
         ) : (
-          <span className="inline-block rounded-full border border-dashed border-border px-2 py-px text-[12px] text-muted-foreground">
-            sem dono
+          <span
+            role="img"
+            aria-label="Sem dono"
+            title="Sem dono"
+            className="grid size-7 place-items-center rounded-full border border-dashed border-border text-muted-foreground/60"
+          >
+            <UserRound className="size-3.5" aria-hidden />
           </span>
         )}
       </div>
 
-      {/* criado em — relativo na lista (o que se lê é recência), absoluto no title */}
-      <span className="text-[12.5px] tabular-nums text-muted-foreground" title={`Criado em ${createdLabel}`}>
-        {relativeDay(lead.created_at) ?? createdLabel}
+      <span
+        className="text-[12px] tabular-nums text-muted-foreground"
+        title={`Criado em ${createdLabel}${relativo ? ` · ${relativo}` : ""}`}
+      >
+        {shortDay(createdLabel)}
       </span>
 
       <div

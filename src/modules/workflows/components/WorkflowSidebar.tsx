@@ -80,6 +80,8 @@ interface WorkflowSidebarProps {
   onDeleteNode?: (nodeId: string) => void;
   onDuplicateNode?: (nodeId: string) => void;
   allNodes?: WorkflowNode[];
+  /** Inspetor em cartão (editor V5): sem a borda lateral, raio do cartão. */
+  embedded?: boolean;
 }
 
 export function WorkflowSidebar({
@@ -93,6 +95,7 @@ export function WorkflowSidebar({
   onDeleteNode,
   onDuplicateNode,
   allNodes = [],
+  embedded = false,
 }: WorkflowSidebarProps) {
   const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
   const [expanded, setExpanded] = useState(false);
@@ -192,7 +195,16 @@ export function WorkflowSidebar({
   };
 
   return (
-    <div role="complementary" aria-label={`Configurar ${title}`} className="min-w-0 max-w-full shrink-0 border-l border-border/60 bg-card flex flex-col h-full" style={{ width: guided && expanded ? 640 : 360 }}>
+    <div
+      role="complementary"
+      aria-label={`Configurar ${title}`}
+      className={
+        embedded
+          ? "flex h-full min-w-0 max-w-full shrink-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo"
+          : "min-w-0 max-w-full shrink-0 border-l border-border/60 bg-card flex flex-col h-full"
+      }
+      style={{ width: guided && expanded ? 640 : embedded ? 320 : 360 }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
         <h3 className="min-w-0 truncate text-sm font-bold tracking-tight">Configurar {title}</h3>

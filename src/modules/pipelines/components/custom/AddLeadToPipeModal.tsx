@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +36,8 @@ interface AddLeadToPipeModalProps {
   pipelineId: string;
   pipelineName: string;
   stages: CustomPipelineStage[];
+  /** Etapa já escolhida ao abrir (o "+" ao pé da coluna). */
+  defaultStageId?: string | null;
 }
 
 interface LeadResult {
@@ -52,10 +54,15 @@ export function AddLeadToPipeModal({
   pipelineId,
   pipelineName,
   stages,
+  defaultStageId,
 }: AddLeadToPipeModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [selectedStageId, setSelectedStageId] = useState<string>(stages[0]?.id || "");
+  const [selectedStageId, setSelectedStageId] = useState<string>(defaultStageId || stages[0]?.id || "");
+  // Abrir pelo "+" de uma coluna traz a etapa daquela coluna.
+  useEffect(() => {
+    if (open && defaultStageId) setSelectedStageId(defaultStageId);
+  }, [open, defaultStageId]);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 

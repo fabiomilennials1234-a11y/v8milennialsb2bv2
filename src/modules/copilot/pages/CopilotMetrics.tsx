@@ -22,7 +22,12 @@ import {
   Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { IconChip, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { FocusCard, IconChip, InkPanel, InkRow, InkSplit, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { CopilotTabs } from "@/modules/copilot/components/CopilotTabs";
+import { FilterRow } from "@/shared/components/PillSearch";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,6 +66,7 @@ interface VariantMetrics {
   avg_score_goal_align: number;
   qualification_rate: number;
   meetings_scheduled: number;
+  agent_id?: string;
 }
 
 // ─── Hook de dados ──────────────────────────────────────────────────────────
@@ -167,15 +173,9 @@ function computeAgentSummaries(
 
 // Só tokens: o par claro/escuro vem do tema, não de uma escala de cor crua.
 function scoreColor(score: number): string {
-  if (score >= 8) return "text-success";
+  if (score >= 8) return "text-success-strong";
   if (score >= 6) return "text-warning-strong";
   return "text-destructive";
-}
-
-function scoreBg(score: number): string {
-  if (score >= 8) return "bg-success/[.06] border-success/20";
-  if (score >= 6) return "bg-warning/10 border-warning/25";
-  return "bg-destructive/[.06] border-destructive/20";
 }
 
 function scoreTone(score: number): "good" | "gold" | "bad" {
@@ -203,7 +203,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
 }
 
 function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
-  if (trend === 'up') return <TrendingUp className="w-4 h-4 text-success" aria-label="Em alta" />;
+  if (trend === 'up') return <TrendingUp className="w-4 h-4 text-success-strong" aria-label="Em alta" />;
   if (trend === 'down') return <TrendingDown className="w-4 h-4 text-destructive" aria-label="Em queda" />;
   return <Minus className="w-4 h-4 text-muted-foreground" aria-label="Estável" />;
 }
@@ -215,15 +215,15 @@ function TitleChip({ icon: Icon }: { icon: typeof Bot }) {
   );
 }
 
-const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
-
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function CopilotMetrics() {
   const { data: teamMember } = useCurrentTeamMember();
   const orgId = teamMember?.organization_id;
+  const navigate = useNavigate();
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [days, setDays] = useState(30);
+  const [abAgentId, setAbAgentId] = useState<string | null>(null);
 
   const { data, isLoading } = useCopilotMetrics(orgId, selectedAgent, days);
 
@@ -239,42 +239,78 @@ export default function CopilotMetrics() {
 
   const kpi = (v: React.ReactNode) => (isLoading ? "·" : v);
 
+  // Médias por critério sobre TODAS as avaliações do recorte — o radar e as
+  // barras de "Qualidade das respostas". Mesmo dado que o cartão antigo
+  // mostrava por agente, só agregado.
+  const evals = data?.evaluations || [];
+  const criteria = CRITERIA.map((c) => ({
+    ...c,
+    value: evals.length ? evals.reduce((sum, e) => sum + (Number(e[c.field]) || 0), 0) / evals.length : 0,
+  }));
+  const worst = [...evals].sort((x, y) => x.score_overall - y.score_overall).slice(0, 5);
+  const agentName = (id: string) => data?.agents.find((a) => a.id === id)?.name || "Agente";
+
+  // Testes A/B agrupados por agente: a lista em tinta escolhe o agente, o
+  // cartão de ouro põe as variantes lado a lado.
+  const abAgents = [...new Set(variants.map((v) => v.agent_id ?? "sem-agente"))];
+  const abFocus = abAgents.includes(abAgentId ?? "") ? abAgentId! : abAgents[0] ?? null;
+  const abVariants = variants.filter((v) => (v.agent_id ?? "sem-agente") === abFocus);
+  const leader = abVariants.length > 1
+    ? [...abVariants].sort((x, y) => Number(y.qualification_rate) - Number(x.qualification_rate))[0]
+    : null;
+  const leaderIsUnique =
+    !!leader && abVariants.filter((v) => Number(v.qualification_rate) === Number(leader.qualification_rate)).length === 1;
+
   return (
     <div className="space-y-5">
       <PageHeader
-        back="/copilot"
-        title="Métricas LLM"
-        subtitle="Qualidade das respostas dos agentes avaliada automaticamente por IA"
-        actions={
-          <>
-            <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
-              <SelectTrigger className="h-10 w-32 rounded-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">7 dias</SelectItem>
-                <SelectItem value="30">30 dias</SelectItem>
-                <SelectItem value="90">90 dias</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-              <SelectTrigger className="h-10 w-48 rounded-full">
-                <SelectValue placeholder="Todos os agentes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os agentes</SelectItem>
-                {(data?.agents || []).map(a => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        }
+        title="Copilot"
+        subtitle="Qualidade das respostas dos agentes, avaliada automaticamente por IA."
+        tabs={<CopilotTabs active="metricas" agentId={selectedAgent !== "all" ? selectedAgent : data?.agents[0]?.id ?? null} />}
       />
+
+      <FilterRow>
+        <span className="mr-1 shrink-0 text-[13px] font-bold text-foreground/80">Período</span>
+        <div role="radiogroup" aria-label="Período" className="inline-flex shrink-0 rounded-full bg-muted p-[3px]">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              type="button"
+              role="radio"
+              aria-checked={days === d}
+              onClick={() => setDays(d)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                days === d ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {d} dias
+            </button>
+          ))}
+        </div>
+        <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+          <SelectTrigger className="h-[34px] w-52 shrink-0 rounded-full text-xs" aria-label="Agente">
+            <SelectValue placeholder="Todos os agentes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os agentes</SelectItem>
+            {(data?.agents || []).map(a => (
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FilterRow>
 
       {/* KPIs — mesmos quatro números de antes, da mesma consulta. */}
       <KpiRow cols={4}>
+        <KpiTile
+          label="Agentes Ativos"
+          icon={Bot}
+          tone="gold"
+          loading={isLoading}
+          value={kpi(agentSummaries.length)}
+          note="Com avaliações no período"
+        />
         <KpiTile
           label="Score Geral"
           icon={Star}
@@ -287,14 +323,6 @@ export default function CopilotMetrics() {
             </span>,
           )}
           note="Média LLM-as-a-judge"
-        />
-        <KpiTile
-          label="Avaliações"
-          icon={MessageSquare}
-          tone="neutral"
-          loading={isLoading}
-          value={kpi(totalEvals.toLocaleString("pt-BR"))}
-          note={`Últimos ${days} dias`}
         />
         {/* Qualificação, não score (CTO, 02/10): tier efetivo prata/ouro/diamante
             sobre o mesmo denominador de antes — leads criados no período. */}
@@ -312,167 +340,310 @@ export default function CopilotMetrics() {
           note="Leads com qualificação Prata, Ouro ou Diamante"
         />
         <KpiTile
-          label="Agentes Ativos"
-          icon={Bot}
-          tone="gold"
+          label="Avaliações"
+          icon={MessageSquare}
+          tone="neutral"
           loading={isLoading}
-          value={kpi(agentSummaries.length)}
-          note="Com avaliações no período"
+          value={kpi(totalEvals.toLocaleString("pt-BR"))}
+          note={`Últimos ${days} dias`}
         />
       </KpiRow>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Scores por Agente */}
-        <Card>
-          <CardHeader className="flex-row items-center gap-3 space-y-0">
-            <TitleChip icon={Bot} />
-            <div className="min-w-0">
-              <CardTitle>Score por Agente</CardTitle>
-              <CardDescription className="text-xs">Qualidade média das respostas por agente</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)
-            ) : agentSummaries.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                <Activity className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                <p className="text-sm font-semibold text-foreground/80">Nenhuma avaliação no período</p>
-                <p className="mt-1 text-xs">As avaliações são geradas automaticamente a cada 3 turnos de conversa</p>
+      {/* Testes A/B — o painel em tinta da tela */}
+      {isLoading ? (
+        <Skeleton className="h-[260px] rounded-panel" />
+      ) : variants.length === 0 ? (
+        <InkPanel title="Testes A/B de prompt">
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <FlaskConical className="h-7 w-7 text-primary" />
+            <p className="text-[14px] font-bold">Nenhum experimento com conversas</p>
+            <p className="max-w-sm text-[12px] text-tinta-muted">Configure variantes de prompt nas configurações do agente.</p>
+          </div>
+        </InkPanel>
+      ) : (
+        <InkSplit
+          title="Testes A/B de prompt"
+          count={`${abAgents.length} ${abAgents.length === 1 ? "agente" : "agentes"}`}
+          list={abAgents.map((id) => {
+            const vs = variants.filter((v) => (v.agent_id ?? "sem-agente") === id);
+            const best = Math.max(...vs.map((v) => Number(v.qualification_rate)));
+            const selected = id === abFocus;
+            return (
+              <InkRow key={id} selected={selected} onClick={() => setAbAgentId(id)}>
+                <span
+                  className={cn(
+                    "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[11px] text-[14px] font-extrabold",
+                    selected ? "bg-primary-foreground text-primary" : "bg-white/[.07] text-primary",
+                  )}
+                >
+                  {agentName(id).charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-bold">{agentName(id)}</span>
+                  <span className={cn("block text-[11px]", selected ? "text-primary-foreground/70" : "text-tinta-muted")}>
+                    {vs.length} {vs.length === 1 ? "variante" : "variantes"}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums",
+                    selected ? "bg-primary-foreground text-primary" : "bg-white/10 text-tinta-foreground",
+                  )}
+                >
+                  {best.toFixed(1)}%
+                </span>
+              </InkRow>
+            );
+          })}
+          detail={
+            <FocusCard className="gap-4">
+              <div>
+                <p className="text-[11px] font-bold text-primary-foreground/70">Teste A/B · {agentName(abFocus ?? "")}</p>
+                <h3 className="mt-1 text-[1.45rem] font-extrabold leading-tight tracking-[-0.03em]">Variantes de prompt</h3>
               </div>
-            ) : (
-              agentSummaries.map(agent => (
-                <div key={agent.agent_id} className={`rounded-2xl border p-4 ${scoreBg(agent.avg_overall)}`}>
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate text-sm font-bold">{agent.agent_name}</span>
+              <div className="grid gap-3 md:grid-cols-2">
+                {abVariants.map((v) => {
+                  const leading = leaderIsUnique && leader?.id === v.id;
+                  return (
+                    <div
+                      key={v.id}
+                      className={cn(
+                        "flex min-w-0 flex-col gap-3 rounded-2xl p-4",
+                        leading ? "bg-tinta text-tinta-foreground shadow-relevo-tinta" : "border border-primary-foreground/10 bg-primary-foreground/[.07]",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[13px] font-bold">{v.name}</span>
+                        {leading ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10.5px] font-bold text-primary-foreground">
+                            <TrendingUp className="h-3 w-3" aria-hidden />
+                            Liderando
+                          </span>
+                        ) : v.is_control ? (
+                          <span className="shrink-0 rounded-full bg-primary-foreground px-2 py-0.5 text-[10.5px] font-bold text-primary">Controle</span>
+                        ) : null}
+                      </div>
+                      <p className="flex items-baseline gap-1.5">
+                        <span className="text-[2.2rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
+                          {Number(v.qualification_rate).toFixed(1)}
+                          <span className="text-[0.5em] opacity-60">%</span>
+                        </span>
+                        <span className={cn("text-[11px] font-semibold", leading ? "text-tinta-muted" : "text-primary-foreground/65")}>qualificação</span>
+                      </p>
+                      <p className={cn("text-[11.5px] tabular-nums", leading ? "text-tinta-muted" : "text-primary-foreground/70")}>
+                        {v.total_conversations.toLocaleString("pt-BR")} conversas · {v.meetings_scheduled.toLocaleString("pt-BR")} reuniões ·
+                        nota {Number(v.avg_score_overall).toFixed(1)}
+                      </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <TrendIcon trend={agent.trend} />
-                      <Badge variant="soft" className="text-[11px] tabular-nums">
-                        {agent.evaluations} avaliações
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <ScoreBar score={agent.avg_relevance} label="Relevância" />
-                    <ScoreBar score={agent.avg_tone} label="Tom" />
-                    <ScoreBar score={agent.avg_goal_align} label="Alinhamento com objetivo" />
-                    <ScoreBar score={agent.avg_conciseness} label="Concisão" />
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </div>
+              {abVariants.length < 2 && (
+                <p className="text-[12px] text-primary-foreground/70">Só uma variante com conversas — o comparativo aparece quando a outra tiver.</p>
+              )}
+            </FocusCard>
+          }
+        />
+      )}
 
-        {/* A/B Testing */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Qualidade das respostas — radar + barras por critério */}
         <Card>
           <CardHeader className="flex-row items-center gap-3 space-y-0">
-            <TitleChip icon={FlaskConical} />
+            <TitleChip icon={Activity} />
             <div className="min-w-0">
-              <CardTitle>A/B Testing</CardTitle>
-              <CardDescription className="text-xs">Comparação de variantes de prompt</CardDescription>
+              <CardTitle>Qualidade das respostas</CardTitle>
+              <CardDescription className="text-xs">Nota de 0 a 10 dada pelo juiz em cada critério</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="mb-3 h-24 rounded-2xl" />)
-            ) : variants.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                <FlaskConical className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                <p className="text-sm font-semibold text-foreground/80">Nenhum experimento ativo</p>
-                <p className="mt-1 text-xs">Configure variantes de prompt nas configurações do agente</p>
-              </div>
+              <Skeleton className="h-56 rounded-2xl" />
+            ) : evals.length === 0 ? (
+              <EmptyEvaluations />
             ) : (
-              <div className="space-y-3">
-                {variants.map(v => (
-                  <div key={v.id} className="rounded-2xl border border-border/70 bg-sunken p-4">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-bold">{v.name}</span>
-                      {v.is_control && (
-                        <Badge variant="ink" className="text-[11px]">Controle</Badge>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className={MICRO_LABEL}>Score Geral</p>
-                        <p className={`text-lg font-extrabold tabular-nums tracking-[-0.03em] ${scoreColor(v.avg_score_overall)}`}>
-                          {Number(v.avg_score_overall).toFixed(1)}<ValueUnit>/10</ValueUnit>
-                        </p>
-                      </div>
-                      <div>
-                        <p className={MICRO_LABEL}>Alinhamento</p>
-                        <p className={`text-lg font-extrabold tabular-nums tracking-[-0.03em] ${scoreColor(v.avg_score_goal_align)}`}>
-                          {Number(v.avg_score_goal_align).toFixed(1)}<ValueUnit>/10</ValueUnit>
-                        </p>
-                      </div>
-                      <div>
-                        <p className={MICRO_LABEL}>Conversas</p>
-                        <p className="text-lg font-extrabold tabular-nums tracking-[-0.03em]">{v.total_conversations}</p>
-                      </div>
-                      <div>
-                        <p className={MICRO_LABEL}>Taxa Qualif.</p>
-                        <p className="text-lg font-extrabold tabular-nums tracking-[-0.03em] text-insights">
-                          {Number(v.qualification_rate).toFixed(1)}<ValueUnit>%</ValueUnit>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="grid items-center gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+                <QualityRadar values={criteria.map((c) => ({ label: c.short, value: c.value }))} />
+                <div className="space-y-3">
+                  {criteria.map((c) => (
+                    <ScoreBar key={c.field} score={c.value} label={c.label} />
+                  ))}
+                </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Conversas com pior avaliação */}
+        <Card>
+          <CardHeader className="flex-row items-center gap-3 space-y-0">
+            <TitleChip icon={MessageSquare} />
+            <div className="min-w-0">
+              <CardTitle>Conversas com pior avaliação</CardTitle>
+              <CardDescription className="text-xs">As cinco menores notas do período e o critério mais fraco de cada uma</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="mb-2 h-14 rounded-2xl" />)
+            ) : worst.length === 0 ? (
+              <EmptyEvaluations />
+            ) : (
+              <ul className="space-y-2">
+                {worst.map((ev, i) => {
+                  const weakest = CRITERIA.map((c) => ({ c, v: Number(ev[c.field]) || 0 })).sort((x, y) => x.v - y.v)[0];
+                  return (
+                    <li key={`${ev.agent_id}-${ev.evaluated_at}-${i}`} className="flex items-center gap-3 rounded-2xl bg-muted/40 px-3 py-2.5">
+                      <ScoreRing score={ev.score_overall} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{agentName(ev.agent_id)}</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">{new Date(ev.evaluated_at).toLocaleString("pt-BR")}</p>
+                      </div>
+                      <Badge variant={weakest.v < 6 ? "warning" : "soft"} className="shrink-0 text-[11px]">
+                        {weakest.c.label} {weakest.v.toFixed(1)}
+                      </Badge>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Últimas avaliações */}
+      {/* Desempenho por agente — tabela no lugar do antigo "Score por agente" */}
       <Card>
         <CardHeader className="flex-row items-center gap-3 space-y-0">
-          <TitleChip icon={MessageSquare} />
+          <TitleChip icon={Bot} />
           <div className="min-w-0">
-            <CardTitle>Últimas Avaliações</CardTitle>
-            <CardDescription className="text-xs">Detalhamento das avaliações mais recentes com pontos de melhoria</CardDescription>
+            <CardTitle>Desempenho por agente</CardTitle>
+            <CardDescription className="text-xs">Médias do juiz no período · clique para abrir no editor</CardDescription>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0 pb-2">
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="mb-2 h-16 rounded-2xl" />)
-          ) : (data?.evaluations || []).length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
-              <p className="text-sm font-semibold text-foreground/80">Nenhuma avaliação ainda</p>
-            </div>
+            <div className="px-6">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="mb-2 h-12 rounded-2xl" />)}</div>
+          ) : agentSummaries.length === 0 ? (
+            <div className="px-6"><EmptyEvaluations /></div>
           ) : (
-            <div className="space-y-2">
-              {(data?.evaluations || []).slice(0, 10).map((ev, i) => {
-                const agent = data?.agents.find(a => a.id === ev.agent_id);
-                return (
-                  <div key={i} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${scoreBg(ev.score_overall)}`}>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className={`w-10 text-xl font-extrabold tabular-nums tracking-[-0.04em] ${scoreColor(ev.score_overall)}`}>
-                        {Number(ev.score_overall).toFixed(1)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{agent?.name || "Agente"}</p>
-                        <p className="text-xs tabular-nums text-muted-foreground">
-                          {new Date(ev.evaluated_at).toLocaleString("pt-BR")}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>Rel: <strong className={`tabular-nums ${scoreColor(ev.score_relevance)}`}>{Number(ev.score_relevance).toFixed(1)}</strong></span>
-                      <span>Tom: <strong className={`tabular-nums ${scoreColor(ev.score_tone)}`}>{Number(ev.score_tone).toFixed(1)}</strong></span>
-                      <span>Obj: <strong className={`tabular-nums ${scoreColor(ev.score_goal_align)}`}>{Number(ev.score_goal_align).toFixed(1)}</strong></span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Agente</TableHead>
+                    <TableHead className="text-right">Avaliações</TableHead>
+                    <TableHead className="text-center">Nota</TableHead>
+                    <TableHead className="text-right">Relevância</TableHead>
+                    <TableHead className="text-right">Tom</TableHead>
+                    <TableHead className="text-right">Concisão</TableHead>
+                    <TableHead className="text-right">Alinhamento</TableHead>
+                    <TableHead className="pr-6 text-center">Tendência</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agentSummaries.map((agent) => (
+                    <TableRow
+                      key={agent.agent_id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/copilot/${agent.agent_id}/editar`)}
+                    >
+                      <TableCell className="pl-6">
+                        <span className="flex items-center gap-2.5">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-tinta text-[13px] font-extrabold text-primary">
+                            {agent.agent_name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="truncate font-bold">{agent.agent_name}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{agent.evaluations}</TableCell>
+                      <TableCell className="text-center"><ScoreRing score={agent.avg_overall} /></TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_relevance)}`}>{agent.avg_relevance.toFixed(1)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_tone)}`}>{agent.avg_tone.toFixed(1)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_conciseness)}`}>{agent.avg_conciseness.toFixed(1)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_goal_align)}`}>{agent.avg_goal_align.toFixed(1)}</TableCell>
+                      <TableCell className="pr-6"><span className="flex justify-center"><TrendIcon trend={agent.trend} /></span></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const CRITERIA: { field: "score_relevance" | "score_tone" | "score_conciseness" | "score_goal_align"; label: string; short: string }[] = [
+  { field: "score_relevance", label: "Relevância", short: "Relevância" },
+  { field: "score_tone", label: "Tom", short: "Tom" },
+  { field: "score_conciseness", label: "Concisão", short: "Concisão" },
+  { field: "score_goal_align", label: "Alinhamento com objetivo", short: "Alinhamento" },
+];
+
+function EmptyEvaluations() {
+  return (
+    <div className="py-8 text-center text-muted-foreground">
+      <Activity className="mx-auto mb-2 h-8 w-8 opacity-50" />
+      <p className="text-sm font-semibold text-foreground/80">Nenhuma avaliação no período</p>
+      <p className="mt-1 text-xs">As avaliações são geradas automaticamente a cada 3 turnos de conversa</p>
+    </div>
+  );
+}
+
+/** Nota 0–10 num anel — o arco é a nota, a cor é a faixa (boa / média / ruim). */
+function ScoreRing({ score }: { score: number }) {
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(1, score / 10));
+  const stroke = score >= 8 ? "hsl(var(--success))" : score >= 6 ? "hsl(var(--warning))" : "hsl(var(--destructive))";
+  return (
+    <span className="relative inline-grid h-10 w-10 shrink-0 place-items-center" aria-label={`Nota ${score.toFixed(1)} de 10`}>
+      <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90" aria-hidden>
+        <circle cx="18" cy="18" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
+        <circle cx="18" cy="18" r={r} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${pct * c} ${c}`} />
+      </svg>
+      <span className="text-[11px] font-extrabold tabular-nums">{score.toFixed(1)}</span>
+    </span>
+  );
+}
+
+/** Radar de 4 eixos (0–10). Desenho simples em SVG, cores por token. */
+function QualityRadar({ values }: { values: { label: string; value: number }[] }) {
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const R = 70;
+  const n = values.length;
+  const point = (i: number, v: number) => {
+    const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    const rr = (Math.max(0, Math.min(10, v)) / 10) * R;
+    return [cx + rr * Math.cos(ang), cy + rr * Math.sin(ang)] as const;
+  };
+  const ring = (k: number) => values.map((_, i) => point(i, k).join(",")).join(" ");
+  const poly = values.map((v, i) => point(i, v.value).join(",")).join(" ");
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-[200px] w-[200px]" role="img" aria-label="Radar das notas por critério">
+      {[2.5, 5, 7.5, 10].map((k) => (
+        <polygon key={k} points={ring(k)} fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
+      ))}
+      {values.map((_, i) => {
+        const [x, y] = point(i, 10);
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="hsl(var(--border))" strokeWidth="1" />;
+      })}
+      <polygon points={poly} fill="hsl(var(--primary) / 0.35)" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinejoin="round" />
+      {values.map((v, i) => {
+        const [x, y] = point(i, v.value);
+        return <circle key={i} cx={x} cy={y} r="3.5" fill="hsl(var(--foreground))" />;
+      })}
+      {values.map((v, i) => {
+        const [x, y] = point(i, 12.6);
+        return (
+          <text key={v.label} x={x} y={y} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-[10px] font-semibold">
+            {v.label}
+          </text>
+        );
+      })}
+    </svg>
   );
 }

@@ -8,6 +8,11 @@
  *   4. Instruções — do's e don'ts
  *
  * Cada seção é um textarea independente com @mention support.
+ *
+ * V5 (mockup "Copilot · Editor"): as cinco caixas ficam EMPILHADAS, cada uma
+ * com rótulo, dica em cinza e contador de caracteres — sai o sub-alternador que
+ * mostrava uma seção por vez. "Inserir referência" age na última caixa focada.
+ * Só forma: o estado, o @autocomplete e o que é salvo são os mesmos.
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
@@ -46,6 +51,8 @@ import type {
 interface SectionConfig {
   key: keyof PromptSections;
   label: string;
+  /** Dica em cinza ao lado do rótulo. */
+  hint: string;
   /** Short label shown in the section switcher (long labels don't fit). */
   short: string;
   icon: React.ReactNode;
@@ -56,6 +63,7 @@ interface SectionConfig {
 const SECTIONS: SectionConfig[] = [
   {
     key: "personality",
+    hint: "quem é o agente e como ele fala",
     label: "Personalidade",
     short: "Personalidade",
     icon: <User className="w-4 h-4" />,
@@ -65,6 +73,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: "objective",
+    hint: "o resultado que define sucesso",
     label: "Objetivo",
     short: "Objetivo",
     icon: <Target className="w-4 h-4" />,
@@ -74,6 +83,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: "flow",
+    hint: "o passo a passo da conversa",
     label: "Fluxo de Atendimento",
     short: "Fluxo",
     icon: <Route className="w-4 h-4" />,
@@ -83,6 +93,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: "products",
+    hint: "o que ele pode oferecer e citar",
     label: "Produtos / Serviços",
     short: "Produtos",
     icon: <Package className="w-4 h-4" />,
@@ -92,6 +103,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: "instructions",
+    hint: "limites inegociáveis",
     label: "Instruções (Do's e Don'ts)",
     short: "Instruções",
     icon: <ShieldCheck className="w-4 h-4" />,
@@ -114,6 +126,8 @@ interface PromptEditorProps {
   links: KnowledgeLink[];
   isExpanded: boolean;
   onToggleExpand: () => void;
+  /** Pílulas de contexto acima das caixas (modelo, estilo de resposta). */
+  meta?: React.ReactNode;
 }
 
 export function PromptEditor({
@@ -125,7 +139,9 @@ export function PromptEditor({
   links,
   isExpanded,
   onToggleExpand,
+  meta,
 }: PromptEditorProps) {
+  // A caixa que recebe "Inserir referência": a última focada (começa na primeira).
   const [activeSection, setActiveSection] = useState<keyof PromptSections>(SECTIONS[0].key);
   const [activeMention, setActiveMention] = useState<{
     sectionKey: string;
@@ -144,15 +160,10 @@ export function PromptEditor({
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
-  // Re-fit when switching sections or when the value changes from outside (Builder).
+  // Re-fit every box when the value changes from outside (Builder, load).
   useEffect(() => {
-    autoGrow(textareaRefs.current[activeSection]);
-  }, [activeSection, sections, autoGrow]);
-
-  // Total char count
-  const totalChars = useMemo(() => {
-    return Object.values(sections).reduce((sum, v) => sum + v.length, 0);
-  }, [sections]);
+    for (const el of Object.values(textareaRefs.current)) autoGrow(el);
+  }, [sections, autoGrow]);
 
   // Build mention items
   const mentionItems = useMemo<MentionItem[]>(() => {
@@ -283,174 +294,135 @@ export function PromptEditor({
     [sections, updateSection]
   );
 
-  const activeConfig = SECTIONS.find((s) => s.key === activeSection) ?? SECTIONS[0];
+  const renderMentions = () =>
+    activeMention ? (
+      <div className="absolute left-2 top-10 z-50 w-72 overflow-hidden rounded-2xl border border-card-border bg-popover shadow-relevo-alto">
+        <Command>
+          <CommandInput
+            placeholder="Buscar tool ou documento..."
+            value={activeMention.search}
+            onValueChange={(v) => setActiveMention({ ...activeMention, search: v })}
+          />
+          <CommandList>
+            <CommandEmpty>Nenhum item encontrado</CommandEmpty>
+
+            {filteredMentions.some((m) => m.type === "tool") && (
+              <CommandGroup heading="Tools">
+                {filteredMentions
+                  .filter((m) => m.type === "tool")
+                  .map((item) => (
+                    <CommandItem key={item.id} value={item.id} onSelect={() => handleSelectMention(item)}>
+                      <span className="mr-2 rounded-md bg-primary-soft px-1.5 py-0.5 font-mono text-xs text-primary-soft-foreground">
+                        @{item.id}
+                      </span>
+                      <span className="text-sm">{item.label}</span>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+
+            {filteredMentions.some((m) => m.type === "document") && (
+              <CommandGroup heading="Documentos">
+                {filteredMentions
+                  .filter((m) => m.type === "document")
+                  .map((item) => (
+                    <CommandItem key={item.id} value={item.id} onSelect={() => handleSelectMention(item)}>
+                      <span className="mr-2 rounded-md bg-insights/10 px-1.5 py-0.5 font-mono text-xs text-insights">
+                        @{item.label}
+                      </span>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+
+            {filteredMentions.some((m) => m.type === "link") && (
+              <CommandGroup heading="Links">
+                {filteredMentions
+                  .filter((m) => m.type === "link")
+                  .map((item) => (
+                    <CommandItem key={item.id} value={item.id} onSelect={() => handleSelectMention(item)}>
+                      <span className="mr-2 rounded-md bg-success/10 px-1.5 py-0.5 font-mono text-xs text-success-strong">
+                        @{item.label}
+                      </span>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </div>
+    ) : null;
 
   return (
     <div className={`relative flex flex-col ${isExpanded ? "flex-1" : ""}`}>
-      {/* Section selector — alternador claro do V5 (segmented). O ponto dourado
-          marca seção já preenchida; a ativa é o cartão branco em relevo. */}
-      <div className="border-b border-border/60 px-4 py-3">
-        <div
-          role="group"
-          aria-label="Seções do prompt"
-          className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide"
-        >
-          {SECTIONS.map((section) => {
-            const isActive = section.key === activeSection;
-            const hasContent = (sections[section.key] ?? "").length > 0;
-
-            return (
-              <button
-                key={section.key}
-                type="button"
-                title={section.label}
-                aria-pressed={isActive}
-                onClick={() => setActiveSection(section.key)}
-                className={`relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:h-3.5 [&_svg]:w-3.5 ${
-                  isActive
-                    ? "bg-card text-foreground shadow-relevo"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {section.icon}
-                {section.short}
-                {hasContent && (
-                  <>
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-                    <span className="sr-only">(preenchida)</span>
-                  </>
-                )}
-              </button>
-            );
-          })}
+      {/* Faixa de contexto: pílulas (modelo, estilo) e as ações do editor */}
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
+        {meta}
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => handleAtInsert(activeSection)}
+          >
+            <AtSign className="w-3.5 h-3.5" />
+            Inserir referência
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 rounded-[9px] p-0"
+            onClick={onToggleExpand}
+            title={isExpanded ? "Recolher editor" : "Expandir editor"}
+            aria-label={isExpanded ? "Recolher editor" : "Expandir editor"}
+          >
+            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </Button>
         </div>
       </div>
 
-      {/* Active section — single auto-growing editor */}
-      <div className="px-4 py-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-bold tracking-tight">{activeConfig.label}</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs tabular-nums text-muted-foreground">{totalChars} chars</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => handleAtInsert(activeSection)}
-            >
-              <AtSign className="w-3.5 h-3.5" />
-              Inserir referência
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 rounded-[9px] p-0"
-              onClick={onToggleExpand}
-              title={isExpanded ? "Recolher editor" : "Expandir editor"}
-              aria-label={isExpanded ? "Recolher editor" : "Expandir editor"}
-            >
-              {isExpanded ? (
-                <Minimize2 className="w-3.5 h-3.5" />
-              ) : (
-                <Maximize2 className="w-3.5 h-3.5" />
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="relative">
-          <textarea
-            ref={(el) => {
-              textareaRefs.current[activeSection] = el;
-              autoGrow(el);
-            }}
-            value={sections[activeSection] ?? ""}
-            onChange={(e) => handleChange(activeSection, e)}
-            onKeyDown={handleKeyDown}
-            onBlur={() => {
-              setTimeout(() => setActiveMention(null), 200);
-            }}
-            placeholder={activeConfig.placeholder}
-            rows={1}
-            className="w-full resize-none overflow-hidden rounded-2xl border border-input bg-sunken p-4 text-sm leading-relaxed placeholder:text-muted-foreground/80 focus:outline-none focus:ring-2 focus:ring-ring/40 min-h-[320px]"
-            style={{ fontFamily: "inherit" }}
-          />
-
-          {/* Mention dropdown */}
-          {activeMention?.sectionKey === activeSection && (
-            <div className="absolute left-2 top-10 z-50 w-72 overflow-hidden rounded-2xl border border-card-border bg-popover shadow-relevo-alto">
-              <Command>
-                <CommandInput
-                  placeholder="Buscar tool ou documento..."
-                  value={activeMention.search}
-                  onValueChange={(v) =>
-                    setActiveMention({ ...activeMention, search: v })
-                  }
+      {/* As cinco caixas, empilhadas */}
+      <div role="group" aria-label="Seções do prompt" className="space-y-5 px-4 py-4">
+        {SECTIONS.map((section) => {
+          const value = sections[section.key] ?? "";
+          const inputId = `prompt-section-${section.key}`;
+          return (
+            <div key={section.key}>
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <label htmlFor={inputId} className="flex min-w-0 items-baseline gap-2">
+                  <span className="text-sm font-bold tracking-tight text-foreground">{section.label}</span>
+                  <span className="truncate text-xs text-muted-foreground">{section.hint}</span>
+                </label>
+                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                  {value.length.toLocaleString("pt-BR")} caracteres
+                </span>
+              </div>
+              <div className="relative">
+                <textarea
+                  id={inputId}
+                  ref={(el) => {
+                    textareaRefs.current[section.key] = el;
+                    autoGrow(el);
+                  }}
+                  value={value}
+                  onChange={(e) => handleChange(section.key, e)}
+                  onFocus={() => setActiveSection(section.key)}
+                  onKeyDown={handleKeyDown}
+                  onBlur={() => {
+                    setTimeout(() => setActiveMention(null), 200);
+                  }}
+                  placeholder={section.placeholder}
+                  rows={1}
+                  className="min-h-[112px] w-full resize-none overflow-hidden rounded-2xl border border-input bg-sunken p-4 text-sm leading-relaxed placeholder:text-muted-foreground/80 focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  style={{ fontFamily: "inherit" }}
                 />
-                <CommandList>
-                  <CommandEmpty>Nenhum item encontrado</CommandEmpty>
-
-                  {filteredMentions.some((m) => m.type === "tool") && (
-                    <CommandGroup heading="Tools">
-                      {filteredMentions
-                        .filter((m) => m.type === "tool")
-                        .map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={item.id}
-                            onSelect={() => handleSelectMention(item)}
-                          >
-                            <span className="mr-2 rounded-md bg-primary-soft px-1.5 py-0.5 font-mono text-xs text-primary-soft-foreground">
-                              @{item.id}
-                            </span>
-                            <span className="text-sm">{item.label}</span>
-                          </CommandItem>
-                        ))}
-                    </CommandGroup>
-                  )}
-
-                  {filteredMentions.some((m) => m.type === "document") && (
-                    <CommandGroup heading="Documentos">
-                      {filteredMentions
-                        .filter((m) => m.type === "document")
-                        .map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={item.id}
-                            onSelect={() => handleSelectMention(item)}
-                          >
-                            <span className="mr-2 rounded-md bg-insights/10 px-1.5 py-0.5 font-mono text-xs text-insights">
-                              @{item.label}
-                            </span>
-                          </CommandItem>
-                        ))}
-                    </CommandGroup>
-                  )}
-
-                  {filteredMentions.some((m) => m.type === "link") && (
-                    <CommandGroup heading="Links">
-                      {filteredMentions
-                        .filter((m) => m.type === "link")
-                        .map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={item.id}
-                            onSelect={() => handleSelectMention(item)}
-                          >
-                            <span className="mr-2 rounded-md bg-success/10 px-1.5 py-0.5 font-mono text-xs text-success">
-                              @{item.label}
-                            </span>
-                          </CommandItem>
-                        ))}
-                    </CommandGroup>
-                  )}
-                </CommandList>
-              </Command>
+                {activeMention?.sectionKey === section.key && renderMentions()}
+              </div>
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

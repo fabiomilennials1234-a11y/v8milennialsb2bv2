@@ -1,400 +1,206 @@
 /**
- * BlastPlanCard — single Blast Plan row in the Disparos panel (#707/#709).
+ * BlastPlanCard — um Blast Plan na grade do painel de Disparos (#707/#709).
  *
- * One card === one plan. Owns its own `useBlastPlanProgress` (hooks can't run in
- * a loop), renders the operational read-out (status pill, message preview, audience,
- * lots, next release, progress bar) and the pause/resume/cancel controls.
+ * Forma do V5 (mockup "Disparos"): cabeçalho com chip + título + origem do
+ * público + selo; linha do lote; barras por lote; barra "Lotes liberados";
+ * quatro mini-blocos (Aceitas, Falhas, Ignorados, Na fila); ações; rodapé com
+ * início e caixa. Um cartão = um plano, dono do próprio `useBlastPlanProgress`
+ * (hooks não rodam em laço).
  *
- * Operational-dashboard feel (Linear/Stripe): the progress bar + status pill carry
- * the signal. Everything else stays quiet and scannable.
+ * "Aceita" é aceita PARA ENVIO — entrou na fila do WhatsApp. A confirmação de
+ * entrega não chega a este painel (blast-outcome.ts), e o rótulo não promete
+ * mais do que isso.
  */
-import { useMemo, useState } from "react";
-import { blastOutcome } from "@/modules/campaigns/lib/blast-outcome";
-import {
-  useBlastPlanProgress,
-  useBlastPlanControl,
-  useUpdateBlastPlan,
-  type BlastPlan,
-} from "@/modules/campaigns/hooks/useBlastPlans";
+import { format, parseISO } from "date-fns";
+import { CheckCircle2, Loader2, Pause, Pencil, Play, Send, Smartphone, Users, X, XCircle } from "lucide-react";
+import { useBlastPlanProgress, type BlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Pause, Play, X, Loader2, Users, Layers, CalendarClock, Pencil } from "lucide-react";
-import { format, isToday, isTomorrow, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-// ─── Status presentation ─────────────────────────────────────────────────
-// Quiet pills — color-coded by lifecycle. Gold = running, muted = idle/done,
-// destructive = cancelled. Each pill reads on its own, no legend needed.
-const STATUS_META: Record<
-  BlastPlan["status"],
-  { label: string; dot: string; pill: string }
-> = {
-  active: {
-    label: "Ativo",
-    dot: "bg-primary",
-    pill: "border-transparent bg-primary-soft text-primary-soft-foreground",
-  },
-  paused: {
-    label: "Pausado",
-    dot: "bg-muted-foreground",
-    pill: "border-border bg-muted/60 text-muted-foreground",
-  },
-  completed: {
-    label: "Lotes liberados",
-    dot: "bg-muted-foreground",
-    pill: "border-border bg-muted/60 text-muted-foreground",
-  },
-  cancelled: {
-    label: "Cancelado",
-    dot: "bg-destructive",
-    pill: "border-destructive/30 bg-destructive/10 text-destructive",
-  },
-};
-
-/** Human "próximo lote" copy — amanhã / hoje / dd MMM. "—" once draining is done. */
-function nextReleaseLabel(plan: BlastPlan): string {
-  if (plan.status === "completed" || plan.status === "cancelled") return "—";
-  if (!plan.next_release_date) return "—";
-  try {
-    const d = parseISO(plan.next_release_date);
-    if (isToday(d)) return "hoje";
-    if (isTomorrow(d)) return "amanhã";
-    return format(d, "dd MMM", { locale: ptBR });
-  } catch {
-    return "—";
-  }
-}
-
-function firstLine(message: string): string {
-  const line = message.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
-  return line || "Sem mensagem";
-}
+import {
+  STATUS_PILL,
+  STATUS_DOT,
+  firstLine,
+  nextReleaseLabel,
+  planStatus,
+  releaseTime,
+  useBlastFigures,
+  useBlastPlanActions,
+} from "./blast-plan-ui";
+import { LotBars, LotSegments } from "./BlastLotBars";
 
 interface BlastPlanCardProps {
   plan: BlastPlan;
-  /** Drill-down (#944): card inteiro clicável → sheet da audiência congelada. */
+  /** Drill-down (#944): abre o sheet da audiência congelada. */
   onOpen?: () => void;
+  /** Origem do público já resolvida ("Funil · Vendas", "Planilha · x.csv"). */
+  origin?: string | null;
+  /** Rótulo da caixa (instância) que dispara. */
+  inboxLabel?: string | null;
 }
 
-export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
-  const { data: progress } = useBlastPlanProgress(plan.id);
-  const control = useBlastPlanControl();
-  const update = useUpdateBlastPlan();
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editMessage, setEditMessage] = useState(plan.message);
-  const [editTime, setEditTime] = useState((plan.release_time ?? "09:00").slice(0, 5));
+const fmt = (n: number) => n.toLocaleString("pt-BR");
 
-  const outcome = blastOutcome(plan.status, progress);
-  const status = outcome.failed && plan.status !== "cancelled"
-    ? { label: outcome.title, dot: "bg-destructive", pill: "border-destructive/30 bg-destructive/10 text-destructive" }
-    : STATUS_META[plan.status];
+function startedAt(plan: BlastPlan): string | null {
+  try {
+    return format(parseISO(plan.created_at), "dd/MM");
+  } catch {
+    return null;
+  }
+}
+
+export function BlastPlanCard({ plan, onOpen, origin, inboxLabel }: BlastPlanCardProps) {
+  const { data: progress } = useBlastPlanProgress(plan.id);
+  const figures = useBlastFigures(plan, progress);
+  const actions = useBlastPlanActions(plan);
+  const status = planStatus(plan, progress);
+
   const isActive = plan.status === "active";
   const isPaused = plan.status === "paused";
   const isTerminal = plan.status === "completed" || plan.status === "cancelled";
+  const next = nextReleaseLabel(plan);
 
-  // Progress: prefer recipient-level counts; fall back to lot ratio while the
-  // recipient query is still loading so the bar never reads empty for a live plan.
-  // `failed` (sent reclassificado pelo sync do poll, ADR-0016/#948) conta como
-  // processado — o disparo passou por ele — mas nunca soma em "enviados".
-  const { total, sent, skipped, failed, pct } = useMemo(() => {
-    const t = progress?.total ?? plan.total_recipients ?? 0;
-    const s = progress?.sent ?? 0;
-    const sk = progress?.skipped ?? 0;
-    const f = progress?.failed ?? 0;
-    const processed = s + sk + f;
-    const lotPct =
-      plan.lots_total > 0 ? Math.round((plan.lots_released / plan.lots_total) * 100) : 0;
-    const recipientPct = t > 0 ? Math.round((processed / t) * 100) : 0;
-    return { total: t, sent: s, skipped: sk, failed: f, pct: progress ? recipientPct : lotPct };
-  }, [progress, plan.total_recipients, plan.lots_total, plan.lots_released]);
+  const ChipIcon = plan.status === "cancelled" ? XCircle : plan.status === "completed" ? CheckCircle2 : isPaused ? Pause : Send;
 
-  const runControl = async (action: "pause" | "resume" | "cancel") => {
-    try {
-      await control.mutateAsync({ plan_id: plan.id, action });
-      toast.success(
-        action === "pause"
-          ? "Disparo pausado"
-          : action === "resume"
-          ? "Disparo retomado"
-          : "Disparo cancelado",
-      );
-    } catch (e) {
-      toast.error((e as Error).message || "Não foi possível atualizar o disparo");
-    }
-  };
+  const lotLine = isTerminal
+    ? `${plan.lots_released} de ${plan.lots_total} ${plan.lots_total === 1 ? "lote liberado" : "lotes liberados"}`
+    : isPaused
+      ? `Pausado no lote ${Math.max(1, plan.lots_released)} de ${plan.lots_total}`
+      : `Lote ${Math.max(1, plan.lots_released)} de ${plan.lots_total}${next !== "—" ? ` · próximo ${next} às ${releaseTime(plan)}` : ""}`;
 
-  const openEdit = () => {
-    // Seed the form from the plan's current values each time it opens.
-    setEditMessage(plan.message);
-    setEditTime((plan.release_time ?? "09:00").slice(0, 5));
-    setEditOpen(true);
-  };
-
-  const saveEdit = async () => {
-    const message = editMessage.trim();
-    if (!message) {
-      toast.error("A mensagem não pode ficar vazia");
-      return;
-    }
-    try {
-      await update.mutateAsync({ plan_id: plan.id, message, release_time: editTime });
-      toast.success("Disparo atualizado");
-      setEditOpen(false);
-    } catch (e) {
-      toast.error((e as Error).message || "Não foi possível editar o disparo");
-    }
-  };
+  const started = startedAt(plan);
 
   return (
-    // Card inteiro = alvo do drill-down (#944). Div interativa (não <button>)
-    // porque os controles internos (pausar/editar/cancelar) são <button> reais —
-    // eles param a propagação no container à direita. Os Dialogs ficam FORA da
-    // div clicável: eventos React borbulham pela árvore de componentes mesmo
-    // com portal, então dentro dela um clique no modal abriria o drill-down.
     <>
-    <div
-      role={onOpen ? "button" : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      aria-label={onOpen ? "Ver leads do disparo" : undefined}
-      onClick={onOpen}
-      onKeyDown={
-        onOpen
-          ? (e) => {
-              if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-                e.preventDefault();
-                onOpen();
-              }
-            }
-          : undefined
-      }
-      className={cn(
-        "group rounded-card border border-card-border bg-card p-5 shadow-relevo transition-[transform,box-shadow] duration-200 motion-reduce:transition-none",
-        onOpen &&
-          "cursor-pointer hover:-translate-y-0.5 hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isTerminal && "opacity-75",
-      )}
-    >
-      <div className="flex items-start justify-between gap-4">
-        {/* Left: status + message + meta */}
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-center gap-2.5">
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
-                "text-[11px] font-semibold uppercase tracking-wide",
-                status.pill,
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
-              {status.label}
-            </span>
-            <p className="min-w-0 truncate text-[15px] font-bold tracking-tight text-foreground">
+      <article
+        className={cn(
+          "flex min-w-0 flex-col gap-3.5 rounded-card border border-card-border bg-card p-[18px] text-card-foreground shadow-relevo",
+          isTerminal && "bg-card/80",
+        )}
+      >
+        {/* Cabeçalho */}
+        <header className="flex items-start gap-3">
+          <span
+            className={cn(
+              "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[11px]",
+              status.tone === "gold"
+                ? "bg-primary-soft text-primary-soft-foreground"
+                : status.tone === "bad"
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-muted text-foreground/70",
+            )}
+          >
+            <ChipIcon className="h-4 w-4" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[14px] font-bold leading-snug tracking-tight text-foreground" title={plan.message}>
               {firstLine(plan.message)}
             </p>
+            <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+              {origin ? `${origin} · ` : ""}
+              <span className="tabular-nums">{fmt(figures.total)}</span> contatos
+            </p>
           </div>
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+              STATUS_PILL[status.tone],
+            )}
+          >
+            <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status.tone])} />
+            {status.label}
+          </span>
+        </header>
 
-          {/* Meta strip — tabular, low-contrast labels, value in foreground */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              <span className="tabular-nums text-foreground/90">{total.toLocaleString("pt-BR")}</span>
-              contatos
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5" />
-              <span className="tabular-nums text-foreground/90">
-                {plan.lots_released}/{plan.lots_total}
-              </span>
-              lotes
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <CalendarClock className="h-3.5 w-3.5" />
-              próximo lote:
-              <span className="text-foreground/90">{nextReleaseLabel(plan)}</span>
-            </span>
-          </div>
+        {/* Lote atual + % */}
+        <div className="flex items-baseline justify-between gap-3 text-[12px]">
+          <span className="min-w-0 truncate font-semibold text-foreground/85">{lotLine}</span>
+          <span className="shrink-0 font-bold tabular-nums text-muted-foreground">{figures.pct}%</span>
         </div>
 
-        {/* Right: controls — cliques aqui nunca abrem o drill-down */}
-        <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <LotBars plan={plan} byLot={progress?.byLot} />
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+            <span>Lotes liberados</span>
+            <span className="tabular-nums text-foreground/80">
+              {plan.lots_released} de {plan.lots_total}
+            </span>
+          </div>
+          <LotSegments released={plan.lots_released} total={plan.lots_total} />
+        </div>
+
+        {/* Mini-blocos */}
+        <dl className="grid grid-cols-4 gap-1.5">
+          {[
+            { label: "Aceitas", value: figures.sent, bad: false },
+            { label: "Falhas", value: figures.failed, bad: figures.failed > 0 },
+            { label: "Ignorados", value: figures.skipped, bad: false },
+            { label: "Na fila", value: figures.pending, bad: false },
+          ].map((b) => (
+            <div key={b.label} className="min-w-0 rounded-xl bg-muted/50 px-2.5 py-2">
+              <dd className={cn("text-[15px] font-extrabold tabular-nums tracking-tight", b.bad ? "text-destructive" : "text-foreground")}>
+                {fmt(b.value)}
+              </dd>
+              <dt className="truncate text-[10.5px] font-medium text-muted-foreground">{b.label}</dt>
+            </div>
+          ))}
+        </dl>
+
+        {/* Ações */}
+        <div className="flex flex-wrap items-center gap-1.5">
           {isActive && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={control.isPending}
-              onClick={() => runControl("pause")}
-            >
-              {control.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Pause className="h-3.5 w-3.5" />
-              )}
-              <span className="ml-1.5 hidden sm:inline">Pausar</span>
+            <Button size="sm" variant="ink" className="h-8" disabled={actions.pending} onClick={actions.pause}>
+              {actions.pending ? <Loader2 className="animate-spin" /> : <Pause />}
+              Pausar
             </Button>
           )}
           {isPaused && (
+            <Button size="sm" variant="ink" className="h-8" disabled={actions.pending} onClick={actions.resume}>
+              {actions.pending ? <Loader2 className="animate-spin" /> : <Play />}
+              Retomar
+            </Button>
+          )}
+          {!isTerminal && (
+            <Button size="sm" variant="outline" className="h-8" disabled={actions.pending} onClick={actions.openEdit}>
+              <Pencil />
+              Editar
+            </Button>
+          )}
+          {!isTerminal && (
             <Button
               size="sm"
               variant="outline"
-              className="h-8"
-              disabled={control.isPending}
-              onClick={() => runControl("resume")}
+              className="h-8 hover:text-destructive"
+              disabled={actions.pending}
+              onClick={actions.askCancel}
             >
-              {control.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              <span className="ml-1.5 hidden sm:inline">Retomar</span>
-            </Button>
-          )}
-          {!isTerminal && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-muted-foreground hover:text-foreground"
-              disabled={control.isPending}
-              onClick={openEdit}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span className="ml-1.5 hidden sm:inline">Editar</span>
-            </Button>
-          )}
-          {!isTerminal && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-muted-foreground hover:text-destructive"
-              disabled={control.isPending}
-              onClick={() => setConfirmCancel(true)}
-            >
-              <X className="h-3.5 w-3.5" />
-              <span className="ml-1.5 hidden sm:inline">Cancelar</span>
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Progress — the load-bearing element. Gold fill, skipped noted in copy. */}
-      <div className="mt-3.5 space-y-1.5">
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn(
-              "h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
-              failed > 0 ? "bg-destructive" : "bg-primary",
-            )}
-            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-          <span>
-            <span className="text-foreground/80">{sent.toLocaleString("pt-BR")}</span> aceitos para envio
-            {failed > 0 && (
-              <span className="text-destructive"> · {failed.toLocaleString("pt-BR")} falhas</span>
-            )}
-            {skipped > 0 && (
-              <span className="text-muted-foreground/70"> · {skipped.toLocaleString("pt-BR")} ignorados</span>
-            )}
-          </span>
-          <span>{pct}%</span>
-        </div>
-      </div>
-
-    </div>
-
-      {/* Edit — message + release time only. The audience is immutable (ADR-0003). */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar disparo</DialogTitle>
-            <DialogDescription>
-              Altere a mensagem ou o horário de envio. O público é fixo e não pode ser alterado.
-              A nova mensagem vale para os contatos que ainda não receberam.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor={`edit-msg-${plan.id}`} className="text-sm">
-                Mensagem
-              </Label>
-              <Textarea
-                id={`edit-msg-${plan.id}`}
-                value={editMessage}
-                onChange={(e) => setEditMessage(e.target.value)}
-                rows={5}
-                className="resize-none"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`edit-time-${plan.id}`} className="text-sm">
-                Horário do envio diário
-              </Label>
-              <Input
-                id={`edit-time-${plan.id}`}
-                type="time"
-                value={editTime}
-                onChange={(e) => setEditTime(e.target.value)}
-                className="w-36"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditOpen(false)} disabled={update.isPending}>
+              <X />
               Cancelar
             </Button>
-            <Button onClick={saveEdit} disabled={update.isPending} className="gap-2">
-              {update.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Salvar
+          )}
+          {onOpen && (
+            <Button size="sm" variant="outline" className={cn("h-8", isTerminal ? "" : "ml-auto")} onClick={onOpen}>
+              <Users />
+              Ver leads do disparo
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
 
-      {/* Cancel confirmation — irreversible action gets a deliberate stop */}
-      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar este disparo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Os lotes ainda não liberados não serão enviados. Os contatos já contactados
-              permanecem. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => runControl("cancel")}
-            >
-              Cancelar disparo
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Rodapé */}
+        {(started || inboxLabel) && (
+          <footer className="mt-auto flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+            <span className="truncate">{started ? `Início ${started}` : ""}</span>
+            {inboxLabel && (
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <Smartphone className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="truncate">{inboxLabel}</span>
+              </span>
+            )}
+          </footer>
+        )}
+      </article>
+
+      {actions.dialogs}
     </>
   );
 }

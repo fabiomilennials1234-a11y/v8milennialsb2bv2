@@ -19,8 +19,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Download,
-  Loader2,
   Users,
   SearchX,
   Check,
@@ -34,7 +32,6 @@ import {
   type SortColumn,
 } from "@/modules/carteira/hooks/usePortfolioClients";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
 import type { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { erpLabel } from "@/shared/format/erp-code";
 
@@ -60,16 +57,11 @@ const PAGE_SIZE = 50;
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /*
- * V5 (2026-10): esta tabela mora DENTRO do painel-herói em tinta (ver
- * `pages/Upsell.tsx`). Tinta é escura nos dois temas, então as cores daqui são
- * escolhidas para fundo escuro — e a linha selecionada vira ouro, com a cor da
- * tinta do cartão de ouro (`primary-foreground`). Nenhuma faixa mudou: os
- * limiares de health, recompra e segmento são os mesmos de antes; só o par de
- * cores é que agora vem de token.
- *
- * Sobre o ouro, cor semântica vira ruído (âmbar some no amarelo). Lá a régua é
- * outra: o estado grave vira pílula invertida (tinta cheia), o resto fica na
- * cor do cartão. O detalhe com as cores completas está no cartão ao lado.
+ * V5 (mockup, 02/10): a tabela saiu do painel em tinta e virou cartão BRANCO
+ * — o herói da tela agora é o Radar de recompra, acima dela. As faixas de
+ * health, recompra e segmento são as mesmas de antes; o que muda é a forma:
+ * anel de health, ciclo com barra (dias sem pedido ÷ ciclo), dias sem pedido em
+ * destaque e a próxima compra com data + relativo.
  */
 
 type HealthTone = "good" | "warn" | "bad" | "idle" | "none";
@@ -83,79 +75,81 @@ function healthConfig(status: string | null, score: number | null): { label: str
   return { label: "—", tone: "none" };
 }
 
-const HEALTH_ON_INK: Record<HealthTone, { chip: string; dot: string }> = {
-  good: { chip: "bg-success/15 text-success", dot: "bg-success" },
-  warn: { chip: "bg-warning/15 text-warning", dot: "bg-warning" },
-  bad: { chip: "bg-destructive/15 text-destructive", dot: "bg-destructive" },
-  idle: { chip: "bg-white/[.08] text-tinta-foreground", dot: "bg-insights" },
-  none: { chip: "bg-white/[.06] text-tinta-muted", dot: "bg-tinta-muted" },
+const HEALTH_STROKE: Record<HealthTone, string> = {
+  good: "text-success",
+  warn: "text-warning",
+  bad: "text-destructive",
+  idle: "text-insights",
+  none: "text-muted-foreground/40",
 };
 
-function segmentConfig(segment: string | null) {
-  switch (segment) {
-    case "ouro":
-      return { label: "OURO", className: "bg-primary/15 text-primary" };
-    case "prata":
-      return { label: "PRATA", className: "bg-silver/20 text-tinta-foreground" };
-    case "novo":
-      return { label: "NOVO", className: "bg-insights/30 text-tinta-foreground" };
-    case "resgate":
-      return { label: "RESGATE", className: "bg-destructive/20 text-destructive" };
-    case "dormindo":
-      return { label: "DORMINDO", className: "bg-white/[.08] text-tinta-muted" };
-    default:
-      return null;
-  }
+const SEGMENT_DOT: Record<string, string> = {
+  ouro: "bg-primary",
+  prata: "bg-silver",
+  novo: "bg-insights",
+  resgate: "bg-chart-5",
+  dormindo: "bg-muted-foreground",
+};
+
+const SEGMENT_LABEL: Record<string, string> = {
+  ouro: "Ouro",
+  prata: "Prata",
+  novo: "Novos",
+  resgate: "Resgate",
+  dormindo: "Dormindo",
+};
+
+/** Dias até a próxima compra (negativo = atrasado). */
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.round((t - Date.now()) / 86_400_000);
 }
 
-type RecompraTone = "late" | "soon" | "ok" | "none";
-
-function recompraCell(
-  daysSinceLast: number | null,
-  cycleDays: number | null,
-  nextExpected: string | null,
-): { label: string; tone: RecompraTone } {
-  if (!cycleDays) return { label: "—", tone: "none" };
-
-  if (nextExpected) {
-    const diff = Math.round(
-      (new Date(nextExpected).getTime() - Date.now()) / 86_400_000,
-    );
-    if (diff < 0)
-      return { label: `${Math.abs(diff)} dias atrasado`, tone: "late" };
-    if (diff <= 3)
-      return { label: `Em ${diff} dias`, tone: "soon" };
-    return { label: `Em ${diff} dias`, tone: "ok" };
-  }
-
-  if (daysSinceLast !== null && cycleDays) {
-    const overdue = daysSinceLast - cycleDays;
-    if (overdue > 0)
-      return { label: `${overdue} dias atrasado`, tone: "late" };
-    const remaining = cycleDays - daysSinceLast;
-    if (remaining <= 3)
-      return { label: `Em ${remaining} dias`, tone: "soon" };
-    return { label: `Em ${remaining} dias`, tone: "ok" };
-  }
-
-  return { label: "—", tone: "none" };
+function initials(text: string): string {
+  return (
+    text
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "?"
+  );
 }
 
-const RECOMPRA_ON_INK: Record<RecompraTone, string> = {
-  late: "font-semibold text-destructive",
-  soon: "text-warning",
-  ok: "text-success",
-  none: "text-tinta-muted",
-};
+/** Anel de health 34 px. */
+function HealthRing({ score, tone }: { score: number | null; tone: HealthTone }) {
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(100, score ?? 0));
+  return (
+    <span className="relative inline-grid size-[34px] place-items-center" role="img" aria-label={score != null ? `Health ${score}` : "Sem health"}>
+      <svg className="absolute inset-0 size-[34px] -rotate-90" viewBox="0 0 34 34" aria-hidden>
+        <circle cx="17" cy="17" r={r} fill="none" stroke="currentColor" strokeWidth="3" className="text-muted" />
+        {score != null && (
+          <circle
+            cx="17"
+            cy="17"
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={`${(v / 100) * c} ${c}`}
+            className={HEALTH_STROKE[tone]}
+          />
+        )}
+      </svg>
+      <span className="text-[10.5px] font-extrabold tabular-nums">{score ?? "—"}</span>
+    </span>
+  );
+}
 
-const RECOMPRA_ON_GOLD: Record<RecompraTone, string> = {
-  late: "rounded-full bg-primary-foreground px-2 py-0.5 font-bold text-primary",
-  soon: "font-semibold",
-  ok: "",
-  none: "opacity-60",
-};
-
-async function downloadCSV(
+/** CSV da carteira com o recorte atual — o botão mora no cabeçalho da página. */
+export async function exportPortfolioCsv(
   orgId: string,
   filter: string,
   search: string,
@@ -214,23 +208,13 @@ async function downloadCSV(
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-/** Botão quadrado de ação da linha — sobre tinta ou sobre o ouro da selecionada. */
-function iconBtnClass(onGold: boolean) {
-  return cn(
-    "grid h-[30px] w-[30px] shrink-0 place-items-center rounded-lg border p-0 shadow-none transition-colors",
-    "focus-visible:outline-none focus-visible:ring-2 [&_svg]:size-3.5",
-    onGold
-      ? "border-primary-foreground/15 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground focus-visible:ring-primary-foreground"
-      : "border-white/10 bg-transparent text-tinta-muted hover:bg-white/10 hover:text-tinta-foreground focus-visible:ring-primary",
-  );
-}
+const iconBtnClass = cn(
+  "grid h-[30px] w-[30px] shrink-0 place-items-center rounded-lg border border-input bg-card p-0 text-muted-foreground shadow-relevo transition-colors",
+  "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
+);
 
 const thBase =
-  "h-auto whitespace-nowrap border-b border-tinta-line py-2.5 text-[11px] font-bold uppercase tracking-[.06em]";
-
-/** Linha da tabela no vocabulário do InkRow: sem divisória, cantos de pílula. */
-const rowBase =
-  "group/row cursor-pointer border-0 hover:bg-transparent [&>td]:transition-colors [&>td:first-child]:rounded-l-2xl [&>td:last-child]:rounded-r-2xl";
+  "h-11 whitespace-nowrap border-b border-border py-2.5 text-[11px] font-bold uppercase tracking-[.06em]";
 
 export function CarteiraClientTable({
   selectedClientId,
@@ -242,11 +226,9 @@ export function CarteiraClientTable({
   bulk,
   onRowsChange,
 }: CarteiraClientTableProps) {
-  const { organizationId } = useOrganization();
   const [sortBy, setSortBy] = useState<SortColumn | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
-  const [exporting, setExporting] = useState(false);
 
   // Reset page when filter/search changes
   useEffect(() => {
@@ -297,16 +279,6 @@ export function CarteiraClientTable({
     [sortBy, sortDir, onSelectClient],
   );
 
-  const handleExport = useCallback(async () => {
-    if (!organizationId) return;
-    setExporting(true);
-    try {
-      await downloadCSV(organizationId, filter, searchQuery);
-    } finally {
-      setExporting(false);
-    }
-  }, [organizationId, filter, searchQuery]);
-
   function SortIcon({ col }: { col: SortColumn }) {
     if (sortBy !== col)
       return <ArrowUpDown className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-60" />;
@@ -327,8 +299,8 @@ export function CarteiraClientTable({
       <TableHead
         className={cn(
           thBase,
-          "cursor-pointer select-none group transition-colors hover:text-tinta-foreground",
-          sortBy === col ? "text-tinta-foreground" : "text-tinta-muted",
+          "cursor-pointer select-none group transition-colors hover:text-foreground",
+          sortBy === col ? "text-foreground" : "text-muted-foreground",
           className,
         )}
         onClick={() => handleSort(col)}
@@ -344,15 +316,15 @@ export function CarteiraClientTable({
   // ── Loading skeleton ────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="space-y-1.5 p-1.5" aria-busy="true">
+      <div className="divide-y divide-border/60" aria-busy="true">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex gap-4 rounded-2xl px-3 py-3.5 animate-pulse">
-            <div className="h-4 w-40 rounded bg-white/[.08]" />
-            <div className="h-4 w-14 rounded bg-white/[.08]" />
-            <div className="h-4 w-24 rounded bg-white/[.08]" />
-            <div className="h-4 w-20 rounded bg-white/[.08]" />
-            <div className="h-4 w-16 rounded bg-white/[.08]" />
-            <div className="h-4 w-16 rounded bg-white/[.08]" />
+          <div key={i} className="flex gap-4 px-4 py-4 animate-pulse">
+            <div className="h-4 w-40 rounded bg-muted" />
+            <div className="h-4 w-14 rounded bg-muted" />
+            <div className="h-4 w-24 rounded bg-muted" />
+            <div className="h-4 w-20 rounded bg-muted" />
+            <div className="h-4 w-16 rounded bg-muted" />
+            <div className="h-4 w-16 rounded bg-muted" />
           </div>
         ))}
       </div>
@@ -364,7 +336,7 @@ export function CarteiraClientTable({
     const hasActiveFilters = filter !== "all" || searchQuery.length > 0;
     return (
       <div className="flex flex-col items-center gap-4 py-20">
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/[.08] text-primary">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
           {hasActiveFilters ? (
             <SearchX className="h-6 w-6" />
           ) : (
@@ -372,12 +344,12 @@ export function CarteiraClientTable({
           )}
         </div>
         <div className="space-y-1 text-center">
-          <p className="text-sm font-bold text-tinta-foreground">
+          <p className="text-sm font-bold text-foreground">
             {hasActiveFilters
               ? "Nenhum cliente encontrado"
               : "Sua carteira está vazia"}
           </p>
-          <p className="max-w-[320px] text-[13px] text-tinta-muted">
+          <p className="max-w-[320px] text-[13px] text-muted-foreground">
             {hasActiveFilters
               ? "Tente ajustar o filtro ou termo de busca."
               : "Use os botões acima para cadastrar, importar uma planilha ou marcar propostas como vendidas."}
@@ -393,46 +365,24 @@ export function CarteiraClientTable({
 
   return (
     <div className="min-w-0">
-      {/* Cabeçalho do painel: título, total e exportar. */}
-      <div className="flex flex-wrap items-center gap-2 px-1.5 pb-3 pt-1">
-        <h2 className="text-base font-bold tracking-tight text-tinta-foreground">Clientes</h2>
-        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-tinta-foreground">
-          {total.toLocaleString("pt-BR")}
-        </span>
-        <span className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting || total === 0}
-          className="h-8 gap-1.5 rounded-full border border-white/10 bg-white/[.06] px-3 text-[12px] text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground"
-        >
-          {exporting ? (
-            <Loader2 className="animate-spin" />
-          ) : (
-            <Download />
-          )}
-          Exportar
-        </Button>
-      </div>
-
-      <Table className="border-separate border-spacing-x-0 border-spacing-y-0.5">
+      <div className="overflow-x-auto">
+      <Table>
         <TableHeader>
           <TableRow className="border-0 hover:bg-transparent">
             {bulk && (
-              <TableHead className={cn(thBase, "w-10 pl-3 pr-0")}>
+              <TableHead className={cn(thBase, "w-10 pl-4 pr-0")}>
                 <button
                   type="button"
                   onClick={() => bulk.selectAll(rowIds)}
                   aria-label="Selecionar todos desta página"
                   className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-md border transition-all",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                    "flex h-4 w-4 items-center justify-center rounded-[5px] border-[1.5px] transition-all",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     allChecked
-                      ? "border-primary bg-primary text-primary-foreground"
+                      ? "border-tinta bg-tinta text-tinta-foreground"
                       : someChecked
-                        ? "border-primary/60 bg-primary/25 text-primary"
-                        : "border-white/25 hover:border-white/50",
+                        ? "border-tinta/60 bg-tinta/20 text-foreground"
+                        : "border-border hover:border-foreground/40",
                   )}
                 >
                   {(allChecked || someChecked) && <Check className="h-3 w-3" />}
@@ -441,54 +391,38 @@ export function CarteiraClientTable({
             )}
             <SortableHeader col="name" label="Cliente" className={bulk ? "" : "pl-4"} />
             <SortableHeader col="health_score" label="Health" />
-            <SortableHeader col="days_since_last_order" label="Recompra" />
             <SortableHeader col="avg_ticket" label="Ticket médio" />
-            <TableHead className={cn(thBase, "text-tinta-muted")}>
-              Tendência
-            </TableHead>
-            <TableHead className={cn(thBase, "text-tinta-muted")}>
-              Segmento
-            </TableHead>
-            <TableHead
-              className={cn(thBase, "w-[100px] pr-4 text-tinta-muted")}
-            />
+            <TableHead className={cn(thBase, "text-muted-foreground")}>Recompra (ciclo)</TableHead>
+            <SortableHeader col="days_since_last_order" label="Dias sem pedido" />
+            <SortableHeader col="next_order_expected" label="Próximo pedido" />
+            <TableHead className={cn(thBase, "w-[112px] pr-4")} aria-label="Ações" />
           </TableRow>
         </TableHeader>
 
         <TableBody>
           {rows.map((client) => {
             const isSelected = client.id === selectedClientId;
-            const health = healthConfig(
-              client.health_status,
-              client.health_score,
-            );
-            const healthStyle = HEALTH_ON_INK[health.tone];
-            const segment = segmentConfig(client.segment);
-            const recompra = recompraCell(
-              client.days_since_last_order,
-              client.reorder_cycle_days,
-              client.next_order_expected,
-            );
-
+            const health = healthConfig(client.health_status, client.health_score);
+            const next = daysUntil(client.next_order_expected);
+            const cycle = client.reorder_cycle_days ?? null;
+            const since = client.days_since_last_order ?? null;
+            const atrasado = next != null ? next < 0 : !!(cycle && since != null && since > cycle);
+            const progresso = cycle && since != null ? Math.min(1, since / cycle) : null;
             const bulkChecked = bulk?.isSelected(client.id);
-            const subText = isSelected ? "text-primary-foreground/70" : "text-tinta-muted";
-            const faint = isSelected ? "text-primary-foreground/40" : "text-tinta-muted/50";
+            const segLabel = client.segment ? SEGMENT_LABEL[client.segment] ?? client.segment : null;
 
             return (
               <TableRow
                 key={client.id}
                 onClick={() => onSelectClient(isSelected ? null : client)}
+                aria-selected={isSelected}
                 className={cn(
-                  rowBase,
-                  isSelected
-                    ? "[&>td]:bg-primary [&>td]:text-primary-foreground"
-                    : bulkChecked
-                      ? "[&>td]:bg-white/[.07] [&:hover>td]:bg-white/[.09]"
-                      : "[&:hover>td]:bg-white/[.04]",
+                  "group/row cursor-pointer border-border/60 transition-colors",
+                  isSelected ? "bg-primary-soft/70 hover:bg-primary-soft" : bulkChecked ? "bg-muted/50" : "hover:bg-muted/40",
                 )}
               >
                 {bulk && (
-                  <TableCell className="w-10 py-3 pl-3 pr-0">
+                  <TableCell className="w-10 py-3 pl-4 pr-0">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -498,134 +432,117 @@ export function CarteiraClientTable({
                       }}
                       aria-label={`Selecionar ${erpLabel(client)}`}
                       className={cn(
-                        "flex h-5 w-5 items-center justify-center rounded-md border transition-all",
-                        "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                        bulkChecked
-                          ? isSelected
-                            ? "border-primary-foreground bg-primary-foreground text-primary"
-                            : "border-primary bg-primary text-primary-foreground"
-                          : isSelected
-                            ? "border-primary-foreground/40 opacity-0 group-hover/row:opacity-100"
-                            : "border-white/25 opacity-0 group-hover/row:opacity-100",
+                        "flex h-4 w-4 items-center justify-center rounded-[5px] border-[1.5px] transition-all",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        bulkChecked ? "border-tinta bg-tinta text-tinta-foreground" : "border-border hover:border-foreground/40",
                       )}
                     >
                       {bulkChecked && <Check className="h-3 w-3" />}
                     </button>
                   </TableCell>
                 )}
+
+                {/* Cliente — ladrilho, nome, empresa e o segmento como tag */}
                 <TableCell className={cn("py-3", bulk ? "" : "pl-4")}>
-                  <div className="flex min-w-0 flex-col gap-px">
-                    <span
-                      className="max-w-[220px] truncate text-sm font-semibold"
-                      title={erpLabel(client)}
-                    >
-                      {erpLabel(client)}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-muted text-[11px] font-extrabold text-foreground/70">
+                      {initials(erpLabel(client))}
                     </span>
-                    <span className={cn("max-w-[220px] truncate text-xs", subText)}>
-                      {[
-                        client.order_count
-                          ? `${client.order_count} pedido${client.order_count !== 1 ? "s" : ""}`
-                          : null,
-                        client.company,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
-                    </span>
+                    <div className="min-w-0 leading-tight">
+                      <p className="max-w-[260px] truncate text-[13px] font-bold" title={erpLabel(client)}>
+                        {erpLabel(client)}
+                      </p>
+                      <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span className="max-w-[160px] truncate">
+                          {[client.company, client.order_count ? `${client.order_count} pedido${client.order_count !== 1 ? "s" : ""}` : null]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </span>
+                        {segLabel && (
+                          <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[6px] bg-muted px-1.5 text-[10.5px] font-bold text-foreground/75">
+                            <span aria-hidden className={cn("size-1.5 rounded-[2px]", SEGMENT_DOT[client.segment ?? ""] ?? "bg-muted-foreground")} />
+                            {segLabel}
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </TableCell>
 
                 <TableCell className="py-3">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums",
-                      isSelected ? "bg-primary-foreground/10 text-primary-foreground" : healthStyle.chip,
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        isSelected ? "bg-primary-foreground" : healthStyle.dot,
-                      )}
-                    />
-                    {health.label}
+                  <HealthRing score={client.health_score} tone={health.tone} />
+                </TableCell>
+
+                {/* Ticket médio + a tendência como seta */}
+                <TableCell className="py-3">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-bold tabular-nums">
+                    {client.avg_ticket != null ? formatBRL(client.avg_ticket) : <span className="font-normal text-muted-foreground/60">—</span>}
+                    {client.trend === "up" && <TrendingUp className="size-3.5 text-success-strong" aria-label="Subindo" />}
+                    {client.trend === "down" && <TrendingDown className="size-3.5 text-destructive" aria-label="Caindo" />}
+                    {client.trend === "stable" && <Minus className="size-3.5 text-muted-foreground" aria-label="Estável" />}
                   </span>
                 </TableCell>
 
+                {/* Ciclo + barra dias-sem-pedido ÷ ciclo */}
                 <TableCell className="py-3">
-                  <span
-                    className={cn(
-                      "whitespace-nowrap text-[13px]",
-                      isSelected ? RECOMPRA_ON_GOLD[recompra.tone] : RECOMPRA_ON_INK[recompra.tone],
-                    )}
-                  >
-                    {recompra.label}
-                  </span>
-                </TableCell>
-
-                <TableCell className="py-3">
-                  <span
-                    className={cn(
-                      "text-sm tabular-nums",
-                      client.avg_ticket == null && faint,
-                    )}
-                  >
-                    {client.avg_ticket != null
-                      ? formatBRL(client.avg_ticket)
-                      : "—"}
-                  </span>
-                </TableCell>
-
-                <TableCell className="py-3">
-                  {client.trend === "up" && (
-                    <span className={cn("inline-flex items-center gap-1 text-[13px] font-medium", !isSelected && "text-success")}>
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Subindo
-                    </span>
-                  )}
-                  {client.trend === "down" && (
-                    <span className={cn("inline-flex items-center gap-1 text-[13px] font-medium", isSelected ? "font-bold" : "text-destructive")}>
-                      <TrendingDown className="h-3.5 w-3.5" />
-                      Caindo
-                    </span>
-                  )}
-                  {client.trend === "stable" && (
-                    <span className={cn("inline-flex items-center gap-1 text-[13px]", subText)}>
-                      <Minus className="h-3.5 w-3.5" />
-                      Estável
-                    </span>
-                  )}
-                  {!client.trend && (
-                    <span className={cn("text-[13px]", faint)}>—</span>
+                  {cycle ? (
+                    <div className="w-[130px]">
+                      <p className="text-[12.5px] font-semibold">a cada {cycle} dias</p>
+                      <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            "h-full rounded-full",
+                            atrasado ? "bg-destructive" : (progresso ?? 0) > 0.75 ? "bg-primary" : "bg-tinta dark:bg-foreground/70",
+                          )}
+                          style={{ width: `${Math.max(4, (atrasado ? 1 : progresso ?? 0) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[13px] text-muted-foreground/60">—</span>
                   )}
                 </TableCell>
 
                 <TableCell className="py-3">
-                  {segment ? (
-                    <span
-                      className={cn(
-                        "rounded-full px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[.06em]",
-                        isSelected ? "bg-primary-foreground/10 text-primary-foreground" : segment.className,
-                      )}
-                    >
-                      {segment.label}
+                  {since != null ? (
+                    <span className="whitespace-nowrap">
+                      <b className={cn("text-[15px] font-extrabold tabular-nums", atrasado && "text-destructive")}>{since}</b>
+                      <span className="ml-1 text-[11px] text-muted-foreground">{since === 1 ? "dia" : "dias"}</span>
                     </span>
                   ) : (
-                    <span className={cn("text-sm", faint)}>—</span>
+                    <span className="text-[13px] text-muted-foreground/60">—</span>
                   )}
                 </TableCell>
 
+                <TableCell className="py-3">
+                  {client.next_order_expected ? (
+                    <div className="leading-tight">
+                      <p className={cn("text-[13px] font-bold tabular-nums", atrasado && "text-destructive")}>
+                        {new Date(client.next_order_expected).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {next == null ? "" : next < 0 ? `atrasado ${Math.abs(next)} d` : next === 0 ? "hoje" : `em ${next} ${next === 1 ? "dia" : "dias"}`}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="leading-tight">
+                      <p className="text-[13px] text-muted-foreground/60">—</p>
+                      <p className="text-[11px] text-muted-foreground">sem previsão</p>
+                    </div>
+                  )}
+                </TableCell>
+
+                {/* Ações — aparecem no hover (e no foco por teclado) */}
                 <TableCell className="py-3 pr-4">
-                  <div className="flex gap-1">
-                    {/* Cliente sem lead vinculado não tem Conversa do Lead.
-                        A prop `onWhatsApp` deixou de existir: o botão resolve
-                        a caixa aqui, em vez de o pai improvisar a navegação. */}
+                  <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 max-md:opacity-100">
+                    {/* Cliente sem lead vinculado não tem Conversa do Lead. */}
                     {client.lead_id && (
                       <AbrirConversaButton
                         leadId={client.lead_id}
                         phone={client.phone}
                         variant="ghost"
                         size="icon"
-                        className={iconBtnClass(isSelected)}
+                        className={iconBtnClass}
                         title="WhatsApp"
                       >
                         <MessageCircle />
@@ -638,8 +555,9 @@ export function CarteiraClientTable({
                           e.stopPropagation();
                           onNewOrder(client.id);
                         }}
-                        className={iconBtnClass(isSelected)}
+                        className={iconBtnClass}
                         title="Novo pedido"
+                        aria-label={`Novo pedido para ${erpLabel(client)}`}
                       >
                         <ClipboardList />
                       </button>
@@ -651,8 +569,9 @@ export function CarteiraClientTable({
                           e.stopPropagation();
                           onViewDetail(client.id);
                         }}
-                        className={iconBtnClass(isSelected)}
+                        className={iconBtnClass}
                         title="Detalhes"
+                        aria-label={`Abrir ${erpLabel(client)}`}
                       >
                         <ChevronRight />
                       </button>
@@ -664,13 +583,14 @@ export function CarteiraClientTable({
           })}
         </TableBody>
       </Table>
+      </div>
 
-      {/* Pagination bar */}
-      {totalPages > 1 && (
-        <div className="mt-2 flex items-center justify-between border-t border-tinta-line px-3 pt-3">
-          <span className="text-[13px] tabular-nums text-tinta-muted">
-            Mostrando {from}–{to} de {total}
-          </span>
+      {/* Rodapé */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+        <span className="text-[13px] tabular-nums text-muted-foreground">
+          Mostrando {from}–{to} de {total.toLocaleString("pt-BR")} clientes
+        </span>
+        {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -680,12 +600,12 @@ export function CarteiraClientTable({
                 onSelectClient(null);
               }}
               disabled={page <= 1}
-              className="h-8 gap-1 px-2.5 text-[13px] text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground"
+              className="h-8 gap-1 px-2.5 text-[13px]"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               Anterior
             </Button>
-            <span className="text-[13px] tabular-nums text-tinta-muted">
+            <span className="text-[13px] tabular-nums text-muted-foreground">
               {page} / {totalPages}
             </span>
             <Button
@@ -696,14 +616,14 @@ export function CarteiraClientTable({
                 onSelectClient(null);
               }}
               disabled={page >= totalPages}
-              className="h-8 gap-1 px-2.5 text-[13px] text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground"
+              className="h-8 gap-1 px-2.5 text-[13px]"
             >
               Próxima
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

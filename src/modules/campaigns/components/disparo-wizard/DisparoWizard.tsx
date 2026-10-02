@@ -30,7 +30,9 @@ import { StepSpeed } from "./StepSpeed";
 import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
 import { instancesToNumbers } from "@/shared/disparo/disparo-numbers";
-import type { DisparoNumber } from "./wizard-machine";
+import { DISPARO_STEPS, type DisparoNumber } from "./wizard-machine";
+import { DisparoPreview } from "./DisparoPreview";
+import { DisparosTabs } from "../DisparosTabs";
 
 /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
 function todayInSaoPaulo(): string {
@@ -153,104 +155,111 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
       case "speed":
         return <StepSpeed draft={wiz.draft} patch={wiz.patch} />;
       case "review":
-        return <StepReview draft={wiz.draft} />;
+        return (
+          <StepReview
+            draft={wiz.draft}
+            onEdit={(id) => wiz.goTo(DISPARO_STEPS.findIndex((s) => s.id === id))}
+          />
+        );
       case "monitor":
         return <StepMonitor draft={wiz.draft} planId={planId} />;
     }
   };
 
+  const nextLabel = DISPARO_STEPS[wiz.index + 1]?.label;
+  const showPreview = !wiz.isMonitor;
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      {/* Header: título da página + fechar. O fechar some no acompanhamento —
-          ali o caminho de saída é "Acompanhar disparos", no rodapé. */}
+    <div className="flex w-full flex-col gap-5">
+      {/* Mesmo cabeçalho do Painel, com a aba "Novo disparo" ativa. O
+          "Cancelar" some no acompanhamento — ali a saída é "Acompanhar
+          disparos", no rodapé do passo. */}
       <PageHeader
-        eyebrow="Disparos"
-        title="Novo disparo"
+        title="Disparos"
+        subtitle="Acompanhe e controle os disparos em massa ao longo dos dias."
+        tabs={<DisparosTabs active="novo" />}
         actions={
           !wiz.isMonitor ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={onClose}
-              className="rounded-full"
-              aria-label="Fechar"
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={createPlan.isPending}>
               <X className="h-4 w-4" />
+              Cancelar
             </Button>
           ) : undefined
         }
       />
 
-      <Card className="px-5 pb-4 pt-5 sm:px-8">
+      <Card className="p-2.5 sm:p-3">
         <WizardProgress index={wiz.index} furthest={wiz.furthest} onJump={wiz.goTo} />
       </Card>
 
-      {/* Step content */}
-      <Card className="px-5 py-7 sm:px-8 sm:py-9">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={wiz.stepId}
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -12 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {renderStep()}
-          </motion.div>
-        </AnimatePresence>
-      </Card>
+      <div className={cn("grid items-start gap-5", showPreview && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
+        {/* Passo atual — conteúdo + rodapé Voltar / Próximo no próprio cartão */}
+        <Card className="min-w-0 px-5 py-6 sm:px-7 sm:py-7">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={wiz.stepId}
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {renderStep()}
+            </motion.div>
+          </AnimatePresence>
 
-      {/* Footer: Voltar / Continuar — barra flutuante, presa ao pé da área de
-          rolagem (o <main>). */}
-      <div className="sticky bottom-3 z-10 rounded-full border border-card-border bg-card/95 shadow-relevo-alto backdrop-blur">
-        <div className="flex w-full items-center justify-between gap-4 px-2.5 py-2">
-          {wiz.isMonitor ? (
-            <Button onClick={onFinish} className="ml-auto gap-2">
-              Acompanhar disparos
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                onClick={wiz.isFirst ? onClose : wiz.back}
-                disabled={createPlan.isPending}
-                className="gap-2 text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                {wiz.isFirst ? "Cancelar" : "Voltar"}
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5">
+            {wiz.isMonitor ? (
+              <Button onClick={onFinish} variant="ink" className="ml-auto gap-2">
+                Acompanhar disparos
+                <ArrowRight className="h-4 w-4" />
               </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={wiz.isFirst ? onClose : wiz.back}
+                  disabled={createPlan.isPending}
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {wiz.isFirst ? "Cancelar" : "Voltar"}
+                </Button>
 
-              <div className="flex items-center gap-3">
-                {wiz.blockReason && (
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    {wiz.blockReason}
-                  </span>
-                )}
-                {wiz.isReview ? (
-                  <Button onClick={handleRelease} disabled={createPlan.isPending} className="gap-2">
-                    {createPlan.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    {createPlan.isPending ? "Iniciando…" : "Enviar disparo"}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={wiz.next}
-                    disabled={!wiz.canAdvance}
-                    className={cn("gap-2", !wiz.canAdvance && "opacity-60")}
-                  >
-                    Continuar
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+                  {wiz.blockReason && (
+                    <span className="hidden text-xs text-muted-foreground sm:inline">{wiz.blockReason}</span>
+                  )}
+                  {wiz.isReview ? (
+                    <Button size="lg" onClick={handleRelease} disabled={createPlan.isPending} className="gap-2">
+                      {createPlan.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      {createPlan.isPending ? "Iniciando…" : "Enviar disparo"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ink"
+                      onClick={wiz.next}
+                      disabled={!wiz.canAdvance}
+                      className={cn("gap-2", !wiz.canAdvance && "opacity-60")}
+                    >
+                      {nextLabel ? `Próximo: ${nextLabel}` : "Continuar"}
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+
+        {showPreview && (
+          <aside className="min-w-0 lg:sticky lg:top-4">
+            <DisparoPreview draft={wiz.draft} />
+          </aside>
+        )}
       </div>
     </div>
   );

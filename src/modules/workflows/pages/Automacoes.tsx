@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { InkRow, InkSplit } from "@/components/ui/bento";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,31 +19,28 @@ import {
   Plus,
   Workflow,
   Loader2,
-  Play,
-  Pause,
-  Trash2,
-  Edit,
-  Clock,
-  Download,
   Zap,
   GitBranch,
   Tag,
   TrendingUp,
   Upload,
   Timer,
+  LayoutTemplate,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFeaturePermission } from "@/modules/identity";
 import { useExportWorkflow, useImportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
 import { WorkflowImportDialog } from "@/modules/workflows/components/WorkflowImportDialog";
 import { WorkflowTemplates } from "@/modules/workflows/components/WorkflowTemplates";
+import { WorkflowFocusCard } from "@/modules/workflows/components/WorkflowFocusCard";
+import { AutomacoesTabs } from "@/modules/workflows/components/AutomacoesTabs";
 import { TRIGGER_LABELS, isDiscontinuedTrigger } from "@/types/workflow";
 import { DiscontinuedBadge } from "@/modules/workflows/components/DiscontinuedNotice";
 import { countDiscontinuedSteps } from "@/modules/workflows/lib/discontinued-steps";
+import { FilterChip } from "@/shared/components/FilterChip";
+import { FilterRow, PillSearch } from "@/shared/components/PillSearch";
 import { cn } from "@/lib/utils";
 import type { Workflow as WorkflowType } from "@/types/workflow";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 const TRIGGER_ICONS: Record<string, React.ElementType> = {
   lead_created: Zap,
@@ -70,11 +66,13 @@ export default function Automacoes() {
     closeImport,
   } = useImportWorkflow();
   const { allowed: canCreateAutomation } = useFeaturePermission("workflows.create");
-  const { allowed: canEditAutomation } = useFeaturePermission("workflows.edit");
   const { allowed: canDeleteAutomation } = useFeaturePermission("workflows.delete");
 
-  const activeWorkflows = workflows?.filter((w) => w.is_active) || [];
-  const inactiveWorkflows = workflows?.filter((w) => !w.is_active) || [];
+  const activeCount = workflows?.filter((w) => w.is_active).length ?? 0;
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [query, setQuery] = useState("");
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   const handleToggle = (workflow: WorkflowType) => {
     toggleWorkflow.mutate(
@@ -103,143 +101,50 @@ export default function Automacoes() {
     });
   };
 
-  const renderWorkflowCard = (workflow: WorkflowType) => {
-    const TriggerIcon = TRIGGER_ICONS[workflow.trigger_type] || Zap;
-    const nodeCount = workflow.definition?.nodes?.length ?? 0;
-    // Score/rating do lead descontinuados (CTO, 02/10): o workflow salvo
-    // continua listado e operável, só ganha o selo para ser achado e revisto.
-    const discontinued =
-      isDiscontinuedTrigger(workflow.trigger_type) || countDiscontinuedSteps(workflow.definition) > 0;
+  const triggerIconOf = (w: WorkflowType) => TRIGGER_ICONS[w.trigger_type] || Zap;
+  // Score/rating do lead descontinuados (CTO, 02/10): o workflow salvo
+  // continua listado e operável, só ganha o selo para ser achado e revisto.
+  const isDiscontinued = (w: WorkflowType) =>
+    isDiscontinuedTrigger(w.trigger_type) || countDiscontinuedSteps(w.definition) > 0;
 
-    return (
-      <Card
-        key={workflow.id}
-        className="group flex cursor-pointer flex-col transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
-        onClick={() => navigate(`/automacoes/${workflow.id}`)}
-      >
-        <div className="flex items-start gap-3 p-5 pb-3">
-          <span
-            className={cn(
-              "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
-              workflow.is_active ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/60",
-            )}
-          >
-            <TriggerIcon className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="truncate">{workflow.name}</CardTitle>
-            {workflow.description && (
-              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{workflow.description}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
-            <Switch
-              checked={workflow.is_active}
-              onCheckedChange={() => handleToggle(workflow)}
-              aria-label={workflow.is_active ? `Desativar ${workflow.name}` : `Ativar ${workflow.name}`}
-            />
-          </div>
-        </div>
-        <div className="mt-auto px-5 pb-4">
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground">
-              <Badge variant="soft" className="font-semibold">
-                {TRIGGER_LABELS[workflow.trigger_type]}
-              </Badge>
-              {discontinued && <DiscontinuedBadge />}
-              <span className="text-xs tabular-nums">{nodeCount} nós</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-[10px]"
-                disabled={!canEditAutomation}
-                aria-label={`Editar ${workflow.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/automacoes/${workflow.id}`);
-                }}
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-[10px]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleExport(workflow);
-                }}
-                title="Exportar workflow"
-                aria-label={`Exportar ${workflow.name}`}
-              >
-                <Download className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-[10px] text-destructive hover:bg-destructive/10 hover:text-destructive"
-                disabled={!canDeleteAutomation}
-                aria-label={`Excluir ${workflow.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeleteTarget(workflow);
-                }}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
-            Criado {formatDistanceToNow(new Date(workflow.created_at), { addSuffix: true, locale: ptBR })}
-          </div>
-        </div>
-      </Card>
-    );
-  };
+  // Ordenação única: editados recentemente (D18 — "mais executados" pediria
+  // uma chamada por workflow).
+  const sorted = [...(workflows ?? [])].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+  );
+  const q = query.trim().toLowerCase();
+  const visible = sorted.filter((w) => {
+    if (statusFilter === "active" && !w.is_active) return false;
+    if (statusFilter === "inactive" && w.is_active) return false;
+    if (!q) return true;
+    return `${w.name} ${w.description ?? ""} ${TRIGGER_LABELS[w.trigger_type] ?? ""}`.toLowerCase().includes(q);
+  });
+  const focus = visible.find((w) => w.id === focusId) ?? visible[0] ?? null;
 
-  const renderSection = (
-    title: string,
-    list: WorkflowType[],
-    icon: React.ReactNode,
-  ) => (
-    <section className="space-y-3">
-      <h2 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.02em]">
-        {icon}
-        {title}
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-foreground/70">
-          {list.length}
-        </span>
-      </h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {list.map(renderWorkflowCard)}
-      </div>
-    </section>
+  const header = (
+    <PageHeader
+      title="Automações"
+      subtitle="Crie e gerencie workflows visuais que trabalham enquanto o time vende."
+      tabs={<AutomacoesTabs active="workflows" workflowId={focus?.id ?? null} count={workflows?.length} />}
+      secondaryActions={[
+        { label: "Importar", icon: Upload, onSelect: openImport, disabled: !canCreateAutomation },
+        { label: "Templates", icon: LayoutTemplate, onSelect: () => setGalleryOpen(true) },
+      ]}
+      actions={
+        <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
+          <Plus />
+          Novo Workflow
+        </Button>
+      }
+    />
   );
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Automações"
-        subtitle="Crie e gerencie workflows visuais para automatizar ações no CRM"
-        actions={
-          <>
-            <Button variant="outline" onClick={openImport} disabled={!canCreateAutomation}>
-              <Upload />
-              Importar
-            </Button>
-            <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
-              <Plus />
-              Novo Workflow
-            </Button>
-          </>
-        }
-      />
+      {header}
 
-      {/* Templates */}
-      <WorkflowTemplates />
+      {/* Templates — fileira compacta; a galeria completa abre num Sheet */}
+      <WorkflowTemplates galleryOpen={galleryOpen} onGalleryOpenChange={setGalleryOpen} />
 
       {isLoading ? (
         <div className="flex h-64 items-center justify-center">
@@ -264,10 +169,121 @@ export default function Automacoes() {
         </Card>
       ) : (
         <>
-          {activeWorkflows.length > 0 &&
-            renderSection("Ativos", activeWorkflows, <Play className="h-4 w-4 text-success" />)}
-          {inactiveWorkflows.length > 0 &&
-            renderSection("Inativos", inactiveWorkflows, <Pause className="h-4 w-4 text-muted-foreground" />)}
+          <FilterRow>
+            <span className="mr-1 shrink-0 text-[15px] font-extrabold tracking-[-0.02em] text-foreground">Workflows</span>
+            {(
+              [
+                ["all", "Todos", workflows.length],
+                ["active", "Ativos", activeCount],
+                ["inactive", "Inativos", workflows.length - activeCount],
+              ] as const
+            ).map(([key, label, count]) => (
+              <FilterChip
+                key={key}
+                active={statusFilter === key}
+                aria-pressed={statusFilter === key}
+                count={count}
+                onClick={() => setStatusFilter(key)}
+              >
+                {label}
+              </FilterChip>
+            ))}
+            <PillSearch
+              value={query}
+              onValueChange={setQuery}
+              placeholder="Buscar workflow ou gatilho"
+              className="ml-auto w-56 shrink-0 sm:w-64"
+            />
+          </FilterRow>
+
+          {focus ? (
+            <InkSplit
+              title="Seus workflows"
+              count={`${activeCount} ${activeCount === 1 ? "ativo" : "ativos"}`}
+              actions={
+                <span className="rounded-full bg-white/[.08] px-3 py-1 text-[11px] font-bold text-tinta-foreground">
+                  Editados recentemente
+                </span>
+              }
+              listClassName="lg:max-h-[620px] lg:overflow-y-auto"
+              list={
+                <>
+                  {visible.map((w) => {
+                    const Icon = triggerIconOf(w);
+                    const selected = w.id === focus.id;
+                    const nodeCount = w.definition?.nodes?.length ?? 0;
+                    return (
+                      <InkRow key={w.id} selected={selected} onClick={() => setFocusId(w.id)}>
+                        <span
+                          className={cn(
+                            "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[11px]",
+                            selected ? "bg-primary-foreground text-primary" : "bg-white/[.07] text-primary",
+                          )}
+                        >
+                          <Icon className="h-4 w-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] font-bold">{w.name}</span>
+                          <span
+                            className={cn(
+                              "mt-0.5 flex items-center gap-1.5 text-[11px]",
+                              selected ? "text-primary-foreground/70" : "text-tinta-muted",
+                            )}
+                          >
+                            <span className="truncate">
+                              {TRIGGER_LABELS[w.trigger_type] ?? w.trigger_type} · {nodeCount} nós
+                            </span>
+                            {isDiscontinued(w) && <DiscontinuedBadge className="px-1.5 py-0 text-[9px]" />}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
+                            selected
+                              ? "bg-primary-foreground text-primary"
+                              : w.is_active
+                                ? "bg-success/15 text-success"
+                                : "bg-white/10 text-tinta-muted",
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", w.is_active ? "bg-success" : "bg-current opacity-60")} />
+                          {w.is_active ? "Ativo" : "Inativo"}
+                        </span>
+                      </InkRow>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => navigate("/automacoes/novo")}
+                    disabled={!canCreateAutomation}
+                    className="mt-1.5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 px-3 py-3.5 text-[13px] font-semibold text-tinta-muted transition-colors hover:border-white/25 hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Novo Workflow
+                  </button>
+                </>
+              }
+              detail={
+                <WorkflowFocusCard
+                  workflow={focus}
+                  triggerIcon={triggerIconOf(focus)}
+                  discontinued={isDiscontinued(focus)}
+                  canDelete={canDeleteAutomation}
+                  togglePending={toggleWorkflow.isPending}
+                  onToggle={() => handleToggle(focus)}
+                  onOpen={() => navigate(`/automacoes/${focus.id}`)}
+                  onExecutions={() => navigate(`/automacoes/${focus.id}/execucoes`)}
+                  onExport={() => void handleExport(focus)}
+                  onDelete={() => setDeleteTarget(focus)}
+                />
+              }
+            />
+          ) : (
+            <div className="rounded-card border border-dashed border-border bg-card/60 px-6 py-12 text-center">
+              <p className="text-sm font-bold text-foreground">Nenhum workflow com esses filtros</p>
+              <p className="mt-1 text-sm text-muted-foreground">Troque o filtro ou a busca.</p>
+            </div>
+          )}
         </>
       )}
 

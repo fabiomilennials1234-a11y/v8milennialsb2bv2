@@ -50,6 +50,7 @@ export const ROUTES = [
   { name: "config-whatsapp", path: "/configuracoes/whatsapp" },
   ...settingsOthers.map((t) => ({ name: `config-${t}`, path: `/configuracoes/outros?tab=${t}` })),
   { name: "faq", path: "/faq" },
+  { name: "pitstop", path: "/pitstop" },
   { name: "tv", path: "/tv", fullReload: true },
   { name: "master", path: "/master", master: true },
   { name: "master-organizations", path: "/master/organizations", master: true },

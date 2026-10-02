@@ -62,9 +62,11 @@ const URGENTES = new Set(["workflow_alert", "cron_drift", "lead_message", "trans
 export interface AlertsDropdownProps {
   /** Texto ao lado do sino. Faz parte do gatilho: clicar na palavra abre. */
   rotulo?: string;
+  /** Forma do gatilho — na barra superior do V5 ele é um botão branco com relevo. */
+  triggerVariant?: "ghost" | "outline";
 }
 
-export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
+export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropdownProps = {}) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
@@ -104,7 +106,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
     >
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant={triggerVariant}
           size={rotulo ? "default" : "icon"}
           className={cn("relative", rotulo && "w-full justify-start gap-3 px-2.5")}
           aria-label="Notificações"

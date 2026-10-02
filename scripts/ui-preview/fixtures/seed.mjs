@@ -1193,6 +1193,80 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
     updated_at: ago(10 * D),
   }));
 
+  // ───────────── disparos (blast plans) ─────────────
+  // Planos em todos os estados do painel: dois ativos, um pausado, um com
+  // todos os lotes liberados e um cancelado. Destinatários por lote
+  // (`lot_index`) para as barras "Progresso por lote".
+  const dayIso = (offsetDays) => new Date(NOW + offsetDays * D).toISOString().slice(0, 10);
+  const blastDefs = [
+    // [n, status, message, total, lotsTotal, lotsReleased, nextOffset, source, inst, createdDaysAgo, processedInCurrentLot]
+    [1, "active", "Reativação · perdidos do 2º trimestre\nOlá {{primeiro_nome}}! Aqui é da Milennials — voltamos com condição nova para a {{empresa}}.", 240, 6, 3, 1, { context: "disparo", source: "estagio", funnelScope: "one", stageScope: "one", pipelineId: SALES_PIPE }, 1, 3, 0.55],
+    [2, "active", "Convite · Feira Febratex 2026\n{{primeiro_nome}}, vamos estar no estande 214. Bora tomar um café?", 120, 4, 1, 1, { context: "disparo", type: "planilha", fileName: "feira-febratex-2026.xlsx" }, 2, 1, 0.7],
+    [3, "paused", "Follow-up · propostas sem resposta\n{{primeiro_nome}}, conseguiu avaliar a proposta?", 60, 2, 1, 1, { context: "disparo", source: "estagio", funnelScope: "one", stageScope: "one", pipelineId: SALES_PIPE }, 1, 2, 1],
+    [4, "completed", "Boas-vindas · clientes do 3º trimestre\nSeja bem-vindo, {{primeiro_nome}}!", 90, 3, 3, null, { context: "disparo", source: "estagio", funnelScope: "all", stageScope: "all" }, 1, 12, 1],
+    [5, "cancelled", "Oferta de setembro · teste\n{{primeiro_nome}}, condição especial até sexta.", 80, 4, 1, null, { context: "disparo", type: "planilha", fileName: "base-distribuidores-sul.csv" }, 2, 9, 1],
+  ];
+  const blast_plans = [];
+  const blast_plan_recipients = [];
+  let recipientSeq = 0;
+  for (const [n, status, message, total, lotsTotal, lotsReleased, nextOffset, source, inst, createdDaysAgo, partial] of blastDefs) {
+    const planId = id("misc", 7700 + n);
+    blast_plans.push({
+      id: planId,
+      organization_id: ORG_ID,
+      instance_id: id("inst", inst),
+      status,
+      message,
+      image_url: null,
+      total_recipients: total,
+      lots_total: lotsTotal,
+      lots_released: lotsReleased,
+      release_time: "09:00:00",
+      next_release_date: nextOffset == null ? null : dayIso(nextOffset),
+      created_by: null,
+      created_at: ago(createdDaysAgo * D),
+      updated_at: ago(2 * H),
+      pipeline_id: source.pipelineId ?? null,
+      source,
+      post_send_target: null,
+      template: null,
+      refinements: {},
+      delay_min_ms: 5000,
+      delay_max_ms: 30000,
+      window_days: null,
+      window_from_minutes: null,
+      window_to_minutes: null,
+    });
+    const perLot = Math.ceil(total / lotsTotal);
+    for (let i = 0; i < total; i++) {
+      const lot = Math.min(lotsTotal - 1, Math.floor(i / perLot));
+      const posInLot = i - lot * perLot;
+      const released = lot < lotsReleased;
+      const isCurrent = lot === lotsReleased - 1;
+      const done = released && (!isCurrent || posInLot < perLot * partial);
+      let st = "pending";
+      if (done) st = i % 29 === 7 ? "failed" : i % 23 === 5 ? "skipped" : "sent";
+      blast_plan_recipients.push({
+        id: id("misc", 20000 + recipientSeq++),
+        plan_id: planId,
+        lead_id: leads[i % leads.length].id,
+        phone: leads[i % leads.length].phone ?? null,
+        instance_id: id("inst", inst),
+        lot_index: lot,
+        status: st,
+        reason: st === "failed" ? "número sem WhatsApp" : st === "skipped" ? "recebeu disparo há menos de 7 dias" : null,
+        variable_snapshot: {},
+        sent_at: st === "sent" ? ago((lotsReleased - lot) * D) : null,
+        claimed_at: null,
+        delivered_at: null,
+        provider_message_id: null,
+        estimated_cost: null,
+        actual_cost: null,
+        created_at: ago(createdDaysAgo * D),
+      });
+    }
+  }
+
   const lead_history = leads.slice(0, 8).flatMap((l, i) => [
     { id: id("misc", 9900 + i * 3), organization_id: ORG_ID, lead_id: l.id, action: "created", description: "Lead criado via " + l.origin, source: "system", metadata: {}, created_by: null, created_at: l.created_at },
     { id: id("misc", 9901 + i * 3), organization_id: ORG_ID, lead_id: l.id, action: "note_added", description: "Decisor é o diretor industrial; pediu proposta com implantação em 30 dias.", source: "user", metadata: {}, created_by: tm(0), created_at: ago((i + 2) * H) },
@@ -1252,6 +1326,8 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
       competition_participants,
       competition_prizes,
       message_templates,
+      blast_plans,
+      blast_plan_recipients,
       lead_history,
       saved_views: [],
     },
