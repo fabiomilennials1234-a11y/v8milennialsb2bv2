@@ -79,6 +79,15 @@ export const LEGACY_PROVIDERS = ["uazapi", "evolution"];
 export const ROUTABLE_PROVIDERS = [...LEGACY_PROVIDERS, "notificame"];
 
 /**
+ * Os provedores que mandam para GRUPO (`…@g.us`) — nó `send_to_group`.
+ *
+ * Só Uazapi: é o único com envio a grupo e listagem de grupos verificados. O
+ * Evolution não tem `listChats`; o canal oficial não tem grupo. Espelhado no
+ * front e preso pelo gêmeo `tests/unit/instance-routing-twin.test.ts`.
+ */
+export const GROUP_PROVIDERS = ["uazapi"] as const;
+
+/**
  * A linha de `whatsapp_instances` que o provider precisa, mais o que a regra lê.
  *
  * `organization_id` e o estreitamento de `provider` estão aqui porque a Instance
@@ -291,6 +300,44 @@ export async function resolveRoutedInstance(
       ? "O responsável pelo lead não tem número vinculado e o nó não declara um número de recuo."
       : "O lead ainda não trocou nenhuma mensagem e o nó não declara um número de recuo.",
   );
+}
+
+export interface ResolvePinnedInstanceArgs {
+  organizationId: string;
+  instanceId: string | null | undefined;
+  /** O universo de provedores aceito. É filtro de consulta: portão, não descrição. */
+  providers: readonly string[];
+}
+
+/**
+ * Resolve a Instance NOMEADA no nó, e só ela — nó `send_to_group`.
+ *
+ * Difere de `resolveRoutedInstance` com `fixed` em dois pontos, e os dois são
+ * a razão de existir:
+ *
+ *  - sem atalho de "uma viva só" (`deadPinShortcut`) e sem recuo: o grupo é da
+ *    instância. Trocar de número mandaria por um número que talvez nem
+ *    participe do grupo — ou, pior, que participa e não deveria falar ali;
+ *  - id inexistente, de outra organização ou de provedor fora do universo dá
+ *    `no_instance_resolved`; instância fora do ar dá `instance_disconnected`.
+ *
+ * Mesmo contrato Result-like: caminho esperado não lança.
+ */
+export async function resolvePinnedInstance(
+  supabase: SupabaseClient,
+  args: ResolvePinnedInstanceArgs,
+): Promise<RoutingResult> {
+  const pinnedId = str(args.instanceId);
+  const declared = await loadInstance(supabase, args.organizationId, pinnedId, args.providers);
+  if (!declared) {
+    return fail(
+      "no_instance_resolved",
+      pinnedId
+        ? `O número configurado no nó não existe nesta organização ou não envia para grupos (${pinnedId}). Escolha outro número no nó.`
+        : "O nó não declara o número que envia para o grupo. Escolha um número no nó.",
+    );
+  }
+  return checkLive(declared);
 }
 
 // ============================================================================
