@@ -70,6 +70,21 @@ export function requireCronAuth(req: Request): { authorized: boolean } {
 }
 
 /**
+ * Chamada servidor→servidor: o chamador manda a service role no `Authorization: Bearer`.
+ *
+ * É como `agent-message` e as action-handlers de workflow chamam funções internas. O
+ * gateway com `verify_jwt` aceita qualquer JWT válido — a anon key do frontend inclusive —,
+ * então ele sozinho não separa "interno" de "qualquer um com a chave pública".
+ * Fail-closed: sem `SUPABASE_SERVICE_ROLE_KEY` no ambiente, ninguém passa.
+ */
+export function isServiceRoleRequest(req: Request): boolean {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  const header = req.headers.get("Authorization")?.trim() ?? "";
+  if (!serviceKey || !header.startsWith("Bearer ")) return false;
+  return timingSafeCompare(header.slice("Bearer ".length).trim(), serviceKey);
+}
+
+/**
  * Validates Evolution API webhook requests
  * Checks for API key in header
  */
