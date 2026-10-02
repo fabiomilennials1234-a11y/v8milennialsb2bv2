@@ -42,8 +42,12 @@ Linha 1:
 ## Blocos
 
 ### Termômetro Meta (mês civil fixo)
-- Fonte canônica: `useTVDashboardData` → RPC `get_sales_metrics`, receita líquida de estorno e mês civil resolvido pelo banco.
-- `metaVendasMes`, `vendasRealizadas`, `ondeDeveriamEstar`
+- Mesmas fontes do card **Meta do mês** do Estúdio: `useTeamGoals` para a meta
+  de `faturamento` da organização e `useCommandMetrics(range, null)` para o realizado.
+- Mês civil no fuso da organização (`studioInterval`), independente do período
+  rotativo e da meta individual de quem abriu a TV.
+- Carregamento, falha e ausência de meta têm estados próprios. Não há meta padrão
+  de R$ 60 mil. O botão atualizar consulta novamente meta e realizado.
 
 ### SDR Performance Block
 - Hook: `src/hooks/useSDRPerformance(range)`
@@ -101,6 +105,9 @@ Seleção dos 6 KPIs vem de `src/lib/tv-config-from-quiz.ts` (onboarding answers
 
 `useTVDashboardData` filtra `propostas`/`confirmacoes`/`whatsapp` por `myId` quando não-admin (`useIsAdmin`). Admin vê tudo da org. Os hooks novos (`useSDRPerformance`, `useCloserPerformance`, `useNewLeads`) consomem dos hooks base já filtrados ou usam `organization_id` via `useOrganization`.
 
+O termômetro mensal usa o agregado da organização, como o card Meta do mês do
+Estúdio. Isso não altera o escopo individual dos demais dados da TV.
+
 ## Performance
 
 - Consulta financeira separada dos cálculos locais em `useTVDashboardData`.
@@ -110,6 +117,9 @@ Seleção dos 6 KPIs vem de `src/lib/tv-config-from-quiz.ts` (onboarding answers
   Polling pausa em segundo plano; atualização manual continua disponível.
 - Mudanças nas listas/metas recompõem a tela imediatamente; receita é atualizada
   pela próxima consulta financeira, em até30s com a TV visível, ou pelo refresh manual.
+- O realizado do termômetro compartilha o cache de `useCommandMetrics` com o
+  Estúdio, incluindo Realtime e atualização automática de60s. A meta acompanha
+  as invalidações de `useTeamGoals`.
 - Reuniões mantêm consulta própria de60s via `useSDRPerformance`.
 - Relógio só atualiza 1×/min (não 1×/s)
 - `useMemo` nos cálculos pesados por range
