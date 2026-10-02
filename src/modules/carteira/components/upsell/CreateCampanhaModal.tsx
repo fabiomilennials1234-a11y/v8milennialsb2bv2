@@ -11,6 +11,7 @@ import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
 import { useOrganization } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateCampanhaModalProps {
   open: boolean;
@@ -58,7 +59,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
       setStep(1);
       setFormData({ client_id: "", responsible_id: "", mrr_planejado: "", projeto_planejado: "", notes: "" });
     } catch (err: any) {
-      toast.error("Erro ao criar campanha: " + (err?.message || ""));
+      notifyError(err, { fallback: "Não foi possível criar campanha." });
     }
   };
 

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText, Filter } from "lucide-react";
 import { useCanDo } from "@/modules/identity";
 import { useVentimaisExportDetails } from "../../hooks/useVentimaisExportDetails";
+import { notifyError } from "@/shared/errors";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
   { value: 500, label: "Os 500 mais recentes" },
@@ -65,7 +66,7 @@ export function ExportLeadsContent({ onDone, listFilters, pipelineId }: ExportLe
       onDone?.();
     } catch (e) {
       console.error("Export error:", e);
-      toast.error(e instanceof Error ? e.message : "Erro ao exportar. Tente novamente.");
+      notifyError(e, { fallback: "Não foi possível exportar. Tente novamente." });
     }
   };
 

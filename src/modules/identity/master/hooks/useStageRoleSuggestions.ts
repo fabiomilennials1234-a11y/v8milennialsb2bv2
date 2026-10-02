@@ -19,6 +19,7 @@ import {
 } from "../lib/stage-role-review";
 import { nomeDoFunil } from "@/contracts/pipe";
 import type { StageRole, SystemPipeDisplay } from "@/contracts/pipe";
+import { notifyError } from "@/shared/errors";
 
 const QUERY_KEY = ["master-stage-role-suggestions"] as const;
 
@@ -113,7 +114,7 @@ export function useReviewStageRoleSuggestion() {
       );
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao revisar sugestão");
+      notifyError(error, { fallback: "Não foi possível revisar sugestão." });
     },
   });
 }

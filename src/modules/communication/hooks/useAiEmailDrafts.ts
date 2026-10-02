@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type EmailStyle = "formal" | "casual" | "follow_up" | "proposal" | "intro";
 
@@ -51,8 +52,8 @@ export function useGenerateEmailDraft() {
     onSuccess: () => {
       toast.success("Rascunho gerado pela IA");
     },
-    onError: () => {
-      toast.error("Erro ao gerar rascunho");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível gerar rascunho." });
     },
   });
 }

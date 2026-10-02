@@ -79,7 +79,7 @@ BEGIN
     WHERE id=p_id AND organization_id='4922638c-4909-494e-ba10-12282ec0b161'::uuid FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'toth_operation_unavailable' USING ERRCODE='P0002'; END IF;
   IF p_token IS NULL OR v_op.lease_token IS DISTINCT FROM p_token OR v_op.lease_expires_at<=clock_timestamp() THEN
-    RAISE EXCEPTION 'toth_lease_lost' USING ERRCODE='40001';
+    RAISE EXCEPTION 'toth_lease_lost' USING ERRCODE='PT409';
   END IF;
   RETURN v_op;
 END;
@@ -315,7 +315,7 @@ BEGIN
   IF NOT toth_order_private.preorder_runtime_ready() THEN RAISE EXCEPTION 'toth_write_contract_unverified' USING ERRCODE='55000'; END IF;
   SELECT * INTO v_draft FROM public.toth_order_drafts WHERE deal_id=p_deal_id AND organization_id=(v_ctx->>'organization_id')::uuid FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'toth_draft_unavailable' USING ERRCODE='P0002'; END IF;
-  IF p_expected_revision IS NULL OR v_draft.revision IS DISTINCT FROM p_expected_revision THEN RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='40001'; END IF;
+  IF p_expected_revision IS NULL OR v_draft.revision IS DISTINCT FROM p_expected_revision THEN RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='PT409'; END IF;
   SELECT id INTO v_id FROM public.toth_preorder_operations WHERE organization_id=v_draft.organization_id AND deal_id=p_deal_id;
   IF FOUND THEN RETURN public.toth_preorder_workspace(p_deal_id); END IF;
   IF v_draft.reviewed_revision IS DISTINCT FROM v_draft.revision OR v_draft.reviewed_by IS NULL
@@ -324,7 +324,7 @@ BEGIN
   IF v_customer IS NULL OR v_draft.lead_id IS DISTINCT FROM (v_ctx->>'lead_id')::uuid
     OR v_draft.client_id IS DISTINCT FROM (v_customer->>'client_id')::uuid
     OR v_draft.customer_external_id IS DISTINCT FROM v_customer->>'customer_external_id' THEN
-    RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='40001';
+    RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='PT409';
   END IF;
   PERFORM toth_order_private.validate_items(v_draft.organization_id,v_draft.items);
   SELECT * INTO v_deal FROM public.deals WHERE id=p_deal_id AND organization_id=v_draft.organization_id;
@@ -362,7 +362,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE v_op public.toth_preorder_operations%ROWTYPE; v_customer jsonb; v_deal public.deals%ROWTYPE;
 BEGIN
   v_op:=toth_order_private.preorder_lease(p_operation_id,p_lease_token);
-  IF v_op.delivery_state<>'queued' THEN RAISE EXCEPTION 'toth_operation_already_dispatched' USING ERRCODE='40001'; END IF;
+  IF v_op.delivery_state<>'queued' THEN RAISE EXCEPTION 'toth_operation_already_dispatched' USING ERRCODE='PT409'; END IF;
   IF NOT toth_order_private.preorder_runtime_ready() THEN RETURN toth_order_private.preorder_block(v_op.id,'toth_write_contract_unverified'); END IF;
   IF NOT toth_order_private.enabled(v_op.organization_id) OR NOT EXISTS(SELECT 1 FROM public.team_members m
     WHERE m.organization_id=v_op.organization_id AND m.user_id=v_op.requested_by AND m.is_active AND m.role='admin')

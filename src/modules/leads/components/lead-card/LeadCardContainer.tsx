@@ -18,6 +18,7 @@ import {
   useDeleteLeadComment,
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
+import { notifyError } from "@/shared/errors";
 
 /**
  * O Card do Lead ligado ao banco.
@@ -116,8 +117,8 @@ export function LeadCardContainer({
       updateLead.mutate(
         { id: leadId, notes: texto },
         {
-          onError: () =>
-            toast.error("Não foi possível salvar a anotação. O texto continua na tela."),
+          onError: (caught: unknown) =>
+            notifyError(caught, { fallback: "Não foi possível salvar a anotação. O texto continua na tela." }),
         },
       );
     },
@@ -137,8 +138,8 @@ export function LeadCardContainer({
       if (!leadId || !organizacaoId) return;
       try {
         await criarComentario.mutateAsync({ leadId, organizationId: organizacaoId, body: texto });
-      } catch {
-        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível publicar o comentário. O texto continua na caixa." });
         // Reergue para a caixa NÃO esvaziar — engolir aqui apagaria o texto.
         throw new Error("comentario-nao-publicado");
       }
@@ -151,8 +152,8 @@ export function LeadCardContainer({
       if (!leadId) return;
       try {
         await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
-      } catch {
-        toast.error("Não foi possível salvar a edição do comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível salvar a edição do comentário." });
         throw new Error("comentario-nao-editado");
       }
     },
@@ -165,8 +166,8 @@ export function LeadCardContainer({
       try {
         await removerComentario.mutateAsync({ commentId: id, leadId });
         toast.success("Comentário apagado.");
-      } catch {
-        toast.error("Não foi possível apagar o comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível apagar o comentário." });
       }
     },
     [leadId, removerComentario],
@@ -302,7 +303,7 @@ export function LeadCardContainer({
           await deleteLead.mutateAsync(leadId);
           toast.success("Lead movido para a lixeira.");
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Erro ao excluir o lead.");
+          notifyError(e, { fallback: "Não foi possível excluir o lead." });
         }
       }}
     />

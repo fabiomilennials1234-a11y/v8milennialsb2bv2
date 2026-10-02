@@ -1,5 +1,5 @@
 {
-  "count": 804,
+  "count": 803,
   "generatedFrom": "node ./node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit",
   "errors": [
     "src/App.tsx|TS6133|'Campanhas' is declared but its value is never read.",
@@ -566,7 +566,6 @@
     "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx|TS6133|'ArrowRight' is declared but its value is never read.",
     "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx|TS6133|'responsibleMembers' is declared but its value is never read.",
     "src/modules/leads/hooks/lead/useLeadCreateHandler.ts|TS2769|No overload matches this call.",
-    "src/modules/leads/hooks/lead/useLeadPipeHandlers.ts|TS2561|Object literal may only specify known properties, but 'new_stage_id' does not exist in type '{ entry_id: string; pipeline_id: string; stage_id: string; }'. Did you mean to write 'stage_id'?",
     "src/modules/leads/hooks/useDuplicateLeads.ts|TS2339|Property 'organizationId' does not exist on type 'AuthContextType'.",
     "src/modules/leads/hooks/useExportLeads.ts|TS2352|Conversion of type '{ \"ID Lead\": string; Nome: {}; Empresa: {}; Email: {}; Telefone: {}; Faturamento: {}; Segmento: {}; Urgência: {}; Notas: {}; \"Prioridade do lead\": string; \"P\\u00FAblico de origem\": {}; utm_campaign: {}; utm_source: {}; ... 33 more ...; \"Data per\\u00EDodo m\\u00E9tricas Propostas\": string; }' to type 'Record<string, string | number>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
     "src/modules/leads/hooks/useImportLeads.ts|TS1117|An object literal cannot have multiple properties with the same name.",

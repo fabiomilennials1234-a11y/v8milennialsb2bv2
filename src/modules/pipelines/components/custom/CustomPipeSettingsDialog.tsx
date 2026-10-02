@@ -28,6 +28,7 @@ import { FunnelIdentitySection } from "../shared/FunnelIdentitySection";
 import { PipeDispatchRulesSection } from "../shared/PipeDispatchRulesSection";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
 import { ExportLeadsContent, useVentimaisExportDetails } from "@/modules/leads";
+import { notifyError } from "@/shared/errors";
 
 // ────────────────────────────────────────────────────────────
 // Dispatch Tab — Mensagens automáticas por etapa (SCRUM-629, D11)
@@ -53,7 +54,7 @@ function DispatchTabContent({
           : "Mensagens automáticas desativadas — envios pendentes deste funil foram cancelados"
       );
     } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar disparo por etapa");
+      notifyError(error, { fallback: "Não foi possível atualizar disparo por etapa." });
     }
   };
 

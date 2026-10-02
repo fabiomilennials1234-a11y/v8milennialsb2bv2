@@ -4,7 +4,6 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarDays, Check, Download, Gauge, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -31,9 +30,10 @@ import { mesDeReferencia } from "@/modules/analytics/lib/metrics-studio-mes-refe
 import templates from "@/modules/analytics/lib/metrics-studio-templates.json";
 import { zonedDateParts } from "@/shared/time/zoned-day";
 import { useCurrentTeamMember, useFeaturePermission, useIdentity, useOrganization } from "@/modules/identity";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 const Analytics = lazy(() => import("@/modules/analytics/components/dashboard/TabAnalyticsV2").then((m) => ({ default: m.TabAnalyticsV2 })));
-const showError = (error: unknown) => toast.error(error instanceof Error ? error.message : "Não foi possível concluir a alteração");
+const showError = (error: unknown) => notifyError(error, { fallback: "Não foi possível concluir a alteração." });
 
 /** Comando cuida da operação; aqui vivem os painéis compartilhados da organização. */
 export default function MetricsStudio() {
@@ -155,7 +155,7 @@ export default function MetricsStudio() {
         onReordenar={(ids) => void abas.reordenar(ids).catch(showError)}
         onRemover={(id) => setRemover(abas.paineis.find((p) => p.id === id) ?? null)} />
 
-      {erro ? <Alert variant="destructive"><AlertTitle>Não foi possível carregar o painel</AlertTitle><AlertDescription>{erro.message}
+      {erro ? <Alert variant="destructive"><AlertTitle>Não foi possível carregar o painel</AlertTitle><AlertDescription>{userMessageOf(erro, "Não foi possível carregar o painel.")}
         <Button variant="outline" onClick={() => { abas.refetch(); persistence.refetch(); }}>Tentar novamente</Button>
       </AlertDescription></Alert> : carregando ? <TorqueLoader variant="inline" /> : (
         <div ref={panelRef} id="studio-panel" role="tabpanel" aria-labelledby={ativa ? `studio-tab-${ativa.id}` : undefined}

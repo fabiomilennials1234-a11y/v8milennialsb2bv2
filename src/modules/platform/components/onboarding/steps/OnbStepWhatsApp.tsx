@@ -15,8 +15,8 @@ import {
   useWhatsAppInstances,
 } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useOnboardingAdvance } from "@/modules/platform/hooks/useOnboardingAdvance";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 const GUIDE_STEPS = [
   { text: "Abra o WhatsApp no seu celular" },
@@ -76,7 +76,7 @@ export function OnbStepWhatsApp() {
     try {
       await advance.mutateAsync({ action: "advance_whatsapp" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao avançar onboarding");
+      notifyError(err, { fallback: "Não foi possível avançar onboarding." });
       setPhase("qr");
     }
   };
@@ -91,7 +91,7 @@ export function OnbStepWhatsApp() {
       setQrCode(result.qr_code ?? null);
       setPhase("qr");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao criar instância");
+      notifyError(err, { fallback: "Não foi possível criar instância." });
     }
   };
 
@@ -101,7 +101,7 @@ export function OnbStepWhatsApp() {
       const res = await refreshQR.mutateAsync({ instance_id: instanceId });
       setQrCode(res.instance.qr_code ?? null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao atualizar QR Code");
+      notifyError(err, { fallback: "Não foi possível atualizar QR Code." });
     }
   };
 

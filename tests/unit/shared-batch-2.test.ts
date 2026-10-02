@@ -79,7 +79,7 @@ describe("generateEmbeddingsBatch", () => {
 });
 
 // ── error-boundary.ts ──
-import { logError, logEvent, withErrorBoundary } from "../../supabase/functions/_shared/error-boundary";
+import { logError, logEvent, UNHANDLED_ERROR_MESSAGE, withErrorBoundary } from "../../supabase/functions/_shared/error-boundary";
 
 describe("logError", () => {
   it("never throws on an Error", async () => {
@@ -136,10 +136,18 @@ describe("withErrorBoundary", () => {
     expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
   });
 
-  it("surfaces the error message in the body", async () => {
+  // ADR-0038 (S5): o corpo leva a frase PT, o código do contrato e o
+  // request_id — nunca a mensagem técnica da exceção, que ia parar no toast.
+  it("answers with the PT sentence, the contract code and the request_id — never the technical message", async () => {
     const handler = withErrorBoundary("test-fn", async () => { throw new Error("boom"); });
     const res = await handler(new Request("http://test.com"));
-    expect(await res.json()).toEqual({ error: "boom" });
+    const body = await res.json();
+    expect(body).toEqual({
+      error: UNHANDLED_ERROR_MESSAGE,
+      code: "server.unavailable",
+      request_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect(JSON.stringify(body)).not.toContain("boom");
   });
 });
 

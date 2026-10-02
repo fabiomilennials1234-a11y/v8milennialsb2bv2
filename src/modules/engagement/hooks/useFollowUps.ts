@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
 import { limitesDoDia } from "@/shared/time/dia-da-org";
+import { notifyError } from "@/shared/errors";
 export interface FollowUp {
   id: string;
   lead_id: string;
@@ -206,18 +207,13 @@ export function useCreateFollowUp() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao criar follow up",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível criar follow up." });
     },
   });
 }
 
 export function useUpdateFollowUp() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { organizationId } = useOrganization();
 
   return useMutation({
@@ -239,11 +235,7 @@ export function useUpdateFollowUp() {
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao atualizar follow up",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar follow up." });
     },
   });
 }
@@ -277,11 +269,7 @@ export function useCompleteFollowUp() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao concluir follow up",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível concluir follow up." });
     },
   });
 }
@@ -313,11 +301,7 @@ export function useArchiveFollowUp() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao arquivar",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível arquivar." });
     },
   });
 }
@@ -348,11 +332,7 @@ export function useArchiveManyFollowUps() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao arquivar",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível arquivar." });
     },
   });
 }
@@ -381,11 +361,7 @@ export function useDeleteFollowUp() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao excluir follow up",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível excluir follow up." });
     },
   });
 }
@@ -435,11 +411,7 @@ export function useCreateFollowUpAutomation() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao criar automação",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível criar automação." });
     },
   });
 }
@@ -468,11 +440,7 @@ export function useUpdateFollowUpAutomation() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao atualizar automação",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar automação." });
     },
   });
 }
@@ -498,11 +466,7 @@ export function useDeleteFollowUpAutomation() {
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao excluir automação",
-        description: error.message,
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível excluir automação." });
     },
   });
 }

@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { userMessageOf } from "@/shared/errors";
 
 /** Estados de aprovação da Meta. `null` = o fornecedor mandou algo desconhecido. */
 export type NotificameTemplateStatus =
@@ -75,6 +76,7 @@ export const notificameTemplatesQueryKey = (
  */
 async function readInvokeError(
   error: unknown,
+  fallback: string,
 ): Promise<{ code: string; message: string; problems: TemplateProblem[] }> {
   const ctx = (error as { context?: unknown })?.context;
   if (ctx && typeof (ctx as Response).json === "function") {
@@ -104,7 +106,9 @@ async function readInvokeError(
       // Corpo não-JSON: cai no genérico abaixo.
     }
   }
-  const message = error instanceof Error ? error.message : "Falha ao ler os templates";
+  // A mensagem vai para a tela (`NotificameTemplatesCard`, `TemplatePicker`,
+  // `StepMessage` a renderizam como está): nunca o texto técnico do erro.
+  const message = userMessageOf(error, fallback);
   return { code: "unknown", message, problems: [] };
 }
 
@@ -166,7 +170,10 @@ export function useCreateNotificameTemplate(instanceId: string) {
       });
 
       if (error) {
-        const { code, message, problems } = await readInvokeError(error);
+        const { code, message, problems } = await readInvokeError(
+          error,
+          "Não foi possível criar o template.",
+        );
         throw new NotificameTemplatesError(code, message, problems);
       }
       return data as { template: { id: string | null; status: string | null } };
@@ -203,7 +210,10 @@ export function useNotificameTemplates({
       });
 
       if (error) {
-        const { code, message } = await readInvokeError(error);
+        const { code, message } = await readInvokeError(
+          error,
+          "Não foi possível carregar os templates.",
+        );
         throw new NotificameTemplatesError(code, message);
       }
 

@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const SUPABASE_FUNCTIONS_URL = `${(import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "")}/functions/v1`;
 
@@ -174,7 +175,7 @@ export function useConnectGoogleCalendar() {
       window.location.href = authUrl;
     },
     onError: (error: Error) => {
-      toast.error("Erro ao conectar", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível conectar." });
     },
   });
 }
@@ -197,7 +198,7 @@ export function useDisconnectGoogleCalendar() {
       toast.success("Google Calendar desconectado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao desconectar", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível desconectar." });
     },
   });
 }

@@ -1,5 +1,5 @@
 import { memo, useRef, type ReactNode } from "react";
-import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -10,12 +10,14 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
+import { OUTCOME_CARD_CLASSES } from "./outcome-card-classes";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
 import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardChecklistsPanel } from "./LeadCardChecklistsPanel";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
+import { CardOutcomeBurst } from "./CardOutcomeBurst";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
 
@@ -55,6 +57,12 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  * O padrão "campo vazio é link azul sublinhado" vem do print e é intencional:
  * é o convite a preencher. Vale para produto, responsáveis e valor.
  */
+
+/** O selo que diz com palavra o que a cor diz. */
+const OUTCOME_BADGE = {
+  won: { className: "border-success/35 bg-success/15 text-success", Icon: Check, label: "Ganho" },
+  lost: { className: "border-destructive/35 bg-destructive/15 text-destructive", Icon: X, label: "Perdido" },
+} as const;
 
 interface Responsavel {
   name: string | null;
@@ -100,6 +108,8 @@ interface LeadCardCompactProps {
     qualTier?: QualificationTier | null;
     avatarUrl?: string | null;
     metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
+    /** Negócio encerrado — pinta o card (verde/vermelho) e troca "parado" pelo selo. */
+    outcome?: "won" | "lost" | null;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -196,6 +206,16 @@ function Badge({ children, className, style }: {
   );
 }
 
+function OutcomeBadge({ outcome }: { outcome: "won" | "lost" }) {
+  const { className, Icon, label } = OUTCOME_BADGE[outcome];
+  return (
+    <Badge className={className}>
+      <Icon className="size-[9px]" />
+      {label}
+    </Badge>
+  );
+}
+
 /**
  * Uma das 4 linhas com ícone. `vazio` é o texto do convite a preencher — e,
  * quando o valor falta, a linha vira link azul sublinhado, como no print.
@@ -273,10 +293,13 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
           "kanban-card group relative cursor-pointer p-0",
           "flex flex-col rounded-[10px]",
+          lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/50",
         )}
       >
+        {/* Ganho/perda: anéis verdes ou vermelhos por cima do card. */}
+        <CardOutcomeBurst entryId={lead.id} />
         <div className="flex flex-col gap-1.5 px-2.5 py-2">
 
           {/* ── 1. inicial · nome + empresa · QUALIFICAÇÃO · menu ── */}
@@ -502,6 +525,11 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
           {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}
           <div className="flex flex-wrap items-center gap-1">
+            {/* A cor sozinha não carrega informação para quem não distingue
+                verde de vermelho (WCAG 1.4.1): o selo diz com palavra o que o
+                fundo diz. */}
+            {lead.outcome && <OutcomeBadge outcome={lead.outcome} />}
+
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
@@ -520,7 +548,8 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
             {dateIndicator && <Badge className={dateIndicator.className}>{dateIndicator.label}</Badge>}
 
-            {diasParado != null && diasParado >= 3 && (
+            {/* Negócio ganho ou perdido não está "parado": está encerrado. */}
+            {!lead.outcome && diasParado != null && diasParado >= 3 && (
               <Badge
                 className={cn(
                   diasParado >= 14 ? "border-red-500/30 bg-red-500/10 text-red-500"

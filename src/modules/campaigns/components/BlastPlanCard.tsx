@@ -43,6 +43,7 @@ import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 // ─── Status presentation ─────────────────────────────────────────────────
 // Quiet pills — color-coded by lifecycle. Gold = running, muted = idle/done,
@@ -142,7 +143,7 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
           : "Disparo cancelado",
       );
     } catch (e) {
-      toast.error((e as Error).message || "Não foi possível atualizar o disparo");
+      notifyError(e, { fallback: "Não foi possível atualizar o disparo." });
     }
   };
 
@@ -164,7 +165,7 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
       toast.success("Disparo atualizado");
       setEditOpen(false);
     } catch (e) {
-      toast.error((e as Error).message || "Não foi possível editar o disparo");
+      notifyError(e, { fallback: "Não foi possível editar o disparo." });
     }
   };
 

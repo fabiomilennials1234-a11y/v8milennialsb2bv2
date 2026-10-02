@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const SUPABASE_FUNCTIONS_URL = `${(import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "")}/functions/v1`;
 
@@ -105,7 +106,7 @@ export function useShareCalendar() {
       toast.success("Calendário compartilhado com sucesso");
     },
     onError: (err: Error) => {
-      toast.error("Erro ao compartilhar", { description: err.message });
+      notifyError(err, { fallback: "Não foi possível compartilhar." });
     },
   });
 }
@@ -138,7 +139,7 @@ export function useUpdateCalendarShare() {
       toast.success("Permissão atualizada");
     },
     onError: (err: Error) => {
-      toast.error("Erro ao atualizar permissão", { description: err.message });
+      notifyError(err, { fallback: "Não foi possível atualizar permissão." });
     },
   });
 }
@@ -161,7 +162,7 @@ export function useRevokeCalendarShare() {
       toast.success("Acesso revogado");
     },
     onError: (err: Error) => {
-      toast.error("Erro ao revogar acesso", { description: err.message });
+      notifyError(err, { fallback: "Não foi possível revogar acesso." });
     },
   });
 }

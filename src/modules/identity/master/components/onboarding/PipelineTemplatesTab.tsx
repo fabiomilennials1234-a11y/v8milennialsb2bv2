@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePipelineTemplates, useDeletePipelineTemplate } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { PipelineTemplateEditor } from "./PipelineTemplateEditor";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function PipelineTemplatesTab() {
   const { data: templates, isLoading } = usePipelineTemplates();
@@ -16,8 +17,8 @@ export function PipelineTemplatesTab() {
     try {
       await deleteMutation.mutateAsync(id);
       toast.success("Template removido");
-    } catch {
-      toast.error("Erro ao remover template");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover template." });
     }
   };
 

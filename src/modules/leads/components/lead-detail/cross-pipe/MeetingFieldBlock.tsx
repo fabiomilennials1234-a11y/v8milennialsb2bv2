@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 type PipeConfirmacao = ProjectedConfirmacaoPipe;
 
@@ -102,8 +103,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
         toast.success(`Lead adicionado a ${nomeConfirmacao}`);
         onSuccess?.();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : `Erro ao adicionar a ${nomeConfirmacao}`;
-        toast.error(msg);
+        notifyError(err, { fallback: `Não foi possível adicionar o lead a ${nomeConfirmacao}.` });
       }
     };
 
@@ -198,8 +198,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
       toast.success("Reunião atualizada");
       onSuccess?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao atualizar reunião";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível atualizar a reunião." });
     }
   };
 
@@ -354,8 +353,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
             setCompareceuOpen(false);
             onSuccess?.();
           } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Erro ao registrar comparecimento";
-            toast.error(msg);
+            notifyError(err, { fallback: "Não foi possível registrar o comparecimento." });
           }
         }}
       />

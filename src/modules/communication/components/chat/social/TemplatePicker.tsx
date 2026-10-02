@@ -53,6 +53,7 @@ import {
 } from "@/modules/communication/lib/template-send";
 import { uploadSocialAttachment } from "@/modules/communication/lib/social-attachment-upload";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 
 export interface TemplatePickerProps {
   /** A instância do canal oficial — é ela que tem os templates. */
@@ -124,7 +125,7 @@ export function TemplatePicker({
       const anexo = await uploadSocialAttachment(file, teamMember.organization_id, "whatsapp_oficial");
       setMidia(anexo.url);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao anexar");
+      notifyError(e, { fallback: "Não foi possível anexar." });
     } finally {
       setSubindo(false);
     }
@@ -152,7 +153,7 @@ export function TemplatePicker({
     } catch (e) {
       // O texto do servidor diz o motivo real — "canal não envia template",
       // "fora da janela", "template não encontrado" pedem reações diferentes.
-      toast.error(e instanceof Error ? e.message : "Não foi possível enviar");
+      notifyError(e, { fallback: "Não foi possível enviar." });
     }
   }
 

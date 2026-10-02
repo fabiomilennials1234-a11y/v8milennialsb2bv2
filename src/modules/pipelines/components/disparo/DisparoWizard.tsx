@@ -54,6 +54,7 @@ import {
   type BlastPreviewState,
   type BlastRefinements,
 } from "./useBlastPreview";
+import { notifyError } from "@/shared/errors";
 
 /**
  * The funnel board's live filter, narrowed to the dimensions the "Filtro ativo"
@@ -547,7 +548,7 @@ function DisparoWizardInner({
       const { data } = supabase.storage.from("media").getPublicUrl(path);
       setImageUrl(data.publicUrl);
     } catch (e) {
-      toast.error(`Falha no upload: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível enviar o arquivo." });
     } finally {
       setUploading(false);
     }
@@ -573,7 +574,7 @@ function DisparoWizardInner({
       });
       setResult(res);
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao iniciar disparo");
+      notifyError(e, { fallback: "Não foi possível iniciar disparo." });
     }
   }
 
@@ -599,7 +600,7 @@ function DisparoWizardInner({
       });
       setPlanResult(res);
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao criar o plano");
+      notifyError(e, { fallback: "Não foi possível criar o plano." });
     }
   }
 

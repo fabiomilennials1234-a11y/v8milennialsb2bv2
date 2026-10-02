@@ -27,6 +27,7 @@ import { useCreatePipeProposta, useCreateManyPipePropostaItems } from "@/modules
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface ProductItem {
   id: string;
@@ -207,7 +208,7 @@ export function CreateProposalModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar proposta");
+      notifyError(error, { fallback: "Não foi possível criar proposta." });
       console.error(error);
     }
   };

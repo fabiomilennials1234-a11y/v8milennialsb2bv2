@@ -4,8 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useComandoAgenda } from "./useComandoAgenda";
 import { useConversasAguardando } from "./useConversasAguardando";
+import { addErrorReporter, type ErrorReport } from "@/shared/errors";
 
-const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
+const { fetchMock, chips } = vi.hoisted(() => ({
+  fetchMock: vi.fn(),
+  chips: { value: [{ id: "chip-1", instance_name: "Comercial" }] },
+}));
 
 // Keep the real SDK: replacing rpc with a mock hides loss of its `this` receiver.
 vi.mock("@/integrations/supabase/client", async () => {
@@ -23,9 +27,7 @@ vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { organization_id: "org-1" } }),
 }));
 vi.mock("@/modules/communication", () => ({
-  useWhatsAppInstancesForUser: () => ({
-    data: [{ id: "chip-1", instance_name: "Comercial" }], isLoading: false,
-  }),
+  useWhatsAppInstancesForUser: () => ({ data: chips.value, isLoading: false }),
 }));
 vi.mock("./useComandoScope", () => ({
   useComandoScope: () => ({
@@ -47,6 +49,7 @@ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data),
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   fetchMock.mockReset();
+  chips.value = [{ id: "chip-1", instance_name: "Comercial" }];
 });
 afterEach(() => { cleanup(); client.clear(); });
 
@@ -70,9 +73,9 @@ describe("Comando RPC transport", () => {
 
   it("loads waiting conversations and only displays those linked to leads", async () => {
     fetchMock.mockImplementation(async (url: string) => {
-      if (url.includes("/rpc/get_conversations_awaiting_human_reply")) {
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json([null, "lead-1"].map((lead_id, i) => ({
-          lead_id, normalized_phone: `551199999000${i}`, phone_number: `551199999000${i}`,
+          instance_id: "chip-1", lead_id, normalized_phone: `551199999000${i}`, phone_number: `551199999000${i}`,
           push_name: null, last_client_message: "Preciso de ajuda",
           last_client_message_at: inicio.toISOString(), ai_replied: i === 1,
           ai_replied_at: null, waiting_total: 2, owner_team_member_id: "member-1",
@@ -89,8 +92,9 @@ describe("Comando RPC transport", () => {
       leadId: "lead-1", displayName: "Lead cadastrado", aiReplied: true,
       lastClientMessage: "Preciso de ajuda",
     })]);
+    expect(fetchMock.mock.calls[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      p_org: "org-1", p_instance: "chip-1", p_limit: 30,
+      p_org: "org-1", p_instances: ["chip-1"], p_limit: 30,
     });
   });
 
@@ -155,6 +159,129 @@ describe("Comando RPC transport", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.semChips).toBe(false);
     expect(result.current.isDegraded).toBe(false);
+  });
+
+
+  // Incidente 2026-10-02: 57 caixas viravam 57 RPCs de 12 s cada.
+  it("asks for every box in ONE multi-box RPC and labels each row with its own box", async () => {
+    chips.value = Array.from({ length: 57 }, (_, i) => ({
+      id: `chip-${i}`, instance_name: `Caixa ${i}`,
+    }));
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
+        return json([
+          { instance_id: "chip-7", lead_id: "lead-a", normalized_phone: "5511999990001",
+            phone_number: "5511999990001", push_name: "A", waiting_total: 2,
+            owner_team_member_id: "member-1", owner_name: "Ana",
+            last_client_message_at: "2026-09-08T12:00:00Z" },
+          { instance_id: "chip-42", lead_id: "lead-b", normalized_phone: "5511999990001",
+            phone_number: "5511999990001", push_name: "B", waiting_total: 2,
+            owner_team_member_id: "member-1", owner_name: "Ana",
+            last_client_message_at: "2026-09-08T13:00:00Z" },
+        ]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.p_instances).toHaveLength(57);
+    expect(body).not.toHaveProperty("p_instance");
+    // Mesmo telefone em duas caixas = duas conversas, cada uma na SUA caixa.
+    expect(result.current.items.map((r) => [r.key, r.instanceId, r.instanceName])).toEqual([
+      ["chip-42:5511999990001", "chip-42", "Caixa 42"],
+      ["chip-7:5511999990001", "chip-7", "Caixa 7"],
+    ]);
+    expect(result.current.chipsComErro).toBe(0);
+  });
+
+  it("falls back to the per-box RPC only while the multi-box one is not deployed", async () => {
+    chips.value = [
+      { id: "chip-1", instance_name: "Comercial" },
+      { id: "chip-2", instance_name: "Suporte" },
+    ];
+    fetchMock.mockImplementation(async (url: string, init: { body: string }) => {
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
+        return json({ code: "PGRST202", message: "Could not find the function" }, 404);
+      }
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply")) {
+        const { p_instance } = JSON.parse(init.body);
+        if (p_instance === "chip-2") return json({ code: "XX000", message: "boom" }, 500);
+        return json([{ lead_id: "lead-1", normalized_phone: "5511999990001",
+          phone_number: "5511999990001", push_name: "A", waiting_total: 1,
+          owner_team_member_id: "member-1", owner_name: "Ana",
+          last_client_message_at: "2026-09-08T12:00:00Z" }]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isError).toBe(false);
+    expect(result.current.chipsComErro).toBe(1);
+    expect(result.current.items).toEqual([expect.objectContaining({
+      key: "chip-1:5511999990001", instanceId: "chip-1", instanceName: "Comercial",
+    })]);
+  });
+
+  it("does not call the server at all when the user has no box", async () => {
+    chips.value = [];
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.semChips).toBe(true));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+
+  // Revisor, volta 1: o fallback para o fan-out só pode abrir com a função
+  // AUSENTE do schema (PGRST202). 42883 também é erro de runtime dentro do
+  // corpo, e 42703 é coluna inexistente — defeito da multi, que precisa
+  // aparecer como erro em vez de virar N × 12 s de banco em silêncio.
+  it.each([
+    ["42883", "function public.whatsapp_chip_instance_ids(uuid) does not exist"],
+    ["42703", "column m.foo does not exist"],
+    ["42P01", "relation \"public.x\" does not exist"],
+  ])("multi-box RPC runtime error %s surfaces as error, never fans out per box", async (code, message) => {
+    chips.value = [
+      { id: "chip-1", instance_name: "Comercial" },
+      { id: "chip-2", instance_name: "Suporte" },
+    ];
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
+        return json({ code, message }, 400);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
+    expect(result.current.isDegraded).toBe(false);
+  });
+
+  it("PGRST202 (multi not deployed) falls back per box and reports it", async () => {
+    const reports: ErrorReport[] = [];
+    const remover = addErrorReporter((r) => reports.push(r));
+    chips.value = [
+      { id: "chip-1", instance_name: "Comercial" },
+      { id: "chip-2", instance_name: "Suporte" },
+    ];
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
+        return json({ code: "PGRST202", message: "Could not find the function" }, 404);
+      }
+      if (url.includes("/rpc/get_conversations_awaiting_human_reply")) return json([]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    remover();
+    expect(result.current.isError).toBe(false);
+    const porChip = fetchMock.mock.calls.filter(
+      ([u]) => /\/rpc\/get_conversations_awaiting_human_reply$/.test(String(u).split("?")[0]),
+    );
+    expect(porChip).toHaveLength(2);
+    expect(reports.map((r) => r.context.fallback)).toEqual(["awaiting-multi-ausente"]);
   });
 
 });

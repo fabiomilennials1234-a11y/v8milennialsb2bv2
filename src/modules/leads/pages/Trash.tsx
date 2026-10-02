@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Trash2,
   RotateCcw,
@@ -29,6 +29,7 @@ import {
   useRestoreLeadsBulk,
   usePurgeLead,
 } from "../hooks/useTrashLeads";
+import { notifyError } from "@/shared/errors";
 
 export default function Trash() {
   const { data: leads, isLoading } = useTrashLeads();
@@ -40,15 +41,19 @@ export default function Trash() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [purgeTarget, setPurgeTarget] = useState<string | null>(null);
 
-  const filtered = leads?.filter((l) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      l.name.toLowerCase().includes(q) ||
-      l.company?.toLowerCase().includes(q) ||
-      l.phone?.includes(q)
-    );
-  }) ?? [];
+  const filtered = useMemo(
+    () =>
+      leads?.filter((l) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+          l.name.toLowerCase().includes(q) ||
+          l.company?.toLowerCase().includes(q) ||
+          l.phone?.includes(q)
+        );
+      }) ?? [],
+    [leads, search],
+  );
 
   const toggleSelect = useCallback((id: string) => {
     setSelected((prev) => {
@@ -71,8 +76,8 @@ export default function Trash() {
       await restoreLead.mutateAsync(id);
       toast.success("Lead restaurado");
       setSelected((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    } catch {
-      toast.error("Erro ao restaurar");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível restaurar." });
     }
   }, [restoreLead]);
 
@@ -82,8 +87,8 @@ export default function Trash() {
       await restoreBulk.mutateAsync(Array.from(selected));
       toast.success(`${selected.size} leads restaurados`);
       setSelected(new Set());
-    } catch {
-      toast.error("Erro ao restaurar leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível restaurar leads." });
     }
   }, [selected, restoreBulk]);
 
@@ -93,8 +98,8 @@ export default function Trash() {
       await purgeLead.mutateAsync(purgeTarget);
       toast.success("Lead excluido permanentemente");
       setPurgeTarget(null);
-    } catch {
-      toast.error("Erro ao excluir permanentemente");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível excluir permanentemente." });
     }
   }, [purgeTarget, purgeLead]);
 

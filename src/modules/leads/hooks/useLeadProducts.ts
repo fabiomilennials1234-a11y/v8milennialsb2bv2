@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface LeadProduct {
   id: string;
@@ -88,7 +89,7 @@ export function useAddLeadProduct() {
       toast.success("Produto vinculado ao lead");
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao vincular produto: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível vincular produto." });
     },
   });
 }

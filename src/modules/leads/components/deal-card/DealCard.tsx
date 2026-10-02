@@ -173,6 +173,8 @@ function AcaoPrimaria({
       type="button"
       onClick={onClick}
       disabled={desabilitado}
+      // De onde a celebração do painel lança o símbolo (`useCelebracaoDoDesfecho`).
+      data-desfecho={tom === "ganho" ? "won" : "lost"}
       className={cn(
         "disabled:pointer-events-none disabled:opacity-45",
         "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors",
@@ -508,8 +510,10 @@ export function DealCard({
           {etiquetas && <div className="mt-2">{etiquetas}</div>}
         </div>
 
-        {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não posições.
-            O card NÃO se move: o desfecho pode ser dado em qualquer etapa.
+        {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não posições:
+            o desfecho pode ser dado em qualquer etapa. Ao GANHAR, o banco leva
+            o card para a etapa de ganho ou de sucesso do funil, quando há (Emenda 2,
+            20271021000039); sem ela, o card fica e o ganho vale sozinho.
 
             O bloco anterior condicionava os dois botões a `etapaGanha`/
             `etapaPerdida` e argumentava que "botão que não tem para onde ir

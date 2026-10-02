@@ -62,6 +62,7 @@ import { useOrgQuotas } from "@/modules/identity";
 import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
+import { notifyError } from "@/shared/errors";
 
 export default function Copilot() {
   const navigate = useNavigate();
@@ -112,7 +113,7 @@ export default function Copilot() {
       if (!newId) throw new Error("Falha ao criar rascunho");
       navigate(`/copilot/${newId}/editar?builder=1`);
     } catch (e) {
-      toast.error("Não foi possível iniciar o assistente. Tente novamente.");
+      notifyError(e, { fallback: "Não foi possível iniciar o assistente. Tente novamente." });
     }
   };
 

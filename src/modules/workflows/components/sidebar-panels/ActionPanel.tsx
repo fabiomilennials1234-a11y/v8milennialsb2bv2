@@ -37,6 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/modules/identity";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
 import {
   TemplateTextarea,
@@ -1766,8 +1767,7 @@ function WhatsAppImagePanel({
         onUpdate({ imageUrl: urlData.publicUrl });
         toast.success("Imagem enviada!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar imagem";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar a imagem." });
       } finally {
         setIsUploading(false);
       }
@@ -1931,8 +1931,7 @@ function WhatsAppVideoPanel({
         onUpdate({ videoUrl: urlData.publicUrl, videoMode: "upload" });
         toast.success("Vídeo enviado!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar vídeo";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o vídeo." });
       } finally {
         setIsUploading(false);
       }
@@ -2093,8 +2092,7 @@ function WhatsAppDocumentPanel({
         onUpdate({ documentUrl: urlData.publicUrl, documentName: file.name });
         toast.success("Documento enviado!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar documento";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o documento." });
       } finally {
         setIsUploading(false);
       }
@@ -2507,7 +2505,9 @@ function AudioRecorderField({
             upsert: false,
           });
 
-        if (error) throw new Error(`Erro ao enviar áudio: ${error.message}`);
+        // O erro original: prefixar a mensagem do Storage com uma frase em PT
+        // faria o texto técnico passar por humano e chegar ao toast.
+        if (error) throw error;
 
         const { data: urlData } = supabase.storage
           .from("media")
@@ -2524,9 +2524,8 @@ function AudioRecorderField({
         setLocalBlob(null);
         toast.success("Áudio salvo com sucesso!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar áudio";
         console.error("Erro ao enviar áudio:", err);
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o áudio." });
       } finally {
         setIsUploading(false);
       }

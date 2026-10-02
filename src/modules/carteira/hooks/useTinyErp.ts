@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 import { invalidateProductQueries } from "./useProducts";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Extracts the actual error message from a Supabase FunctionsHttpError.
@@ -122,7 +123,7 @@ export function useConnectTinyErp() {
       toast.success("TinyERP conectado com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao conectar TinyERP", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível conectar TinyERP." });
     },
   });
 }
@@ -146,7 +147,7 @@ export function useDisconnectTinyErp() {
       toast.success("TinyERP desconectado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao desconectar", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível desconectar." });
     },
   });
 }
@@ -173,7 +174,7 @@ export function useTinyErpSyncProducts() {
       toast.success(`Produtos sincronizados: ${created} criados, ${updated} atualizados`);
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar produtos", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar produtos." });
     },
   });
 }
@@ -199,7 +200,7 @@ export function useTinyErpPushOrder() {
       toast.success("Pedido enviado para o TinyERP!");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao enviar pedido", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível enviar pedido." });
     },
   });
 }
@@ -306,7 +307,7 @@ export function useTinyErpFetchNfe() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao buscar NF-e", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível buscar NF-e." });
     },
   });
 }

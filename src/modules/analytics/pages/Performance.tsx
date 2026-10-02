@@ -65,6 +65,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { resolveMeetingGoals } from "@/modules/engagement/lib/goal-progress";
 import badgeIcon from "@/assets/badge-icon.png";
+import { notifyError } from "@/shared/errors";
 
 // ============ CONSTANTS ============
 const months = [
@@ -767,7 +768,7 @@ export default function Performance() {
       await endCompetition.mutateAsync(activeCompetition.id);
       toast.success("Competição cancelada.");
     } catch (err: any) {
-      toast.error("Erro ao cancelar competição: " + (err?.message || ""));
+      notifyError(err, { fallback: "Não foi possível cancelar competição." });
     } finally {
       setCancelCompetitionOpen(false);
     }
@@ -847,7 +848,7 @@ export default function Performance() {
       queryClient.invalidateQueries({ queryKey: ["competition-participants"] });
       queryClient.invalidateQueries({ queryKey: ["competition-prizes"] });
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar competição demo");
+      notifyError(error, { fallback: "Não foi possível criar competição demo." });
     } finally {
       setIsSeeding(false);
     }
@@ -1087,7 +1088,7 @@ export default function Performance() {
       toast.success("Meta excluída com sucesso!");
       setDeleteGoalId(null);
     } catch (error: unknown) {
-      toast.error("Erro ao excluir meta: " + (error as Error).message);
+      notifyError(error, { fallback: "Não foi possível excluir meta." });
     }
   };
 

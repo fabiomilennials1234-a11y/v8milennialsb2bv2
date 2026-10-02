@@ -1,7 +1,7 @@
 # CONTRIBUTING — Torque CRM
 
 Padrões de contribuição do Torque CRM. Documento curto e operacional.
-Detalhe técnico vive em [`CLAUDE.md`](./CLAUDE.md).
+Detalhe técnico vive em `docs/adr/`, no `CONTEXT.md` e no vault.
 
 ---
 
@@ -173,7 +173,6 @@ git commit -m "docs(vault): renomeia <X> para <Y>"
 - [ ] Build não quebra (`npm run build`)
 - [ ] Lint limpo (`npm run lint`)
 - [ ] Wikilinks do vault íntegros (se tocou em vault)
-- [ ] CLAUDE.md atualizado (se mudou padrão estrutural ou área frágil)
 
 ### No PR
 
@@ -215,7 +214,7 @@ Default = **dev**. Deploy em produção exige **pedido explícito do CTO na sess
 
 ⚠️ O projeto dev foi **aposentado** em 2026-07-22 (estava 404 migrations atrás).
 O alvo de validação passou a ser **branch efêmera do Supabase a partir de prod** —
-descartável, sempre encerrada após o teste. Ver `CLAUDE.md` § Ambientes.
+descartável, sempre encerrada após o teste. Ver `.specs/project/runbook-validacao-local.md`.
 
 **Bloqueio ativo:** a branch replaya as migrations do repo do zero e o repo não
 replaya (840 migrations, morre em jan/2026). Enquanto o baseline não for feito,
@@ -251,6 +250,5 @@ npm run test:unit
 
 ## Referências
 
-- [`CLAUDE.md`](./CLAUDE.md) — instruções para agente Claude Code
 - [`Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md`](./Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/00%20—%20INDEX.md) — índice do vault
 - [Conventional Commits](https://www.conventionalcommits.org/pt-br/v1.0.0/)

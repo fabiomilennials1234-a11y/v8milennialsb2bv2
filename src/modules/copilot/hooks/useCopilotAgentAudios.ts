@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 import type { CopilotAgentAudio } from "@/types/copilot";
+import { notifyError } from "@/shared/errors";
 
 const MAX_AUDIOS = 5;
 
@@ -125,9 +126,7 @@ export function useUploadCopilotAgentAudio() {
       toast.success("Áudio cadastrado!");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao cadastrar áudio", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível cadastrar áudio." });
     },
   });
 }
@@ -174,9 +173,7 @@ export function useDeleteCopilotAgentAudio() {
       toast.success("Áudio removido");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao remover áudio", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível remover áudio." });
     },
   });
 }
@@ -212,9 +209,7 @@ export function useUpdateCopilotAgentAudio() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar áudio", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar áudio." });
     },
   });
 }

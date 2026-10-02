@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { sanitizeFileName } from "@/shared/format/storage-key";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type AgentDocument = {
   id: string;
@@ -142,9 +143,7 @@ export function useUploadAgentDocument() {
       });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao enviar documento", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível enviar documento." });
     },
   });
 }
@@ -191,9 +190,7 @@ export function useDeleteAgentDocument() {
       toast.success("Documento removido");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao remover documento", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível remover documento." });
     },
   });
 }
@@ -268,9 +265,7 @@ export function useUpdateAgentDocument() {
       toast.success("Documento atualizado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar documento", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível atualizar documento." });
     },
   });
 }
@@ -313,9 +308,7 @@ export function useReprocessDocument() {
       toast.success("Reprocessamento iniciado!");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao reprocessar", {
-        description: error.message,
-      });
+      notifyError(error, { fallback: "Não foi possível reprocessar." });
     },
   });
 }

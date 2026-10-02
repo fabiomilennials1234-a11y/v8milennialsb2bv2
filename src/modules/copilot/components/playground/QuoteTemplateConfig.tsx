@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DOCX_MIME, DERIVED_FIELDS, QUOTE_MAX_BYTES } from "@/contracts/copilot/quote-document";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface Props { agentId?: string; config: Record<string, unknown>; onChange: (patch: Record<string, unknown>) => void }
 export function QuoteTemplateConfig({ agentId, config, onChange }: Props) {
@@ -29,7 +30,7 @@ export function QuoteTemplateConfig({ agentId, config, onChange }: Props) {
       onChange({ templateDocumentId: model.id, templateName: model.name, fields: model.fields,
         requiredFields: model.fields.filter((f: string) => !DERIVED_FIELDS.includes(f)).join(", ") });
       toast.success("Modelo importado. Salve o agente para usar a nova versão.");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Falha ao importar."); }
+    } catch (error) { notifyError(error, { fallback: "Não foi possível importar." }); }
     finally { setBusy(false); }
   }
   async function changePdf(enabled: boolean) {
@@ -39,7 +40,7 @@ export function QuoteTemplateConfig({ agentId, config, onChange }: Props) {
       const health = await invoke({ action: "health" });
       if (health.pdf !== true) throw new Error("Conversor PDF indisponível.");
       onChange({ convertToPdf: true });
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Conversor indisponível."); }
+    } catch (error) { notifyError(error, { fallback: "Conversor indisponível." }); }
     finally { setBusy(false); }
   }
   async function preview() {
@@ -50,7 +51,7 @@ export function QuoteTemplateConfig({ agentId, config, onChange }: Props) {
       const url = URL.createObjectURL(new Blob([bytes], { type: pdf ? "application/pdf" : DOCX_MIME }));
       const link = document.createElement("a"); link.href = url; link.download = `orcamento-teste.${pdf ? "pdf" : "docx"}`;
       link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Prévia indisponível."); }
+    } catch (error) { notifyError(error, { fallback: "Prévia indisponível." }); }
     finally { setBusy(false); }
   }
   return <div className="flex flex-col gap-3">

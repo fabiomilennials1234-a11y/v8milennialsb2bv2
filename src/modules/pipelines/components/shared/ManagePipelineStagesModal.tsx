@@ -86,6 +86,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Etapa como o EDITOR ÚNICO a enxerga (SCRUM-636, D3).
@@ -796,10 +797,8 @@ export function ManagePipelineStagesContent({
       const mensagem = mensagemDeConflitoDeEtapa(error);
       if (mensagem) {
         toast.error(mensagem);
-      } else if (typeof error?.message === "string" && error.message.trim()) {
-        toast.error(error.message);
       } else {
-        toast.error("Erro ao criar etapa");
+        notifyError(error, { fallback: "Não foi possível criar a etapa." });
       }
     }
   };
@@ -835,7 +834,7 @@ export function ManagePipelineStagesContent({
       setMigrateToStageId("");
     } catch (error: any) {
       console.error("Error deleting stage:", error);
-      toast.error(error.message || "Erro ao remover etapa");
+      notifyError(error, { fallback: "Não foi possível remover etapa." });
     }
   };
 

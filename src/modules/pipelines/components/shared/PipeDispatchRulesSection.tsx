@@ -42,6 +42,7 @@ import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 import { usePipeQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { DispatchQueueSheet } from "@/shared/components/DispatchQueueSheet";
+import { notifyError } from "@/shared/errors";
 
 const TRIGGER_LABELS: Record<PipeDispatchRuleTriggerType, string> = {
   lead_added: "Ao adicionar lead no funil",
@@ -252,8 +253,8 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
     try {
       await deleteRule.mutateAsync({ id: r.id, pipe_type: pipeType, pipeline_id: pipelineId });
       toast.success("Regra removida");
-    } catch {
-      toast.error("Erro ao remover regra");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover regra." });
     }
   };
 
@@ -329,7 +330,7 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
         body: pipelineId ? { pipeline_id: pipelineId } : { pipe_type: pipeType },
       });
       if (error) {
-        toast.error(error.message || "Erro ao processar fila");
+        notifyError(error, { fallback: "Não foi possível processar fila." });
         return;
       }
       const result = data as { processed?: number; sent?: number; failed?: number; actions_executed?: number; message?: string } | null;
@@ -344,7 +345,7 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
       }
       queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_metrics", organizationId, pipelineId ?? pipeType] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
+      notifyError(e, { fallback: "Não foi possível processar fila." });
     } finally {
       setProcessingQueue(false);
     }

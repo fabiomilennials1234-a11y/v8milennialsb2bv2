@@ -1,8 +1,9 @@
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 /**
  * A CSP de `index.html` é estática e lista `https://*.supabase.co`. Isso cobre
@@ -59,6 +60,65 @@ function cspComOrigemDoSupabase(supabaseUrl: string): Plugin {
   };
 }
 
+/**
+ * Source maps para o Sentry (ADR-0038, S6). Só existe com `SENTRY_AUTH_TOKEN`
+ * no ambiente do build — e o token só existe no estágio builder do Docker, nunca
+ * no bundle nem na imagem servida.
+ *
+ * Com token: o plugin injeta um debug id em cada chunk, sobe os `.map` e os
+ * apaga do `dist/` logo depois. Sem token (dev, CI de teste, build local): não
+ * roda, os maps ficam no `dist/` do builder e o Dockerfile os apaga da imagem.
+ * Nos dois caminhos `/assets/*.map` nunca é servido.
+ *
+ * `release.inject: false` porque o `main.tsx` já passa o release ao SDK
+ * (`__APP_VERSION__`, o sha do build). O casamento do map com o chunk é pelo
+ * debug id, não pelo release.
+ */
+function sentrySourceMaps(env: Record<string, string>): PluginOption {
+  const authToken = env.SENTRY_AUTH_TOKEN?.trim();
+  if (!authToken) return null;
+  return sentryVitePlugin({
+    authToken,
+    org: env.SENTRY_ORG,
+    project: env.SENTRY_PROJECT,
+    // Organização na região EU: a API é outra (de.sentry.io).
+    url: env.SENTRY_URL || "https://de.sentry.io",
+    release: { name: env.VITE_APP_VERSION || undefined, inject: false },
+    sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
+    telemetry: false,
+  });
+}
+
+/**
+ * Nome do componente React no rastro de clique e no replay (ADR-0038, S6):
+ * `data-sentry-component="KanbanCard"` em cada elemento renderizado. O passo a
+ * passo no Sentry passa de `div > button` para `KanbanCard > BotaoExcluir` —
+ * legível, e sem dado de lead (o nome vem do código, não da tela; o rótulo
+ * visível continua fora do rastro, ver `sentry-event.ts`).
+ *
+ * Plugin à parte, com `enforce: 'pre'` e ANTES do `react()`: o SWC também é
+ * `pre` e compila o JSX; o plugin do Sentry no fim da fila receberia JS sem JSX e
+ * não marcaria nada, em silêncio. Daqui só o `transform` de marcação — sem
+ * upload, sem release, sem debug id (isso é do `sentrySourceMaps`).
+ *
+ * Só no build: o dev do time não paga o passe extra de Babel por arquivo, e o
+ * dev não manda nada ao Sentry.
+ */
+function sentryComponentNames(): Plugin {
+  const [sentry] = sentryVitePlugin({
+    telemetry: false,
+    reactComponentAnnotation: { enabled: true },
+    sourcemaps: { disable: true },
+    release: { create: false, finalize: false, inject: false },
+  }) as Plugin[];
+  return {
+    name: "torque-sentry-component-names",
+    enforce: "pre",
+    apply: "build",
+    transform: sentry.transform,
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // `loadEnv` porque o valor pode vir do ambiente (CI) OU de um `.env` local —
@@ -84,6 +144,8 @@ export default defineConfig(({ mode }) => {
     },
   },
   plugins: [
+    // Antes do react(): precisa ver o JSX antes do SWC compilá-lo.
+    sentryComponentNames(),
     react(),
     cspComOrigemDoSupabase(env.VITE_SUPABASE_URL),
     VitePWA({
@@ -124,12 +186,18 @@ export default defineConfig(({ mode }) => {
       injectManifest: {
         // NEVER cache WebSocket / Realtime connections
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // HTML fora do precache: navegação vai sempre à rede (nginx serve o
+        // index.html com no-store). Precacheado, o SW antigo servia `/` de um
+        // build que já não existe no servidor (chamado 39ff2cd1).
+        globIgnores: ['**/*.html'],
       },
       devOptions: {
         enabled: false, // Don't run SW in dev
       },
     }),
     mode === "development" && componentTagger(),
+    // Por último: o plugin do Sentry precisa ver o bundle já final.
+    mode === "production" && sentrySourceMaps(env),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -153,8 +221,11 @@ export default defineConfig(({ mode }) => {
         drop: ['console', 'debugger'],
       },
     }),
-    // Source maps em produção para stack traces legíveis, em dev para debugging
-    sourcemap: true,
+    // `hidden`: o map é gerado, mas o bundle não aponta para ele (sem
+    // `//# sourceMappingURL`). Ele existe para ser enviado ao Sentry e nunca é
+    // servido — o Dockerfile o apaga da imagem do nginx. Com `true`, o código-fonte
+    // inteiro ficava público em /assets/*.js.map. Ver docs/adr/0038.
+    sourcemap: 'hidden',
     // Dividir chunks para melhor cache
     rollupOptions: {
       output: {
@@ -174,6 +245,13 @@ export default defineConfig(({ mode }) => {
     },
   },
   define: {
+    // Tree-shaking do SDK do Sentry (ADR-0038, S6) — valem com ou sem o plugin,
+    // para o bundle não depender de haver token no build: sem logger de debug,
+    // sem tracing (não usamos), sem gravar iframe nem shadow DOM no replay.
+    __SENTRY_DEBUG__: false,
+    __SENTRY_TRACING__: false,
+    __RRWEB_EXCLUDE_IFRAME__: true,
+    __RRWEB_EXCLUDE_SHADOW_DOM__: true,
     // Identifica o build, não o produto. A imagem Docker é taggeada com o sha
     // curto; sem isto o Support Context de um Chamado apontaria para a versao
     // do package.json, que nao muda entre deploys.

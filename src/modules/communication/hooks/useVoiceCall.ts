@@ -66,6 +66,7 @@ import {
   type PcmAudioSession,
 } from "@/modules/communication/lib/voicePcmSession";
 import { startRingback } from "@/modules/communication/lib/voiceRingback";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 /** Rótulo exigido pela VPS. Qualquer outro é ignorado por ela, em silêncio. */
 const PCM_CHANNEL_LABEL = "pcm";
@@ -576,7 +577,12 @@ export function useVoiceCall(tcSessionId: string | null) {
           });
         } catch (e) {
           if (e instanceof CallDeniedError) fail(e.message, e.code);
-          else fail(e instanceof Error ? e.message : "Falha ao iniciar a chamada", null);
+          else {
+            // A tela já mostra a falha no painel da chamada; aqui só não deixamos a
+            // causa técnica sumir (ADR-0038).
+            notifyError(e, { fallback: "Não foi possível iniciar a chamada.", silent: true, context: { feature: "voice_call" } });
+            fail(userMessageOf(e, "Não foi possível iniciar a chamada."), null);
+          }
           return;
         }
 
@@ -664,7 +670,10 @@ export function useVoiceCall(tcSessionId: string | null) {
             callId: call.callId,
             organizationId: organizationId ?? undefined,
           }).catch(() => {});
-          fail(e instanceof Error ? e.message : "Falha ao estabelecer o áudio", "media_failed");
+          // A tela já mostra a falha no painel da chamada; aqui só não deixamos a
+          // causa técnica sumir (ADR-0038).
+          notifyError(e, { fallback: "Não foi possível estabelecer o áudio.", silent: true, context: { feature: "voice_call" } });
+          fail(userMessageOf(e, "Não foi possível estabelecer o áudio."), "media_failed");
           return;
         }
       } finally {
@@ -782,7 +791,12 @@ export function useVoiceCall(tcSessionId: string | null) {
           // pegou primeiro. É o desfecho normal da corrida que o ADR-0027
           // desenha, e por isso vira uma frase e não um susto.
           if (e instanceof CallDeniedError) fail(e.message, e.code);
-          else fail(e instanceof Error ? e.message : "Falha ao atender a chamada", null);
+          else {
+            // A tela já mostra a falha no painel da chamada; aqui só não deixamos a
+            // causa técnica sumir (ADR-0038).
+            notifyError(e, { fallback: "Não foi possível atender a chamada.", silent: true, context: { feature: "voice_call" } });
+            fail(userMessageOf(e, "Não foi possível atender a chamada."), null);
+          }
           return false;
         }
 
@@ -861,7 +875,10 @@ export function useVoiceCall(tcSessionId: string | null) {
             callId: call.callId,
             organizationId: organizationId ?? undefined,
           }).catch(() => {});
-          fail(e instanceof Error ? e.message : "Falha ao estabelecer o áudio", "media_failed");
+          // A tela já mostra a falha no painel da chamada; aqui só não deixamos a
+          // causa técnica sumir (ADR-0038).
+          notifyError(e, { fallback: "Não foi possível estabelecer o áudio.", silent: true, context: { feature: "voice_call" } });
+          fail(userMessageOf(e, "Não foi possível estabelecer o áudio."), "media_failed");
           return false;
         }
 

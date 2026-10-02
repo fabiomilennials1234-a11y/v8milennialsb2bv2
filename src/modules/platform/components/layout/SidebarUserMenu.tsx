@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
 import { useAuth, useGestor, useIdentity, useJobTitle, useMasterAuth, useUserRole } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -86,8 +87,7 @@ export function SidebarUserMenu({ collapsed }: { collapsed: boolean }) {
       toast.success("Foto de perfil atualizada.");
       setAvatarModalOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Não foi possível enviar a foto.";
-      toast.error(message);
+      notifyError(error, { fallback: "Não foi possível enviar a foto." });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

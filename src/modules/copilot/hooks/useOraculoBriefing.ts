@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { recordOraculoSignal } from "./useOraculoFeedback";
+import { notifyError } from "@/shared/errors";
 
 export interface OraculoBriefing {
   id: string;
@@ -65,7 +65,7 @@ export function useOraculoBriefing() {
         }).catch(() => undefined);
       }
     },
-    onError: () => toast.error("Não consegui abrir o briefing. Tente novamente."),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não consegui abrir o briefing. Tente novamente." }),
   });
 
   return {

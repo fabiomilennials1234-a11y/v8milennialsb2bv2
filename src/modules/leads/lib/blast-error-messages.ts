@@ -35,3 +35,8 @@ export function blastErrorMessage(raw: string | undefined | null): string {
   if (!raw) return BLAST_ERROR_MESSAGES.blast_failed;
   return BLAST_ERROR_MESSAGES[raw] ?? raw;
 }
+
+/** `true` quando o código tem mensagem própria do disparo. */
+export function isKnownBlastError(raw: string | undefined | null): boolean {
+  return !!raw && Object.prototype.hasOwnProperty.call(BLAST_ERROR_MESSAGES, raw);
+}

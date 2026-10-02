@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,6 +10,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "
 import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
+import { createQueryErrorHandlers } from "@/shared/errors/query-error-handlers";
+import { setReportIdentity } from "@/shared/errors";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
@@ -28,23 +30,10 @@ import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
+import { lazyRetry } from "@/core/stale-build-recovery";
 
-// Retry helper para chunks que falham ao carregar (comum após deploy)
-function lazyRetry<T extends { default: any }>(
-  importFn: () => Promise<T>,
-  retries = 2
-): Promise<T> {
-  return importFn().catch((err) => {
-    if (retries > 0) {
-      return new Promise<T>((resolve) =>
-        setTimeout(() => resolve(lazyRetry(importFn, retries - 1)), 1000)
-      );
-    }
-    throw err;
-  });
-}
-
-// Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
+// lazyRetry: uma nova tentativa para falha passageira; chunk velho aciona a
+// recuperação de build (src/core/stale-build-recovery.ts).
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
@@ -144,7 +133,10 @@ import { SupportPanel } from "@/modules/platform/components/support/SupportPanel
 import { SupportAccess } from "@/modules/platform/components/support/SupportAccess";
 import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
 
+// ADR-0038: nenhum erro de query ou mutation some em silêncio. Os caches só
+// relatam; o toast continua com a tela (ver `createQueryErrorHandlers`).
 const queryClient = new QueryClient({
+  ...createQueryErrorHandlers(),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,        // 5 minutos — dados são considerados frescos por 5 min
@@ -194,6 +186,22 @@ function EnvMissingScreen() {
 function RealtimeOrgBridge({ children }: { children: React.ReactNode }) {
   const { organizationId } = useOrganization();
   return <RealtimeOrgProvider organizationId={organizationId}>{children}</RealtimeOrgProvider>;
+}
+
+// Quem estava usando, nos relatórios de erro (ADR-0038): só UUIDs e o papel —
+// nunca nome, e-mail ou telefone. Sem isto um evento no Sentry não diz de que
+// organização veio, e o suporte não casa o evento com o Chamado.
+function ReportIdentityBridge() {
+  const { user } = useAuth();
+  const { organizationId, role } = useOrganization();
+  const { isMaster } = useMasterAuth();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    setReportIdentity(userId ? { userId, organizationId, role: isMaster ? "master" : role } : null);
+  }, [userId, organizationId, role, isMaster]);
+
+  return null;
 }
 
 // Wrapper for pages that need the main layout
@@ -878,13 +886,19 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
+        {/* Os toasts ficam FORA do ThemeTransitionProvider: ele embrulha o app
+            numa `div.relative z-[1]`, e esse z-index cria um contexto de
+            empilhamento que prendia o toaster abaixo do overlay de qualquer
+            modal (z-50, portado no body). Todo erro disparado de dentro de um
+            formulário aparecia apagado atrás do modal (ADR-0038, validação). */}
+        <Toaster />
+        <Sonner />
         <ThemeTransitionProvider>
           <TooltipProvider>
-            <Toaster />
-            <Sonner />
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
+                <ReportIdentityBridge />
                 <TorqueIntro />
                 {/* PilhaDeCartoes usa useNavigate() para abrir o link do
                     cartão, então PRECISA ficar dentro do BrowserRouter.

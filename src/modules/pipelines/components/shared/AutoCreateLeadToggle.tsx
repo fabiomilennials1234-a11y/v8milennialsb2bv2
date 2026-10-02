@@ -23,6 +23,7 @@ import {
   useMasterAuth,
   useAutoCreateLeadSetting,
 } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 
 export function AutoCreateLeadToggle() {
   const { data: userRole } = useUserRole();
@@ -43,8 +44,8 @@ export function AutoCreateLeadToggle() {
           ? "Criação automática de lead ativada para a conta"
           : "Criação automática de lead desativada",
       );
-    } catch {
-      toast.error("Não foi possível salvar a configuração");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar a configuração." });
     }
   };
 

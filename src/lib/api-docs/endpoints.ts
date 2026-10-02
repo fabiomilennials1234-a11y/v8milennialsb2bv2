@@ -24,8 +24,9 @@ import { restApiCategory } from "./rest-api-endpoints";
  *                         Ausência de registro, não prova de zero uso: nada garante que
  *                         elas escrevam nessas tabelas.
  *
- * O contrato do `lead-webhook` vive no `CLAUDE.md` da raiz, seção "Webhook lead-webhook" —
- * é ali que o suporte deve buscá-lo. O histórico das entradas removidas está no git.
+ * O contrato do `lead-webhook` vive em `supabase/functions/CLAUDE.md`, seção
+ * "Contrato do lead-webhook" — é ali que o suporte deve buscá-lo. O histórico das
+ * entradas removidas está no git.
  *
  * Somar categoria aqui sem contrato em `openapi.json` recria exatamente o problema.
  */

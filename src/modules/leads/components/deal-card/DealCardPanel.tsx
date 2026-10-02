@@ -1,6 +1,6 @@
 import { downloadCommentFile } from "../../lib/comment-attachments/storage";
 import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -40,6 +40,12 @@ import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
+import { useCelebracaoDoDesfecho } from "./useCelebracaoDoDesfecho";
+import {
+  cancelarEfeitoDeDesfecho,
+  definirPainelAberto,
+  dispararEfeitoDeDesfecho,
+} from "../../lib/card-effects";
 import { useRenomearNegocio } from "./useRenomearNegocio";
 import {
   useAtualizarItemDoNegocio,
@@ -48,6 +54,7 @@ import {
   useRemoverItemDoNegocio,
 } from "./useItensDoNegocio";
 import type { DealCardComentario, ItemEditado } from "./types";
+import { notifyError } from "@/shared/errors";
 
 /**
  * A casca do painel — diálogo de DUAS COLUNAS no desktop, folha no celular.
@@ -77,6 +84,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
     useDealCardData(entryId, leadId, isOpen);
+
+  // O efeito do card (ganho, perda, poeira) espera o painel fechar: tocado
+  // por trás do overlay, ninguém o veria. Ver `lib/card-effects.ts`.
+  useEffect(() => {
+    definirPainelAberto(isOpen);
+    return () => definirPainelAberto(false);
+  }, [isOpen]);
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
 
@@ -203,9 +217,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
   /**
    * ── Ganhar / perder ───────────────────────────────────────────────────────
    *
-   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1). Não move o card: o
-   * vendedor decide na etapa em que estiver, que é o que destrava os 283 funis
-   * (71%) sem etapa terminal.
+   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1): o vendedor decide na etapa
+   * em que estiver, que é o que destrava os 283 funis (71%) sem etapa terminal.
+   * Quem move o card para a etapa de ganho/sucesso, quando há, é o BANCO
+   * (trigger em `deals.outcome`, Emenda 2) — esta tela não move nada, só
+   * invalida o board para a coluna nova aparecer.
    *
    * Vai por RPC, não por `.update()`, por três razões — e a terceira decide:
    * `deals.outcome` ainda não existe em `types.ts`; a transição de `outcome` é
@@ -233,10 +249,19 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const [pedindoValor, setPedindoValor] = useState(false);
 
+  /**
+   * Celebração dentro do painel: confete e baú no ganho, lixeira na perda.
+   * A origem do voo é o botão clicado, lida ANTES da RPC — depois dela o
+   * negócio encerra e o botão sai do cabeçalho.
+   */
+  const painelRef = useRef<HTMLDivElement>(null);
+  const { origemDo, celebrar, camada: camadaDaCelebracao } = useCelebracaoDoDesfecho(painelRef);
+
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
       setDecidindo(true);
+      const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
         const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
@@ -267,6 +292,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
             const terminal = data?.etapas.find((e) => e.papel === papel);
             if (terminal) {
               await moverEtapa(terminal.chave);
+              dispararEfeitoDeDesfecho(entryId, desfecho);
+              celebrar(desfecho, origem);
               return;
             }
             // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
@@ -285,6 +312,12 @@ export const DealCardPanel = memo(function DealCardPanel() {
         }
 
         toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        if (desfecho === "open") {
+          cancelarEfeitoDeDesfecho(entryId);
+        } else {
+          dispararEfeitoDeDesfecho(entryId, desfecho);
+          celebrar(desfecho, origem);
+        }
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
@@ -293,12 +326,12 @@ export const DealCardPanel = memo(function DealCardPanel() {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Não foi possível registrar o desfecho");
+        notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
       } finally {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa],
+    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar],
   );
 
   /**
@@ -442,8 +475,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
           // É isto que responde "em qual negócio isto foi dito".
           pipelineEntryId: entryId,
         });
-      } catch {
-        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível publicar o comentário. O texto continua na caixa." });
         // Reergue para o bloco NÃO esvaziar a caixa — ver a regra 1 do
         // `DealCardComments`. Engolir aqui apagaria o que a pessoa escreveu.
         throw new Error("comentario-nao-publicado");
@@ -457,8 +490,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       if (!leadId) return;
       try {
         await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
-      } catch {
-        toast.error("Não foi possível salvar a edição do comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível salvar a edição do comentário." });
         throw new Error("comentario-nao-editado");
       }
     },
@@ -471,8 +504,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       try {
         await removerComentario.mutateAsync({ commentId: id, leadId });
         toast.success("Comentário apagado.");
-      } catch {
-        toast.error("Não foi possível apagar o comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível apagar o comentário." });
         throw new Error("comentario-nao-apagado");
       }
     },
@@ -589,7 +622,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
    */
   const conteudo = (comLead: boolean) => (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+    <div ref={painelRef} className="relative flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+      {camadaDaCelebracao}
       {/* A coluna da pessoa só existe quando há pessoa. Um negócio órfão de lead
           não deveria existir (ADR-0023 §2), mas se existir o painel abre com o
           negócio ocupando tudo em vez de com uma coluna vazia acusando falta. */}

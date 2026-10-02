@@ -13,6 +13,7 @@ import { useUpdateLead } from "../useLeads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useCurrentTeamMember } from "@/modules/identity";
 import type { CreateLeadPayload } from "../../components/lead/create/LeadCreateForm";
+import { notifyError } from "@/shared/errors";
 
 interface UseLeadCreateHandlerOptions {
   pushName?: string | null;
@@ -42,12 +43,11 @@ export function useLeadCreateHandler({ pushName, onSuccess }: UseLeadCreateHandl
       // acontecia — o insert era recusado porque o id do membro virtual não
       // existe em `team_members`, e a recusa morria no vazio.
       //
-      // Falha visível é o mínimo. A mensagem do servidor entra na descrição
-      // porque "violação de chave estrangeira" e "sem permissão" pedem reações
-      // diferentes, e um texto genérico as achataria numa só.
-      toast.error("Não foi possível criar o lead", {
-        description: e instanceof Error ? e.message : undefined,
-      });
+      // Falha visível é o mínimo. "Violação de chave estrangeira" e "sem
+      // permissão" pedem reações diferentes: o `notifyError` as separa pelo
+      // código (`record.not_found` × `permission.denied`), mostra cada uma em PT
+      // e relata a que for defeito — a FK do membro virtual é defeito (ADR-0038).
+      notifyError(e, { fallback: "Não foi possível criar o lead." });
       throw e;
     }
   };

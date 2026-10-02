@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function useCreateSandbox() {
   const queryClient = useQueryClient();
@@ -19,8 +20,8 @@ export function useCreateSandbox() {
       toast.success("Sandbox criado — troque de organização para acessar");
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
     },
-    onError: () => {
-      toast.error("Erro ao criar sandbox — verifique permissões de admin");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível criar sandbox — verifique permissões de admin." });
     },
   });
 }

@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import torqueLogo from '@/assets/torque-logo.png';
 import { validatePassword } from '@/lib/password-validation';
+import { notifyError } from "@/shared/errors";
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
@@ -50,8 +51,8 @@ export default function Auth() {
         setResetEmailSent(true);
         toast({ title: 'E-mail enviado', description: 'Se o e-mail estiver cadastrado, você receberá o link.' });
       }
-    } catch {
-      toast({ title: 'Erro inesperado', description: 'Tente novamente mais tarde.', variant: 'destructive' });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível enviar o e-mail de redefinição." });
     } finally {
       setLoading(false);
     }
@@ -72,11 +73,7 @@ export default function Auth() {
               variant: 'destructive',
             });
           } else {
-            toast({
-              title: 'Erro ao entrar',
-              description: error.message,
-              variant: 'destructive',
-            });
+            notifyError(error, { fallback: "Não foi possível entrar." });
           }
         } else {
           toast({
@@ -109,18 +106,18 @@ export default function Auth() {
 
         const { error } = await signUp(email, password, fullName);
         if (error) {
-          if (error.message.includes('already registered')) {
+          // Anti-enumeração: toda variante de "e-mail já cadastrado" cai na mesma
+          // resposta ambígua. O código cobre `email_exists`, cujo texto ("has
+          // already been registered") escapa do `includes`.
+          const code = (error as { code?: string }).code;
+          if (code === 'user_already_exists' || code === 'email_exists' || /already (been )?registered/i.test(error.message)) {
             toast({
               title: 'Verifique seu e-mail',
               description: 'Se este e-mail estiver cadastrado, verifique sua caixa de entrada. Caso contrário, tente novamente.',
               variant: 'destructive',
             });
           } else {
-            toast({
-              title: 'Erro ao criar conta',
-              description: error.message,
-              variant: 'destructive',
-            });
+            notifyError(error, { fallback: "Não foi possível criar conta." });
           }
         } else {
           toast({
@@ -131,11 +128,7 @@ export default function Auth() {
         }
       }
     } catch (err) {
-      toast({
-        title: 'Erro inesperado',
-        description: 'Tente novamente mais tarde.',
-        variant: 'destructive',
-      });
+      notifyError(err, { fallback: isLogin ? "Não foi possível entrar." : "Não foi possível criar a conta." });
     } finally {
       setLoading(false);
     }

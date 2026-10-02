@@ -8,6 +8,7 @@ import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
 import { useRetentionSuggestion, useGenerateRetentionSuggestion } from "@/modules/carteira/hooks/useRetentionSuggestion";
 import type { Tables } from "@/integrations/supabase/types";
+import { notifyError } from "@/shared/errors";
 
 interface ClienteCopilotSuggestionProps {
   clientId?: string;
@@ -83,8 +84,8 @@ export function ClienteCopilotSuggestion({
   const handleGenerate = () => {
     if (!clientId) return;
     generateMutation.mutate(clientId, {
-      onError: () => {
-        toast({ title: "Erro ao gerar sugestão", description: "Tente novamente em alguns instantes.", variant: "destructive" });
+      onError: (error: unknown) => {
+        notifyError(error, { fallback: "Não foi possível gerar sugestão." });
       },
     });
   };

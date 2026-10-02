@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export function useAITimeline(leadId: string | null | undefined) {
       toast.success("Ação revertida");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao reverter ação");
+      notifyError(error, { fallback: "Não foi possível reverter ação." });
     },
   });
 

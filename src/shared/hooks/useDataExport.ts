@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type ExportType = "full_export" | "erasure" | "portability";
 export type ExportStatus = "pending" | "processing" | "completed" | "failed";
@@ -79,8 +80,8 @@ export function useExportLeadData() {
     onSuccess: () => {
       toast.success("Dados exportados com sucesso");
     },
-    onError: () => {
-      toast.error("Erro ao exportar dados — verifique permissões de admin");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível exportar dados — verifique permissões de admin." });
     },
   });
 }

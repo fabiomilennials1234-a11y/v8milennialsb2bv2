@@ -11,6 +11,7 @@ import {
 import { usePipeOps } from "../../../../pipe-ops";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+import { notifyError } from "@/shared/errors";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
@@ -307,8 +308,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
           persistExpanded(null);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao remover";
-        toast.error(msg);
+        notifyError(err, { fallback: `Não foi possível remover o lead de ${pipe.label}.` });
       }
     },
     [removeStandardMutation, leadId, logAction, expanded, persistExpanded],

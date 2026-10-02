@@ -90,6 +90,7 @@ import {
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import type { SocialMessage } from "@/modules/communication/hooks/chat/useSocialMessages";
+import { notifyError } from "@/shared/errors";
 
 // ─── Adaptação para a timeline compartilhada ─────────────────────────────────
 
@@ -340,7 +341,7 @@ function SocialComposer({
     try {
       setAnexo(await uploadSocialAttachment(file, organizationId, canal));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao anexar");
+      notifyError(e, { fallback: "Não foi possível anexar." });
     } finally {
       setSubindo(false);
     }
@@ -390,9 +391,7 @@ function SocialComposer({
           } catch (e) {
             // Falhar aqui é melhor que subir o que a Meta recusa em silêncio: o
             // vendedor fica sabendo na hora, com o áudio ainda na mão.
-            toast.error("Não foi possível preparar o áudio para o WhatsApp", {
-              description: e instanceof Error ? e.message : undefined,
-            });
+            notifyError(e, { fallback: "Não foi possível preparar o áudio para o WhatsApp." });
             return;
           }
         }
@@ -405,10 +404,8 @@ function SocialComposer({
       gravadorRef.current = rec;
       rec.start();
       setGravando(true);
-    } catch {
-      toast.error("Não foi possível acessar o microfone", {
-        description: "Verifique a permissão do navegador.",
-      });
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível acessar o microfone." });
     }
   };
 
@@ -437,11 +434,11 @@ function SocialComposer({
       setAnexo(null);
       onCancelarResposta();
     } catch (e) {
-      const erro = e as SocialSendError;
-      toast.error(erro.message, {
-        // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
-        // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
-        description: erro.detail ?? undefined,
+      // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
+      // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
+      notifyError(e, {
+        fallback: "Não foi possível enviar.",
+        detail: (e as Partial<SocialSendError> | null)?.detail ?? undefined,
       });
     }
   };
@@ -749,7 +746,7 @@ export function SocialChatView({
               selectedContact.external_user_id,
             )
               .then(() => toast.success("Contato bloqueado"))
-              .catch((e: Error) => toast.error(e.message));
+              .catch((e: Error) => notifyError(e, { fallback: "Não foi possível bloquear o contato." }));
           }
           : undefined}
       />
@@ -802,7 +799,7 @@ export function SocialChatView({
                 .send({ contactExternalId: selectedContact.external_user_id, text: texto })
                 .then(() => toast.success("Mensagem reenviada"))
                 .catch((e) =>
-                  toast.error(e instanceof Error ? e.message : "Não foi possível reenviar"),
+                  notifyError(e, { fallback: "Não foi possível reenviar." }),
                 );
             }}
             onOpenTemplates={() => {
@@ -838,7 +835,7 @@ export function SocialChatView({
                           selectedContact.external_user_id,
                         ),
                       }))
-                    .catch((e: Error) => toast.error(e.message));
+                    .catch((e: Error) => notifyError(e, { fallback: "Não foi possível reagir à mensagem." }));
                 },
                 onResponder: (m) => {
                   if (!m.providerMessageId) return;

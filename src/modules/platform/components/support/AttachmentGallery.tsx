@@ -12,7 +12,6 @@
  */
 
 import { useState } from "react";
-import { toast } from "sonner";
 import {
   FileSpreadsheet,
   FileText,
@@ -44,6 +43,7 @@ import {
   useDeleteTicketAttachment,
   type TicketAttachment,
 } from "@/modules/platform/hooks/useTicketAttachments";
+import { notifyError } from "@/shared/errors";
 
 const ICONS: Record<AttachmentKind, typeof FileText> = {
   imagem: ImageIcon,
@@ -86,7 +86,7 @@ export function AttachmentGallery({ attachments, className, canDelete, ticketId 
     try {
       await remove.mutateAsync({ id: alvo.id, path: alvo.path, ticketId });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu para remover o anexo.");
+      notifyError(err, { fallback: "Não deu para remover o anexo." });
     }
   }
 

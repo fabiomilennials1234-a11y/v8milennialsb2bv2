@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { PipeOpsPort } from "../../pipe-ops";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Item de menu "Adicionar a funil". Só renderiza quando a org tem ≥1 funil
@@ -80,7 +81,7 @@ export function AddToFunilDialog({
       setStageId("");
     } catch (e) {
       // O hook lança "Este lead já está neste funil" em duplicata.
-      toast.error(e instanceof Error ? e.message : "Erro ao adicionar ao funil");
+      notifyError(e, { fallback: "Não foi possível adicionar ao funil." });
     }
   };
 

@@ -17,7 +17,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { logger } from "@/modules/platform";
-import { getErrorMessage } from "@/shared/errors";
+import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 import { useSetMeetingDate } from "../../hooks/model/useSetMeetingDate";
 import { useRescheduleMeeting } from "../../hooks/model/useMergedFunnelActions";
@@ -84,10 +84,9 @@ export function SetMeetingDateModal({
       err instanceof Error ? err : new Error(String(err)),
       { resource: "pipelines", action: "set-meeting-date-failed", metadata: { entryId, leadId, variant } },
     );
-    toast.error(
-      variant === "reschedule" ? "Erro ao remarcar reunião" : "Erro ao salvar data da reunião",
-      { description: getErrorMessage(err) },
-    );
+    notifyError(err, {
+      fallback: variant === "reschedule" ? "Não foi possível remarcar a reunião." : "Não foi possível salvar a data da reunião.",
+    });
   };
 
   const save = () => {

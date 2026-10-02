@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { dispatch, type DispatchContext } from "./dispatch.ts";
 import type { JsonRpcError, JsonRpcSuccess, ToolContext, ToolDef, ToolResult } from "./types.ts";
+import { textOf } from "./content.ts";
 
 function ctx(overrides: Partial<DispatchContext> = {}): DispatchContext {
   return {
@@ -96,7 +97,7 @@ Deno.test("dispatch — tools/call runs the tool with args + injected context", 
     ctx({ tools: [tool], allowMutations: false, toolContext }),
   );
   const result = (res as JsonRpcSuccess).result as ToolResult;
-  assertEquals(result.content[0].text, "lead-1 found");
+  assertEquals(textOf(result), "lead-1 found");
   assertEquals(received!.args, { org_id: "o1" });
   assertEquals(received!.ctx, toolContext);
 });
@@ -146,5 +147,5 @@ Deno.test("dispatch — tools/call wraps a thrown handler error as isError resul
   // MCP convention: tool failures are a result with isError, not a JSON-RPC error
   const result = (res as JsonRpcSuccess).result as ToolResult;
   assertEquals(result.isError, true);
-  assertEquals(result.content[0].text.includes("boom from tool"), true);
+  assertEquals(textOf(result).includes("boom from tool"), true);
 });

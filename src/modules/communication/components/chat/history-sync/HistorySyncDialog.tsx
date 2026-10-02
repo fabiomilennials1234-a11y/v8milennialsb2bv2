@@ -26,6 +26,7 @@ import {
   useCreateHistorySyncJob,
   type SyncScope,
 } from "@/modules/communication/hooks/useHistorySyncJobs";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   instanceId: string | null;
@@ -57,7 +58,7 @@ export function HistorySyncDialog({ instanceId, open, onOpenChange }: Props) {
       toast.success("Import agendado. Acompanhe na lista de jobs.");
       onOpenChange(false);
     } catch (e) {
-      toast.error(`Erro ao criar job: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível criar job." });
     }
   };
 

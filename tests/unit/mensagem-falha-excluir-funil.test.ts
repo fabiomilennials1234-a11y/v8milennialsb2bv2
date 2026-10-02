@@ -47,26 +47,33 @@ describe("mensagemDeFalhaAoExcluir", () => {
       .toBe("Este funil já não existe nesta organização.");
   });
 
-  it("mostra a mensagem CRUA quando não casa nenhum padrão conhecido", () => {
-    // É este o caso que produzia "Erro ao excluir funil" sem pista nenhuma.
+  // ADR-0038 revogou o "texto técnico cru na tela": a pista vai para o
+  // relatório, com o código que aparece no toast, e a tela recebe uma frase.
+  it("texto técnico não vai para a tela — o código do erro decide a frase", () => {
     const e = erroSupabase({
       message: "JSON object requested, multiple (or no) rows returned",
       code: "PGRST116",
     });
     const saida = mensagemDeFalhaAoExcluir(e);
-    expect(saida).toContain("multiple (or no) rows returned");
-    expect(saida).not.toBe("Erro ao excluir funil");
+    expect(saida).not.toContain("rows returned");
+    expect(saida).toBe("Este registro não existe mais ou foi removido por outra pessoa.");
   });
 
-  it("aproveita details e hint do PostgrestError, que carregam a causa concreta", () => {
+  it("aproveita o hint do PostgrestError, que é orientação; nunca o details, que é dado da linha", () => {
     const e = erroSupabase({
       message: "insert or update violates foreign key constraint",
       details: 'Key (pipeline_id) is still referenced from table "pipeline_entries".',
       hint: "Mova os cards antes.",
     });
     const saida = mensagemDeFalhaAoExcluir(e);
-    expect(saida).toContain("pipeline_entries");
-    expect(saida).toContain("Mova os cards antes.");
+    expect(saida).toBe("Mova os cards antes.");
+    expect(saida).not.toContain("pipeline_entries");
+  });
+
+  it("recusa desconhecida sem nada legível cai no fallback", () => {
+    expect(mensagemDeFalhaAoExcluir(erroSupabase({ message: "column does not exist", code: "42703" }))).toBe(
+      "Não foi possível excluir o funil.",
+    );
   });
 
   it("ainda funciona com Error nativo, que é o caminho do throw do próprio front", () => {
@@ -74,7 +81,7 @@ describe("mensagemDeFalhaAoExcluir", () => {
   });
 
   it("só cai no genérico quando não há mensagem nenhuma", () => {
-    expect(mensagemDeFalhaAoExcluir(null)).toBe("Erro ao excluir funil");
-    expect(mensagemDeFalhaAoExcluir({})).toBe("Erro ao excluir funil");
+    expect(mensagemDeFalhaAoExcluir(null)).toBe("Não foi possível excluir o funil.");
+    expect(mensagemDeFalhaAoExcluir({})).toBe("Não foi possível excluir o funil.");
   });
 });

@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Check, Copy, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface GeneratedLinkDialogProps {
   /** O token em texto. `null` fecha o diálogo. */
@@ -67,11 +68,11 @@ export function GeneratedLinkDialog({ token, buyerPrefilled, onClose }: Generate
       await navigator.clipboard.writeText(checkoutUrl(token));
       setCopied(true);
       toast.success("Link copiado.");
-    } catch {
+    } catch (caught) {
       // Clipboard bloqueado (permissão, contexto inseguro) não pode virar
       // silêncio: quem não souber que falhou fecha o diálogo com nada na área
       // de transferência e perde o link.
-      toast.error("Não consegui copiar. Selecione o texto e copie na mão antes de fechar.");
+      notifyError(caught, { fallback: "Não consegui copiar. Selecione o texto e copie na mão antes de fechar." });
     }
   }
 

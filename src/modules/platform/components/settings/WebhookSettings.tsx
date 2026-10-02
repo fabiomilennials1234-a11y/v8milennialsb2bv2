@@ -53,6 +53,7 @@ import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
+import { userMessageOf } from "@/shared/errors";
 
 const DEFAULT_HEADERS = [{ key: "", value: "" }];
 
@@ -212,7 +213,9 @@ export function WebhookSettings() {
         success: false,
         status_code: null,
         response_body: "",
-        error_message: err instanceof Error ? err.message : String(err),
+        // Vai para o painel do teste, na tela: é a falha da NOSSA chamada, não a
+        // resposta do endpoint do cliente (essa vem em `data.error_message`).
+        error_message: userMessageOf(err, "Não foi possível enviar o teste do webhook."),
       });
     } finally {
       setSendingTestId(null);
