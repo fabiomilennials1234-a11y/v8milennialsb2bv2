@@ -44,13 +44,35 @@ export function useOnboarding() {
     queryKey: ["org-onboarding", organizationId],
     queryFn: async (): Promise<OrgOnboarding | null> => {
       if (!organizationId) return null;
+      // `org_onboarding` foi substituída pela máquina de estados em `organizations`
+      // (onboarding_state / onboarding_answers). Ler a tabela antiga dava PGRST205.
       const { data, error } = await supabase
-        .from("org_onboarding")
-        .select("*")
-        .eq("organization_id", organizationId)
+        .from("organizations")
+        .select("id, onboarding_state, onboarding_answers, onboarding_completed_at, created_at, updated_at")
+        .eq("id", organizationId)
         .maybeSingle();
       if (error) throw error;
-      return data as OrgOnboarding | null;
+      if (!data) return null;
+      const row = data as {
+        id: string;
+        onboarding_state: string | null;
+        onboarding_answers: OnboardingAnswers | null;
+        onboarding_completed_at: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      return {
+        id: row.id,
+        organization_id: row.id,
+        status: row.onboarding_state === "completed" ? "completed" : "in_progress",
+        current_step: 0,
+        answers: row.onboarding_answers ?? {},
+        applied_at: null,
+        completed_at: row.onboarding_completed_at,
+        completed_by: null,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      };
     },
     enabled: !!organizationId,
     staleTime: 60_000,

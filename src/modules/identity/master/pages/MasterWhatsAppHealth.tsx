@@ -70,17 +70,34 @@ export default function MasterWhatsAppHealth() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("whatsapp_health_checks")
-        .select("instance_id, organization_id, checked_at, v8_inbound_1h, uazapi_inbound_1h, drift_ratio, status, action_taken, notes, whatsapp_instances:instance_id(instance_name,provider), organizations:organization_id(name)")
+        .select("instance_id, organization_id, checked_at, v8_inbound_1h, uazapi_inbound_1h, drift_ratio, status, action_taken, notes, whatsapp_instances:instance_id(instance_name,provider)")
         .order("checked_at", { ascending: false })
         .limit(500)
-        .returns<HealthCheck[]>();
+        .returns<Omit<HealthCheck, "organizations">[]>();
       if (error) throw error;
       const seen = new Set<string>();
-      return (data ?? []).filter((r) => {
+      const latest = (data ?? []).filter((r) => {
         if (seen.has(r.instance_id)) return false;
         seen.add(r.instance_id);
         return true;
       });
+      // `whatsapp_health_checks` não tem FK para `organizations` (só para a
+      // instância): embutir `organizations:organization_id(name)` dava PGRST200.
+      // O nome vem de uma segunda leitura.
+      const orgIds = [...new Set(latest.map((r) => r.organization_id))];
+      const names = new Map<string, string>();
+      if (orgIds.length > 0) {
+        const { data: orgs, error: orgError } = await supabase
+          .from("organizations")
+          .select("id, name")
+          .in("id", orgIds);
+        if (orgError) throw orgError;
+        for (const o of orgs ?? []) names.set(o.id, o.name);
+      }
+      return latest.map((r) => ({
+        ...r,
+        organizations: names.has(r.organization_id) ? { name: names.get(r.organization_id)! } : null,
+      }));
     },
     refetchInterval: 60_000,
   });
