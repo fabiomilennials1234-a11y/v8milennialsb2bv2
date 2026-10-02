@@ -13,6 +13,7 @@ import { getPipeEntry } from "./pipeline-adapter.ts";
 import { getStageDoNegocio, entryIdDoContexto } from "./negocio-subject.ts";
 import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
+import { moveCustomStageSafely } from "./action-handlers/move-stage-safe.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
 import { updateLeadField as sharedUpdateLeadField, updateCustomField as sharedUpdateCustomField, updateRating as sharedUpdateRating } from "./action-handlers/lead-field-operations.ts";
 import { duplicateToPipe as sharedDuplicateToPipe, removeFromPipe as sharedRemoveFromPipe, markAsLost as sharedMarkAsLost } from "./action-handlers/pipe-operations.ts";
@@ -534,12 +535,17 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       if (!pipeRef) { result = { success: false, error: "No target funnel configured" }; break; }
       const targetStage = ctx.nodeData.targetStage as string;
       if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
-      result = await sharedMoveStage({
+      const safe = ctx.nodeData.safeCustomMove === true;
+      result = await (safe ? moveCustomStageSafely : sharedMoveStage)({
         ...toActionInput(ctx),
-        params: { target_stage: targetStage, target_pipe: pipeRef },
+        params: {
+          target_stage: targetStage,
+          target_pipe: pipeRef,
+          ...(safe ? { expected_stage_ids: ctx.nodeData.expectedStageIds } : {}),
+        },
       });
       if (result.success && result.data) {
-        result.data = { pipeType: pipeRef, targetStage: result.data.target_stage };
+        result.data = { ...(safe ? result.data : {}), pipeType: pipeRef, targetStage: result.data.target_stage };
       }
       break;
     }

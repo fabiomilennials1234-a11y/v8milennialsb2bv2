@@ -41,6 +41,9 @@ const VOCABULARIO_DAS_MEDIDAS = [
   "receita",
   "num_vendas",
   "leads_criados",
+  // Base atual (rollout Riofix 20261002).
+  "base_leads_atuais",
+  "base_clientes_atuais",
   "reunioes_marcadas",
   "reunioes_realizadas",
   "leads_na_etapa",
@@ -237,14 +240,15 @@ describe("engine map — decisões do grill", () => {
   // Ele NÃO é a defesa contra oferecer medida que o banco não tem — essa é
   // `filtrarPeloCatalogo`, testada acima. Aqui só se afirma que ninguém
   // acrescentou entrada por acidente.
-  it("G1: a oferta de fábrica é 25 medidas + 7 razões + 1 árvore", () => {
+  it("G1: a oferta de fábrica é 27 medidas + 7 razões + 1 árvore", () => {
     // O número sobe a cada fatia do SCRUM-311, e é isso que ele serve para
     // dizer: medida nova sem passar por aqui é medida que ninguém contou.
     // 23 → 25 na fatia 2 do SCRUM-545: valor_em_aberto e valor_perdido.
+    // 25 → 27: base atual de leads e clientes.
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
     const trees = ENGINE_METRICS.filter((m) => m.measureRef.kind === "tree");
-    expect(leafs).toHaveLength(25);
+    expect(leafs).toHaveLength(27);
     expect(ratios).toHaveLength(7);
     expect(trees).toHaveLength(1);
   });
