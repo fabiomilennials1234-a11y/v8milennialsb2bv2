@@ -254,16 +254,16 @@ export function WebhookSettings() {
       {/* Onda 2: alerts críticos webhook circuit breaker */}
       <AlertsBanner category="webhook_circuit_breaker" organizationId={organizationId} />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Webhooks</h3>
-          <p className="text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-bold tracking-tight">Webhooks</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Configure endpoints para receber eventos (leads criados/atualizados, etc.)
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => openDialog()} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
+          <Button onClick={() => openDialog()} size="sm">
+            <Plus />
             Novo webhook
           </Button>
         )}
@@ -272,11 +272,11 @@ export function WebhookSettings() {
       {isLoading ? (
         <div className="grid gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />
+            <div key={i} className="h-14 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       ) : webhooks.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+        <div className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
           Nenhum webhook configurado
         </div>
       ) : (
@@ -286,16 +286,18 @@ export function WebhookSettings() {
               key={wh.id}
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors"
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-foreground/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <WebhookIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                  <WebhookIcon className="h-4 w-4" />
+                </span>
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{wh.name}</p>
+                  <p className="truncate text-sm font-semibold">{wh.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{wh.url}</p>
                   <div className="flex gap-1 mt-1 flex-wrap">
                     {(wh.events ?? []).slice(0, 3).map((e) => (
-                      <span key={e} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                      <span key={e} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/75">
                         {e}
                       </span>
                     ))}
@@ -307,7 +309,7 @@ export function WebhookSettings() {
                   </div>
                 </div>
                 {!wh.is_active && (
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="soft" className="shrink-0">
                     Inativo
                   </Badge>
                 )}
@@ -399,7 +401,7 @@ export function WebhookSettings() {
             <div className="grid gap-2">
               <Label>Método HTTP</Label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={formData.http_method}
                 onChange={(e) =>
                   setFormData((p) => ({
@@ -455,7 +457,7 @@ export function WebhookSettings() {
               <Label htmlFor="wh-active">Ativo</Label>
             </div>
             {testResult && testResult.webhookId === editingWebhook?.id && (
-              <div className="rounded-md border p-3 text-sm">
+              <div className="rounded-xl border border-border p-3 text-sm">
                 <p className="font-medium">
                   {testResult.success ? "Teste enviado com sucesso" : "Falha no teste"}
                 </p>
@@ -466,7 +468,7 @@ export function WebhookSettings() {
                   <p className="text-destructive">{testResult.error_message}</p>
                 )}
                 {testResult.response_body && (
-                  <pre className="mt-2 overflow-auto max-h-24 text-xs bg-muted p-2 rounded">
+                  <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-muted p-2 text-xs">
                     {testResult.response_body}
                   </pre>
                 )}

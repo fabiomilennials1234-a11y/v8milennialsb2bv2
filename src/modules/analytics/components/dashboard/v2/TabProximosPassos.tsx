@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
-import { ChartNoAxesCombined } from "lucide-react";
+import { AlarmClock, ListChecks, MessageSquareDot } from "lucide-react";
+import { KpiTile } from "@/components/ui/bento";
 import { useAcoesDoDia } from "@/modules/engagement";
 import { useOrganization } from "@/modules/identity";
 import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
@@ -86,38 +86,60 @@ export function TabProximosPassos() {
     return partes.join(" · ");
   }, [aguardando, pendentes.length, atrasadasCount, convLoading, taskLoading, convError, taskError, chipsComErro, isAdmin]);
 
+  // Só os estados que NÃO são número viram frase: carregando, erro, nada a fazer.
+  // Com número, os três cartões abaixo já dizem o resumo.
+  const resumoEhEstado =
+    convError || taskError || chipsComErro > 0 || convLoading || taskLoading ||
+    (aguardando === 0 && pendentes.length === 0 && atrasadasCount === 0);
+  const carregando = convLoading || taskLoading;
+  const valor = (n: number, erro: boolean) => (erro ? "—" : carregando ? "·" : n.toLocaleString("pt-BR"));
+
   return (
     <div className="space-y-5 pt-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">
-            {isAdmin ? "Central de trabalho da equipe" : "Sua central de trabalho"}
-          </h2>
-          <p className="text-[12px] text-muted-foreground/70">{resumo}</p>
-        </div>
-
-        {/* Comando é operação; análise vive no Estúdio. O par precisa de uma
-            porta explícita, senão a separação vira dois produtos. */}
-        <Link
-          to="/metricas"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-        >
-          <ChartNoAxesCombined className="h-3.5 w-3.5" />
-          Ver métricas
-        </Link>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="text-[17px] font-bold tracking-[-0.02em]">
+          {isAdmin ? "Central de trabalho da equipe" : "Sua central de trabalho"}
+        </h2>
+        {resumoEhEstado && <p className="text-[12px] text-muted-foreground">{resumo}</p>}
       </header>
 
-      {/* Desktop-first, como o produto é usado.
-          Coluna LARGA: conversas (a única que representa oportunidade perdida)
-          e metas (que precisam de largura para a lista de vendedores).
-          Coluna ESTREITA: agenda e tarefas, que são listas curtas.
-          Abaixo de lg tudo vira uma coluna só, na mesma ordem de prioridade. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-        <div className="grid gap-4">
-          <CardConversasAguardando />
-          <CardMetas />
-        </div>
+      {/* V5: o resumo do topo vira número. Mesmos três valores da frase de
+          antes, do mesmo cache — o cartão nunca discorda da lista abaixo. */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiTile
+          label="Clientes esperando"
+          value={valor(aguardando, convError)}
+          icon={MessageSquareDot}
+          tone={aguardando > 0 ? "gold" : "neutral"}
+          loading={convLoading}
+          note={isAdmin ? "Fila de resposta da equipe" : "Na sua fila de resposta"}
+        />
+        <KpiTile
+          label="Tarefas abertas"
+          value={valor(pendentes.length, taskError)}
+          icon={ListChecks}
+          tone="info"
+          loading={taskLoading}
+          note={isAdmin ? "Do time, para hoje" : "Suas, para hoje"}
+        />
+        <KpiTile
+          label="Atrasadas"
+          value={valor(atrasadasCount, taskError)}
+          icon={AlarmClock}
+          tone={atrasadasCount > 0 ? "bad" : "good"}
+          loading={taskLoading}
+          note={atrasadasCount > 0 ? "Passaram do prazo" : "Nada passou do prazo"}
+        />
+      </div>
 
+      {/* Herói: quem falou e não foi respondido — o único bloco que é dinheiro
+          escapando. Embaixo, à esquerda, metas (precisam de largura para a
+          lista de vendedores); à direita, agenda e tarefas, listas curtas.
+          Abaixo de lg tudo vira uma coluna só, na mesma ordem de prioridade. */}
+      <CardConversasAguardando />
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+        <CardMetas />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
           <CardProximasAgendas />
           <CardTarefasDoDia />

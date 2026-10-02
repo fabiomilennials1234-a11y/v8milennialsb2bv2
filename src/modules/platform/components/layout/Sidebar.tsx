@@ -23,6 +23,7 @@ import { AlertsDropdown } from "@/modules/platform/components/notifications/Aler
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { useSidebarCollapsed } from "@/modules/platform/hooks/useSidebarCollapsed";
 import {
+  SIDEBAR_GUTTER,
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_COLLAPSED,
 } from "@/modules/platform/lib/navigation-model";
@@ -126,6 +127,9 @@ export function Sidebar() {
   });
 
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
+  // V5: a lateral flutua a 12px da borda. O que abre ao lado dela (Oráculo,
+  // Agenda, Pitstop em overlay) começa depois da margem dos dois lados.
+  const panelLeft = width + SIDEBAR_GUTTER * 2;
 
   return (
     <>
@@ -141,7 +145,7 @@ export function Sidebar() {
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
-        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
+        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
       >
         <div ref={topoRef} data-medida="topo" className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
@@ -325,6 +329,7 @@ export function Sidebar() {
         onClose={() => setPitstopOpen(false)}
         groups={model.pitstopGroups}
         isActive={model.isActive}
+        overlayLeft={panelLeft}
       />
 
       {/* Monta na PRIMEIRA abertura e não desmonta mais. As duas metades
@@ -341,7 +346,7 @@ export function Sidebar() {
           <AgendaPanel
             open={agendaOpen}
             onClose={() => setAgendaOpen(false)}
-            sidebarWidth={width}
+            sidebarWidth={panelLeft}
           />
         </Suspense>
       )}
@@ -349,7 +354,7 @@ export function Sidebar() {
       <OraculoPanel
         open={oraculoAberto}
         onClose={() => setOraculoAberto(false)}
-        sidebarWidth={width}
+        sidebarWidth={panelLeft}
         conversaInicial={oraculoConversaInicial}
       />
 
@@ -384,7 +389,7 @@ function PitstopTrigger({
         "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "bg-primary/10 font-semibold text-primary"
+          ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground [&>svg:first-child]:text-primary"
           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
         collapsed && "justify-center px-0",
       )}

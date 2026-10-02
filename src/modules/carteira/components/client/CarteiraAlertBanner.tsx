@@ -1,4 +1,5 @@
-import { Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
@@ -18,30 +19,30 @@ export function CarteiraAlertBanner({ onViewDetails, className }: CarteiraAlertB
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 rounded-xl px-5 py-4",
-        "bg-amber-500/10 border border-amber-500/20",
+        "flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-card border border-warning/30 bg-warning/10 px-5 py-4",
         className,
       )}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <Zap size={20} className="shrink-0 text-amber-500" aria-hidden="true" />
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/20 text-warning-strong">
+          <Zap className="h-4 w-4" aria-hidden="true" />
+        </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">
-            {overdueCount} {overdueCount === 1 ? "cliente" : "clientes"} com recompra atrasada — {formatBRL(overdueRevenue)} em risco
+          <p className="text-sm font-bold text-foreground">
+            {overdueCount} {overdueCount === 1 ? "cliente" : "clientes"} com recompra atrasada —{" "}
+            <span className="tabular-nums">{formatBRL(overdueRevenue)}</span> em risco
           </p>
-          <p className="text-[13px] text-amber-600 dark:text-amber-400 mt-0.5">
+          <p className="mt-0.5 text-[13px] text-warning-strong">
             Copilot pode abordar automaticamente. Clientes estratégicos precisam de contato pessoal.
           </p>
         </div>
       </div>
 
       {onViewDetails && (
-        <button
-          onClick={onViewDetails}
-          className="shrink-0 px-3.5 py-1.5 bg-primary text-primary-foreground rounded-md text-[13px] font-semibold hover:bg-primary/90 transition-colors"
-        >
+        <Button size="sm" variant="ink" onClick={onViewDetails} className="shrink-0">
           Ver detalhes
-        </button>
+          <ArrowRight />
+        </Button>
       )}
     </div>
   );

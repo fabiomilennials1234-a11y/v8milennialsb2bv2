@@ -17,7 +17,7 @@ import { useAllPipelineStages, usePipelineDisplayConfig } from "@/modules/pipeli
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
 
 const ESCALATION_ACTIONS = [
-  { value: "notify", label: "Notificar responsavel" },
+  { value: "notify", label: "Notificar responsável" },
   { value: "escalate", label: "Escalar para gestor" },
   { value: "auto_move", label: "Mover automaticamente" },
   { value: "create_followup", label: "Criar follow-up" },
@@ -94,14 +94,14 @@ export function SlaConfigPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
-            <Timer className="h-5 w-5 text-primary" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
+            <Timer className="h-4 w-4 text-muted-foreground" />
             SLA por etapa
           </h3>
-          <p className="text-sm text-muted-foreground">
-            Defina prazos maximos por etapa do funil e ações em caso de atraso
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Defina prazos máximos por etapa do funil e ações em caso de atraso
           </p>
         </div>
         <Button
@@ -117,12 +117,12 @@ export function SlaConfigPanel() {
             setDialogOpen(true);
           }}
         >
-          <Plus className="mr-1 h-4 w-4" /> Novo SLA
+          <Plus /> Novo SLA
         </Button>
       </div>
 
       {configs.length === 0 ? (
-        <Card className="border-dashed">
+        <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Timer className="h-8 w-8 text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">Nenhum SLA configurado</p>
@@ -132,16 +132,16 @@ export function SlaConfigPanel() {
         <div className="space-y-3">
           {configs.map((config) => (
             <Card key={config.id} className={!config.is_active ? "opacity-50" : ""}>
-              <CardHeader className="pb-2">
+              <CardHeader className="px-4 py-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-sm">
                       {pipeName(config.pipeline_type)} — {getStageName(config.stage_id)}
                     </CardTitle>
-                    <Badge variant="outline" className="text-xs tabular-nums">
+                    <Badge variant="gold" className="text-xs tabular-nums">
                       {config.max_hours}h
                     </Badge>
-                    <Badge variant="secondary" className="text-[10px]">
+                    <Badge variant="soft" className="text-[10px]">
                       {ESCALATION_ACTIONS.find((a) => a.value === config.escalation_action)?.label ?? config.escalation_action}
                     </Badge>
                   </div>
@@ -210,7 +210,7 @@ export function SlaConfigPanel() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Tempo maximo (horas)</Label>
+              <Label className="text-xs">Tempo máximo (horas)</Label>
               <Input
                 type="number"
                 min={1}
@@ -220,7 +220,7 @@ export function SlaConfigPanel() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Acao ao estourar</Label>
+              <Label className="text-xs">Ação ao estourar</Label>
               <Select
                 value={form.escalation_action}
                 onValueChange={(v) => setForm({ ...form, escalation_action: v })}

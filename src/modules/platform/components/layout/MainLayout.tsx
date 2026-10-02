@@ -137,7 +137,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
             isFullBleed
               ? "overflow-hidden"
               : "overflow-y-auto overflow-x-hidden md:overflow-x-auto",
-            isMobile && !hideBottomNav && "pb-16",
+            // V5: a barra inferior flutua (56px + 12px de margem + safe-area)
+            isMobile && !hideBottomNav && "pb-[calc(5.5rem+env(safe-area-inset-bottom))]",
           )}
         >
           <div

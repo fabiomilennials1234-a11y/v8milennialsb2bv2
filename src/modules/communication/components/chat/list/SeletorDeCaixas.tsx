@@ -60,8 +60,8 @@ function ehOficial(box: InboxBox): boolean {
 }
 
 function corDoStatus(status: string): string {
-  if (status === "connected") return "bg-emerald-500";
-  if (status === "connecting") return "bg-amber-500";
+  if (status === "connected") return "bg-success";
+  if (status === "connecting") return "bg-warning";
   return "bg-muted-foreground/40";
 }
 
@@ -89,9 +89,9 @@ export function SeletorDeCaixas({
   const rotulo = marcadas.length === 1 ? primeira.name : `${marcadas.length} caixas`;
 
   return (
-    <div className="mb-3">
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+    <div>
+      <div className="mb-1.5 flex items-center justify-between px-1">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Caixa de entrada
         </p>
         {isAdmin && onOpenInstances && (
@@ -99,7 +99,7 @@ export function SeletorDeCaixas({
             variant="ghost"
             size="sm"
             onClick={onOpenInstances}
-            className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground px-2"
+            className="h-6 gap-1 rounded-full px-2 text-xs text-muted-foreground hover:text-foreground"
             title="Gerenciar instâncias WhatsApp"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -112,7 +112,8 @@ export function SeletorDeCaixas({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="h-9 w-full justify-between bg-background font-normal"
+            // Superfície translúcida: o seletor mora na coluna de tinta.
+            className="h-10 w-full justify-between rounded-2xl border-white/10 bg-white/[.05] px-3 font-semibold shadow-none hover:-translate-y-0 hover:border-white/20 hover:bg-white/[.08]"
             aria-label={
               marcadas.length === 1
                 ? `Caixa de entrada: ${primeira.name}`

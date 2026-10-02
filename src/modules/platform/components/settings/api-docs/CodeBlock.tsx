@@ -18,19 +18,19 @@ export function CodeBlock({ code, language = "bash", className }: CodeBlockProps
   }, [code]);
 
   return (
-    <div className={cn("relative group rounded-lg overflow-hidden", className)}>
-      <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/80 border-b border-zinc-700/50">
-        <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
+    <div className={cn("group relative overflow-hidden rounded-xl border border-tinta-line", className)}>
+      <div className="flex items-center justify-between border-b border-tinta-line bg-tinta-3 px-4 py-2">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-tinta-muted">
           {language}
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-tinta-muted transition-colors hover:text-tinta-foreground"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400">Copiado</span>
+              <Check className="h-3.5 w-3.5 text-success" />
+              <span className="text-success">Copiado</span>
             </>
           ) : (
             <>
@@ -40,8 +40,8 @@ export function CodeBlock({ code, language = "bash", className }: CodeBlockProps
           )}
         </button>
       </div>
-      <pre className="p-4 overflow-x-auto text-[13px] leading-relaxed bg-zinc-900/95">
-        <code className="text-zinc-300 font-mono whitespace-pre">{code}</code>
+      <pre className="overflow-x-auto bg-tinta-2 p-4 text-[13px] leading-relaxed">
+        <code className="whitespace-pre font-mono text-tinta-foreground/90">{code}</code>
       </pre>
     </div>
   );

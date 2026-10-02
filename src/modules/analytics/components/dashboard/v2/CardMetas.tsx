@@ -155,7 +155,7 @@ export function CardMetas() {
           />
         )}
         {grupos.map((g) => (
-          <div key={g.metrica} className="px-4 py-3">
+          <div key={g.metrica} className="px-5 py-3.5">
             {/* Linha da equipe: é a soma exata do que está logo abaixo. */}
             <div className="mb-2.5">
               <div className="flex items-baseline gap-2">
@@ -299,29 +299,27 @@ function MetaDaOrganizacao({
   if (isLoading) return null;
 
   return (
-    <div className="px-4 py-3">
-      <div className="flex items-baseline gap-2">
-        <span className="cmd-lbl">Faturamento · organização</span>
-        {alvo > 0 && (
-          <>
-            <span className="ml-auto text-[12px] font-semibold tabular-nums">
-              {formatBRL(realizado)}
-              <span className="font-normal text-muted-foreground/60">
-                {" / "}
-                {formatBRL(alvo)}
-              </span>
-            </span>
-            <span
-              className={cn(
-                "w-[38px] shrink-0 text-right text-[12px] font-bold tabular-nums",
-                percentual >= 100 ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              {percentual}%
-            </span>
-          </>
-        )}
-      </div>
+    <div className="px-5 py-4">
+      <span className="cmd-lbl">Faturamento · organização</span>
+      {/* V5: o realizado é o número da tela — grande; o alvo vem ao lado. */}
+      {alvo > 0 && (
+        <div className="mb-1 mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-[1.65rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums">
+            {formatBRL(realizado)}
+          </span>
+          <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">
+            de {formatBRL(alvo)}
+          </span>
+          <span
+            className={cn(
+              "ml-auto rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums",
+              percentual >= 100 ? "bg-primary text-primary-foreground" : "bg-muted text-foreground/70",
+            )}
+          >
+            {percentual}%
+          </span>
+        </div>
+      )}
 
       {alvo > 0 ? (
         <>

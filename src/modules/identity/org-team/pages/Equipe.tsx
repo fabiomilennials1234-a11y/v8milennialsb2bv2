@@ -9,10 +9,17 @@ import {
   Mail,
   MoreHorizontal,
   UserPlus,
+  Users,
+  CalendarCheck,
+  Handshake,
+  Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { KpiTile } from "@/components/ui/bento";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Table,
   TableBody,
@@ -377,30 +384,28 @@ export default function Equipe() {
     member: "Membro",
   };
 
-  const roleColors: Record<string, string> = {
-    admin: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    member: "bg-primary/10 text-primary border-primary/20",
+  // V5: admin é destaque de marca (ouro suave); membro é neutro.
+  const roleVariant: Record<string, BadgeProps["variant"]> = {
+    admin: "gold",
+    member: "soft",
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Equipe
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie membros da equipe e suas permissões
-          </p>
-        </div>
+  const activeMembers = members.filter((m) => m.is_active);
+  const meetingsCount = activeMembers.filter((m) => (m as any).metric_type === "meetings").length;
+  const salesCount = activeMembers.filter((m) => (m as any).metric_type === "sales").length;
+  const oteTotal = activeMembers.reduce(
+    (sum, m) => sum + Number(m.ote_base || 0) + Number(m.ote_bonus || 0),
+    0,
+  );
 
-        {isAdmin && (
-          <div className="flex gap-2">
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Equipe"
+        subtitle="Gerencie membros da equipe e suas permissões"
+        actions={
+          isAdmin && (
+            <>
             <Dialog
               open={isDialogOpen}
               onOpenChange={(open) => {
@@ -699,9 +704,10 @@ export default function Equipe() {
                 )}
               </DialogContent>
             </Dialog>
-          </div>
-        )}
-      </div>
+            </>
+          )
+        }
+      />
 
       {/* Política da organização, antes da lista: é o que governa TODO membro,
           inclusive quem ainda vai ser contratado. */}
@@ -714,53 +720,30 @@ export default function Equipe() {
         </p>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Total Membros</p>
-          <p className="text-xl font-bold">{members.length}</p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Reuniões</p>
-          <p className="text-xl font-bold text-chart-5">
-            {members.filter((m) => (m as any).metric_type === "meetings" && m.is_active).length}
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Vendas</p>
-          <p className="text-xl font-bold text-primary">
-            {members.filter((m) => (m as any).metric_type === "sales" && m.is_active).length}
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Folha OTE Total</p>
-          <p className="text-xl font-bold text-success">
-            {formatCurrency(
-              members
-                .filter((m) => m.is_active)
-                .reduce((sum, m) => sum + Number(m.ote_base || 0) + Number(m.ote_bonus || 0), 0)
-            )}
-          </p>
-        </motion.div>
+      {/* Stats — mesmos quatro números de antes, agora em KpiTile. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiTile label="Total de membros" value={members.length} icon={Users} tone="neutral" />
+        <KpiTile
+          label="Reuniões"
+          value={meetingsCount}
+          icon={CalendarCheck}
+          tone="info"
+          note="Ativos medidos por reuniões"
+        />
+        <KpiTile
+          label="Vendas"
+          value={salesCount}
+          icon={Handshake}
+          tone="gold"
+          note="Ativos medidos por vendas"
+        />
+        <KpiTile
+          label="Folha OTE total"
+          value={formatCurrency(oteTotal)}
+          icon={Wallet}
+          tone="good"
+          note="Base + bônus dos ativos"
+        />
       </div>
 
       {/* Filters */}
@@ -779,7 +762,7 @@ export default function Equipe() {
             <SelectValue placeholder="Função" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas Funções</SelectItem>
+            <SelectItem value="all">Todas as funções</SelectItem>
             <SelectItem value="admin">Administrador</SelectItem>
             <SelectItem value="member">Membro</SelectItem>
           </SelectContent>
@@ -787,7 +770,7 @@ export default function Equipe() {
       </div>
 
       {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
+      <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -820,7 +803,7 @@ export default function Equipe() {
             ) : (
               filteredMembers.map((member) => (
                 <TableRow key={member.id}>
-                  <TableCell className="font-medium">{member.name}</TableCell>
+                  <TableCell className="font-semibold">{member.name}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground" title="ID do piloto (use no n8n round robin)">
                     {member.id}
                   </TableCell>
@@ -835,7 +818,7 @@ export default function Equipe() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={roleColors[member.role] || roleColors.member}>
+                    <Badge variant={roleVariant[member.role] ?? roleVariant.member}>
                       {roleLabels[member.role] || member.role}
                     </Badge>
                   </TableCell>
@@ -851,12 +834,12 @@ export default function Equipe() {
                   </TableCell>
                   <TableCell>
                     {member.is_active ? (
-                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                      <Badge variant="success">
                         <UserCheck className="w-3 h-3 mr-1" />
                         Ativo
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-muted text-muted-foreground">
+                      <Badge variant="soft" className="text-muted-foreground">
                         <UserX className="w-3 h-3 mr-1" />
                         Inativo
                       </Badge>
@@ -896,7 +879,7 @@ export default function Equipe() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </Card>
 
       {/* Permissões por função (apenas admin) */}
       {isAdmin && (

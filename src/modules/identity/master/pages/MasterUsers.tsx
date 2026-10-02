@@ -4,7 +4,6 @@
 
 import { useState } from "react";
 import {
-  Users,
   Search,
   MoreVertical,
   UserCog,
@@ -69,6 +68,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/ui/page-header";
 
 type AppRole = Enums<"app_role">;
 
@@ -219,18 +219,18 @@ export default function MasterUsers() {
       case "admin":
         return <Badge variant="destructive">Admin</Badge>;
       case "member":
-        return <Badge variant="default">Membro</Badge>;
+        return <Badge variant="gold">Membro</Badge>;
       case "agency":
         return <Badge variant="destructive">Agency</Badge>;
       // Legacy roles (pre-migration data)
       case "sdr":
-        return <Badge variant="default">Membro (Pré-Venda)</Badge>;
+        return <Badge variant="gold">Membro (Pré-Venda)</Badge>;
       case "closer":
-        return <Badge variant="secondary">Membro (Vendedor)</Badge>;
+        return <Badge variant="soft">Membro (Vendedor)</Badge>;
       case "bdr":
-        return <Badge variant="default">Membro (BDR)</Badge>;
+        return <Badge variant="gold">Membro (BDR)</Badge>;
       case "cliente":
-        return <Badge variant="secondary">Membro (Cliente)</Badge>;
+        return <Badge variant="soft">Membro (Cliente)</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
@@ -250,23 +250,17 @@ export default function MasterUsers() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="w-6 h-6" />
-            Usuários
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie todos os usuários do sistema
-          </p>
-        </div>
-        <Button onClick={() => setCreateUserOpen(true)}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Criar usuário
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Usuários"
+        subtitle="Gerencie todos os usuários do sistema"
+        actions={
+          <Button onClick={() => setCreateUserOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Criar usuário
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -281,10 +275,10 @@ export default function MasterUsers() {
 
       {/* Cadastros pendentes (usuários que se cadastraram mas não têm organização) */}
       {unassignedUsers.length > 0 && (
-        <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
-          <CardContent className="p-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        <Card className="border-warning/40 bg-warning/[.06]">
+          <CardContent className="p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold tracking-tight">
+              <Clock className="h-5 w-5 text-warning-strong" />
               Cadastros pendentes
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
@@ -373,8 +367,8 @@ export default function MasterUsers() {
                   <TableRow key={user.team_member_id || user.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
+                          <span className="text-sm font-semibold">
                             {user.full_name?.substring(0, 2).toUpperCase() || "??"}
                           </span>
                         </div>
@@ -392,9 +386,9 @@ export default function MasterUsers() {
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell>
                       {user.is_active ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
+                        <Badge variant="success">Ativo</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
                     <TableCell>

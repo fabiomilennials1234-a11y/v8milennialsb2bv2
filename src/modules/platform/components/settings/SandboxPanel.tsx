@@ -42,57 +42,57 @@ export function SandboxPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <FlaskConical className="w-5 h-5 text-primary" />
+        <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
+          <FlaskConical className="h-4 w-4 text-muted-foreground" />
           Sandbox
         </h3>
-        <p className="text-sm text-muted-foreground">
-          Crie uma copia da organizacao para testes sem afetar dados reais
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          Crie uma cópia da organização para testes sem afetar dados reais
         </p>
       </div>
 
       {isSandbox && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <FlaskConical className="w-5 h-5 text-amber-500 shrink-0" />
+        <Card className="border-warning/40 bg-warning/10 shadow-none">
+          <CardContent className="flex items-center gap-3 p-4">
+            <FlaskConical className="h-5 w-5 shrink-0 text-warning-strong" />
             <p className="text-sm">
-              Voce esta em uma organizacao <strong>Sandbox</strong>. Alteracoes aqui nao afetam a organizacao principal.
+              Você está em uma organização <strong>Sandbox</strong>. Alterações aqui não afetam a organização principal.
             </p>
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-4 p-4 rounded-lg border border-border">
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-center gap-4 rounded-xl border border-border p-4">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-warning-strong" />
             <div>
               <p className="text-sm font-medium">Criar sandbox</p>
               <p className="text-xs text-muted-foreground">
-                Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead e copiado.
+                Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead é copiado.
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-              O que e clonado:
+            <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+              O que é clonado:
             </h4>
             <ul className="space-y-1.5 text-sm">
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Etapas e configurações dos funis
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Tags e campos customizados
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Agentes Copilot (configuracoes)
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
+                Agentes Copilot (configurações)
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Workflows (estrutura)
               </li>
             </ul>
@@ -101,7 +101,6 @@ export function SandboxPanel() {
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={createSandbox.isPending}
-            className="gap-2"
           >
             {createSandbox.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -119,7 +118,7 @@ export function SandboxPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Criar sandbox?</AlertDialogTitle>
             <AlertDialogDescription>
-              Uma nova organizacao sera criada com as configuracoes da org atual. Troque de organizacao para acessar.
+              Uma nova organização será criada com as configurações da org atual. Troque de organização para acessar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

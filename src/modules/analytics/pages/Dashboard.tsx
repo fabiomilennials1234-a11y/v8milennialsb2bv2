@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChartNoAxesCombined, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabProximosPassos } from "@/modules/analytics/components/dashboard/v2/TabProximosPassos";
 import { useOrganization, useUserRole, useCurrentTeamMember } from "@/modules/identity";
@@ -19,12 +21,20 @@ export default function Dashboard() {
   if (orgLoading || memberLoading) return <div className="flex flex-col gap-4"><Skeleton className="h-16" /><Skeleton className="h-80" /></div>;
   return (
     <div>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
-        <div><h1 className="text-xl font-bold tracking-tight">Comando</h1><p className="text-sm text-muted-foreground">Próximos passos da operação.</p></div>
-        <div className="flex flex-wrap gap-2">
-          <Button className="min-h-11" onClick={() => setLeadOpen(true)}><Plus className="mr-2 size-4" />Novo lead</Button>
-        </div>
-      </header>
+      <PageHeader
+        title="Comando"
+        subtitle="Próximos passos da operação."
+        actions={
+          <>
+            {/* Comando é operação; análise vive no Estúdio. O par precisa de
+                uma porta explícita, senão a separação vira dois produtos. */}
+            <Button asChild variant="outline">
+              <Link to="/metricas"><ChartNoAxesCombined />Ver métricas</Link>
+            </Button>
+            <Button onClick={() => setLeadOpen(true)}><Plus />Novo lead</Button>
+          </>
+        }
+      />
       <TabProximosPassos />
       <LeadModal open={leadOpen} onOpenChange={setLeadOpen} />
     </div>

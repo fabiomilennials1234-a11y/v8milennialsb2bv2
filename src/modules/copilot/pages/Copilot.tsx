@@ -26,13 +26,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import {
@@ -62,6 +57,10 @@ import { useOrgQuotas } from "@/modules/identity";
 import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
+import { cn } from "@/lib/utils";
+
+/** Rótulo micro do V5 — nome de campo dentro do cartão. */
+const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
 
 export default function Copilot() {
   const navigate = useNavigate();
@@ -158,84 +157,74 @@ export default function Copilot() {
   }
 
   return (
-    <div className="copilot-surface p-6 space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">
-            Copilot — Agentes de IA
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Configure e gerencie seus agentes de IA personalizados
-          </p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Admin ou membros com a permissão habilitada podem criar copilots e vinculá-los a números em Configurações → WhatsApp. Qualquer membro pode ativar ou desativar a IA em cada conversa.
-          </p>
-          {!canManageCopilot && (
-            <p className="text-xs text-muted-foreground/80 mt-1 max-w-xl">
-              Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot; nas configurações de permissões.
-            </p>
-          )}
-        </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Copilot"
+        subtitle="Configure e gerencie seus agentes de IA personalizados."
+        actions={
+          <>
+            {!copilotQuota.is_unlimited && (
+              <Badge variant="soft" className="tabular-nums">
+                {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
+              </Badge>
+            )}
+            <Button variant="outline" onClick={() => navigate("/copilot/metricas")}>
+              <BarChart3 />
+              Métricas LLM
+            </Button>
+            {canManageCopilot && builderEnabled && (
+              <Button
+                onClick={handleCreateWithAI}
+                variant="ink"
+                disabled={!copilotQuota.can_add || createAgent.isPending}
+              >
+                <Sparkles />
+                Criar com IA
+              </Button>
+            )}
+            {canManageCopilot && (
+              <Button onClick={handleCreateAgent} disabled={!copilotQuota.can_add}>
+                <Plus />
+                Novo Copilot
+              </Button>
+            )}
+          </>
+        }
+      />
 
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          {!copilotQuota.is_unlimited && (
-            <Badge variant="outline" className="text-xs">
-              {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
-            </Badge>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => navigate("/copilot/metricas")}
-          >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Métricas LLM
-          </Button>
-          {canManageCopilot && builderEnabled && (
-            <Button
-              onClick={handleCreateWithAI}
-              variant="outline"
-              className="border-primary/40 text-primary hover:bg-primary/10"
-              disabled={!copilotQuota.can_add || createAgent.isPending}
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Criar com IA
-            </Button>
-          )}
-          {canManageCopilot && (
-            <Button
-              onClick={handleCreateAgent}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              disabled={!copilotQuota.can_add}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Copilot
-            </Button>
-          )}
-        </div>
-      </motion.div>
+      <div className="-mt-1 max-w-2xl space-y-1 text-xs leading-relaxed text-muted-foreground">
+        <p>
+          Admin ou membros com a permissão habilitada podem criar copilots e vinculá-los a números em Configurações → WhatsApp. Qualquer membro pode ativar ou desativar a IA em cada conversa.
+        </p>
+        {!canManageCopilot && (
+          <p className="text-muted-foreground/80">
+            Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot; nas configurações de permissões.
+          </p>
+        )}
+      </div>
 
       {builderEnabled && drafts.length > 0 && (
-        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Sparkles className="h-4 w-4 text-primary" />
+        <section className="flex flex-col gap-3 rounded-card border border-primary/25 bg-primary-soft/60 p-4 shadow-relevo">
+          <div className="flex items-center gap-2.5 text-sm font-bold text-foreground">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Sparkles className="h-4 w-4" />
+            </span>
             {drafts.length === 1
               ? "Você tem um Copilot em construção"
               : `Você tem ${drafts.length} Copilots em construção`}
           </div>
-          <div className="flex flex-col gap-1.5">
+          <ul className="flex flex-col gap-1">
             {drafts.map((d) => (
-              <div key={d.id} className="flex items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground">{d.name}</span>
-                <div className="flex items-center gap-1">
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-card/70 px-3 py-1.5"
+              >
+                <span className="min-w-0 truncate text-sm text-foreground/80">{d.name}</span>
+                <div className="flex shrink-0 items-center gap-1">
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-primary hover:bg-primary/10"
+                    className="h-8 text-primary-soft-foreground hover:bg-primary/10 hover:text-primary-soft-foreground"
                     onClick={() => navigate(`/copilot/${d.id}/editar?builder=1`)}
                   >
                     Retomar
@@ -243,46 +232,44 @@ export default function Copilot() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-muted-foreground hover:text-destructive"
+                    aria-label={`Excluir rascunho ${d.name}`}
+                    className="h-8 w-8 rounded-xl p-0 text-muted-foreground hover:text-destructive"
                     onClick={() => setAgentToDelete(d.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
       {/* Subscription Warning - Apenas para quem não tem acesso */}
       {!canManageCopilot && (isTrial || !hasAccess) && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <Card className="border-primary bg-primary/5">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <Lock className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="font-semibold mb-1">
-                    Recurso Exclusivo para Assinantes
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    O Copilot está disponível apenas para planos pagos. Faça
-                    upgrade para desbloquear este recurso e criar agentes de IA
-                    personalizados.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => navigate("/configuracoes")}
-                  >
-                    Ver Planos
-                  </Button>
-                </div>
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+          <Card className="border-primary/30">
+            <CardContent className="flex items-start gap-4 p-5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+                <Lock className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="mb-1 text-base font-bold tracking-tight">
+                  Recurso Exclusivo para Assinantes
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  O Copilot está disponível apenas para planos pagos. Faça
+                  upgrade para desbloquear este recurso e criar agentes de IA
+                  personalizados.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => navigate("/configuracoes")}
+                >
+                  Ver Planos
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -291,91 +278,98 @@ export default function Copilot() {
 
       {/* Agents List */}
       {agents && agents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {agents.map((agent, index) => (
-            <motion.div
-              key={agent.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ scale: 1.02 }}
-            >
-              <Card
-                  className="h-full cursor-pointer hover:border-primary/50 transition-colors"
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {agents.map((agent, index) => {
+            const pipes = (agent.active_pipes as string[]) || [];
+            return (
+              <motion.div
+                key={agent.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(index, 8) * 0.05 }}
+              >
+                <Card
+                  className="group flex h-full cursor-pointer flex-col transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
                   onClick={() => handleOpenConfig(agent)}
                 >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bot className="w-5 h-5 text-primary" />
-                      <CardTitle className="text-lg">{agent.name}</CardTitle>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {agent.is_default && (
-                        <Star className="w-4 h-4 fill-primary text-primary" />
+                  <div className="flex items-start gap-3 p-5 pb-4">
+                    <span
+                      className={cn(
+                        "grid h-11 w-11 shrink-0 place-items-center rounded-2xl",
+                        agent.is_active ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/60",
                       )}
-                      {agent.is_active ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
-                      ) : (
-                        <Badge variant="secondary">Inativo</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <CardDescription className="capitalize">
-                    {agent.template_type}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <span className="text-sm text-muted-foreground">
-                      Personalidade:
+                    >
+                      <Bot className="h-5 w-5" />
                     </span>
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                      <Badge variant="outline" className="text-xs">
-                        {agent.personality_tone}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {agent.personality_style}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {agent.personality_energy}
-                      </Badge>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <CardTitle className="truncate">{agent.name}</CardTitle>
+                        {agent.is_default && (
+                          <Star
+                            className="h-3.5 w-3.5 shrink-0 fill-primary text-primary"
+                            aria-label="Agente padrão"
+                          />
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-xs capitalize text-muted-foreground">
+                        {agent.template_type}
+                      </p>
                     </div>
+                    {agent.is_active ? (
+                      <Badge variant="success" className="shrink-0 gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                        Ativo
+                      </Badge>
+                    ) : (
+                      <Badge variant="soft" className="shrink-0">Inativo</Badge>
+                    )}
                   </div>
 
-                  <div>
-                    <span className="text-sm text-muted-foreground">
-                      Habilidades:
-                    </span>
-                    <p className="text-sm">
-                      {agent.skills?.length || 0} configuradas
-                    </p>
-                  </div>
+                  <div className="flex flex-1 flex-col gap-4 px-5 pb-5">
+                    <div>
+                      <span className={MICRO_LABEL}>Personalidade</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <Badge variant="soft" className="text-[11px]">{agent.personality_tone}</Badge>
+                        <Badge variant="soft" className="text-[11px]">{agent.personality_style}</Badge>
+                        <Badge variant="soft" className="text-[11px]">{agent.personality_energy}</Badge>
+                      </div>
+                    </div>
 
-                  {/* Pipeline Info */}
-                  <div>
-                    <span className="text-sm text-muted-foreground flex items-center gap-1">
-                      <GitBranch className="w-3 h-3" />
-                      Funis ativos:
-                    </span>
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                      {((agent.active_pipes as string[]) || []).length > 0 ? (
-                        ((agent.active_pipes as string[]) || []).map((pipe) => (
-                          <Badge key={pipe} variant="secondary" className="text-xs capitalize">
-                            {labelForRef(pipe)}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-amber-500 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          Nenhum funil — configure antes de ativar
-                        </span>
-                      )}
+                    <div>
+                      <span className={MICRO_LABEL}>Habilidades</span>
+                      <p className="mt-1 text-sm">
+                        <span className="font-extrabold tabular-nums tracking-[-0.02em]">
+                          {agent.skills?.length || 0}
+                        </span>{" "}
+                        <span className="text-muted-foreground">configuradas</span>
+                      </p>
+                    </div>
+
+                    {/* Pipeline Info */}
+                    <div>
+                      <span className={cn(MICRO_LABEL, "flex items-center gap-1")}>
+                        <GitBranch className="h-3 w-3" />
+                        Funis ativos
+                      </span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {pipes.length > 0 ? (
+                          pipes.map((pipe) => (
+                            <Badge key={pipe} variant="info" className="text-[11px] capitalize">
+                              {labelForRef(pipe)}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning-strong">
+                            <AlertTriangle className="h-3 w-3" />
+                            Nenhum funil — configure antes de ativar
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {canManageCopilot && (
-                    <div className="flex gap-2 pt-4 border-t flex-wrap">
+                    <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border/60 px-5 py-3.5">
                       <Button
                         variant="outline"
                         size="sm"
@@ -384,7 +378,7 @@ export default function Copilot() {
                           handleOpenConfig(agent);
                         }}
                       >
-                        <Settings className="w-4 h-4 mr-2" />
+                        <Settings />
                         Configurar
                       </Button>
 
@@ -392,13 +386,12 @@ export default function Copilot() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-primary/40 text-primary hover:bg-primary/10"
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/copilot/${agent.id}/editar?builder=1`);
                           }}
                         >
-                          <Sparkles className="w-4 h-4 mr-2" />
+                          <Sparkles className="text-primary" />
                           Revisar com IA
                         </Button>
                       )}
@@ -409,7 +402,7 @@ export default function Copilot() {
                         onClick={(e) => handleToggleAgent(agent, e)}
                         disabled={toggleAgent.isPending}
                       >
-                        <Power className="w-4 h-4 mr-2" />
+                        <Power />
                         {agent.is_active ? "Desativar" : "Ativar"}
                       </Button>
 
@@ -423,7 +416,7 @@ export default function Copilot() {
                           }}
                           disabled={setDefault.isPending}
                         >
-                          <Star className="w-4 h-4 mr-2" />
+                          <Star />
                           Padrão
                         </Button>
                       )}
@@ -431,42 +424,40 @@ export default function Copilot() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        aria-label={`Excluir ${agent.name}`}
+                        className="ml-auto h-9 w-9 rounded-xl p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
                           setAgentToDelete(agent.id);
                         }}
                         disabled={deleteAgent.isPending}
                       >
-                        <Trash2 className="w-4 h-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
       ) : (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
           <Card>
-            <CardContent className="py-16 text-center">
-              <Bot className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">
+            <CardContent className="flex flex-col items-center px-6 py-16 text-center">
+              <span className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+                <Bot className="h-7 w-7" />
+              </span>
+              <h3 className="mb-1.5 text-lg font-extrabold tracking-[-0.02em]">
                 Nenhum Copilot configurado
               </h3>
-              <p className="text-muted-foreground mb-6">
+              <p className="mb-6 max-w-sm text-sm text-muted-foreground">
                 Crie seu primeiro agente de IA para começar a automatizar suas
                 vendas
               </p>
               {canManageCopilot && (
-                <Button
-                  onClick={handleCreateAgent}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button onClick={handleCreateAgent}>
+                  <Plus />
                   Criar Primeiro Copilot
                 </Button>
               )}
@@ -509,7 +500,7 @@ export default function Copilot() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <AlertTriangle className="w-5 h-5 text-warning-strong" />
               Agente sem funis configurados
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">

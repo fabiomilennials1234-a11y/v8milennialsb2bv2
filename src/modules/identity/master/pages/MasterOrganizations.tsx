@@ -6,7 +6,6 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Building2,
   Plus,
   Search,
   MoreVertical,
@@ -67,6 +66,7 @@ import { BillingOverrideModal } from "../components/BillingOverrideModal";
 import { OrgSuspensionDialog } from "../components/OrgSuspensionDialog";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default function MasterOrganizations() {
   const { isOutbounder } = useMasterAuth();
@@ -125,11 +125,11 @@ export default function MasterOrganizations() {
     const statusBadge = (() => {
       switch (status) {
         case "active":
-          return <Badge className="bg-success text-success-foreground">Ativo</Badge>;
+          return <Badge variant="success">Ativo</Badge>;
         case "trial":
-          return <Badge className="bg-blue-500">Trial</Badge>;
+          return <Badge variant="info">Trial</Badge>;
         case "suspended":
-          return <Badge className="bg-warning text-warning-foreground">Suspenso</Badge>;
+          return <Badge variant="warning">Suspenso</Badge>;
         case "cancelled":
         case "expired":
           return <Badge variant="destructive">Cancelado</Badge>;
@@ -142,7 +142,7 @@ export default function MasterOrganizations() {
       <div className="flex items-center gap-1.5">
         {statusBadge}
         {hasOverride && (
-          <Badge className="bg-purple-500" title="Plano liberado pelo Master — ignora o status da assinatura">
+          <Badge variant="gold" title="Plano liberado pelo Master — ignora o status da assinatura">
             Override
           </Badge>
         )}
@@ -156,25 +156,21 @@ export default function MasterOrganizations() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Building2 className="w-6 h-6" />
-            {isOutbounder ? "Organizações Outbound" : "Organizações"}
-          </h1>
-          <p className="text-muted-foreground">
-            {isOutbounder
-              ? "Gerencie as organizações de outbound"
-              : "Gerencie todas as organizações do sistema"}
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Organização
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title={isOutbounder ? "Organizações Outbound" : "Organizações"}
+        subtitle={
+          isOutbounder
+            ? "Gerencie as organizações de outbound"
+            : "Gerencie todas as organizações do sistema"
+        }
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Organização
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -240,14 +236,14 @@ export default function MasterOrganizations() {
                           {org.id.slice(0, 8)}...
                         </code>
                         {copiedId === org.id ? (
-                          <Check className="w-3 h-3 text-emerald-500" />
+                          <Check className="w-3 h-3 text-success" />
                         ) : (
                           <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                         )}
                       </button>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={org.org_type === "outbound" ? "default" : "secondary"}>
+                      <Badge variant={org.org_type === "outbound" ? "info" : "soft"}>
                         {org.org_type === "outbound" ? "Outbound" : "CRM"}
                       </Badge>
                     </TableCell>

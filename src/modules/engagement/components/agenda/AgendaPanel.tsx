@@ -83,7 +83,7 @@ export function AgendaPanel({ open, onClose, sidebarWidth }: AgendaPanelProps) {
             exit={{ x: "100%" }}
             transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
             style={{ width: largura }}
-            className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-card shadow-2xl"
+            className="fixed inset-y-3 right-3 z-40 flex flex-col overflow-hidden rounded-panel border border-card-border bg-card shadow-relevo-alto"
           >
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5 lg:px-6 lg:py-6">
               <Suspense

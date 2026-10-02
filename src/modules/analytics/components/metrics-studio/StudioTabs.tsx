@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsAction } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { StudioPanel } from "@/modules/analytics/hooks/useMetricsStudioPanels";
 
@@ -32,23 +32,26 @@ export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, p
     onReordenar(ids);
   };
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 items-center gap-6">
-        <div className="min-w-0 overflow-x-auto">
-          <TabsList aria-label="Painéis de métricas" className="h-auto justify-start">
-            {paineis.map((panel) => (
-              <TabsTrigger key={panel.id} value={panel.id} id={`studio-tab-${panel.id}`}
-                aria-controls="studio-panel" className="min-h-11">
-                {panel.nome}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-        {podeCriar && <TabsAction onClick={onCriar} disabled={busy} className="shrink-0 self-stretch border-b border-border"><Plus className="size-3.5" aria-hidden="true" />Nova Aba</TabsAction>}
+    <div className="flex min-w-0 max-w-full flex-col gap-2">
+      {/* V5: navegação de página — pílula escura com a aba ativa em ouro. As
+          ações de aba ficam ao lado, fora da lista (não são abas selecionáveis). */}
+      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+        <TabsList variant="pill" aria-label="Painéis de métricas" className="min-w-0">
+          {paineis.map((panel) => (
+            <TabsTrigger key={panel.id} value={panel.id} id={`studio-tab-${panel.id}`} aria-controls="studio-panel">
+              {panel.nome}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {podeCriar && (
+          <Button type="button" variant="outline" size="sm" onClick={onCriar} disabled={busy} className="shrink-0">
+            <Plus aria-hidden="true" />Nova Aba
+          </Button>
+        )}
         {podeGerenciar && active && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost" className="size-11 shrink-0" disabled={busy} aria-label={`Opções da aba ${active.nome}`}>
+              <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-full" disabled={busy} aria-label={`Opções da aba ${active.nome}`}>
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -63,7 +66,7 @@ export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, p
                 <DropdownMenuItem disabled={activeIndex === paineis.length - 1} onSelect={() => move(1)}>
                   <ArrowRight className="mr-2 size-4" />Mover para a direita
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onRemover(active.id)}>
+                <DropdownMenuItem onSelect={() => onRemover(active.id)} className="text-destructive focus:text-destructive">
                   <Trash2 className="mr-2 size-4" />Excluir aba
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -78,12 +81,12 @@ export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, p
           onRenomear(renomeando.id, renomeando.nome.trim());
           setRenomeando(null);
         }}>
-          <label htmlFor="studio-tab-name" className="text-sm">Nome da aba</label>
-          <Input id="studio-tab-name" autoFocus value={renomeando.nome} maxLength={60} className="h-11 max-w-xs"
+          <label htmlFor="studio-tab-name" className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Nome da aba</label>
+          <Input id="studio-tab-name" autoFocus value={renomeando.nome} maxLength={60} className="h-9 max-w-xs"
             onChange={(event) => setRenomeando({ ...renomeando, nome: event.target.value })}
             onKeyDown={(event) => { if (event.key === "Escape") setRenomeando(null); }} />
-          <Button type="submit" disabled={busy || !renomeando.nome.trim()} className="min-h-11">Salvar nome</Button>
-          <Button type="button" variant="ghost" onClick={() => setRenomeando(null)} className="min-h-11">Cancelar</Button>
+          <Button type="submit" size="sm" disabled={busy || !renomeando.nome.trim()}>Salvar nome</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setRenomeando(null)}>Cancelar</Button>
         </form>
       )}
     </div>

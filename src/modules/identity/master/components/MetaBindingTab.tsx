@@ -12,10 +12,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Loader2, Plus, X, FileText, BarChart3, Lock, AlertTriangle, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
 
 function AssetIcon({ type, className }: { type: "page" | "ad_account"; className?: string }) {
   return type === "page"
-    ? <FileText className={cn("w-3.5 h-3.5 text-sky-400", className)} />
+    ? <FileText className={cn("w-3.5 h-3.5 text-insights", className)} />
     : <BarChart3 className={cn("w-3.5 h-3.5 text-primary", className)} />;
 }
 
@@ -31,7 +32,7 @@ function AssetChip({ asset, onUnbind, onDataset }: {
       <AssetIcon type={asset.type} />
       <span className="text-foreground/90">{asset.name}</span>
       {asset.type === "page" && (
-        <span className={cn("w-1.5 h-1.5 rounded-full", asset.lastError ? "bg-destructive" : asset.lastPolledAt ? "bg-emerald-500" : "bg-muted-foreground/40")}
+        <span className={cn("w-1.5 h-1.5 rounded-full", asset.lastError ? "bg-destructive" : asset.lastPolledAt ? "bg-success" : "bg-muted-foreground/40")}
           title={asset.lastError ?? (asset.lastPolledAt ? "Recebendo leads" : "Aguardando primeiro lead")} />
       )}
       {asset.type === "ad_account" && (
@@ -116,17 +117,16 @@ export function MetaBindingTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Vínculo de Ativos Meta</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-            Escolha a organização e vincule as Páginas e Contas de anúncio dela. Páginas trazem os leads; contas otimizam campanha.
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Atualizar
-        </Button>
-      </div>
+      {/* Único consumidor é /master/meta-assets: este cabeçalho É o da página. */}
+      <PageHeader
+        title="Vínculo de Ativos Meta"
+        subtitle="Escolha a organização e vincule as Páginas e Contas de anúncio dela. Páginas trazem os leads; contas otimizam campanha."
+        actions={
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Atualizar
+          </Button>
+        }
+      />
 
       <div className="flex items-center gap-3">
         <div className="relative max-w-xs flex-1">
@@ -134,7 +134,7 @@ export function MetaBindingTab() {
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filtrar organização…" className="pl-9 h-9" />
         </div>
         <span className="text-xs text-muted-foreground ml-auto">
-          <span className="text-foreground font-medium">{boundCount}</span> vinculados · {unbound.length} disponíveis
+          <span className="text-foreground font-semibold tabular-nums">{boundCount}</span> vinculados · {unbound.length} disponíveis
         </span>
       </div>
 
@@ -142,9 +142,9 @@ export function MetaBindingTab() {
         {shownOrgs.map((org) => {
           const bound = byOrg.get(org.id) ?? [];
           return (
-            <div key={org.id} className="rounded-xl border border-border bg-card p-4">
+            <div key={org.id} className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
               <div className="flex items-center gap-3 mb-3">
-                <span className="grid place-items-center w-8 h-8 rounded-lg bg-primary/15 text-primary text-xs font-bold">
+                <span className="grid place-items-center w-8 h-8 rounded-xl bg-primary-soft text-primary-soft-foreground text-xs font-bold">
                   {org.name.charAt(0).toUpperCase()}
                 </span>
                 <div className="flex-1 min-w-0">

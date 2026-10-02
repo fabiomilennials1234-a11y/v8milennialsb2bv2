@@ -20,8 +20,14 @@ import {
  * de um menu, o estado precisa aparecer por fora, senão quem está em Analytics
  * não sabe por que o board sumiu.
  *
- * ⚠️ Este menu é o **único** caminho de volta do Analytics. A página não pode
- * escondê-lo por visão (o painel de Filtros, sim — ver `PipeWhatsapp`).
+ * ⚠️ Sem a pílula de visões (`withViewSwitcher` = true, o padrão), este menu
+ * é o **único** caminho de volta do Analytics. A página não pode escondê-lo
+ * por visão (o painel de Filtros, sim).
+ *
+ * V5: a página do funil passou a mostrar as visões numa pílula escura sob o
+ * nome (`FunnelControlBar.tabs`) e liga `withViewSwitcher={false}` — o menu
+ * fica só com as visualizações salvas. Duas portas para a mesma troca, uma
+ * delas escondida, era o que o V5 tirou.
  */
 
 export interface FunnelViewOption<T extends string> {
@@ -58,6 +64,11 @@ type FunnelViewsMenuProps<
   onApplyFilters: (filters: TFilters) => void;
   activeViewId: string | null;
   onActiveViewChange: (viewId: string | null) => void;
+  /**
+   * Mostra o bloco "Visão" no topo do popover (e o ícone da visão no gatilho).
+   * `false` quando a página já expõe as visões em outro lugar (a pílula do V5).
+   */
+  withViewSwitcher?: boolean;
 };
 
 export function FunnelViewsMenu<
@@ -69,6 +80,7 @@ export function FunnelViewsMenu<
   viewOptions,
   pipelineId,
   entityType,
+  withViewSwitcher = true,
   ...savedViewsProps
 }: FunnelViewsMenuProps<TView, TFilters>) {
   const activeOption =
@@ -79,6 +91,10 @@ export function FunnelViewsMenu<
   const resolvedEntityType: SavedViewEntityType =
     pipelineId != null ? pipelineEntityType(pipelineId) : entityType;
 
+  if (!withViewSwitcher) {
+    return <SavedViewsDropdown {...savedViewsProps} entityType={resolvedEntityType} />;
+  }
+
   return (
     <SavedViewsDropdown
       {...savedViewsProps}
@@ -86,7 +102,7 @@ export function FunnelViewsMenu<
       triggerIcon={activeOption?.icon}
       header={({ close }) => (
         <div className="p-1" role="group" aria-label="Visão do funil">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             Visão
           </p>
           {viewOptions.map(({ value, icon: Icon, label, hint }) => {
@@ -103,17 +119,17 @@ export function FunnelViewsMenu<
                   close();
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                  "flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors",
                   "outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "hover:bg-muted/50",
+                    ? "bg-primary-soft text-primary-soft-foreground"
+                    : "hover:bg-muted/60",
                 )}
               >
                 <Icon
                   className={cn(
                     "size-3.5 shrink-0",
-                    active ? "text-primary" : "text-muted-foreground",
+                    active ? "text-primary-soft-foreground" : "text-muted-foreground",
                   )}
                 />
                 <span className="flex-1 truncate text-sm">{label}</span>

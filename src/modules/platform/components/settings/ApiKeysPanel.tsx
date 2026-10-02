@@ -150,18 +150,18 @@ export function ApiKeysPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
-            <Key className="w-5 h-5 text-primary" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
+            <Key className="h-4 w-4 text-muted-foreground" />
             API Keys
           </h3>
-          <p className="text-sm text-muted-foreground">
-            Gerencie chaves de acesso para integracoes externas
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Gerencie chaves de acesso para integrações externas
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
+        <Button onClick={() => setCreateOpen(true)} size="sm">
+          <Plus />
           Nova chave
         </Button>
       </div>
@@ -169,8 +169,8 @@ export function ApiKeysPanel() {
       {/* Active keys */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-500" />
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Shield className="h-4 w-4 text-success" />
             Chaves ativas ({activeKeys.length})
           </CardTitle>
         </CardHeader>
@@ -190,14 +190,14 @@ export function ApiKeysPanel() {
                   key={key.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Key className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{key.name}</p>
-                        <code className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                           {key.key_prefix}...
                         </code>
                       </div>
@@ -247,7 +247,7 @@ export function ApiKeysPanel() {
               {revokedKeys.slice(0, 5).map((key) => (
                 <div
                   key={key.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 opacity-50"
+                  className="flex items-center gap-3 rounded-xl bg-muted/30 p-3 opacity-50"
                 >
                   <Key className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div>
@@ -273,18 +273,18 @@ export function ApiKeysPanel() {
 
           {newKey ? (
             <div className="space-y-4 py-2">
-              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/15 p-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" />
                 <div>
                   <p className="text-sm font-medium">Copie agora</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Esta chave nao sera exibida novamente. Armazene em local seguro.
+                    Esta chave não será exibida novamente. Armazene em local seguro.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <code className="flex-1 text-sm font-mono bg-muted p-3 rounded-lg break-all">
+                <code className="flex-1 break-all rounded-xl bg-muted p-3 font-mono text-sm">
                   {newKey}
                 </code>
                 <Button variant="outline" size="icon" onClick={handleCopyKey}>
@@ -305,7 +305,7 @@ export function ApiKeysPanel() {
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Integracao n8n"
+                  placeholder="Ex: Integração n8n"
                 />
               </div>
 
@@ -333,7 +333,7 @@ export function ApiKeysPanel() {
                   {AVAILABLE_SCOPES.map((scope) => (
                     <label
                       key={scope.value}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
+                      className="flex cursor-pointer items-center gap-3 rounded-xl p-2 hover:bg-muted/50"
                     >
                       <Checkbox
                         checked={scopes.includes(scope.value)}
@@ -391,14 +391,14 @@ export function ApiKeysPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Revogar API Key?</AlertDialogTitle>
             <AlertDialogDescription>
-              A chave sera desativada imediatamente. Integracoes usando essa chave deixarao de funcionar.
+              A chave será desativada imediatamente. Integrações usando essa chave deixarão de funcionar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRevoke}
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Revogar
             </AlertDialogAction>

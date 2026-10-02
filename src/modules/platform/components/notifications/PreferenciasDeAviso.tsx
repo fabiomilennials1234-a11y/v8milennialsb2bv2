@@ -84,15 +84,15 @@ export function PreferenciasDeAviso() {
   return (
     <div className="space-y-6" aria-busy={carregando}>
       <div>
-        <h3 className="text-lg font-medium">Notificações</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-base font-bold tracking-tight">Notificações</h3>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Vale só para você, e só nesta organização. Tudo continua registrado no sino — o
           que muda aqui é o que interrompe.
         </p>
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border p-4">
+        <div className="flex items-center justify-between rounded-xl border border-border p-4">
           <div className="space-y-0.5">
             <Label>Som</Label>
             <p className="text-sm text-muted-foreground">
@@ -105,10 +105,10 @@ export function PreferenciasDeAviso() {
           />
         </div>
 
-        <div className="rounded-lg border p-4">
+        <div className="rounded-xl border border-border p-4">
           <div className="mb-3 flex items-center justify-between">
             <Label>Volume</Label>
-            <span className="text-sm tabular-nums text-muted-foreground">
+            <span className="text-sm font-bold tabular-nums text-muted-foreground">
               {volumeLocal ?? preferencias.volume}
             </span>
           </div>
@@ -126,7 +126,7 @@ export function PreferenciasDeAviso() {
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-4">
+        <div className="flex items-center justify-between rounded-xl border border-border p-4">
           <div className="space-y-0.5">
             <Label>Silenciar a conversa aberta</Label>
             <p className="text-sm text-muted-foreground">
@@ -139,7 +139,7 @@ export function PreferenciasDeAviso() {
           />
         </div>
 
-        <div className="rounded-lg border p-4">
+        <div className="rounded-xl border border-border p-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>Horário silencioso</Label>
@@ -196,7 +196,7 @@ export function PreferenciasDeAviso() {
           )}
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-4">
+        <div className="flex items-center justify-between rounded-xl border border-border p-4">
           <div className="space-y-0.5">
             <Label>Avisar no celular</Label>
             <p className="text-sm text-muted-foreground">
@@ -233,9 +233,9 @@ export function PreferenciasDeAviso() {
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-sm font-medium">O que faz som</h4>
+        <h4 className="pb-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">O que faz som</h4>
         {GRUPOS_DE_SOM.map(({ rotulo, descricao, tipos }) => (
-          <div key={rotulo} className="flex items-center justify-between rounded-lg border p-4">
+          <div key={rotulo} className="flex items-center justify-between rounded-xl border border-border p-4">
             <div className="space-y-0.5">
               <Label>{rotulo}</Label>
               <p className="text-sm text-muted-foreground">{descricao}</p>
@@ -251,7 +251,7 @@ export function PreferenciasDeAviso() {
                   motorDeSom.tocar(timbreDoTipo(tipos[0]), preferencias.volume);
                 }}
                 disabled={!preferencias.sound_enabled || !somDoGrupo(tipos)}
-                className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
               >
                 Ouvir
               </button>

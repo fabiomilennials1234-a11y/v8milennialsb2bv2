@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +36,6 @@ import { toast } from "sonner";
 
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
-import { funilIcon } from "@/modules/pipelines/lib/funil-icons";
 import {
   useFunilStages,
   usePaginatedFunil,
@@ -562,17 +562,19 @@ function FunilPageInner() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="flex h-[60vh] items-center justify-center" aria-busy="true">
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" aria-label="Carregando funil" />
       </div>
     );
   }
 
   if (!pipeline) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <AlertTriangle className="w-12 h-12 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">Funil não encontrado</h2>
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <AlertTriangle className="h-5 w-5" aria-hidden />
+        </span>
+        <h2 className="text-lg font-bold tracking-tight">Funil não encontrado</h2>
         <Button variant="outline" onClick={() => navigate("/funis")}>
           Ver todos os funis
         </Button>
@@ -580,7 +582,6 @@ function FunilPageInner() {
     );
   }
 
-  const PipeIcon = funilIcon(pipeline.icon);
   const periodRange = controller.metricsRange;
 
   const viewOptions: { value: FunilViewMode; icon: typeof LayoutGrid; label: string }[] = [
@@ -590,36 +591,57 @@ function FunilPageInner() {
     { value: "analytics", icon: BarChart3, label: "Analytics" },
   ];
 
+  // O ÚNICO botão de ouro do cabeçalho (V5): a criação típica de cada família.
   const primaryAction = ehCustom ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Adicionar Lead
+    <Button size="sm" onClick={() => setShowAddLead(true)}>
+      <Plus />
+      Adicionar lead
     </Button>
   ) : trioSlug === "whatsapp" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateOpportunity(true)}>
-      <Plus className="w-4 h-4 mr-2" />
+    <Button size="sm" onClick={() => setShowCreateOpportunity(true)}>
+      <Plus />
       Novo negócio
     </Button>
   ) : trioSlug === "confirmacao" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateMeeting(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Nova Reunião
+    <Button size="sm" onClick={() => setShowCreateMeeting(true)}>
+      <Plus />
+      Nova reunião
     </Button>
   ) : trioSlug === "propostas" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateProposal(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Nova Proposta
+    <Button size="sm" onClick={() => setShowCreateProposal(true)}>
+      <Plus />
+      Nova proposta
     </Button>
   ) : undefined;
 
   return (
-    <div className="space-y-4">
+    // A pílula de visões é navegação Radix (`Tabs`) e cada visão é o seu
+    // `TabsContent` — mesmo `viewMode`, mesmo estado; só ganhou forma.
+    <Tabs
+      value={viewMode}
+      onValueChange={(v) => setViewMode(v as FunilViewMode)}
+      className="space-y-5"
+    >
       <FunnelControlBar
         funnelKey={`pipeline:${pipeline.id}`}
         funnelLabel={pipeline.name}
         funnelColor={pipeline.color}
+        funnelIcon={pipeline.icon}
+        subtitle={pipeline.description || undefined}
         search={controller.search}
         onSearchChange={controller.setSearch}
+        tabs={
+          stages.length > 0 ? (
+            <TabsList variant="pill" aria-label="Visão do funil">
+              {viewOptions.map(({ value, icon: Icon, label }) => (
+                <TabsTrigger key={value} value={value}>
+                  <Icon className="size-4" aria-hidden />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          ) : undefined
+        }
         views={
           <FunnelViewsMenu
             viewMode={viewMode}
@@ -631,31 +653,26 @@ function FunilPageInner() {
             onApplyFilters={applyBoardState}
             activeViewId={activeViewId}
             onActiveViewChange={handleActiveViewChange}
+            // A pílula acima já troca a visão; o menu fica com as views salvas.
+            withViewSwitcher={false}
           />
         }
         filters={
-          <>
-            <PipeIcon
-              className="hidden size-4 shrink-0 sm:block"
-              style={{ color: pipeline.color }}
-              aria-hidden
-            />
-            {stages.length > 0 && viewMode !== "analytics" && (
-              <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
-            )}
-          </>
+          stages.length > 0 && viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+          ) : undefined
         }
         actions={
           <>
             {ehCustom && customRow && (
-              <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
+              <Button size="sm" variant="outline" onClick={() => setShowSettings(true)}>
+                <Settings2 />
                 Configurações
               </Button>
             )}
             {trioSlug && (
-              <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSystemSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
+              <Button size="sm" variant="outline" onClick={() => setShowSystemSettings(true)}>
+                <Settings2 />
                 Configurações
               </Button>
             )}
@@ -664,13 +681,13 @@ function FunilPageInner() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-9 px-2"
+                    size="icon"
+                    variant="outline"
+                    className="h-9 w-9"
                     aria-label="Mais ações do funil"
                     data-testid="funnel-overflow"
                   >
-                    <MoreHorizontal className="w-4 h-4" />
+                    <MoreHorizontal />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
@@ -705,26 +722,24 @@ function FunilPageInner() {
         }
       />
 
-      {pipeline.description && (
-        <p className="-mt-2 truncate text-sm text-muted-foreground">{pipeline.description}</p>
-      )}
-
       {/* Sem GhostLeadsBanner de propósito: `get_pipeline_page` usa INNER JOIN
           com `leads` sob RLS — entry cujo lead o usuário não enxerga nem chega
           na tela, e a contagem da coluna sai do MESMO recorte. */}
 
       {/* Indicador de período ativo (porte das páginas velhas) */}
       {viewMode !== "analytics" && periodRange && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
-          <CalendarIcon className="w-4 h-4 shrink-0" />
-          <span className="flex-1">
+        <div className="flex items-center gap-3 rounded-2xl border border-card-border bg-card py-2 pl-2 pr-2 text-sm text-muted-foreground shadow-relevo">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+            <CalendarIcon className="h-4 w-4" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
             Exibindo cards criados em{" "}
-            <span className="text-foreground font-medium">{formatPeriodLabel(periodRange)}</span>
+            <span className="font-semibold text-foreground tabular-nums">{formatPeriodLabel(periodRange)}</span>
           </span>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs"
+            className="h-8 rounded-full text-xs"
             onClick={() =>
               controller.setState((s) => ({ ...s, period: createInitialPeriodState() }))
             }
@@ -735,81 +750,98 @@ function FunilPageInner() {
       )}
 
       {stages.length > 0 ? (
-        viewMode === "analytics" ? (
-          <FunilAnalytics
-            pipeline={pipeline}
-            stages={stages}
-            stageData={stageData}
-            allItems={allItems}
-            metrics={metrics}
-            periodRange={periodRange}
-            responsibleMembers={responsibleMembers}
-          />
-        ) : viewMode === "timeline" ? (
-          <MeetingTimeline
-            meetings={timelineItems}
-            onMeetingClick={(meeting) => {
-              if (meeting.lead_id) openDeal(meeting.id, meeting.lead_id);
-            }}
-          />
-        ) : isMobile || viewMode === "list" ? (
-          <PipelineListView
-            stages={mobileStages}
-            leads={mobileLeads}
-            onLeadClick={handleMobileLeadClick}
-            onMoveLeadToStage={handleMobileMove}
-            isLoading={loadingBoard}
-          />
-        ) : (
-          <FunilKanban
-            pipelineId={pipeline.id}
-            stages={stages}
-            stageData={stageData}
-            onMove={handleMove}
-            onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
-            onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
-            metricsMap={metricsMap}
-            onDisparar={handleDispararManual}
-            onDeleteAllLeads={
-              trioSlug
-                ? (stageKey, stageTitle) => setStageToDelete({ id: stageKey, title: stageTitle })
-                : undefined
-            }
-            renderStageBadge={
-              trioSlug
-                ? (col) => {
-                    const allCounts = systemWorkflowCounts["__all__"] || { total: 0, active: 0 };
-                    const stageCounts = systemWorkflowCounts[col.id] || { total: 0, active: 0 };
-                    return (
-                      <StageWorkflowsBadgeWrapper
-                        pipeType={trioSlug}
-                        stageKey={col.id}
-                        stageName={col.title}
-                        counts={{
-                          total: stageCounts.total + allCounts.total,
-                          active: stageCounts.active + allCounts.active,
-                        }}
-                      />
-                    );
-                  }
-                : undefined
-            }
-          />
-        )
+        <>
+          <TabsContent value="analytics" className="mt-0">
+            <FunilAnalytics
+              pipeline={pipeline}
+              stages={stages}
+              stageData={stageData}
+              allItems={allItems}
+              metrics={metrics}
+              periodRange={periodRange}
+              responsibleMembers={responsibleMembers}
+            />
+          </TabsContent>
+          <TabsContent value="timeline" className="mt-0">
+            <MeetingTimeline
+              meetings={timelineItems}
+              onMeetingClick={(meeting) => {
+                if (meeting.lead_id) openDeal(meeting.id, meeting.lead_id);
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="list" className="mt-0">
+            <PipelineListView
+              stages={mobileStages}
+              leads={mobileLeads}
+              onLeadClick={handleMobileLeadClick}
+              onMoveLeadToStage={handleMobileMove}
+              isLoading={loadingBoard}
+            />
+          </TabsContent>
+          <TabsContent value="kanban" className="mt-0">
+            {isMobile ? (
+              <PipelineListView
+                stages={mobileStages}
+                leads={mobileLeads}
+                onLeadClick={handleMobileLeadClick}
+                onMoveLeadToStage={handleMobileMove}
+                isLoading={loadingBoard}
+              />
+            ) : (
+              <FunilKanban
+                pipelineId={pipeline.id}
+                stages={stages}
+                stageData={stageData}
+                onMove={handleMove}
+                onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
+                onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
+                metricsMap={metricsMap}
+                onDisparar={handleDispararManual}
+                onDeleteAllLeads={
+                  trioSlug
+                    ? (stageKey, stageTitle) => setStageToDelete({ id: stageKey, title: stageTitle })
+                    : undefined
+                }
+                renderStageBadge={
+                  trioSlug
+                    ? (col) => {
+                        const allCounts = systemWorkflowCounts["__all__"] || { total: 0, active: 0 };
+                        const stageCounts = systemWorkflowCounts[col.id] || { total: 0, active: 0 };
+                        return (
+                          <StageWorkflowsBadgeWrapper
+                            pipeType={trioSlug}
+                            stageKey={col.id}
+                            stageName={col.title}
+                            counts={{
+                              total: stageCounts.total + allCounts.total,
+                              active: stageCounts.active + allCounts.active,
+                            }}
+                          />
+                        );
+                      }
+                    : undefined
+                }
+              />
+            )}
+          </TabsContent>
+        </>
       ) : (
-        <div className="text-center py-16 text-muted-foreground">
-          <Kanban className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium">Nenhuma etapa configurada</p>
+        <div className="flex flex-col items-center rounded-panel border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <Kanban className="h-5 w-5" aria-hidden />
+          </span>
+          <p className="text-base font-bold tracking-tight">Nenhuma etapa configurada</p>
           {ehCustom && customRow ? (
             <>
-              <p className="text-sm mt-1">Abra as configurações para criar etapas.</p>
-              <Button variant="outline" className="mt-4" onClick={() => setShowSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
-                Configurar Etapas
+              <p className="mt-1 text-sm text-muted-foreground">Abra as configurações para criar etapas.</p>
+              <Button variant="outline" className="mt-5" onClick={() => setShowSettings(true)}>
+                <Settings2 />
+                Configurar etapas
               </Button>
             </>
           ) : (
-            <p className="text-sm mt-1">Este funil ainda não tem etapas ativas.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Este funil ainda não tem etapas ativas.</p>
           )}
         </div>
       )}
@@ -932,7 +964,7 @@ function FunilPageInner() {
       <AlertDialog open={!!removeEntryId} onOpenChange={() => setRemoveEntryId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover Lead do Funil</AlertDialogTitle>
+            <AlertDialogTitle>Remover lead do funil</AlertDialogTitle>
             <AlertDialogDescription>
               O lead será removido deste funil, mas continuará existindo no sistema.
             </AlertDialogDescription>
@@ -944,14 +976,14 @@ function FunilPageInner() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {(removeLead.isPending || deleteEntry.isPending) && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               )}
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Tabs>
   );
 }
 

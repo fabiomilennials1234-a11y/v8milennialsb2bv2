@@ -6,10 +6,12 @@ import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   GitBranch,
   Plus,
-  Loader2,
   Kanban,
   ArrowRight,
   ChevronDown,
@@ -100,148 +102,178 @@ export default function FunisHub() {
       };
     });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      {/* ── Header ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Funis</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie seus funis de vendas
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Criar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Funis"
+        subtitle="Gerencie seus funis de vendas"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Criar
+          </Button>
+        }
+      />
 
-      {/* Uma lista só. A linha abaixo do nome mostra apenas fatos do funil,
-          como prazo, meta e estado. */}
-      {allFunnels.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {allFunnels.map((funil) => (
-            /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
-               de ações, e botão dentro de botão é HTML inválido (o menu nem
-               abriria). A área de navegação continua sendo um botão — só que
-               agora ela é o miolo do cartão, e o menu é irmão dela. */
-            <div
-              key={funil.key}
-              className="group flex items-center rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all"
-            >
-              <button
-                onClick={() => navigate(funil.path)}
-                className="flex flex-1 min-w-0 items-center gap-3 p-4 text-left"
-              >
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: funil.color + "15" }}
-                >
-                  <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{funil.name}</p>
-                  {funil.meta && (
-                    <p className="text-xs text-muted-foreground truncate">{funil.meta}</p>
-                  )}
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-              {funil.pipeline && (
-                <div className="pr-3 pl-1">
-                  <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
-                </div>
-              )}
-            </div>
+      {/* Carregando: o esqueleto já tem a forma da grade — o cabeçalho não
+          espera dado nenhum, então ele não some enquanto a lista chega. */}
+      {isLoading ? (
+        <div
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          aria-busy="true"
+          aria-label="Carregando funis"
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[84px] rounded-card" />
           ))}
         </div>
-      )}
-
-      {/* ── Encerrados (collapsed) ──────────────────────────── */}
-      {endedTemporary.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowEnded(!showEnded)}
-            className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronDown
-              className={cn(
-                "w-4 h-4 transition-transform",
-                showEnded && "rotate-180"
-              )}
-            />
-            {endedTemporary.length} funil{endedTemporary.length > 1 ? "s" : ""}{" "}
-            encerrado{endedTemporary.length > 1 ? "s" : ""}
-          </button>
-          {showEnded && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 opacity-60">
-              {endedTemporary.map((pipe) => {
-                const canonical = pipeById.get(pipe.id);
-                const displayName = canonical?.name ?? pipe.name;
-                return (
-                /* Encerrado é estado, não espécie: o funil segue sendo funil e
-                   ganha o mesmo menu — é justamente aqui que "excluir" costuma
-                   ser o que a pessoa quer. */
+      ) : (
+        <>
+          {/* Uma lista só. A linha abaixo do nome mostra apenas fatos do funil,
+              como prazo, meta e estado. */}
+          {allFunnels.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {allFunnels.map((funil) => (
+                /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
+                   de ações, e botão dentro de botão é HTML inválido (o menu nem
+                   abriria). A área de navegação continua sendo um botão — só que
+                   agora ela é o miolo do cartão, e o menu é irmão dela. */
                 <div
-                  key={pipe.id}
-                  className="group flex items-start rounded-xl border border-border/50 bg-card"
+                  key={funil.key}
+                  className={cn(
+                    "group flex items-center rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
+                    "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                  )}
                 >
                   <button
-                    onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
-                    className="flex-1 min-w-0 p-4 text-left"
+                    onClick={() => navigate(funil.path)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-3.5 rounded-card p-[18px] text-left",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    )}
                   >
-                    <div className="flex items-center gap-2">
-                      <Kanban className="w-4 h-4 text-muted-foreground" />
-                      <p className="text-sm font-medium truncate">{displayName}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
+                    {/* Cor e ícone que o usuário escolheu — tinta translúcida
+                        sobre o cartão, que assenta nos dois temas. */}
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px]"
+                      style={{ backgroundColor: `color-mix(in srgb, ${funil.color} 14%, transparent)` }}
+                    >
+                      <funil.icon className="h-5 w-5" style={{ color: funil.color }} aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-bold tracking-[-0.01em]">
+                        {funil.name}
+                      </span>
+                      {funil.meta && (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {funil.meta}
+                        </span>
+                      )}
+                    </span>
+                    <ArrowRight
+                      className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-x-0.5 group-hover:opacity-100"
+                      aria-hidden
+                    />
                   </button>
-                  {canonical && (
-                    <div className="pr-3 pt-4 pl-1">
-                      <FunnelActionsMenu
-                        pipeline={canonical}
-                        displayName={displayName}
-                      />
+                  {funil.pipeline && (
+                    <div className="pl-1 pr-3">
+                      <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
                     </div>
                   )}
                 </div>
-                );
-              })}
+              ))}
             </div>
           )}
-        </div>
-      )}
 
-      {/* ── Estado vazio ─────────────────────────────────────
-          Antes aparecia mesmo COM funis na tela ("seus funis estruturais estão
-          prontos, crie os customizados"). Sem as duas espécies, a frase não
-          fazia mais sentido — e o vazio só é vazio quando não há funil algum. */}
-      {allFunnels.length === 0 && endedTemporary.length === 0 && (
-        <div className="text-center py-12 bg-muted/20 rounded-xl border border-border/30">
-          <GitBranch className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <h3 className="text-base font-semibold mb-1">
-            Nenhum funil por aqui ainda
-          </h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-            Crie um funil para organizar sua operação
-          </p>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            variant="outline"
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Criar funil
-          </Button>
-        </div>
+          {/* ── Encerrados (recolhidos) ─────────────────────────── */}
+          {endedTemporary.length > 0 && (
+            <section className="space-y-3">
+              <button
+                onClick={() => setShowEnded(!showEnded)}
+                aria-expanded={showEnded}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-1 py-1 text-[13px] font-semibold text-muted-foreground transition-colors",
+                  "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <ChevronDown
+                  className={cn("h-4 w-4 transition-transform duration-200", showEnded && "rotate-180")}
+                  aria-hidden
+                />
+                {endedTemporary.length} funil{endedTemporary.length > 1 ? "s" : ""}{" "}
+                encerrado{endedTemporary.length > 1 ? "s" : ""}
+              </button>
+              {showEnded && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {endedTemporary.map((pipe) => {
+                    const canonical = pipeById.get(pipe.id);
+                    const displayName = canonical?.name ?? pipe.name;
+                    return (
+                    /* Encerrado é estado, não espécie: o funil segue sendo funil e
+                       ganha o mesmo menu — é justamente aqui que "excluir" costuma
+                       ser o que a pessoa quer. */
+                    <div
+                      key={pipe.id}
+                      className="group flex items-center rounded-card border border-dashed border-border bg-card/60 text-card-foreground"
+                    >
+                      <button
+                        onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center gap-3.5 rounded-card p-[18px] text-left",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                      >
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-muted text-muted-foreground">
+                          <Kanban className="h-5 w-5" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-foreground/80">
+                            {displayName}
+                          </span>
+                          <Badge variant="soft" className="mt-1 px-2 py-0 text-[11px]">
+                            Encerrado
+                          </Badge>
+                        </span>
+                      </button>
+                      {canonical && (
+                        <div className="pl-1 pr-3">
+                          <FunnelActionsMenu
+                            pipeline={canonical}
+                            displayName={displayName}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Estado vazio ─────────────────────────────────────
+              Antes aparecia mesmo COM funis na tela ("seus funis estruturais estão
+              prontos, crie os customizados"). Sem as duas espécies, a frase não
+              fazia mais sentido — e o vazio só é vazio quando não há funil algum. */}
+          {allFunnels.length === 0 && endedTemporary.length === 0 && (
+            <div className="flex flex-col items-center rounded-panel border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+              <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+                <GitBranch className="h-5 w-5" aria-hidden />
+              </span>
+              <h3 className="text-base font-bold tracking-tight">
+                Nenhum funil por aqui ainda
+              </h3>
+              <p className="mx-auto mb-5 mt-1 max-w-sm text-sm text-muted-foreground">
+                Crie um funil para organizar sua operação
+              </p>
+              <Button onClick={() => setCreateOpen(true)} variant="outline">
+                <Plus />
+                Criar funil
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <CreateFunilOuCampanhaModal open={createOpen} onOpenChange={setCreateOpen} />

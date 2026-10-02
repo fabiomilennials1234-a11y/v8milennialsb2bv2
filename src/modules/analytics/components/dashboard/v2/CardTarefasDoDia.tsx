@@ -134,7 +134,7 @@ export function CardTarefasDoDia() {
           <button
             type="submit"
             disabled={criar.isPending}
-            className="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
+            className="shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
           >
             {criar.isPending ? "…" : "Add"}
           </button>

@@ -99,14 +99,16 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
   };
 
   return (
-    <div className="border rounded-lg">
+    <div className="overflow-hidden rounded-2xl border border-border/70">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Tools</span>
+      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-muted text-foreground/60">
+            <Wrench className="w-4 h-4" />
+          </span>
+          <span className="text-sm font-bold tracking-tight">Tools</span>
           {activeCount > 0 && (
-            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+            <Badge variant="gold" className="text-[11px] tabular-nums">
               {activeCount} ativas
             </Badge>
           )}
@@ -114,7 +116,7 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
       </div>
 
       {/* Tool list */}
-      <div className="divide-y">
+      <div className="divide-y divide-border/60">
         {PLAYGROUND_TOOLS.map((def) => {
           const isAutoEnabled = def.id === "MOVER_CARD" && isMoverCardAutoEnabled(activePipes);
           const state = tools[def.id] || { enabled: false, config: {}, instruction: "" };
@@ -125,11 +127,11 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
           return (
             <div key={def.id}>
               {/* Tool header */}
-              <div className="flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {isAutoEnabled ? (
                     <div className="flex items-center gap-1" title="Autoativado (funis configurados)">
-                      <Lock className="w-3.5 h-3.5 text-primary/60" />
+                      <Lock className="w-3.5 h-3.5 text-primary-soft-foreground" />
                     </div>
                   ) : (
                     <Switch
@@ -147,12 +149,18 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
                       }
                     }}
                   >
-                    <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span
+                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${
+                        effectiveEnabled ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/60"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </span>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium truncate">{def.name}</p>
+                        <p className="text-sm font-semibold truncate">{def.name}</p>
                         {isAutoEnabled && (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
+                          <Badge variant="gold" className="h-4 shrink-0 px-1.5 py-0 text-[9px]">
                             auto
                           </Badge>
                         )}
@@ -165,7 +173,9 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
                 {effectiveEnabled && (
                   <button
                     type="button"
-                    className="p-1 hover:bg-muted rounded"
+                    className="grid h-7 w-7 place-items-center rounded-[9px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={isExpanded ? `Recolher ${def.name}` : `Configurar ${def.name}`}
+                    aria-expanded={isExpanded}
                     onClick={() => setExpandedTool(isExpanded ? null : def.id)}
                   >
                     {isExpanded ? (
@@ -179,26 +189,26 @@ export function PlaygroundTools({ tools, onChange, activePipes, agentId }: Playg
 
               {/* Tool config: instruction + parameters */}
               {isExpanded && (
-                <div className="px-4 pb-3 ml-12 space-y-3">
+                <div className="ml-[5.25rem] space-y-3 px-4 pb-4">
                   {/* Instruction textarea */}
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Instrucao de uso</Label>
+                    <Label className="text-xs font-semibold">Instrução de uso</Label>
                     <textarea
                       value={state.instruction || ""}
                       onChange={(e) => updateToolInstruction(def.id, e.target.value)}
                       placeholder={def.defaultInstruction}
-                      className="w-full resize-none bg-muted/20 rounded-md p-2.5 text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/30 border border-border/50 min-h-[80px]"
+                      className="w-full resize-none rounded-xl border border-input bg-sunken p-3 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring/40 min-h-[80px]"
                     />
                     <p className="text-[10px] text-muted-foreground">
-                      Descreva quando e como o copilot deve usar esta ferramenta. Quanto mais especifico, melhor.
+                      Descreva quando e como o copilot deve usar esta ferramenta. Quanto mais específico, melhor.
                     </p>
                   </div>
 
                   {/* Parameters */}
                   {def.id === "GERAR_ORCAMENTO_PDF" && <QuoteTemplateConfig agentId={agentId} config={state.config} onChange={patch => onChange({ ...tools, [def.id]: { ...state, config: { ...state.config, ...patch } } })} />}
                   {def.parameters.length > 0 && (
-                    <div className="space-y-2 pt-1 border-t border-border/30">
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Configuracao</p>
+                    <div className="space-y-2 border-t border-border/40 pt-2">
+                      <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Configuração</p>
                       {def.parameters.map((param) => (
                         <div key={param.key} className="space-y-1">
                           <Label className="text-xs">{param.label}</Label>

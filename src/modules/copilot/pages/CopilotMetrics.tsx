@@ -10,20 +10,19 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import {
-  BarChart3,
   Bot,
   Star,
   TrendingUp,
   TrendingDown,
   Minus,
   Users,
-  Calendar,
   FlaskConical,
   MessageSquare,
   Activity,
-  ChevronDown,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -165,27 +164,34 @@ function computeAgentSummaries(
   });
 }
 
+// Só tokens: o par claro/escuro vem do tema, não de uma escala de cor crua.
 function scoreColor(score: number): string {
-  if (score >= 8) return "text-green-500";
-  if (score >= 6) return "text-yellow-500";
-  return "text-red-500";
+  if (score >= 8) return "text-success";
+  if (score >= 6) return "text-warning-strong";
+  return "text-destructive";
 }
 
 function scoreBg(score: number): string {
-  if (score >= 8) return "bg-green-50 border-green-200";
-  if (score >= 6) return "bg-yellow-50 border-yellow-200";
-  return "bg-red-50 border-red-200";
+  if (score >= 8) return "bg-success/[.06] border-success/20";
+  if (score >= 6) return "bg-warning/10 border-warning/25";
+  return "bg-destructive/[.06] border-destructive/20";
+}
+
+function scoreTone(score: number): "good" | "gold" | "bad" {
+  if (score >= 8) return "good";
+  if (score >= 6) return "gold";
+  return "bad";
 }
 
 function ScoreBar({ score, label }: { score: number; label: string }) {
   const pct = (score / 10) * 100;
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-sm">
+      <div className="flex justify-between text-[13px]">
         <span className="text-muted-foreground">{label}</span>
-        <span className={`font-semibold ${scoreColor(score)}`}>{score.toFixed(1)}</span>
+        <span className={`font-bold tabular-nums ${scoreColor(score)}`}>{score.toFixed(1)}</span>
       </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full rounded-full transition-all ${score >= 8 ? "bg-success" : score >= 6 ? "bg-warning" : "bg-destructive"}`}
           style={{ width: `${pct}%` }}
@@ -196,10 +202,21 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
 }
 
 function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
-  if (trend === 'up') return <TrendingUp className="w-4 h-4 text-green-500" />;
-  if (trend === 'down') return <TrendingDown className="w-4 h-4 text-red-500" />;
-  return <Minus className="w-4 h-4 text-muted-foreground" />;
+  if (trend === 'up') return <TrendingUp className="w-4 h-4 text-success" aria-label="Em alta" />;
+  if (trend === 'down') return <TrendingDown className="w-4 h-4 text-destructive" aria-label="Em queda" />;
+  return <Minus className="w-4 h-4 text-muted-foreground" aria-label="Estável" />;
 }
+
+/** Ícone do título do cartão num chip neutro — o vocabulário do bento. */
+function TitleChip({ icon: Icon }: { icon: typeof Bot }) {
+  return (
+    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
+
+const MICRO_LABEL = "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
@@ -221,129 +238,120 @@ export default function CopilotMetrics() {
     : "0.0";
   const variants = (data?.variants || []).filter(v => v.total_conversations > 0);
 
+  const kpi = (v: React.ReactNode) => (isLoading ? "·" : v);
+
   return (
-    <div className="copilot-surface space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" />
-            Métricas LLM
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Qualidade das respostas dos agentes avaliada automaticamente por IA
-          </p>
-        </div>
+    <div className="space-y-5">
+      <PageHeader
+        back="/copilot"
+        title="Métricas LLM"
+        subtitle="Qualidade das respostas dos agentes avaliada automaticamente por IA"
+        actions={
+          <>
+            <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
+              <SelectTrigger className="h-10 w-32 rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 dias</SelectItem>
+                <SelectItem value="30">30 dias</SelectItem>
+                <SelectItem value="90">90 dias</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <div className="flex items-center gap-3">
-          <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">7 dias</SelectItem>
-              <SelectItem value="30">30 dias</SelectItem>
-              <SelectItem value="90">90 dias</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+              <SelectTrigger className="h-10 w-48 rounded-full">
+                <SelectValue placeholder="Todos os agentes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os agentes</SelectItem>
+                {(data?.agents || []).map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+      />
 
-          <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Todos os agentes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os agentes</SelectItem>
-              {(data?.agents || []).map(a => (
-                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {/* KPIs — mesmos quatro números de antes, da mesma consulta. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile
+          label="Score Geral"
+          icon={Star}
+          tone={isLoading ? "neutral" : scoreTone(globalAvg)}
+          loading={isLoading}
+          value={kpi(
+            <span className={scoreColor(globalAvg)}>
+              {globalAvg.toFixed(1)}
+              <ValueUnit>/10</ValueUnit>
+            </span>,
+          )}
+          note="Média LLM-as-a-judge"
+        />
+        <KpiTile
+          label="Avaliações"
+          icon={MessageSquare}
+          tone="neutral"
+          loading={isLoading}
+          value={kpi(totalEvals.toLocaleString("pt-BR"))}
+          note={`Últimos ${days} dias`}
+        />
+        {/* ⚠️ Decisão pendente do CTO: este KPI lê qualification_score >= 70.
+            Restyle não mexe na fonte — só na forma. */}
+        <KpiTile
+          label="Taxa de Qualificação"
+          icon={Users}
+          tone="info"
+          loading={isLoading}
+          value={kpi(
+            <span className="text-insights">
+              {qualRate}
+              <ValueUnit>%</ValueUnit>
+            </span>,
+          )}
+          note="Leads qualificados (score ≥ 70)"
+        />
+        <KpiTile
+          label="Agentes Ativos"
+          icon={Bot}
+          tone="gold"
+          loading={isLoading}
+          value={kpi(agentSummaries.length)}
+          note="Com avaliações no período"
+        />
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            {isLoading ? <Skeleton className="h-16" /> : (
-              <>
-                <p className="text-sm text-muted-foreground">Score Geral</p>
-                <p className={`text-2xl font-bold ${scoreColor(globalAvg)}`}>
-                  {globalAvg.toFixed(1)}<span className="text-base text-muted-foreground">/10</span>
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">Média LLM-as-a-judge</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            {isLoading ? <Skeleton className="h-16" /> : (
-              <>
-                <p className="text-sm text-muted-foreground">Avaliações</p>
-                <p className="text-2xl font-bold">{totalEvals.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">Últimos {days} dias</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            {isLoading ? <Skeleton className="h-16" /> : (
-              <>
-                <p className="text-sm text-muted-foreground">Taxa de Qualificação</p>
-                <p className="text-2xl font-bold text-blue-600">{qualRate}%</p>
-                <p className="text-xs text-muted-foreground mt-1">Leads qualificados (score ≥ 70)</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            {isLoading ? <Skeleton className="h-16" /> : (
-              <>
-                <p className="text-sm text-muted-foreground">Agentes Ativos</p>
-                <p className="text-2xl font-bold">{agentSummaries.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">Com avaliações no período</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Scores por Agente */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="w-5 h-5" />
-              Score por Agente
-            </CardTitle>
-            <CardDescription>Qualidade média das respostas por agente</CardDescription>
+          <CardHeader className="flex-row items-center gap-3 space-y-0">
+            <TitleChip icon={Bot} />
+            <div className="min-w-0">
+              <CardTitle>Score por Agente</CardTitle>
+              <CardDescription className="text-xs">Qualidade média das respostas por agente</CardDescription>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20" />)
+              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)
             ) : agentSummaries.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Nenhuma avaliação no período</p>
-                <p className="text-xs mt-1">As avaliações são geradas automaticamente a cada 3 turnos de conversa</p>
+              <div className="py-8 text-center text-muted-foreground">
+                <Activity className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                <p className="text-sm font-semibold text-foreground/80">Nenhuma avaliação no período</p>
+                <p className="mt-1 text-xs">As avaliações são geradas automaticamente a cada 3 turnos de conversa</p>
               </div>
             ) : (
               agentSummaries.map(agent => (
-                <div key={agent.agent_id} className={`p-4 rounded-lg border ${scoreBg(agent.avg_overall)}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Bot className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">{agent.agent_name}</span>
+                <div key={agent.agent_id} className={`rounded-2xl border p-4 ${scoreBg(agent.avg_overall)}`}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-sm font-bold">{agent.agent_name}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <TrendIcon trend={agent.trend} />
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="soft" className="text-[11px] tabular-nums">
                         {agent.evaluations} avaliações
                       </Badge>
                     </div>
@@ -362,52 +370,54 @@ export default function CopilotMetrics() {
 
         {/* A/B Testing */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="w-5 h-5" />
-              A/B Testing
-            </CardTitle>
-            <CardDescription>Comparação de variantes de prompt</CardDescription>
+          <CardHeader className="flex-row items-center gap-3 space-y-0">
+            <TitleChip icon={FlaskConical} />
+            <div className="min-w-0">
+              <CardTitle>A/B Testing</CardTitle>
+              <CardDescription className="text-xs">Comparação de variantes de prompt</CardDescription>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-24 mb-3" />)
+              Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="mb-3 h-24 rounded-2xl" />)
             ) : variants.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FlaskConical className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Nenhum experimento ativo</p>
-                <p className="text-xs mt-1">Configure variantes de prompt nas configurações do agente</p>
+              <div className="py-8 text-center text-muted-foreground">
+                <FlaskConical className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                <p className="text-sm font-semibold text-foreground/80">Nenhum experimento ativo</p>
+                <p className="mt-1 text-xs">Configure variantes de prompt nas configurações do agente</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {variants.map(v => (
-                  <div key={v.id} className="p-4 rounded-lg border">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-sm">{v.name}</span>
+                  <div key={v.id} className="rounded-2xl border border-border/70 bg-sunken p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-bold">{v.name}</span>
                       {v.is_control && (
-                        <Badge variant="secondary" className="text-xs">Controle</Badge>
+                        <Badge variant="ink" className="text-[11px]">Controle</Badge>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-muted-foreground text-xs">Score Geral</p>
-                        <p className={`font-bold ${scoreColor(v.avg_score_overall)}`}>
-                          {Number(v.avg_score_overall).toFixed(1)}/10
+                        <p className={MICRO_LABEL}>Score Geral</p>
+                        <p className={`text-lg font-extrabold tabular-nums tracking-[-0.03em] ${scoreColor(v.avg_score_overall)}`}>
+                          {Number(v.avg_score_overall).toFixed(1)}<ValueUnit>/10</ValueUnit>
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs">Alinhamento</p>
-                        <p className={`font-bold ${scoreColor(v.avg_score_goal_align)}`}>
-                          {Number(v.avg_score_goal_align).toFixed(1)}/10
+                        <p className={MICRO_LABEL}>Alinhamento</p>
+                        <p className={`text-lg font-extrabold tabular-nums tracking-[-0.03em] ${scoreColor(v.avg_score_goal_align)}`}>
+                          {Number(v.avg_score_goal_align).toFixed(1)}<ValueUnit>/10</ValueUnit>
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs">Conversas</p>
-                        <p className="font-bold">{v.total_conversations}</p>
+                        <p className={MICRO_LABEL}>Conversas</p>
+                        <p className="text-lg font-extrabold tabular-nums tracking-[-0.03em]">{v.total_conversations}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs">Taxa Qualif.</p>
-                        <p className="font-bold text-blue-600">{Number(v.qualification_rate).toFixed(1)}%</p>
+                        <p className={MICRO_LABEL}>Taxa Qualif.</p>
+                        <p className="text-lg font-extrabold tabular-nums tracking-[-0.03em] text-insights">
+                          {Number(v.qualification_rate).toFixed(1)}<ValueUnit>%</ValueUnit>
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -420,42 +430,42 @@ export default function CopilotMetrics() {
 
       {/* Últimas avaliações */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" />
-            Últimas Avaliações
-          </CardTitle>
-          <CardDescription>Detalhamento das avaliações mais recentes com pontos de melhoria</CardDescription>
+        <CardHeader className="flex-row items-center gap-3 space-y-0">
+          <TitleChip icon={MessageSquare} />
+          <div className="min-w-0">
+            <CardTitle>Últimas Avaliações</CardTitle>
+            <CardDescription className="text-xs">Detalhamento das avaliações mais recentes com pontos de melhoria</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 mb-2" />)
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="mb-2 h-16 rounded-2xl" />)
           ) : (data?.evaluations || []).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">Nenhuma avaliação ainda</p>
+            <div className="py-8 text-center text-muted-foreground">
+              <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
+              <p className="text-sm font-semibold text-foreground/80">Nenhuma avaliação ainda</p>
             </div>
           ) : (
             <div className="space-y-2">
               {(data?.evaluations || []).slice(0, 10).map((ev, i) => {
                 const agent = data?.agents.find(a => a.id === ev.agent_id);
                 return (
-                  <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${scoreBg(ev.score_overall)}`}>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-lg font-bold ${scoreColor(ev.score_overall)}`}>
+                  <div key={i} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${scoreBg(ev.score_overall)}`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className={`w-10 text-xl font-extrabold tabular-nums tracking-[-0.04em] ${scoreColor(ev.score_overall)}`}>
                         {Number(ev.score_overall).toFixed(1)}
                       </span>
-                      <div>
-                        <p className="text-sm font-medium">{agent?.name || "Agente"}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{agent?.name || "Agente"}</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">
                           {new Date(ev.evaluated_at).toLocaleString("pt-BR")}
                         </p>
                       </div>
                     </div>
                     <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>Rel: <strong className={scoreColor(ev.score_relevance)}>{Number(ev.score_relevance).toFixed(1)}</strong></span>
-                      <span>Tom: <strong className={scoreColor(ev.score_tone)}>{Number(ev.score_tone).toFixed(1)}</strong></span>
-                      <span>Obj: <strong className={scoreColor(ev.score_goal_align)}>{Number(ev.score_goal_align).toFixed(1)}</strong></span>
+                      <span>Rel: <strong className={`tabular-nums ${scoreColor(ev.score_relevance)}`}>{Number(ev.score_relevance).toFixed(1)}</strong></span>
+                      <span>Tom: <strong className={`tabular-nums ${scoreColor(ev.score_tone)}`}>{Number(ev.score_tone).toFixed(1)}</strong></span>
+                      <span>Obj: <strong className={`tabular-nums ${scoreColor(ev.score_goal_align)}`}>{Number(ev.score_goal_align).toFixed(1)}</strong></span>
                     </div>
                   </div>
                 );

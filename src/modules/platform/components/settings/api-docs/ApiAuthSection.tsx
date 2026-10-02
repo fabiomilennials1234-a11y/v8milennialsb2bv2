@@ -6,9 +6,9 @@ interface ApiAuthSectionProps {
 }
 
 const AUTH_ICONS = {
-  "api-key": <Key className="w-4 h-4 text-amber-400" />,
-  bearer: <Shield className="w-4 h-4 text-blue-400" />,
-  none: <ShieldOff className="w-4 h-4 text-zinc-400" />,
+  "api-key": <Key className="h-4 w-4 text-warning-strong" />,
+  bearer: <Shield className="h-4 w-4 text-insights" />,
+  none: <ShieldOff className="h-4 w-4 text-muted-foreground" />,
 };
 
 export function ApiAuthSection({ endpoint }: ApiAuthSectionProps) {
@@ -16,14 +16,14 @@ export function ApiAuthSection({ endpoint }: ApiAuthSectionProps) {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+      <h4 className="flex items-center gap-2 text-sm font-bold text-foreground">
         {AUTH_ICONS[auth.type]}
-        Autenticacao
+        Autenticação
       </h4>
-      <div className="p-3 rounded-lg border border-border bg-muted/20">
+      <div className="rounded-xl border border-border bg-muted/40 p-3">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted/50 text-muted-foreground uppercase">
-            {auth.type === "none" ? "Sem autenticacao" : auth.type}
+          <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs uppercase text-muted-foreground">
+            {auth.type === "none" ? "Sem autenticação" : auth.type}
           </span>
           {auth.header && (
             <code className="text-xs font-mono text-foreground/70">{auth.header}</code>

@@ -58,6 +58,12 @@ function estimateItemHeight(density: DensityMode): number {
   }
 }
 
+/** V5 — alternador segmentado sobre a tinta (Ativas · Arquivadas · Grupos). */
+const SEGMENTO =
+  "flex-1 whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-semibold transition-[background-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const SEGMENTO_ATIVO = "bg-foreground text-background";
+const SEGMENTO_INATIVO = "text-muted-foreground hover:text-foreground";
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ConversationListProps {
@@ -372,9 +378,11 @@ export function ConversationList({
   });
 
   return (
+    // Desktop: a coluna é o cartão de TINTA do ChatShell (o fundo vem de lá).
+    // Mobile: ocupa a tela inteira e mantém a superfície clara.
     <div className={cn(
-      "flex flex-col h-full min-h-0 bg-muted/20",
-      !isMobile && "border-r border-border/60",
+      "flex flex-col h-full min-h-0",
+      isMobile && "bg-muted/20",
     )}>
       {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
       {isMobile ? (
@@ -413,7 +421,15 @@ export function ConversationList({
           canSeeUnassigned={canSeeUnassigned}
         />
       ) : (
-      <div className="p-3 border-b bg-background shrink-0">
+      <div className="shrink-0 space-y-2.5 px-3 pb-3 pt-3.5">
+        <div className="flex items-baseline gap-2 px-1">
+          <p className="text-base font-bold tracking-tight text-foreground">Inbox</p>
+          <span className="flex-1" />
+          <p className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+            Total: {isSocialBox ? filteredContacts.length : fmtCount(filteredContacts.length)}
+          </p>
+        </div>
+
         {boxes && boxes.length > 0 && marcadas && onAlternarCaixa && (
           <SeletorDeCaixas
             caixas={boxes}
@@ -427,16 +443,13 @@ export function ConversationList({
           />
         )}
 
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-          Inbox
-        </p>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar conversa..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-9 bg-background"
+            className="h-9 rounded-full border-white/10 bg-white/[.06] pl-9 shadow-none focus-visible:ring-offset-0"
           />
         </div>
 
@@ -461,36 +474,25 @@ export function ConversationList({
           />
         )}
 
-        <p className="mt-2 text-xs text-muted-foreground">
-          Total: {isSocialBox ? filteredContacts.length : fmtCount(filteredContacts.length)}
-        </p>
-
         {/* Arquivamento vive em `whatsapp_conversations`; não há equivalente
             para canal social, então as abas não nascem em vez de nascerem
-            mortas. */}
+            mortas. V5: alternador segmentado sobre a tinta — continuam botões
+            (trocam o recorte da lista, não a página). */}
         {!isSocialBox && (
-          <div className="flex mt-2 bg-muted rounded-md p-0.5">
+          <div className="flex gap-0.5 rounded-full bg-white/[.06] p-[3px]">
             <button
               type="button"
+              aria-pressed={activeTab === "active"}
               onClick={() => onTabChange("active")}
-              className={cn(
-                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                activeTab === "active"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className={cn(SEGMENTO, activeTab === "active" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
             >
               Ativas ({fmtCount(activeCount)})
             </button>
             <button
               type="button"
+              aria-pressed={activeTab === "archived"}
               onClick={() => onTabChange("archived")}
-              className={cn(
-                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                activeTab === "archived"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className={cn(SEGMENTO, activeTab === "archived" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
             >
               Arquivadas ({fmtCount(archivedCount)})
             </button>
@@ -498,13 +500,9 @@ export function ConversationList({
             {abasDeGrupos && (
               <button
                 type="button"
+                aria-pressed={activeTab === "grupos"}
                 onClick={() => onTabChange("grupos")}
-                className={cn(
-                  "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                  activeTab === "grupos"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                className={cn(SEGMENTO, activeTab === "grupos" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
               >
                 Grupos ({fmtCount(gruposCount)})
               </button>
@@ -530,12 +528,12 @@ export function ConversationList({
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             {!isSocialBox && activeTab === "archived" ? (
               <>
-                <Archive className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <Archive className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">Nenhuma conversa arquivada</p>
               </>
             ) : !isSocialBox && activeTab === "grupos" ? (
               <>
-                <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <Users className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 {/* Vazio aqui quase nunca é "não há grupo": é `capture_groups`
                     desligada na org, e aí o webhook derruba a mensagem de grupo
                     antes de gravar. Dizer só "nenhum grupo" mandaria o vendedor
@@ -552,7 +550,7 @@ export function ConversationList({
               </>
             ) : (
               <>
-                <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <MessageSquare className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
                   {searchQuery
                     ? "Nenhuma conversa encontrada"
@@ -569,7 +567,7 @@ export function ConversationList({
           // ── Modo virtualizado ──────────────────────────────────────────────
           <div
             style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-            className="divide-y divide-border/60"
+            className="mx-2"
           >
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const contact = filteredContacts[virtualItem.index];
@@ -585,6 +583,7 @@ export function ConversationList({
                     width: "100%",
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
+                  className="pb-0.5"
                 >
                   <ConversationListItem
                     contact={contact}
@@ -612,7 +611,7 @@ export function ConversationList({
           </div>
         ) : (
           // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
-          <div className={cn(!isMobile && "divide-y divide-border/60")}>
+          <div className={cn(!isMobile && "mx-2 flex flex-col gap-0.5 pb-2")}>
             {filteredContacts.map((contact) =>
               isMobile ? (
                 <MobileConversationRow

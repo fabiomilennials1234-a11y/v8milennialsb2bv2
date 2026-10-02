@@ -240,11 +240,13 @@ describe("Sidebar — slot do Oráculo", () => {
     renderSidebar();
     await user.click(screen.getByRole("button", { name: /Oráculo/ }));
 
-    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("248px");
+    // V5: a lateral flutua com 12px de margem dos dois lados — o capturador
+    // começa depois da lateral E do respiro: 248 + 12 + 12.
+    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("272px");
 
     await user.click(screen.getByRole("button", { name: "Recolher menu" }));
 
-    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("64px");
+    expect(screen.getByTestId("captura-do-oraculo").style.left).toBe("88px");
   });
 
   it("fecha pelo Esc e pelo botão", async () => {

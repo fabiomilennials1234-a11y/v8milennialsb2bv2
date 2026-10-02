@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Users,
+  Building2,
   Search,
   RefreshCw,
   AlertTriangle,
@@ -43,6 +44,8 @@ import {
   isAccessDeniedError,
   type OrgActivityGroup,
 } from "../hooks/useMasterUserActivity";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiTile } from "@/components/ui/bento";
 
 const WINDOW_OPTIONS = [
   { value: "60", label: "Última hora" },
@@ -78,12 +81,12 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
   return (
     <div className="border-b last:border-b-0">
       {/* Cabeçalho da org */}
-      <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-muted/40">
+      <div className="flex items-center justify-between gap-3 bg-muted/40 px-5 py-2.5">
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={cn(
               "w-2 h-2 rounded-full shrink-0",
-              hasOnline ? "bg-emerald-500" : "bg-muted-foreground/30",
+              hasOnline ? "bg-success" : "bg-muted-foreground/30",
             )}
             aria-hidden
           />
@@ -97,7 +100,7 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
         <span
           className={cn(
             "text-xs tabular-nums shrink-0",
-            hasOnline ? "text-emerald-600 font-medium" : "text-muted-foreground",
+            hasOnline ? "font-semibold text-success" : "text-muted-foreground",
           )}
         >
           {group.onlineCount} de {group.totalCount}
@@ -106,7 +109,7 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
 
       {/* Membros */}
       {group.members.length === 0 ? (
-        <p className="px-4 py-3 text-xs text-muted-foreground italic">
+        <p className="px-5 py-3 text-xs text-muted-foreground italic">
           Nenhum usuário ativo cadastrado nesta organização.
         </p>
       ) : (
@@ -114,13 +117,13 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
           {group.members.map((m) => (
             <li
               key={m.memberId}
-              className="flex items-center justify-between gap-3 px-4 py-2 hover:bg-accent/40"
+              className="flex items-center justify-between gap-3 px-5 py-2 hover:bg-accent/40"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <span
                   className={cn(
                     "w-2 h-2 rounded-full shrink-0",
-                    m.isOnline ? "bg-emerald-500" : "bg-muted-foreground/30",
+                    m.isOnline ? "bg-success" : "bg-muted-foreground/30",
                   )}
                   aria-label={m.isOnline ? "ativo" : "sem sinal"}
                 />
@@ -135,7 +138,7 @@ function OrgBlock({ group }: { group: OrgActivityGroup }) {
                 {m.isMaster && (
                   <Badge
                     variant="outline"
-                    className="text-[10px] px-1 py-0 shrink-0 border-red-500/30 text-red-600 gap-0.5"
+                    className="text-[10px] px-1 py-0 shrink-0 border-destructive/30 text-destructive gap-0.5"
                   >
                     <ShieldCheck className="w-2.5 h-2.5" />
                     master
@@ -232,45 +235,42 @@ export default function MasterUsuariosAtivos() {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-4"
+      className="space-y-5"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="w-6 h-6 text-red-500" />
-            Usuários
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Quem deu sinal de uso em cada organização — {windowLabel}.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="gap-2"
-        >
-          <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
-          Atualizar
-        </Button>
-      </div>
+      <PageHeader
+        title="Usuários ativos"
+        subtitle={<>Quem deu sinal de uso em cada organização — {windowLabel}.</>}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
+            Atualizar
+          </Button>
+        }
+      />
 
       {/* Resumo */}
       {!isLoading && !error && (
-        <div className="flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <strong className="tabular-nums">{totals.online}</strong>
-            <span className="text-muted-foreground">
-              de {totals.members} usuários
-            </span>
-          </span>
-          <span className="text-muted-foreground">
-            em <strong className="tabular-nums">{totals.orgsOnline}</strong>{" "}
-            {totals.orgsOnline === 1 ? "organização" : "organizações"}
-          </span>
+        <div className="grid gap-4 sm:grid-cols-2 xl:max-w-3xl">
+          <KpiTile
+            label="Com atividade"
+            icon={Users}
+            tone="good"
+            value={totals.online}
+            note={`de ${totals.members} usuários`}
+          />
+          <KpiTile
+            label={totals.orgsOnline === 1 ? "Organização com atividade" : "Organizações com atividade"}
+            icon={Building2}
+            tone="info"
+            value={totals.orgsOnline}
+            note={windowLabel}
+          />
         </div>
       )}
 
@@ -298,14 +298,14 @@ export default function MasterUsuariosAtivos() {
           </SelectContent>
         </Select>
         <Button
-          variant={onlyOnline ? "default" : "outline"}
+          variant={onlyOnline ? "ink" : "outline"}
           size="sm"
           onClick={() => setOnlyOnline((v) => !v)}
         >
           Só com atividade
         </Button>
         <Button
-          variant={includeMasters ? "default" : "outline"}
+          variant={includeMasters ? "ink" : "outline"}
           size="sm"
           onClick={() => setIncludeMasters((v) => !v)}
         >
@@ -314,7 +314,7 @@ export default function MasterUsuariosAtivos() {
       </div>
 
       {/* Aviso de precisão — parte do contrato da tela, não enfeite */}
-      <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
+      <div className="flex items-start gap-2 rounded-xl border bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
         <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
         <p>
           O sinal vem da sessão de login, que se renova a cada ~1 hora. Serve para
@@ -327,16 +327,16 @@ export default function MasterUsuariosAtivos() {
       {/* Estados */}
       {isLoading ? (
         <Card>
-          <CardContent className="p-4 space-y-3">
+          <CardContent className="p-5 space-y-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </CardContent>
         </Card>
       ) : error ? (
-        <Card className="border-amber-500/40">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        <Card className="border-warning/40">
+          <CardContent className="p-5 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" />
             <div className="space-y-1 text-sm">
               {isMissingRpcError(error) ? (
                 <>

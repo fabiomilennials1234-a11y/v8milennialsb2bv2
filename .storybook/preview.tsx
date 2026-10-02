@@ -29,11 +29,12 @@ const mockAuth = {
 
 const preview: Preview = {
   parameters: {
+    // V5: bancada clara quente e preto puro — os mesmos fundos do app.
     backgrounds: {
-      default: "dark",
+      default: "bancada",
       values: [
-        { name: "dark", value: "hsl(30 15% 10%)" },
-        { name: "light", value: "hsl(42 25% 96%)" },
+        { name: "bancada", value: "hsl(42 18% 94%)" },
+        { name: "preto", value: "hsl(0 0% 0%)" },
       ],
     },
     layout: "padded",

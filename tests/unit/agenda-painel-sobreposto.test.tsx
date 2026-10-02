@@ -92,7 +92,8 @@ describe("AgendaPanel", () => {
   it("não cobre a tela inteira — é ancorado à direita", async () => {
     abrir();
     const painel = await screen.findByLabelText("Atividades");
-    expect(painel.className).toContain("right-0");
+    // V5: flutua a 12px da borda direita — continua ancorado à direita.
+    expect(painel.className).toContain("right-3");
     expect(painel.className).not.toContain("inset-0");
   });
 

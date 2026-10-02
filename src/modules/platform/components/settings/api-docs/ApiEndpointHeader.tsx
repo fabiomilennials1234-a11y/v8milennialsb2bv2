@@ -33,13 +33,13 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-bold text-foreground">{endpoint.name}</h2>
+          <h2 className="text-xl font-extrabold tracking-[-0.02em] text-foreground">{endpoint.name}</h2>
           <div className="flex items-center gap-2 mt-1">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono text-muted-foreground bg-muted/40">
+            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
               v{endpoint.version}
             </span>
             {endpoint.deprecated && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning-strong">
                 Descontinuado
               </span>
             )}
@@ -47,7 +47,7 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
         </div>
       </div>
 
-      <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border group">
+      <div className="group flex items-center gap-2 rounded-xl border border-border bg-muted/40 p-3">
         <MethodBadge method={endpoint.method} />
         <code className="flex-1 text-sm font-mono text-foreground truncate">
           {fullUrl}
@@ -58,7 +58,7 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
           title="Copiar URL"
         >
           {copied ? (
-            <Check className="w-4 h-4 text-emerald-400" />
+            <Check className="h-4 w-4 text-success" />
           ) : (
             <Copy className="w-4 h-4" />
           )}
@@ -69,7 +69,7 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
         {endpoint.description}
       </p>
       {endpoint.deprecation_notice && (
-        <p className="text-xs text-amber-500 mt-1">{endpoint.deprecation_notice}</p>
+        <p className="mt-1 text-xs text-warning-strong">{endpoint.deprecation_notice}</p>
       )}
     </div>
   );

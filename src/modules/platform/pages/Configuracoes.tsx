@@ -1,12 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useMemo,
-  lazy,
-  Suspense,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useState, useEffect, useMemo, lazy, Suspense, type ElementType, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePipelineDisplayConfig } from "@/modules/pipelines";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
@@ -14,7 +6,6 @@ import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
 import {
-  Settings,
   Tag,
   Plus,
   Edit2,
@@ -27,7 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PreferenciasDeAviso } from "@/modules/platform/components/notifications/PreferenciasDeAviso";
 import { Switch } from "@/components/ui/switch";
@@ -139,8 +131,30 @@ const colorOptions = [
 
 function TabFallback({ label }: { label: string }) {
   return (
-    <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
-      Carregando {label}...
+    <div className="flex h-[400px] items-center justify-center rounded-card border border-card-border bg-card text-sm text-muted-foreground shadow-relevo">
+      Carregando {label}…
+    </div>
+  );
+}
+
+/**
+ * Cartão de bento de cada aba. Antes era `glass-card` + `pt-6` repetido em
+ * treze lugares; o respiro e o raio passam a morar aqui.
+ */
+function SettingsCard({ children }: { children: ReactNode }) {
+  return (
+    <Card>
+      <CardContent className="p-5 sm:p-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+/** Título de seção dentro de uma aba — mesmo ritmo nas abas inline. */
+function SectionHeading({ title, description }: { title: ReactNode; description?: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <h3 className="text-base font-bold tracking-tight">{title}</h3>
+      {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
     </div>
   );
 }
@@ -205,51 +219,50 @@ function TagsSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Tags de Leads</h3>
-          <p className="text-sm text-muted-foreground">
-            Crie e gerencie tags para organizar seus leads
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeading
+          title="Tags de leads"
+          description="Crie e gerencie tags para organizar seus leads"
+        />
         {isAdmin && (
-          <Button onClick={() => handleOpenDialog()} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
+          <Button onClick={() => handleOpenDialog()} size="sm">
+            <Plus />
             Nova Tag
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+            <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       ) : tags.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+        <div className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
           Nenhuma tag cadastrada
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {tags.map((tag) => (
             <motion.div
               key={tag.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors"
+              className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-card py-2 pl-3 pr-1.5 transition-colors hover:border-foreground/20"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                {/* Cor da tag é dado do usuário — fica inline. */}
                 <div
-                  className="w-4 h-4 rounded-full"
+                  className="h-3.5 w-3.5 shrink-0 rounded-full"
                   style={{ backgroundColor: tag.color || "#F5C518" }}
                 />
-                <span className="text-sm font-medium">{tag.name}</span>
+                <span className="truncate text-sm font-semibold">{tag.name}</span>
               </div>
               {isAdmin && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" aria-label={`Ações da tag ${tag.name}`}>
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -297,10 +310,12 @@ function TagsSettings() {
                     key={color}
                     type="button"
                     onClick={() => setFormData({ ...formData, color })}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                    aria-label={`Cor ${color}`}
+                    aria-pressed={formData.color === color}
+                    className={`h-8 w-8 rounded-full ring-offset-2 ring-offset-background transition-all ${
                       formData.color === color
-                        ? "border-primary scale-110"
-                        : "border-transparent hover:scale-105"
+                        ? "scale-110 ring-2 ring-foreground"
+                        : "hover:scale-105"
                     }`}
                     style={{ backgroundColor: color }}
                   />
@@ -344,7 +359,7 @@ function TagsSettings() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -384,12 +399,10 @@ function ConfirmacaoOverdueSettings() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">Funil {nomeConfirmacao}</h3>
-        <p className="text-sm text-muted-foreground">
-          Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)
-        </p>
-      </div>
+      <SectionHeading
+        title={`Funil ${nomeConfirmacao}`}
+        description={<>Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)</>}
+      />
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
           <Label htmlFor="confirmacao-overdue-days">Dias sem interação para considerar atrasado</Label>
@@ -449,12 +462,10 @@ function DefaultPipelineSettings() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">Funil padrão</h3>
-        <p className="text-sm text-muted-foreground">
-          Onde entra um lead que chega por integração sem funil de destino declarado
-        </p>
-      </div>
+      <SectionHeading
+        title="Funil padrão"
+        description="Onde entra um lead que chega por integração sem funil de destino declarado"
+      />
       <div className="grid gap-2 max-w-sm">
         <Label htmlFor="default-pipeline">Funil de entrada</Label>
         <Select
@@ -508,12 +519,10 @@ function ReorderCycleSettings() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">Carteira de Clientes</h3>
-        <p className="text-sm text-muted-foreground">
-          Ciclo padrão de recompra para clientes novos (com menos de 2 pedidos)
-        </p>
-      </div>
+      <SectionHeading
+        title="Carteira de clientes"
+        description="Ciclo padrão de recompra para clientes novos (com menos de 2 pedidos)"
+      />
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
           <Label htmlFor="reorder-cycle-days">Dias entre recompras (padrão)</Label>
@@ -570,12 +579,7 @@ function GeneralSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Configurações Gerais</h3>
-        <p className="text-sm text-muted-foreground">
-          Configurações gerais do sistema
-        </p>
-      </div>
+      <SectionHeading title="Configurações gerais" description="Configurações gerais do sistema" />
 
       <div className="space-y-4">
         <div className="grid gap-2">
@@ -588,7 +592,7 @@ function GeneralSettings() {
           <Input id="timezone" defaultValue="America/Sao_Paulo" disabled />
         </div>
 
-        <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
           <div className="space-y-0.5">
             <Label>Modo escuro</Label>
             <p className="text-sm text-muted-foreground">
@@ -601,7 +605,7 @@ function GeneralSettings() {
           />
         </div>
 
-        <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
           <div className="space-y-0.5">
             <Label>Animações</Label>
             <p className="text-sm text-muted-foreground">
@@ -612,60 +616,18 @@ function GeneralSettings() {
         </div>
       </div>
 
-      <div className="pt-6 border-t border-border">
+      <div className="border-t border-border pt-6">
         <DefaultPipelineSettings />
       </div>
 
-      <div className="pt-6 border-t border-border">
+      <div className="border-t border-border pt-6">
         <ConfirmacaoOverdueSettings />
       </div>
 
-      <div className="pt-6 border-t border-border">
+      <div className="border-t border-border pt-6">
         <ReorderCycleSettings />
       </div>
     </div>
-  );
-}
-
-// Gradiente dourado das pílulas (mesma paleta dos botões de seção do Copilot Playground).
-const PILL_GRADIENT = {
-  "--gradient-from": "hsl(47 100% 58%)",
-  "--gradient-to": "hsl(40 96% 45%)",
-} as CSSProperties;
-
-/**
- * PillTab — trigger de aba no estilo "pílula gradiente hover-expand" (portado do
- * PromptEditor do Copilot Playground). Círculo de ícone (48px) que expande para
- * 160px revelando preenchimento gradiente + glow + label uppercase.
- *
- * Comportamento pedido: no hover a pílula cresce NO FLUXO, empurrando as vizinhas
- * PARA O LADO (permitido) — mas nunca quebra linha nem mexe a página. Isso é
- * garantido no container (`TabsList`): `flex-nowrap` trava tudo numa linha só (não
- * desce) e `overflow-x:clip` corta qualquer transbordo horizontal sem criar
- * scrollbar (não empurra a tela) — e, ao contrário de `hidden`, o `clip` deixa o
- * glow vertical aparecer. Estados lidos via `data-state` do Radix.
- */
-function PillTab({ value, label, icon }: { value: string; label: string; icon: ReactNode }) {
-  return (
-    <TabsTrigger
-      value={value}
-      title={label}
-      style={PILL_GRADIENT}
-      className="group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card p-0 shadow-sm transition-all duration-500 hover:w-[160px] hover:border-transparent hover:shadow-none data-[state=active]:w-[160px] data-[state=active]:border-transparent data-[state=active]:shadow-none after:hidden"
-    >
-      {/* Gradient fill */}
-      <span className="absolute inset-0 rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-data-[state=active]:opacity-100" />
-      {/* Blur glow */}
-      <span className="absolute top-2 inset-x-0 h-full rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] blur-[15px] -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-40 group-data-[state=active]:opacity-40" />
-      {/* Icon */}
-      <span className="relative z-10 text-muted-foreground transition-transform duration-500 [&_svg]:w-5 [&_svg]:h-5 scale-100 group-hover:scale-0 group-data-[state=active]:scale-0">
-        {icon}
-      </span>
-      {/* Label */}
-      <span className="absolute inset-0 z-10 flex items-center justify-center px-3 text-center text-primary-foreground uppercase tracking-wide text-[11px] font-semibold whitespace-nowrap transition-transform duration-500 scale-0 group-hover:scale-100 group-hover:delay-150 group-data-[state=active]:scale-100 group-data-[state=active]:delay-150">
-        {label}
-      </span>
-    </TabsTrigger>
   );
 }
 
@@ -717,231 +679,183 @@ export default function Configuracoes() {
   }, [activeTab, location.pathname, location.search, navigate, searchParams]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    // Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo registro
+    // que alimenta o Pitstop — dois inventários divergiriam. Leitura da ajuda
+    // mora no painel de suporte (o "?" do Cmd+K); aqui fica só a autoria, e
+    // `HelpAdminPanel` não se protege sozinho — quem gateava era o
+    // `HelpCenter`, que saiu daqui.
+    //
+    // V5: o `<Tabs>` envolve o cabeçalho para a navegação da página morar
+    // dentro do `PageHeader` como pílula escura (antes: círculos de 48px que
+    // cresciam para 160px com gradiente). Mesmos `value`s, mesma navegação.
+    <Tabs
+      value={activeTab.value}
+      onValueChange={(value) => {
+        const next = tabs.find((t) => t.value === value);
+        if (next) navigate(settingsTabPath(next));
+      }}
+      className="w-full space-y-5"
+    >
+      <PageHeader
+        title="Configurações"
+        subtitle="Gerencie as configurações do sistema"
+        tabs={
+          <TabsList variant="pill" aria-label="Seções de configurações">
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                <tab.icon className="h-4 w-4" aria-hidden />
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        }
+      />
+
       <div>
-        <motion.h1
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-2xl font-bold flex items-center gap-2"
-        >
-          <Settings className="w-6 h-6 text-primary" />
-          Configurações
-        </motion.h1>
-        <p className="text-muted-foreground mt-1">
-          Gerencie as configurações do sistema
-        </p>
+        <TabsContent value="tags" className="mt-0">
+          <SettingsCard>
+            <TagsSettings />
+          </SettingsCard>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="mt-0">
+          <SettingsCard>
+            <PreferenciasDeAviso />
+          </SettingsCard>
+        </TabsContent>
+
+        <TabsContent value="whatsapp" className="mt-0">
+          <Suspense fallback={<TabFallback label="WhatsApp" />}>
+            <SettingsCard>
+              <WhatsAppSettings />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="integracoes" className="mt-0">
+          <Suspense fallback={<TabFallback label="Integrações" />}>
+            <IntegrationsCatalog />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="webhooks" className="mt-0">
+          <Suspense fallback={<TabFallback label="Webhooks" />}>
+            <SettingsCard>
+              <WebhookSettings />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="api" className="mt-0">
+          <Suspense fallback={<TabFallback label="documentação" />}>
+            <ApiDocsSettings />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="sla" className="mt-0">
+          <Suspense fallback={<TabFallback label="SLA" />}>
+            <SettingsCard>
+              <SlaConfigPanel />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="api-keys" className="mt-0">
+          <Suspense fallback={<TabFallback label="API Keys" />}>
+            <SettingsCard>
+              <ApiKeysPanel />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="sandbox" className="mt-0">
+          <Suspense fallback={<TabFallback label="Sandbox" />}>
+            <SettingsCard>
+              <SandboxPanel />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="checklists" className="mt-0">
+          <Suspense fallback={<TabFallback label="Checklists" />}>
+            <SettingsCard>
+              <ChecklistTemplatesManager />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="oraculo-profile" className="mt-0">
+          <Suspense fallback={<TabFallback label="Perfil da operação" />}>
+            <SettingsCard>
+              <OraculoPerfilSettings />
+            </SettingsCard>
+          </Suspense>
+        </TabsContent>
+
+        {isAdmin && <TabsContent value="billing" className="mt-0">
+          <Suspense fallback={<TabFallback label="assinatura e cobrança" />}>
+            <BillingSettings onContactSupport={supportAvailable ? openNewTicket : undefined} />
+          </Suspense>
+        </TabsContent>}
+
+        <TabsContent value="general" className="mt-0">
+          <SettingsCard>
+            <GeneralSettings />
+          </SettingsCard>
+        </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="ajuda" className="mt-0">
+            <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+              <SettingsCard>
+                <HelpAdminPanel />
+              </SettingsCard>
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {orgType === "outbound" && (
+          <TabsContent value="marcos" className="mt-0">
+            <Suspense fallback={<TabFallback label="Marcos" />}>
+              <MilestonesConfig />
+            </Suspense>
+          </TabsContent>
+        )}
       </div>
 
-      {/* Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo
-          registro que alimenta o Pitstop — dois inventários divergiriam.
-          Leitura da ajuda mora no painel de suporte (o "?" do Cmd+K); aqui fica
-          só a autoria, e `HelpAdminPanel` não se protege sozinho — quem gateava
-          era o `HelpCenter`, que saiu daqui. */}
-      <Tabs
-        value={activeTab.value}
-        onValueChange={(value) => {
-          const next = tabs.find((t) => t.value === value);
-          if (next) navigate(settingsTabPath(next));
-        }}
-        className="w-full"
-      >
-        <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
-          {tabs.map((tab) => (
-            <PillTab
-              key={tab.value}
-              value={tab.value}
-              label={tab.label}
-              icon={<tab.icon className="w-4 h-4" />}
-            />
-          ))}
-        </TabsList>
-
-        <div className="mt-6">
-          <TabsContent value="tags">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <TagsSettings />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="notifications">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <PreferenciasDeAviso />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="whatsapp">
-            <Suspense fallback={<TabFallback label="WhatsApp" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <WhatsAppSettings />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="integracoes">
-            <Suspense fallback={<TabFallback label="Integrações" />}>
-              <IntegrationsCatalog />
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="webhooks">
-            <Suspense fallback={<TabFallback label="Webhooks" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <WebhookSettings />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="api">
-            <Suspense fallback={<TabFallback label="documentação" />}>
-              <ApiDocsSettings />
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="sla">
-            <Suspense fallback={<TabFallback label="SLA" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <SlaConfigPanel />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-
-
-          <TabsContent value="api-keys">
-            <Suspense fallback={<TabFallback label="API Keys" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <ApiKeysPanel />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="sandbox">
-            <Suspense fallback={<TabFallback label="Sandbox" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <SandboxPanel />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="checklists">
-            <Suspense fallback={<TabFallback label="Checklists" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <ChecklistTemplatesManager />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="oraculo-profile">
-            <Suspense fallback={<TabFallback label="Perfil da operação" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <OraculoPerfilSettings />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          {isAdmin && <TabsContent value="billing">
-            <Suspense fallback={<TabFallback label="assinatura e cobrança" />}>
-              <BillingSettings onContactSupport={supportAvailable ? openNewTicket : undefined} />
-            </Suspense>
-          </TabsContent>}
-
-          <TabsContent value="general">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <GeneralSettings />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {isAdmin && (
-            <TabsContent value="ajuda">
-              <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
-                <Card className="glass-card">
-                  <CardContent className="pt-6">
-                    <HelpAdminPanel />
-                  </CardContent>
-                </Card>
-              </Suspense>
-            </TabsContent>
-          )}
-
-          {orgType === "outbound" && (
-            <TabsContent value="marcos">
-              <Suspense fallback={<TabFallback label="Marcos" />}>
-                <MilestonesConfig />
-              </Suspense>
-            </TabsContent>
-          )}
-
-        </div>
-      </Tabs>
-
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-        <Card className="glass-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Database className="w-4 h-4 text-primary" />
-              Banco de Dados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Status: Conectado</p>
-            <Badge className="mt-2 bg-success/20 text-success border-success/30">
-              Online
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />
-              Segurança
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">RLS: Ativo</p>
-            <Badge className="mt-2 bg-success/20 text-success border-success/30">
-              Protegido
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" />
-              API
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Latência: {"<"}50ms</p>
-            <Badge className="mt-2 bg-success/20 text-success border-success/30">
-              Rápido
-            </Badge>
-          </CardContent>
-        </Card>
+      {/* ⚠️ HERDADO: os três cartões abaixo são FIXOS no código — não medem
+          banco, RLS nem latência. Ficam (decisão de produto pendente); só a
+          forma mudou. Ver docs/ui-v5/validacao-telas.md. */}
+      <div className="grid grid-cols-1 gap-4 pt-3 md:grid-cols-3">
+        <StatusCard icon={Database} title="Banco de Dados" detail="Status: Conectado" badge="Online" />
+        <StatusCard icon={Shield} title="Segurança" detail="RLS: Ativo" badge="Protegido" />
+        <StatusCard icon={Globe} title="API" detail={<>Latência: {"<"}50ms</>} badge="Rápido" />
       </div>
-    </div>
+    </Tabs>
+  );
+}
+
+function StatusCard({
+  icon: Icon,
+  title,
+  detail,
+  badge,
+}: {
+  icon: ElementType;
+  title: string;
+  detail: ReactNode;
+  badge: string;
+}) {
+  return (
+    <Card className="flex items-center gap-3 p-4">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold tracking-tight">{title}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+      <Badge variant="success">{badge}</Badge>
+    </Card>
   );
 }

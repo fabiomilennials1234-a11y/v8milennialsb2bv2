@@ -133,7 +133,7 @@ export function ApiExplorer({ endpoint, orgContext }: ApiExplorerProps) {
       <Button
         onClick={handleSubmit}
         disabled={isLoading}
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+        className="w-full"
         size="sm"
       >
         {isLoading ? (
@@ -150,9 +150,9 @@ export function ApiExplorer({ endpoint, orgContext }: ApiExplorerProps) {
       </Button>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span className="text-[13px] text-red-300">{error}</span>
+        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/15 p-3">
+          <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+          <span className="text-[13px] text-tinta-foreground">{error}</span>
         </div>
       )}
 
@@ -160,14 +160,14 @@ export function ApiExplorer({ endpoint, orgContext }: ApiExplorerProps) {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             {response.status < 400 ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-red-400" />
+              <AlertCircle className="h-4 w-4 text-destructive" />
             )}
-            <span className={`text-sm font-mono font-bold ${response.status < 400 ? "text-emerald-400" : "text-red-400"}`}>
+            <span className={`text-sm font-mono font-bold ${response.status < 400 ? "text-success" : "text-destructive"}`}>
               {response.status} {response.statusText}
             </span>
-            <span className="text-[11px] text-zinc-500 ml-auto">
+            <span className="ml-auto text-[11px] tabular-nums text-tinta-muted">
               {response.duration}ms
             </span>
           </div>
@@ -193,10 +193,10 @@ function ParamField({
 }) {
   if (param.children) {
     return (
-      <div className="space-y-2 pl-3 border-l border-zinc-700">
-        <Label className="text-[12px] text-zinc-400 font-mono">
+      <div className="space-y-2 border-l border-tinta-line pl-3">
+        <Label className="font-mono text-[12px] text-tinta-muted">
           {param.name}
-          {param.required && <span className="text-red-400 ml-1">*</span>}
+          {param.required && <span className="ml-1 text-destructive">*</span>}
         </Label>
         {param.children.map((child) => (
           <ParamField
@@ -215,9 +215,9 @@ function ParamField({
   if (param.type === "boolean") {
     return (
       <div className="flex items-center justify-between">
-        <Label className="text-[12px] text-zinc-400 font-mono">
+        <Label className="font-mono text-[12px] text-tinta-muted">
           {param.name}
-          {param.required && <span className="text-red-400 ml-1">*</span>}
+          {param.required && <span className="ml-1 text-destructive">*</span>}
         </Label>
         <Switch
           checked={!!value}
@@ -230,16 +230,16 @@ function ParamField({
 
   return (
     <div className="space-y-1">
-      <Label className="text-[12px] text-zinc-400 font-mono">
+      <Label className="font-mono text-[12px] text-tinta-muted">
         {param.name}
-        {param.required && <span className="text-red-400 ml-1">*</span>}
-        <span className="ml-2 text-[10px] text-zinc-600 font-normal">{param.type}</span>
+        {param.required && <span className="ml-1 text-destructive">*</span>}
+        <span className="ml-2 text-[10px] font-normal text-tinta-muted/70">{param.type}</span>
       </Label>
       <Input
         value={(value as string) || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={param.description.slice(0, 60)}
-        className="h-8 text-[13px] bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 font-mono"
+        className="h-8 border-tinta-line bg-tinta-2 font-mono text-[13px] text-tinta-foreground placeholder:text-tinta-muted/70"
       />
     </div>
   );

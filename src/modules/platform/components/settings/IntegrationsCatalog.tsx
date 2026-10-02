@@ -8,7 +8,7 @@ import {
   ChevronRight,
   Phone,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 // Componentes de configuração existentes (reaproveitados integralmente)
 // `InstagramSettings` (Graph) SAIU do catálogo — decisão do CTO em 14/08/2026.
@@ -474,43 +475,36 @@ function IntegrationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.25 }}
+      className="h-full"
     >
       <Card
-        className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-primary/40 h-full"
+        className="group flex h-full cursor-pointer flex-col gap-3 p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
         onClick={onClick}
       >
-        <CardContent className="p-0">
-          {/* Logo area */}
-          <div className="flex items-center justify-center p-5 pb-3">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-sm">
-              {integration.logo}
-            </div>
+        {/* Logo de marca de terceiro — cor literal é a marca, não tema. */}
+        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
+          {integration.logo}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="mb-1 text-sm font-bold tracking-tight">{integration.name}</h3>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {integration.description}
+          </p>
+        </div>
+
+        {/* Status */}
+        {status.connected ? (
+          <div className="inline-flex items-center gap-1 self-start rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-bold text-success">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Conectado
           </div>
-
-          {/* Info */}
-          <div className="px-4 pb-4 text-center">
-            <h3 className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors">
-              {integration.name}
-            </h3>
-
-            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed mb-3">
-              {integration.description}
-            </p>
-
-            {/* Status */}
-            {status.connected ? (
-              <div className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Conectado
-              </div>
-            ) : (
-              <button className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
-                Configurar
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        </CardContent>
+        ) : (
+          <button className="inline-flex items-center gap-1 self-start rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground/75 transition-colors group-hover:bg-tinta group-hover:text-tinta-foreground">
+            Configurar
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        )}
       </Card>
     </motion.div>
   );
@@ -533,28 +527,28 @@ function IntegrationModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] p-0 gap-0">
+      <DialogContent className="max-h-[85vh] max-w-2xl gap-0 overflow-hidden p-0">
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b">
+        <div className="border-b border-border px-6 pb-4 pt-6">
           <DialogHeader>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl overflow-hidden shadow-sm shrink-0">
+            <div className="flex items-center gap-4 pr-6">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl shadow-sm">
                 {integration.logo}
               </div>
-              <div className="flex-1 min-w-0">
-                <DialogTitle className="text-lg">{integration.name}</DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-lg font-extrabold tracking-[-0.02em]">{integration.name}</DialogTitle>
+                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                   {CATEGORY_LABELS[integration.category]}
                 </p>
               </div>
               {status.connected ? (
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400 shrink-0" variant="outline">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                <Badge variant="success" className="shrink-0">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
                   Conectado
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="shrink-0">
-                  <Circle className="w-3 h-3 mr-1" />
+                <Badge variant="soft" className="shrink-0">
+                  <Circle className="mr-1 h-3 w-3" />
                   Disponível
                 </Badge>
               )}
@@ -564,21 +558,21 @@ function IntegrationModal({
 
         {/* Body */}
         <ScrollArea className="max-h-[calc(85vh-120px)]">
-          <div className="px-6 py-5 space-y-6">
+          <div className="space-y-6 px-6 py-5">
             {/* About */}
             <div>
-              <h4 className="text-sm font-semibold mb-2">Sobre esta integração</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">
+              <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Sobre esta integração</h4>
+              <p className="text-sm leading-relaxed text-foreground/80">
                 {integration.longDescription}
               </p>
             </div>
 
             {/* Features */}
             <div>
-              <h4 className="text-sm font-semibold mb-2">Recursos</h4>
+              <h4 className="mb-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Recursos</h4>
               <div className="flex flex-wrap gap-2">
                 {integration.features.map((f) => (
-                  <Badge key={f} variant="secondary" className="text-xs font-normal">
+                  <Badge key={f} variant="soft" className="text-xs font-medium">
                     {f}
                   </Badge>
                 ))}
@@ -586,8 +580,8 @@ function IntegrationModal({
             </div>
 
             {/* Settings Component */}
-            <div className="border-t pt-5">
-              <h4 className="text-sm font-semibold mb-4">Configuração</h4>
+            <div className="border-t border-border pt-5">
+              <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Configuração</h4>
               {SettingsComponent && <SettingsComponent />}
             </div>
           </div>
@@ -665,30 +659,39 @@ export default function IntegrationsCatalog() {
   const selected = visibleIntegrations.find((i) => i.id === selectedId);
   const showGrouped = filterCategory !== "all";
 
+  const chipClass = (active: boolean) =>
+    cn(
+      "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      active
+        ? "bg-tinta text-tinta-foreground shadow-relevo-tinta"
+        : "border border-card-border bg-card text-muted-foreground shadow-relevo hover:text-foreground",
+    );
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Plug className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold">Integrações</h2>
-            <Badge variant="secondary" className="ml-1">
+    <div className="space-y-5">
+      {/* Header — a página já tem o PageHeader "Configurações"; aqui é o
+          cabeçalho da seção. */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[17px] font-bold tracking-[-0.02em]">Integrações</h2>
+            <Badge variant={connectedCount > 0 ? "success" : "soft"} className="tabular-nums">
               {connectedCount}/{totalCount} conectadas
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             Conecte ferramentas externas para ampliar as capacidades do Torque
           </p>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar integração..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9"
+            className="h-10 rounded-full pl-10"
           />
         </div>
       </div>
@@ -697,11 +700,8 @@ export default function IntegrationsCatalog() {
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setFilterCategory("all")}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            filterCategory === "all"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground"
-          }`}
+          aria-pressed={filterCategory === "all"}
+          className={chipClass(filterCategory === "all")}
         >
           Todos
         </button>
@@ -709,20 +709,19 @@ export default function IntegrationsCatalog() {
           <button
             key={cat}
             onClick={() => setFilterCategory(cat)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filterCategory === cat
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
+            aria-pressed={filterCategory === cat}
+            className={chipClass(filterCategory === cat)}
           >
             {CATEGORY_LABELS[cat]}
           </button>
         ))}
+        {/* ⚠️ HERDADO: "Conectadas" não filtra — volta para "Todos". Fica
+            assim até decisão; o restyle só trocou a forma. */}
         <button
           onClick={() => setFilterCategory("all")}
-          className="px-3 py-1.5 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          className={chipClass(false)}
         >
-          <CheckCircle2 className="w-3 h-3 text-green-500" />
+          <CheckCircle2 className="h-3 w-3 text-success" />
           Conectadas
         </button>
       </div>
@@ -731,10 +730,10 @@ export default function IntegrationsCatalog() {
       {showGrouped ? (
         // Grouped by selected category (only 1 group shows)
         <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+          <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             {CATEGORY_LABELS[filterCategory as IntegrationCategory]}
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {filtered.map((integration, index) => (
               <IntegrationCard
                 key={integration.id}
@@ -748,7 +747,7 @@ export default function IntegrationsCatalog() {
         </div>
       ) : (
         // Flat grid — all integrations without category dividers
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filtered.map((integration, index) => (
             <IntegrationCard
               key={integration.id}
@@ -762,8 +761,8 @@ export default function IntegrationsCatalog() {
       )}
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <Plug className="w-8 h-8 mx-auto mb-2 opacity-40" />
+        <div className="rounded-card border border-dashed border-border py-12 text-center text-muted-foreground">
+          <Plug className="mx-auto mb-2 h-8 w-8 opacity-40" />
           <p className="text-sm">Nenhuma integração encontrada</p>
         </div>
       )}

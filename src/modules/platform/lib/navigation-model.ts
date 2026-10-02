@@ -281,5 +281,7 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
 /** Largura da lateral, em px. Mesma medida validada no estudo. */
 export const SIDEBAR_WIDTH = 248;
 export const SIDEBAR_WIDTH_COLLAPSED = 64;
+/** V5: a lateral flutua a esta distância da borda (e do conteúdo). */
+export const SIDEBAR_GUTTER = 12;
 /** Abaixo disto o Pitstop vira overlay em vez de coluna que empurra. */
 export const PITSTOP_OVERLAY_BREAKPOINT = 1180;

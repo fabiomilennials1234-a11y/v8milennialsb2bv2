@@ -183,7 +183,7 @@ export function CardProximasAgendas() {
                   return (
                     <span
                       className={cn(
-                        "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums",
                         hoje
                           ? "bg-primary/15 text-primary"
                           : "bg-muted text-muted-foreground/70",

@@ -4,7 +4,8 @@
  */
 
 import { useState } from "react";
-import { CreditCard, Check, X, ArrowLeft } from "lucide-react";
+import { Check, X, ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,20 +25,23 @@ export default function MasterPlans() {
   // ─── Editor view ──────────────────────────────────────
   if (selectedPlan) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedPlan(null)}>
-            <ArrowLeft className="w-5 h-5" />
+      <div className="space-y-5">
+        <div className="flex items-center gap-4">
+          {/* Voltar é estado local (fecha o editor), não rota — por isso não usa o `back` do PageHeader. */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0 rounded-full"
+            aria-label="Voltar"
+            onClick={() => setSelectedPlan(null)}
+          >
+            <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <CreditCard className="w-6 h-6" />
-              Editar Plano
-            </h1>
-            <p className="text-muted-foreground">
-              Configure features, limites e preços
-            </p>
-          </div>
+          <PageHeader
+            className="min-w-0 flex-1"
+            title="Editar Plano"
+            subtitle="Configure features, limites e preços"
+          />
         </div>
         <PlanEditor
           plan={selectedPlan}
@@ -49,17 +53,11 @@ export default function MasterPlans() {
 
   // ─── Grid view ────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CreditCard className="w-6 h-6" />
-          Planos de Assinatura
-        </h1>
-        <p className="text-muted-foreground">
-          Gerencie os planos disponíveis no sistema. Clique em um plano para editar.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Planos de Assinatura"
+        subtitle="Gerencie os planos disponíveis no sistema. Clique em um plano para editar."
+      />
 
       {/* Plans Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -71,7 +69,7 @@ export default function MasterPlans() {
           plans?.map((plan) => (
             <Card
               key={plan.id}
-              className={`cursor-pointer hover:border-primary/50 transition-colors ${
+              className={`cursor-pointer transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none ${
                 !plan.is_active ? "opacity-60" : ""
               }`}
               onClick={() => setSelectedPlan(plan)}
@@ -79,7 +77,7 @@ export default function MasterPlans() {
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-lg">{plan.display_name}</CardTitle>
+                    <CardTitle>{plan.display_name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{plan.name}</p>
                   </div>
                   <div className="flex gap-1">
@@ -87,7 +85,7 @@ export default function MasterPlans() {
                       <Badge variant="outline" className="text-xs">Padrão</Badge>
                     )}
                     {!plan.is_active && (
-                      <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                      <Badge variant="soft" className="text-xs">Inativo</Badge>
                     )}
                   </div>
                 </div>
@@ -95,9 +93,9 @@ export default function MasterPlans() {
               <CardContent className="space-y-4">
                 {/* Prices */}
                 <div>
-                  <p className="text-2xl font-bold">
+                  <p className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
                     {formatCurrency(plan.price_monthly)}
-                    <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                    <span className="ml-0.5 text-sm font-semibold tracking-normal text-muted-foreground">/mês</span>
                   </p>
                   <p className="text-sm text-muted-foreground">
                     ou {formatCurrency(plan.price_yearly)}/ano
@@ -127,7 +125,7 @@ export default function MasterPlans() {
                     .map(([key, value]) => (
                       <Badge
                         key={key}
-                        variant={value ? "default" : "secondary"}
+                        variant={value ? "success" : "soft"}
                         className="text-xs"
                       >
                         {value ? (

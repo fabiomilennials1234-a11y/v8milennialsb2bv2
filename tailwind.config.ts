@@ -14,7 +14,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -29,7 +29,21 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          // V5: ouro em superfície (pílula, linha selecionada, chip de destaque)
+          soft: "hsl(var(--gold-soft))",
+          "soft-foreground": "hsl(var(--gold-soft-foreground))",
         },
+        // V5: superfície escura nos dois temas (lateral, painel-herói, pílula de
+        // navegação, tooltip). Nome em português — `ink` já é cor da landing.
+        tinta: {
+          DEFAULT: "hsl(var(--ink))",
+          2: "hsl(var(--ink-2))",
+          3: "hsl(var(--ink-3))",
+          line: "hsl(var(--ink-line))",
+          foreground: "hsl(var(--ink-foreground))",
+          muted: "hsl(var(--ink-muted))",
+        },
+        "card-border": "hsl(var(--card-border))",
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
@@ -111,6 +125,13 @@ export default {
             foreground: "hsl(var(--bubble-system-foreground))",
             border: "hsl(var(--bubble-system-border))",
           },
+          // Faltava: `bg-bubble-workflow` era usado no chat e nunca gerado —
+          // a bolha de automação saía sem fundo.
+          workflow: {
+            DEFAULT: "hsl(var(--bubble-workflow))",
+            foreground: "hsl(var(--bubble-workflow-foreground))",
+            border: "hsl(var(--bubble-workflow-border))",
+          },
         },
         // Landing page custom colors
         orange: {
@@ -139,6 +160,9 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        // V5: cartão de bento e painel-herói têm raio próprio
+        card: "var(--radius-card)",
+        panel: "var(--radius-panel)",
       },
       boxShadow: {
         'gold': '0 10px 30px -10px hsl(47 100% 50% / 0.3)',
@@ -150,6 +174,8 @@ export default {
         'relevo-alto': 'var(--relevo-alto)',
         'afundado': 'var(--afundado)',
         'afundado-raso': 'var(--afundado-raso)',
+        'relevo-tinta': 'var(--relevo-tinta)',
+        'brilho-ouro': 'var(--brilho-ouro)',
       },
       keyframes: {
         "accordion-down": {

@@ -320,7 +320,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
   };
 
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {/* Linha: toggle rápido + adicionar filtro */}
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -329,8 +329,8 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
           className={cn(
             "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
             filter.unread
-              ? "border-transparent bg-primary/15 text-primary"
-              : "border-border bg-background text-muted-foreground hover:text-foreground",
+              ? "border-transparent bg-primary text-primary-foreground"
+              : "border-white/10 bg-white/[.06] text-muted-foreground hover:text-foreground",
           )}
         >
           <MailOpen className="h-3.5 w-3.5" />
@@ -339,7 +339,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
             <span
               className={cn(
                 "ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums",
-                filter.unread ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground",
+                filter.unread ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground",
               )}
             >
               {unreadCount}
@@ -348,7 +348,13 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
         </button>
 
         {props.onNewConversation && (
-          <Button type="button" variant="outline" size="sm" className="h-8 rounded-full px-3" onClick={props.onNewConversation}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full border-white/10 bg-white/[.06] px-3 text-foreground shadow-none hover:-translate-y-0 hover:border-white/20 hover:bg-white/10"
+            onClick={props.onNewConversation}
+          >
             Nova Conversa
           </Button>
         )}
@@ -357,7 +363,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/[.06] px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
               Filtro
@@ -396,13 +402,13 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
               return (
                 <span
                   key={d.key}
-                  className="inline-flex items-center overflow-hidden rounded-lg border border-primary/25 bg-primary/10 text-xs font-medium"
+                  className="inline-flex items-center overflow-hidden rounded-full border border-primary/25 bg-primary/10 text-xs font-medium"
                 >
                   <span className="flex items-center gap-1.5 py-1.5 pl-2.5 pr-1.5 text-primary">
                     <Icon className="h-3 w-3" />
                     {d.label}
                     {d.key === "needsHuman" && waitingHumanCount > 0 && (
-                      <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white tabular-nums">
+                      <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-warning px-1 text-[10px] font-bold tabular-nums text-warning-foreground">
                         {waitingHumanCount}
                       </span>
                     )}
@@ -421,7 +427,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
             return (
               <span
                 key={d.key}
-                className="inline-flex items-center overflow-hidden rounded-lg border border-primary/25 bg-primary/10 text-xs font-medium"
+                className="inline-flex items-center overflow-hidden rounded-full border border-primary/25 bg-primary/10 text-xs font-medium"
               >
                 <Popover
                   defaultOpen={autoOpen === d.key}

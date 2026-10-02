@@ -81,50 +81,6 @@ import { quoteConfigFromTool } from "@/contracts/copilot/quote-document";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { hasFullBehaviorCoverage } from "@/modules/copilot/components/BehaviorWindowsEditor";
 
-// Gradient hover-expand tab trigger — same design as the prompt-section pills.
-// At rest it's an icon circle; on hover, or when active (Radix data-state), it
-// expands into a gold gradient pill with a blur glow + its label. The active state
-// is driven by `group-data-[state=active]` so Radix owns it (no JS boolean).
-// `data-gradient` opts it out of the global .copilot-surface gold-hover rule;
-// `after:hidden` removes the base underline.
-function GradientTabTrigger({
-  value,
-  icon,
-  label,
-}: {
-  value: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <TabsTrigger
-      value={value}
-      data-gradient
-      title={label}
-      style={
-        {
-          "--gradient-from": "hsl(47 100% 58%)",
-          "--gradient-to": "hsl(40 96% 45%)",
-        } as React.CSSProperties
-      }
-      className="group relative h-[56px] w-[56px] shrink-0 flex items-center justify-center rounded-full border border-border/60 bg-card shadow-sm p-0 transition-all duration-500 after:hidden hover:w-[184px] hover:border-transparent data-[state=active]:w-[184px] data-[state=active]:border-transparent data-[state=active]:shadow-none"
-    >
-      {/* Gradient fill */}
-      <span className="absolute inset-0 rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-data-[state=active]:opacity-100" />
-      {/* Blur glow */}
-      <span className="absolute top-2 inset-x-0 h-full rounded-full bg-[linear-gradient(45deg,var(--gradient-from),var(--gradient-to))] blur-[15px] -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-40 group-data-[state=active]:opacity-40" />
-      {/* Icon */}
-      <span className="relative z-10 scale-100 text-muted-foreground transition-transform duration-500 group-hover:scale-0 group-data-[state=active]:scale-0 [&_svg]:w-6 [&_svg]:h-6">
-        {icon}
-      </span>
-      {/* Label */}
-      <span className="absolute inset-0 z-10 flex items-center justify-center px-3 text-center uppercase tracking-wide text-[11px] font-semibold text-primary-foreground whitespace-nowrap scale-0 transition-transform duration-500 group-hover:scale-100 group-hover:delay-150 group-data-[state=active]:scale-100 group-data-[state=active]:delay-150">
-        {label}
-      </span>
-    </TabsTrigger>
-  );
-}
-
 // =============================================================
 // HELPER: Build system prompt from playground data
 // =============================================================
@@ -498,19 +454,19 @@ export function CopilotPlayground() {
     }
     // Hard validations — block save
     if (!data.name.trim()) {
-      toast.error("Nome obrigatorio", { description: "Informe um nome para o agente." });
+      toast.error("Nome obrigatório", { description: "Informe um nome para o agente." });
       return;
     }
     const totalContent = Object.values(data.promptSections).join("").trim();
     if (totalContent.length < 10) {
-      toast.error("Prompt muito curto", { description: "Preencha pelo menos uma secao do prompt com instrucoes para o agente." });
+      toast.error("Prompt muito curto", { description: "Preencha pelo menos uma seção do prompt com instruções para o agente." });
       return;
     }
 
     // Soft warning — incomplete behavior windows is OK (agent responds only during configured hours)
     if (!hasFullBehaviorCoverage(data.behaviorWindows)) {
-      toast.warning("Cobertura de horario incompleta", {
-        description: "O agente so respondera nos horarios configurados. Voce pode ajustar isso depois em Configuracoes de horario.",
+      toast.warning("Cobertura de horário incompleta", {
+        description: "O agente só responderá nos horários configurados. Você pode ajustar isso depois em Configurações de horário.",
         duration: 5000,
       });
     }
@@ -585,7 +541,7 @@ export function CopilotPlayground() {
 
         // Guide user through next steps after creation
         toast.success("Copilot criado com sucesso!", {
-          description: "Proximos passos: 1) Ative o agente na lista, 2) Configure os funis em Configurar, 3) Vincule ao seu WhatsApp em Configuracoes.",
+          description: "Próximos passos: 1) Ative o agente na lista, 2) Configure os funis em Configurar, 3) Vincule ao seu WhatsApp em Configurações.",
           duration: 10000,
         });
         navigate("/copilot");
@@ -607,55 +563,57 @@ export function CopilotPlayground() {
   }
 
   return (
-    <div className="copilot-surface flex h-[calc(100vh-4rem)]">
+    <div className="flex h-[calc(100vh-4rem)] gap-4">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col flex-1 min-w-0 h-full"
+      className="flex flex-col flex-1 min-w-0 h-full gap-4"
     >
       {/* ===== Header ===== */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2"
-            onClick={() => navigate("/copilot")}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
+      <header className="flex shrink-0 flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/copilot")}
+          aria-label="Voltar"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-card-border bg-card text-foreground shadow-relevo transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
 
-          <Bot className="w-5 h-5 text-primary" />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+          <Bot className="w-5 h-5" />
+        </span>
 
-          <Input
-            value={data.name}
-            onChange={(e) => updateData({ name: e.target.value })}
-            placeholder="Nome do agente..."
-            className="w-64 h-8 text-sm"
-          />
-        </div>
+        <Input
+          value={data.name}
+          onChange={(e) => updateData({ name: e.target.value })}
+          placeholder="Nome do agente..."
+          aria-label="Nome do agente"
+          className="h-10 w-72 max-w-full rounded-xl text-base font-bold tracking-[-0.01em]"
+        />
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {/* Status badge + activate/deactivate + set-as-default (edit mode only) */}
           {isEditMode && currentAgent && (
             <>
-              <Badge
-                variant={currentAgent.is_active ? "default" : "secondary"}
-                className={currentAgent.is_active ? "bg-success text-success-foreground" : ""}
-              >
-                {currentAgent.is_active ? "Ativo" : "Inativo"}
-              </Badge>
+              {currentAgent.is_active ? (
+                <Badge variant="success" className="gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                  Ativo
+                </Badge>
+              ) : (
+                <Badge variant="soft">Inativo</Badge>
+              )}
 
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-1.5"
                     onClick={handleToggleActive}
                     disabled={toggleAgent.isPending}
                   >
-                    <Power className="w-3.5 h-3.5" />
+                    <Power />
                     {currentAgent.is_active ? "Desativar" : "Ativar"}
                   </Button>
                 </TooltipTrigger>
@@ -669,64 +627,63 @@ export function CopilotPlayground() {
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5"
+                      size="icon"
+                      className="h-9 w-9"
+                      aria-label="Definir como padrão"
                       onClick={handleSetDefault}
                       disabled={setDefault.isPending}
                     >
-                      <Star className="w-3.5 h-3.5" />
+                      <Star />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Definir como padrao</TooltipContent>
+                  <TooltipContent>Definir como padrão</TooltipContent>
                 </Tooltip>
               )}
 
               {currentAgent.is_default && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Star className="w-4 h-4 fill-primary text-primary" />
+                    <span
+                      className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft"
+                      aria-label="Agente padrão"
+                    >
+                      <Star className="w-4 h-4 fill-primary text-primary" />
+                    </span>
                   </TooltipTrigger>
-                  <TooltipContent>Agente padrao</TooltipContent>
+                  <TooltipContent>Agente padrão</TooltipContent>
                 </Tooltip>
               )}
 
-              <div className="w-px h-6 bg-border" />
+              <div className="mx-1 h-6 w-px bg-border" />
             </>
           )}
 
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            size="sm"
-            className="gap-2"
-          >
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
             {isSaving ? "Salvando..." : "Salvar"}
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* ===== Main Content ===== */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 gap-4">
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
-        <div className="flex flex-col w-[60%] border-r min-h-0">
+        <section className="flex w-[60%] min-h-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="flex flex-wrap w-full items-center gap-4 border-b bg-background px-4 py-5 shrink-0 h-auto">
-              <GradientTabTrigger value="prompt" icon={<FileText />} label="Prompt" />
-              <GradientTabTrigger value="tools" icon={<Wrench />} label="Tools" />
-              <GradientTabTrigger value="funis" icon={<GitBranch />} label="Funis" />
-              <GradientTabTrigger value="knowledge" icon={<BookOpen />} label="Conhecimento" />
-              <GradientTabTrigger value="conexao" icon={<Plug />} label="Conexão" />
-              <GradientTabTrigger value="comportamento" icon={<SlidersHorizontal />} label="Comportamento" />
-              <GradientTabTrigger value="handoff-notify" icon={<BellRing />} label="Notificação" />
-            </TabsList>
+            <div className="shrink-0 border-b border-border/60 px-4 py-3">
+              <TabsList variant="pill" aria-label="Seções do agente">
+                <TabsTrigger value="prompt"><FileText className="h-3.5 w-3.5" />Prompt</TabsTrigger>
+                <TabsTrigger value="tools"><Wrench className="h-3.5 w-3.5" />Tools</TabsTrigger>
+                <TabsTrigger value="funis"><GitBranch className="h-3.5 w-3.5" />Funis</TabsTrigger>
+                <TabsTrigger value="knowledge"><BookOpen className="h-3.5 w-3.5" />Conhecimento</TabsTrigger>
+                <TabsTrigger value="conexao"><Plug className="h-3.5 w-3.5" />Conexão</TabsTrigger>
+                <TabsTrigger value="comportamento"><SlidersHorizontal className="h-3.5 w-3.5" />Comportamento</TabsTrigger>
+                <TabsTrigger value="handoff-notify"><BellRing className="h-3.5 w-3.5" />Notificação</TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="prompt" className="flex-1 overflow-y-auto m-0 p-0 data-[state=inactive]:hidden">
-              <div className={`border-b ${isEditorExpanded ? "flex-1" : ""}`}>
+              <div className={`border-b border-border/60 ${isEditorExpanded ? "flex-1" : ""}`}>
                 <PromptEditor
                   sections={data.promptSections}
                   onSectionsChange={handleSectionsChange}
@@ -822,10 +779,10 @@ export function CopilotPlayground() {
               <PlaygroundHandoffNotify data={data} onChange={updateData} />
             </TabsContent>
           </Tabs>
-        </div>
+        </section>
 
-        {/* ===== Right Column: Live Preview Chat (sempre visivel) ===== */}
-        <div className="w-[40%] p-4">
+        {/* ===== Right Column: Live Preview Chat (sempre visível) ===== */}
+        <div className="w-[40%] min-h-0">
           <LivePreviewChat
             systemPrompt={systemPromptForPreview}
             agentName={data.name}
@@ -846,12 +803,12 @@ export function CopilotPlayground() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <AlertTriangle className="w-5 h-5 text-warning-strong" />
               Agente sem funis configurados
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                O agente <strong>{data.name}</strong> ainda nao tem funis configurados. Ativado assim, ele pode responder a todos os leads da organizacao sem roteamento.
+                O agente <strong>{data.name}</strong> ainda não tem funis configurados. Ativado assim, ele pode responder a todos os leads da organização sem roteamento.
               </span>
               <span className="block">
                 Recomendado: configure a aba <strong>Funis</strong> antes de ativar.

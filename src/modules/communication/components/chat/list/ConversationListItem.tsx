@@ -83,6 +83,10 @@ export function formatContactTime(timestamp: string): string {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
+/** Chip neutro da linha (lead vinculado, etapa) — inverte sobre o ouro. */
+const CHIP_NEUTRO =
+  "shrink-0 whitespace-nowrap rounded-md bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground/80";
+
 // ─── ContactContextMenu ───────────────────────────────────────────────────────
 
 interface ContactContextMenuProps {
@@ -128,10 +132,10 @@ function ContactContextMenu({
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="p-1 rounded-md hover:bg-muted/80 transition-colors"
+            className="rounded-md p-1 transition-colors hover:bg-muted/80 group-data-[selected=true]/linha:hover:bg-primary-foreground/10"
             aria-label="Opções da conversa"
           >
-            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+            <MoreVertical className="h-3.5 w-3.5 text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
@@ -321,13 +325,16 @@ export function ConversationListItem({
           onSelect(key);
         }
       }}
+      data-selected={isSelected}
       className={cn(
-        "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 focus-visible:relative",
+        // V5: linha arredondada; a selecionada vira ouro (como no painel de
+        // tinta do Comando). O resto da linha lê `data-selected` pelo grupo.
+        "group/linha relative w-full cursor-pointer rounded-2xl px-2.5 py-2.5 text-left outline-none transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary",
         isSelected
-          ? "bg-primary/[0.08] border-l-primary"
+          ? "bg-primary text-primary-foreground shadow-brilho-ouro"
           : contact.unread_count > 0
-            ? "bg-primary/[0.04] border-l-primary/40 hover:bg-primary/[0.07]"
-            : "hover:bg-muted/50 border-l-transparent",
+            ? "bg-primary/[0.07] hover:bg-primary/[0.11]"
+            : "hover:bg-muted/60",
       )}
       whileTap={{ scale: 0.99 }}
       onClick={() => onSelect(key)}
@@ -338,13 +345,16 @@ export function ConversationListItem({
             <img
               src={contact.avatar_url}
               alt=""
-              className="w-11 h-11 rounded-full border-2 border-background shadow-sm object-cover"
+              className="h-11 w-11 rounded-full object-cover"
             />
           ) : (
             <div
               className={cn(
-                "w-11 h-11 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-                avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+                "flex h-11 w-11 select-none items-center justify-center rounded-full text-sm font-bold",
+                // Letra escura ou clara conforme o gradiente do avatar (cor do
+                // dado, derivada do nome). Os tokens de tinta são os mesmos nos
+                // dois temas — o contraste é com o gradiente, não com a página.
+                avatarGradient.ink ? "text-tinta" : "text-tinta-foreground",
               )}
               style={{ background: avatarGradient.background }}
               aria-hidden
@@ -358,7 +368,7 @@ export function ConversationListItem({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
-            <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1">
+            <span className="flex min-w-0 items-center gap-1 truncate text-sm font-bold">
               <span className="truncate">{displayName}</span>
               {isWhatsApp && (
                 <ContactContextMenu
@@ -381,7 +391,7 @@ export function ConversationListItem({
                   isso passou a valer para os dois canais. O ponto some assim que
                   alguém vincula, nos dois. */}
               {!contact.lead_id && (
-                <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-primary/70 group-data-[selected=true]/linha:bg-primary-foreground/60" title="Novo" />
               )}
               {/* No WhatsApp o nome do lead JÁ é o título da linha
                   (`contactDisplayName`). No Instagram o título é o @handle —
@@ -389,7 +399,7 @@ export function ConversationListItem({
                   aparece se ganhar espaço próprio. */}
               {!isWhatsApp && contact.lead_name && (
                 <span
-                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 max-w-[104px] truncate bg-muted text-muted-foreground/90 whitespace-nowrap"
+                  className={cn(CHIP_NEUTRO, "max-w-[104px] truncate")}
                   title={`Lead: ${contact.lead_name}`}
                 >
                   {contact.lead_name}
@@ -409,20 +419,32 @@ export function ConversationListItem({
                 </span>
               ))}
               {contact.tags.length > 2 && (
-                <span className="text-[10px] text-muted-foreground shrink-0">
+                <span className="shrink-0 text-[10px] text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
                   +{contact.tags.length - 2}
                 </span>
               )}
             </span>
             <time
               dateTime={contact.last_message_time || ""}
-              className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums"
+              className={cn(
+                "shrink-0 whitespace-nowrap text-[11px] tabular-nums",
+                contact.unread_count > 0 && !isSelected
+                  ? "font-bold text-primary"
+                  : "font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70",
+              )}
             >
               {formatContactTime(contact.last_message_time)}
             </time>
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
-            <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
+            <p
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-1 truncate text-[12px]",
+                contact.unread_count > 0 && !isSelected
+                  ? "font-semibold text-foreground/85"
+                  : "text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/75",
+              )}
+            >
               {/* De qual caixa esta conversa corre. Vive na linha de metadados,
                   e não ao lado do nome: o nome é o que a pessoa procura ao
                   varrer a lista, e um selo disputando esse espaço rouba a
@@ -438,7 +460,7 @@ export function ConversationListItem({
                     style={{ backgroundColor: instanceColor(caixa.id) }}
                     aria-hidden
                   />
-                  <span className="text-[10px] leading-none truncate text-muted-foreground/90">
+                  <span className="truncate text-[10px] leading-none">
                     {caixa.nome}
                   </span>
                 </span>
@@ -449,7 +471,7 @@ export function ConversationListItem({
                   altura de linha variável quebra a lista virtualizada. */}
               {tambemEm && tambemEm.length > 0 && (
                 <span
-                  className="flex items-center gap-0.5 shrink-0 text-[10px] leading-none text-muted-foreground/70"
+                  className="flex shrink-0 items-center gap-0.5 text-[10px] leading-none opacity-80"
                   title={`O mesmo contato também tem conversa em: ${tambemEm
                     .map((c) => c.nome)
                     .join(", ")}`}
@@ -464,7 +486,7 @@ export function ConversationListItem({
               )}
               {stageLabel && (
                 <span
-                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 bg-muted text-muted-foreground/90 whitespace-nowrap"
+                  className={CHIP_NEUTRO}
                   title={`Etapa: ${stageLabel}`}
                 >
                   {stageLabel}
@@ -475,14 +497,14 @@ export function ConversationListItem({
                   existe (nada sai daqui nesta fatia), então o marcador se
                   resume ao "Você:" quando a direção for de saída. */}
               {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
-                <Zap className="h-2.5 w-2.5 text-[#a78bfa] shrink-0" />
+                <Zap className="h-2.5 w-2.5 shrink-0 text-bubble-workflow-foreground group-data-[selected=true]/linha:text-primary-foreground" />
               )}
               {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "copilot" && (
-                <Bot className="h-2.5 w-2.5 text-[#fbbf24] shrink-0" />
+                <Bot className="h-2.5 w-2.5 shrink-0 text-primary group-data-[selected=true]/linha:text-primary-foreground" />
               )}
               {contact.last_message_direction === "outgoing" &&
                 (!isWhatsApp || !contact.last_message_sent_source || contact.last_message_sent_source === "manual") && (
-                <span className="text-foreground/50 shrink-0" title="Você enviou">
+                <span className="shrink-0 opacity-70" title="Você enviou">
                   Você:
                 </span>
               )}
@@ -490,7 +512,7 @@ export function ConversationListItem({
             </p>
             {contact.unread_count > 0 && !isSelected && (
               <Badge
-                className="h-5 min-w-5 px-1.5 shrink-0 text-xs bg-primary text-primary-foreground border-0 hover:bg-primary/90 rounded-full"
+                className="h-5 min-w-5 shrink-0 rounded-full border-0 bg-primary px-1.5 text-[10.5px] font-extrabold tabular-nums text-primary-foreground hover:bg-primary/90"
                 title="Mensagens não lidas"
               >
                 {contact.unread_count > 99 ? "99+" : contact.unread_count}

@@ -12,7 +12,6 @@ import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  UserCog,
   Plus,
   Search,
   MoreVertical,
@@ -61,6 +60,7 @@ import {
 } from "../hooks/useMasterGestores";
 import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
 import { useMasterAuth } from "../hooks/useMasterAuth";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default function MasterGestores() {
   const { hasPermission } = useMasterAuth();
@@ -162,23 +162,17 @@ export default function MasterGestores() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <UserCog className="w-6 h-6" />
-            Gestores de Portfólio
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie gestores e as organizações que cada um administra
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Gestor
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Gestores de Portfólio"
+        subtitle="Gerencie gestores e as organizações que cada um administra"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Gestor
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -240,7 +234,7 @@ export default function MasterGestores() {
                           {g.user_id.slice(0, 8)}...
                         </code>
                         {copiedId === g.user_id ? (
-                          <Check className="w-3 h-3 text-emerald-500" />
+                          <Check className="w-3 h-3 text-success" />
                         ) : (
                           <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                         )}
@@ -252,7 +246,7 @@ export default function MasterGestores() {
                       ) : (
                         <div className="flex flex-wrap gap-1 max-w-xs">
                           {g.organization_ids.slice(0, 3).map((orgId) => (
-                            <Badge key={orgId} variant="secondary" className="font-normal">
+                            <Badge key={orgId} variant="soft" className="font-normal">
                               {orgNameById.get(orgId) ?? `${orgId.slice(0, 6)}…`}
                             </Badge>
                           ))}
@@ -266,9 +260,9 @@ export default function MasterGestores() {
                     </TableCell>
                     <TableCell>
                       {g.is_active ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
+                        <Badge variant="success">Ativo</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
                     <TableCell>

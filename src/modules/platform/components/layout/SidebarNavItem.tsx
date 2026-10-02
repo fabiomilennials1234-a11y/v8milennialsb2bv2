@@ -42,12 +42,14 @@ interface SidebarNavItemProps {
 
 const rowClasses = (active: boolean, compact: boolean) =>
   cn(
-    "group relative flex w-full items-center gap-3 rounded-lg px-2.5 text-left transition-colors",
+    "group relative flex w-full items-center gap-3 rounded-xl px-2.5 text-left transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
     compact ? "py-1.5 text-[13px]" : "py-2 text-sm",
+    // V5: o ativo é a superfície clara da tinta + ícone em ouro + trilho
+    // dourado com brilho. O ouro deixa de pintar o rótulo inteiro.
     active
-      ? "bg-primary/10 font-semibold text-primary"
-      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+      ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground [&>svg:not([data-chevron])]:text-primary"
+      : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground",
   );
 
 /** Barra de 3px que marca o item ativo, colada na borda da lateral. */
@@ -56,7 +58,7 @@ function ActiveRail({ active }: { active: boolean }) {
   return (
     <span
       aria-hidden
-      className="absolute -left-2.5 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+      className="absolute -left-2.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/.65)]"
     />
   );
 }
@@ -93,6 +95,7 @@ export function SidebarNavItem({
       {!collapsed && trailing}
       {!collapsed && isParent && !locked && (
         <ChevronRight
+          data-chevron
           className={cn(
             "h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40 transition-transform",
             expanded && "rotate-90",

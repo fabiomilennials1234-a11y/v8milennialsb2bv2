@@ -20,7 +20,7 @@ export function ApiDocsContent({ endpoint, baseUrl }: ApiDocsContentProps) {
 
       <div className="border-t border-border" />
 
-      <ApiParamsTable params={endpoint.parameters} title="Parametros do Request" />
+      <ApiParamsTable params={endpoint.parameters} title="Parâmetros do Request" />
 
       {endpoint.responseFields.length > 0 && (
         <>

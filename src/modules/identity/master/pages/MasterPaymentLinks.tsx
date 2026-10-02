@@ -8,33 +8,31 @@
  */
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { PaymentLinkComposer } from "../components/PaymentLinkComposer";
 import { PaymentLinksList } from "../components/PaymentLinksList";
 
 export default function MasterPaymentLinks() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Propostas de pagamento</h1>
-        <p className="text-sm text-muted-foreground">
-          Monte o pacote, cote com o motor e gere o link que o cliente paga.
-        </p>
-      </div>
+    <Tabs defaultValue="compose" className="space-y-5">
+      <PageHeader
+        title="Propostas de pagamento"
+        subtitle="Monte o pacote, cote com o motor e gere o link que o cliente paga."
+        tabs={
+          <TabsList variant="pill">
+            <TabsTrigger value="compose">Montar proposta</TabsTrigger>
+            <TabsTrigger value="list">Propostas geradas</TabsTrigger>
+          </TabsList>
+        }
+      />
 
-      <Tabs defaultValue="compose">
-        <TabsList>
-          <TabsTrigger value="compose">Montar proposta</TabsTrigger>
-          <TabsTrigger value="list">Propostas geradas</TabsTrigger>
-        </TabsList>
+      <TabsContent value="compose" className="mt-0">
+        <PaymentLinkComposer />
+      </TabsContent>
 
-        <TabsContent value="compose" className="mt-6">
-          <PaymentLinkComposer />
-        </TabsContent>
-
-        <TabsContent value="list" className="mt-6">
-          <PaymentLinksList />
-        </TabsContent>
-      </Tabs>
-    </div>
+      <TabsContent value="list" className="mt-0">
+        <PaymentLinksList />
+      </TabsContent>
+    </Tabs>
   );
 }
