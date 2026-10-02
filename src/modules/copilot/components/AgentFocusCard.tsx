@@ -75,7 +75,7 @@ export function AgentFocusCard({
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold text-primary-foreground/70">Agente em foco · {agentTypeLabel(agent.template_type)}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h3 className="min-w-0 text-[1.6rem] font-extrabold leading-[1.1] tracking-[-0.035em]">{agent.name}</h3>
+            <h3 className="min-w-0 text-[1.6rem] font-extrabold leading-[1.1] tracking-[-0.035em] max-sm:text-[1.3rem]">{agent.name}</h3>
             {agent.llm_model && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary-foreground px-2.5 py-1 text-[11px] font-bold text-primary">
                 <Cpu className="h-3 w-3" aria-hidden />

@@ -171,6 +171,9 @@ function computeAgentSummaries(
   });
 }
 
+/** Uma casa decimal, com vírgula (pt-BR). */
+const fmt1 = (n: number) => Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 // Só tokens: o par claro/escuro vem do tema, não de uma escala de cor crua.
 function scoreColor(score: number): string {
   if (score >= 8) return "text-success-strong";
@@ -190,7 +193,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
     <div className="space-y-1">
       <div className="flex justify-between text-[13px]">
         <span className="text-muted-foreground">{label}</span>
-        <span className={`font-bold tabular-nums ${scoreColor(score)}`}>{score.toFixed(1)}</span>
+        <span className={`font-bold tabular-nums ${scoreColor(score)}`}>{fmt1(score)}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
@@ -232,9 +235,10 @@ export default function CopilotMetrics() {
     ? agentSummaries.reduce((s, a) => s + a.avg_overall, 0) / agentSummaries.length
     : 0;
   const totalEvals = data?.evaluations.length || 0;
-  const qualRate = data?.totalLeads
-    ? ((data.qualifiedLeads / data.totalLeads) * 100).toFixed(1)
-    : "0.0";
+  const qualRate = (data?.totalLeads ? (data.qualifiedLeads / data.totalLeads) * 100 : 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
   const variants = (data?.variants || []).filter(v => v.total_conversations > 0);
 
   const kpi = (v: React.ReactNode) => (isLoading ? "·" : v);
@@ -314,13 +318,17 @@ export default function CopilotMetrics() {
         <KpiTile
           label="Score Geral"
           icon={Star}
-          tone={isLoading ? "neutral" : scoreTone(globalAvg)}
+          tone={isLoading || totalEvals === 0 ? "neutral" : scoreTone(globalAvg)}
           loading={isLoading}
           value={kpi(
-            <span className={scoreColor(globalAvg)}>
-              {globalAvg.toFixed(1)}
-              <ValueUnit>/10</ValueUnit>
-            </span>,
+            totalEvals === 0 ? (
+              "—"
+            ) : (
+              <span className={scoreColor(globalAvg)}>
+                {globalAvg.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                <ValueUnit>/10</ValueUnit>
+              </span>
+            ),
           )}
           note="Média LLM-as-a-judge"
         />
@@ -390,7 +398,7 @@ export default function CopilotMetrics() {
                     selected ? "bg-primary-foreground text-primary" : "bg-white/10 text-tinta-foreground",
                   )}
                 >
-                  {best.toFixed(1)}%
+                  {fmt1(best)}%
                 </span>
               </InkRow>
             );
@@ -425,14 +433,14 @@ export default function CopilotMetrics() {
                       </div>
                       <p className="flex items-baseline gap-1.5">
                         <span className="text-[2.2rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
-                          {Number(v.qualification_rate).toFixed(1)}
+                          {fmt1(v.qualification_rate)}
                           <span className="text-[0.5em] opacity-60">%</span>
                         </span>
                         <span className={cn("text-[11px] font-semibold", leading ? "text-tinta-muted" : "text-primary-foreground/65")}>qualificação</span>
                       </p>
                       <p className={cn("text-[11.5px] tabular-nums", leading ? "text-tinta-muted" : "text-primary-foreground/70")}>
                         {v.total_conversations.toLocaleString("pt-BR")} conversas · {v.meetings_scheduled.toLocaleString("pt-BR")} reuniões ·
-                        nota {Number(v.avg_score_overall).toFixed(1)}
+                        nota {fmt1(v.avg_score_overall)}
                       </p>
                     </div>
                   );
@@ -462,7 +470,7 @@ export default function CopilotMetrics() {
             ) : evals.length === 0 ? (
               <EmptyEvaluations />
             ) : (
-              <div className="grid items-center gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+              <div className="grid items-center gap-5 sm:grid-cols-[220px_minmax(0,1fr)]">
                 <QualityRadar values={criteria.map((c) => ({ label: c.short, value: c.value }))} />
                 <div className="space-y-3">
                   {criteria.map((c) => (
@@ -497,10 +505,12 @@ export default function CopilotMetrics() {
                       <ScoreRing score={ev.score_overall} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{agentName(ev.agent_id)}</p>
-                        <p className="text-xs tabular-nums text-muted-foreground">{new Date(ev.evaluated_at).toLocaleString("pt-BR")}</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">
+                          {new Date(ev.evaluated_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </p>
                       </div>
                       <Badge variant={weakest.v < 6 ? "warning" : "soft"} className="shrink-0 text-[11px]">
-                        {weakest.c.label} {weakest.v.toFixed(1)}
+                        {weakest.c.short} {fmt1(weakest.v)}
                       </Badge>
                     </li>
                   );
@@ -557,10 +567,10 @@ export default function CopilotMetrics() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{agent.evaluations}</TableCell>
                       <TableCell className="text-center"><ScoreRing score={agent.avg_overall} /></TableCell>
-                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_relevance)}`}>{agent.avg_relevance.toFixed(1)}</TableCell>
-                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_tone)}`}>{agent.avg_tone.toFixed(1)}</TableCell>
-                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_conciseness)}`}>{agent.avg_conciseness.toFixed(1)}</TableCell>
-                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_goal_align)}`}>{agent.avg_goal_align.toFixed(1)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_relevance)}`}>{fmt1(agent.avg_relevance)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_tone)}`}>{fmt1(agent.avg_tone)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_conciseness)}`}>{fmt1(agent.avg_conciseness)}</TableCell>
+                      <TableCell className={`text-right font-bold tabular-nums ${scoreColor(agent.avg_goal_align)}`}>{fmt1(agent.avg_goal_align)}</TableCell>
                       <TableCell className="pr-6"><span className="flex justify-center"><TrendIcon trend={agent.trend} /></span></TableCell>
                     </TableRow>
                   ))}
@@ -598,22 +608,22 @@ function ScoreRing({ score }: { score: number }) {
   const pct = Math.max(0, Math.min(1, score / 10));
   const stroke = score >= 8 ? "hsl(var(--success))" : score >= 6 ? "hsl(var(--warning))" : "hsl(var(--destructive))";
   return (
-    <span className="relative inline-grid h-10 w-10 shrink-0 place-items-center" aria-label={`Nota ${score.toFixed(1)} de 10`}>
+    <span className="relative inline-grid h-10 w-10 shrink-0 place-items-center" aria-label={`Nota ${fmt1(score)} de 10`}>
       <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90" aria-hidden>
         <circle cx="18" cy="18" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
         <circle cx="18" cy="18" r={r} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${pct * c} ${c}`} />
       </svg>
-      <span className="text-[11px] font-extrabold tabular-nums">{score.toFixed(1)}</span>
+      <span className="text-[11px] font-extrabold tabular-nums">{fmt1(score)}</span>
     </span>
   );
 }
 
 /** Radar de 4 eixos (0–10). Desenho simples em SVG, cores por token. */
 function QualityRadar({ values }: { values: { label: string; value: number }[] }) {
-  const size = 200;
+  const size = 240;
   const cx = size / 2;
   const cy = size / 2;
-  const R = 70;
+  const R = 68;
   const n = values.length;
   const point = (i: number, v: number) => {
     const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
@@ -623,7 +633,7 @@ function QualityRadar({ values }: { values: { label: string; value: number }[] }
   const ring = (k: number) => values.map((_, i) => point(i, k).join(",")).join(" ");
   const poly = values.map((v, i) => point(i, v.value).join(",")).join(" ");
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-[200px] w-[200px]" role="img" aria-label="Radar das notas por critério">
+    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-[220px] w-[220px]" role="img" aria-label="Radar das notas por critério">
       {[2.5, 5, 7.5, 10].map((k) => (
         <polygon key={k} points={ring(k)} fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
       ))}
@@ -637,9 +647,10 @@ function QualityRadar({ values }: { values: { label: string; value: number }[] }
         return <circle key={i} cx={x} cy={y} r="3.5" fill="hsl(var(--foreground))" />;
       })}
       {values.map((v, i) => {
-        const [x, y] = point(i, 12.6);
+        const [x, y] = point(i, 11.6);
+        const anchor = Math.abs(x - cx) < 1 ? "middle" : x > cx ? "start" : "end";
         return (
-          <text key={v.label} x={x} y={y} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-[10px] font-semibold">
+          <text key={v.label} x={x} y={y} textAnchor={anchor} dominantBaseline="middle" className="fill-muted-foreground text-[10px] font-semibold">
             {v.label}
           </text>
         );

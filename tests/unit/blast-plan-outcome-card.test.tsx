@@ -20,14 +20,18 @@ describe("completed blast card", () => {
     state.progress = { total: 1, sent: 0, failed: 1, skipped: 0, pending: 0 };
     const html = renderToStaticMarkup(<BlastPlanCard plan={plan} />);
     expect(html).toContain("Disparo com falha");
-    expect(html).toContain("1 falhas");
+    // V5: a contagem saiu da legenda ("1 falhas") para o mini-bloco "Falhas",
+    // em vermelho quando há falha.
+    expect(html).toMatch(/text-destructive[^"]*">1<\/dd><dt[^>]*>Falhas</);
     expect(html).not.toContain("Concluído");
   });
   it("shows queue acceptance without claiming sending before failure sync", () => {
     state.progress = { total: 1, sent: 1, failed: 0, skipped: 0, pending: 0 };
     const html = renderToStaticMarkup(<BlastPlanCard plan={plan} />);
     expect(html).toContain("Lotes liberados");
-    expect(html).toContain("aceitos para envio");
+    // "Aceitas" (para envio) e não "Enviadas": entrar na fila não é entrega.
+    expect(html).toContain(">Aceitas<");
+    expect(html).not.toContain("Enviad");
     expect(html).not.toContain("bg-success");
   });
 });

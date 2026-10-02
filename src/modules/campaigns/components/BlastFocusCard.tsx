@@ -53,7 +53,7 @@ export function BlastFocusCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-bold text-primary-foreground/70">Disparo em foco</p>
-            <h3 className="mt-1 line-clamp-2 text-[1.45rem] font-extrabold leading-[1.15] tracking-[-0.03em]" title={plan.message}>
+            <h3 className="mt-1 line-clamp-2 text-[1.45rem] font-extrabold leading-[1.15] tracking-[-0.03em] max-sm:text-[1.25rem]" title={plan.message}>
               {firstLine(plan.message)}
             </h3>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

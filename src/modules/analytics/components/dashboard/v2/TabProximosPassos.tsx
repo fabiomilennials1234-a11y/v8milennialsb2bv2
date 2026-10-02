@@ -1,12 +1,13 @@
 import { useMemo } from "react";
-import { AlarmClock, ListChecks, MessageSquareDot } from "lucide-react";
+import { AlarmClock, CalendarCheck, ListChecks, MessageSquareDot } from "lucide-react";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { useAcoesDoDia } from "@/modules/engagement";
 import { useOrganization } from "@/modules/identity";
 import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
 import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
 import { useConversasAguardando } from "@/modules/analytics/hooks/useConversasAguardando";
-import { CardConversasAguardando } from "./CardConversasAguardando";
+import { useComandoAgenda } from "@/modules/analytics/hooks/useComandoAgenda";
+import { CardConversasAguardando, esperaCurta } from "./CardConversasAguardando";
 import { CardProximasAgendas } from "./CardProximasAgendas";
 import { CardTarefasDoDia } from "./CardTarefasDoDia";
 import { CardMetas } from "./CardMetas";
@@ -50,7 +51,26 @@ export function TabProximosPassos() {
   // queryKeys de ambos carregam o escopo, e pedir escopo diferente do card não
   // reaproveitaria o cache — dispararia uma segunda consulta e o número do topo
   // passaria a discordar da lista logo abaixo dele.
-  const { total: aguardando, isLoading: convLoading, isError: convError, chipsComErro } = useConversasAguardando(10);
+  const { total: aguardando, items: filaItems, isLoading: convLoading, isError: convError, chipsComErro } = useConversasAguardando(10);
+
+  // Reuniões de hoje: janela do dia, derivada uma vez por dia (mesmo cuidado
+  // de `CardProximasAgendas` com a queryKey).
+  const diaCorrente = new Date().toDateString();
+  const [inicioDia, fimDia] = useMemo(() => {
+    const i = new Date();
+    i.setHours(0, 0, 0, 0);
+    const f = new Date(i);
+    f.setDate(f.getDate() + 1);
+    return [i, f];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a data é a dependência real
+  }, [diaCorrente]);
+  const agendaHoje = useComandoAgenda(inicioDia, fimDia);
+  const reunioesHoje = useMemo(() => {
+    const doDia = (agendaHoje.data ?? []).filter(
+      (e) => e.event_type === "meeting" && !["cancelled", "canceled"].includes((e.status ?? "").toLowerCase()),
+    );
+    return { total: doDia.length, realizadas: doDia.filter((e) => (e.status ?? "").toLowerCase() === "completed").length };
+  }, [agendaHoje.data]);
   const { data: tarefas, isLoading: taskLoading, isError: taskError } = useAcoesDoDia(isAdmin ? "tudo" : "meu");
 
   const { pendentes, atrasadasCount } = useMemo(
@@ -94,26 +114,53 @@ export function TabProximosPassos() {
   const carregando = convLoading || taskLoading;
   const valor = (n: number, erro: boolean) => (erro ? "—" : carregando ? "·" : n.toLocaleString("pt-BR"));
 
-  return (
-    <div className="space-y-5 pt-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 className="text-[17px] font-bold tracking-[-0.02em]">
-          {isAdmin ? "Central de trabalho da equipe" : "Sua central de trabalho"}
-        </h2>
-        {resumoEhEstado && <p className="text-[12px] text-muted-foreground">{resumo}</p>}
-      </header>
+  const maisAntigo = useMemo(() => {
+    const vezes = (filaItems ?? []).map((c) => c.lastClientMessageAt).filter(Boolean).sort();
+    return vezes[0] ? esperaCurta(vezes[0]) : null;
+  }, [filaItems]);
+  const avatares = (filaItems ?? []).slice(0, 5);
+  const alemDosAvatares = Math.max(0, aguardando - avatares.length);
 
-      {/* V5: o resumo do topo vira número. Mesmos três valores da frase de
-          antes, do mesmo cache — o cartão nunca discorda da lista abaixo. */}
-      <KpiRow cols={3}>
+  return (
+    <div className="flex flex-col gap-4">
+      {/* O estado (carregando, erro, nada esperando) — com número, os cartões
+          já dizem o resumo. */}
+      {resumoEhEstado && <p className="-mt-1 text-[12px] text-muted-foreground">{resumo}</p>}
+
+      <KpiRow cols={4}>
         <KpiTile
           label="Clientes esperando"
           value={valor(aguardando, convError)}
           icon={MessageSquareDot}
           tone={aguardando > 0 ? "gold" : "neutral"}
           loading={convLoading}
-          note={isAdmin ? "Fila de resposta da equipe" : "Na sua fila de resposta"}
-        />
+          note={maisAntigo ? `mais antigo há ${maisAntigo.texto}` : isAdmin ? "Fila de resposta da equipe" : "Na sua fila de resposta"}
+        >
+          {avatares.length > 0 && (
+            <div className="flex items-center" aria-hidden>
+              {avatares.map((c, i) => (
+                <span
+                  key={c.key}
+                  className="-ml-1.5 grid h-7 w-7 place-items-center rounded-full border-2 border-card bg-tinta text-[9.5px] font-bold text-tinta-foreground first:ml-0"
+                  style={{ zIndex: avatares.length - i }}
+                >
+                  {c.displayName
+                    .replace(/[^\p{L}\s]/gu, " ")
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((p) => p[0]?.toUpperCase() ?? "")
+                    .join("") || "?"}
+                </span>
+              ))}
+              {alemDosAvatares > 0 && (
+                <span className="-ml-1.5 grid h-7 min-w-7 place-items-center rounded-full border-2 border-card bg-muted px-1 text-[10px] font-bold">
+                  +{alemDosAvatares}
+                </span>
+              )}
+            </div>
+          )}
+        </KpiTile>
         <KpiTile
           label="Tarefas abertas"
           value={valor(pendentes.length, taskError)}
@@ -130,17 +177,30 @@ export function TabProximosPassos() {
           loading={taskLoading}
           note={atrasadasCount > 0 ? "Passaram do prazo" : "Nada passou do prazo"}
         />
+        <KpiTile
+          label="Reuniões hoje"
+          value={agendaHoje.isError ? "—" : agendaHoje.isLoading ? "·" : reunioesHoje.total.toLocaleString("pt-BR")}
+          icon={CalendarCheck}
+          tone="info"
+          loading={agendaHoje.isLoading}
+          note={
+            reunioesHoje.total === 0
+              ? "Nenhuma marcada para hoje"
+              : `${reunioesHoje.realizadas} ${reunioesHoje.realizadas === 1 ? "realizada" : "realizadas"}`
+          }
+        />
       </KpiRow>
 
       {/* Herói: quem falou e não foi respondido — o único bloco que é dinheiro
-          escapando. Embaixo, à esquerda, metas (precisam de largura para a
-          lista de vendedores); à direita, agenda e tarefas, listas curtas.
-          Abaixo de lg tudo vira uma coluna só, na mesma ordem de prioridade. */}
+          escapando. Embaixo, metas em 2/3 (precisam de largura para o
+          gráfico) e, à direita, agenda e tarefas, listas curtas. */}
       <CardConversasAguardando />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
-        <CardMetas />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <CardMetas />
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
           <CardProximasAgendas />
           <CardTarefasDoDia />
         </div>

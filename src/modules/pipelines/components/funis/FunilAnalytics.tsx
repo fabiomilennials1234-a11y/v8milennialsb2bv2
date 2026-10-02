@@ -533,7 +533,7 @@ function PropostasBlock({
       {/* As abas "funil / Produtos" viraram seções (mockup V5): o que estava
           escondido atrás do segmentado fica à vista, na ordem de leitura. */}
       <div className="grid gap-4 md:grid-cols-2">
-            <AnalyticsPanel title="Funil de Vendas" subtitle="Volume e valor por etapa">
+            <AnalyticsPanel title={pipeline.name} subtitle="Volume e valor por etapa">
               <ContinuousFunnel
                 unit="propostas"
                 stages={funnelData.map((stage) => ({

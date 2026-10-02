@@ -299,7 +299,7 @@ export function WorkflowTemplates({
         key={tpl.id}
         type="button"
         onClick={() => setSelected(tpl)}
-        className="group flex min-w-[220px] flex-1 flex-col gap-2 rounded-[18px] border border-card-border bg-card p-4 text-left transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:border-foreground/20 hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-w-0"
+        className="group flex min-w-[220px] flex-1 flex-col gap-2 rounded-[18px] border border-border bg-card p-4 text-left transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:border-foreground/20 hover:shadow-relevo-alto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-w-0"
       >
         <span className="flex items-center justify-between gap-2">
           <IconChip icon={CatIcon} tone="gold" />

@@ -88,7 +88,7 @@ export function FunilMeetingTimeline({ meetings, stages, onMeetingClick }: Funil
   }, [days]);
   const span = (endHour - startHour) * 60;
   const ticks = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i).filter(
-    (h, i, arr) => arr.length <= 9 || i % 2 === 0,
+    (_, i, arr) => arr.length <= 9 || i % 2 === 0,
   );
   const pos = (d: Date) => Math.min(100, Math.max(0, ((d.getHours() * 60 + d.getMinutes() - startHour * 60) / span) * 100));
 

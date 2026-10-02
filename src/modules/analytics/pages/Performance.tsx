@@ -2,11 +2,11 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Trophy, Target, Gift, Medal, Award, TrendingUp, Star, Crown,
-  Flame, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles,
+  Trophy, Target, Gift, TrendingUp, Star,
+  Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles,
   CircleDollarSign, CalendarPlus, Handshake, Building2, Tv, type LucideIcon,
 } from "lucide-react";
-import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, useEndCompetition, type Competition } from "@/modules/engagement/hooks/useCompetitions";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, useEndCompetition } from "@/modules/engagement/hooks/useCompetitions";
 import { CompetitionPodiumV2 } from "@/modules/analytics/components/performance/CompetitionPodiumV2";
 import {
   AlternadorVisao,
@@ -60,7 +60,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ProgressRing, MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
+import { ProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gamification/AchievementBadge";
 import { CelebrationEffect } from "@/modules/engagement/components/gamification/CelebrationEffect";
 import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/modules/engagement/hooks/useGoals";
@@ -104,23 +104,6 @@ const awardTypeLabels: Record<string, { label: string; icon: typeof Trophy; colo
   especial: { label: "Especial", icon: Gift, color: "text-warning-strong" },
 };
 
-// Pódio no V5: ouro = primary, prata = silver, bronze = warning.
-const positionStyles = {
-  1: { icon: Crown, color: "text-primary-soft-foreground", bg: "bg-primary text-primary-foreground", border: "border-primary" },
-  2: { icon: Medal, color: "text-silver", bg: "bg-silver text-silver-foreground", border: "border-silver" },
-  3: { icon: Award, color: "text-warning-strong", bg: "bg-warning text-warning-foreground", border: "border-warning" },
-};
-
-// Fundo da linha do ranking por colocação. Antes era montado com template
-// string (`from-${...}-400/5`, `${styles.border}/30`) — o Tailwind só gera
-// classe que aparece INTEIRA no código, então prata e bronze saíam sem cor.
-// Mapa estático de classes completas.
-const RANKING_ROW_CLASS: Record<1 | 2 | 3, string> = {
-  1: "border-primary/40 bg-gradient-to-r from-primary/10 to-transparent shadow-relevo",
-  2: "border-silver/30 bg-gradient-to-r from-silver/10 to-transparent",
-  3: "border-warning/30 bg-gradient-to-r from-warning/10 to-transparent",
-};
-
 // ============ INTERFACES ============
 
 interface RankingUser {
@@ -152,21 +135,6 @@ interface AchievementProgress {
   currentValue: number;
   progress: number;
   isUnlocked: boolean;
-}
-
-// ============ HELPER FUNCTIONS ============
-function getPositionIcon(position: number) {
-  if (position === 1) return Crown;
-  if (position === 2) return Award;
-  if (position === 3) return Trophy;
-  return null;
-}
-
-function getPositionStyle(position: number) {
-  if (position === 1) return "from-primary to-primary border-primary";
-  if (position === 2) return "from-silver to-silver border-silver";
-  if (position === 3) return "from-warning to-warning border-warning";
-  return "from-muted to-muted border-border";
 }
 
 // ============ SUB-COMPONENTS ============
@@ -984,7 +952,11 @@ export default function Performance() {
 
   // ── V5: pódio + competição numa tinta, classificação completa, metas com anel ──
   const mesLabel = months[selectedMonth - 1].toLowerCase();
-  const subDe = (role?: string | null) => (role && role !== "master" ? role : undefined);
+  // Cargo da pessoa (job_title). O `role` do RPC às vezes é a função do enum
+  // ("admin", "member") — isso não é cargo e não vai para a tela.
+  const subDe = (id: string, role?: string | null) =>
+    teamMembers.find((m) => m.id === id)?.job_title?.trim() ||
+    (role && !["admin", "member", "master", "Vendas"].includes(role) ? role : undefined);
 
   const rankingVisao: RankingUser[] = visao === "venda" ? closers : sdrs;
   const metricaVisao: "sales" | "meetings" = visao === "venda" ? "sales" : "meetings";
@@ -999,7 +971,7 @@ export default function Performance() {
         goalProgress: u.goalProgress,
         position: u.position,
         avatarUrl: u.avatarUrl,
-        sub: subDe(u.role),
+        sub: subDe(u.id, u.role),
         count: u.conversions,
       }))
     : rankingVisao.slice(0, 3).map((u) => ({
@@ -1009,7 +981,7 @@ export default function Performance() {
         goalProgress: u.goalProgress,
         position: u.position,
         avatarUrl: avatarMap.get(u.id),
-        sub: subDe(u.role),
+        sub: subDe(u.id, u.role),
         count: u.conversions,
       }));
 
@@ -1017,7 +989,7 @@ export default function Performance() {
     ? competitionRanking.map((u) => ({
         id: u.id,
         name: u.name,
-        sub: subDe(u.role),
+        sub: subDe(u.id, u.role),
         avatarUrl: u.avatarUrl,
         position: u.position,
         value: podioMetric === "sales" ? u.value : u.meetings || u.value,
@@ -1029,7 +1001,7 @@ export default function Performance() {
     : rankingVisao.map((u) => ({
         id: u.id,
         name: u.name,
-        sub: subDe(u.role),
+        sub: subDe(u.id, u.role),
         avatarUrl: avatarMap.get(u.id),
         position: u.position,
         value: valorVisao(u),
@@ -1109,7 +1081,7 @@ export default function Performance() {
       return {
         id,
         name: getMemberName(id),
-        sub: subDe(r?.role),
+        sub: subDe(id, r?.role),
         avatarUrl: avatarMap.get(id),
         progresso: r?.goal ? r.goalProgress : null,
         realizadoTexto: r

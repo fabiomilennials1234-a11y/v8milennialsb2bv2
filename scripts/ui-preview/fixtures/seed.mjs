@@ -1193,6 +1193,47 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
     updated_at: ago(10 * D),
   }));
 
+  // ───────────── copilot: avaliações do juiz e testes A/B ─────────────
+  // Notas 0–10 por critério, espalhadas nos últimos 30 dias, para a tela de
+  // Métricas LLM ter radar, tabela por agente e "piores avaliações".
+  const copilot_conversation_evaluations = Array.from({ length: 18 }, (_, i) => {
+    const agentIdx = i % 3;
+    const base = [8.4, 7.1, 6.2][agentIdx];
+    const wobble = ((i * 37) % 17) / 10 - 0.8;
+    const clamp = (v) => Math.max(2, Math.min(10, Math.round(v * 10) / 10));
+    const relevance = clamp(base + wobble);
+    const tone = clamp(base + 0.4 - wobble / 2);
+    const goal = clamp(base - 0.3 + wobble / 3);
+    const concise = clamp(base - 1.1 + wobble);
+    return {
+      id: id("misc", 7800 + i),
+      organization_id: ORG_ID,
+      agent_id: id("agent", agentIdx + 2),
+      score_relevance: relevance,
+      score_tone: tone,
+      score_goal_align: goal,
+      score_conciseness: concise,
+      score_overall: clamp((relevance + tone + goal + concise) / 4),
+      evaluated_at: ago((i * 1.5 + 0.3) * D),
+    };
+  });
+  const copilot_agent_variants = [
+    [1, 2, "A · Abertura consultiva", true, 412, 7.9, 8.1, 9.8, 40],
+    [2, 2, "B · Abertura com case", false, 398, 8.4, 8.6, 12.9, 51],
+    [3, 3, "Pergunta de faturamento", true, 120, 7.0, 7.2, 21.4, 9],
+  ].map(([n, agent, name, control, convs, overall, goal, qual, meetings]) => ({
+    id: id("misc", 7900 + n),
+    organization_id: ORG_ID,
+    agent_id: id("agent", agent),
+    name,
+    is_control: control,
+    total_conversations: convs,
+    avg_score_overall: overall,
+    avg_score_goal_align: goal,
+    qualification_rate: qual,
+    meetings_scheduled: meetings,
+  }));
+
   // ───────────── disparos (blast plans) ─────────────
   // Planos em todos os estados do painel: dois ativos, um pausado, um com
   // todos os lotes liberados e um cancelado. Destinatários por lote
@@ -1328,6 +1369,8 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
       message_templates,
       blast_plans,
       blast_plan_recipients,
+      copilot_conversation_evaluations,
+      copilot_agent_variants,
       lead_history,
       saved_views: [],
     },

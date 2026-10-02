@@ -237,6 +237,16 @@ for (const theme of themes) {
       await page.waitForTimeout(400); // last paint / chart layout
       const state = await detectState(page);
       const file = join(dir, `${route.name}.png`);
+      if (FULL_PAGE) {
+        // O layout é h-screen e quem rola é o <main>: sem isto o "página
+        // inteira" sai do tamanho da janela. Destrava a altura só para o print.
+        await page.evaluate(() => {
+          const raiz = document.querySelector('[data-layout="main"]');
+          const main = raiz?.querySelector("main");
+          if (raiz instanceof HTMLElement) raiz.style.height = "auto";
+          if (main instanceof HTMLElement) main.style.overflow = "visible";
+        });
+      }
       await page.screenshot({ path: file, fullPage: FULL_PAGE });
       const log = await (await fetch(`${MOCK_URL}/__log?since=${t0}`)).json().catch(() => []);
       const misses = [...new Set(log.filter((e) => e.miss).map((e) => `${e.kind} ${e.name}${e.note ? ` (${e.note})` : ""}`))];

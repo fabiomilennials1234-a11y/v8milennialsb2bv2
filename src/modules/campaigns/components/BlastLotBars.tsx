@@ -38,7 +38,7 @@ export function LotBars({
   const showLabels = total <= LABEL_LIMIT;
 
   return (
-    <div className={cn("flex h-[58px] items-end gap-1", className)} aria-hidden>
+    <div className={cn("flex h-[58px] items-end gap-1.5", showLabels && "justify-center", className)} aria-hidden>
       {lots.map((lot, i) => {
         const released = i < plan.lots_released;
         const ratio = lot && lot.total > 0 ? lot.processed / lot.total : 0;
@@ -52,10 +52,10 @@ export function LotBars({
               ? "bg-primary"
               : "bg-foreground dark:bg-foreground/85";
         return (
-          <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+          <div key={i} className={cn("flex min-w-0 flex-col items-center gap-1", showLabels ? "w-[26px]" : "flex-1")}>
             <div
               className={cn(
-                "relative flex h-[40px] w-full max-w-[26px] items-end overflow-hidden rounded-[7px]",
+                "relative flex h-[40px] w-full items-end overflow-hidden rounded-[7px]",
                 tone === "gold" ? "bg-primary-foreground/[.09]" : "bg-muted",
               )}
             >

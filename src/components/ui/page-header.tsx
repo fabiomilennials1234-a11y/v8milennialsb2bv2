@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,6 +46,8 @@ export interface PageHeaderAction {
   disabled?: boolean;
   /** Tinta do ícone (ex.: o envio da Carteira em ouro suave). */
   iconClassName?: string;
+  /** No desktop vira botão só de ícone, com o rótulo no tooltip (atalhos: TV, Métricas). */
+  iconOnly?: boolean;
 }
 
 interface PageHeaderProps extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
@@ -109,12 +112,30 @@ export function PageHeader({
           <div className="flex flex-wrap items-center gap-2">
             {hasSecondary && (
               <>
-                {secondaryActions!.map(({ label, icon: Icon, onSelect, disabled, iconClassName }) => (
-                  <Button key={label} variant="outline" onClick={onSelect} disabled={disabled} className="max-sm:hidden">
-                    {Icon && <Icon className={iconClassName} />}
-                    {label}
-                  </Button>
-                ))}
+                {secondaryActions!.map(({ label, icon: Icon, onSelect, disabled, iconClassName, iconOnly }) =>
+                  iconOnly && Icon ? (
+                    <Tooltip key={label}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={onSelect}
+                          disabled={disabled}
+                          aria-label={label}
+                          className="max-sm:hidden"
+                        >
+                          <Icon className={iconClassName} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{label}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button key={label} variant="outline" onClick={onSelect} disabled={disabled} className="max-sm:hidden">
+                      {Icon && <Icon className={iconClassName} />}
+                      {label}
+                    </Button>
+                  ),
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="icon" className="sm:hidden" aria-label={secondaryActionsLabel}>

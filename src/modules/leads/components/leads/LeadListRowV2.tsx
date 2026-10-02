@@ -161,7 +161,7 @@ export function LeadListHeaderV2({
     <div
       className={cn(
         GRID_COLS,
-        "sticky top-0 z-10 h-11 border-b border-border bg-card/95 px-4 backdrop-blur",
+        "sticky top-0 z-10 h-11 border-b border-border bg-card/95 px-4 backdrop-blur [&_button]:uppercase",
         "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground",
       )}
     >

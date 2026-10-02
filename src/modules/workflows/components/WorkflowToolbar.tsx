@@ -159,7 +159,7 @@ export function WorkflowToolbar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-card-border bg-card px-3 py-2.5 shadow-relevo">
       {/* Left */}
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
         <button
           type="button"
           onClick={() => navigate("/automacoes")}
@@ -169,7 +169,7 @@ export function WorkflowToolbar({
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-[180px] flex-1 items-center gap-2 sm:flex-none">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-tinta text-primary">
             <Zap className="h-4 w-4" />
           </span>
@@ -177,7 +177,7 @@ export function WorkflowToolbar({
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             aria-label="Nome do workflow"
-            className="h-9 w-64 max-w-full rounded-full border-input bg-card text-[15px] font-bold tracking-[-0.01em]"
+            className="h-9 w-full min-w-0 rounded-full border-input bg-card text-[15px] font-bold tracking-[-0.01em] sm:w-64"
             placeholder="Nome do workflow"
           />
         </div>

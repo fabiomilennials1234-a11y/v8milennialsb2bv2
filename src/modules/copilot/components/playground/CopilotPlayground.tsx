@@ -567,7 +567,7 @@ export function CopilotPlayground() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-4">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-[560px] gap-4">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

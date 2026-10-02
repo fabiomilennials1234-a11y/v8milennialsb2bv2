@@ -28,6 +28,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { formatBRL, formatDateFull } from "@/lib/format";
 import {
   sourceLabel,
@@ -52,6 +53,28 @@ interface OrdersTableProps {
   from: number;
   to: number;
   onPageChange: (page: number) => void;
+}
+
+function initials(text: string): string {
+  return (
+    text
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+/** "hoje" · "ontem" · "há N dias". */
+function relativeDays(iso: string): string {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (Number.isNaN(d) || d < 0) return "";
+  if (d === 0) return "hoje";
+  if (d === 1) return "ontem";
+  return `há ${d} dias`;
 }
 
 // ─── Constantes de estilo (espelham CarteiraClientTable:181-185) ────────────
@@ -205,25 +228,15 @@ export function OrdersTable({
         <Table>
           <TableHeader>
             <TableRow className="border-0 hover:bg-transparent">
-              <SortableHeader col="client" label="Cliente" className="pl-4" />
-              <SortableHeader col="value" label="Valor" className="text-right" />
+              <TableHead className={cn(thBase, "pl-4 text-muted-foreground")}>Pedido</TableHead>
+              <SortableHeader col="client" label="Cliente" />
               <SortableHeader col="date" label="Data" />
-              <TableHead
-                className={cn(thBase, "text-muted-foreground hidden md:table-cell")}
-              >
-                Closer
-              </TableHead>
-              <TableHead
-                className={cn(thBase, "text-muted-foreground hidden lg:table-cell")}
-              >
-                Origem
-              </TableHead>
-              <TableHead className={cn(thBase, "text-muted-foreground")}>
-                Situação
-              </TableHead>
-              <TableHead
-                className={cn(thBase, "text-muted-foreground pr-4 w-[70px]")}
-              />
+              <TableHead className={cn(thBase, "text-muted-foreground hidden md:table-cell")}>Itens</TableHead>
+              <TableHead className={cn(thBase, "text-muted-foreground")}>Situação</TableHead>
+              <TableHead className={cn(thBase, "text-muted-foreground hidden lg:table-cell")}>Origem</TableHead>
+              <TableHead className={cn(thBase, "text-muted-foreground hidden md:table-cell")}>Vendedor</TableHead>
+              <SortableHeader col="value" label="Valor" className="text-right" />
+              <TableHead className={cn(thBase, "text-muted-foreground pr-4 w-[60px]")} aria-label="Ações" />
             </TableRow>
           </TableHeader>
 
@@ -256,40 +269,61 @@ export function OrdersTable({
                   key={order.id}
                   className="group/row border-border/60 transition-colors hover:bg-muted/40"
                 >
-                  {/* 1 — Cliente */}
+                  {/* Pedido — o produto (não há número humano de pedido) */}
                   <TableCell className="pl-4 py-3">
-                    <div className="text-sm font-semibold text-foreground truncate max-w-[240px]">
-                      {order.client_name}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate max-w-[240px]">
-                      {order.product_name}
-                      {itemCount > 0 &&
-                        ` · ${itemCount} ${itemCount === 1 ? "item" : "itens"}`}
+                    <div className="max-w-[220px] truncate text-[13px] font-semibold text-foreground" title={order.product_name}>
+                      {order.product_name || "—"}
                     </div>
                   </TableCell>
 
-                  {/* 2 — Valor (alvo de comparação vertical: direita + tabular) */}
-                  <TableCell className="py-3 text-right text-sm font-semibold tabular-nums text-foreground">
-                    {formatBRL(Number(order.sale_value), 2)}
-                  </TableCell>
-
-                  {/* 3 — Data */}
-                  <TableCell className="py-3 text-[13px] text-muted-foreground whitespace-nowrap">
-                    {formatDateFull(order.sold_at)}
-                  </TableCell>
-
-                  {/* 4 — Closer */}
-                  <TableCell className="py-3 text-[13px] hidden md:table-cell">
-                    {order.closer_name ? (
-                      <span className="text-muted-foreground truncate max-w-[140px] inline-block align-bottom">
-                        {order.closer_name}
+                  {/* Cliente — ladrilho + nome + empresa */}
+                  <TableCell className="py-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid size-[30px] shrink-0 place-items-center rounded-[10px] bg-muted text-[10.5px] font-extrabold text-foreground/70">
+                        {initials(order.client_name)}
                       </span>
-                    ) : (
-                      <span className="text-muted-foreground/30">—</span>
-                    )}
+                      <div className="min-w-0 leading-tight">
+                        <p className="max-w-[220px] truncate text-[13px] font-bold">{order.client_name}</p>
+                        {order.client_company && (
+                          <p className="max-w-[220px] truncate text-[11px] text-muted-foreground">{order.client_company}</p>
+                        )}
+                      </div>
+                    </div>
                   </TableCell>
 
-                  {/* 5 — Origem do registro */}
+                  {/* Data + relativo */}
+                  <TableCell className="py-3 whitespace-nowrap">
+                    <p className="text-[13px] font-semibold tabular-nums">{formatDateFull(order.sold_at)}</p>
+                    <p className="text-[11px] text-muted-foreground">{relativeDays(order.sold_at)}</p>
+                  </TableCell>
+
+                  <TableCell className="py-3 text-[13px] text-muted-foreground hidden md:table-cell whitespace-nowrap">
+                    {itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "item" : "itens"}` : "—"}
+                  </TableCell>
+
+                  {/* Situação: aprovado + procedência, quando há vínculo ERP.
+                      Rotula o SISTEMA (TinyERP/Omie/NF-e), não "Faturado":
+                      medido em prod, notas_fiscais tem 0 linhas e 232 pedidos
+                      são bloqueados por tiny_order_id. */}
+                  <TableCell className="py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="success" className="h-5 px-2 py-0 text-[10.5px]">
+                        Aprovado
+                      </Badge>
+                      {order.is_erp_linked && (
+                        <Badge variant="info" className="h-5 px-2 py-0 text-[10.5px]">
+                          {order.erp_source === "nfe" ? (
+                            <ReceiptText className="mr-1 h-3 w-3" />
+                          ) : (
+                            <Link2 className="mr-1 h-3 w-3" />
+                          )}
+                          {erpSourceLabel(order.erp_source)}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  {/* Origem do registro */}
                   <TableCell className="py-3 hidden lg:table-cell">
                     <Badge
                       variant="outline"
@@ -302,29 +336,25 @@ export function OrdersTable({
                     </Badge>
                   </TableCell>
 
-                  {/* 6 — Situação: procedência, quando há vínculo ERP.
-                      Rotula o SISTEMA (TinyERP/Omie/NF-e), não "Faturado":
-                      medido em prod, notas_fiscais tem 0 linhas e 232 pedidos
-                      são bloqueados por tiny_order_id. */}
-                  <TableCell className="py-3">
-                    {order.is_erp_linked && (
-                      <Badge
-                        variant="success"
-                        className="h-5 px-2 py-0 text-[10.5px]"
-                      >
-                        {order.erp_source === "nfe" ? (
-                          <ReceiptText className="mr-1 h-3 w-3" />
-                        ) : (
-                          <Link2 className="mr-1 h-3 w-3" />
-                        )}
-                        {erpSourceLabel(order.erp_source)}
-                      </Badge>
+                  {/* Vendedor — avatar, nome no title */}
+                  <TableCell className="py-3 hidden md:table-cell">
+                    {order.closer_name ? (
+                      <div title={order.closer_name} className="w-fit">
+                        <UserAvatar name={order.closer_name} size="xs" />
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground/30">—</span>
                     )}
+                  </TableCell>
+
+                  {/* Valor (alvo de comparação vertical: direita + tabular) */}
+                  <TableCell className="py-3 text-right text-[13px] font-bold tabular-nums text-foreground whitespace-nowrap">
+                    {formatBRL(Number(order.sale_value), 2)}
                   </TableCell>
 
                   {/* Ações — largura fixa: layout não desloca entre linhas
                       editáveis e bloqueadas. */}
-                  <TableCell className="py-3 pr-4 w-[70px]">
+                  <TableCell className="py-3 pr-4 w-[60px]">
                     <div className="flex items-center justify-end gap-1">
                       {canMutate &&
                         (order.is_erp_linked ? (

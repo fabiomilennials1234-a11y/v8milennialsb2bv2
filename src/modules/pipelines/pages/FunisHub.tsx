@@ -14,6 +14,7 @@ import {
   Plus,
   Kanban,
   ChevronDown,
+  ArrowRight,
   LayoutGrid,
   List,
   BarChart3,
@@ -209,7 +210,7 @@ export default function FunisHub() {
                   <div
                     key={funil.key}
                     className={cn(
-                      "group relative flex min-h-[150px] flex-col rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
+                      "group relative flex min-h-[132px] flex-col rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
                       "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto",
                       "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
                     )}
@@ -240,18 +241,20 @@ export default function FunisHub() {
                               </Badge>
                             )}
                           </span>
-                          <span className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                            {funil.temporary
-                              ? funil.temporary.endsAt
-                                ? `Funil temporário · termina ${new Date(funil.temporary.endsAt).toLocaleDateString("pt-BR")}`
-                                : "Funil temporário"
-                              : funil.description || "Funil de vendas"}
-                          </span>
+                          {(funil.temporary || funil.description) && (
+                            <span className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                              {funil.temporary
+                                ? funil.temporary.endsAt
+                                  ? `Funil temporário · termina ${new Date(funil.temporary.endsAt).toLocaleDateString("pt-BR")}`
+                                  : "Funil temporário"
+                                : funil.description}
+                            </span>
+                          )}
                         </span>
                       </span>
 
                       {(funil.temporary || funil.meta) && (
-                        <span className="mt-auto flex flex-wrap items-center gap-1.5">
+                        <span className="flex flex-wrap items-center gap-1.5">
                           {funil.temporary?.daysLeft != null && (
                             <Badge variant="warning" className="px-2 py-0.5 text-[11px] tabular-nums">
                               {funil.temporary.daysLeft} {funil.temporary.daysLeft === 1 ? "dia" : "dias"}
@@ -274,6 +277,10 @@ export default function FunisHub() {
                           )}
                         </span>
                       )}
+                      <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
+                        Abrir quadro
+                        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                      </span>
                     </button>
                     {funil.pipeline && (
                       <div className="absolute right-3 top-3">
@@ -289,7 +296,7 @@ export default function FunisHub() {
                 type="button"
                 onClick={() => setCreateOpen(true)}
                 className={cn(
-                  "flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-card border-[1.5px] border-dashed border-border",
+                  "flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-card border-[1.5px] border-dashed border-border",
                   "text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/60 hover:bg-card hover:text-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 )}

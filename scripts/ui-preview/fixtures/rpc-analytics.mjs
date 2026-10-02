@@ -257,7 +257,16 @@ export function analyticsRpcs(threads) {
         churn_probability: c.churn_probability,
         external_id: c.external_id ?? null,
       }));
-      if (a.p_filter && a.p_filter !== "all") rows = rows.filter((r) => r.segment === a.p_filter || r.health_status === a.p_filter);
+      // Mesmos recortes da RPC real (20270921000000): atrasado = 15% além do
+      // ciclo; previsto = próxima compra nos próximos 7 dias.
+      if (a.p_filter === "overdue") {
+        rows = rows.filter((r) => r.days_since_last_order != null && r.reorder_cycle_days != null && r.days_since_last_order > r.reorder_cycle_days * 1.15);
+      } else if (a.p_filter === "expected") {
+        rows = rows.filter((r) => {
+          const t = r.next_order_expected ? new Date(r.next_order_expected).getTime() : NaN;
+          return Number.isFinite(t) && t >= fx.NOW && t <= fx.NOW + 7 * 864e5;
+        });
+      } else if (a.p_filter && a.p_filter !== "all") rows = rows.filter((r) => r.segment === a.p_filter || r.health_status === a.p_filter);
       if (a.p_search) rows = rows.filter((r) => `${r.name} ${r.company}`.toLowerCase().includes(String(a.p_search).toLowerCase()));
       const col = a.p_sort_by ?? "name";
       const dir = a.p_sort_dir === "desc" ? -1 : 1;

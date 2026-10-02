@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Check, Circle, CheckCircle2, ListChecks, Plus, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight, Check, ListChecks, Plus, X } from "lucide-react";
 import {
   useAcoesDoDia,
   useCreateAcaoDoDia,
@@ -101,6 +102,7 @@ export function CardTarefasDoDia() {
       count={pendentes.length}
       tone={atrasadasCount > 0 ? "urgent" : "default"}
       scopeHint={isAdmin ? "Equipe" : undefined}
+      action={{ label: "Revisão", to: "/follow-ups" }}
       isLoading={isLoading}
       isError={isError}
       onRetry={() => void refetch()}
@@ -120,32 +122,12 @@ export function CardTarefasDoDia() {
         ) : null
       }
     >
-      <form onSubmit={adicionar} className="flex items-center gap-2 px-4 py-2.5">
-        <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-        <input
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Ligar para o João…"
-          aria-label="Nova tarefa do dia"
-          disabled={criar.isPending}
-          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
-        />
-        {texto.trim() && (
-          <button
-            type="submit"
-            disabled={criar.isPending}
-            className="shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
-          >
-            {criar.isPending ? "…" : "Add"}
-          </button>
-        )}
-      </form>
 
       {pendentes.length === 0 && concluidasHoje.length === 0 && (
-        <p className="px-4 pb-3 text-[11px] text-muted-foreground/60">
+        <p className="px-4 pb-1 pt-2 text-[11px] text-muted-foreground/60">
           {isAdmin
-            ? "Ninguém do time tem tarefa aberta. Escreva acima para criar a sua."
-            : "Nenhuma tarefa. Escreva acima e aperte Enter."}
+            ? "Ninguém do time tem tarefa aberta. Escreva abaixo para criar a sua."
+            : "Nenhuma tarefa. Escreva abaixo e aperte Enter."}
         </p>
       )}
 
@@ -161,16 +143,11 @@ export function CardTarefasDoDia() {
                 onClick={() => concluir.mutate(tarefa.id)}
                 disabled={concluir.isPending}
                 aria-label={`Concluir ${tarefa.title}`}
-                className="shrink-0 text-muted-foreground/40 transition-colors hover:text-primary disabled:opacity-50"
-              >
-                <Circle className="h-4 w-4" />
-              </button>
+                className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] border-[1.5px] border-border bg-card transition-colors hover:border-success-strong disabled:opacity-50"
+              />
             ) : (
               // Tarefa de outra pessoa: o admin acompanha, não executa.
-              <Circle
-                className="h-4 w-4 shrink-0 text-muted-foreground/20"
-                aria-hidden
-              />
+              <span aria-hidden className="h-5 w-5 shrink-0 rounded-[7px] border-[1.5px] border-dashed border-border" />
             )}
 
             <span className="min-w-0 flex-1">
@@ -191,9 +168,19 @@ export function CardTarefasDoDia() {
             </span>
 
             {atrasada && (
-              <span className="shrink-0 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.06em] text-destructive">
-                Atrasada
+              <span className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[10.5px] font-bold text-destructive">
+                atrasada
               </span>
+            )}
+
+            {tarefa.lead_id && (
+              <Link
+                to={`/leads?lead=${tarefa.lead_id}`}
+                aria-label={`Abrir o lead de ${tarefa.title}`}
+                className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
             )}
 
             {souDono(tarefa.user_id) && (
@@ -221,15 +208,14 @@ export function CardTarefasDoDia() {
                   onClick={() => desfazer.mutate(tarefa.id)}
                   disabled={desfazer.isPending}
                   aria-label={`Reabrir ${tarefa.title}`}
-                  className="shrink-0 text-primary/70 transition-colors hover:text-primary disabled:opacity-50"
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] bg-success-strong text-white transition-opacity hover:opacity-80 disabled:opacity-50"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
                 </button>
               ) : (
-                <CheckCircle2
-                  className="h-4 w-4 shrink-0 text-primary/25"
-                  aria-hidden
-                />
+                <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] bg-success-strong/40 text-white">
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
               )}
               <span className="min-w-0 flex-1">
                 <span
@@ -247,10 +233,33 @@ export function CardTarefasDoDia() {
                   />
                 )}
               </span>
-              <Check className="h-3 w-3 shrink-0 text-muted-foreground/30" />
             </li>
           ))}
       </ul>
+      {/* V5: o campo de nova tarefa vem DEPOIS da lista — o que já existe é
+          lido primeiro; criar é o gesto do fim. */}
+      <form onSubmit={adicionar} className="mx-4 mb-3 mt-1 flex items-center gap-2 rounded-xl border border-border bg-background/60 px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
+        <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Ligar para o João…"
+          aria-label="Nova tarefa do dia"
+          disabled={criar.isPending}
+          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50 disabled:opacity-50"
+        />
+        {texto.trim() ? (
+          <button
+            type="submit"
+            disabled={criar.isPending}
+            className="shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
+          >
+            {criar.isPending ? "…" : "Adicionar"}
+          </button>
+        ) : (
+          <kbd className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">↵</kbd>
+        )}
+      </form>
     </ComandoCard>
   );
 }

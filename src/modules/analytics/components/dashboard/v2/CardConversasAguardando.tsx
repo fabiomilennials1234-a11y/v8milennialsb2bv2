@@ -1,32 +1,33 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight, Bot, MessageSquareDot, Smartphone } from "lucide-react";
-import { formatDistanceToNowStrict } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { FocusCard, FocusTile, InkPanel } from "@/components/ui/bento";
+import { AlertTriangle, ArrowRight, MessageCircle, MessageSquareDot } from "lucide-react";
+import { FocusCard, FocusTile, InkPanel, InkRow } from "@/components/ui/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useViewport } from "@/shared/hooks/use-viewport";
+import { useCopilotToggleStatus } from "@/modules/copilot";
+import { QUALIFICATION_TIER_CONFIG } from "@/modules/leads";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
-import { formatContactTime } from "@/modules/communication/components/chat/list/ConversationListItem";
 import {
   useConversasAguardando,
   type ConversaAguardando,
 } from "@/modules/analytics/hooks/useConversasAguardando";
-import { DonoDaLinha } from "./DonoDaLinha";
+import { useFocoDoLead } from "@/modules/analytics/hooks/useFocoDoLead";
 
 const MOSTRAR = 10;
 
-/** Linha inteira é o alvo do clique: a lista é a ação, não a decoração. */
+/** No celular a linha inteira abre a conversa (a lista é a ação). */
 const LINHA_CLASSES =
-  "flex h-auto w-full items-center justify-start gap-3 whitespace-normal rounded-2xl px-3 py-2.5 text-left font-normal text-tinta-foreground transition-colors hover:bg-white/[.06] hover:text-tinta-foreground active:scale-100";
+  "group flex h-auto w-full items-center justify-start gap-3 whitespace-normal rounded-2xl px-3 py-2.5 text-left font-normal text-tinta-foreground transition-colors hover:bg-white/[.06] hover:text-tinta-foreground active:scale-100";
 
 /**
  * Bloco 1 — o mais importante da tela, e o único que representa dinheiro
  * escapando: cliente que falou e não foi respondido.
  *
- * V5 (2026-10): vira o painel-herói em tinta. A lista continua sendo a ação —
- * cada linha abre a conversa direto, como antes. O cartão de ouro não é uma
- * seleção: é o PRIMEIRO da fila ("próximo a responder"), com a mensagem
- * inteira, para o olho começar por ele. Nenhum dado novo; só hierarquia.
+ * V5 (mockup, decisão do CTO 02/10): lista de 340 px em tinta à esquerda e o
+ * cartão de ouro do cliente SELECIONADO à direita. No computador a linha
+ * seleciona e o cartão abre a conversa; no celular a linha abre direto (lá o
+ * cartão fica em cima e escolher antes de agir é um passo a mais).
  *
  * ⚠️ ABRIR CONVERSA TEM UM CAMINHO SÓ. É `AbrirConversaButton`, e um
  * `no-restricted-imports` em `eslint.config.js` reprova quem chamar
@@ -48,21 +49,20 @@ export function CardConversasAguardando() {
     refetch,
   } = useConversasAguardando(MOSTRAR);
 
+  const { isMobile } = useViewport();
+  const [selecionadaKey, setSelecionadaKey] = useState<string | null>(null);
+
   const restantes = Math.max(0, total - items.length);
   const comLead = items.filter((c): c is ConversaAguardando & { leadId: string } => !!c.leadId);
-  const proxima = comLead[0];
+  // Sem escolha (ou a escolhida saiu da fila), o foco é o primeiro.
+  const emFoco = comLead.find((c) => c.key === selecionadaKey) ?? comLead[0];
 
   return (
     <InkPanel
-      title="Aguardando resposta"
-      count={!isLoading && !isError ? total : undefined}
+      title="Conversas aguardando"
+      count={!isLoading && !isError ? `${total} ${total === 1 ? "cliente" : "clientes"}` : undefined}
       actions={
         <>
-          {isAdmin && (
-            <span className="rounded-full border border-white/15 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-tinta-muted">
-              Equipe
-            </span>
-          )}
           <Link
             to="/chat-whatsapp"
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/[.06] px-3 text-[12px] font-semibold text-tinta-foreground transition-colors hover:bg-white/10"
@@ -92,13 +92,13 @@ export function CardConversasAguardando() {
       ) : null}
 
       {isLoading ? (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
           <div className="space-y-2 p-1.5">
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-12 rounded-2xl bg-white/[.07]" />
             ))}
           </div>
-          <Skeleton className="hidden min-h-[260px] rounded-card bg-white/[.07] lg:block" />
+          <Skeleton className="hidden min-h-[340px] rounded-card bg-white/[.07] lg:block" />
         </div>
       ) : isError ? (
         <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
@@ -130,19 +130,29 @@ export function CardConversasAguardando() {
           </p>
         </div>
       ) : (
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
-          <ul className="order-2 flex min-w-0 flex-col gap-0.5 lg:order-1">
-            {comLead.map((c, i) => (
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+          <ul className="order-2 flex min-w-0 flex-col gap-1 lg:order-1">
+            {comLead.map((c) => (
               <li key={c.key}>
-                <AbrirConversaButton
-                  leadId={c.leadId}
-                  phone={c.phoneNumber}
-                  variant="ghost"
-                  className={cn(LINHA_CLASSES, i === 0 && "bg-white/[.06]")}
-                  aria-label={`Abrir conversa com ${c.displayName}`}
-                >
-                  <LinhaConversa conversa={c} mostrarDono={isAdmin} />
-                </AbrirConversaButton>
+                {isMobile ? (
+                  <AbrirConversaButton
+                    leadId={c.leadId}
+                    phone={c.phoneNumber}
+                    variant="ghost"
+                    className={LINHA_CLASSES}
+                    aria-label={`Abrir conversa com ${c.displayName}`}
+                  >
+                    <LinhaConversa conversa={c} />
+                  </AbrirConversaButton>
+                ) : (
+                  <InkRow
+                    selected={c.key === emFoco?.key}
+                    onClick={() => setSelecionadaKey(c.key)}
+                    aria-label={`Ver ${c.displayName}`}
+                  >
+                    <LinhaConversa conversa={c} />
+                  </InkRow>
+                )}
               </li>
             ))}
             {restantes > 0 && (
@@ -153,7 +163,7 @@ export function CardConversasAguardando() {
             )}
           </ul>
 
-          {proxima && <ProximaAResponder conversa={proxima} mostrarDono={isAdmin} />}
+          {emFoco && <CartaoDoFoco conversa={emFoco} mostrarDono={isAdmin} />}
         </div>
       )}
     </InkPanel>
@@ -171,131 +181,159 @@ function iniciais(nome: string) {
     .join("") || "?";
 }
 
-function esperandoHa(iso: string | null | undefined) {
+/** Espera curta e exata — "6 min", "1 h 35 min", "3 d". */
+export function esperaCurta(iso: string | null | undefined, agora = Date.now()) {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return formatDistanceToNowStrict(d, { locale: ptBR });
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const min = Math.max(0, Math.round((agora - t) / 60_000));
+  if (min < 60) return { valor: String(min), unidade: "min", texto: `${min} min`, longa: false };
+  const h = Math.floor(min / 60);
+  if (h < 24) {
+    const resto = min % 60;
+    return { valor: String(h), unidade: resto ? `h ${resto} min` : "h", texto: resto ? `${h} h ${resto} min` : `${h} h`, longa: true };
+  }
+  const d = Math.floor(h / 24);
+  return { valor: String(d), unidade: d === 1 ? "dia" : "dias", texto: `${d} ${d === 1 ? "dia" : "dias"}`, longa: true };
 }
 
-/** O primeiro da fila, em destaque — mesma ação da linha, mais contexto. */
-function ProximaAResponder({
-  conversa,
-  mostrarDono,
-}: {
-  conversa: ConversaAguardando & { leadId: string };
-  mostrarDono: boolean;
-}) {
-  const ha = esperandoHa(conversa.lastClientMessageAt);
-  return (
-    <FocusCard className="order-1 lg:order-2">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold text-primary-foreground/70">Próximo a responder</p>
-          <p className="mt-0.5 truncate text-[1.35rem] font-extrabold leading-tight tracking-[-0.03em]">
-            {conversa.displayName}
-          </p>
-        </div>
-        {ha && (
-          <div className="shrink-0 text-right">
-            <p className="text-[11px] font-bold text-primary-foreground/70">Esperando há</p>
-            <p className="text-[1.35rem] font-extrabold leading-tight tracking-[-0.03em] tabular-nums">{ha}</p>
-          </div>
-        )}
-      </div>
-
-      <FocusTile className="text-[14px] font-semibold leading-relaxed">
-        “{conversa.lastClientMessage?.trim() || "Mensagem sem texto"}”
-      </FocusTile>
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-semibold">
-        <span className="inline-flex items-center gap-1.5">
-          <Smartphone className="h-3.5 w-3.5" />
-          {conversa.instanceName}
-        </span>
-        {conversa.aiReplied && (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-primary-foreground px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-primary"
-            title="A IA já respondeu; nenhum humano respondeu depois"
-          >
-            <Bot className="h-3 w-3" />
-            IA respondeu
-          </span>
-        )}
-        {mostrarDono && <DonoDaLinha nome={conversa.ownerName} className="text-[12px] text-primary-foreground/75" />}
-      </div>
-
-      <AbrirConversaButton
-        leadId={conversa.leadId}
-        phone={conversa.phoneNumber}
-        variant="outline"
-        className="h-11 w-full justify-center rounded-full border-transparent bg-white text-[13px] font-bold text-neutral-900 shadow-none hover:bg-white/90"
-        aria-label={`Abrir conversa com ${conversa.displayName}`}
-      >
-        Abrir conversa
-        <ArrowRight className="h-4 w-4" />
-      </AbrirConversaButton>
-    </FocusCard>
-  );
-}
-
-function LinhaConversa({
-  conversa,
-  mostrarDono,
-}: {
-  conversa: ConversaAguardando;
-  /** Só o admin: para o vendedor a fila inteira já é dele. */
-  mostrarDono: boolean;
-}) {
+function LinhaConversa({ conversa }: { conversa: ConversaAguardando }) {
+  const espera = esperaCurta(conversa.lastClientMessageAt);
   return (
     <>
       <span
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-bold text-tinta-foreground"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-bold text-tinta-foreground group-data-[selected=true]:bg-primary-foreground/15 group-data-[selected=true]:text-primary-foreground"
         aria-hidden
       >
         {iniciais(conversa.displayName)}
       </span>
-
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-[13px] font-semibold">
-            {conversa.displayName}
-          </span>
-          {conversa.aiReplied && (
-            <span
-              className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-white/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.06em] text-tinta-muted"
-              title="A IA já respondeu; nenhum humano respondeu depois"
-            >
-              <Bot className="h-2.5 w-2.5" />
-              IA
-            </span>
-          )}
-        </span>
-        <span className="block truncate text-[11.5px] text-tinta-muted">
+        <span className="block truncate text-[13px] font-bold">{conversa.displayName}</span>
+        <span className="block truncate text-[11.5px] text-tinta-muted group-data-[selected=true]:text-primary-foreground/70">
           {conversa.lastClientMessage?.trim() || "Mensagem sem texto"}
         </span>
-        {/* Terceira linha só para admin: de quem é a conversa. */}
-        {mostrarDono && (
-          <DonoDaLinha nome={conversa.ownerName} className="mt-0.5 text-tinta-muted" />
-        )}
       </span>
-
-      <span className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className="text-[11.5px] font-bold tabular-nums text-tinta-foreground">
-          {formatContactTime(conversa.lastClientMessageAt)}
-        </span>
-        {/* A instância é requisito explícito do admin; para o vendedor só a
-            partir de `sm`, porque ele costuma ter uma caixa só. */}
+      {espera && (
         <span
           className={cn(
-            "items-center gap-1 text-[10px] text-tinta-muted",
-            mostrarDono ? "flex" : "hidden sm:flex",
+            "shrink-0 text-[12px] font-bold tabular-nums",
+            espera.longa ? "text-destructive" : "text-tinta-foreground",
+            "group-data-[selected=true]:text-primary-foreground",
           )}
         >
-          <Smartphone className="h-2.5 w-2.5" />
-          <span className="max-w-[110px] truncate">{conversa.instanceName}</span>
+          {espera.texto}
         </span>
-      </span>
+      )}
     </>
+  );
+}
+
+/** O cartão de ouro: quem, há quanto tempo, o que disse, onde está — e agir. */
+function CartaoDoFoco({
+  conversa,
+  mostrarDono,
+}: {
+  conversa: ConversaAguardando & { leadId: string };
+  /** Só a visão da equipe mostra o dono: para o vendedor a fila já é dele. */
+  mostrarDono: boolean;
+}) {
+  const espera = esperaCurta(conversa.lastClientMessageAt);
+  const foco = useFocoDoLead(conversa.leadId);
+  const copilot = useCopilotToggleStatus({ phone: conversa.phoneNumber, leadId: conversa.leadId });
+  const tier = foco.data?.qualificacao
+    ? QUALIFICATION_TIER_CONFIG[foco.data.qualificacao as keyof typeof QUALIFICATION_TIER_CONFIG]
+    : undefined;
+  const carregando = foco.isLoading;
+
+  return (
+    <FocusCard className="order-1 min-h-[340px] gap-4 p-[18px] lg:order-2">
+      {/* (a) espera · cliente · dono */}
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        {espera && (
+          <div className="shrink-0">
+            <p className="text-[11px] font-bold text-primary-foreground/70">Esperando há</p>
+            <p className="text-[2.6rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
+              {espera.valor}
+              <span className="ml-1 text-[0.45em] font-bold tracking-normal">{espera.unidade}</span>
+            </p>
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold text-primary-foreground/70">Cliente</p>
+          <p className="truncate text-[17px] font-extrabold tracking-[-0.02em]">{conversa.displayName}</p>
+          <p className="truncate text-[12px] text-primary-foreground/70">
+            {[foco.data?.empresa, conversa.instanceName].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        {mostrarDono &&
+          (conversa.ownerName ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-primary-foreground/15 text-[11px] font-bold" aria-hidden>
+                {iniciais(conversa.ownerName)}
+              </span>
+              <span className="leading-tight">
+                <span className="block text-[13px] font-bold">{conversa.ownerName}</span>
+                <span className="block text-[11px] text-primary-foreground/70">Responsável</span>
+              </span>
+            </div>
+          ) : (
+            <span className="shrink-0 rounded-full bg-tinta px-2.5 py-1 text-[11px] font-bold text-tinta-foreground">
+              Sem responsável
+            </span>
+          ))}
+      </div>
+
+      {/* (b) o que o cliente disse */}
+      <FocusTile className="p-4">
+        <p className="flex gap-2 text-[16px] font-semibold leading-snug">
+          <MessageCircle className="mt-1 h-4 w-4 shrink-0" aria-hidden />
+          <span>“{conversa.lastClientMessage?.trim() || "Mensagem sem texto"}”</span>
+        </p>
+        <p className="mt-2 text-[11px] font-semibold text-primary-foreground/65">
+          Caixa {conversa.instanceName} · {conversa.aiReplied ? "IA respondeu, nenhum humano depois" : "Aguardando resposta"}
+        </p>
+      </FocusTile>
+
+      {/* (c) onde o lead está — só leitura */}
+      <div className="grid gap-2.5 sm:grid-cols-3">
+        <FocusTile>
+          <p className="truncate text-[15px] font-extrabold">{carregando ? "…" : foco.data?.etapa ?? "Sem negócio aberto"}</p>
+          <p className="truncate text-[11px] text-primary-foreground/65">
+            Etapa{foco.data?.funil ? ` · ${foco.data.funil}` : ""}
+          </p>
+        </FocusTile>
+        <FocusTile>
+          <p className="truncate text-[15px] font-extrabold">{carregando ? "…" : tier?.label ?? "Sem qualificação"}</p>
+          <p className="truncate text-[11px] text-primary-foreground/65">Qualificação</p>
+        </FocusTile>
+        <FocusTile>
+          <p className="truncate text-[15px] font-extrabold">
+            {copilot.isLoading ? "…" : copilot.data?.ai_disabled ? "IA pausada" : "IA ativa"}
+          </p>
+          <p className="truncate text-[11px] text-primary-foreground/65">Copilot</p>
+        </FocusTile>
+      </div>
+
+      {/* (d) agir */}
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-primary-foreground/10 pt-4">
+        <Link
+          to={`/leads?lead=${conversa.leadId}`}
+          className="inline-flex h-9 items-center rounded-full bg-primary-foreground/10 px-4 text-[12.5px] font-bold transition-colors hover:bg-primary-foreground/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/40"
+        >
+          Ver lead
+        </Link>
+        <span className="flex-1" />
+        <AbrirConversaButton
+          leadId={conversa.leadId}
+          phone={conversa.phoneNumber}
+          variant="outline"
+          className="h-11 justify-center rounded-full border-transparent bg-white px-5 text-[13px] font-bold text-neutral-900 shadow-none hover:bg-white/90"
+          aria-label={`Abrir conversa com ${conversa.displayName}`}
+        >
+          Abrir conversa
+          <ArrowRight className="h-4 w-4" />
+        </AbrirConversaButton>
+      </div>
+    </FocusCard>
   );
 }

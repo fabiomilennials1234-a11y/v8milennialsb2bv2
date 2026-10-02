@@ -103,7 +103,7 @@ export function WorkflowFocusCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold text-primary-foreground/70">Workflow em foco · criado {created}</p>
-          <h3 className="mt-1 line-clamp-2 text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em]">
+          <h3 className="mt-1 line-clamp-2 text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em] max-sm:text-[1.3rem]">
             {workflow.name}
           </h3>
           {workflow.description && (
