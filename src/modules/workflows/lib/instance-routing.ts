@@ -195,6 +195,37 @@ export function deadPinShortcut<T extends {
   return chips.length > 0 ? chips : live;
 }
 
+/**
+ * Os provedores que mandam para grupo — nó `send_to_group`. Espelha
+ * `GROUP_PROVIDERS` do backend (só Uazapi). O gêmeo prende os dois.
+ */
+export const GROUP_PROVIDERS = ["uazapi"] as const;
+
+/**
+ * Instância que o painel do `send_to_group` oferece: viva e de provedor com
+ * grupo. O executor faz a mesma conta (`resolvePinnedInstance`: filtro por
+ * provedor + `checkLive`).
+ */
+export function isGroupCapableInstance(inst: {
+  status?: string | null;
+  session_dead_since?: string | null;
+  provider?: string | null;
+}): boolean {
+  return isLive(inst) && (GROUP_PROVIDERS as readonly string[]).includes(String(inst.provider));
+}
+
+/** Formato canônico de JID de grupo (novo e legado). Espelha o backend. */
+const VALID_GROUP_JID = /^\d{5,25}(-\d{5,15})?@g\.us$/;
+
+/**
+ * JID de grupo válido como destino. Cópia de `isValidGroupJid` em
+ * `supabase/functions/_shared/whatsapp-jid.ts` — o front não importa de lá; o
+ * gêmeo `tests/unit/instance-routing-twin.test.ts` prende as duas.
+ */
+export function isValidGroupJid(value: unknown): value is string {
+  return typeof value === "string" && VALID_GROUP_JID.test(value);
+}
+
 function isPolicy(value: unknown): value is InstanceRoutingPolicy {
   return typeof value === "string" && value in POLICY_SPECS;
 }

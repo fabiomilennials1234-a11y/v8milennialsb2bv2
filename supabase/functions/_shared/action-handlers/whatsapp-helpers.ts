@@ -13,6 +13,7 @@ import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import type { ActionResult } from "./types.ts";
 import {
   resolveRoutedInstance,
+  resolvePinnedInstance,
   isInstanceLive,
   type RoutedInstance,
   type RoutingNodeConfig,
@@ -74,6 +75,38 @@ export async function getWhatsAppInstance(
     };
   }
 
+  return {
+    ok: true,
+    instanceId: resolved.instance.id,
+    instanceName: resolved.instance.instance_name,
+    instance: resolved.instance,
+  };
+}
+
+/**
+ * Resolve a Instance NOMEADA no nó e só ela — sem atalho, sem recuo, sem
+ * conversa do lead. Usado por `send_to_group`: o grupo é da instância, então
+ * trocar de número nunca é uma saída aceitável. Ver `resolvePinnedInstance`.
+ *
+ * Mesma forma de `getWhatsAppInstance`; toda falha é não-retentável.
+ */
+export async function getPinnedWhatsAppInstance(
+  supabase: SupabaseClient,
+  organizationId: string,
+  instanceId: string | null | undefined,
+  providers: readonly string[],
+): Promise<InstanceResolution> {
+  const resolved = await resolvePinnedInstance(supabase, {
+    organizationId,
+    instanceId,
+    providers,
+  });
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      failure: { success: false, error: resolved.message, retryable: false },
+    };
+  }
   return {
     ok: true,
     instanceId: resolved.instance.id,

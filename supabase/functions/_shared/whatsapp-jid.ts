@@ -44,6 +44,26 @@ export function isGroupJid(value: unknown): boolean {
 }
 
 /**
+ * Formato canônico de JID de grupo: o novo (`120363…@g.us`) e o legado
+ * (`<criador>-<timestamp>@g.us`). Ancorado nas duas pontas, sem flag `m`.
+ */
+const VALID_GROUP_JID = /^\d{5,25}(-\d{5,15})?@g\.us$/;
+
+/**
+ * É um JID de grupo **válido como destino de envio**? Estrito, ao contrário de
+ * `isGroupJid` (classificação tolerante por substring, usada para descartar
+ * conversa não-individual — lá um falso positivo só esconde ruído).
+ *
+ * Aqui o valor vem do JSON do workflow e viaja INTACTO até o `/send/text` do
+ * provedor: `120363…@g.us.evil`, espaço, quebra de linha ou JID de telefone são
+ * recusados. Espelhado no front (`src/modules/workflows/lib/instance-routing.ts`)
+ * e preso pelo gêmeo `tests/unit/instance-routing-twin.test.ts`.
+ */
+export function isValidGroupJid(value: unknown): value is string {
+  return typeof value === "string" && VALID_GROUP_JID.test(value);
+}
+
+/**
  * Rótulo do motivo, quando o JID não é conversa individual — `undefined` se for
  * individual (ou LID, que tem tratamento próprio: às vezes dá para resolver).
  */
