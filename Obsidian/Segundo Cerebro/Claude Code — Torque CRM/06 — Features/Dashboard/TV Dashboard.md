@@ -1,4 +1,7 @@
 ---
+type: feature
+title: TV Dashboard
+status: active
 tags: [feature, dashboard, tv]
 created: 2026-05-22
 ---
