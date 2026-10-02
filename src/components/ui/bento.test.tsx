@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { DeltaChip, KpiRow, KpiTile } from "./bento";
+import { DeltaChip, FocusCard, InkRow, InkSplit, KpiRow, KpiTile } from "./bento";
 
 describe("DeltaChip", () => {
   it("alta é boa por padrão", () => {
@@ -76,3 +76,33 @@ describe("KpiRow", () => {
     expect(screen.getByText("a").parentElement).toHaveClass("sm:grid-cols-2", "lg:grid-cols-4");
   });
 });
+
+describe("InkSplit", () => {
+  it("lista à esquerda e foco à direita no desktop; foco primeiro no celular", () => {
+    render(
+      <InkSplit
+        title="Aguardando resposta"
+        count={2}
+        list={
+          <>
+            <InkRow selected>Fernanda</InkRow>
+            <InkRow>Carlos</InkRow>
+          </>
+        }
+        detail={<FocusCard>Detalhe da Fernanda</FocusCard>}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Aguardando resposta" })).toBeInTheDocument();
+    const lista = screen.getByRole("button", { name: "Fernanda" }).parentElement!;
+    const foco = screen.getByText("Detalhe da Fernanda").parentElement!;
+    expect(lista).toHaveClass("order-2", "lg:order-1");
+    expect(foco).toHaveClass("order-1", "lg:order-2");
+    expect(lista.parentElement).toHaveClass("lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]");
+  });
+
+  it("a linha selecionada se anuncia como pressionada", () => {
+    render(<InkSplit list={<InkRow selected>Fernanda</InkRow>} detail={null} />);
+    expect(screen.getByRole("button", { name: "Fernanda" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+

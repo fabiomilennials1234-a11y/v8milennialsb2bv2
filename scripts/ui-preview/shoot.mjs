@@ -16,12 +16,19 @@
  *                         client-side navigate — same app, no 3.3 s intro)
  *   --master              include master-only routes (mock must run --master)
  *   --real-clock          do not pin the browser clock to the fixture clock
+ *   --spawn-mock          if the mock is not answering, start it for THIS run
+ *                         only (with --master when given) and stop it at the
+ *                         end — no server left running between rounds
+ *   --spawn-app           same for the Vite app (start-vite.mjs)
  *
- * Starts nothing: run the mock and vite first (see README.md).
+ * Vite must already be running (see README.md). The mock too, unless
+ * --spawn-mock.
  * Output: <out>/<theme>-<width>/<route>.png + <out>/report.json
  */
+import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { launchBrowser, prepareContext } from "./browser-session.mjs";
 import { ROUTES } from "./routes.mjs";
 import { APP_URL, MOCK_URL } from "./lib/session.mjs";
@@ -43,6 +50,8 @@ const FULL_PAGE = has("--full-page");
 const DIRECT = has("--direct");
 const MASTER = has("--master");
 const REAL_CLOCK = has("--real-clock");
+const SPAWN_MOCK = has("--spawn-mock");
+const SPAWN_APP = has("--spawn-app");
 
 const HEIGHT = { 1440: 900, 390: 844 };
 const INTRO_MS = 3500; // TorqueIntro plays once per full page load (3.25 s)
@@ -59,15 +68,56 @@ async function health() {
   }
 }
 
-const mock = await health();
+/**
+ * Mock efêmero: sobe só para esta rodada e cai no fim. Se outra rodada subiu
+ * um mock ao mesmo tempo, a porta já está ocupada — o nosso morre com
+ * EADDRINUSE e reaproveitamos o dela (o poll de saúde abaixo resolve os dois).
+ */
+let ownMock = null;
+async function ensureMock() {
+  let h = await health();
+  if (h || !SPAWN_MOCK) return h;
+  const script = join(dirname(fileURLToPath(import.meta.url)), "mock-supabase.mjs");
+  ownMock = spawn(process.execPath, [script, ...(MASTER ? ["--master"] : [])], { stdio: "ignore" });
+  for (let i = 0; i < 60 && !h; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    h = await health();
+  }
+  return h;
+}
+let ownApp = null;
+async function appUp() {
+  try {
+    await fetch(APP_URL);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function ensureApp() {
+  let up = await appUp();
+  if (up || !SPAWN_APP) return up;
+  const script = join(dirname(fileURLToPath(import.meta.url)), "start-vite.mjs");
+  ownApp = spawn(process.execPath, [script], { stdio: "ignore" });
+  for (let i = 0; i < 120 && !up; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    up = await appUp();
+  }
+  return up;
+}
+const stopOwnMock = () => {
+  if (ownMock && ownMock.exitCode === null) ownMock.kill("SIGTERM");
+  if (ownApp && ownApp.exitCode === null) ownApp.kill("SIGTERM");
+};
+process.on("exit", stopOwnMock);
+
+const mock = await ensureMock();
 if (!mock) {
-  console.error(`✖ mock not reachable at ${MOCK_URL} — run: node scripts/ui-preview/mock-supabase.mjs`);
+  console.error(`✖ mock not reachable at ${MOCK_URL} — run: node scripts/ui-preview/mock-supabase.mjs (or pass --spawn-mock)`);
   process.exit(1);
 }
-try {
-  await fetch(APP_URL);
-} catch {
-  console.error(`✖ app not reachable at ${APP_URL} — run: node scripts/ui-preview/start-vite.mjs`);
+if (!(await ensureApp())) {
+  console.error(`✖ app not reachable at ${APP_URL} — run: node scripts/ui-preview/start-vite.mjs (or pass --spawn-app)`);
   process.exit(1);
 }
 if (MASTER && !mock.master) console.warn("⚠ --master given but the mock runs without --master; master routes will redirect.");
@@ -241,6 +291,8 @@ for (const theme of themes) {
 }
 
 await browser.close();
+// O filho segura o event loop: sem isto o processo nunca termina.
+stopOwnMock();
 report.finishedAt = new Date().toISOString();
 writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
 const bad = report.results.filter((r) => r.error || r.errorBoundary || r.envMissing || r.login || r.pageErrors?.length);

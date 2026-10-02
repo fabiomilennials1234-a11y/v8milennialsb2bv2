@@ -49,6 +49,8 @@ Each shot takes 3 to 4 seconds, so a full run (50 routes × 4 variants) takes ab
 | `--master` | include `/master/*` and `/insights` (start the mock with `--master`) |
 | `--direct` | load each route by URL and wait out the 3.3 s intro animation (see below) |
 | `--real-clock` | do not shift the browser `Date` to the fixture clock |
+| `--spawn-mock` | sobe o mock só para esta rodada (com `--master` se dado) e derruba no fim — nada fica de pé entre rodadas |
+| `--spawn-app` | idem para o Vite (`start-vite.mjs`) |
 
 Example of a fast iteration on one screen:
 

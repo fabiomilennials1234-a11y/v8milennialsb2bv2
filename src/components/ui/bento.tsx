@@ -169,6 +169,45 @@ interface InkRowProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
 }
 
+/**
+ * O herói "fila + foco" do V5: painel de tinta com a lista à esquerda (340 px)
+ * e o cartão de ouro do item selecionado à direita. É a composição que o
+ * mockup repete em quase toda tela (Comando, Disparos, Automações, Copilot,
+ * Carteira, Comissões…) — uma só implementação para todas.
+ *
+ * No celular o foco vem primeiro e a lista embaixo: quem abre a tela quer o
+ * item da vez, não a fila.
+ */
+export function InkSplit({
+  title,
+  count,
+  actions,
+  list,
+  detail,
+  className,
+  listClassName,
+}: {
+  title?: React.ReactNode;
+  count?: React.ReactNode;
+  actions?: React.ReactNode;
+  /** Linhas — normalmente `<InkRow>`. */
+  list: React.ReactNode;
+  /** Normalmente `<FocusCard>`; `null` quando não há item selecionado. */
+  detail: React.ReactNode;
+  className?: string;
+  /** Ex.: altura máxima com rolagem própria para filas longas. */
+  listClassName?: string;
+}) {
+  return (
+    <InkPanel title={title} count={count} actions={actions} className={className}>
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div className={cn("order-2 flex min-w-0 flex-col gap-0.5 lg:order-1", listClassName)}>{list}</div>
+        <div className="order-1 min-w-0 lg:order-2">{detail}</div>
+      </div>
+    </InkPanel>
+  );
+}
+
 export const InkRow = React.forwardRef<HTMLButtonElement, InkRowProps>(
   ({ selected = false, className, type = "button", ...props }, ref) => (
     <button

@@ -49,6 +49,9 @@ degrau acima do cartão para continuarem lidas como objeto.
 - `KpiRow cols={2|3|4|5}` — **toda** fileira de `KpiTile`. Grade no desktop; no celular vira carrossel com snap
   (empilhados, três ou quatro cartões ocupavam a tela inteira antes do conteúdo).
 - `InkPanel` + `InkRow` — **um** painel-herói em tinta por tela, para o que pede ação agora. A linha selecionada vira ouro.
+- `InkSplit` — a composição "fila + foco" do mockup: lista de 340 px em tinta à esquerda, `FocusCard` do item
+  selecionado à direita (no celular o foco vem antes). Use-o em vez de montar a grade à mão.
+- `IconChip` — o quadradinho tintado com ícone (título de diálogo, cabeçalho de seção, KpiTile).
 - `FocusCard` + `FocusTile` — o cartão de ouro (detalhe do foco) e seus sub-blocos translúcidos.
 - `DeltaChip`, `ValueUnit` — variação e unidade/centavos pequenos.
 
