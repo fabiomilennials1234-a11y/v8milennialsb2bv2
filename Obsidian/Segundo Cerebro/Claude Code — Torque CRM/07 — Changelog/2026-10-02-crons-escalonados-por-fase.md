@@ -1,3 +1,14 @@
+---
+type: changelog
+title: Crons de prod escalonados por fase (anti-rajada)
+status: active
+created: 2026-10-02
+updated: 2026-10-02
+tags: [changelog, infra, pg-cron, incidente]
+related: []
+owner: claude-agent
+---
+
 # 2026-10-02 — Crons de prod escalonados por fase (anti-rajada)
 
 ## Mudanças
