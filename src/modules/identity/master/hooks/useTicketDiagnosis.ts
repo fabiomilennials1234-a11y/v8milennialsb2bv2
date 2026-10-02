@@ -13,6 +13,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useMasterAuth } from "./useMasterAuth";
 import {
   parseUsd,
+  type CauseConfirmation,
   type DiagnosisDraft,
   type ExecutionOutcome,
 } from "../lib/ticket-diagnosis";
@@ -68,6 +69,9 @@ export function useSaveTicketDiagnosis() {
             executed_at: null,
             execution_outcome: null,
             actual_cost_usd: null,
+            root_cause_confirmed: null,
+            extra_commits: null,
+            reply_contradicted: null,
           },
           { onConflict: "ticket_id" },
         )
@@ -82,8 +86,16 @@ export function useSaveTicketDiagnosis() {
   });
 }
 
+/** O que a execução revelou sobre o diagnóstico. */
+export interface ExecutionPrecision {
+  rootCauseConfirmed: CauseConfirmation;
+  extraCommits: number;
+  replyContradicted: boolean;
+}
+
 /**
- * O fecho do ciclo. `null` em `outcome` reabre (desfaz o registro). Sem
+ * O fecho do ciclo. `null` em `outcome` reabre (desfaz o registro, precisão
+ * junto — o CHECK do banco recusa precisão sem execução). Sem
  * `.select().single()` um UPDATE que não casa linha voltaria 200 calado.
  */
 export function useRecordDiagnosisExecution() {
@@ -94,10 +106,12 @@ export function useRecordDiagnosisExecution() {
       ticketId,
       outcome,
       actualCostUsd,
+      precision,
     }: {
       ticketId: string;
       outcome: ExecutionOutcome | null;
       actualCostUsd: number | null;
+      precision: ExecutionPrecision | null;
     }) => {
       const { data, error } = await supabase
         .from("support_ticket_diagnoses")
@@ -107,8 +121,18 @@ export function useRecordDiagnosisExecution() {
                 executed_at: new Date().toISOString(),
                 execution_outcome: outcome,
                 actual_cost_usd: actualCostUsd,
+                root_cause_confirmed: precision?.rootCauseConfirmed ?? null,
+                extra_commits: precision?.extraCommits ?? null,
+                reply_contradicted: precision?.replyContradicted ?? null,
               }
-            : { executed_at: null, execution_outcome: null, actual_cost_usd: null },
+            : {
+                executed_at: null,
+                execution_outcome: null,
+                actual_cost_usd: null,
+                root_cause_confirmed: null,
+                extra_commits: null,
+                reply_contradicted: null,
+              },
         )
         .eq("ticket_id", ticketId)
         .select()

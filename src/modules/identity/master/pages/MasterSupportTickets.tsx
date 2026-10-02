@@ -613,6 +613,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
         {/* Etapa 4 do processo de fix: responder o cliente e executar o prompt. */}
         <TicketDiagnosisPanel
           ticketId={ticket.id}
+          comments={comments}
           onUseReply={(text) => {
             setIsInternal(false);
             setBody(text);

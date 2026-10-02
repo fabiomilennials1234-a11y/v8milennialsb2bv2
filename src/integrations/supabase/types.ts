@@ -15998,12 +15998,15 @@ export type Database = {
           estimated_cost_usd: number | null
           executed_at: string | null
           execution_outcome: string | null
+          extra_commits: number | null
           keystones: Json
           kind: string
           recommended_effort: string
           recommended_model: string
+          reply_contradicted: boolean | null
           resolution_prompt: string
           root_cause: string | null
+          root_cause_confirmed: string | null
           source: string
           summary: string
           template_version: number
@@ -16019,12 +16022,15 @@ export type Database = {
           estimated_cost_usd?: number | null
           executed_at?: string | null
           execution_outcome?: string | null
+          extra_commits?: number | null
           keystones: Json
           kind: string
           recommended_effort: string
           recommended_model: string
+          reply_contradicted?: boolean | null
           resolution_prompt: string
           root_cause?: string | null
+          root_cause_confirmed?: string | null
           source?: string
           summary: string
           template_version?: number
@@ -16040,12 +16046,15 @@ export type Database = {
           estimated_cost_usd?: number | null
           executed_at?: string | null
           execution_outcome?: string | null
+          extra_commits?: number | null
           keystones?: Json
           kind?: string
           recommended_effort?: string
           recommended_model?: string
+          reply_contradicted?: boolean | null
           resolution_prompt?: string
           root_cause?: string | null
+          root_cause_confirmed?: string | null
           source?: string
           summary?: string
           template_version?: number
