@@ -1,0 +1,431 @@
+{
+  "_source": "prod jsjsmuncfkbsbzqzqhfq, cron.job lido 2026-10-02 ~15:20 UTC (71 jobs, todos active). avgSeconds = média de cron.job_run_details nas 6 h anteriores (diários: última execução). Snapshot congelado para o teste de contrato do reescalonamento; não é fonte da verdade do cron de prod.",
+  "jobs": [
+    {
+      "jobid": 2,
+      "jobname": "process-outbound-dispatches",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.74
+    },
+    {
+      "jobid": 3,
+      "jobname": "process-copilot-followups",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.79
+    },
+    {
+      "jobid": 4,
+      "jobname": "process-followup-automations",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.78
+    },
+    {
+      "jobid": 6,
+      "jobname": "purge-deleted-whatsapp-conversations",
+      "schedule": "0 3 * * *",
+      "avgSeconds": 0.2
+    },
+    {
+      "jobid": 11,
+      "jobname": "cleanup_usage_events_180d",
+      "schedule": "0 4 * * *",
+      "avgSeconds": 1.41
+    },
+    {
+      "jobid": 13,
+      "jobname": "cleanup-automation-jobs",
+      "schedule": "0 2 * * *",
+      "avgSeconds": 2.21
+    },
+    {
+      "jobid": 14,
+      "jobname": "retry-dead-letter-jobs",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.65
+    },
+    {
+      "jobid": 23,
+      "jobname": "refresh-meta-tokens",
+      "schedule": "0 2 * * *",
+      "avgSeconds": 0.11
+    },
+    {
+      "jobid": 39,
+      "jobname": "cron-health-monitor",
+      "schedule": "2-59/5 * * * *",
+      "avgSeconds": 3.02
+    },
+    {
+      "jobid": 40,
+      "jobname": "pgnet_response_cleanup",
+      "schedule": "0 3 * * *",
+      "avgSeconds": 0.01
+    },
+    {
+      "jobid": 41,
+      "jobname": "cron_health_check",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.82
+    },
+    {
+      "jobid": 45,
+      "jobname": "mass-send-status-poll",
+      "schedule": "*/2 * * * *",
+      "avgSeconds": 0.73
+    },
+    {
+      "jobid": 47,
+      "jobname": "whatsapp_dlq_replay",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.7
+    },
+    {
+      "jobid": 48,
+      "jobname": "whatsapp_session_watchdog",
+      "schedule": "*/10 * * * *",
+      "avgSeconds": 0.42
+    },
+    {
+      "jobid": 49,
+      "jobname": "whatsapp_health_monitor",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.73
+    },
+    {
+      "jobid": 51,
+      "jobname": "whatsapp_media_retry",
+      "schedule": "*/2 * * * *",
+      "avgSeconds": 0.7
+    },
+    {
+      "jobid": 52,
+      "jobname": "cleanup-copilot-batching",
+      "schedule": "0 3 * * *",
+      "avgSeconds": 0.11
+    },
+    {
+      "jobid": 54,
+      "jobname": "copilot_v2_worker",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.35
+    },
+    {
+      "jobid": 55,
+      "jobname": "blast-plan-release",
+      "schedule": "5 12 * * *",
+      "avgSeconds": 0.05
+    },
+    {
+      "jobid": 56,
+      "jobname": "followup-reclassify",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.75
+    },
+    {
+      "jobid": 58,
+      "jobname": "process-ai-actions",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.53
+    },
+    {
+      "jobid": 59,
+      "jobname": "process-workflow-executions",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.5
+    },
+    {
+      "jobid": 60,
+      "jobname": "workflow-cron-triggers",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.47
+    },
+    {
+      "jobid": 61,
+      "jobname": "campaign-rule-dispatch",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.52
+    },
+    {
+      "jobid": 62,
+      "jobname": "pipe-rule-dispatch",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.43
+    },
+    {
+      "jobid": 63,
+      "jobname": "process-scheduled-user-messages",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.53
+    },
+    {
+      "jobid": 64,
+      "jobname": "history-sync-worker",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.53
+    },
+    {
+      "jobid": 65,
+      "jobname": "calculate-portfolio-health",
+      "schedule": "21-59/30 * * * *",
+      "avgSeconds": 0.06
+    },
+    {
+      "jobid": 66,
+      "jobname": "process-followup-situations",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.66
+    },
+    {
+      "jobid": 67,
+      "jobname": "cron-job-run-details-retention",
+      "schedule": "17 3 * * *",
+      "avgSeconds": 0.2
+    },
+    {
+      "jobid": 73,
+      "jobname": "agent-decision-logs-retention",
+      "schedule": "23 3 * * *",
+      "avgSeconds": 0.44
+    },
+    {
+      "jobid": 75,
+      "jobname": "raw-payload-retention",
+      "schedule": "33 3 * * *",
+      "avgSeconds": 27.43
+    },
+    {
+      "jobid": 77,
+      "jobname": "whatsapp-dlq-retention",
+      "schedule": "43 3 * * *",
+      "avgSeconds": 0.03
+    },
+    {
+      "jobid": 78,
+      "jobname": "purge-deleted-leads-log",
+      "schedule": "17 3 * * *",
+      "avgSeconds": 0.03
+    },
+    {
+      "jobid": 80,
+      "jobname": "meta-leadgen-poll",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.69
+    },
+    {
+      "jobid": 81,
+      "jobname": "meta-conversion-dispatch",
+      "schedule": "*/10 * * * *",
+      "avgSeconds": 0.35
+    },
+    {
+      "jobid": 82,
+      "jobname": "cleanup-audit-log-14d",
+      "schedule": "6-59/10 * * * *",
+      "avgSeconds": 0.24
+    },
+    {
+      "jobid": 83,
+      "jobname": "cleanup-wa-health-checks-7d",
+      "schedule": "4-59/10 * * * *",
+      "avgSeconds": 0.85
+    },
+    {
+      "jobid": 84,
+      "jobname": "cleanup-wa-media-jobs-14d",
+      "schedule": "13-59/15 * * * *",
+      "avgSeconds": 0.34
+    },
+    {
+      "jobid": 85,
+      "jobname": "copilot-queue-sweep",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.54
+    },
+    {
+      "jobid": 87,
+      "jobname": "tinyerp-pull-orders-basic4u",
+      "schedule": "*/15 * * * *",
+      "avgSeconds": 0.03
+    },
+    {
+      "jobid": 90,
+      "jobname": "purge-runtime-logs",
+      "schedule": "9-59/10 * * * *",
+      "avgSeconds": 4.86
+    },
+    {
+      "jobid": 91,
+      "jobname": "whatsapp_media_retention",
+      "schedule": "0 4 * * *",
+      "avgSeconds": 0.03
+    },
+    {
+      "jobid": 92,
+      "jobname": "close-resolved-support-tickets",
+      "schedule": "20 4 * * *",
+      "avgSeconds": 0.12
+    },
+    {
+      "jobid": 93,
+      "jobname": "omie-sync-dispatch",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.54
+    },
+    {
+      "jobid": 94,
+      "jobname": "send-dedup-log-cleanup",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.64
+    },
+    {
+      "jobid": 96,
+      "jobname": "voip-sweep-stuck-calls",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.43
+    },
+    {
+      "jobid": 99,
+      "jobname": "history-sync-budget-cleanup",
+      "schedule": "3-59/15 * * * *",
+      "avgSeconds": 0.04
+    },
+    {
+      "jobid": 100,
+      "jobname": "infra-watchdog",
+      "schedule": "*/2 * * * *",
+      "avgSeconds": 0.63
+    },
+    {
+      "jobid": 101,
+      "jobname": "whatsapp_instance_reaper",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.74
+    },
+    {
+      "jobid": 106,
+      "jobname": "purge-copilot-midia-logs",
+      "schedule": "8-59/15 * * * *",
+      "avgSeconds": 0.11
+    },
+    {
+      "jobid": 107,
+      "jobname": "billing-provision-worker",
+      "schedule": "*/2 * * * *",
+      "avgSeconds": 0.69
+    },
+    {
+      "jobid": 109,
+      "jobname": "notificame-subscription-repair",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.77
+    },
+    {
+      "jobid": 139,
+      "jobname": "voip-reap-authorized",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.53
+    },
+    {
+      "jobid": 140,
+      "jobname": "voip-webhook-events-cleanup",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.65
+    },
+    {
+      "jobid": 141,
+      "jobname": "torquecalls-recording-maintenance",
+      "schedule": "3-59/5 * * * *",
+      "avgSeconds": 0.08
+    },
+    {
+      "jobid": 142,
+      "jobname": "inv5-public-tables-readable-by-anon",
+      "schedule": "17 4 * * *",
+      "avgSeconds": 0.02
+    },
+    {
+      "jobid": 143,
+      "jobname": "toth-sync-clientes",
+      "schedule": "0 * * * *",
+      "avgSeconds": 0.07
+    },
+    {
+      "jobid": 144,
+      "jobname": "toth-sync-cobrancas",
+      "schedule": "15 */2 * * *",
+      "avgSeconds": 0.27
+    },
+    {
+      "jobid": 146,
+      "jobname": "process-blast-recipients",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.52
+    },
+    {
+      "jobid": 151,
+      "jobname": "avisos-varredura-followups",
+      "schedule": "0 10 * * *",
+      "avgSeconds": 2.22
+    },
+    {
+      "jobid": 152,
+      "jobname": "avisos-varredura-reuniao-proxima",
+      "schedule": "*/15 * * * *",
+      "avgSeconds": 2.35
+    },
+    {
+      "jobid": 153,
+      "jobname": "send-push",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.53
+    },
+    {
+      "jobid": 154,
+      "jobname": "avisos-limpeza-semanal",
+      "schedule": "0 7 * * 0",
+      "avgSeconds": null
+    },
+    {
+      "jobid": 155,
+      "jobname": "summarize-conversations-batch",
+      "schedule": "7-59/10 * * * *",
+      "avgSeconds": 0.16
+    },
+    {
+      "jobid": 156,
+      "jobname": "oraculo-feedback-alerts",
+      "schedule": "* * * * *",
+      "avgSeconds": 0.54
+    },
+    {
+      "jobid": 157,
+      "jobname": "oraculo-feedback-weekly",
+      "schedule": "0 12 * * *",
+      "avgSeconds": 0.7
+    },
+    {
+      "jobid": 158,
+      "jobname": "oraculo-benchmark-weekly",
+      "schedule": "15 13 * * 1",
+      "avgSeconds": null
+    },
+    {
+      "jobid": 159,
+      "jobname": "oraculo-admin-briefing",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 1.3
+    },
+    {
+      "jobid": 160,
+      "jobname": "oraculo-admin-briefing-shrinkage",
+      "schedule": "7,22,37,52 * * * *",
+      "avgSeconds": 0.25
+    },
+    {
+      "jobid": 161,
+      "jobname": "oraculo-member-briefing",
+      "schedule": "*/5 * * * *",
+      "avgSeconds": 0.74
+    }
+  ]
+}
