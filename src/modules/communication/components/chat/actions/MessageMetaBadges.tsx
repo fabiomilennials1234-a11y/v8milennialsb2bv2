@@ -64,7 +64,7 @@ export function MessageMetaBadges({
     <div className={cn("flex flex-wrap items-center gap-2 mt-1", className)}>
       {pinnedAt && (
         <span
-          className="inline-flex items-center gap-0.5 text-[10px] text-primary/70"
+          className="inline-flex items-center gap-0.5 text-[10px] opacity-70"
           aria-label="Mensagem fixada"
         >
           <Pin className="h-3 w-3 fill-current" />

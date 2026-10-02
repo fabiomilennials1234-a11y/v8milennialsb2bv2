@@ -180,8 +180,8 @@ export function LeadCreateForm({
     <div className="space-y-4 py-4 overflow-y-auto px-6">
       {/* Header */}
       <div className="text-center pb-4">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-          <Plus className="w-8 h-8 text-primary" />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-soft flex items-center justify-center">
+          <Plus className="w-8 h-8 text-primary-soft-foreground" />
         </div>
         <h3 className="font-semibold text-lg">Criar Novo Lead</h3>
         <p className="text-sm text-muted-foreground">

@@ -192,7 +192,7 @@ export function CustomFieldsManager() {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          className="border border-primary/20 rounded-lg p-4 bg-primary/5"
+          className="rounded-2xl border border-primary/25 bg-primary-soft/50 p-4"
         >
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-medium text-sm">Novo Campo</h4>

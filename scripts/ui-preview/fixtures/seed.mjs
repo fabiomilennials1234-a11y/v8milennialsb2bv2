@@ -757,7 +757,7 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
       reorder_cycle_days: int(25, 60),
       next_order_expected: ahead(int(-10, 30) * D),
       health_score: Math.max(5, 100 - daysSince),
-      health_status: daysSince < 30 ? "healthy" : daysSince < 70 ? "at_risk" : "critical",
+      health_status: daysSince < 30 ? "saudavel" : daysSince < 70 ? "atencao" : "risco",
       health_updated_at: ago(D),
       trend: pick(["up", "stable", "down"]),
       churn_probability: Math.round(Math.min(95, (daysSince / 130) * 100)), // percent
@@ -1164,9 +1164,9 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
   ];
   const competition_participants = team_members.slice(1).map((m, i) => ({ id: id("misc", 9710 + i), competition_id: competitionId, team_member_id: m.id, created_at: ago(D) }));
   const competition_prizes = [
-    [1, "Viagem para Gramado", "2 diárias com acompanhante", 4000, "trophy"],
-    [2, "iPad", "iPad 10ª geração", 3500, "medal"],
-    [3, "Vale-experiência", "Voucher de R$ 800", 800, "gift"],
+    [1, "Viagem para Gramado", "2 diárias com acompanhante", 4000, "🏆"],
+    [2, "iPad", "iPad 10ª geração", 3500, "🥈"],
+    [3, "Vale-experiência", "Voucher de R$ 800", 800, "🎁"],
   ].map(([position, prize_name, prize_description, prize_value, prize_icon], i) => ({
     id: id("misc", 9730 + i),
     competition_id: competitionId,

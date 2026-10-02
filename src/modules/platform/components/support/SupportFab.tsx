@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Headset } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DockItem, DockOrder } from "@/modules/platform/components/dock/FloatingDock";
@@ -16,6 +17,7 @@ import { useSupportPanel } from "./SupportPanelContext";
  *
  * Recolhe enquanto o usuário lê: ao rolar para baixo em qualquer área de
  * rolagem grande, desliza para a borda direita e deixa só uma aba de 12px.
+ * Em telas com compositor no canto (chat, prévia do Copilot) já nasce aba.
  * Volta ao rolar para cima, ao chegar no topo, no hover e no foco do teclado.
  * Nunca recolhe com o painel aberto nem com resposta não lida — aí ele é o
  * aviso, e aviso escondido não avisa.
@@ -25,6 +27,19 @@ import { useSupportPanel } from "./SupportPanelContext";
  * resposta não lida do suporte. A fonte de `attention` é
  * `useSupportUnread().total > 0` (ADR-0018).
  */
+
+/**
+ * Telas com compositor ou ação primária presa no canto inferior direito (enviar
+ * do chat, enviar da prévia do Copilot, editor de automação). Lá não há rolagem
+ * de página para recolher a pílula, então ela já nasce recolhida em aba.
+ */
+const COMPOSITOR_NO_CANTO = [
+  /^\/chat(\/|$)/,
+  /^\/chat-whatsapp/,
+  /^\/atendimento(\/|$)/,
+  /^\/copilot\/(novo|[^/]+\/editar)$/,
+  /^\/automacoes\/[^/]+$/,
+];
 
 /** Rolagem menor que isto não decide nada — tremor de trackpad. */
 const LIMIAR_PX = 6;
@@ -62,7 +77,9 @@ export function SupportFab() {
   const { total } = useSupportUnread();
   const attention = total > 0;
   const rolando = useRecolheAoRolar();
-  const recolhido = rolando && !isOpen && !attention;
+  const { pathname } = useLocation();
+  const ancorado = COMPOSITOR_NO_CANTO.some((re) => re.test(pathname));
+  const recolhido = (rolando || ancorado) && !isOpen && !attention;
 
   return (
     <DockItem order={DockOrder.support}>

@@ -219,7 +219,7 @@ export function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStand
 
   return (
     <span
-      className="inline-flex w-fit items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[12.5px] font-semibold text-primary"
+      className="inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary-soft px-2 py-0.5 text-[12.5px] font-semibold text-primary-soft-foreground"
       title={
         porCadastroErp
           ? "Cadastrado no ERP"

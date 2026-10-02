@@ -50,8 +50,10 @@ export function FunnelIdentityDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Palette className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+              <Palette className="h-4 w-4" />
+            </span>
             Renomear funil
           </DialogTitle>
           <DialogDescription>

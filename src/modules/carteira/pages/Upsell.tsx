@@ -145,16 +145,13 @@ export default function Upsell() {
         <PageHeader
           title="Carteira de Clientes"
           subtitle={kpiSubtitle}
+          secondaryActions={[
+            { label: "Disparo", icon: Send, iconClassName: "text-primary-soft-foreground", onSelect: () => setDisparoOpen(true) },
+            { label: "Importar planilha", icon: Upload, onSelect: () => setImportOpen(true) },
+          ]}
+          secondaryActionsLabel="Mais ações da carteira"
           actions={
             <>
-              <Button onClick={() => setDisparoOpen(true)} variant="outline">
-                <Send className="text-primary-soft-foreground" />
-                Disparo
-              </Button>
-              <Button onClick={() => setImportOpen(true)} variant="outline">
-                <Upload />
-                Importar planilha
-              </Button>
               <Button
                 onClick={() => {
                   setQuickOrderClientId(null);
@@ -389,12 +386,10 @@ export default function Upsell() {
       <PageHeader
         title="Carteira de Clientes Ativos"
         subtitle="Gerencie sua carteira de clientes e classifique por perfil"
+        secondaryActions={[{ label: "Importar planilha", icon: Upload, onSelect: () => setImportOpen(true) }]}
+        secondaryActionsLabel="Mais ações da carteira"
         actions={
           <>
-            <Button onClick={() => setImportOpen(true)} variant="outline">
-              <Upload />
-              Importar planilha
-            </Button>
             <Button onClick={() => setNovaVendaOpen(true)} variant="ink">
               <ShoppingCart />
               Nova venda

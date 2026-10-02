@@ -67,7 +67,13 @@ const allNavItems: NavItem[] = [
   { label: "Meta — Ativos", icon: Megaphone, path: "/master/meta-assets", permission: "features" },
 ];
 
-export function MasterSidebar() {
+interface MasterSidebarProps {
+  className?: string;
+  /** Chamado depois de navegar — a gaveta do celular fecha sozinha. */
+  onNavigate?: () => void;
+}
+
+export function MasterSidebar({ className, onNavigate }: MasterSidebarProps = {}) {
   const navigate = useNavigate();
   const { masterUser, permissions, isOutbounder } = useMasterAuth();
 
@@ -91,7 +97,10 @@ export function MasterSidebar() {
     <motion.aside
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      className="m-3 mr-0 flex h-[calc(100vh-1.5rem)] w-64 shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta"
+      className={cn(
+        "m-3 mr-0 flex h-[calc(100vh-1.5rem)] w-64 shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta",
+        className,
+      )}
     >
       {/* Header */}
       <div className="border-b border-sidebar-border px-4 pb-4 pt-5">
@@ -122,6 +131,7 @@ export function MasterSidebar() {
             key={item.path}
             to={item.path}
             end={item.path === "/master"}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(
                 "group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-colors",

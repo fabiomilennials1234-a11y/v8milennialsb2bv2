@@ -95,7 +95,7 @@ export function SlashCommandPopover({
           onClick={() => onSelect(template)}
         >
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-primary">
+            <span className="font-mono text-sm font-semibold text-primary-soft-foreground">
               /{template.command}
             </span>
             <span className="text-sm text-muted-foreground">

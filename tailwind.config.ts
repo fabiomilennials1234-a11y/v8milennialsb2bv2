@@ -51,6 +51,8 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+          // Par legível do vermelho para texto/ícone (ver `textColor` abaixo).
+          strong: "hsl(var(--destructive-strong))",
         },
         success: {
           DEFAULT: "hsl(var(--success))",
@@ -178,6 +180,15 @@ export default {
         'afundado-raso': 'var(--afundado-raso)',
         'relevo-tinta': 'var(--relevo-tinta)',
         'brilho-ouro': 'var(--brilho-ouro)',
+      },
+      // `text-destructive` resolve para o par forte. O vermelho de
+      // preenchimento (`--destructive`) dá ~3,8:1 sobre o cartão claro e
+      // ~3,6:1 no escuro — reprova AA em texto pequeno, e são 677 usos em
+      // texto. `bg-`/`border-`/`ring-destructive` seguem no preenchimento.
+      textColor: {
+        destructive: {
+          DEFAULT: "hsl(var(--destructive-strong))",
+        },
       },
       // Curvas com nome. `ease-[cubic-bezier(...)]` NÃO funciona aqui: o
       // tailwindcss-animate também aceita valor arbitrário em `ease-*`, a classe

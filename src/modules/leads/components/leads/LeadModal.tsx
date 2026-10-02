@@ -465,28 +465,30 @@ export function LeadModal({
         </DialogHeader>
 
         <Tabs defaultValue="dados" className="w-full">
-          <div className="px-6">
-            <TabsList className={cn("grid w-full", isEditing ? "grid-cols-2" : "grid-cols-1")}>
-              <TabsTrigger value="dados">Dados</TabsTrigger>
-              {isEditing && (
+          {/* Criar tem uma aba só: sem lista — uma aba solitária com sublinhado
+              de ouro lia como enfeite, não como navegação. */}
+          {isEditing && (
+            <div className="px-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="dados">Dados</TabsTrigger>
                 <TabsTrigger value="history" className="gap-1">
                   <History className="w-3 h-3" />
                   Histórico
                 </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
+              </TabsList>
+            </div>
+          )}
 
           <TabsContent value="dados" className="m-0">
             <ScrollArea className="h-[calc(90vh-200px)] max-h-[500px]">
-              <div className="flex gap-6 px-6 py-4">
+              <div className="flex flex-col gap-6 px-6 py-4 sm:flex-row">
                 {/* Coluna Esquerda - 70% */}
                 <div className="flex-1 min-w-0 space-y-6">
 
                   {/* CONTATO */}
                   <div>
                     <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Contato</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="grid gap-1.5">
                         <Label htmlFor="name" className="text-xs">Nome *</Label>
                         <Input
@@ -543,7 +545,7 @@ export function LeadModal({
                   {customFields.length > 0 && (
                     <div>
                       <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Campos Personalizados</h3>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {customFields.map((field) => {
                           const value = customValues[field.id] || "";
                           const FieldIcon = {
@@ -620,7 +622,7 @@ export function LeadModal({
                   {showPipeSelector && (
                     <div>
                       <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Funil</h3>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="grid gap-1.5">
                           <Label className="text-xs">Adicionar ao Funil</Label>
                           <Select
@@ -659,7 +661,7 @@ export function LeadModal({
                   {/* DETALHES */}
                   <div>
                     <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Detalhes</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="grid gap-1.5">
                         <Label htmlFor="origin" className="text-xs">Origem</Label>
                         <Select
@@ -722,7 +724,7 @@ export function LeadModal({
                       </div>
 
                       {/* Indicacao para adicionar novos campos */}
-                      <div className="col-span-2 flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                      <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground sm:col-span-2">
                         <Plus className="w-3 h-3" />
                         <span>Gerencie campos em Configurações do Funil</span>
                       </div>
@@ -766,7 +768,7 @@ export function LeadModal({
                 </div>
 
                 {/* Coluna Direita - Sidebar de acoes (30%) */}
-                <div className="w-[200px] shrink-0 space-y-2">
+                <div className="w-full shrink-0 space-y-2 sm:w-[200px]">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Ações</p>
 
                   {/* Responsaveis */}

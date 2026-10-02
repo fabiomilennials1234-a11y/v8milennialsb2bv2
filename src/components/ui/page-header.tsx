@@ -1,7 +1,14 @@
 import * as React from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,13 +22,30 @@ import { cn } from "@/lib/utils";
  * `back` liga o botão redondo de voltar. `true` volta no histórico; uma string
  * navega para aquela rota (telas de detalhe têm um "pai" certo, o histórico
  * pode ter vindo de qualquer lugar).
+ *
+ * `secondaryActions` são as ações de apoio (importar, exportar, histórico):
+ * pílulas brancas a partir de `sm`, um menu `⋯` no celular — em pílula, três
+ * ou quatro delas ocupavam duas linhas antes do conteúdo. `actions` fica para
+ * o que é sempre visível (o primário em ouro, no máximo um `ink`).
  */
+export interface PageHeaderAction {
+  label: string;
+  icon?: LucideIcon;
+  onSelect: () => void;
+  disabled?: boolean;
+  /** Tinta do ícone (ex.: o envio da Carteira em ouro suave). */
+  iconClassName?: string;
+}
+
 interface PageHeaderProps extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   /** Rótulo pequeno acima do título (ex.: nome do funil, "Pitstop"). */
   eyebrow?: React.ReactNode;
   actions?: React.ReactNode;
+  secondaryActions?: PageHeaderAction[];
+  /** Rótulo acessível do menu `⋯` do celular. */
+  secondaryActionsLabel?: string;
   /** Navegação da página — normalmente `<TabsList variant="pill">`. */
   tabs?: React.ReactNode;
   back?: boolean | string;
@@ -32,11 +56,14 @@ export function PageHeader({
   subtitle,
   eyebrow,
   actions,
+  secondaryActions,
+  secondaryActionsLabel = "Mais ações",
   tabs,
   back,
   className,
   ...props
 }: PageHeaderProps) {
+  const hasSecondary = !!secondaryActions?.length;
   const navigate = useNavigate();
   const onBack = React.useCallback(() => {
     if (typeof back === "string") navigate(back);
@@ -67,7 +94,36 @@ export function PageHeader({
           </h1>
           {subtitle && <p className="mt-1 text-[13px] text-muted-foreground">{subtitle}</p>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {(actions || hasSecondary) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {hasSecondary && (
+              <>
+                {secondaryActions!.map(({ label, icon: Icon, onSelect, disabled, iconClassName }) => (
+                  <Button key={label} variant="outline" onClick={onSelect} disabled={disabled} className="max-sm:hidden">
+                    {Icon && <Icon className={iconClassName} />}
+                    {label}
+                  </Button>
+                ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="sm:hidden" aria-label={secondaryActionsLabel}>
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {secondaryActions!.map(({ label, icon: Icon, onSelect, disabled, iconClassName }) => (
+                      <DropdownMenuItem key={label} onSelect={onSelect} disabled={disabled}>
+                        {Icon && <Icon className={iconClassName} />}
+                        {label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+            {actions}
+          </div>
+        )}
       </div>
       {tabs && <div className="flex min-w-0 max-w-full">{tabs}</div>}
     </header>

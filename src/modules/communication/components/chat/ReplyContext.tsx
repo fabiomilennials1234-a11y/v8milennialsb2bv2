@@ -17,7 +17,7 @@ export function ReplyPreview() {
   const reply = useChatReply();
   if (!reply?.target) return null;
   return <div role="status" className="flex items-center gap-2 m-2 border-l-2 border-primary rounded bg-muted/60 p-2">
-    <div className="min-w-0 flex-1"><p className="text-xs font-medium text-primary">Respondendo {reply.target.direction === "outgoing" ? "a você" : "ao contato"}</p><p className="text-sm truncate">{reply.target.text}</p></div>
+    <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-primary-soft-foreground">Respondendo {reply.target.direction === "outgoing" ? "a você" : "ao contato"}</p><p className="text-sm truncate">{reply.target.text}</p></div>
     <button type="button" aria-label="Cancelar resposta" className="p-2" onClick={() => reply.clear()}><X className="h-4 w-4" /></button>
   </div>;
 }

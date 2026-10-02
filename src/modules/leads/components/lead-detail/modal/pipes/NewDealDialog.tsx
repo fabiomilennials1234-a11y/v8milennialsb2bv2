@@ -230,8 +230,8 @@ export const NewDealDialog = memo(function NewDealDialog({
           title={noOptions ? "O lead já está em todos os funis" : undefined}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md font-semibold",
-            "border border-primary/30 bg-primary/10 text-primary",
-            "hover:bg-primary/15 hover:border-primary/50",
+            "border border-primary/30 bg-primary-soft text-primary-soft-foreground",
+            "hover:border-primary/50 hover:bg-primary/25",
             "transition-colors duration-150",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             "disabled:opacity-45 disabled:pointer-events-none",

@@ -31,7 +31,9 @@ export default function ChatWhatsApp() {
         )}
       </AnimatePresence>
       {!coachingOpen && (
-        <div className="shrink-0 flex items-start pl-2 md:pl-3">
+        // Celular: o trilho custava ~55 px de 390 para um painel que hoje abre
+        // sempre vazio (`activeConversationId` nunca é preenchido — TODO acima).
+        <div className="hidden shrink-0 items-start pl-3 md:flex">
           <CoachingSidebar
             conversationId={activeConversationId}
             isOpen={false}

@@ -59,6 +59,7 @@
     /* Destructive */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 72% 42%;  /* ~6,5:1 sobre --card light */
 
     /* Success - Gamification Green */
     --success: 142 70% 45%;
@@ -281,6 +282,7 @@
        — um de tinta, um de superfície — e isso é mudança de contrato. */
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 84% 68%;  /* ~6:1 sobre --card dark */
 
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
@@ -455,6 +457,10 @@
 
     --success:            142 62% 52%; /* +L vs app: verde escuro some em parede */
     --destructive:          0 72% 60%;
+    /* Pares legíveis (texto): a TV é escura mesmo com o app em claro. */
+    --destructive-strong:   0 84% 68%;
+    --success-strong:       142 62% 58%;
+    --warning-strong:       38 92% 62%;
     --warning:             38 92% 58%;
 
     /* ─── Escala tipográfica — cinco degraus, só cinco ────────────────
@@ -542,6 +548,17 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .tv-value-loading { animation: none; opacity: 0.55; }
+  }
+
+  /* Tinta é escura nos DOIS temas. Os pares legíveis de texto semântico
+     (`-strong`) são calibrados contra o cartão — no claro, escuros; dentro da
+     tinta isso dá vermelho/verde escuro sobre quase-preto. Aqui a superfície
+     reescopa os três para os valores do escuro. */
+  .bg-tinta,
+  .bg-sidebar {
+    --destructive-strong: 0 84% 68%;
+    --success-strong: 142 62% 58%;
+    --warning-strong: 38 92% 62%;
   }
 }
 

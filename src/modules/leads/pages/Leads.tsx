@@ -717,50 +717,13 @@ function LeadsInner() {
         title="Leads"
         subtitle="Da primeira conversa à próxima compra."
         // Ações da lista de leads; a carteira (aba Clientes) tem as suas.
+        secondaryActions={portfolioActive ? undefined : [
+          { label: "Importações", icon: History, onSelect: () => setIsImportHistoryOpen(true) },
+          { label: "Importar", icon: FileUp, onSelect: () => setIsImportModalOpen(true), disabled: !canImport },
+          { label: "Exportar", icon: FileDown, onSelect: () => setIsExportModalOpen(true), disabled: !canExport },
+        ]}
+        secondaryActionsLabel="Mais ações de leads"
         actions={!portfolioActive && <>
-          {/* No celular as três ações de arquivo cabem num menu: em pílula,
-              ocupavam duas linhas antes da lista. */}
-          <div className="hidden items-center gap-2 sm:flex">
-            {isV2 ? (
-              <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)}>
-                <History />
-                Importações
-              </Button>
-            ) : (
-              <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-                <History />
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport}>
-              <FileUp />
-              Importar
-            </Button>
-            <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport}>
-              <FileDown />
-              Exportar
-            </Button>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="sm:hidden" aria-label="Mais ações de leads">
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setIsImportHistoryOpen(true)}>
-                <History />
-                Importações
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsImportModalOpen(true)} disabled={!canImport}>
-                <FileUp />
-                Importar
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsExportModalOpen(true)} disabled={!canExport}>
-                <FileDown />
-                Exportar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
             <Plus />
             Novo lead
