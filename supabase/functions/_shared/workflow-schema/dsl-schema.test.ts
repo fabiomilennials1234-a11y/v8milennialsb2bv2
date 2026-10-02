@@ -85,6 +85,40 @@ Deno.test("safeParseSpec — tiered: send_to_number without messageTemplate is r
   if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_to_number requires messageTemplate")), true);
 });
 
+const GROUP_CFG = {
+  groupJid: "120363041234567890@g.us",
+  whatsappInstanceId: "inst-1",
+  messageTemplate: "Lead {{nome}}",
+};
+
+function groupStep(config: Record<string, unknown>) {
+  return { ...valid, steps: [{ kind: "action", actionType: "send_to_group", config }] };
+}
+
+Deno.test("safeParseSpec — tiered: send_to_group completo é aceito", () => {
+  assertEquals(safeParseSpec(groupStep(GROUP_CFG)).ok, true);
+});
+
+Deno.test("safeParseSpec — tiered: send_to_group sem groupJid válido é recusado", () => {
+  for (const groupJid of [undefined, "", "5511999998888", "120363041234567890@g.us.evil"]) {
+    const r = safeParseSpec(groupStep({ ...GROUP_CFG, groupJid }));
+    assertEquals(r.ok, false);
+    if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_to_group requires a valid groupJid")), true);
+  }
+});
+
+Deno.test("safeParseSpec — tiered: send_to_group sem whatsappInstanceId é recusado", () => {
+  const r = safeParseSpec(groupStep({ ...GROUP_CFG, whatsappInstanceId: "" }));
+  assertEquals(r.ok, false);
+  if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_to_group requires whatsappInstanceId")), true);
+});
+
+Deno.test("safeParseSpec — tiered: send_to_group sem messageTemplate é recusado", () => {
+  const r = safeParseSpec(groupStep({ ...GROUP_CFG, messageTemplate: "" }));
+  assertEquals(r.ok, false);
+  if (!r.ok) assertEquals(r.errors.some((e) => e.includes("send_to_group requires messageTemplate")), true);
+});
+
 Deno.test("safeParseSpec — tiered: long-tail action with arbitrary config passes (passthrough)", () => {
   const r = safeParseSpec({
     ...valid,

@@ -75,6 +75,19 @@ const no = (actionType: string, extra: Record<string, unknown> = {}, id = "n1") 
 });
 
 describe("detecção de nó incompleto", () => {
+  it("send_to_group exige número, grupo e mensagem — e marca o nó", () => {
+    const r = findNodeConfigIssues([no("send_to_group", {}, "grp")]);
+    expect(r.map((i) => i.missing)).toEqual(["número que envia", "grupo de destino", "mensagem"]);
+    expect(r.every((i) => i.nodeId === "grp")).toBe(true);
+    expect(
+      findNodeConfigIssues([no("send_to_group", {
+        whatsappInstanceId: "inst-1",
+        groupJid: "120363041234567890@g.us",
+        messageTemplate: "Lead {{nome}}",
+      })]),
+    ).toHaveLength(0);
+  });
+
   it("add_tag sem tag é apontado", () => {
     const r = findNodeConfigIssues([no("add_tag")]);
     expect(r).toHaveLength(1);

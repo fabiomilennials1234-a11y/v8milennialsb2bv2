@@ -30,6 +30,7 @@ import {
 } from "@/modules/workflows/components/action-configs";
 import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
+import { SendToGroupConfig } from "./SendToGroupConfig";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
@@ -799,6 +800,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* Send to fixed number(s) */}
       {at === "send_to_number" && (
         <SendToNumberConfig data={data} onUpdate={onUpdate} />
+      )}
+
+      {/* Send to ONE WhatsApp group — instância presa, sem política de roteamento */}
+      {at === "send_to_group" && (
+        <SendToGroupConfig data={data} onUpdate={onUpdate} />
       )}
 
       {/* ═══════ LEAD MANAGEMENT ═══════ */}
