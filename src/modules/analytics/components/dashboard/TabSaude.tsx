@@ -2,8 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FocusCard, FocusTile, InkRow, InkSplit, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { Badge } from "@/components/ui/badge";
 import { BadgeCheck, CalendarX, HeartPulse, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -26,8 +27,8 @@ import {
   TRANSITION_TOOLTIPS,
   TRANSITION_LABELS,
   statusOf,
-  STATUS_TEXT,
   STATUS_LED,
+  STATUS_CHIP,
   fmtPct,
   HelpTip,
   StatusChip,
@@ -72,6 +73,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
     origins,
   );
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
+  const [transicao, setTransicao] = useState<string | null>(null);
   
   const periodLabel = `de ${format(range.start, "dd/MM")} a ${format(range.end, "dd/MM")}`;
   const originsLabel = origins
@@ -134,6 +136,8 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
     ? measured.reduce((worst, t) => (t.conv / t.goal < worst.conv / worst.goal ? t : worst))
     : null;
   const healthy = measured.filter((t) => statusOf(t.conv, t.goal) === "ok").length;
+  // Transição em foco no herói: a escolhida, senão o maior gargalo.
+  const foco = transitions.find((t) => t.label === transicao) ?? bottleneck ?? transitions[0] ?? null;
 
   const cohort = data.cohort_total;
   const sold = data.stages.compraram;
@@ -154,154 +158,15 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
       <div className="flex flex-wrap items-center justify-end gap-3">
         <SaudeOriginFilter value={origins} onChange={setOrigins} />
       </div>
-      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[380px_1fr]">
-        {/* ───── Rail: gargalo + ranking de transições ───── */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card>
-            <CardContent className="p-6">
-              {bottleneck ? (
-                <>
-                  <div className="text-[11px] font-bold uppercase tracking-[.06em] text-destructive">
-                    Maior gargalo
-                  </div>
-                  <div className="mt-2 text-7xl font-extrabold leading-none tracking-[-0.05em] text-destructive tabular-nums">
-                    {fmtPct(bottleneck.conv)}
-                  </div>
-                  <div className="mt-3 text-[15px] font-bold tracking-[-0.02em]">
-                    {bottleneck.label}
-                    <span className="ml-2 text-[13px] font-medium text-muted-foreground">
-                      meta {bottleneck.goal}%
-                    </span>
-                  </div>
-                  {bottleneck.label === "Reunião → Compareceu" && (
-                    <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
-                      Só <b className="font-semibold text-foreground">{held} das {booked} reuniões</b>{" "}
-                      marcadas aconteceram —{" "}
-                      <b className="font-semibold text-foreground">{booked - held} perdidas</b> no
-                      período.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-                    Saúde do funil
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Sem leads no período selecionado — as taxas aparecem quando a coorte tiver
-                    volume.
-                  </p>
-                </>
-              )}
-
-              <div className="mt-5 overflow-hidden rounded-2xl bg-sunken">
-                {transitions.map((t, i) => {
-                  const status = t.conv !== null ? statusOf(t.conv, t.goal) : null;
-                  return (
-                    <div
-                      key={t.label}
-                      className={cn(
-                        "flex items-center gap-2.5 px-3.5 py-3 text-xs",
-                        i > 0 && "border-t border-border/60"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "h-2 w-2 shrink-0 rounded-full",
-                          status ? STATUS_LED[status] : "bg-muted-foreground/30"
-                        )}
-                      />
-                      <span className="flex-1 font-medium">
-                        <HelpTip text={t.tooltip}>{t.label}</HelpTip>
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[13px] font-bold tabular-nums",
-                          status ? STATUS_TEXT[status] : "text-muted-foreground"
-                        )}
-                      >
-                        {t.conv !== null ? fmtPct(t.conv) : "—"}
-                      </span>
-                      <span className="w-14 text-right text-[11px] text-muted-foreground tabular-nums">
-                        meta {t.goal}%
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* ───── Tempo até a venda (ciclos médios, variante V3) ───── */}
-              {data.cycles && (
-                <div className="mt-5 border-t border-border/60 pt-4">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-                      <HelpTip text="Médias calculadas só sobre os leads do período que viraram venda. A venda vale a primeira chegada à etapa de venda no funil de fechamento; a reunião, a primeira reunião realizada.">
-                        Tempo até a venda
-                      </HelpTip>
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {data.cycles.sales_count > 0
-                        ? `média · ${data.cycles.sales_count} ${data.cycles.sales_count === 1 ? "venda" : "vendas"}`
-                        : "sem vendas no recorte"}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 flex items-center">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground ring-[1.5px] ring-border" />
-                    <div className="relative h-3.5 min-w-0 flex-1">
-                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-muted-foreground/50 to-primary" />
-                      <b className="absolute left-1/2 top-[-7px] -translate-x-1/2 whitespace-nowrap bg-card px-1.5 text-[13.5px] font-extrabold tabular-nums">
-                        {fmtDays(data.cycles.lead_to_meeting_days)}
-                        <span className="text-[10.5px] font-bold text-muted-foreground">
-                          {data.cycles.lead_to_meeting_days != null && "d"}
-                        </span>
-                      </b>
-                    </div>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/30" />
-                    <div className="relative h-3.5 min-w-0 flex-1">
-                      <i className="absolute inset-x-0.5 top-1.5 block h-0.5 rounded-full bg-gradient-to-r from-primary to-success" />
-                      <b className="absolute left-1/2 top-[-7px] -translate-x-1/2 whitespace-nowrap bg-card px-1.5 text-[13.5px] font-extrabold tabular-nums">
-                        {fmtDays(data.cycles.meeting_to_sale_days)}
-                        <span className="text-[10.5px] font-bold text-muted-foreground">
-                          {data.cycles.meeting_to_sale_days != null && "d"}
-                        </span>
-                      </b>
-                    </div>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success ring-2 ring-success/30" />
-                  </div>
-                  <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-                    <span>lead entrou</span>
-                    <span>compareceu</span>
-                    <span>venda</span>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-sunken px-4 py-3">
-                    <span className="whitespace-nowrap text-3xl font-extrabold tracking-[-0.04em] tabular-nums">
-                      {fmtDays(data.cycles.lead_to_sale_days)}
-                      <span className="text-[15px] font-bold text-muted-foreground">
-                        {data.cycles.lead_to_sale_days != null && "d"}
-                      </span>
-                    </span>
-                    <span className="text-xs leading-snug text-muted-foreground">
-                      <b className="font-semibold text-foreground">Ciclo médio de venda</b>
-                      <br />
-                      da entrada do lead até fechar a venda
-                    </span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ───── Main: KPIs + mesa + matriz ───── */}
-        <div className="flex min-w-0 flex-col gap-4">
+      {/* V5: resumo (KPIs) → herói em tinta com as transições e o gargalo em
+          ouro → tabelas. Os números são os mesmos; só a hierarquia mudou. */}
+      <div className="mt-3 flex min-w-0 flex-col gap-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: 0.05 }}
           >
-            <KpiRow cols={2}>
+            <KpiRow cols={4}>
             <KpiTile
               label="Leads no período"
               value={cohort}
@@ -331,6 +196,86 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
               note="não aconteceram"
             />
             </KpiRow>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <InkSplit
+              title={bottleneck ? "Maior gargalo" : "Saúde do funil"}
+              count={bottleneck ? bottleneck.label : undefined}
+              actions={<span className="text-[11.5px] text-tinta-muted">Clique numa transição</span>}
+              list={transitions.map((t) => {
+                const status = t.conv !== null ? statusOf(t.conv, t.goal) : null;
+                const selected = t.label === foco?.label;
+                return (
+                  <InkRow key={t.label} selected={selected} onClick={() => setTransicao(t.label)} title={t.tooltip}>
+                    <span
+                      className={cn("h-2 w-2 shrink-0 rounded-full", status ? STATUS_LED[status] : "bg-white/30")}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold">{t.label}</span>
+                    <span className="shrink-0 text-[14px] font-extrabold tabular-nums">
+                      {t.conv !== null ? fmtPct(t.conv) : "—"}
+                    </span>
+                    <span className={cn("w-16 shrink-0 text-right text-[11px] tabular-nums", selected ? "text-primary-foreground/70" : "text-tinta-muted")}>
+                      meta {t.goal}%
+                    </span>
+                  </InkRow>
+                );
+              })}
+              detail={
+                foco ? (
+                  <FocusCard className="gap-3.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="ink">{foco.label === bottleneck?.label ? "Maior gargalo" : "Transição"}</Badge>
+                      {foco.conv !== null && (
+                        <span className="ml-auto rounded-full bg-primary-foreground/10 px-2.5 py-0.5 text-[11px] font-bold">
+                          {STATUS_CHIP[statusOf(foco.conv, foco.goal)].label}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[clamp(3rem,6vw,4.5rem)] font-extrabold leading-none tracking-[-0.05em] tabular-nums">
+                        {foco.conv !== null ? fmtPct(foco.conv) : "—"}
+                      </p>
+                      <p className="mt-2 text-[1.2rem] font-extrabold tracking-[-0.03em]">
+                        {foco.label}
+                        <span className="ml-2 text-[13px] font-semibold text-primary-foreground/70">meta {foco.goal}%</span>
+                      </p>
+                    </div>
+                    <p className="rounded-2xl bg-[hsl(40_60%_8%/.1)] px-3 py-2.5 text-[12.5px] font-semibold leading-relaxed">
+                      {foco.label === "Reunião → Compareceu"
+                        ? `Só ${held} das ${booked} reuniões marcadas aconteceram — ${booked - held} perdidas no período.`
+                        : foco.tooltip}
+                    </p>
+                    {data.cycles && (
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
+                        <FocusTile>
+                          <p className="text-[1rem] font-extrabold tabular-nums">{fmtDays(data.cycles.lead_to_meeting_days)}{data.cycles.lead_to_meeting_days != null && " d"}</p>
+                          <p className="text-[11px] font-semibold text-primary-foreground/70">lead → compareceu</p>
+                        </FocusTile>
+                        <FocusTile>
+                          <p className="text-[1rem] font-extrabold tabular-nums">{fmtDays(data.cycles.meeting_to_sale_days)}{data.cycles.meeting_to_sale_days != null && " d"}</p>
+                          <p className="text-[11px] font-semibold text-primary-foreground/70">compareceu → venda</p>
+                        </FocusTile>
+                        <FocusTile>
+                          <p className="text-[1rem] font-extrabold tabular-nums">{fmtDays(data.cycles.lead_to_sale_days)}{data.cycles.lead_to_sale_days != null && " d"}</p>
+                          <p className="text-[11px] font-semibold text-primary-foreground/70">
+                            ciclo médio{data.cycles.sales_count > 0 ? ` · ${data.cycles.sales_count} ${data.cycles.sales_count === 1 ? "venda" : "vendas"}` : ""}
+                          </p>
+                        </FocusTile>
+                      </div>
+                    )}
+                  </FocusCard>
+                ) : (
+                  <FocusCard>
+                    <p className="text-[15px] font-bold">Sem leads no período</p>
+                    <p className="text-[13px] text-primary-foreground/75">
+                      As taxas aparecem quando a coorte tiver volume.
+                    </p>
+                  </FocusCard>
+                )
+              }
+            />
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
@@ -474,7 +419,6 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
               </Table>
             </Card>
           </motion.div>
-        </div>
       </div>
 
       <FunnelStageLeadsSheet

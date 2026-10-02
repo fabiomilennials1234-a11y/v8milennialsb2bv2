@@ -329,8 +329,8 @@ function PairCard({
         </span>
         <span className="flex-1" />
         {sim > 0 && (
-          <span className="relative grid size-11 place-items-center" role="img" aria-label={`${sim}% de similaridade`}>
-            <svg className="absolute inset-0 size-11 -rotate-90" viewBox="0 0 40 40" aria-hidden>
+          <span className="relative grid size-12 place-items-center" role="img" aria-label={`${sim}% de similaridade`}>
+            <svg className="absolute inset-0 size-12 -rotate-90" viewBox="0 0 40 40" aria-hidden>
               <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-primary-foreground/15" />
               <circle
                 cx="20"
@@ -344,7 +344,7 @@ function PairCard({
                 className="text-primary-foreground"
               />
             </svg>
-            <span className="text-[11px] font-extrabold tabular-nums">{sim}%</span>
+            <span className="text-[10px] font-extrabold tabular-nums tracking-[-0.02em]">{sim}%</span>
           </span>
         )}
       </div>
@@ -359,7 +359,12 @@ function PairCard({
 
       {/* Campo a campo — o que difere fica em negrito */}
       <FocusTile className="overflow-hidden p-0">
-        <table className="w-full text-[12px]">
+        <table className="w-full table-fixed text-[12px]">
+          <colgroup>
+            <col className="w-[104px]" />
+            <col />
+            <col />
+          </colgroup>
           <thead>
             <tr className="text-left text-[10.5px] font-bold uppercase tracking-[.06em] text-primary-foreground/70">
               <th className="px-3 py-2 font-bold">Campo</th>

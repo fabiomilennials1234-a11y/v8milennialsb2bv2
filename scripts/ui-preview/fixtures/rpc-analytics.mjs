@@ -237,6 +237,34 @@ export function analyticsRpcs(threads) {
         segment_counts: seg,
       };
     },
+    // Lixeira — alguns leads da base, excluídos em datas espalhadas pelos 30
+    // dias de retenção (o painel "Prestes a sumir" precisa de quem expira em 7).
+    get_trash_leads: (_a, fx) => {
+      const quem = fx.db.team_members?.[0]?.user_id ?? null;
+      return [2, 9, 18, 24, 26, 28].map((dias, i) => {
+        const l = fx.db.leads[fx.db.leads.length - 1 - i];
+        return {
+          id: l.id,
+          name: l.name,
+          company: l.company,
+          email: l.email,
+          phone: l.phone,
+          deleted_at: new Date(fx.NOW - dias * 864e5 - i * 3600e3).toISOString(),
+          deleted_by: i % 2 === 0 ? quem : fx.db.team_members?.[1]?.user_id ?? quem,
+        };
+      });
+    },
+    // Duplicatas — pares montados sobre leads reais da base, um de cada critério.
+    find_duplicate_leads: (_a, fx) => {
+      const L = fx.db.leads;
+      const par = (a, b, match_type, similarity) => ({
+        lead_a_id: L[a].id, lead_a_name: L[a].name, lead_a_phone: L[a].phone, lead_a_email: L[a].email, lead_a_company: L[a].company,
+        lead_b_id: L[b].id, lead_b_name: L[b].name, lead_b_phone: match_type === "phone" ? L[a].phone : L[b].phone,
+        lead_b_email: match_type === "email" ? L[a].email : L[b].email, lead_b_company: L[b].company,
+        match_type, similarity,
+      });
+      return [par(0, 5, "phone", 1), par(1, 7, "email", 1), par(2, 9, "name", 0.86), par(3, 11, "name", 0.78)];
+    },
     get_portfolio_clients: (a, fx) => {
       let rows = fx.db.upsell_clients.map((c) => ({
         id: c.id,

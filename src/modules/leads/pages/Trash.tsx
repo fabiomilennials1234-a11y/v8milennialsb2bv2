@@ -221,8 +221,8 @@ export default function Trash() {
                     <TableHead>Item</TableHead>
                     <TableHead className="max-md:hidden">Excluído por</TableHead>
                     <TableHead className="max-md:hidden">Quando</TableHead>
-                    <TableHead>Expira em</TableHead>
-                    <TableHead className="w-40 pr-4 text-right">Ações</TableHead>
+                    <TableHead className="max-sm:hidden">Expira em</TableHead>
+                    <TableHead className="pr-4 text-right sm:w-40">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -245,6 +245,10 @@ export default function Trash() {
                               <p className="max-w-[260px] truncate text-[11px] text-muted-foreground">
                                 {["Lead", lead.company].filter(Boolean).join(" · ")}
                               </p>
+                              {/* No celular a coluna "Expira em" some — o prazo vem aqui. */}
+                              <p className={cn("text-[11px] font-semibold tabular-nums sm:hidden", urgente ? "text-destructive" : "text-muted-foreground")}>
+                                expira em {restam} {restam === 1 ? "dia" : "dias"}
+                              </p>
                             </div>
                           </div>
                         </TableCell>
@@ -261,7 +265,7 @@ export default function Trash() {
                         <TableCell className="max-md:hidden whitespace-nowrap text-[13px] tabular-nums text-muted-foreground">
                           {whenLabel(lead.deleted_at)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-sm:hidden">
                           <div className="w-[96px]">
                             <p className={cn("text-[13px] font-bold tabular-nums", urgente && "text-destructive")}>
                               {restam} {restam === 1 ? "dia" : "dias"}
@@ -279,12 +283,13 @@ export default function Trash() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-8 rounded-full bg-muted text-xs hover:bg-muted/70"
+                              className="h-8 rounded-full bg-muted text-xs hover:bg-muted/70 max-sm:w-8 max-sm:px-0"
                               onClick={() => handleRestore(lead.id)}
                               disabled={restoreLead.isPending}
+                              aria-label={`Restaurar ${lead.name}`}
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
-                              Restaurar
+                              <span className="max-sm:sr-only">Restaurar</span>
                             </Button>
                             <Button
                               size="sm"

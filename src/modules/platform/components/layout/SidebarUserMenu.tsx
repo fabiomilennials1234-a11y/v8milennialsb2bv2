@@ -171,25 +171,21 @@ export function SidebarUserMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          {variant === "rail" ? (
-            <Tooltip delayDuration={120}>
-              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-              <TooltipContent side="right" sideOffset={14}>
-                {name}
-              </TooltipContent>
-            </Tooltip>
-          ) : collapsed ? (
-            <Tooltip delayDuration={120}>
-              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-              <TooltipContent side="right" sideOffset={10}>
-                {name}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            trigger
-          )}
-        </DropdownMenuTrigger>
+        {/* Tooltip POR FORA do gatilho do menu: `DropdownMenuTrigger asChild`
+            passa ref ao filho, e `<Tooltip>` não aceita ref ("Function
+            components cannot be given refs" em toda rota). */}
+        {variant === "rail" || collapsed ? (
+          <Tooltip delayDuration={120}>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={variant === "rail" ? 14 : 10}>
+              {name}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+        )}
 
         <DropdownMenuContent
           side={variant === "rail" ? "right" : variant === "chip" ? "bottom" : "top"}

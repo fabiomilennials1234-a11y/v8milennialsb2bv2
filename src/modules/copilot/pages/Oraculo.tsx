@@ -289,7 +289,7 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
 
             <div className="border-t border-border/60 p-4">
               <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-full border border-input bg-muted/50 py-1.5 pl-4 pr-1.5 focus-within:ring-2 focus-within:ring-ring/40">
-                <Sparkles className="mb-3 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <Sparkles className="mb-3 h-4 w-4 shrink-0 text-primary max-sm:hidden" aria-hidden />
                 <Textarea
                   disabled={aguardandoHistorico}
                   value={rascunho}
@@ -308,8 +308,10 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
                   variant="ink"
                   onClick={enviar}
                   disabled={!rascunho.trim() || oraculo.pensando || aguardandoHistorico}
+                  aria-label="Perguntar"
+                  className="max-sm:h-10 max-sm:w-10 max-sm:px-0"
                 >
-                  Perguntar
+                  <span className="max-sm:hidden">Perguntar</span>
                   <ArrowUp aria-hidden />
                 </Button>
               </div>

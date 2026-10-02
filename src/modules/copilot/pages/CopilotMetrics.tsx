@@ -470,7 +470,7 @@ export default function CopilotMetrics() {
             ) : evals.length === 0 ? (
               <EmptyEvaluations />
             ) : (
-              <div className="grid items-center gap-5 sm:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="grid items-center gap-5 sm:grid-cols-[240px_minmax(0,1fr)]">
                 <QualityRadar values={criteria.map((c) => ({ label: c.short, value: c.value }))} />
                 <div className="space-y-3">
                   {criteria.map((c) => (
@@ -620,10 +620,10 @@ function ScoreRing({ score }: { score: number }) {
 
 /** Radar de 4 eixos (0–10). Desenho simples em SVG, cores por token. */
 function QualityRadar({ values }: { values: { label: string; value: number }[] }) {
-  const size = 240;
+  const size = 280;
   const cx = size / 2;
   const cy = size / 2;
-  const R = 68;
+  const R = 72;
   const n = values.length;
   const point = (i: number, v: number) => {
     const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
@@ -633,7 +633,7 @@ function QualityRadar({ values }: { values: { label: string; value: number }[] }
   const ring = (k: number) => values.map((_, i) => point(i, k).join(",")).join(" ");
   const poly = values.map((v, i) => point(i, v.value).join(",")).join(" ");
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-[220px] w-[220px]" role="img" aria-label="Radar das notas por critério">
+    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-[240px] w-[240px]" role="img" aria-label="Radar das notas por critério">
       {[2.5, 5, 7.5, 10].map((k) => (
         <polygon key={k} points={ring(k)} fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
       ))}
@@ -650,7 +650,7 @@ function QualityRadar({ values }: { values: { label: string; value: number }[] }
         const [x, y] = point(i, 11.6);
         const anchor = Math.abs(x - cx) < 1 ? "middle" : x > cx ? "start" : "end";
         return (
-          <text key={v.label} x={x} y={y} textAnchor={anchor} dominantBaseline="middle" className="fill-muted-foreground text-[10px] font-semibold">
+          <text key={v.label} x={x} y={y} textAnchor={anchor} dominantBaseline="middle" className="fill-muted-foreground text-[11px] font-semibold">
             {v.label}
           </text>
         );

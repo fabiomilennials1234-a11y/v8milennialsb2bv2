@@ -31,9 +31,12 @@ import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Check,
+  Clock,
+  Hourglass,
   Plus,
   RefreshCw,
   X,
@@ -41,6 +44,10 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useViewport } from "@/shared/hooks/use-viewport";
+import { AgendaProximo } from "./AgendaProximo";
 import { cn } from "@/lib/utils";
 import { useAuth, useCanDo, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
@@ -65,6 +72,7 @@ import type {
 } from "./agenda-helpers";
 import {
   EVENT_TYPE_KEYS,
+  EVENT_TYPE_LABELS,
   getWeekDays,
   normalizeAgendaEvents,
   normalizeGoogleEvents,
@@ -125,10 +133,12 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const { userId, teamMemberId, isAdmin, isReady: identityReady } = useIdentity();
   const { data: teamMembers = [] } = useTeamMembers();
 
-  // A grade do mês é a visão principal. O dia continua acessível: era a visão
-  // de produção antes desta tela e a lista cronológica é o que a operação usa
-  // para tocar o dia. A semana segue inerte (reversível), como já estava.
-  const [view, setView] = useState<ViewType>("month");
+  // V5 (CTO, 02/10): a SEMANA é a visão principal no computador — ela existia
+  // no código e estava inalcançável. No celular abre no Dia (a grade do mês e a
+  // da semana não cabem a 390 px). O Dia continua sendo LISTA cronológica, a
+  // decisão de 24/08.
+  const { isMobile } = useViewport();
+  const [view, setView] = useState<ViewType>(() => (isMobile ? "day" : "week"));
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -339,6 +349,37 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     return { ...r, total: r.compareceu + r.naoCompareceu + r.semRegistro };
   }, [eventosNoPeriodo]);
 
+  /** "4 reuniões · 2 ligações" — a nota do KPI de compromissos. */
+  const contagemPorTipo = useMemo(() => {
+    const PLURAL: Record<EventTypeKey, string> = {
+      meeting: "reuniões",
+      call: "ligações",
+      follow_up: "follow-ups",
+      task: "tarefas",
+      other: "outros",
+    };
+    const conta = new Map<EventTypeKey, number>();
+    for (const e of eventosNoPeriodo) {
+      const tipo = normalizeEventType(e.eventType);
+      conta.set(tipo, (conta.get(tipo) ?? 0) + 1);
+    }
+    return [...conta.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([tipo, n]) => `${n} ${n === 1 ? EVENT_TYPE_LABELS[tipo].toLowerCase() : PLURAL[tipo]}`)
+      .join(" · ");
+  }, [eventosNoPeriodo]);
+
+  /** Hoje, independentemente da visão: quantos e qual é o próximo. */
+  const hoje = useMemo(() => {
+    const agora = Date.now();
+    const doDia = allEvents.filter((e) => isSameDay(e.start, new Date()));
+    const proximo = doDia
+      .filter((e) => e.start.getTime() >= agora)
+      .sort((a, b) => a.start.getTime() - b.start.getTime())[0];
+    return { total: doDia.length, proximo };
+  }, [allEvents]);
+
   // ── Mutations ───────────────────────────────────────────────────────────────
   const deleteMeeting = useDeleteMeeting();
   const updateMeeting = useUpdateMeeting();
@@ -526,6 +567,15 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             : "Crie, edite e gerencie suas atividades."
         }
         className={cn(onClose && "[&_h1]:text-[1.375rem]")}
+        tabs={
+          <Tabs value={view} onValueChange={(v) => setView(v as ViewType)}>
+            <TabsList variant="pill" aria-label="Visão da agenda">
+              <TabsTrigger value="week">Semana</TabsTrigger>
+              <TabsTrigger value="month">Mês</TabsTrigger>
+              <TabsTrigger value="day">Dia</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
         actions={
           <>
             <Button
@@ -556,6 +606,47 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           </>
         }
       />
+
+      {/* KPIs do período à vista. Todos DERIVADOS da lista já em tela — acompanham
+          filtros e escopo, e não podem divergir do que a grade mostra. */}
+      <KpiRow cols={4}>
+        <KpiTile
+          label={view === "week" ? "Compromissos na semana" : view === "month" ? "Compromissos no mês" : "Compromissos no dia"}
+          value={isLoading ? "·" : eventosNoPeriodo.length.toLocaleString("pt-BR")}
+          icon={CalendarDays}
+          tone="gold"
+          loading={isLoading}
+          note={contagemPorTipo || "Nada marcado no período"}
+        />
+        <KpiTile
+          label="Reuniões realizadas"
+          value={isLoading ? "·" : `${resumo.compareceu}`}
+          icon={Check}
+          tone="good"
+          loading={isLoading}
+          note={
+            resumo.compareceu + resumo.naoCompareceu > 0
+              ? `de ${resumo.compareceu + resumo.naoCompareceu} com desfecho · ${resumo.naoCompareceu} não compareceram`
+              : "Nenhum desfecho registrado"
+          }
+        />
+        <KpiTile
+          label={`Hoje · ${format(new Date(), "EEEE", { locale: ptBR })}`}
+          value={isLoading ? "·" : hoje.total.toLocaleString("pt-BR")}
+          icon={Clock}
+          tone="info"
+          loading={isLoading}
+          note={hoje.proximo ? `próximo: ${format(hoje.proximo.start, "HH:mm")} · ${hoje.proximo.leadName ?? hoje.proximo.title}` : "Nada mais hoje"}
+        />
+        <KpiTile
+          label="Aguardando desfecho"
+          value={isLoading ? "·" : resumo.semRegistro.toLocaleString("pt-BR")}
+          icon={Hourglass}
+          tone={resumo.semRegistro > 0 ? "bad" : "neutral"}
+          loading={isLoading}
+          note={resumo.semRegistro > 0 ? "Reuniões passadas sem compareceu/faltou" : "Tudo registrado"}
+        />
+      </KpiRow>
 
       {/* Abas de estado + filtros */}
       <AgendaFilterBar
@@ -607,73 +698,6 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
-            {isLoading
-              ? "Carregando…"
-              : eventosNoPeriodo.length === 0
-                ? "Nenhuma atividade"
-                : `${eventosNoPeriodo.length} ${eventosNoPeriodo.length === 1 ? "atividade" : "atividades"}`}
-          </span>
-
-          {/* Comparecimento do período. Some quando não há nada registrável —
-              zero sem contexto é ruído, não informação.
-              O número é DERIVADO da lista já em tela: acompanha os filtros,
-              acompanha o escopo de quem está vendo, e não pode divergir do que
-              a grade mostra. Trocar um resultado move de balde; não soma.
-
-              O banho da pílula é token (`success`/`destructive`), mas o TEXTO
-              segue no par de escala `x dark:y`: os dois tokens são valor de
-              preenchimento e, como texto, reprovam AA no tema claro — mesma
-              medição documentada em `AgendaOutcomeToggle`. */}
-          {!isLoading && resumo.total > 0 && (
-            <div
-              className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums"
-              aria-label="Comparecimento no período"
-            >
-              <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
-                <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
-                {resumo.compareceu}
-                <span className="sr-only">compareceram</span>
-              </span>
-              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-red-700 dark:text-red-300">
-                <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
-                {resumo.naoCompareceu}
-                <span className="sr-only">não compareceram</span>
-              </span>
-              {resumo.semRegistro > 0 && (
-                <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
-                  {resumo.semRegistro} sem registro
-                </span>
-              )}
-            </div>
-          )}
-          {/* Alternador segmentado do V5 — mesma forma do segmentado de estado
-              da barra de filtros. Continua sendo par de botões com
-              `aria-pressed` (não aba): não há painel por visão para um
-              `tabpanel` apontar. O rótulo inativo fica em `foreground/70`, e
-              não em `muted-foreground`, que mede ~4,4:1 sobre `--muted` no
-              tema claro. */}
-          <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
-            {(["month", "day"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                aria-pressed={view === v}
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  view === v
-                    ? "bg-card text-foreground shadow-relevo"
-                    : "text-foreground/70 hover:text-foreground",
-                )}
-              >
-                {v === "month" ? "Mês" : "Dia"}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Estado de ERRO — sem isto, RPC quebrada renderiza um calendário vazio
@@ -711,7 +735,10 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         </div>
       )}
 
-      {/* Calendário */}
+      {/* Calendário + coluna do próximo compromisso (fora do painel sobreposto,
+          que é estreito demais para duas colunas). */}
+      <div className={cn("grid min-h-0 flex-1 items-start gap-4", !onClose && "xl:grid-cols-[minmax(0,1fr)_340px]")}>
+      <div className="flex min-h-0 min-w-0 flex-col">
       <AnimatePresence mode="wait">
         <motion.div
           key={view}
@@ -748,6 +775,17 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           )}
         </motion.div>
       </AnimatePresence>
+      </div>
+      {!onClose && (
+        <AgendaProximo
+          events={allEvents}
+          onEventClick={handleEventClick}
+          googleConnected={googleConnected}
+          googleEmail={gcalStatus?.google_email ?? null}
+          className="max-xl:hidden"
+        />
+      )}
+      </div>
 
       {/* Event popover */}
       <AnimatePresence>

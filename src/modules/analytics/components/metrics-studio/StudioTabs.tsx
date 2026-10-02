@@ -42,16 +42,23 @@ export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, p
               {panel.nome}
             </TabsTrigger>
           ))}
+          {/* "Nova aba" mora dentro da pílula, como último item (o mockup). Não
+              é um gatilho de aba: botão comum, fora do roving focus do Radix. */}
+          {podeCriar && (
+            <button
+              type="button"
+              onClick={onCriar}
+              disabled={busy}
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold text-tinta-muted transition-colors hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />Nova Aba
+            </button>
+          )}
         </TabsList>
-        {podeCriar && (
-          <Button type="button" variant="outline" size="sm" onClick={onCriar} disabled={busy} className="shrink-0">
-            <Plus aria-hidden="true" />Nova Aba
-          </Button>
-        )}
         {podeGerenciar && active && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-full" disabled={busy} aria-label={`Opções da aba ${active.nome}`}>
+              <Button size="icon" variant="outline" className="h-9 w-9 shrink-0 rounded-full" disabled={busy} aria-label={`Opções da aba ${active.nome}`}>
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>

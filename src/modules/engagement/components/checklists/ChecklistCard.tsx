@@ -19,10 +19,14 @@ import {
 
 interface ChecklistCardProps {
   checklist: ChecklistWithCounts;
+  /** Abre já com os itens à mostra (edição a partir do cartão de ouro). */
+  defaultExpanded?: boolean;
+  /** Chamado depois de excluir o template (quem abriu fecha o diálogo). */
+  onDeleted?: () => void;
 }
 
-export const ChecklistCard = memo(function ChecklistCard({ checklist }: ChecklistCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExpanded = false, onDeleted }: ChecklistCardProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [newItemTitle, setNewItemTitle] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(checklist.title);
@@ -139,7 +143,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => deleteChecklist.mutate(checklist.id)}
+              onClick={() => deleteChecklist.mutate(checklist.id, { onSuccess: () => onDeleted?.() })}
               aria-label="Excluir template"
             >
               <Trash2 className="h-3.5 w-3.5" />

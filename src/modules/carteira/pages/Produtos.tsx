@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Bot, Search, X, Download, Upload, CircleDollarSign, Receipt, ListChecks } from "lucide-react";
-import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { useProductRanking } from "@/modules/carteira/hooks/useProductRanking";
 import { CurvaAbcHero, TIPO_PRODUTO, brlCompacto, curvaAbc, type ClasseAbc } from "@/modules/carteira/components/produtos/CurvaAbc";
 import type { ProductType } from "@/modules/carteira/hooks/useProducts";
@@ -59,6 +59,18 @@ function ultimos90Dias() {
 
 /** Rótulo de valor nos sub-blocos estreitos do cartão — sem caixa-alta, que quebrava a linha. */
 const tileLabel = "truncate text-[11px] font-semibold text-muted-foreground";
+
+/** "R$ 990,00" com os centavos menores — o número-herói do cartão. */
+function ComCentavos({ texto }: { texto: string }) {
+  const i = texto.lastIndexOf(",");
+  if (i < 0) return <>{texto}</>;
+  return (
+    <>
+      {texto.slice(0, i)}
+      <ValueUnit>{texto.slice(i)}</ValueUnit>
+    </>
+  );
+}
 
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
@@ -347,7 +359,7 @@ export default function Produtos() {
                   <div>
                     <p className={tileLabel}>Ticket</p>
                     <p className="text-[1.6rem] font-extrabold leading-tight tracking-[-0.04em] tabular-nums">
-                      {formatCurrency(product.ticket)}
+                      <ComCentavos texto={formatCurrency(product.ticket)} />
                       {product.base_unit && (
                         <small className="ml-1 text-[12px] font-semibold tracking-normal text-muted-foreground">/{product.base_unit}</small>
                       )}
