@@ -61,6 +61,10 @@ export {
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
 export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
+// Negócios do lead (posição + dinheiro) — a mesma leitura da ficha do lead.
+// O chat a consome para mostrar etapa e valor no bloco do lead (CTO, P8a).
+export { useLeadsDeals } from "./hooks/useLeadsDeals";
+export type { LeadDeal } from "./hooks/useLeadsDeals";
 export type {
   StandardPipelineStatus,
   CustomPipelineStatus,

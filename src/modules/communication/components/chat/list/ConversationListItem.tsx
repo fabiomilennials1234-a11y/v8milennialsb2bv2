@@ -469,7 +469,7 @@ export function ConversationListItem({
                 derivações dariam duas cores para a mesma caixa. */}
             {caixa && (
               <span
-                className="flex min-w-0 max-w-[132px] shrink items-center gap-1"
+                className="flex min-w-[4.5rem] max-w-[132px] shrink-[2] items-center gap-1"
                 title={`Caixa: ${caixa.nome}`}
               >
                 <span
@@ -489,7 +489,7 @@ export function ConversationListItem({
             )}
             {stageLabel && (
               <span
-                className="flex min-w-0 max-w-[7.5rem] shrink items-center gap-1"
+                className="flex min-w-[3.25rem] max-w-[7.5rem] shrink-[3] items-center gap-1"
                 title={`Etapa: ${stageLabel}`}
               >
                 <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-60" aria-hidden />
@@ -504,7 +504,7 @@ export function ConversationListItem({
             )}
             {contact.tags.length > 0 && (
               <span
-                className="flex min-w-[2.25rem] shrink-[999] items-center gap-1 overflow-hidden"
+                className="flex min-w-[1.75rem] shrink-[999] items-center gap-1 overflow-hidden"
                 title={contact.tags.map((t) => t.name).join(", ")}
               >
                 <span

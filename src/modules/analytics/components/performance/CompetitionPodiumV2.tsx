@@ -79,33 +79,33 @@ function ValorPodio({ value, metricType, className }: { value: number; metricTyp
 const POSITION_CONFIG = {
   1: {
     avatarSize: "2xl" as const,
-    avatarClassName: "h-[72px] w-[72px]",
+    avatarClassName: "h-14 w-14 sm:h-[72px] sm:w-[72px]",
     ring: "bg-primary",
-    blockHeight: "min-h-[188px]",
+    blockHeight: "min-h-[160px] sm:min-h-[188px]",
     block: "bg-primary text-primary-foreground shadow-brilho-ouro",
     pill: "bg-tinta text-tinta-foreground",
     sub: "text-primary-foreground/70",
-    value: "text-[clamp(1.6rem,2.6vw,2.1rem)]",
+    value: "text-[clamp(1.05rem,4.2vw,2.1rem)]",
   },
   2: {
     avatarSize: "xl" as const,
-    avatarClassName: "h-14 w-14",
+    avatarClassName: "h-11 w-11 sm:h-14 sm:w-14",
     ring: "bg-silver",
-    blockHeight: "min-h-[148px]",
+    blockHeight: "min-h-[124px] sm:min-h-[148px]",
     block: "border border-tinta-line bg-tinta-2 text-tinta-foreground",
     pill: "bg-white/10 text-tinta-foreground",
     sub: "text-tinta-muted",
-    value: "text-[1.45rem]",
+    value: "text-[clamp(0.95rem,3.4vw,1.45rem)]",
   },
   3: {
     avatarSize: "xl" as const,
-    avatarClassName: "h-14 w-14",
+    avatarClassName: "h-11 w-11 sm:h-14 sm:w-14",
     ring: "bg-warning",
-    blockHeight: "min-h-[118px]",
+    blockHeight: "min-h-[100px] sm:min-h-[118px]",
     block: "border border-tinta-line bg-tinta-2 text-tinta-foreground",
     pill: "bg-white/10 text-tinta-foreground",
     sub: "text-tinta-muted",
-    value: "text-[1.45rem]",
+    value: "text-[clamp(0.95rem,3.4vw,1.45rem)]",
   },
 } as const;
 
@@ -199,7 +199,7 @@ function BlocoPodio({
   return (
     <div
       className={cn(
-        "flex w-full flex-col items-center justify-center gap-1.5 rounded-t-[22px] px-3 py-4 text-center",
+        "flex w-full flex-col items-center justify-center gap-1.5 rounded-t-[22px] px-1.5 py-4 text-center sm:px-3",
         cfg.blockHeight,
         cfg.block,
       )}
@@ -210,7 +210,7 @@ function BlocoPodio({
         metricType={metricType}
         className={cn("font-extrabold leading-none tracking-[-0.04em] tabular-nums", cfg.value)}
       />
-      <span className={cn("text-[11.5px] font-semibold tabular-nums", cfg.sub)}>
+      <span className={cn("text-[10.5px] font-semibold tabular-nums sm:text-[11.5px]", cfg.sub)}>
         {contagem}
         {Math.round(user.goalProgress)}% da meta
       </span>
@@ -275,7 +275,7 @@ function PodiumSlot({
           />
         </div>
       </div>
-      <p className="mt-2 max-w-full truncate text-center text-[14px] font-bold text-tinta-foreground">{user.name}</p>
+      <p className="mt-2 max-w-full truncate text-center text-[12.5px] font-bold text-tinta-foreground sm:text-[14px]">{user.name}</p>
       <p className="mb-3 h-4 max-w-full truncate text-center text-[11.5px] text-tinta-muted">{user.sub ?? ""}</p>
       <BlocoPodio user={user} prize={prize} metricType={metricType} position={pos} />
     </motion.div>

@@ -27,7 +27,7 @@ import { ChatReplyProvider } from "./ReplyContext";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, WifiOff, UserPlus } from "lucide-react";
+import { Loader2, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
@@ -87,7 +87,7 @@ import { zerarNaoLidas } from "@/modules/communication/hooks/chat/shared/cacheDe
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
-import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
+import { AiStateStrip } from "@/modules/communication/components/chat/takeover/AiStateStrip";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -164,6 +164,13 @@ interface ChatViewProps {
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
   isMobile: boolean;
+  /** Telefone da caixa aberta — o "final 4400" do compositor. */
+  instancePhone?: string | null;
+  /** Ações do ⋯ do cabeçalho — as mesmas do menu da linha. */
+  onMarkUnread?: () => void;
+  isArchived?: boolean;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
 }
 
 function ChatView({
@@ -179,6 +186,11 @@ function ChatView({
   density,
   onDensityChange,
   isMobile,
+  instancePhone,
+  onMarkUnread,
+  isArchived,
+  onArchive,
+  onUnarchive,
 }: ChatViewProps) {
   const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
   const conversationId = selectedContact?.conversation_id ?? null;
@@ -249,15 +261,8 @@ function ChatView({
   // mensagens. Uma requisição por conversa aberta, cacheada — sem poll.
   const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId, hasOlderMessages ? messages?.[0]?.timestamp : undefined);
 
-  // ── C1: useTakeover real — FSM ia_state da conversa ──────────────────────
-  const {
-    state: takeoverState,
-    isMutating: takeoverMutating,
-    markHumanActive,
-  } = useTakeover(conversationId);
-
-  const isWaitingHuman = takeoverState === "WAITING_HUMAN";
-  const isHumanActive  = takeoverState === "HUMAN_ACTIVE";
+  // O estado da IA (FSM `conversations.ai_state`) é lido pela `AiStateStrip`,
+  // que é quem desenha e oferece as transições — ver o cabeçalho dela.
 
   // Image preview state (C6)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -275,10 +280,7 @@ function ChatView({
   });
 
   const aiDisabled = copilotToggle.aiDisabled;
-  const toggleAiMutation = {
-    mutate: (checked: boolean) => copilotToggle.toggle(!checked),
-    isPending: copilotToggle.isPending,
-  };
+  const toggleAi = (checked: boolean) => copilotToggle.toggle(!checked);
 
   const handleRetry = useCallback(
     (msg: FailedMessage) => {
@@ -328,27 +330,6 @@ function ChatView({
   return (
     <ChatReplyProvider key={conversationKey} messages={messages}>
     <div className="flex flex-col h-full min-h-0 min-w-0">
-      {/* C1 — Banner WAITING_HUMAN */}
-      {isWaitingHuman && (
-        <div
-          role="alert"
-          className="flex shrink-0 items-center justify-between gap-3 border-b border-warning/30 bg-warning/15 px-4 py-2 text-warning-strong"
-        >
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-            IA pediu ajuda. Assuma a conversa.
-          </div>
-          <button
-            type="button"
-            className="h-8 shrink-0 rounded-full bg-tinta px-3.5 text-xs font-semibold text-tinta-foreground transition-colors hover:bg-tinta-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 dark:bg-foreground dark:text-background dark:hover:bg-foreground/90"
-            onClick={() => { void markHumanActive(); }}
-            disabled={takeoverMutating}
-          >
-            {takeoverMutating ? "..." : "Assumir"}
-          </button>
-        </div>
-      )}
-
       {isMobile ? (
         <MobileChatThreadHeader
           contactName={contactName}
@@ -364,31 +345,37 @@ function ChatView({
           contactName={contactName}
           hasLead={!!effectiveLeadId}
           leadId={effectiveLeadId ?? undefined}
-          conversationId={conversationId}
           instanceId={instanceId ?? undefined}
-          aiDisabled={aiDisabled || isHumanActive}
-          isWaitingHuman={isWaitingHuman}
+          instanceName={instanceName}
           szChatSession={null}
           organizationId={organizationId}
           onBack={onBack}
           onOpenLeadModal={onOpenLeadModal}
-          onToggleAi={(checked) => {
-            if (isHumanActive) return;
-            toggleAiMutation.mutate(checked);
-          }}
           onTransferToSzChatTeam={() => {
             // SZ.chat transfer — Onda 6
           }}
-          toggleAiPending={toggleAiMutation.isPending || isHumanActive}
           transferPending={false}
           density={density}
           onDensityChange={onDensityChange}
-          humanPaused={copilotPause.isPaused}
-          humanPausedUntil={copilotPause.pausedUntil}
-          onReactivateCopilot={copilotPause.reactivate}
-          isReactivating={copilotPause.isReactivating}
+          onMarkUnread={onMarkUnread}
+          isArchived={isArchived}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
         />
       )}
+
+      {/* Faixa de estado da IA — logo abaixo do cabeçalho, nos dois tamanhos
+          de tela: no celular ela substitui o banner "IA pediu ajuda". */}
+      <AiStateStrip
+        conversationId={conversationId}
+        aiDisabled={aiDisabled}
+        onToggleAi={toggleAi}
+        toggleAiPending={copilotToggle.isPending}
+        humanPaused={copilotPause.isPaused}
+        humanPausedUntil={copilotPause.pausedUntil}
+        onReactivateCopilot={copilotPause.reactivate}
+        isReactivating={copilotPause.isReactivating}
+      />
 
       {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
           precisa saber que a automação fala por outro número ANTES de ler a
@@ -478,6 +465,7 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           canReply
           density={density}
+          instancePhone={instancePhone}
           selectedContact={{
             push_name: selectedContact?.push_name ?? null,
             lead_name: effectiveLeadName,
@@ -1467,6 +1455,23 @@ export function ChatShellWithContext() {
               density={density}
               onDensityChange={setDensity}
               isMobile={isMobile}
+              instancePhone={instances.find((i) => i.id === selectedInstanceId)?.phone_number ?? null}
+              onMarkUnread={
+                telefoneSelecionado && selectedInstanceId
+                  ? () => { void handleMarkUnread(telefoneSelecionado, selectedInstanceId); }
+                  : undefined
+              }
+              isArchived={!!selectedContact?.archived_at}
+              onArchive={
+                telefoneSelecionado
+                  ? () => handleArchive(telefoneSelecionado, selectedInstanceId)
+                  : undefined
+              }
+              onUnarchive={
+                selectedContact?.conversation_id
+                  ? () => handleUnarchive(selectedContact.conversation_id!)
+                  : undefined
+              }
             />
           )
         }

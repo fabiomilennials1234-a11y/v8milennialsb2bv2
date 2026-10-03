@@ -132,7 +132,7 @@ describe("AiStateStrip — transições por estado (as do menu de TakeoverContro
 describe("AiStateStrip — o switch do lead é outro conceito", () => {
   it("lead com IA desligada: a faixa diz o que acontece de fato, sem ações de FSM", () => {
     montar({ aiDisabled: true });
-    expect(screen.getByText("IA desligada para este lead")).toBeInTheDocument();
+    expect(screen.getByText("IA desligada para este lead", { selector: "p" })).toBeInTheDocument();
     expect(botao("Pausar IA")).not.toBeInTheDocument();
   });
 

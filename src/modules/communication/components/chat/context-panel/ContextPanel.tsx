@@ -14,13 +14,17 @@
  * mais score de lead (CTO, 01/10) nem calor (03/09 — "fica só qualificação e
  * pré-qualificação"). As duas qualificações continuam na aba Infos.
  */
-import { useState, type ReactNode } from "react";
-import { Building2, Loader2 } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowUpRight, Building2, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { FocusCard } from "@/components/ui/bento";
+import { FocusCard, FocusTile } from "@/components/ui/bento";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatBRL } from "@/lib/format";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
-import { useLeadById } from "@/modules/leads";
+import { useLeadById, useLeadsDeals } from "@/modules/leads";
+import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
+import { negocioEmDestaque } from "@/modules/communication/lib/negocioEmDestaque";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
@@ -74,6 +78,13 @@ export function ContextPanel({
   const lead = leadByPhone ?? leadById ?? null;
   const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
+  const [fichaAberta, setFichaAberta] = useState(false);
+
+  // O Negócio do bloco de ouro (CTO, P8a): a MESMA leitura da ficha do lead
+  // (`useLeadsDeals`), só leitura. Hook antes dos retornos antecipados.
+  const idsDoLead = useMemo(() => (activeLeadId ? [activeLeadId] : []), [activeLeadId]);
+  const { data: negociosPorLead } = useLeadsDeals(idsDoLead);
+  const destaque = activeLeadId ? negocioEmDestaque(negociosPorLead?.[activeLeadId]) : null;
 
   if (!phoneNumber && !leadId) {
     return (
@@ -110,28 +121,81 @@ export function ContextPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header persistente — bloco de ouro com quem é o interlocutor. */}
-      <FocusCard className="m-3 mb-0 shrink-0 flex-row items-center gap-3 p-4">
-        <Avatar className="h-12 w-12 shrink-0">
-          <AvatarFallback className="bg-primary-foreground/10 text-base font-bold text-primary-foreground">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[11px] font-bold text-primary-foreground/70">
-            {lead ? "Lead" : "Contato sem lead"}
-          </span>
-          <span className="truncate text-[1.1rem] font-extrabold leading-tight tracking-[-0.02em]">
-            {displayName}
-          </span>
-          {lead?.company && (
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold leading-tight text-primary-foreground/75">
-              <Building2 className="h-3 w-3 shrink-0" />
-              <span className="truncate">{lead.company}</span>
-            </div>
+      {/* Header persistente — bloco de ouro com quem é o interlocutor e, quando
+          existe, o Negócio dele (etapa + valor, só leitura). Score, anel e
+          temperatura NÃO entram (o produto tirou). */}
+      <FocusCard className="m-3 mb-0 shrink-0 gap-3 p-4">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-11 w-11 shrink-0">
+            <AvatarFallback className="bg-primary-foreground/10 text-base font-bold text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[11px] font-bold text-primary-foreground/70">
+              {lead ? "Lead" : "Contato sem lead"}
+            </span>
+            <span className="truncate text-[1.1rem] font-extrabold leading-tight tracking-[-0.02em]">
+              {displayName}
+            </span>
+            {lead?.company && (
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold leading-tight text-primary-foreground/75">
+                <Building2 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{lead.company}</span>
+              </div>
+            )}
+          </div>
+          {phoneNumber && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setFichaAberta(true)}
+                  aria-label={lead ? "Abrir ficha do lead" : "Criar ou vincular lead"}
+                  className="grid h-9 w-9 shrink-0 place-items-center self-start rounded-full bg-primary-foreground/10 text-primary-foreground transition-colors hover:bg-primary-foreground/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/40"
+                >
+                  <ArrowUpRight className="h-4 w-4" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{lead ? "Abrir ficha do lead" : "Criar ou vincular lead"}</TooltipContent>
+            </Tooltip>
           )}
         </div>
+
+        {destaque && (
+          <FocusTile className="flex items-end justify-between gap-3 px-3.5 py-3" data-testid="negocio-do-lead">
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold text-primary-foreground/70">
+                Negócio · {destaque.negocio.stageName}
+              </p>
+              <p className="text-[1.3rem] font-extrabold leading-tight tracking-[-0.03em] tabular-nums">
+                {destaque.negocio.value > 0 ? (
+                  formatBRL(destaque.negocio.value)
+                ) : (
+                  <span className="text-[13px] font-bold text-primary-foreground/60">Sem valor</span>
+                )}
+              </p>
+            </div>
+            <p className="min-w-0 max-w-[50%] truncate text-right text-[11px] font-semibold text-primary-foreground/65" title={destaque.negocio.funnelName}>
+              {destaque.negocio.funnelName}
+              {destaque.outrosAbertos > 0 && (
+                <span className="block text-primary-foreground/55">
+                  +{destaque.outrosAbertos} {destaque.outrosAbertos === 1 ? "aberto" : "abertos"}
+                </span>
+              )}
+            </p>
+          </FocusTile>
+        )}
       </FocusCard>
+
+      {phoneNumber && (
+        <LeadContactModal
+          isOpen={fichaAberta}
+          onClose={() => setFichaAberta(false)}
+          phoneNumber={phoneNumber}
+          pushName={pushName ?? undefined}
+        />
+      )}
 
       {identitySlot}
 

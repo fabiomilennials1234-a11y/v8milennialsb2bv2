@@ -112,8 +112,9 @@ export function formatMessageTime(timestamp: string): string {
 // ---------------------------------------------------------------------------
 
 export function MessageStatusIcon({ status, onInk = false }: { status: string; onInk?: boolean }) {
-  // onInk → ícone está sobre o ouro (bolha manual de saída): usa a tinta do
-  // próprio ouro para legibilidade. Caso contrário, tons neutros + azul de lida.
+  // onInk → ícone está sobre o OURO (bolha da IA, V5): usa a tinta do próprio
+  // ouro para legibilidade. Caso contrário, tons neutros + azul de lida — o que
+  // também serve à bolha humana em tinta, que roda no escopo `dark`.
   const muted = onInk ? "text-primary-foreground/45" : "text-muted-foreground/60";
   const readTone = onInk ? "text-primary-foreground/80" : "text-insights";
   switch (status) {
@@ -273,17 +274,23 @@ export function MessageBubble({
   };
 
   // Bubble color tokens — C9.
-  // V5: manual/humano outgoing é OURO SÓLIDO (era gradiente) com texto em tinta
-  // do ouro; a de entrada é o cartão branco. Copilot/automação preservam as
-  // cores semânticas (IA/automação) — é por elas que se lê quem escreveu.
+  // V5 ("mais perto do mockup", 02/10): quem escreveu se lê pela cor.
+  //   humano (saída) → TINTA, no escopo `dark` para os tokens internos (texto
+  //                    apagado, mídia, selos) lerem claro sobre ela;
+  //   IA (Copilot)   → OURO sólido;
+  //   automação      → violeta, como sempre;
+  //   recebida       → cartão branco.
   const isManualOutgoing = isOutgoing && sentSource === "manual";
+  const isAiOutgoing = isOutgoing && sentSource === "copilot";
   const bubbleColorClass =
-    sentSource === "copilot"
-      ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
+    isAiOutgoing
+      ? "bg-primary text-primary-foreground border border-transparent shadow-[0_6px_16px_-10px_hsl(var(--primary)/0.8)]"
       : sentSource === "workflow"
         ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
-        : isManualOutgoing
-          ? "bg-primary text-primary-foreground border border-transparent shadow-[0_6px_16px_-10px_hsl(var(--primary)/0.8)]"
+        // Falha não entra na tinta: o vermelho da falha é calibrado para o
+        // tema da página, e o escopo `dark` o clarearia sobre fundo claro.
+        : isManualOutgoing && !isFailed
+          ? "dark bg-tinta text-tinta-foreground border border-tinta-line shadow-relevo-tinta"
           : "bg-card text-card-foreground border border-border/70 shadow-relevo";
 
   const radiusClass = isOutgoing
@@ -386,8 +393,8 @@ export function MessageBubble({
               </>
             ) : (
               <>
-                <Bot className="h-3 w-3 text-bubble-ai-foreground/70" />
-                <span className="text-[10px] font-bold text-bubble-ai-foreground/80">Copilot</span>
+                <Bot className="h-3 w-3 text-primary-foreground/70" />
+                <span className="text-[10px] font-bold text-primary-foreground/80">Copilot</span>
               </>
             )}
           </div>
@@ -473,7 +480,7 @@ export function MessageBubble({
             {isDocument && message.media_url && (
               <MessageDocument
                 src={message.media_url}
-                isOutgoing={isOutgoing}
+                isOutgoing={isAiOutgoing}
               />
             )}
 
@@ -581,7 +588,7 @@ export function MessageBubble({
                   return <MessageVideo src={mediaUrl} />;
                 if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
                   return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
-                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
+                return <MessageDocument src={mediaUrl} isOutgoing={isAiOutgoing} />;
               })()
             )}
 
@@ -606,7 +613,7 @@ export function MessageBubble({
                     key={i}
                     className={cn(
                       "py-1.5 text-center text-[13px] font-semibold",
-                      isManualOutgoing ? "text-primary-foreground" : "text-insights",
+                      isAiOutgoing ? "text-primary-foreground" : isManualOutgoing ? "text-tinta-foreground" : "text-insights",
                     )}
                   >
                     {rotulo}
@@ -649,12 +656,12 @@ export function MessageBubble({
               dateTime={message.timestamp}
               className={cn(
                 "text-[10px] tabular-nums",
-                isManualOutgoing ? "text-primary-foreground/65" : "text-muted-foreground",
+                isAiOutgoing ? "text-primary-foreground/65" : isManualOutgoing && !isFailed ? "text-tinta-muted" : "text-muted-foreground",
               )}
             >
               {formatMessageTime(message.timestamp)}
             </time>
-            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isManualOutgoing} />}
+            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isAiOutgoing} />}
           </div>
         )}
       </div>

@@ -19,7 +19,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, Mic, Clock, AlertCircle, X, LayoutList, QrCode, Sticker, Paperclip, FileText, Film } from "lucide-react";
+import { Send, Loader2, CalendarClock, AlertCircle, X, LayoutList, QrCode, Sticker, FileText, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,7 +46,7 @@ import {
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
-import { ChatQuickActions } from "./ChatQuickActions";
+import { ChatQuickActions, QUICK_ACTION_BUTTON } from "./ChatQuickActions";
 import { SendMenuDialog } from "./SendMenuDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/lib/menu-sender";
@@ -75,6 +75,8 @@ export interface ChatComposerProps {
   density?: DensityMode;
   /** Callback ao abrir modal de agendamento */
   onScheduleOpen?: () => void;
+  /** Telefone da caixa — o "final 4400" de "Respondendo pela caixa X". */
+  instancePhone?: string | null;
   /** Dados do contact para templates */
   selectedContact?: {
     push_name: string | null;
@@ -96,6 +98,7 @@ export function ChatComposer({
   canReply,
   density: _density,
   onScheduleOpen,
+  instancePhone,
   selectedContact,
 }: ChatComposerProps) {
   const { user } = useAuth();
@@ -407,15 +410,21 @@ export function ChatComposer({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [message]);
+
+  /** Os quatro últimos dígitos da caixa — o que distingue dois números de mesmo nome. */
+  const finalDoNumero = (() => {
+    const digitos = (instancePhone ?? "").replace(/\D/g, "");
+    return digitos.length >= 4 ? digitos.slice(-4) : null;
+  })();
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div
       className={cn(
-        "min-w-0 shrink-0 border-t border-border/60 bg-card px-3 pb-3 pt-2.5",
+        "min-w-0 shrink-0 border-t border-border/60 bg-card px-3 pb-2.5 pt-2.5",
         isDragOver && "ring-2 ring-ring ring-inset bg-muted/30",
       )}
       onDragOver={handleDragOver}
@@ -517,25 +526,10 @@ export function ChatComposer({
             );
           })()}
 
-          {/* Quick action bar */}
-          <ChatQuickActions
-            onAudio={() => {
-              if (sendMedia.isPending) {
-                toast.info("Aguarde o envio anterior finalizar.");
-                return;
-              }
-              setIsRecording(true);
-            }}
-            onTemplate={() => {
-              setMessage("/");
-              setShowSlashPopover(true);
-            }}
-            onAttach={() => fileInputRef.current?.click()}
-            disabled={sendMessage.isPending || sendMedia.isPending}
-          />
-
-          {/* Input row — container "pill" arredondado (estilo mockup) */}
-          <div className="relative flex items-end gap-1 rounded-[22px] border border-border/70 bg-sunken px-1.5 py-1 transition-colors focus-within:border-primary/50 focus-within:bg-card">
+          {/* Compositor em DOIS ANDARES (V5): o campo em cima, a régua de
+              ferramentas embaixo e o enviar à direita. A fileira duplicada que
+              ficava acima do campo saiu — cada ferramenta existe uma vez. */}
+          <div className="relative rounded-[18px] border border-border/70 bg-muted/50 transition-colors focus-within:border-primary/50 focus-within:bg-card">
             {/* File input oculto */}
             <input
               ref={fileInputRef}
@@ -545,49 +539,6 @@ export function ChatComposer({
               className="hidden"
               aria-hidden="true"
             />
-
-            {/* Botão anexar arquivo */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sendMessage.isPending || sendMedia.isPending}
-              aria-label="Anexar arquivo"
-              title="Anexar imagem, vídeo ou documento"
-              className="opacity-50 hover:opacity-100 transition-opacity"
-            >
-              <Paperclip className="w-5 h-5 text-muted-foreground" />
-            </Button>
-
-            {/* Menu + Pix — Uazapi-only (hidden for Meta/Evolution instances) */}
-            {caps.canUseUazapiActions && (
-              <>
-                <SendRichContactActions key={conversationKey} instanceId={instanceId} phoneNumber={phoneNumber} leadId={leadId} disabled={!canReply || sendMessage.isPending || sendMedia.isPending} />
-                {/* Menu interativo */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setMenuDialogOpen(true)}
-                  aria-label="Enviar menu interativo"
-                  title="Menu interativo"
-                  className="opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  <LayoutList className="w-4 h-4 text-muted-foreground" />
-                </Button>
-
-                {/* Pix */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setPixDialogOpen(true)}
-                  aria-label="Enviar botão Pix"
-                  title="Enviar Pix"
-                  className="opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  <QrCode className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </>
-            )}
 
             {/* SlashCommandPopover para templates */}
             {showSlashPopover && templates && (
@@ -599,10 +550,10 @@ export function ChatComposer({
               />
             )}
 
-            {/* Input de texto — textarea p/ suportar quebra de linha (⇧⏎) */}
+            {/* Andar 1 — o texto. Textarea p/ suportar quebra de linha (⇧⏎). */}
             <Textarea
               ref={inputRef}
-              rows={1}
+              rows={2}
               placeholder={`Mensagem para ${contactName}...`}
               value={message}
               onChange={(e) => {
@@ -616,35 +567,81 @@ export function ChatComposer({
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
-              className="flex-1 min-h-[36px] max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 leading-5"
+              className="block w-full min-h-[52px] max-h-[140px] resize-none border-0 bg-transparent px-3.5 pb-1 pt-3 text-sm leading-5 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
 
-            {/* Botão agendar */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (onScheduleOpen) {
-                  onScheduleOpen();
-                } else {
-                  setScheduleModalOpen(true);
-                }
-              }}
-              aria-label="Agendar mensagem"
-              title="Agendar mensagem"
-              className="opacity-50 hover:opacity-100 hover:text-primary transition-all"
-            >
-              <Clock className="w-4 h-4" />
-            </Button>
+            {/* Andar 2 — ferramentas · enviar. */}
+            <div className="flex items-center gap-1 px-1 pb-1">
+              <ChatQuickActions
+                onAudio={() => {
+                  if (sendMedia.isPending) {
+                    toast.info("Aguarde o envio anterior finalizar.");
+                    return;
+                  }
+                  setIsRecording(true);
+                }}
+                onTemplate={() => {
+                  setMessage("/");
+                  setShowSlashPopover(true);
+                }}
+                onAttach={() => fileInputRef.current?.click()}
+                disabled={sendMessage.isPending || sendMedia.isPending}
+                className="min-w-0 flex-1 overflow-x-auto scrollbar-hide"
+              >
+                {/* Agendar */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onScheduleOpen) {
+                      onScheduleOpen();
+                    } else {
+                      setScheduleModalOpen(true);
+                    }
+                  }}
+                  aria-label="Agendar mensagem"
+                  title="Agendar mensagem"
+                  className={QUICK_ACTION_BUTTON}
+                >
+                  <CalendarClock className="w-[18px] h-[18px]" />
+                </button>
 
-            {/* Botão enviar ou gravar */}
-            {message.trim() ? (
+                {/* Menu + Pix + contato/localização — Uazapi-only (somem para
+                    Meta/Evolution: allowlist positiva, R13). */}
+                {caps.canUseUazapiActions && (
+                  <>
+                    <SendRichContactActions key={conversationKey} instanceId={instanceId} phoneNumber={phoneNumber} leadId={leadId} disabled={!canReply || sendMessage.isPending || sendMedia.isPending} />
+                    <button
+                      type="button"
+                      onClick={() => setPixDialogOpen(true)}
+                      aria-label="Enviar botão Pix"
+                      title="Enviar Pix"
+                      className={QUICK_ACTION_BUTTON}
+                    >
+                      <QrCode className="w-[18px] h-[18px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMenuDialogOpen(true)}
+                      aria-label="Enviar menu interativo"
+                      title="Menu interativo"
+                      className={QUICK_ACTION_BUTTON}
+                    >
+                      <LayoutList className="w-[18px] h-[18px]" />
+                    </button>
+                  </>
+                )}
+              </ChatQuickActions>
+
+              {/* Enviar — tinta, redondo. Sem texto, fica desabilitado (o
+                  gravador mora na régua, não troca de lugar com o enviar). */}
               <Button
-                onClick={handleSend}
-                disabled={sendMessage.isPending}
+                type="button"
+                variant="ink"
                 size="icon"
+                onClick={handleSend}
+                disabled={!message.trim() || sendMessage.isPending}
                 aria-label="Enviar mensagem"
-                className="shrink-0 rounded-full"
+                className="h-[38px] w-[38px] shrink-0 rounded-full"
               >
                 {sendMessage.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -652,42 +649,30 @@ export function ChatComposer({
                   <Send className="w-4 h-4" />
                 )}
               </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  if (sendMedia.isPending) {
-                    toast.info("Aguarde o envio anterior finalizar.");
-                    return;
-                  }
-                  setIsRecording(true);
-                }}
-                aria-label="Gravar áudio"
-                className="opacity-50 hover:opacity-100 transition-opacity"
-              >
-                <Mic className="w-5 h-5 text-muted-foreground" />
-              </Button>
-            )}
+            </div>
           </div>
 
-          {/* Kbd hints — visíveis apenas em desktop */}
-          <p className="hidden sm:flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground/50 select-none">
-            <kbd className="font-sans">⏎</kbd>
-            <span>enviar</span>
-            <span className="opacity-40">·</span>
-            <kbd className="font-sans">⇧⏎</kbd>
-            <span>nova linha</span>
-            <span className="opacity-40">·</span>
-            <kbd className="font-sans">⌘K</kbd>
-            <span>templates</span>
-            <span className="opacity-40">·</span>
-            <span className="opacity-50">@time</span>
-            <span className="opacity-30">(em breve)</span>
-            <span className="opacity-40">·</span>
-            <span className="opacity-50">#tag</span>
-            <span className="opacity-30">(em breve)</span>
-          </p>
+          {/* Linha de dicas — desktop. À direita, POR ONDE a resposta sai: na
+              caixa unificada a thread pertence à linha clicada, e o vendedor
+              precisa ver o número antes de mandar. */}
+          <div className="mt-1.5 hidden items-center gap-3 text-[10.5px] text-muted-foreground select-none sm:flex">
+            <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+              <kbd className="rounded border border-border/70 bg-muted/60 px-1 py-px font-mono text-[10px]">Enter</kbd>
+              envia
+              <kbd className="ml-1.5 rounded border border-border/70 bg-muted/60 px-1 py-px font-mono text-[10px]">Shift+Enter</kbd>
+              nova linha
+              <span className="hidden items-center gap-1.5 2xl:flex">
+                <kbd className="ml-1.5 rounded border border-border/70 bg-muted/60 px-1 py-px font-mono text-[10px]">⌘K</kbd>
+                templates
+              </span>
+            </span>
+            {instanceName && (
+              <span className="ml-auto min-w-0 truncate whitespace-nowrap text-right">
+                Respondendo pela caixa <span className="font-semibold text-foreground/80">{instanceName}</span>
+                {finalDoNumero && <> · final <span className="font-mono tabular-nums">{finalDoNumero}</span></>}
+              </span>
+            )}
+          </div>
         </>
       )}
 

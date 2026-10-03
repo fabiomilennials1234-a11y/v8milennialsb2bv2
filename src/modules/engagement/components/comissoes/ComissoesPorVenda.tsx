@@ -160,13 +160,13 @@ export const ComissoesPorVenda = forwardRef<HTMLDivElement, Props>(function Comi
                       {format(new Date(l.created_at), "dd/MM")}
                     </TableCell>
                     <TableCell className="py-3 text-[13px]">{TIPO[tipo] ?? tipo}</TableCell>
-                    <TableCell className="py-3 text-right text-[13px] tabular-nums">
+                    <TableCell className="whitespace-nowrap py-3 text-right text-[13px] tabular-nums">
                       {l.pipe_proposta?.sale_value != null ? formatBRL(Number(l.pipe_proposta.sale_value)) : "—"}
                     </TableCell>
                     <TableCell className="py-3 text-right text-[13px] tabular-nums text-muted-foreground">
                       {l.rate_percent != null ? `${Number(l.rate_percent).toLocaleString("pt-BR")}%` : "—"}
                     </TableCell>
-                    <TableCell className="py-3 text-right text-[13px] font-bold tabular-nums">
+                    <TableCell className="whitespace-nowrap py-3 text-right text-[13px] font-bold tabular-nums">
                       {formatBRL(Number(l.amount || 0))}
                     </TableCell>
                     <TableCell className="py-3 pr-6">

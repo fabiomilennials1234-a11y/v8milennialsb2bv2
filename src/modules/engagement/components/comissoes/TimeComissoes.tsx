@@ -10,7 +10,8 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
 import { useCommissionSummaries, type CommissionSummary } from "@/modules/engagement/hooks/useCommissions";
 
-import { Dinheiro, FAIXAS_ACELERADOR, formatBRL, multiplicadorDaMeta } from "./comissoes-format";
+import { Dinheiro } from "./Dinheiro";
+import { FAIXAS_ACELERADOR, formatBRL, multiplicadorDaMeta } from "./comissoes-format";
 
 export interface PessoaComissao {
   id: string;
@@ -491,7 +492,7 @@ function AceleradoresCard({
     .reduce<{ p: PessoaComissao & { progresso: number }; left: number; nivel: number }[]>((acc, p) => {
       const left = pos(p.progresso);
       const ant = acc[acc.length - 1];
-      const nivel = ant && left - ant.left < 11 ? (ant.nivel + 1) % 3 : 0;
+      const nivel = ant && left - ant.left < 20 ? (ant.nivel + 1) % 3 : 0;
       acc.push({ p, left, nivel });
       return acc;
     }, []);

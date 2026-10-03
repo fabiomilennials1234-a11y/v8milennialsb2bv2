@@ -456,9 +456,10 @@ export function MessageList({
   }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado]);
 
   return (
-    // V5: a conversa corre num fundo afundado dentro do cartão — é o que faz a
-    // bolha de entrada (cartão) e a de saída (ouro) lerem como objeto.
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sunken">
+    // V5: a conversa corre num fundo afundado com grade de pontos (1 px a cada
+    // 20 px, na cor da borda) — é o que faz a bolha de entrada (cartão), a
+    // humana (tinta) e a da IA (ouro) lerem como objeto.
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sunken bg-[radial-gradient(hsl(var(--border))_1px,transparent_1.2px)] [background-size:20px_20px]">
       <ScrollArea
         ref={scrollAreaRef}
         className={cn(

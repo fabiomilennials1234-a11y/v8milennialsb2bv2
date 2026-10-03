@@ -318,9 +318,9 @@ export function ClassificacaoCompleta({
                     </TableCell>
                     {vendas ? (
                       <>
-                        <TableCell className="py-3 text-right text-[13px] font-bold tabular-nums">{brl(l.value)}</TableCell>
+                        <TableCell className="whitespace-nowrap py-3 text-right text-[13px] font-bold tabular-nums">{brl(l.value)}</TableCell>
                         <TableCell className="py-3 text-right text-[13px] tabular-nums">{l.conversions ?? 0}</TableCell>
-                        <TableCell className="py-3 text-right text-[13px] tabular-nums text-muted-foreground">
+                        <TableCell className="whitespace-nowrap py-3 text-right text-[13px] tabular-nums text-muted-foreground">
                           {ticket != null ? brl(ticket) : "—"}
                         </TableCell>
                       </>
@@ -345,7 +345,7 @@ export function ClassificacaoCompleta({
                             </span>
                             <span className="w-11 text-right text-[12px] font-bold tabular-nums">{pct}%</span>
                           </div>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                          <p className="mt-0.5 whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
                             meta {vendas ? brl(l.goal) : l.goal}
                           </p>
                         </div>
