@@ -49,6 +49,9 @@ chave `ui_v5_enabled` na allowlist de `set_org_settings` (admin da org ou master
 1. **Antes do merge**: trazer a `main` para esta branch e regenerar a clássica dela —
    `npm run ui-classic:snapshot -- --ref origin/main`. Hoje a pasta vem da base comum (`1b3524727`), porque a
    `main` já usa dependências que a branch ainda não tem (`@sentry/react`); o patch aplica limpo nos dois refs.
+   Por isso ela está marcada `provisoria` no `classic/SNAPSHOT.json`, e o `merge-dist.mjs` **recusa buildar para
+   produção** assim: um merge antes da regeneração falha o build no EasyPanel em vez de rebaixar o front das orgs
+   na clássica.
 2. **Merge** → EasyPanel builda a imagem com as duas interfaces. Sem cookie, todo mundo recebe a clássica —
    o mesmo que já usa hoje.
 3. **Apply da migration** (botão do humano). Conferir depois:

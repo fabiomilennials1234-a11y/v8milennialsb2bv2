@@ -21,6 +21,18 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const V5 = join(RAIZ, "dist");
 const CLASSICA = join(RAIZ, "dist-classic");
 
+// Clássica gerada de um ref que não é o de produção (snapshot.mjs --provisorio).
+// Ir ao ar assim rebaixaria o front de todas as orgs na clássica.
+const snapshot = JSON.parse(readFileSync(join(RAIZ, "classic/SNAPSHOT.json"), "utf8"));
+if (snapshot.provisoria && process.env.UI_CLASSIC_PERMITE_PROVISORIA !== "1") {
+  console.error(
+    `✖ classic/ é PROVISÓRIA (ref ${String(snapshot.ref).slice(0, 9)}). Regenere a partir da main antes de buildar para produção:\n` +
+      "    npm run ui-classic:snapshot -- --ref origin/main\n" +
+      "  (validação local: UI_CLASSIC_PERMITE_PROVISORIA=1)",
+  );
+  process.exit(1);
+}
+
 for (const [nome, dir] of [["dist", V5], ["dist-classic", CLASSICA]]) {
   if (!existsSync(join(dir, "index.html"))) {
     console.error(`✖ ${nome}/index.html não existe — rode o build correspondente antes.`);

@@ -45,6 +45,8 @@ if (!args.includes("--sem-build")) {
       VITE_INVITE_API_URL: "",
       VITE_DEMO_MODE: "",
       VITE_UI_SWITCH: "true",
+      // Prova local: aceita a clássica provisória (ver merge-dist.mjs).
+      UI_CLASSIC_PERMITE_PROVISORIA: "1",
     },
   });
 }

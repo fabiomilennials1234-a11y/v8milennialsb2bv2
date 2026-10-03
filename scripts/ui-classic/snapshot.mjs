@@ -3,6 +3,8 @@
  * Gera `classic/` — a interface clássica congelada — a partir de um ref do git.
  *
  *   node scripts/ui-classic/snapshot.mjs [--ref origin/main]   # extrai + aplica o patch
+ *   node scripts/ui-classic/snapshot.mjs --ref <ref velho> --provisorio
+ *                                    # só para validar local; o build de produção recusa
  *   node scripts/ui-classic/snapshot.mjs --gerar-patch         # classic/ editada → patch
  *
  * O que vem do ref: `src/` (sem testes, stories e .md), `index.html` e
@@ -97,8 +99,12 @@ extrair(CLASSIC);
 if (existsSync(PATCH) && readFileSync(PATCH, "utf8").trim()) {
   execFileSync("git", ["apply", "--whitespace=nowarn", PATCH], { cwd: RAIZ, stdio: "inherit" });
 }
+// Provisória = não veio do que está em produção (origin/main). O build de
+// produção (merge-dist.mjs) recusa: mergear com a clássica de um ref velho
+// rebaixaria o front de todas as orgs que ficam nela.
+const provisoria = args.includes("--provisorio");
 writeFileSync(
   join(CLASSIC, "SNAPSHOT.json"),
-  `${JSON.stringify({ ref: sha, origem: ref, geradoEm: new Date().toISOString().slice(0, 10) }, null, 2)}\n`,
+  `${JSON.stringify({ ref: sha, origem: ref, geradoEm: new Date().toISOString().slice(0, 10), ...(provisoria && { provisoria: true }) }, null, 2)}\n`,
 );
 console.log(`classic/ ← ${ref} (${sha.slice(0, 9)})${existsSync(PATCH) ? " + classic.patch" : ""}`);
