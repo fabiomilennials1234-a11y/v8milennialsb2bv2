@@ -1,0 +1,144 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/modules/identity";
+import { isVirtualTeamMember } from "@/modules/identity";
+import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+import { toast } from "sonner";
+import type { ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
+
+export function useChecklistTemplates() {
+  const { organizationId, isReady } = useOrganization();
+  useRealtimeSubscription("checklists", ["checklist_templates"]);
+
+  return useQuery({
+    queryKey: ["checklist_templates", organizationId],
+    queryFn: async (): Promise<ChecklistWithCounts[]> => {
+      if (!organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("checklists")
+        .select(`*, checklist_items(id, is_completed)`)
+        .eq("organization_id", organizationId)
+        .is("lead_id", null)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data ?? []).map((c: any) => {
+        const items = c.checklist_items ?? [];
+        return {
+          ...c,
+          checklist_items: undefined,
+          total_items: items.length,
+          completed_items: items.filter((i: any) => i.is_completed).length,
+          lead: null,
+        };
+      });
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useApplyChecklistTemplate() {
+  const queryClient = useQueryClient();
+  const { organizationId, teamMemberId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async ({ templateId, leadId, entryId }: {
+      templateId: string;
+      leadId: string;
+      /**
+       * O Negócio que recebe o checklist (`pipeline_entries.id`).
+       *
+       * Ausente = aplica na PESSOA, que é o que a ficha do lead faz. Presente =
+       * aplica naquele negócio só, e a idempotência muda de chave junto — sem
+       * isso, aplicar o mesmo template no segundo negócio do lead devolveria o
+       * checklist do primeiro e o segundo sairia sem nada.
+       */
+      entryId?: string | null;
+    }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
+      const { data: template, error: tErr } = await supabase
+        .from("checklists")
+        .select("title, description")
+        .eq("id", templateId)
+        .single();
+
+      if (tErr) throw tErr;
+
+      // Idempotência: espelha o handler de workflow e o trigger de stage.
+      // Se este template já foi aplicado neste lead, no-op em vez de duplicar.
+      // Antes deste guard, o apply manual inseria sem source_template_id e furava
+      // o índice parcial único uniq_checklists_lead_source — gerando checklists
+      // duplicados do mesmo template no lead (ADR-0016).
+      const escopo = supabase
+        .from("checklists")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("source_template_id", templateId);
+      const { data: existing } = entryId
+        ? await escopo.eq("pipeline_entry_id", entryId).maybeSingle()
+        : await escopo.eq("lead_id", leadId).is("pipeline_entry_id", null).maybeSingle();
+
+      if (existing) return existing;
+
+      const { data: templateItems, error: iErr } = await supabase
+        .from("checklist_items")
+        .select("id, title, position")
+        .eq("checklist_id", templateId)
+        .order("position", { ascending: true });
+
+      if (iErr) throw iErr;
+
+      const { data: newChecklist, error: cErr } = await supabase
+        .from("checklists")
+        .insert({
+          organization_id: organizationId,
+          created_by: teamMemberId && !isVirtualTeamMember(teamMemberId) ? teamMemberId : null,
+          title: template.title,
+          description: template.description,
+          lead_id: leadId,
+          // O negócio dono. Nulo = da pessoa. Ver a migration
+          // `20270827000020_checklist_do_negocio.sql`.
+          pipeline_entry_id: entryId ?? null,
+          // Marca a origem → habilita dedup via índice parcial único
+          // (negócio, template) ou (lead, template) entre os sem negócio, e
+          // deixa o checklist auditável.
+          source_template_id: templateId,
+        } as never)
+        .select()
+        .single();
+
+      if (cErr) throw cErr;
+
+      if (templateItems && templateItems.length > 0) {
+        const itemsToInsert = templateItems.map((item) => ({
+          checklist_id: newChecklist.id,
+          title: item.title,
+          position: item.position,
+          // Linhagem estável template→lead (ADR-0016).
+          template_item_id: item.id,
+        }));
+
+        const { error: insertErr } = await supabase
+          .from("checklist_items")
+          .insert(itemsToInsert);
+
+        if (insertErr) throw insertErr;
+      }
+
+      return newChecklist;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklists"] });
+      queryClient.invalidateQueries({ queryKey: ["checklist_items"] });
+      toast.success("Template aplicado ao lead!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao aplicar template", { description: error.message });
+    },
+  });
+}

@@ -1,0 +1,184 @@
+import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useOrganization } from "@/modules/identity";
+import { supabase } from "@/integrations/supabase/client";
+import { fetchMetricMeasure } from "./useMetricMeasure";
+import type { EngineMetric } from "@/modules/analytics/lib/metrics-studio-engine-map";
+import {
+  montarRelatorio,
+  nomeDoArquivo,
+  REPORT_SCOPE_LABEL,
+  type ReportItem,
+  type ReportScope,
+  sanitizarCelula,
+} from "@/modules/analytics/lib/metrics-studio-report";
+import { periodoAnterior, periodoAtual, referenciaNaOrg, type StudioPeriod, type StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
+import { studioInterval } from "@/modules/analytics/lib/metrics-studio-interval";
+import { fetchCommandMetrics } from "./useCommandMetrics";
+import { fetchTeamResponseTime } from "./useTeamResponseTime";
+import type { StudioWindow } from "./useMetricsStudio";
+
+/**
+ * Exportação do painel em planilha (SCRUM-312 · G10).
+ *
+ * `exceljs` entra por `await import()`, nunca por import estático: ele NÃO
+ * está em `manualChunks` do vite.config, e só fica fora do bundle inicial
+ * porque todos os seis call-sites do repo o carregam sob demanda. Um import
+ * estático aqui jogaria a lib inteira no carregamento da aplicação.
+ */
+
+const MESES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function rotuloDoPeriodo(scope: ReportScope, hoje: Date): string {
+  if (scope === "month") return `${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+  const tri = Math.floor(hoje.getMonth() / 3) + 1;
+  return `${tri}º trimestre de ${hoje.getFullYear()}`;
+}
+
+export function useMetricsStudioReport(windows: StudioWindow[], byId: Map<string, EngineMetric>, selection: { period: StudioPeriod; range: StudioRange | null } = { period: "month", range: null }) {
+  const { organizationId, timezone } = useOrganization();
+  const [exportando, setExportando] = useState<ReportScope | null>(null);
+  const busy = useRef(false);
+
+  const exportar = useCallback(
+    async (scope: ReportScope) => {
+      if (!organizationId || busy.current) return;
+      busy.current = true;
+      setExportando(scope);
+
+      try {
+        const geradoEm = new Date();
+        const hoje = referenciaNaOrg(geradoEm, timezone ?? "UTC");
+
+        // `useOrganization` não expõe o nome da org — expõe id, tipo e fuso.
+        // Buscar aqui, no clique, evita alterar um hook de identidade que meio
+        // sistema consome só para preencher um cabeçalho de planilha.
+        const { data: org, error: orgError } = await supabase
+          .from("organizations")
+          .select("name")
+          .eq("id", organizationId)
+          .maybeSingle();
+        if (orgError) throw new Error(orgError.message);
+        const orgNome = (org as { name?: string | null } | null)?.name ?? "Organização";
+
+        const studioPeriod = scope === "selected" ? selection.period : scope;
+        const custom = scope === "selected" ? selection.range : null;
+        const atual = periodoAtual(studioPeriod, hoje, custom);
+        const anterior = periodoAnterior(studioPeriod, hoje, custom);
+        const intervalo = studioInterval(studioPeriod, geradoEm, timezone ?? "UTC", custom);
+        const common = { organizationId, timezone: timezone ?? "UTC", filterMemberId: null };
+        // Abas só com métricas do motor mantêm a exportação independente das
+        // RPCs de dashboard, como antes da inclusão dos cards fixos.
+        const includeDashboard = windows.length === 0 || windows.some((win) => win.fixo);
+        const summary = includeDashboard ? await Promise.all([
+          fetchCommandMetrics({ ...common, start: intervalo.start, end: intervalo.end }),
+          fetchCommandMetrics({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
+          // Falhas nas fontes adicionais ficam explícitas na planilha e não
+          // descartam os indicadores que o dashboard retornou corretamente.
+          Promise.allSettled([
+            fetchTeamResponseTime({ ...common, start: intervalo.start, end: intervalo.end }),
+            fetchTeamResponseTime({ ...common, start: intervalo.prevStart, end: intervalo.prevEnd }),
+            fetchMetricMeasure({ organizationId, measureRef: { kind: "leaf", id: "negocios_na_etapa" }, recorte: "pipeline", ...atual }),
+          ]),
+        ]) : null;
+        const dashboard = summary?.[0];
+        const previous = summary?.[1];
+        const response = summary?.[2][0];
+        const previousResponse = summary?.[2][1];
+        const pipelineResult = summary?.[2][2];
+        const pipeline = pipelineResult?.status === "fulfilled" ? pipelineResult.value : null;
+
+        // Uma leitura por janela, atual e anterior. São poucas janelas (teto de
+        // 24 no banco) e o clique é deliberado — paralelizar é seguro aqui.
+        const itens: ReportItem[] = [];
+        await Promise.all(
+          windows.map(async (win) => {
+            if (win.fixo) return;
+            const metric = byId.get(win.metricId);
+            if (!metric) return;
+            const comum = { organizationId, measureRef: metric.measureRef, filters: metric.filtrosFixos };
+            const [medidaAtual, medidaAnterior] = await Promise.all([
+              fetchMetricMeasure({ ...comum, recorte: win.corte, ...atual }),
+              fetchMetricMeasure({ ...comum, recorte: "total", ...anterior }),
+            ]);
+            itens.push({ metric, corte: win.corte, atual: medidaAtual, anterior: medidaAnterior });
+          }),
+        );
+
+        // A ordem do Promise.all não é a ordem do painel — reordena para o
+        // relatório sair na sequência que a pessoa vê na tela.
+        const ordem = new Map(windows.map((w, i) => [w.metricId + w.corte, i]));
+        itens.sort((a, b) => (ordem.get(a.metric.id + a.corte) ?? 0) - (ordem.get(b.metric.id + b.corte) ?? 0));
+
+        const abas = montarRelatorio({
+          orgNome,
+          scope,
+          periodoLabel: scope === "selected"
+            ? `${intervalo.start.toLocaleDateString("pt-BR", { timeZone: timezone ?? "UTC" })} — ${intervalo.end.toLocaleDateString("pt-BR", { timeZone: timezone ?? "UTC" })}`
+            : rotuloDoPeriodo(scope, hoje),
+          geradoEm,
+          itens,
+          indicadores: dashboard && previous ? [
+            { label: "Leads novos", value: dashboard.totalLeads, previous: previous.totalLeads, note: "Entradas no período; não é o total de negócios do funil" },
+            { label: "Reuniões marcadas", value: dashboard.reunioesMarcadas, previous: previous.reunioesMarcadas },
+            { label: "Propostas", value: dashboard.propostasEnviadas, previous: previous.propostasEnviadas },
+            { label: "Vendas", value: dashboard.novosClientes, previous: previous.novosClientes },
+            { label: "Receita (R$)", value: dashboard.vendaTotal, previous: previous.vendaTotal },
+            { label: "Ticket médio (R$)", value: dashboard.ticketMedio, previous: previous.ticketMedio },
+            { label: "Conversão (%)", value: dashboard.taxaConversao, previous: previous.taxaConversao },
+            { label: "Resposta da equipe (minutos)", value: response?.status === "fulfilled" ? response.value : null,
+              previous: previousResponse?.status === "fulfilled" ? previousResponse.value : null,
+              note: response?.status === "rejected" ? "Medida indisponível; não significa zero."
+                : previousResponse?.status === "rejected" ? "Comparativo indisponível; valor atual em minutos."
+                : "WhatsApp: recebida até a próxima resposta, no expediente; até 12h. Ausência não significa zero." },
+          ] : [],
+          detalhes: dashboard ? [
+            { nome: "Negócios por funil", linhas: [
+              ["Funil", "Negócios em aberto agora"],
+              ...(pipeline?.series ?? []).map((item) => [sanitizarCelula(item.label), item.value]),
+              ["Observação", pipeline === null ? "Contagem indisponível" : "Posição atual; inclui negócios de meses anteriores. Um lead pode ter vários negócios."],
+            ] },
+            { nome: "Receita diária", linhas: [["Data", "Receita (R$)", "Vendas"],
+              ...dashboard.dailySales.map((item) => [item.day, item.revenue, item.count]) ] },
+          ] : [],
+        });
+
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        for (const aba of abas) {
+          const ws = workbook.addWorksheet(aba.nome);
+          aba.linhas.forEach((linha) => ws.addRow(linha));
+          ws.getRow(1).font = { bold: true };
+          ws.columns.forEach((col) => {
+            col.width = 26;
+          });
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nomeDoArquivo(orgNome, scope, hoje);
+        a.click();
+        URL.revokeObjectURL(url);
+
+        toast.success(`Relatório ${REPORT_SCOPE_LABEL[scope].toLowerCase()} baixado`);
+      } catch (e) {
+        console.error("[metrics-studio] falha ao exportar", e);
+        toast.error("Não foi possível gerar o relatório");
+      } finally {
+        busy.current = false;
+        setExportando(null);
+      }
+    },
+    [organizationId, timezone, windows, byId, selection.period, selection.range],
+  );
+
+  return { exportar, exportando };
+}

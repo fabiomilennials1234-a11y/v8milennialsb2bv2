@@ -18,6 +18,7 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
 import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportFab } from "@/modules/platform/components/support/SupportFab";
+import { UiVersionGuard } from "@/modules/platform/ui-version/UiVersionGuard";
 import { SupportAccess } from "../support/SupportAccess";
 import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
@@ -188,6 +189,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
         <SupportFab />
         <SupportRealtimeAnnouncement />
       </SupportAccess>
+      {/* Interface nova ou clássica: segue a escolha da org (Configurações › Geral). */}
+      <UiVersionGuard />
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />

@@ -69,6 +69,7 @@ import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization, useOrgSwitcher } from "@/modules/identity";
+import { InterfaceDaOrgSetting } from "@/modules/platform/ui-version/InterfaceDaOrgSetting";
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_BASE_PATH,
@@ -629,6 +630,10 @@ function GeneralSettings() {
 
   return (
     <div className="space-y-4">
+      <CartaoDeAjustes titulo="Interface" descricao="Como o Torque aparece para toda a organização">
+        <InterfaceDaOrgSetting />
+      </CartaoDeAjustes>
+
       <CartaoDeAjustes titulo="Empresa" descricao="Como a organização aparece para o time">
         {/* ⚠️ HERDADO: o nome não é salvo daqui (não há escrita ligada a este
             campo). O restyle só mostra o nome real em vez de um texto fixo. */}

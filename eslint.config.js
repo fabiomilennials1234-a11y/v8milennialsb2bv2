@@ -10,6 +10,10 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      // Interface clássica: cópia congelada do front da main, gerada por
+      // scripts/ui-classic/snapshot.mjs. Já passou pelos gates lá; aqui só builda.
+      "classic/**",
+      "dist-classic",
       // Auto-gerado pelo Supabase CLI — regen via `supabase gen types typescript`.
       // Editar manualmente é proibido (ver CLAUDE.md). Parsing errors aqui
       // indicam drift de versão CLI ou schema; corrigir é regen, não fix manual.

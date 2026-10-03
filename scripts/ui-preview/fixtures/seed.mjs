@@ -86,6 +86,9 @@ export function buildFixtures({ master = false, now = fixtureNow() } = {}) {
     subscription_plan: "enterprise",
     subscription_expires_at: ahead(200 * D),
     default_pipeline_id: SALES_PIPE,
+    // Interface da org (20271104120000). `UI_PREVIEW_ORG_UI_V5=0` sobe o mock
+    // com a org na clássica — é como scripts/ui-classic/e2e-troca.mjs começa.
+    ui_v5_enabled: process.env.UI_PREVIEW_ORG_UI_V5 !== "0",
     created_at: ago(400 * D),
     updated_at: ago(2 * D),
     feature_flags: {},

@@ -74,6 +74,20 @@ function threads(fx, instanceIds) {
 }
 
 export const rpcHandlers = {
+  // ── configurações da org (allowlist igual à do banco) ──
+  set_org_settings: (a, fx) => {
+    const org = fx.db.organizations.find((o) => o.id === a.p_org_id);
+    if (!org) return { __status: 404, body: { code: "02000", message: "organização não encontrada" } };
+    const permitidas = ["confirmacao_overdue_days", "default_reorder_cycle_days", "default_pipeline_id", "ui_v5_enabled"];
+    const intrusas = Object.keys(a.p_patch ?? {}).filter((k) => !permitidas.includes(k));
+    if (intrusas.length) return { __status: 403, body: { code: "42501", message: `campo(s) não permitido(s): ${intrusas.join(", ")}` } };
+    if ("ui_v5_enabled" in a.p_patch && typeof a.p_patch.ui_v5_enabled !== "boolean") {
+      return { __status: 400, body: { code: "22023", message: "ui_v5_enabled precisa ser booleano" } };
+    }
+    const antes = { ...org };
+    Object.assign(org, a.p_patch);
+    return { antes, depois: { ...org } };
+  },
   // ── chat ──
   get_whatsapp_conversation_list_multi: (a, fx) => threads(fx, a.p_instances ?? null),
   get_whatsapp_conversation_list: (a, fx) => threads(fx, a.p_instance ? [a.p_instance] : null),
