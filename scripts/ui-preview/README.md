@@ -21,9 +21,9 @@ node scripts/ui-preview/mock-supabase.mjs            # add --master for a master
 node scripts/ui-preview/start-vite.mjs
 
 # 3. screenshots: every route × dark/light × 1440/390
-node scripts/ui-preview/shoot.mjs before             # → /tmp/ui-preview-shots/before/
+node scripts/ui-preview/shoot.mjs before             # → .ui-shots/before/
 #    …apply the restyle…
-node scripts/ui-preview/shoot.mjs after              # → /tmp/ui-preview-shots/after/
+node scripts/ui-preview/shoot.mjs after              # → .ui-shots/after/
 ```
 
 Output: `<out>/<theme>-<width>/<route>.png`, plus `<out>/report.json`. The
@@ -41,7 +41,7 @@ Each shot takes 3 to 4 seconds, so a full run (50 routes × 4 variants) takes ab
 | flag | meaning |
 |---|---|
 | `[label]` | output folder name (default: timestamp) |
-| `--out <dir>` | output root (default `/tmp/ui-preview-shots/<label>`) |
+| `--out <dir>` | output root (default `.ui-shots/<label>`, ignorado pelo git) |
 | `--routes dashboard,leads,funil-vendas` | only these route names (see `routes.mjs`) |
 | `--themes dark,light` | default: both |
 | `--widths 1440,390` | default: both. 1440×900 desktop; 390×844 is phone (isMobile + touch) |

@@ -357,22 +357,28 @@ function guessM2O(col, base, db) {
   return { table, type: "m2o", localCol: col, remoteCol: "id" };
 }
 
-/** Project a row according to select nodes (keeps all columns on `*`). */
+/**
+ * Project a row according to select nodes (keeps all columns on `*`).
+ *
+ * Os nomes vêm do `?select=` da URL: acumula num Map e só vira objeto no fim,
+ * por `Object.fromEntries` (propriedade própria, sem setter) — `select=__proto__`
+ * não troca o protótipo da linha (CodeQL: remote property injection).
+ */
 export function projectRow(ctx, table, row, nodes) {
   const hasStar = nodes.some((n) => n.kind === "star");
-  const out = hasStar ? { ...row } : {};
+  const out = new Map(hasStar ? Object.entries(row) : []);
   let keep = true;
   for (const n of nodes) {
     if (n.kind === "col") {
       const v = getPath(row, n.path);
-      out[n.alias ?? n.name] = v === undefined ? null : v;
+      out.set(n.alias ?? n.name, v === undefined ? null : v);
     } else if (n.kind === "count") {
-      out[n.alias] = 1;
+      out.set(n.alias, 1);
     } else if (n.kind === "embed") {
       const relInfo = resolveRelation(ctx.schema, ctx.db, table, n.rel, n.hint);
       const key = n.alias ?? n.rel;
       if (!relInfo) {
-        out[key] = null;
+        out.set(key, null);
         continue;
       }
       const targetRows = ctx.db[relInfo.table] ?? [];
@@ -383,20 +389,22 @@ export function projectRow(ctx, table, row, nodes) {
           lv == null ? null : targetRows.find((t) => String(t[relInfo.type === "m2o" ? relInfo.remoteCol : relInfo.remoteCol]) === String(lv)) ?? null;
         if (n.inner && !match) keep = false;
         const projected = match && ctx.depth < 4 ? projectRow({ ...ctx, depth: ctx.depth + 1 }, relInfo.table, match, n.children).row : match;
-        if (n.spread && projected) Object.assign(out, projected);
-        else out[key] = projected;
+        if (n.spread && projected) for (const [k, v] of Object.entries(projected)) out.set(k, v);
+        else out.set(key, projected);
       } else {
         const lv = row[relInfo.localCol];
         const matches = targetRows.filter((t) => lv != null && String(t[relInfo.remoteCol]) === String(lv));
         if (n.inner && matches.length === 0) keep = false;
-        if (countOnly) out[key] = [{ count: matches.length }];
+        if (countOnly) out.set(key, [{ count: matches.length }]);
         else
-          out[key] =
+          out.set(
+            key,
             ctx.depth < 4
               ? matches.map((m) => projectRow({ ...ctx, depth: ctx.depth + 1 }, relInfo.table, m, n.children).row)
-              : matches;
+              : matches,
+          );
       }
     }
   }
-  return { row: out, keep };
+  return { row: Object.fromEntries(out), keep };
 }

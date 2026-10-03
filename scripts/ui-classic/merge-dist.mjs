@@ -13,7 +13,7 @@
  * O nginx escolhe index e sw pelo cookie `torque_ui` (Dockerfile). O resto da
  * raiz (manifest, ícones, public/) é o mesmo nas duas e fica o da V5.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,23 +51,27 @@ function unir(origem, destino) {
       unir(de, para);
       continue;
     }
-    if (existsSync(para)) {
-      // Chunk idêntico nas duas builds (mesmo hash) e mapa diferente só porque
-      // os `sources` apontam para src/ num e classic/src/ no outro: fica o da
-      // V5. JS/CSS com o mesmo nome e conteúdo diferente, não — aborta.
-      if (nome.endsWith(".map")) {
-        iguais++;
-        continue;
-      }
-      if (!readFileSync(de).equals(readFileSync(para))) {
-        console.error(`✖ colisão de asset com conteúdo diferente: ${relative(RAIZ, para)}`);
-        process.exit(1);
-      }
+    // Cópia exclusiva: falha se o destino já existe, em vez de checar antes e
+    // copiar depois (CodeQL: file system race condition).
+    try {
+      copyFileSync(de, para, constants.COPYFILE_EXCL);
+      copiados++;
+      continue;
+    } catch (e) {
+      if (e?.code !== "EEXIST") throw e;
+    }
+    // Chunk idêntico nas duas builds (mesmo hash) e mapa diferente só porque
+    // os `sources` apontam para src/ num e classic/src/ no outro: fica o da
+    // V5. JS/CSS com o mesmo nome e conteúdo diferente, não — aborta.
+    if (nome.endsWith(".map")) {
       iguais++;
       continue;
     }
-    copyFileSync(de, para);
-    copiados++;
+    if (!readFileSync(de).equals(readFileSync(para))) {
+      console.error(`✖ colisão de asset com conteúdo diferente: ${relative(RAIZ, para)}`);
+      process.exit(1);
+    }
+    iguais++;
   }
 }
 unir(join(CLASSICA, "assets"), join(V5, "assets"));

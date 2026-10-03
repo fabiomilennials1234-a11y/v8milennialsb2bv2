@@ -168,7 +168,9 @@ async function handleRest(req, res, table, url) {
     const limit = params.has("limit") ? Number(params.get("limit")) : Infinity;
     // Range header (older clients)
     let page = projected.slice(offset, offset + limit);
-    const range = req.headers.range?.match(/(\d+)-(\d+)/);
+    // Ancorada e com teto de dígitos: a versão solta retrocedia em O(n²) num
+    // cabeçalho longo sem hífen (CodeQL: polynomial regex).
+    const range = req.headers.range?.trim().match(/^(\d{1,10})-(\d{1,10})$/);
     if (range) page = projected.slice(Number(range[1]), Number(range[2]) + 1);
 
     record({ kind: "rest", method: req.method, name: table, rows: page.length, miss: !known, note: !known ? (inSchema ? "empty table" : "NOT IN SCHEMA") : undefined, query: url.search.slice(0, 300) });
@@ -232,11 +234,14 @@ async function handleRest(req, res, table, url) {
 async function handleRpc(req, res, fn, url) {
   let args = {};
   if (req.method === "GET" || req.method === "HEAD") {
-    for (const [k, v] of url.searchParams) args[k] = v;
+    // `fromEntries` define propriedade própria: `?__proto__=` vira só um campo,
+    // não troca o protótipo do objeto (CodeQL: remote property injection).
+    args = Object.fromEntries(url.searchParams);
   } else {
     args = (await readBody(req)) ?? {};
   }
-  const handler = rpcHandlers[fn];
+  // Só handler próprio: `/rpc/constructor` não pode cair em Object.prototype.
+  const handler = Object.hasOwn(rpcHandlers, fn) ? rpcHandlers[fn] : undefined;
   let result;
   let miss = false;
   if (handler) {
@@ -323,7 +328,8 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     console.error("mock error:", e);
     try {
-      send(req, res, 500, { message: String(e?.message ?? e) });
+      // A causa fica no log do mock, não na resposta (CodeQL: stack trace exposure).
+      send(req, res, 500, { message: "ui-preview mock: erro interno — ver o log do mock" });
     } catch {
       /* socket gone */
     }

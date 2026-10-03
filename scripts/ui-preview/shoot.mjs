@@ -6,7 +6,7 @@
  *   node scripts/ui-preview/shoot.mjs [label] [options]
  *
  *   label                 output folder name (default: timestamp)
- *   --out <dir>           output root (default /tmp/ui-preview-shots/<label>)
+ *   --out <dir>           output root (default .ui-shots/<label>, ignorado pelo git)
  *   --routes a,b,c        only these route names (see routes.mjs)
  *   --themes dark,light   default: dark,light
  *   --widths 1440,390     default: 1440,390
@@ -42,7 +42,9 @@ const has = (n) => argv.includes(n);
 const VALUE_OPTS = new Set(["--out", "--routes", "--themes", "--widths"]);
 const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_OPTS.has(argv[i - 1]));
 const label = positional[0] ?? new Date().toISOString().replace(/[:.]/g, "-");
-const OUT = opt("--out", join("/tmp/ui-preview-shots", label));
+// Dentro do repo (ignorado pelo git), não num /tmp previsível: outro usuário da
+// máquina poderia criar o diretório antes (CodeQL: insecure temporary file).
+const OUT = opt("--out", join(dirname(fileURLToPath(import.meta.url)), "../../.ui-shots", label));
 const themes = opt("--themes", "dark,light").split(",");
 const widths = opt("--widths", "1440,390").split(",").map(Number);
 const only = opt("--routes", null)?.split(",");
