@@ -792,7 +792,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MasterRoute>
-              <MasterLayout />
+              {/* V5: a área Master mora no shell normal (trilho + barra
+                  superior), sem os portões de onboarding e assinatura do
+                  `LayoutWrapper` — o master olha organizações que podem não
+                  ter plano nem onboarding concluído. */}
+              <OrgFeaturesProvider>
+                <MainLayout>
+                  <MasterLayout />
+                </MainLayout>
+              </OrgFeaturesProvider>
             </MasterRoute>
           </ProtectedRoute>
         }
@@ -824,7 +832,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MasterRoute>
-              <MasterInsights />
+              <OrgFeaturesProvider>
+                <MainLayout>
+                  <MasterInsights />
+                </MainLayout>
+              </OrgFeaturesProvider>
             </MasterRoute>
           </ProtectedRoute>
         }

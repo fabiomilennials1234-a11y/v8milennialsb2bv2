@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Layers, Plus, ShoppingCart, Trophy, XCircle } from "lucide-react";
+import { ArrowRight, ChevronRight, Layers, Plus, ShoppingCart, Trophy, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { LeadCardDeal } from "./types";
@@ -214,12 +214,138 @@ function LinhaAberta({
   );
 }
 
+/**
+ * O negócio em DESTAQUE — o cartão de ouro da aba Negócios do mockup V5.
+ *
+ * É o negócio aberto mais avançado (o mesmo que a sub-linha do cabeçalho chama
+ * de "Em negociação"), com o que já se lê da ficha: valor, etapa, tempo na
+ * etapa, a jornada em segmentos e os produtos. Ganhou e Perdeu NÃO moram aqui:
+ * desfecho é do painel do Negócio, com o fluxo de valor e motivo — o botão em
+ * tinta leva até lá.
+ *
+ * Ouro é escasso: um destaque por gaveta. Dentro do painel do Negócio (com
+ * `atual`) a lista não destaca nada — o ouro lá é o do próprio negócio.
+ */
+function Destaque({
+  deal,
+  onOpen,
+  abertosNoFunil,
+}: {
+  deal: LeadCardDeal;
+  onOpen: (id: string) => void;
+  abertosNoFunil: number;
+}) {
+  const casas = deal.etapaIndice !== null && deal.etapaTotal > 0 ? Math.min(deal.etapaTotal, 8) : 0;
+  const preenchidas =
+    casas > 0 ? Math.max(1, Math.round((((deal.etapaIndice ?? 0) + 1) / deal.etapaTotal) * casas)) : 0;
+
+  return (
+    <section
+      aria-label={`Negócio em destaque: ${deal.titulo}`}
+      className="flex flex-col gap-3 rounded-card bg-primary p-4 text-primary-foreground shadow-brilho-ouro"
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-bold text-primary-foreground/70">
+            Negócio · {deal.funil}
+          </p>
+          <p className="truncate text-[14px] font-bold leading-snug">{deal.titulo}</p>
+        </div>
+        {abertosNoFunil > 1 && <MarcaDuplicado quantos={abertosNoFunil} funil={deal.funil} />}
+      </div>
+
+      {/* Sem valor lançado não vira "R$ 0,00": a maioria da qualificação não
+          tem `sale_value`, e zero afirma que o negócio não vale nada. */}
+      <p className="text-[1.6rem] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+        {deal.valor > 0 ? formatBRL(deal.valor) : (
+          <span className="text-[15px] font-bold tracking-normal text-primary-foreground/70">
+            Sem valor lançado
+          </span>
+        )}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex h-6 items-center rounded-full bg-tinta px-2.5 text-[11.5px] font-bold text-tinta-foreground">
+          {deal.etapa}
+        </span>
+        {deal.diasNaEtapa !== null && (
+          <span className="inline-flex h-6 items-center rounded-full bg-primary-foreground/10 px-2.5 text-[11.5px] font-bold">
+            {deal.diasNaEtapa === 1 ? "1 dia nesta etapa" : `${deal.diasNaEtapa} dias nesta etapa`}
+          </span>
+        )}
+        {deal.diasEmAberto !== null && (
+          <span className="inline-flex h-6 items-center rounded-full bg-primary-foreground/10 px-2.5 text-[11.5px] font-semibold">
+            {deal.diasEmAberto === 1 ? "aberto há 1 dia" : `aberto há ${deal.diasEmAberto} dias`}
+          </span>
+        )}
+      </div>
+
+      {casas > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div
+            className="flex items-center gap-[3px]"
+            role="img"
+            aria-label={`Etapa ${(deal.etapaIndice ?? 0) + 1} de ${deal.etapaTotal}`}
+          >
+            {Array.from({ length: casas }).map((_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "h-1.5 flex-1 rounded-full",
+                  i < preenchidas ? "bg-primary-foreground" : "bg-primary-foreground/15",
+                )}
+              />
+            ))}
+          </div>
+          <span className="text-[10.5px] font-bold text-primary-foreground/65">
+            Jornada do Negócio · etapa {(deal.etapaIndice ?? 0) + 1} de {deal.etapaTotal}
+          </span>
+        </div>
+      )}
+
+      {deal.produtos.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-2xl border border-primary-foreground/10 bg-primary-foreground/[.07] px-3 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[.08em] text-primary-foreground/65">
+            Produtos deste negócio
+          </span>
+          {deal.produtos.map((p, i) => (
+            <span key={`${p.nome}-${i}`} className="flex items-baseline gap-2 text-[12px]">
+              <span className="min-w-0 flex-1 truncate font-semibold" title={p.nome}>
+                {p.nome}
+                {p.avulso && <span className="ml-1.5 text-[10px] font-medium opacity-70">avulso</span>}
+              </span>
+              <span className="shrink-0 tabular-nums opacity-75">
+                {p.quantidade} × {formatBRL(p.precoUnitario, 2)}
+              </span>
+              <span className="shrink-0 font-bold tabular-nums">{formatBRL(p.total, 2)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => onOpen(deal.id)}
+        className={cn(
+          "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-tinta text-[12.5px] font-bold text-tinta-foreground",
+          "transition-[transform,background-color] hover:bg-tinta-3 active:scale-[.98]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tinta focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
+        )}
+      >
+        Abrir negócio
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </button>
+    </section>
+  );
+}
+
 export function LeadCardDeals({
   negocios,
   onOpenDeal,
   onNewDeal,
   registrarVenda,
   atual,
+  principal,
 }: {
   negocios: LeadCardDeal[];
   onOpenDeal: (id: string) => void;
@@ -230,6 +356,11 @@ export function LeadCardDeals({
    * um painel de negócio. No card do Lead não há "atual" e a prop fica vazia.
    */
   atual?: string;
+  /**
+   * O negócio que vai para o cartão de ouro — o aberto mais avançado, que a
+   * ficha já calcula (`situacao.negocioId`). Sem ele, o primeiro aberto.
+   */
+  principal?: string;
 }) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
@@ -244,36 +375,48 @@ export function LeadCardDeals({
   const ganhos = fechados.filter((d) => d.estado === "ganho");
   const somaGanha = ganhos.reduce((s, d) => s + d.valor, 0);
 
+  // Na ficha (sem `atual`) o aberto mais avançado sobe para o ouro; dentro do
+  // painel do Negócio ninguém sobe — o ouro de lá é o próprio negócio.
+  const destaque = atual ? null : (abertos.find((d) => d.id === principal) ?? abertos[0] ?? null);
+  const demais = destaque ? abertos.filter((d) => d.id !== destaque.id) : abertos;
+
+  const criar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onNewDeal}
+        className={cn(
+          "inline-flex h-10 min-w-[200px] flex-1 items-center justify-center gap-1.5 rounded-full border border-input bg-card px-4 text-[13px] font-semibold shadow-relevo",
+          "transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        )}
+      >
+        <Plus className="size-4" />
+        Criar negócio
+      </button>
+      {registrarVenda}
+    </div>
+  );
+
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        {/* Sem título: a aba acima já diz "Negócios". Repetir o rótulo a 40px
-            de distância é ruído, não hierarquia. */}
-        <p className="text-[11.5px] text-muted-foreground">
-          {abertos.length > 0
-            ? `${abertos.length} em andamento — clique para abrir o negócio`
-            : "Nenhum negócio em andamento"}
-        </p>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-        {registrarVenda}
-        <button
-          type="button"
-          onClick={onNewDeal}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold text-primary-soft-foreground",
-            "transition-colors hover:bg-primary-soft",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
-          <Plus className="size-3.5" />
-          Criar negócio
-        </button>
-        </div>
-      </div>
+      {destaque && (
+        <Destaque
+          deal={destaque}
+          onOpen={onOpenDeal}
+          abertosNoFunil={abertosPorFunil.get(destaque.funil) ?? 1}
+        />
+      )}
 
-      {abertos.length > 0 ? (
+      {demais.length > 0 && (
         <div className="flex flex-col gap-2">
-          {abertos.map((d) => (
+          {/* Sem título quando a lista é a do painel: a aba já diz "Negócios". */}
+          {destaque && (
+            <span className="px-1 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+              Outros em andamento · {demais.length}
+            </span>
+          )}
+          {demais.map((d) => (
             <LinhaAberta
               key={d.id}
               deal={d}
@@ -283,9 +426,11 @@ export function LeadCardDeals({
             />
           ))}
         </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border px-3 py-4 text-center text-[12.5px] text-muted-foreground">
-          Sem negócio aberto
+      )}
+
+      {abertos.length === 0 && (
+        <div className="rounded-card border border-dashed border-border bg-card/60 px-3 py-5 text-center text-[12.5px] text-muted-foreground">
+          Nenhum negócio em andamento
         </div>
       )}
 
@@ -296,7 +441,7 @@ export function LeadCardDeals({
             onClick={() => setHistoricoAberto((v) => !v)}
             aria-expanded={historicoAberto}
             className={cn(
-              "flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-[12.5px]",
+              "flex items-center gap-2 rounded-2xl border border-dashed border-border bg-card/60 px-3 py-2.5 text-[12.5px]",
               "transition-colors hover:border-muted-foreground/35 hover:bg-muted/30",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
@@ -305,11 +450,11 @@ export function LeadCardDeals({
             <span className="text-muted-foreground">
               {ganhos.length > 0 && (
                 <>
-                  <span className="font-medium text-success">
+                  <span className="font-medium text-success-strong">
                     {ganhos.length} fechado{ganhos.length > 1 ? "s" : ""}
                   </span>
                   {somaGanha > 0 && (
-                    <span className="font-semibold tabular-nums text-success">
+                    <span className="font-semibold tabular-nums text-success-strong">
                       {" · "}
                       {formatBRL(somaGanha)}
                     </span>
@@ -353,7 +498,7 @@ export function LeadCardDeals({
                     <span
                       className={cn(
                         "shrink-0 font-medium tabular-nums",
-                        d.estado === "ganho" ? "text-success" : "text-muted-foreground",
+                        d.estado === "ganho" ? "text-success-strong" : "text-muted-foreground",
                       )}
                     >
                       {formatBRL(d.valor)}
@@ -365,6 +510,7 @@ export function LeadCardDeals({
           )}
         </div>
       )}
+      {criar}
     </section>
   );
 }

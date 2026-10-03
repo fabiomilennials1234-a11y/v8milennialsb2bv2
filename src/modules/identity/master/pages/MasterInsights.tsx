@@ -36,8 +36,9 @@ export default function MasterInsights() {
   const selectedOrg = orgs.find((o) => o.id === orgId) ?? null;
 
   return (
-    // Rota fora do MainLayout: `data-layout="main"` liga a bancada V5 (grade de 28 px).
-    <div data-layout="main" className="relative min-h-screen bg-background">
+    // V5: a rota mora DENTRO do MainLayout (trilho + barra superior); a bancada
+    // e o padding vêm de lá. Fica só o halo azul da identidade do Gestor.
+    <div className="relative min-w-0">
       {/* Stage-light: radial azul estático atrás do header (DESIGN §3). */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[360px]"
@@ -48,9 +49,9 @@ export default function MasterInsights() {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 px-8 lg:px-12">
-        {/* Chrome próprio: voltar + wordmark Gestor */}
-        <div className="flex items-center justify-between py-4">
+      <div className="relative z-10">
+        {/* Voltar + wordmark Gestor */}
+        <div className="flex items-center justify-between pb-4">
           <button
             type="button"
             onClick={() => navigate(-1)}

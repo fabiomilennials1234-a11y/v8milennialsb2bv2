@@ -1,16 +1,16 @@
 import { memo, useEffect, useRef, useState } from "react";
 
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { useOrganization } from "@/modules/identity";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
+import { GavetaLateral } from "./GavetaLateral";
 import { LeadCardContainer } from "./LeadCardContainer";
 import { LeadCardNewDeal } from "./LeadCardNewDeal";
 
 /**
- * A casca do Card do Lead — diálogo no desktop, folha no celular.
+ * A casca do Card do Lead — a gaveta à direita do V5 no computador, a folha de
+ * baixo no celular (`GavetaLateral`).
  *
  * Fica separada do card e do container porque cada um responde por uma coisa:
  * `LeadCard` desenha, `LeadCardContainer` busca, e este arquivo só decide onde
@@ -89,24 +89,9 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
     </>
   );
 
-  if (isMobile) {
-    return (
-      <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-        <SheetContent side="bottom" className="h-[92vh] overflow-hidden rounded-t-panel bg-card p-0">
-          {conteudo}
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
   return (
-    <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
-      {/* Mesmo defeito que o painel do Negócio tinha: o `DialogContent` já
-          desenha o `DialogPrimitive.Close` (ui/dialog.tsx:48-51) e este
-          arquivo desenhava um segundo 4px ao lado. Fica só o do primitivo. */}
-      <DialogContent className="h-[86vh] max-w-[1180px] gap-0 overflow-hidden p-0">
-        {conteudo}
-      </DialogContent>
-    </Dialog>
+    <GavetaLateral aberta={isOpen} onFechar={close} celular={isMobile} rotulo="Ficha do lead">
+      {conteudo}
+    </GavetaLateral>
   );
 });
