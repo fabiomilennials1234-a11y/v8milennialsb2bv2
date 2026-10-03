@@ -713,7 +713,7 @@ export function ConversationList({
           </div>
         ) : (
           // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
-          <div className={cn(!isMobile && "mx-2 flex flex-col gap-0.5 pb-2")}>
+          <div className={cn("flex flex-col gap-0.5 pb-2", !isMobile && "mx-2")}>
             {filteredContacts.map((contact) =>
               isMobile ? (
                 <MobileConversationRow
@@ -721,6 +721,8 @@ export function ConversationList({
                   contact={contact}
                   isSelected={selectedKey === contactKey(contact)}
                   onPress={onSelectContact}
+                  waitingHumanLeadIds={waitingHumanLeadIds}
+                  caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                 />
               ) : (
                 <ConversationListItem

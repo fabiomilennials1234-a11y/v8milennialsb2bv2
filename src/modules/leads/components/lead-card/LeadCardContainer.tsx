@@ -45,6 +45,8 @@ export function LeadCardContainer({
   forma = "card",
   onAbrirFicha,
   podeCriarEtiqueta = false,
+  modo = "ficha",
+  painelNegocios,
 }: {
   leadId: string | null;
   isOpen: boolean;
@@ -72,6 +74,13 @@ export function LeadCardContainer({
   forma?: "card" | "coluna";
   /** Só na forma `coluna`: leva para a ficha inteira do lead. */
   onAbrirFicha?: () => void;
+  /**
+   * `negocio` = a gaveta aberta pelo cartão do funil (V5): a mesma ficha, com o
+   * card do Negócio (`painelNegocios`) na aba do meio, que é a que abre.
+   * Ver `LeadCard` para o que muda no cabeçalho.
+   */
+  modo?: "ficha" | "negocio";
+  painelNegocios?: React.ReactNode;
 }) {
   const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
   const renderLigar = useLeadCallAction();
@@ -182,6 +191,33 @@ export function LeadCardContainer({
       ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border bg-sunken"
       : "rounded-[inherit]";
 
+  /**
+   * No modo `negocio` a pessoa é a moldura, não a condição: se ela ainda não
+   * carregou — ou não pode ser vista —, o negócio aparece mesmo assim, sem o
+   * cabeçalho dela. Esconder o negócio porque a ficha da pessoa falhou tiraria
+   * da tela justamente o que o cartão do funil pediu para abrir.
+   */
+  if (painelNegocios && (isLoading || visibility !== "exists" || !data)) {
+    const aviso =
+      isLoading || visibility === "loading"
+        ? null
+        : visibility === "deleted"
+          ? "Este lead está na lixeira."
+          : visibility === "permission_denied"
+            ? "Você não tem acesso a este lead."
+            : "Lead não encontrado.";
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain rounded-[inherit] bg-background px-4 pb-6 pt-4 sm:px-5">
+        {aviso && (
+          <p className="mb-3 mr-10 rounded-2xl border border-dashed border-border px-3 py-2 text-[12.5px] text-muted-foreground">
+            {aviso}
+          </p>
+        )}
+        {painelNegocios}
+      </div>
+    );
+  }
+
   if (isLoading || visibility === "loading") {
     return (
       <div className={cn("flex h-full items-center justify-center bg-card", molduraAviso)}>
@@ -261,9 +297,31 @@ export function LeadCardContainer({
     );
   }
 
+  const edicao = data.edicao;
+  const tierDoCard = (v: string | null | undefined): QualificationTier | null =>
+    v ? (v as QualificationTier) : null;
+
   return (
     <LeadCard
       lead={data}
+      modo={modo}
+      abaInicial={modo === "negocio" ? "negocios" : undefined}
+      painelNegocios={painelNegocios}
+      /* Responsáveis e qualificação, os MESMOS controles que a coluna do painel
+         do Negócio já montava — agora também na ficha, em grade (V5). */
+      controles={
+        leadId && edicao ? (
+          <LeadCardControles
+            forma="grade"
+            leadId={leadId}
+            preVenda={edicao.preVenda}
+            venda={edicao.venda}
+            preQualificacao={tierDoCard(edicao.preQualificacao)}
+            qualificacao={tierDoCard(edicao.qualificacao)}
+            atualizadoEm={edicao.atualizadoEm}
+          />
+        ) : undefined
+      }
       onOpenChat={data.telefone?.trim() ? () => {
         // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
         // Navegação de documento reinicia essa resolução mesmo quando a ficha

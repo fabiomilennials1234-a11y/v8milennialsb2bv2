@@ -461,10 +461,12 @@ export function ConversationListItem({
             )}
           </div>
 
-          {/* Andar 3 — metadados em 10,5 px: de qual caixa corre · etapa ·
-              pediu atendente · etiqueta · o "fio". Uma linha só, truncando —
-              altura variável quebraria a lista virtualizada. */}
-          <div className="mt-1 flex min-w-0 items-center gap-2 text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
+          {/* Andar 3 — metadados em 10,5 px, como no mockup: de qual caixa
+              corre · etapa · pediu atendente · o "fio". Etiquetas saíram da
+              linha (moram no painel de contexto e no filtro "Tag"): eram elas
+              que estouravam a linha quando o lead pedia atendente. Uma linha
+              só, truncando — altura variável quebraria a lista virtualizada. */}
+          <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
             {/* A cor é a MESMA que a bolha de chat dá ao número — duas
                 derivações dariam duas cores para a mesma caixa. */}
             {caixa && (
@@ -487,6 +489,12 @@ export function ConversationListItem({
                 {contact.lead_name}
               </span>
             )}
+            {pediuAtendente && (
+              <span className="flex shrink-0 items-center gap-1 font-semibold text-destructive group-data-[selected=true]/linha:text-primary-foreground">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive group-data-[selected=true]/linha:bg-primary-foreground" aria-hidden />
+                Pediu atendente
+              </span>
+            )}
             {stageLabel && (
               <span
                 className="flex min-w-[3.25rem] max-w-[7.5rem] shrink-[3] items-center gap-1"
@@ -494,28 +502,6 @@ export function ConversationListItem({
               >
                 <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-60" aria-hidden />
                 <span className="truncate">{stageLabel}</span>
-              </span>
-            )}
-            {pediuAtendente && (
-              <span className="flex shrink-0 items-center gap-1 font-semibold text-destructive group-data-[selected=true]/linha:text-primary-foreground">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive group-data-[selected=true]/linha:bg-primary-foreground" aria-hidden />
-                Pediu atendente
-              </span>
-            )}
-            {contact.tags.length > 0 && (
-              <span
-                className="flex min-w-[1.75rem] shrink-[999] items-center gap-1 overflow-hidden"
-                title={contact.tags.map((t) => t.name).join(", ")}
-              >
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: contact.tags[0].color }}
-                  aria-hidden
-                />
-                <span className="min-w-0 truncate">{contact.tags[0].name}</span>
-                {contact.tags.length > 1 && (
-                  <span className="shrink-0 font-semibold">+{contact.tags.length - 1}</span>
-                )}
               </span>
             )}
             {/* O FIO. Texto, e não só um ícone: cor e forma sozinhas não dizem

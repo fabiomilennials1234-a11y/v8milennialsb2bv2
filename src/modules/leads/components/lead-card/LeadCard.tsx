@@ -1,13 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Bot,
-  CalendarPlus,
-  Mail,
-  MapPin,
-  MessageCircle,
-  Trash2,
-  Phone,
-} from "lucide-react";
+import { Bot, CalendarPlus, Mail, MessageCircle, Trash2, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadCardMetrics } from "./LeadCardMetrics";
 import { LeadCardDeals } from "./LeadCardDeals";
@@ -17,29 +9,34 @@ import { LeadCardHistory } from "./LeadCardHistory";
 import type { LeadCardData } from "./types";
 
 /**
- * O Card do Lead — o centro do sistema.
+ * O Card do Lead — a gaveta da pessoa no formato do mockup V5.
  *
- * Existem dois cards no Torque inteiro: este e o do Negócio.
- * **Lead e Cliente são o mesmo card** (decisão do CTO; ADR-0023 §8 já pedia
- * isso ao aposentar a Carteira como módulo). Não há segunda tela de gente:
- * a mesma pessoa, com `relacao` diferente.
+ * Existem dois cards no Torque inteiro: este e o do Negócio — e no V5 eles
+ * vivem na MESMA gaveta. **Lead e Cliente são o mesmo card** (decisão do CTO;
+ * ADR-0023 §8): a mesma pessoa, com `relacao` diferente.
  *
- * ── ANATOMIA ──────────────────────────────────────────────────────────────
- * Cabeçalho    quem é + os dois fatos + como falar
- * Trilho       a relação (métricas) · negócios · anotações
- * Painel       histórico · dados
+ * ── ANATOMIA (mockup `leads.js`, `T.openLead`) ────────────────────────────
+ * Cabeçalho  avatar, nome, empresa · relação · situação; a fileira de ações
+ *            (Abrir conversa em tinta, Ligar, …) e a faixa do Copilot.
+ * Abas       Dados · Negócios · Histórico, segmentadas. Abre em Dados.
+ * Dados      relação (tinta para quem comprou), responsáveis e qualificação,
+ *            etiquetas, anotações e o perfil chave-valor.
+ * Negócios   o negócio mais avançado no cartão de ouro, os outros abaixo.
+ * Histórico  filtro, linha do tempo e comentário da equipe.
  *
- * O trilho carrega o que se consulta de relance e não muda de assunto; o painel
- * carrega o que se lê com atenção. Anotação fica no trilho, sempre aberta, e
- * não numa aba — `notes` está em 74,9% dos leads e `lead_comments` em 4,4%; a
- * diferença mais provável entre os dois é que um está na cara e o outro está
- * atrás de um clique.
+ * O cabeçalho NÃO rola: o interruptor do Copilot é a ação de urgência de
+ * quando o agente responde o que não devia, e ele não pode ficar atrás de aba
+ * nem abaixo da dobra (`lead-card-cabecalho.test.tsx`).
  *
  * ── O QUE NÃO ESTÁ AQUI ───────────────────────────────────────────────────
  * Etapa, mover, orçamento, reunião, ganhar/perder. Tudo isso é do Card do
- * Negócio. O critério é tempo de vida: o Lead sobrevive à venda, o Negócio
- * morre com ela.
+ * Negócio (a aba do meio no modo `negocio`). O critério é tempo de vida: o
+ * Lead sobrevive à venda, o Negócio morre com ela.
  */
+
+/** O cartão branco da gaveta — a bancada fica atrás, os cartões na frente. */
+const CARTAO = "rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo";
+const ROTULO = "text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground";
 
 function Avatar({ nome }: { nome: string }) {
   // Hue estável a partir do nome — mesma pessoa, mesma cor, sempre.
@@ -49,7 +46,7 @@ function Avatar({ nome }: { nome: string }) {
     <div
       style={{ "--h": h } as React.CSSProperties}
       className={cn(
-        "flex size-[52px] shrink-0 items-center justify-center rounded-full text-[21px] font-semibold",
+        "flex size-11 shrink-0 items-center justify-center rounded-full text-[17px] font-bold",
         "bg-[hsl(var(--h)_70%_92%)] text-[hsl(var(--h)_55%_32%)]",
         "dark:bg-[hsl(var(--h)_42%_22%)] dark:text-[hsl(var(--h)_58%_74%)]",
       )}
@@ -65,11 +62,13 @@ function AcaoRapida({
   rotulo,
   onClick,
   desabilitado,
+  perigo,
 }: {
-  icone: typeof Phone;
+  icone: LucideIcon;
   rotulo: string;
   onClick?: () => void;
   desabilitado?: boolean;
+  perigo?: boolean;
 }) {
   return (
     <button
@@ -80,18 +79,117 @@ function AcaoRapida({
       aria-label={rotulo}
       className={cn(
         // V5: o botão de ícone é quadrado arredondado sobre o cartão, com relevo.
-        "flex size-9 items-center justify-center rounded-xl border border-input bg-card text-muted-foreground shadow-relevo",
+        "flex size-10 shrink-0 items-center justify-center rounded-xl border border-input bg-card text-muted-foreground shadow-relevo",
         "transition-[color,border-color,transform] hover:-translate-y-px hover:border-foreground/20 hover:text-foreground",
+        perigo && "hover:border-destructive/40 hover:text-destructive",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:pointer-events-none disabled:opacity-35 disabled:shadow-none",
       )}
     >
-      <Icone className="size-[15px]" />
+      <Icone className="size-4" />
     </button>
   );
 }
 
-type Aba = "historico" | "negocios" | "dados";
+/**
+ * O alternador segmentado do mockup (`T.seg`) — em BOTÕES, não em `Tabs`.
+ *
+ * O primitivo `TabsList variant="segmented"` é Radix e dá `role="tab"`; as
+ * abas desta ficha são `button` por contrato (os testes do card as acham assim
+ * desde o primeiro desenho). Mesmo desenho do primitivo, mesmo papel de antes.
+ */
+function Segmentado<T extends string>({
+  itens,
+  ativa,
+  onTrocar,
+  rotulo,
+}: {
+  itens: { chave: T; rotulo: string; contagem?: number }[];
+  ativa: T;
+  onTrocar: (chave: T) => void;
+  rotulo: string;
+}) {
+  return (
+    <div role="group" aria-label={rotulo} className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
+      {itens.map((i) => {
+        const acesa = i.chave === ativa;
+        return (
+          <button
+            key={i.chave}
+            type="button"
+            aria-pressed={acesa}
+            onClick={() => onTrocar(i.chave)}
+            className={cn(
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold",
+              "transition-[background-color,color,box-shadow] duration-150",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              acesa ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {i.rotulo}
+            {i.contagem !== undefined && i.contagem > 0 && (
+              <span className="text-[11px] font-bold tabular-nums opacity-55">{i.contagem}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A faixa do Copilot — interruptor, não rótulo.
+ *
+ * É um `button` (e não `role="switch"`) porque o contrato do card o acha assim,
+ * e o nome acessível diz o ESTADO ATUAL ("Copilot ativo" / "Copilot desligado"):
+ * quem lê "ativo" tem de estar vendo a IA ligada. `aria-pressed` carrega o
+ * mesmo estado para o leitor de tela. O clique manda o estado NOVO — a dupla
+ * negação até `useToggleLeadAI` é guardada em `lead-card-cabecalho.test.tsx`.
+ */
+function FaixaCopilot({ ativo, onToggle }: { ativo: boolean; onToggle?: (ativo: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle?.(!ativo)}
+      disabled={!onToggle}
+      aria-pressed={ativo}
+      title={ativo ? "Desligar o Copilot neste lead" : "Ligar o Copilot neste lead"}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-2xl border border-card-border bg-card px-3.5 py-2.5 text-left shadow-relevo",
+        "transition-[border-color] hover:border-foreground/15",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "disabled:cursor-default disabled:hover:border-card-border",
+      )}
+    >
+      <Bot className={cn("size-4 shrink-0", ativo ? "text-foreground" : "text-muted-foreground")} aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate text-[13px]">
+        {/* O nome acessível vem inteiro do `sr-only`: o cálculo de nome junta
+            os nós sem espaço, e "Copilot" + "ativo" virava "Copilotativo". */}
+        <span className="sr-only">{ativo ? "Copilot ativo" : "Copilot desligado"}</span>
+        <span aria-hidden="true" className="font-bold">Copilot</span>
+        <span aria-hidden="true" className="text-muted-foreground">
+          {" "}· {ativo ? "atendendo este lead" : "desligado para este lead"}
+        </span>
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+          ativo ? "bg-primary" : "bg-input",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 size-5 rounded-full bg-background shadow-sm transition-transform duration-200 ease-standard",
+            ativo ? "translate-x-[22px]" : "translate-x-0.5",
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
+type Aba = "dados" | "negocios" | "historico";
 
 export function LeadCard({
   lead,
@@ -109,6 +207,10 @@ export function LeadCard({
   editorDeEtiquetas,
   acaoLigar,
   onOpenChat,
+  controles,
+  modo = "ficha",
+  abaInicial,
+  painelNegocios,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -158,8 +260,26 @@ export function LeadCard({
    */
   acaoLigar?: React.ReactNode;
   onOpenChat?: () => void;
+  /**
+   * Responsáveis e qualificação QUE ESCREVEM (`LeadCardControles` em grade),
+   * montados por quem tem banco — mesmo escape de `editorDeEtiquetas`. Sem a
+   * prop, a aba Dados mostra só o dono, de leitura.
+   */
+  controles?: React.ReactNode;
+  /**
+   * `ficha` é a gaveta da pessoa (a lista de Leads abre esta). `negocio` é a
+   * MESMA gaveta aberta pelo cartão do funil: o nome da pessoa deixa de ser o
+   * `h1` (o título da tela é o do negócio), a lixeira do lead sai do cabeçalho
+   * — excluir ali tem de ser do negócio — e a aba do meio passa a ser o
+   * negócio aberto (`painelNegocios`).
+   */
+  modo?: "ficha" | "negocio";
+  abaInicial?: Aba;
+  /** O conteúdo da aba do meio no modo `negocio` — o card do Negócio. */
+  painelNegocios?: React.ReactNode;
 }) {
-  const [aba, setAba] = useState<Aba>("historico");
+  const inicial: Aba = abaInicial ?? "dados";
+  const [aba, setAba] = useState<Aba>(inicial);
   const [nota, setNota] = useState(lead.nota);
 
   /**
@@ -167,46 +287,52 @@ export function LeadCard({
    * reposta quando o card troca de pessoa. Sem isto, abrir um lead e depois
    * outro mostra a anotação do primeiro no card do segundo — e, no momento em
    * que o campo perde o foco, grava a anotação errada na pessoa errada.
-   * Pego na visualização trocando de exemplo.
    */
   useEffect(() => {
     setNota(lead.nota);
-    setAba("historico");
   }, [lead.id, lead.nota]);
 
+  /**
+   * A aba volta ao início SÓ quando a pessoa troca. Juntas com a nota, gravar
+   * a anotação (que refaz a leitura) jogaria quem está no Negócio de volta
+   * para Dados no meio do trabalho.
+   */
+  useEffect(() => {
+    setAba(inicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
+
+  const noNegocio = modo === "negocio";
+  const Titulo = noNegocio ? "h2" : "h1";
+
   const abas: { chave: Aba; rotulo: string; contagem?: number }[] = [
+    { chave: "dados", rotulo: "Dados" },
+    noNegocio
+      ? { chave: "negocios", rotulo: "Negócio" }
+      : { chave: "negocios", rotulo: "Negócios", contagem: lead.negocios.length },
     { chave: "historico", rotulo: "Histórico", contagem: lead.historico.length },
-    { chave: "negocios", rotulo: "Negócios", contagem: lead.negocios.length },
-    {
-      chave: "dados",
-      rotulo: "Dados",
-      contagem: lead.campos.reduce((s, g) => s + g.campos.length, 0),
-    },
   ];
 
   return (
-    // Sem moldura própria: quem emoldura é a casca (diálogo/folha do V5, raio
-    // 28). A borda + raio de antes desenhava um segundo quadro dentro do primeiro.
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-card">
-      {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
-      {/* `pr-14`: o "×" da casca mora em `right-4 top-4` (ui/dialog, ui/sheet)
-          e as ações rápidas não podem nascer embaixo dele. */}
-      <header className="flex shrink-0 flex-col gap-4 border-b border-border py-5 pl-6 pr-14">
-        <div className="flex items-start gap-4">
+    // Sem moldura própria: quem emoldura é a casca (`GavetaLateral`, raio 28).
+    // O fundo é a BANCADA; os blocos da gaveta são cartões brancos sobre ela.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-background">
+      <header className="flex shrink-0 flex-col gap-3 px-4 pb-3 pt-4 sm:px-5">
+        {/* `pr-10`: o "×" da casca mora em `right-4 top-4`. */}
+        <div className="flex items-center gap-3 pr-10">
           <Avatar nome={lead.nome} />
-
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <h1 className="truncate text-[22px] font-extrabold leading-tight tracking-[-0.03em]">{lead.nome}</h1>
-
-              {/* Relação e Situação, sempre as duas, nunca colapsadas —
-                  ADR-0023 §6. 180 leads em prod são Cliente E estão em
-                  negociação; um status de valor único esconderia metade da
-                  verdade exatamente neles. A tinta vai só no Cliente: "Lead" é
-                  94% da base e selo ali seria decoração. */}
-              {lead.relacao === "cliente" ? (
+            <Titulo className="truncate text-[17px] font-bold leading-tight tracking-[-0.02em]">
+              {lead.nome}
+            </Titulo>
+            <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted-foreground">
+              {lead.empresa && <span className="max-w-full truncate">{lead.empresa}</span>}
+              {/* Relação e Situação, sempre as duas (ADR-0023 §6): 180 leads em
+                  prod são Cliente E estão em negociação. A pílula vai só em
+                  Cliente e Perdido — "Lead" é 94% da base, selo ali é enfeite. */}
+              {lead.relacao === "cliente" && (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 text-[12px] font-bold text-primary-soft-foreground"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-soft px-2 py-px text-[11px] font-bold text-primary-soft-foreground"
                   title={
                     lead.prova === "ambas"
                       ? "Comprou pelo funil e tem pedido no ERP"
@@ -215,203 +341,147 @@ export function LeadCard({
                         : "Fechou negócio no funil"
                   }
                 >
-                  <span className="size-1.5 rounded-full bg-current" />
+                  <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
                   Cliente
                 </span>
-              ) : (
-                <span className="shrink-0 text-[13px] text-muted-foreground">{lead.relacao === "perdido" ? "Perdido" : "Lead"}</span>
               )}
-
-              <span className="h-3 w-px shrink-0 bg-border" aria-hidden="true" />
-
+              {lead.relacao === "perdido" && (
+                <span className="inline-flex shrink-0 rounded-full bg-muted px-2 py-px text-[11px] font-bold text-foreground/75">
+                  Perdido
+                </span>
+              )}
               {lead.situacao ? (
-                <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
+                <span className="inline-flex min-w-0 items-center gap-1.5">
                   <span
                     className="size-1.5 shrink-0 rounded-full"
                     style={{ background: lead.situacao.funilCor }}
                     aria-hidden="true"
                   />
-                  <span className="shrink-0 text-foreground/85">Em negociação</span>
-                  <span className="truncate text-muted-foreground">· {lead.situacao.funil}</span>
+                  <span className="truncate">Em negociação · {lead.situacao.funil}</span>
                 </span>
               ) : (
-                <span className="inline-flex shrink-0 rounded-full border border-dashed border-border px-2 py-0.5 text-[12px] text-muted-foreground">
-                  Sem negócio aberto
-                </span>
+                <span className="shrink-0 text-muted-foreground/80">Sem negócio aberto</span>
               )}
-            </div>
-
-            {lead.empresa && (
-              <p className="mt-1 truncate text-[13.5px] text-muted-foreground">{lead.empresa}</p>
-            )}
-
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground">
-              {lead.telefone && (
-                <span className="inline-flex items-center gap-1.5">
-                  <Phone className="size-3.5" />
-                  {lead.telefone}
-                </span>
-              )}
-              {lead.email && (
-                <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <Mail className="size-3.5 shrink-0" />
-                  <span className="truncate">{lead.email}</span>
-                </span>
-              )}
-              {lead.uf && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-3.5" />
-                  {lead.uf}
-                </span>
-              )}
-              {/* O Copilot é interruptor, não rótulo: desligar a IA num lead é
-                  a ação de urgência quando o agente responde o que não devia. */}
-              <button
-                type="button"
-                onClick={() => onToggleCopilot?.(!lead.copilotAtivo)}
-                disabled={!onToggleCopilot}
-                title={lead.copilotAtivo ? "Desligar o Copilot neste lead" : "Ligar o Copilot"}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  onToggleCopilot && "hover:bg-muted hover:text-foreground",
-                  !onToggleCopilot && "cursor-default",
-                )}
-              >
-                <Bot
-                  className={cn("size-3.5", lead.copilotAtivo ? "text-primary-soft-foreground" : "opacity-50")}
-                />
-                Copilot {lead.copilotAtivo ? "ativo" : "desligado"}
-              </button>
-            </div>
+            </p>
           </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" onClick={onOpenChat} desabilitado={!onOpenChat || !lead.telefone?.trim()} />
-            {acaoLigar}
-            <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
-            <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />
-            <AcaoRapida
-              icone={Trash2}
-              rotulo="Excluir lead"
-              onClick={onDelete}
-              desabilitado={!onDelete}
-            />
-          </div>
+          {!noNegocio && (
+            <AcaoRapida icone={Trash2} rotulo="Excluir lead" onClick={onDelete} desabilitado={!onDelete} perigo />
+          )}
         </div>
 
-        {/* Sempre visível, mesmo sem dono e sem etiqueta. Escondendo a faixa
-            quando está vazia, o lead novo — 94% da base — perde justamente os
-            dois convites que ele mais precisa: atribuir dono e etiquetar.
-
-            O convite de etiquetar só é convite quando `editorDeEtiquetas` vem:
-            até então este lugar tinha um "+ etiqueta" que não abria nada. */}
-        <div className="flex flex-wrap items-center gap-1.5">
-            {lead.dono ? (
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-[3px] text-[12px] font-medium"
-                title={lead.dono.papel}
-              >
-                <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-                {lead.dono.nome}
-              </span>
-            ) : (
-              <span className="inline-flex rounded-full border border-dashed border-border px-2.5 py-[3px] text-[12px] text-muted-foreground">
-                Sem dono
-              </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenChat}
+            disabled={!onOpenChat || !lead.telefone?.trim()}
+            className={cn(
+              "inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-tinta px-4 text-[13px] font-bold text-tinta-foreground",
+              "transition-[background-color,transform] hover:bg-tinta-3 active:scale-[.98]",
+              "dark:bg-foreground dark:text-background dark:hover:bg-foreground/90",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "disabled:pointer-events-none disabled:opacity-40",
             )}
-            {editorDeEtiquetas ??
-              lead.tags.map((t) => (
-                <span
-                  key={t.id}
-                  className="inline-flex rounded-full bg-muted px-2.5 py-[3px] text-[12px] text-muted-foreground"
-                >
-                  {t.nome}
-                </span>
-              ))}
+          >
+            <MessageCircle className="size-4" aria-hidden="true" />
+            Abrir conversa
+          </button>
+          {acaoLigar}
+          {/* Os dois abaixo vieram do card antigo sem ação ligada (HERDADO).
+              Ficam só na ficha — o painel do Negócio não ganha botão morto. */}
+          {!noNegocio && <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />}
+          {!noNegocio && <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />}
         </div>
+
+        <FaixaCopilot ativo={lead.copilotAtivo} onToggle={onToggleCopilot} />
       </header>
 
-      {/* ── Corpo ─────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1">
-        {/* Trilho: consulta de relance, assunto fixo.
-            A anotação NÃO rola junto. Ela mora ancorada no pé, sempre visível e
-            sempre editável — se ela some abaixo da dobra, "espaço para
-            anotação" vira promessa. Rola só o que está acima dela.
+      <nav className="shrink-0 px-4 pb-3 sm:px-5">
+        <Segmentado rotulo="Seções da ficha" itens={abas} ativa={aba} onTrocar={setAba} />
+      </nav>
 
-            Negócios saiu daqui para a aba própria: a linha do negócio carrega
-            funil, barra de etapa, tempo em aberto e tempo parado, e isso não
-            cabe em 348px sem truncar justo o que é acionável. O cabeçalho já
-            responde "o que está acontecendo" com a Situação. */}
-        {/* Trilho afundado (`sunken`): os ladrilhos de cima viram cartões
-            brancos sobre ele — o bento do V5 dentro da ficha. */}
-        <aside className="flex w-[348px] shrink-0 flex-col border-r border-border bg-sunken">
-          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 sm:px-5">
+        {aba === "dados" && (
+          <div className="flex flex-col gap-3">
             <LeadCardMetrics metricas={lead.metricas} />
-          </div>
-          <div className="shrink-0 border-t border-border px-5 py-4">
-            <LeadCardNotes
-              valor={nota}
-              onSave={(texto) => {
-                setNota(texto);
-                onSaveNote?.(texto);
-              }}
-            />
-          </div>
-        </aside>
 
-        {/* Painel: leitura com atenção */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <nav className="flex shrink-0 items-center gap-1 border-b border-border px-5">
-            {abas.map((a) => {
-              const ativo = aba === a.chave;
-              return (
-                <button
-                  key={a.chave}
-                  type="button"
-                  onClick={() => setAba(a.chave)}
-                  className={cn(
-                    "relative px-3 py-3 text-[13px] transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    ativo ? "font-semibold text-foreground" : "font-medium text-muted-foreground hover:text-foreground/80",
-                  )}
-                >
-                  {a.rotulo}
-                  {a.contagem !== undefined && (
-                    <span className="ml-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground/70">
-                      {a.contagem}
+            {controles ?? (
+              <div className={CARTAO}>
+                <span className={ROTULO}>Responsável</span>
+                <p className={cn("mt-1.5 truncate text-[13.5px]", lead.dono ? "font-bold" : "text-muted-foreground")}>
+                  {lead.dono ? lead.dono.nome : "Sem dono"}
+                </p>
+              </div>
+            )}
+
+            <section className={cn(CARTAO, "flex flex-col gap-2")}>
+              <h3 className={ROTULO}>Etiquetas</h3>
+              {/* Com o editor, as pílulas saem daqui e vêm de lá: duas listas
+                  da mesma coisa, uma que reage e outra não, é o defeito. Sem
+                  ele, só leitura — e nenhum botão que não faz nada. */}
+              {editorDeEtiquetas ?? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {lead.tags.map((t) => (
+                    <span
+                      key={t.id}
+                      className="inline-flex rounded-full bg-muted px-2.5 py-[3px] text-[12px] font-medium text-foreground/80"
+                    >
+                      {t.nome}
                     </span>
+                  ))}
+                  {lead.tags.length === 0 && (
+                    <span className="text-[12px] text-muted-foreground">sem etiqueta</span>
                   )}
-                  {/* O ouro só aparece no que está valendo. */}
-                  {ativo && (
-                    <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-primary" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+                </div>
+              )}
+            </section>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {aba === "historico" && (
-              <LeadCardHistory
-                eventos={lead.historico}
-                onComentar={onComentar}
-                onEditarComentario={onEditarComentario}
-                onApagarComentario={onApagarComentario}
-                comentando={comentando}
+            {/* A anotação fica na aba que ABRE: `notes` está em 74,9% dos leads,
+                o campo mais escrito do produto depois de nome e telefone. */}
+            <div className={CARTAO}>
+              <LeadCardNotes
+                valor={nota}
+                onSave={(texto) => {
+                  setNota(texto);
+                  onSaveNote?.(texto);
+                }}
               />
-            )}
-            {aba === "negocios" && (
-              <LeadCardDeals
-                negocios={lead.negocios}
-                registrarVenda={registrarVenda}
-                onOpenDeal={(id) => onOpenDeal?.(id)}
-                onNewDeal={() => onNewDeal?.()}
-              />
-            )}
-            {aba === "dados" && <LeadCardFields grupos={lead.campos} onSave={onSaveField} />}
+            </div>
+
+            <div className={CARTAO}>
+              {/* `key`: a edição em linha guarda o valor salvo até o refetch;
+                  sem reiniciar por pessoa, o nome gravado em um lead aparecia
+                  no campo do próximo (a aba Dados agora fica aberta na troca). */}
+              <LeadCardFields key={lead.id} grupos={lead.campos} onSave={onSaveField} />
+            </div>
           </div>
-        </div>
+        )}
+        {/* O negócio fica MONTADO quando se troca de aba: o rascunho de
+            comentário e o anexo subindo vivem nele, e ir conferir um dado da
+            pessoa não pode apagar o que se estava escrevendo. */}
+        {painelNegocios ? (
+          <div hidden={aba !== "negocios"} className="h-full">
+            {painelNegocios}
+          </div>
+        ) : (
+          aba === "negocios" && (
+            <LeadCardDeals
+              negocios={lead.negocios}
+              principal={lead.situacao?.negocioId}
+              registrarVenda={registrarVenda}
+              onOpenDeal={(id) => onOpenDeal?.(id)}
+              onNewDeal={() => onNewDeal?.()}
+            />
+          )
+        )}
+        {aba === "historico" && (
+          <LeadCardHistory
+            eventos={lead.historico}
+            onComentar={onComentar}
+            onEditarComentario={onEditarComentario}
+            onApagarComentario={onApagarComentario}
+            comentando={comentando}
+          />
+        )}
       </div>
     </div>
   );

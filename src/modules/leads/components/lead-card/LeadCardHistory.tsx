@@ -1,19 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bot,
-  FileText,
-  Handshake,
-  ListFilter,
-  Loader2,
-  MessageCircle,
-  MessageSquare,
-  Pencil,
-  Plus,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Loader2, MessageSquarePlus, Pencil, Send, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LeadCardEvent, TipoDeEvento } from "./types";
 
@@ -47,40 +33,20 @@ import type { LeadCardEvent, TipoDeEvento } from "./types";
  * escrito errado.
  */
 
-const ICONE: Record<TipoDeEvento, typeof UserRound> = {
-  lead: UserRound,
-  negocio: Handshake,
-  campo: FileText,
-  mensagem: MessageCircle,
-  comentario: MessageSquare,
-  automacao: Bot,
-};
-
 /**
- * Cor por tipo — semântica, não decorativa: dá para varrer sem ler.
- *
- * Só tokens (V5). A paleta crua de antes (`sky-400`, `violet-400`…) era
- * afinada para o escuro e some no claro (ícone `-400` sobre branco fica abaixo
- * de 3:1). Pessoa em tinta neutra forte, negócio em verde (dinheiro), mensagem
- * em azul, comentário em âmbar — o que alguém escreveu à mão precisa saltar.
+ * O ponto de cada evento na linha do tempo (mockup V5, `.tl`) — cor por tipo,
+ * semântica e não decorativa: dá para varrer sem ler. Só tokens. O ouro marca o
+ * que a automação/Copilot fez; tinta, o que mexeu no negócio; âmbar cheio, o que
+ * uma pessoa escreveu à mão — numa parede de tráfego de WhatsApp, é o que
+ * precisa saltar.
  */
-const COR: Record<TipoDeEvento, string> = {
-  lead: "bg-foreground/[0.07] text-foreground ring-foreground/15",
-  negocio: "bg-success/15 text-success ring-success/30",
-  campo: "bg-muted text-muted-foreground ring-border",
-  mensagem: "bg-insights/15 text-insights ring-insights/30",
-  comentario: "bg-warning/15 text-warning-strong ring-warning/35",
-  automacao: "bg-muted text-muted-foreground ring-border",
-};
-
-/** Cor do fio que liga um evento ao próximo — herda o tipo do de cima. */
-const FIO: Record<TipoDeEvento, string> = {
-  lead: "bg-foreground/20",
-  negocio: "bg-success/35",
-  campo: "bg-border",
-  mensagem: "bg-insights/35",
-  comentario: "bg-warning/40",
-  automacao: "bg-border",
+const PONTO: Record<TipoDeEvento, string> = {
+  lead: "border-foreground/45 bg-card",
+  negocio: "border-foreground bg-card",
+  campo: "border-muted-foreground/35 bg-card",
+  mensagem: "border-insights bg-card",
+  comentario: "border-warning bg-warning",
+  automacao: "border-primary bg-primary",
 };
 
 const FILTROS: { chave: TipoDeEvento | "todos"; rotulo: string }[] = [
@@ -200,7 +166,7 @@ function CorpoDoComentario({
 
   if (editando) {
     return (
-      <div className="flex flex-col gap-2 px-3 py-2">
+      <div className="flex flex-col gap-2">
         <textarea
           value={rascunho}
           onChange={(e) => setRascunho(e.target.value)}
@@ -239,7 +205,7 @@ function CorpoDoComentario({
   }
 
   return (
-    <div className="flex items-start gap-2 px-3 py-2">
+    <div className="flex items-start gap-2 rounded-xl bg-warning/[0.08] px-3 py-2">
       <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground">
         {c.corpo}
       </p>
@@ -309,36 +275,112 @@ export function LeadCardHistory({
     setEscrevendo(false);
   };
 
+  const quantos = (chave: TipoDeEvento | "todos") =>
+    chave === "todos" ? eventos.length : eventos.filter((e) => e.tipo === chave).length;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-3">
-        {/* Sem título aqui: a aba acima já diz "Histórico", e repetir o mesmo
-            rótulo a 40px de distância é ruído, não hierarquia. */}
-        <p className="text-[11.5px] text-muted-foreground">
-          Tudo que aconteceu com esta pessoa
-        </p>
-        {onComentar && !escrevendo && (
-          <button
-            type="button"
-            onClick={() => {
-              setEscrevendo(true);
-              // O foco tem de esperar o campo existir.
-              window.setTimeout(() => campo.current?.focus(), 0);
-            }}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold text-primary-soft-foreground",
-              "transition-colors hover:bg-primary-soft",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            )}
-          >
-            <Plus className="size-3.5" />
-            Comentário
-          </button>
-        )}
+    <div className="flex flex-col gap-3">
+      {/* O filtro segmentado do mockup. Tipo sem evento some — chip que filtra
+          para o vazio ensina a não clicar em nenhum. */}
+      <div
+        role="group"
+        aria-label="Filtrar histórico"
+        className="flex flex-wrap items-center gap-0.5 self-start rounded-[18px] bg-muted p-[3px]"
+      >
+        {FILTROS.map((f) => {
+          const ativo = filtro === f.chave;
+          const n = quantos(f.chave);
+          if (n === 0 && f.chave !== "todos") return null;
+          return (
+            <button
+              key={f.chave}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => setFiltro(f.chave)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-[background-color,color,box-shadow]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                ativo ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f.rotulo}
+              <span className="tabular-nums opacity-55">{n}</span>
+            </button>
+          );
+        })}
       </div>
 
+      {visiveis.length > 0 ? (
+        <ol className="relative flex flex-col gap-3.5 rounded-[18px] border border-card-border bg-card px-3.5 py-3.5 shadow-relevo">
+          {/* O fio da linha do tempo vive no container, não em cada evento:
+              assim não sobra antes do primeiro nem depois do último. */}
+          <span
+            className="pointer-events-none absolute bottom-5 left-[21px] top-5 w-0.5 rounded-full bg-border"
+            aria-hidden="true"
+          />
+          {visiveis.map((e) => (
+            <li key={e.id} className="relative flex gap-3 pl-6">
+              <span
+                className={cn("absolute left-0 top-1 size-3 rounded-full border-[2.5px]", PONTO[e.tipo])}
+                aria-hidden="true"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                {e.comentario ? (
+                  <CorpoDoComentario
+                    evento={e}
+                    onEditar={onEditarComentario}
+                    onApagar={onApagarComentario}
+                  />
+                ) : (
+                  <Frase evento={e} />
+                )}
+                <span className="flex min-w-0 items-center gap-1 text-[11.5px] text-muted-foreground">
+                  <span className="truncate">{e.autor ?? "Sistema"}</span>
+                  {e.comentario?.editadoEm && <span className="shrink-0 opacity-70">· editado</span>}
+                </span>
+              </div>
+              <time
+                dateTime={e.quando}
+                className="shrink-0 pt-px text-[11px] tabular-nums text-muted-foreground/80"
+              >
+                {quando(e.quando)}
+              </time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="rounded-[18px] border border-dashed border-border py-8 text-center text-[13px] text-muted-foreground">
+          Nada deste tipo no histórico.
+        </p>
+      )}
+
+      {/* O campo de comentar fica no PÉ, como no mockup — é onde se escreve
+          depois de ler. Começa como um campo fechado (o botão "Comentário") e
+          abre a caixa no clique; o resto é o mesmo de antes. */}
+      {onComentar && !escrevendo && (
+        <button
+          type="button"
+          onClick={() => {
+            setEscrevendo(true);
+            // O foco tem de esperar o campo existir.
+            window.setTimeout(() => campo.current?.focus(), 0);
+          }}
+          className={cn(
+            "flex h-11 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3.5 text-left text-[13px] shadow-relevo",
+            "transition-colors hover:border-foreground/20",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <MessageSquarePlus className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="font-semibold">Comentário</span>
+          <span aria-hidden="true" className="truncate text-muted-foreground">
+            · escreva para a equipe
+          </span>
+        </button>
+      )}
+
       {onComentar && escrevendo && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-card-border bg-sunken p-3">
+        <div className="flex flex-col gap-2 rounded-2xl border border-card-border bg-card p-3 shadow-relevo">
           <textarea
             ref={campo}
             value={texto}
@@ -355,9 +397,7 @@ export function LeadCardHistory({
             }}
           />
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[10.5px] text-muted-foreground/55">
-              Ctrl + Enter para publicar
-            </span>
+            <span className="text-[10.5px] text-muted-foreground/55">Ctrl + Enter para publicar</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -381,125 +421,12 @@ export function LeadCardHistory({
                   "disabled:pointer-events-none disabled:opacity-45 disabled:shadow-none",
                 )}
               >
-                {comentando ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Send className="size-3.5" />
-                )}
+                {comentando ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                 Comentar
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        <ListFilter className="size-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-        {FILTROS.map((f) => {
-          const ativo = filtro === f.chave;
-          const quantos =
-            f.chave === "todos" ? eventos.length : eventos.filter((e) => e.tipo === f.chave).length;
-          if (quantos === 0 && f.chave !== "todos") return null;
-          return (
-            <button
-              key={f.chave}
-              type="button"
-              onClick={() => setFiltro(f.chave)}
-              className={cn(
-                "rounded-full border px-2.5 py-[3px] text-[12px] font-medium transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                ativo
-                  ? "border-transparent bg-tinta font-semibold text-tinta-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
-              )}
-            >
-              {f.rotulo}
-              <span className="ml-1.5 tabular-nums opacity-60">{quantos}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <ol className="flex flex-col">
-        {visiveis.map((e, i) => {
-          const Icone = ICONE[e.tipo];
-          const ultimo = i === visiveis.length - 1;
-          return (
-            <li key={e.id} className="relative flex gap-3 pb-3 last:pb-0">
-              {/* O fio herda a cor do evento de cima — a coluna vira uma leitura
-                  cromática do que andou nesta relação, sem ler uma palavra. */}
-              {!ultimo && (
-                <span
-                  className={cn(
-                    "absolute left-[15px] top-[34px] bottom-0 w-[2px] rounded-full",
-                    FIO[e.tipo],
-                  )}
-                  aria-hidden="true"
-                />
-              )}
-              <span
-                className={cn(
-                  "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1",
-                  COR[e.tipo],
-                )}
-                aria-hidden="true"
-              >
-                <Icone className="size-[15px]" />
-              </span>
-
-              <div
-                className={cn(
-                  "min-w-0 flex-1 overflow-hidden rounded-xl border bg-card",
-                  // O comentário ganha a borda âmbar do próprio tipo: numa
-                  // parede de tráfego de WhatsApp, o que uma pessoa escreveu à
-                  // mão precisa ser achável sem ler.
-                  e.comentario ? "border-warning/45" : "border-border",
-                )}
-              >
-                {e.comentario ? (
-                  <CorpoDoComentario
-                    evento={e}
-                    onEditar={onEditarComentario}
-                    onApagar={onApagarComentario}
-                  />
-                ) : (
-                  <div className="px-3 py-2">
-                    <Frase evento={e} />
-                  </div>
-                )}
-                <div className="flex items-center gap-2 border-t border-border/70 bg-sunken px-3 py-1.5">
-                  {e.autor ? (
-                    <>
-                      <span
-                        className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary-soft text-[10px] font-bold text-primary-soft-foreground"
-                        aria-hidden="true"
-                      >
-                        {iniciais(e.autor)}
-                      </span>
-                      <span className="truncate text-[11.5px] text-muted-foreground">
-                        {e.autor}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[11.5px] text-muted-foreground/70">Sistema</span>
-                  )}
-                  {e.comentario?.editadoEm && (
-                    <span className="shrink-0 text-[11px] text-muted-foreground/55">· editado</span>
-                  )}
-                  <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-muted-foreground/70">
-                    {quando(e.quando)}
-                  </span>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-
-      {visiveis.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-border py-8 text-center text-[13px] text-muted-foreground">
-          Nada deste tipo no histórico.
-        </p>
       )}
     </div>
   );

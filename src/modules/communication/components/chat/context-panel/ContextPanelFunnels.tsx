@@ -205,12 +205,12 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         return (
           <div
             key={row.key}
-            className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-sunken p-2.5"
+            className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 p-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
               <div className="min-w-0">
-                <div className="truncate text-[12.5px] font-medium text-foreground">{row.label}</div>
+                <div className="truncate text-[13px] font-bold text-foreground">{row.label}</div>
                 <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
               </div>
             </div>
