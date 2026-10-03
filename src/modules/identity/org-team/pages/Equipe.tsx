@@ -541,7 +541,7 @@ export default function Equipe() {
                 ) : (
                   admins.slice(0, 4).map((a) => (
                     <span key={a.id} className="inline-flex items-center gap-2 text-[13px] font-semibold">
-                      <UserAvatar name={a.name} avatarUrl={avatarMap.get(a.id)} size="xs" className="h-7 w-7" fallbackClassName="bg-white/10 text-tinta-foreground" />
+                      <UserAvatar name={a.name} avatarUrl={avatarMap.get(a.id)} size="xs" className="h-7 w-7" fallbackClassName="bg-tinta-3 text-tinta-foreground" />
                       {a.name}
                     </span>
                   ))
@@ -594,22 +594,12 @@ export default function Equipe() {
                 <p className="text-[11px] font-semibold text-primary-foreground/70">assentos livres</p>
               </FocusTile>
             </div>
+            {/* "Criar usuário" mora só no cabeçalho (um primário por cabeçalho):
+                repetido aqui, eram dois no mesmo viewport. O cartão fica com o
+                plano, que é o assunto dele. */}
             {isAdmin && (
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  disabled={seatUsage ? !seatUsage.can_add : false}
-                  onClick={() => handleCreateUserDialogOpen(true)}
-                  className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
-                >
-                  <UserPlus />
-                  Criar usuário
-                </Button>
-                <Button
-                  variant="outline"
-                  asChild
-                  className="border-transparent bg-[hsl(40_60%_8%/.1)] text-primary-foreground shadow-none hover:bg-[hsl(40_60%_8%/.16)]"
-                >
+                <Button variant="on-gold" asChild>
                   <Link to="/configuracoes/outros?tab=billing">Ver plano</Link>
                 </Button>
               </div>
@@ -665,18 +655,18 @@ export default function Equipe() {
             />
           </div>
         </div>
-        <Table className="min-w-[1120px] [&_td]:px-3 [&_th]:whitespace-nowrap [&_th]:px-3">
+        {/* Oito colunas, não onze: OTE base + bônus e as duas comissões viraram
+            pares empilhados, e o email desceu para baixo do nome. Com 1120 px de
+            piso a coluna de ações só aparecia rolando a 1440. */}
+        <Table className="min-w-[880px] [&_td]:px-3 [&_th]:whitespace-nowrap [&_th]:px-3">
           <TableHeader>
             <TableRow>
               <TableHead className="pl-5">Nome</TableHead>
-              <TableHead>Email</TableHead>
               <TableHead>Função</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">OTE Base</TableHead>
-              <TableHead className="text-right">OTE Bônus</TableHead>
-              <TableHead className="text-right">Com. rec.</TableHead>
-              <TableHead className="text-right">Com. projeto</TableHead>
+              <TableHead className="text-right">OTE</TableHead>
+              <TableHead className="text-right">Comissão</TableHead>
               <TableHead>Métrica</TableHead>
               {isAdmin && <TableHead className="w-[50px]"></TableHead>}
             </TableRow>
@@ -684,37 +674,39 @@ export default function Equipe() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : filteredMembers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   Nenhum membro encontrado
                 </TableCell>
               </TableRow>
             ) : (
               filteredMembers.map((member) => (
                 <TableRow key={member.id} className={cn(!member.is_active && "text-muted-foreground")}>
-                  <TableCell className="whitespace-nowrap py-3 pl-5">
-                    <span className="flex items-center gap-3">
+                  <TableCell className="py-3 pl-5">
+                    <span className="flex min-w-0 items-center gap-3">
                       <UserAvatar
                         name={member.name}
                         avatarUrl={avatarMap.get(member.id)}
                         size="sm"
-                        className={cn(!member.is_active && "opacity-60")}
+                        className={cn("shrink-0", !member.is_active && "opacity-60")}
                         fallbackClassName="bg-muted text-foreground"
                       />
-                      <span className="font-semibold">{member.name}</span>
+                      <span className="min-w-0">
+                        <span className="block whitespace-nowrap font-semibold">{member.name}</span>
+                        {member.email ? (
+                          <span className="block max-w-[240px] truncate text-[12px] text-muted-foreground" title={member.email}>
+                            {member.email}
+                          </span>
+                        ) : (
+                          <span className="block text-[12px] italic text-muted-foreground/50">Email não configurado</span>
+                        )}
+                      </span>
                     </span>
-                  </TableCell>
-                  <TableCell>
-                    {member.email ? (
-                      <span className="block max-w-[220px] truncate text-sm text-muted-foreground" title={member.email}>{member.email}</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50 italic">Não configurado</span>
-                    )}
                   </TableCell>
                   <TableCell>
                     {member.role === "admin" ? (
@@ -744,10 +736,22 @@ export default function Equipe() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCurrency(Number(member.ote_base) || 0)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCurrency(Number(member.ote_bonus) || 0)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{Number(member.commission_mrr_percent || 0)}%</TableCell>
-                  <TableCell className="text-right tabular-nums">{Number(member.commission_projeto_percent || 0)}%</TableCell>
+                  <TableCell className="whitespace-nowrap text-right tabular-nums">
+                    <span className="block">{formatCurrency(Number(member.ote_base) || 0)}</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      + {formatCurrency(Number(member.ote_bonus) || 0)} bônus
+                    </span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right tabular-nums">
+                    <span className="block">
+                      {Number(member.commission_mrr_percent || 0)}%{" "}
+                      <span className="text-[12px] text-muted-foreground">rec.</span>
+                    </span>
+                    <span className="block">
+                      {Number(member.commission_projeto_percent || 0)}%{" "}
+                      <span className="text-[12px] text-muted-foreground">projeto</span>
+                    </span>
+                  </TableCell>
                   <TableCell>
                     {member.metric_type ? (
                       <Badge variant={member.metric_type === "meetings" ? "info" : "gold"} className="gap-1 whitespace-nowrap">
@@ -798,7 +802,7 @@ export default function Equipe() {
           <span>
             Mostrando {filteredMembers.length} de {members.length} {members.length === 1 ? "pessoa" : "pessoas"}
           </span>
-          <span>Com. rec. = comissão sobre recorrência · Com. projeto = comissão sobre setup e serviços</span>
+          <span>OTE = base + bônus · Rec. = comissão sobre recorrência · Projeto = comissão sobre setup e serviços</span>
         </div>
       </Card>
     </div>
@@ -887,7 +891,7 @@ export default function Equipe() {
                           />
                         </div>
                         <div className="grid gap-2">
-                          <Label htmlFor="create-user-metric-type">Tipo de Métrica</Label>
+                          <Label htmlFor="create-user-metric-type">Tipo de métrica</Label>
                           <Select
                             value={createUserForm.metric_type}
                             onValueChange={(v) => setCreateUserForm((p) => ({ ...p, metric_type: v as "meetings" | "sales" }))}
@@ -973,7 +977,7 @@ export default function Equipe() {
           >
             <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
               <DialogHeader>
-                <DialogTitle>Editar Membro</DialogTitle>
+                <DialogTitle>Editar membro</DialogTitle>
                 <DialogDescription>
                   Ajuste as informações do membro da equipe (OTE, comissões, Cal.com, etc.)
                 </DialogDescription>
@@ -1030,7 +1034,7 @@ export default function Equipe() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="metric_type">Tipo de Métrica</Label>
+                <Label htmlFor="metric_type">Tipo de métrica</Label>
                 <Select
                   value={formData.metric_type}
                   onValueChange={(value: "meetings" | "sales") => setFormData(prev => ({ ...prev, metric_type: value }))}
@@ -1046,7 +1050,7 @@ export default function Equipe() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="ote_base">OTE Base (R$)</Label>
+                  <Label htmlFor="ote_base">OTE base (R$)</Label>
                   <Input
                     id="ote_base"
                     type="number"
@@ -1060,7 +1064,7 @@ export default function Equipe() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="ote_bonus">OTE Bônus (R$)</Label>
+                  <Label htmlFor="ote_bonus">OTE bônus (R$)</Label>
                   <Input
                     id="ote_bonus"
                     type="number"
@@ -1076,7 +1080,7 @@ export default function Equipe() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="commission_mrr">Comissão Rec. (%)</Label>
+                  <Label htmlFor="commission_mrr">Comissão rec. (%)</Label>
                   <Input
                     id="commission_mrr"
                     type="number"
@@ -1090,7 +1094,7 @@ export default function Equipe() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="commission_projeto">Comissão Projeto (%)</Label>
+                  <Label htmlFor="commission_projeto">Comissão projeto (%)</Label>
                   <Input
                     id="commission_projeto"
                     type="number"
@@ -1127,7 +1131,7 @@ export default function Equipe() {
                 </p>
               </div>
               <div className="flex items-center justify-between">
-                <Label htmlFor="is_active">Membro Ativo</Label>
+                <Label htmlFor="is_active">Membro ativo</Label>
                 <Switch
                   id="is_active"
                   checked={formData.is_active}
@@ -1190,7 +1194,9 @@ function GrupoComercial({
         </span>
       </p>
       <div className="mt-auto flex items-center gap-2">
-        <div className="flex -space-x-2">
+        {/* Fundo opaco e sobreposição curta: com `bg-white/10` e `-space-x-2` as
+            iniciais de um avatar vazavam por baixo do vizinho e a 2ª letra sumia. */}
+        <div className="flex -space-x-1">
           {pessoas.slice(0, 5).map((p) => (
             <UserAvatar
               key={p.id}
@@ -1198,7 +1204,7 @@ function GrupoComercial({
               avatarUrl={avatarDe(p.id)}
               size="xs"
               className="h-7 w-7 ring-2 ring-tinta-2"
-              fallbackClassName="bg-white/10 text-tinta-foreground"
+              fallbackClassName="bg-tinta-3 text-tinta-foreground"
             />
           ))}
         </div>

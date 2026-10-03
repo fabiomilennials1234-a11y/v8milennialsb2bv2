@@ -34,8 +34,10 @@ export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, p
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-2">
       {/* V5: navegação de página — pílula escura com a aba ativa em ouro. As
-          ações de aba ficam ao lado, fora da lista (não são abas selecionáveis). */}
-      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          ações de aba ficam ao lado, fora da lista (não são abas selecionáveis).
+          Sem quebra: no celular o "⋯" caía sozinho numa linha; a pílula é que
+          encolhe e rola. */}
+      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 max-w-full items-center gap-2">
         <TabsList variant="pill" aria-label="Painéis de métricas" className="min-w-0">
           {paineis.map((panel) => (
             <TabsTrigger key={panel.id} value={panel.id} id={`studio-tab-${panel.id}`} aria-controls="studio-panel">

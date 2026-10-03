@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import {
   Select,
   SelectContent,
@@ -116,7 +116,7 @@ export default function MasterSupportTickets() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
+      <MasterPageHeader
         title="Suporte"
         subtitle="Chamados de todas as organizações. Você deriva a severidade; o cliente declara o impacto."
         actions={
@@ -224,44 +224,45 @@ function TicketTable({
   unread?: Record<string, number>;
   resolved?: boolean;
 }) {
+  // Carga e vazio ficam FORA da tabela, centrados no cartão: dentro dela, no
+  // celular, o texto seguia a largura das colunas e ia parar na borda.
+  if (isLoading) {
+    return (
+      <div className="grid place-items-center py-12 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+      </div>
+    );
+  }
+  if (!tickets.length) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+
+  // Abaixo de lg, organização e impacto sobem para baixo do assunto; abaixo de
+  // sm, severidade, status e dono também (`TicketRow`) — nada sai da tela.
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead className="w-8" />
           <TableHead>Chamado</TableHead>
-          <TableHead className="w-[180px]">Organização</TableHead>
-          <TableHead className="w-[130px]">Impacto</TableHead>
-          <TableHead className="w-[120px]">Severidade</TableHead>
-          <TableHead className="w-[150px]">Status</TableHead>
-          <TableHead className="w-[120px]">Dono</TableHead>
+          <TableHead className="w-[180px] max-lg:hidden">Organização</TableHead>
+          <TableHead className="w-[130px] max-lg:hidden">Impacto</TableHead>
+          <TableHead className="w-[120px] max-sm:hidden">Severidade</TableHead>
+          <TableHead className="w-[150px] max-sm:hidden">Status</TableHead>
+          <TableHead className="w-[120px] max-sm:hidden">Dono</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {isLoading ? (
-          <TableRow>
-            <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-              <Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden />
-            </TableCell>
-          </TableRow>
-        ) : !tickets.length ? (
-          <TableRow>
-            <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-              {emptyLabel}
-            </TableCell>
-          </TableRow>
-        ) : (
-          tickets.map((t) => (
-            <TicketRow
-              key={t.id}
-              ticket={t}
-              isExpanded={expanded === t.id}
-              onToggle={() => onToggle(t.id)}
-              unread={unread?.[t.id] ?? 0}
-              resolved={resolved}
-            />
-          ))
-        )}
+        {tickets.map((t) => (
+          <TicketRow
+            key={t.id}
+            ticket={t}
+            isExpanded={expanded === t.id}
+            onToggle={() => onToggle(t.id)}
+            unread={unread?.[t.id] ?? 0}
+            resolved={resolved}
+          />
+        ))}
       </TableBody>
     </Table>
   );
@@ -369,6 +370,86 @@ function TicketRow({
 
   const mine = ticket.assigned_master_user_id === masterUser?.id;
 
+  // Os três controles de triagem moram nas colunas a partir de sm e, no
+  // celular, numa linha sob o assunto — o mesmo elemento nos dois lugares.
+  const severidade = (
+    <Select
+      value={ticket.severidade ?? ALL}
+      onValueChange={(v) =>
+        triage.mutate(
+          { ticketId: ticket.id, severidade: v as TicketSeveridade },
+          { onError: () => toast.error("Não deu para definir a severidade.") },
+        )
+      }
+    >
+      <SelectTrigger className="h-8 w-[110px] text-xs">
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL} disabled>
+          Não triado
+        </SelectItem>
+        {(Object.keys(SEVERIDADE_LABELS) as TicketSeveridade[]).map((sev) => (
+          <SelectItem key={sev} value={sev}>
+            {SEVERIDADE_LABELS[sev]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  /*
+    `fechado` nao aparece: o fechamento e automatico, 7 dias apos
+    `resolvido`, e o banco recusa um fechamento manual. E um chamado ja
+    fechado e terminal — nao ha para onde levá-lo.
+  */
+  const status = (
+    <Select
+      value={ticket.status}
+      disabled={isTerminal(ticket.status)}
+      onValueChange={(v) =>
+        triage.mutate(
+          { ticketId: ticket.id, status: v as TicketStatus },
+          { onError: () => toast.error("Não deu para mudar o status.") },
+        )
+      }
+    >
+      <SelectTrigger className="h-8 w-[140px] text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(Object.keys(STATUS_LABELS_STAFF) as TicketStatus[])
+          .filter((st) => !isTerminal(st) || ticket.status === st)
+          .map((st) => (
+            <SelectItem key={st} value={st} disabled={isTerminal(st)}>
+              {STATUS_LABELS_STAFF[st]}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const dono = ticket.assigned_master_user_id ? (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 text-xs"
+      onClick={() => claim.mutate({ ticketId: ticket.id, masterUserId: null })}
+    >
+      {mine ? "Você · soltar" : "Devolver à fila"}
+    </Button>
+  ) : (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-8 gap-1.5 text-xs"
+      onClick={() => claim.mutate({ ticketId: ticket.id })}
+    >
+      <Hand className="h-3.5 w-3.5" aria-hidden />
+      Pegar
+    </Button>
+  );
+
   return (
     <>
       <TableRow
@@ -385,7 +466,7 @@ function TicketRow({
             <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
           )}
         </TableCell>
-        <TableCell>
+        <TableCell className="max-sm:w-full max-sm:max-w-0">
           {/*
             O assunto vai ate 200 caracteres e antes era cortado com reticencias:
             quem tria a fila lia meia frase. Agora quebra em linhas (o teto de
@@ -420,91 +501,33 @@ function TicketRow({
             )}
             <OverdueTag ticket={ticket} />
           </p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground lg:hidden">
+            {ticket.organization?.name ?? "—"}
+            <span aria-hidden> · </span>
+            <span className={IMPACTO_TONE[ticket.impacto]}>{IMPACTO_LABELS[ticket.impacto]}</span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 sm:hidden" onClick={(e) => e.stopPropagation()}>
+            {severidade}
+            {status}
+            {dono}
+          </div>
         </TableCell>
-        <TableCell className="text-sm text-muted-foreground">
+        <TableCell className="text-sm text-muted-foreground max-lg:hidden">
           {ticket.organization?.name ?? "—"}
         </TableCell>
-        <TableCell>
+        <TableCell className="max-lg:hidden">
           <span className={cn("text-xs", IMPACTO_TONE[ticket.impacto])}>
             {IMPACTO_LABELS[ticket.impacto]}
           </span>
         </TableCell>
-        <TableCell onClick={(e) => e.stopPropagation()}>
-          <Select
-            value={ticket.severidade ?? ALL}
-            onValueChange={(v) =>
-              triage.mutate(
-                { ticketId: ticket.id, severidade: v as TicketSeveridade },
-                { onError: () => toast.error("Não deu para definir a severidade.") },
-              )
-            }
-          >
-            <SelectTrigger className="h-8 w-[110px] text-xs">
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL} disabled>
-                Não triado
-              </SelectItem>
-              {(Object.keys(SEVERIDADE_LABELS) as TicketSeveridade[]).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {SEVERIDADE_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <TableCell className="max-sm:hidden" onClick={(e) => e.stopPropagation()}>
+          {severidade}
         </TableCell>
-        <TableCell onClick={(e) => e.stopPropagation()}>
-          {/*
-            `fechado` nao aparece: o fechamento e automatico, 7 dias apos
-            `resolvido`, e o banco recusa um fechamento manual. E um chamado ja
-            fechado e terminal — nao ha para onde levá-lo.
-          */}
-          <Select
-            value={ticket.status}
-            disabled={isTerminal(ticket.status)}
-            onValueChange={(v) =>
-              triage.mutate(
-                { ticketId: ticket.id, status: v as TicketStatus },
-                { onError: () => toast.error("Não deu para mudar o status.") },
-              )
-            }
-          >
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(STATUS_LABELS_STAFF) as TicketStatus[])
-                .filter((s) => !isTerminal(s) || ticket.status === s)
-                .map((s) => (
-                  <SelectItem key={s} value={s} disabled={isTerminal(s)}>
-                    {STATUS_LABELS_STAFF[s]}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+        <TableCell className="max-sm:hidden" onClick={(e) => e.stopPropagation()}>
+          {status}
         </TableCell>
-        <TableCell onClick={(e) => e.stopPropagation()}>
-          {ticket.assigned_master_user_id ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => claim.mutate({ ticketId: ticket.id, masterUserId: null })}
-            >
-              {mine ? "Você · soltar" : "Devolver à fila"}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => claim.mutate({ ticketId: ticket.id })}
-            >
-              <Hand className="h-3.5 w-3.5" aria-hidden />
-              Pegar
-            </Button>
-          )}
+        <TableCell className="max-sm:hidden" onClick={(e) => e.stopPropagation()}>
+          {dono}
         </TableCell>
       </TableRow>
 

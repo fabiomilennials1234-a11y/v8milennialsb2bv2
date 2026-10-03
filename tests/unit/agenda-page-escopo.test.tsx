@@ -1,8 +1,8 @@
 /**
- * Página /agenda — a tela "Atividades" que o botão da lateral abre.
+ * Página /agenda — a tela "Agenda" que o botão da lateral abre.
  *
  * Prova o que o pedido exige de ponta a ponta, sem banco:
- *   - cabeçalho "Atividades" + descrição + "Nova atividade" na área principal;
+ *   - cabeçalho "Agenda" + descrição + "Nova atividade" na área principal;
  *   - abas de estado e filtros;
  *   - usuário comum vê SÓ os próprios compromissos;
  *   - admin vê os de todo mundo, com o responsável identificável.
@@ -170,7 +170,7 @@ describe("Agenda — moldura da tela", () => {
   it("é uma página do sistema: título, descrição e ação no topo", async () => {
     await renderAgendaNoMes();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Atividades" }),
+      screen.getByRole("heading", { level: 1, name: "Agenda" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Crie, edite e gerencie/)).toBeInTheDocument();
     expect(

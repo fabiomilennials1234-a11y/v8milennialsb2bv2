@@ -71,7 +71,7 @@ export function AjudaArtigos({
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar nos artigos…"
                 aria-label="Buscar nos artigos"
-                className="h-12 w-full rounded-full border-0 bg-white pl-11 pr-4 text-[14px] text-neutral-900 shadow-relevo placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="h-12 w-full rounded-full border-0 bg-primary-cta pl-11 pr-4 text-[14px] text-primary-foreground shadow-relevo placeholder:text-primary-foreground/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
             </div>
             {categorias.length > 0 && (
@@ -118,9 +118,8 @@ export function AjudaArtigos({
               </div>
               <div className="mt-auto">
                 <Button
-                  variant="outline"
+                  variant="on-gold"
                   onClick={() => setAberto(destaque)}
-                  className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
                 >
                   {destaque.video_url ? <PlayCircle /> : <BookOpen />}
                   {destaque.video_url ? "Assistir" : "Ler o passo a passo"}
@@ -138,9 +137,8 @@ export function AjudaArtigos({
               </p>
               <div className="mt-auto flex flex-wrap gap-2">
                 <Button
-                  variant="outline"
+                  variant="on-gold"
                   onClick={onVerFaq}
-                  className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
                 >
                   <LifeBuoy />
                   Ver perguntas frequentes

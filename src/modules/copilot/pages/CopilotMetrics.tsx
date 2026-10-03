@@ -12,7 +12,7 @@ import { QUALIFIED_TIER_FILTER } from "@/modules/copilot/lib/qualified-leads-fil
 import { useCurrentTeamMember } from "@/modules/identity";
 import {
   Bot,
-  Star,
+  Gauge,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -316,8 +316,8 @@ export default function CopilotMetrics() {
           note="Com avaliações no período"
         />
         <KpiTile
-          label="Score Geral"
-          icon={Star}
+          label="Nota geral"
+          icon={Gauge}
           tone={isLoading || totalEvals === 0 ? "neutral" : scoreTone(globalAvg)}
           loading={isLoading}
           value={kpi(

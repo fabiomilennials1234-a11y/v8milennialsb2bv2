@@ -33,7 +33,9 @@ export function CopilotTabs({
           Agentes
           {count != null && <span className="text-[11px] font-extrabold tabular-nums opacity-70">{count}</span>}
         </TabsTrigger>
-        <TabsTrigger value="editor" disabled={!agentId}>
+        {/* Em /copilot/novo o Editor é a aba ativa sem agente: desligá-la a
+            pintava como apagada. Só fica desligada quando não é a atual. */}
+        <TabsTrigger value="editor" disabled={!agentId && active !== "editor"}>
           Editor
         </TabsTrigger>
         <TabsTrigger value="metricas">Métricas LLM</TabsTrigger>

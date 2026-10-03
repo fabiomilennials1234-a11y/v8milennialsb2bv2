@@ -214,7 +214,7 @@ export default function Copilot() {
             {canManageCopilot && (
               <Button onClick={handleCreateAgent} disabled={!copilotQuota.can_add}>
                 <Plus />
-                Novo Copilot
+                Novo copilot
               </Button>
             )}
           </>
@@ -224,7 +224,7 @@ export default function Copilot() {
       {!canManageCopilot && (
         <p className="-mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
           Admin ou membros com a permissão habilitada criam copilots e os vinculam a números em Configurações → WhatsApp.
-          Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot;.
+          Se você não vê o botão &quot;Novo copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot;.
         </p>
       )}
 
@@ -458,7 +458,7 @@ export default function Copilot() {
                       className="mt-1.5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 px-3 py-3.5 text-[13px] font-semibold text-tinta-muted transition-colors hover:border-white/25 hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                     >
                       <Plus className="h-4 w-4" />
-                      Novo Copilot
+                      Novo copilot
                     </button>
                   )}
                 </>
@@ -505,7 +505,7 @@ export default function Copilot() {
               {canManageCopilot && (
                 <Button onClick={handleCreateAgent}>
                   <Plus />
-                  Criar Primeiro Copilot
+                  Criar primeiro copilot
                 </Button>
               )}
             </CardContent>

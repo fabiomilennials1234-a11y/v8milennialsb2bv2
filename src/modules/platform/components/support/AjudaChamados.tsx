@@ -195,9 +195,8 @@ function FocoChamado({ ticket, onAbrir }: { ticket: SupportTicket; onAbrir: (id:
       )}
       <div className="mt-auto pt-1">
         <Button
-          variant="outline"
+          variant="on-gold"
           onClick={() => onAbrir(ticket.id)}
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
         >
           <MessageSquareReply />
           Abrir conversa

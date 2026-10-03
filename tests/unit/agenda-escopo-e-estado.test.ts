@@ -3,7 +3,7 @@
  *
  * POR QUE ESTE ARQUIVO EXISTE
  * ---------------------------
- * A tela "Atividades" recorta o que cada pessoa vê: usuário comum enxerga só os
+ * A tela "Agenda" recorta o que cada pessoa vê: usuário comum enxerga só os
  * próprios compromissos, admin enxerga os de todo mundo. O recorte parece um
  * `filter(e => e.createdBy === userId)` de uma linha — e essa linha estaria
  * errada.

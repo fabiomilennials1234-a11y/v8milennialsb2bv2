@@ -1155,7 +1155,7 @@ export function ManagePipelineStagesModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Gerenciar Etapas - {nomeDaFamilia}</DialogTitle>
+          <DialogTitle>Gerenciar etapas - {nomeDaFamilia}</DialogTitle>
           <DialogDescription>
             Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
           </DialogDescription>

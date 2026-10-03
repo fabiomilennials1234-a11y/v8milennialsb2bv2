@@ -66,7 +66,7 @@ import { BillingOverrideModal } from "../components/BillingOverrideModal";
 import { OrgSuspensionDialog } from "../components/OrgSuspensionDialog";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 
 export default function MasterOrganizations() {
   const { isOutbounder } = useMasterAuth();
@@ -132,7 +132,7 @@ export default function MasterOrganizations() {
           return <Badge variant="warning">Suspenso</Badge>;
         case "cancelled":
         case "expired":
-          return <Badge variant="destructive">Cancelado</Badge>;
+          return <Badge variant="destructive" className="bg-destructive/10 text-destructive hover:bg-destructive/15">Cancelado</Badge>;
         default:
           return <Badge variant="secondary">{status}</Badge>;
       }
@@ -157,8 +157,8 @@ export default function MasterOrganizations() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title={isOutbounder ? "Organizações Outbound" : "Organizações"}
+      <MasterPageHeader
+        title={isOutbounder ? "Organizações outbound" : "Organizações"}
         subtitle={
           isOutbounder
             ? "Gerencie as organizações de outbound"
@@ -167,7 +167,7 @@ export default function MasterOrganizations() {
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4" />
-            Nova Organização
+            Nova organização
           </Button>
         }
       />
@@ -183,43 +183,43 @@ export default function MasterOrganizations() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão. No
+          celular, tipo e plano sobem para baixo do slug e a data some: nenhuma
+          coluna sai da tela. */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filteredOrgs?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma organização encontrada</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
-                <TableHead>Tipo</TableHead>
+                <TableHead className="max-sm:hidden">Tipo</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Criada em</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-md:hidden">Plano</TableHead>
+                <TableHead className="max-lg:hidden">Criada em</TableHead>
+                <TableHead className="w-[100px] max-sm:w-14">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filteredOrgs?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhuma organização encontrada
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredOrgs?.map((org) => (
+              {filteredOrgs.map((org) => (
                   <TableRow key={org.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{org.name}</p>
-                        <p className="text-sm text-muted-foreground">{org.slug}</p>
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{org.name}</p>
+                        <p className="truncate text-sm text-muted-foreground">{org.slug}</p>
+                        <p className="truncate text-xs text-muted-foreground md:hidden">
+                          <span className="sm:hidden">{org.org_type === "outbound" ? "Outbound" : "CRM"} · </span>
+                          <span className="capitalize">{org.subscription_plan || "free"}</span>
+                        </p>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-sm:hidden">
                       <Badge variant={org.org_type === "outbound" ? "info" : "soft"}>
                         {org.org_type === "outbound" ? "Outbound" : "CRM"}
                       </Badge>
@@ -227,10 +227,10 @@ export default function MasterOrganizations() {
                     <TableCell>
                       {getStatusBadge(org.subscription_status, org.billing_override)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <span className="capitalize">{org.subscription_plan || "free"}</span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-lg:hidden">
                       {format(new Date(org.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </TableCell>
                     <TableCell>
@@ -255,11 +255,11 @@ export default function MasterOrganizations() {
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Eye className="w-4 h-4 mr-2" />
-                            Ver Detalhes
+                            Ver detalhes
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Users className="w-4 h-4 mr-2" />
-                            Ver Membros
+                            Ver membros
                           </DropdownMenuItem>
                           {!isOutbounder && (
                             <>
@@ -271,7 +271,7 @@ export default function MasterOrganizations() {
                                 }}
                               >
                                 <CreditCard className="w-4 h-4 mr-2" />
-                                Liberar Plano
+                                Liberar plano
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
@@ -311,10 +311,10 @@ export default function MasterOrganizations() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -322,12 +322,12 @@ export default function MasterOrganizations() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Organização</DialogTitle>
+            <DialogTitle>Nova organização</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {!isOutbounder && (
               <div className="space-y-2">
-                <Label>Tipo de Organização</Label>
+                <Label>Tipo de organização</Label>
                 <div className="flex gap-2">
                   <Button
                     type="button"

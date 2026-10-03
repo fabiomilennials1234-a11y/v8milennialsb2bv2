@@ -72,7 +72,7 @@ function RealVsExpectedChartBase({ dailySales, goalTarget, month, year }: RealVs
         <span
           className={cn(
             "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
-            deltaPp >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
+            deltaPp >= 0 ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
           )}
         >
           {deltaPp >= 0 ? `+${deltaPp}pp à frente` : `${deltaPp}pp atrás`}

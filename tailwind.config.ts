@@ -32,6 +32,8 @@ export default {
           // V5: ouro em superfície (pílula, linha selecionada, chip de destaque)
           soft: "hsl(var(--gold-soft))",
           "soft-foreground": "hsl(var(--gold-soft-foreground))",
+          // V5: botão branco dentro do cartão de ouro (Button variant="on-gold")
+          cta: "hsl(var(--gold-cta))",
         },
         // V5: superfície escura nos dois temas (lateral, painel-herói, pílula de
         // navegação, tooltip). Nome em português — `ink` já é cor da landing.
@@ -185,9 +187,18 @@ export default {
       // preenchimento (`--destructive`) dá ~3,8:1 sobre o cartão claro e
       // ~3,6:1 no escuro — reprova AA em texto pequeno, e são 677 usos em
       // texto. `bg-`/`border-`/`ring-destructive` seguem no preenchimento.
+      // Mesma regra para o verde (~2,3:1 no claro, 269 usos) e o âmbar
+      // (~2,6:1): quem escreve `text-success` quer texto legível, não a cor de
+      // preenchimento. Dentro de tinta e da lateral o par já é reescopado.
       textColor: {
         destructive: {
           DEFAULT: "hsl(var(--destructive-strong))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success-strong))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning-strong))",
         },
       },
       // Curvas com nome. `ease-[cubic-bezier(...)]` NÃO funciona aqui: o

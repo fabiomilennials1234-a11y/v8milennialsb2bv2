@@ -201,9 +201,8 @@ function FocoTemplate({
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
         <Button
-          variant="outline"
+          variant="on-gold"
           onClick={onEditar}
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
         >
           <Pencil />
           Editar template

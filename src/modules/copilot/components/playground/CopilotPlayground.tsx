@@ -1,7 +1,7 @@
 /**
  * CopilotPlayground — Tela unica para criar/editar copilots
  *
- * Layout: 2 colunas (60/40)
+ * Layout: 2 colunas (60/40) a partir de `lg`; abaixo disso, empilhadas
  * - Esquerda: Prompt editor + paineis colapsaveis (Settings, Tools, Conhecimento)
  * - Direita: Chat de teste (Live Preview)
  */
@@ -144,7 +144,7 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
     agent: {
       name: data.name,
       template_type: data.templateType || "custom",
-      // "Novo Copilot" is a complete, explicit creation — finalize immediately so
+      // "Novo copilot" is a complete, explicit creation — finalize immediately so
       // it shows in the main list. Builder drafts (handleCreateWithAI) use their
       // own minimal payload and intentionally stay finalized_at NULL until graduated.
       finalized_at: new Date().toISOString(),
@@ -567,11 +567,14 @@ export function CopilotPlayground() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-[560px] gap-4">
+    // A partir de `lg`: editor e Prévia lado a lado, presos à altura da tela, cada
+    // um rolando por dentro. Abaixo disso a página rola inteira e a Prévia desce
+    // para baixo do editor — lado a lado, cada coluna ficava com ~170 px no celular.
+    <div className="flex flex-col gap-4 lg:h-[calc(100dvh-7rem)] lg:min-h-[560px] lg:flex-row">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col flex-1 min-w-0 h-full gap-4"
+      className="flex flex-col flex-1 min-w-0 gap-4 lg:h-full"
     >
       {/* ===== Cabeçalho da página — a pílula Agentes · Editor · Métricas LLM ===== */}
       <PageHeader
@@ -580,9 +583,9 @@ export function CopilotPlayground() {
         className="shrink-0 gap-3"
       />
       {/* ===== Main Content ===== */}
-      <div className="flex flex-1 min-h-0 gap-4">
+      <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
         {/* ===== Left Column: cabeçalho do agente + seções ===== */}
-        <section className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+        <section className="flex min-w-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo lg:min-h-0 lg:flex-1">
           <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 px-4 py-3.5">
             <button
               type="button"
@@ -598,7 +601,9 @@ export function CopilotPlayground() {
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-success" aria-hidden />
               )}
             </span>
-            <div className="min-w-0 flex-1">
+            {/* Piso de largura (como o do PageHeader): sem ele as ações ficavam na
+                linha e espremiam o nome até "Qual…". */}
+            <div className="min-w-[min(100%,12rem)] flex-1">
               <Input
                 value={data.name}
                 onChange={(e) => updateData({ name: e.target.value })}
@@ -819,8 +824,9 @@ export function CopilotPlayground() {
           </Tabs>
         </section>
 
-        {/* ===== Right Column: Live Preview Chat (sempre visível) ===== */}
-        <div className="w-[40%] min-h-0 shrink-0 xl:w-[360px]">
+        {/* ===== Right Column: Live Preview Chat (sempre visível) =====
+            Abaixo de `lg` ganha altura própria: o chat rola por dentro. */}
+        <div className="h-[min(36rem,calc(100dvh-10rem))] w-full shrink-0 lg:h-auto lg:min-h-0 lg:w-[40%] xl:w-[360px]">
           <LivePreviewChat
             systemPrompt={systemPromptForPreview}
             agentName={data.name}
@@ -872,7 +878,7 @@ export function CopilotPlayground() {
       </AlertDialog>
     </motion.div>
     {builderActive && (
-      <div className="w-[380px] shrink-0 h-full">
+      <div className="h-[min(36rem,calc(100dvh-10rem))] w-full shrink-0 lg:h-full lg:w-[380px]">
         <BuilderPanel
           agentId={editId}
           toolDefs={builderToolDefs}

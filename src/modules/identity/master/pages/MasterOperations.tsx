@@ -41,7 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -100,27 +100,27 @@ function OverviewTab() {
       ) : (
         <KpiRow cols={4}>
           <KpiTile
-            label={`Jobs Executados (${periodLabel[interval]})`}
+            label={`Jobs executados (${periodLabel[interval]})`}
             icon={Activity}
             tone="info"
             value={data?.jobs_total ?? 0}
           />
           <KpiTile
-            label="Jobs com Erro"
+            label="Jobs com erro"
             icon={XCircle}
             tone={isHighError ? "bad" : "neutral"}
             className={cn(isHighError && "border-destructive/40 bg-destructive/5")}
             value={<span className={cn(isHighError && "text-destructive")}>{data?.jobs_error ?? 0}</span>}
           />
           <KpiTile
-            label="Taxa de Erro"
+            label="Taxa de erro"
             icon={AlertTriangle}
             tone={isHighError ? "bad" : "neutral"}
             className={cn(isHighError && "border-destructive/40 bg-destructive/5")}
             value={<span className={cn(isHighError && "text-destructive")}>{errorRate.toFixed(1)}%</span>}
           />
           <KpiTile
-            label="Organizações Ativas"
+            label="Organizações ativas"
             icon={Building2}
             tone="good"
             value={data?.orgs_active ?? 0}
@@ -390,11 +390,11 @@ function UsageByOrgTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Organização</TableHead>
-                  <TableHead className="text-right">Leads Criados</TableHead>
-                  <TableHead className="text-right">Cards Movidos</TableHead>
+                  <TableHead className="text-right">Leads criados</TableHead>
+                  <TableHead className="text-right">Cards movidos</TableHead>
                   <TableHead className="text-right">Mensagens</TableHead>
-                  <TableHead className="text-right">Total Eventos</TableHead>
-                  <TableHead>Última Atividade</TableHead>
+                  <TableHead className="text-right">Total de eventos</TableHead>
+                  <TableHead>Última atividade</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -459,7 +459,7 @@ const JOB_STATUS_BADGE: Record<string, { class: string; label: string }> = {
 
 /** Paleta categórica (não é status): só separa um motor do outro num relance. */
 const SOURCE_ENGINE_BADGE: Record<string, { class: string; label: string }> = {
-  pipe_dispatch: { class: "bg-insights/10 text-insights border-insights/20", label: "Pipe Dispatch" },
+  pipe_dispatch: { class: "bg-insights/10 text-insights border-insights/20", label: "Pipe dispatch" },
   copilot: { class: "bg-primary-soft text-primary-soft-foreground border-transparent", label: "Copilot" },
   campaign: { class: "bg-tinta text-tinta-foreground border-transparent", label: "Campaign" },
   followup: { class: "bg-card text-foreground border-border", label: "Follow-up" },
@@ -577,7 +577,7 @@ function JobsTab() {
             value={<span className="text-insights">{overview?.running ?? 0}</span>}
           />
           <KpiTile
-            label="Dead Letter"
+            label="Dead letter"
             icon={Skull}
             tone={hasDeadLetters ? "bad" : "neutral"}
             className={cn(hasDeadLetters && "border-destructive/40 bg-destructive/5")}
@@ -598,17 +598,17 @@ function JobsTab() {
             <SelectItem value="success">Success</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
             <SelectItem value="retrying">Retrying</SelectItem>
-            <SelectItem value="dead_letter">Dead Letter</SelectItem>
+            <SelectItem value="dead_letter">Dead letter</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={engineFilter || "__all__"} onValueChange={(v) => { setEngineFilter(v === "__all__" ? "" : v); setPage(0); }}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Source Engine" />
+            <SelectValue placeholder="Source engine" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todos os engines</SelectItem>
-            <SelectItem value="pipe_dispatch">Pipe Dispatch</SelectItem>
+            <SelectItem value="pipe_dispatch">Pipe dispatch</SelectItem>
             <SelectItem value="copilot">Copilot</SelectItem>
             <SelectItem value="campaign">Campaign</SelectItem>
             <SelectItem value="followup">Follow-up</SelectItem>
@@ -819,14 +819,14 @@ function JobRow({
 export default function MasterOperations() {
   return (
     <Tabs defaultValue="overview" className="space-y-5">
-      <PageHeader
-        title="Operations Center"
+      <MasterPageHeader
+        title="Operations center"
         subtitle="Monitoramento de jobs, erros e uso por organização"
         tabs={
-          <TabsList variant="pill">
-            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-            <TabsTrigger value="logs">Logs de Runtime</TabsTrigger>
-            <TabsTrigger value="usage">Uso por Organização</TabsTrigger>
+          <TabsList aria-label="Painéis de operações" className="max-w-full overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="overview">Visão geral</TabsTrigger>
+            <TabsTrigger value="logs">Logs de runtime</TabsTrigger>
+            <TabsTrigger value="usage">Uso por organização</TabsTrigger>
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
             <TabsTrigger value="apis">APIs</TabsTrigger>
           </TabsList>

@@ -38,10 +38,10 @@ interface CommissionBreakdownProps {
 
 export function CommissionBreakdown({ data }: CommissionBreakdownProps) {
   const chartData = [
-    { name: "OTE Base", value: data.oteBase, color: "hsl(var(--primary))" },
+    { name: "OTE base", value: data.oteBase, color: "hsl(var(--primary))" },
     { name: "Bônus OTE", value: data.bonus, color: "hsl(var(--success))" },
     { name: "Comissão MRR", value: data.mrr, color: "hsl(var(--chart-5))" },
-    { name: "Comissão Projeto", value: data.projeto, color: "hsl(var(--chart-4))" },
+    { name: "Comissão projeto", value: data.projeto, color: "hsl(var(--chart-4))" },
   ];
 
   const total = chartData.reduce((sum, item) => sum + item.value, 0);

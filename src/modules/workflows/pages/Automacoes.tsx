@@ -133,7 +133,7 @@ export default function Automacoes() {
       actions={
         <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
           <Plus />
-          Novo Workflow
+          Novo workflow
         </Button>
       }
     />
@@ -163,7 +163,7 @@ export default function Automacoes() {
             </p>
             <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
               <Plus />
-              Criar Primeiro Workflow
+              Criar primeiro workflow
             </Button>
           </CardContent>
         </Card>
@@ -259,7 +259,7 @@ export default function Automacoes() {
                     className="mt-1.5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 px-3 py-3.5 text-[13px] font-semibold text-tinta-muted transition-colors hover:border-white/25 hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
-                    Novo Workflow
+                    Novo workflow
                   </button>
                 </>
               }

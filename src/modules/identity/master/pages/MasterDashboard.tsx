@@ -18,7 +18,7 @@ import { useMasterUserStats } from "../hooks/useMasterUsers";
 import { useMasterAuditStats } from "../hooks/useMasterAuditLogs";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { Link } from "react-router-dom";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 
 const kpiLinkClass =
@@ -32,9 +32,9 @@ export default function MasterDashboard() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Master Admin"
-        subtitle="Painel de controle com acesso total ao sistema"
+      <MasterPageHeader
+        title="Master"
+        subtitle="Camada acima das organizações — visível só para usuários master."
       />
 
       {/* Quick Stats */}
@@ -79,7 +79,7 @@ export default function MasterDashboard() {
 
         <Link to="/master/organizations" className={kpiLinkClass}>
           <KpiTile
-            label="Billing Overrides"
+            label="Billing overrides"
             icon={CreditCard}
             tone="gold"
             loading={orgLoading}
@@ -90,7 +90,7 @@ export default function MasterDashboard() {
 
         <Link to="/master/audit-logs" className={kpiLinkClass}>
           <KpiTile
-            label="Ações Hoje"
+            label="Ações hoje"
             icon={Activity}
             tone="neutral"
             loading={auditLoading}
@@ -105,7 +105,7 @@ export default function MasterDashboard() {
         {/* Organization Status */}
         <Card>
           <CardHeader>
-            <CardTitle>Status das Organizações</CardTitle>
+            <CardTitle>Status das organizações</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -118,7 +118,7 @@ export default function MasterDashboard() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-insights" />
-                <span>Em Trial</span>
+                <span>Em trial</span>
               </div>
               <span className="font-bold tabular-nums">{orgStats?.trial || 0}</span>
             </div>
@@ -142,12 +142,15 @@ export default function MasterDashboard() {
         {/* User Roles */}
         <Card>
           <CardHeader>
-            <CardTitle>Distribuição de Roles</CardTitle>
+            <CardTitle>Distribuição de roles</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Badge variant="destructive">Admin</Badge>
+                {/* Vermelho tintado: branco sobre o vermelho cheio reprovava AA. */}
+                <Badge variant="destructive" className="bg-destructive/10 text-destructive hover:bg-destructive/15">
+                  Admin
+                </Badge>
                 <span>Administradores</span>
               </div>
               <span className="font-bold tabular-nums">{userStats?.admins || 0}</span>
@@ -170,7 +173,7 @@ export default function MasterDashboard() {
               <div className="flex items-center justify-between text-warning-strong">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />
-                  <span>Sem Organização</span>
+                  <span>Sem organização</span>
                 </div>
                 <span className="font-bold tabular-nums">{userStats?.withoutOrg}</span>
               </div>
@@ -187,7 +190,7 @@ export default function MasterDashboard() {
               <Shield className="h-5 w-5 text-destructive" />
             </div>
             <div>
-              <p className="font-semibold">Logado como Master</p>
+              <p className="font-semibold">Logado como master</p>
               <p className="text-sm text-muted-foreground">
                 {masterUser?.notes || "Acesso total ao sistema"}
               </p>

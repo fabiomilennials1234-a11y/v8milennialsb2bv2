@@ -44,7 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { cn } from "@/lib/utils";
 import {
   useCopilotToggleAudit,
@@ -329,11 +329,11 @@ function DriftTab() {
 export default function CopilotToggleAudit() {
   return (
     <Tabs defaultValue="history" className="space-y-5">
-      <PageHeader
-        title="Copilot Toggle Audit"
+      <MasterPageHeader
+        title="Copilot toggle audit"
         subtitle="Histórico de ações ligar/desligar copilot + detecção de drift entre fontes"
         tabs={
-          <TabsList variant="pill">
+          <TabsList aria-label="Visões da auditoria" className="max-w-full overflow-x-auto scrollbar-hide">
             <TabsTrigger value="history">
               <History className="w-4 h-4" /> Histórico
             </TabsTrigger>

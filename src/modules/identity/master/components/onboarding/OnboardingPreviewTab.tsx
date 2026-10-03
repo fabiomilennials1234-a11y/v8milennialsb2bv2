@@ -131,7 +131,7 @@ export function OnboardingPreviewTab() {
     <div className="space-y-6 rounded-card border border-card-border bg-card p-5 shadow-relevo">
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Simulador de Quiz
+          Simulador de quiz
         </h3>
         <p className="text-xs text-muted-foreground mb-4">
           Simule respostas do quiz e veja quais templates seriam matched.

@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 
 interface FeatureFlag {
   id: string;
@@ -174,13 +174,13 @@ export default function MasterFeatures() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Feature Flags"
+      <MasterPageHeader
+        title="Feature flags"
         subtitle="Gerencie as features disponíveis no sistema"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4" />
-            Nova Feature
+            Nova feature
           </Button>
         }
       />
@@ -196,52 +196,53 @@ export default function MasterFeatures() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão: dentro
+          dela, no celular, o texto seguia a largura das colunas e ia parar na
+          borda. Key e categoria sobem para baixo do nome quando a coluna some;
+          planos só a partir de lg. */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filteredFeatures?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma feature encontrada</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Feature</TableHead>
-                <TableHead>Key</TableHead>
-                <TableHead>Categoria</TableHead>
+                <TableHead className="max-md:hidden">Key</TableHead>
+                <TableHead className="max-sm:hidden">Categoria</TableHead>
                 <TableHead>Padrão</TableHead>
-                <TableHead>Planos</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-lg:hidden">Planos</TableHead>
+                <TableHead className="w-[100px]">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filteredFeatures?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhuma feature encontrada
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredFeatures?.map((feature) => (
+              {filteredFeatures.map((feature) => (
                   <TableRow key={feature.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{feature.name}</p>
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{feature.name}</p>
                         {feature.description && (
                           <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                             {feature.description}
                           </p>
                         )}
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 md:hidden">
+                          <code className="truncate rounded bg-muted px-1 py-0.5 text-xs">{feature.key}</code>
+                          <div className="sm:hidden">{getCategoryBadge(feature.category)}</div>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <code className="text-sm bg-muted px-1 py-0.5 rounded">
                         {feature.key}
                       </code>
                     </TableCell>
-                    <TableCell>{getCategoryBadge(feature.category)}</TableCell>
+                    <TableCell className="max-sm:hidden">{getCategoryBadge(feature.category)}</TableCell>
                     <TableCell>
                       {feature.default_enabled ? (
                         <Badge variant="success">Ativo</Badge>
@@ -249,7 +250,7 @@ export default function MasterFeatures() {
                         <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-lg:hidden">
                       <div className="flex flex-wrap gap-1">
                         {feature.requires_plan?.map((plan) => (
                           <Badge key={plan} variant="outline" className="text-xs">
@@ -263,6 +264,7 @@ export default function MasterFeatures() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Editar ${feature.name}`}
                           onClick={() => handleEdit(feature)}
                         >
                           <Edit className="w-4 h-4" />
@@ -271,6 +273,7 @@ export default function MasterFeatures() {
                           variant="ghost"
                           size="icon"
                           className="text-destructive"
+                          aria-label={`Excluir ${feature.name}`}
                           onClick={() => {
                             if (confirm("Excluir esta feature?")) {
                               deleteFeature.mutate(feature.id);
@@ -282,10 +285,10 @@ export default function MasterFeatures() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -293,7 +296,7 @@ export default function MasterFeatures() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Feature Flag</DialogTitle>
+            <DialogTitle>Nova feature flag</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -314,7 +317,7 @@ export default function MasterFeatures() {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome da Feature"
+                placeholder="Nome da feature"
               />
             </div>
             <div className="space-y-2">
@@ -375,7 +378,7 @@ export default function MasterFeatures() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Feature - {selectedFeature?.name}</DialogTitle>
+            <DialogTitle>Editar feature - {selectedFeature?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

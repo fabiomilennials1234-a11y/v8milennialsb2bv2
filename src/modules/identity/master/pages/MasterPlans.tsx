@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { Check, X, ArrowLeft } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,23 +26,19 @@ export default function MasterPlans() {
   if (selectedPlan) {
     return (
       <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          {/* Voltar é estado local (fecha o editor), não rota — por isso não usa o `back` do PageHeader. */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0 rounded-full"
-            aria-label="Voltar"
-            onClick={() => setSelectedPlan(null)}
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <PageHeader
-            className="min-w-0 flex-1"
-            title="Editar Plano"
-            subtitle="Configure features, limites e preços"
-          />
-        </div>
+        {/* Voltar é estado local (fecha o editor), não rota — por isso não usa o
+            `back` do PageHeader. Vai entre as ações: ao lado do título ele
+            empurrava a moldura master (sub-páginas e faixa) para a direita. */}
+        <MasterPageHeader
+          title="Editar plano"
+          subtitle="Configure features, limites e preços"
+          actions={
+            <Button variant="outline" onClick={() => setSelectedPlan(null)}>
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </Button>
+          }
+        />
         {/* O editor é um formulário solto: na bancada com grade ele precisa de cartão. */}
         <Card className="p-5">
           <PlanEditor
@@ -57,8 +53,8 @@ export default function MasterPlans() {
   // ─── Grid view ────────────────────────────────────────
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Planos de Assinatura"
+      <MasterPageHeader
+        title="Planos de assinatura"
         subtitle="Gerencie os planos disponíveis no sistema. Clique em um plano para editar."
       />
 

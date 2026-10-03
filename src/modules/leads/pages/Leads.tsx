@@ -141,17 +141,19 @@ const originLabels: Record<string, string> = {
  * Tinta de cada origem — só tokens (V5). A paleta crua de antes (`green-600`,
  * `blue-600`…) era afinada para o claro e reprovava contraste no escuro. A
  * origem sempre vem escrita ao lado da cor, então dois canais com o mesmo
- * matiz (WhatsApp e Indicação) não perdem identidade.
+ * matiz (WhatsApp e Indicação; Meta Ads e Site) não perdem identidade. Texto
+ * sempre no par `-strong`: o verde de preenchimento dava 2,3:1 sobre o cartão
+ * claro, e a cor de série de gráfico (`chart-5`) não é cor de texto.
  */
 const originColors: Record<string, string> = {
-  whatsapp: "bg-success/10 text-success border-success/25",
+  whatsapp: "bg-success/10 text-success-strong border-success/25",
   meta_ads: "bg-insights/10 text-insights border-insights/25",
   outro: "bg-muted text-muted-foreground border-border",
-  site: "bg-chart-5/10 text-chart-5 border-chart-5/25",
+  site: "bg-insights/10 text-insights border-insights/25",
   remarketing: "bg-warning/15 text-warning-strong border-warning/30",
   google_ads: "bg-destructive/10 text-destructive border-destructive/25",
   cal: "bg-primary-soft text-primary-soft-foreground border-primary/30",
-  indicacao: "bg-success/10 text-success border-success/25",
+  indicacao: "bg-success/10 text-success-strong border-success/25",
 };
 
 interface LeadFormData {

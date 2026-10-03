@@ -89,23 +89,16 @@ export function AgendaProximo({
               </div>
               <div className="flex items-center gap-2">
                 {proximo.meetLink ? (
-                  <a
-                    href={proximo.meetLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-white text-[13px] font-bold text-neutral-900 transition-colors hover:bg-white/90"
-                  >
-                    Entrar na reunião
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                  </a>
+                  <Button asChild variant="on-gold" className="flex-1">
+                    <a href={proximo.meetLink} target="_blank" rel="noreferrer">
+                      Entrar na reunião
+                      <ExternalLink aria-hidden />
+                    </a>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={(e) => onEventClick(e, proximo)}
-                    className="inline-flex h-10 flex-1 items-center justify-center rounded-full bg-white text-[13px] font-bold text-neutral-900 transition-colors hover:bg-white/90"
-                  >
+                  <Button type="button" variant="on-gold" className="flex-1" onClick={(e) => onEventClick(e, proximo)}>
                     Ver detalhes
-                  </button>
+                  </Button>
                 )}
               </div>
             </FocusCard>

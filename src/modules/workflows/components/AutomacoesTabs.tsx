@@ -35,10 +35,12 @@ export function AutomacoesTabs({
             <span className="text-[11px] font-extrabold tabular-nums opacity-70">{count}</span>
           )}
         </TabsTrigger>
-        <TabsTrigger value="editor" disabled={!workflowId}>
+        {/* A aba ativa nunca fica desligada: em /automacoes/novo o Editor é a
+            atual sem workflow, e desligá-la a pintava como apagada. */}
+        <TabsTrigger value="editor" disabled={!workflowId && active !== "editor"}>
           Editor
         </TabsTrigger>
-        <TabsTrigger value="execucoes" disabled={!workflowId}>
+        <TabsTrigger value="execucoes" disabled={!workflowId && active !== "execucoes"}>
           Execuções
         </TabsTrigger>
       </TabsList>

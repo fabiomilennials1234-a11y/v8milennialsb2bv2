@@ -110,15 +110,15 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
       </KpiRow>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <AnalyticsPanel title="Saúde do Funil" subtitle="Volume por etapa e perda entre etapas">
+        <AnalyticsPanel title="Saúde do funil" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="leads" />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem do funil" dot="success">
+        <AnalyticsPanel title="Taxa de conversão" subtitle="Saúde de cada passagem do funil" dot="success">
           <ConversionHealth items={conversions} />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Leads por Origem" subtitle="Distribuição do período" dot="blue">
+        <AnalyticsPanel title="Leads por origem" subtitle="Distribuição do período" dot="blue">
           <OriginDonut slices={originData} unit="leads" />
         </AnalyticsPanel>
 

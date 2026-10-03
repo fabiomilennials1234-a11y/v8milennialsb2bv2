@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -70,7 +70,7 @@ export default function MasterOraculoFeedback() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
+      <MasterPageHeader
         eyebrow="Operação de IA"
         title="Qualidade do Oráculo"
         subtitle="Feedback reproduzível, com o rastro exato das consultas."

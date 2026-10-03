@@ -48,7 +48,9 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
   const nodesQuery = useSplitAbNodes(workflowId);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
 
-  const nodes = nodesQuery.data ?? [];
+  // Memorizados: o `?? []` criava um array novo a cada render e disparava
+  // os efeitos e memos abaixo à toa.
+  const nodes = useMemo(() => nodesQuery.data ?? [], [nodesQuery.data]);
 
   // Auto-select first node
   useEffect(() => {
@@ -58,7 +60,7 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
   }, [nodes, selectedNodeId]);
 
   const metricsQuery = useSplitAbMetrics(workflowId, selectedNodeId);
-  const metrics = metricsQuery.data ?? [];
+  const metrics = useMemo(() => metricsQuery.data ?? [], [metricsQuery.data]);
 
   const bestVariantId = useMemo(() => {
     if (metrics.length <= 1) return null;

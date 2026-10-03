@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshCw, AlertTriangle, AlertCircle, ServerOff, Inbox, Smartphone } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
@@ -137,8 +137,8 @@ export default function MasterWhatsAppHealth() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="WhatsApp Health"
+      <MasterPageHeader
+        title="WhatsApp health"
         subtitle="Saúde do pipeline Uazapi por instância. Atualiza a cada 1 min."
         actions={
           <Button

@@ -100,7 +100,7 @@ describe("DeletePipelineDialog — funil padrão da org (624)", () => {
     );
 
     expect((await screen.findAllByText(/funil padrão/)).length).toBeGreaterThan(0);
-    const acao = screen.getByText("Excluir Funil").closest("button")!;
+    const acao = screen.getByText("Excluir funil").closest("button")!;
     expect(acao).toHaveProperty("disabled", true);
 
     // O próprio funil não é opção de substituto.
@@ -108,7 +108,7 @@ describe("DeletePipelineDialog — funil padrão da org (624)", () => {
     expect(select.innerHTML).not.toContain(">Oportunidades<");
 
     fireEvent.change(select, { target: { value: "pipe-b" } });
-    const acaoDepois = screen.getByText("Excluir Funil").closest("button")!;
+    const acaoDepois = screen.getByText("Excluir funil").closest("button")!;
     expect(acaoDepois).toHaveProperty("disabled", false);
     fireEvent.click(acaoDepois);
 
@@ -128,7 +128,7 @@ describe("DeletePipelineDialog — funil padrão da org (624)", () => {
     fireEvent.change(screen.getByTestId("substitute-select"), {
       target: { value: "__none__" },
     });
-    fireEvent.click(screen.getByText("Excluir Funil").closest("button")!);
+    fireEvent.click(screen.getByText("Excluir funil").closest("button")!);
 
     await waitFor(() => expect(callOrder.length).toBe(2));
     expect(callOrder[0]).toBe('updateSettings:{"default_pipeline_id":null}');
@@ -144,7 +144,7 @@ describe("DeletePipelineDialog — fluxos sem substituto", () => {
     );
 
     expect(screen.queryByTestId("substitute-select")).toBeNull();
-    fireEvent.click(screen.getByText("Excluir Funil").closest("button")!);
+    fireEvent.click(screen.getByText("Excluir funil").closest("button")!);
 
     await waitFor(() => expect(callOrder).toEqual(["delete:pipe-a"]));
     expect(updateSettings).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe("DeletePipelineDialog — fluxos sem substituto", () => {
     );
 
     expect(await screen.findByText(/Não dá para excluir agora/)).toBeTruthy();
-    expect(screen.queryByText("Excluir Funil")).toBeNull();
+    expect(screen.queryByText("Excluir funil")).toBeNull();
     expect(screen.getByText("Entendi")).toBeTruthy();
     expect(callOrder.length).toBe(0);
   });

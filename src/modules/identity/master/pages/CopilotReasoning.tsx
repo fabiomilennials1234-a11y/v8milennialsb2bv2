@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { cn } from "@/lib/utils";
 import {
   useCopilotReasoning,
@@ -86,8 +86,8 @@ export default function CopilotReasoning() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Copilot Reasoning"
+      <MasterPageHeader
+        title="Copilot reasoning"
         subtitle="Chain-of-thought capturado dos agentes durante a conversa"
         actions={
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>

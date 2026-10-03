@@ -99,7 +99,7 @@ function StatusBadge({ status }: { status: ApiHealthResult["status"] }) {
   return (
     <Badge variant="soft" className="gap-1 text-muted-foreground">
       <MinusCircle className="w-3 h-3" />
-      Não Configurado
+      Não configurado
     </Badge>
   );
 }
@@ -278,7 +278,7 @@ export function ApiStatusTab() {
           ) : (
             <RefreshCw className="w-3.5 h-3.5" />
           )}
-          Verificar Agora
+          Verificar agora
         </Button>
       </div>
 

@@ -31,7 +31,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
 
   const funnelStages = useMemo(
     () => [
-      { key: "marcadas", label: "Reuniões Marcadas", count: counts.total },
+      { key: "marcadas", label: "Reuniões marcadas", count: counts.total },
       { key: "confirmadas", label: "Confirmadas", count: counts.confirmadas },
       { key: "compareceram", label: "Compareceram", count: counts.compareceram, tone: "success" as const },
     ],
@@ -123,20 +123,20 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
 
       {/* Gráficos */}
       <div className="grid gap-4 md:grid-cols-2">
-        <AnalyticsPanel title="Funil de Comparecimento" subtitle="Volume por etapa e perda entre etapas">
+        <AnalyticsPanel title="Funil de comparecimento" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="reuniões" />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem" dot="success">
+        <AnalyticsPanel title="Taxa de conversão" subtitle="Saúde de cada passagem" dot="success">
           <ConversionHealth items={conversions} />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Reuniões por Origem" subtitle="Distribuição do período" dot="blue">
+        <AnalyticsPanel title="Reuniões por origem" subtitle="Distribuição do período" dot="blue">
           <OriginDonut slices={originData} unit="reuniões" />
         </AnalyticsPanel>
 
         <AnalyticsPanel
-          title="Performance por Responsável"
+          title="Performance por responsável"
           subtitle="Reuniões trabalhadas e comparecimento"
         >
           <MemberLeaderboard rows={leaderboard} />

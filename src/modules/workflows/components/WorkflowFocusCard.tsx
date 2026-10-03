@@ -33,7 +33,7 @@ const CHAIN_LIMIT = 6;
  * largura (o primeiro caminho de cada bifurcação vem antes). Nós soltos, sem
  * aresta, entram no fim — nada some da contagem.
  */
-export function workflowChain(workflow: Workflow): string[] {
+function workflowChain(workflow: Workflow): string[] {
   const nodes = workflow.definition?.nodes ?? [];
   const edges = workflow.definition?.edges ?? [];
   const byId = new Map(nodes.map((n) => [n.id, n]));

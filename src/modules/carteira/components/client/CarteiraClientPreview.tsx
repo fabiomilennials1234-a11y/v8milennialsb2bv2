@@ -270,7 +270,7 @@ export function CarteiraClientPreview({
           <ShoppingCart />
         </Button>
         <Button
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+          variant="on-gold"
           onClick={() => onViewDetail(client.id)}
         >
           Abrir Cliente 360

@@ -157,11 +157,14 @@ export function PageHeader({
           </div>
         )}
       </div>
+      {/* `[&>*]:min-w-0`: a raiz de `<Tabs>` nasce com `min-width:auto` e, no
+          slot estreito do celular, a pílula vazava da tela em vez de rolar —
+          a aba ativa ficava cortada e o esmaecimento nunca disparava. */}
       {tabs &&
         (tabsSlot ? (
-          createPortal(<div className="flex min-w-0 max-w-full">{tabs}</div>, tabsSlot)
+          createPortal(<div className="flex min-w-0 max-w-full [&>*]:min-w-0">{tabs}</div>, tabsSlot)
         ) : (
-          <div className="flex min-w-0 max-w-full">{tabs}</div>
+          <div className="flex min-w-0 max-w-full [&>*]:min-w-0">{tabs}</div>
         ))}
     </header>
   );

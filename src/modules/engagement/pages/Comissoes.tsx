@@ -195,20 +195,20 @@ export default function Comissoes() {
           </>
         }
         tabs={
-          // A lista fica mesmo com uma aba só ("Minha Comissão"): o gatilho é
+          // A lista fica mesmo com uma aba só ("Minha comissão"): o gatilho é
           // a única saída de quem nasce na aba errada (ver relatório).
           !hasNoAccess ? (
             <TabsList variant="pill" aria-label="Comissões por time">
               {showVendasTab && (
                 <TabsTrigger value="vendas">
                   <Users className="h-3.5 w-3.5" />
-                  {canViewAll ? `Vendas (${visibleVendas.length})` : "Minha Comissão"}
+                  {canViewAll ? `Vendas (${visibleVendas.length})` : "Minha comissão"}
                 </TabsTrigger>
               )}
               {showReunioesTab && (
                 <TabsTrigger value="reunioes">
                   <Users className="h-3.5 w-3.5" />
-                  {canViewAll ? `Reuniões (${visibleReunioes.length})` : "Minha Comissão"}
+                  {canViewAll ? `Reuniões (${visibleReunioes.length})` : "Minha comissão"}
                 </TabsTrigger>
               )}
             </TabsList>
@@ -223,7 +223,7 @@ export default function Comissoes() {
             <span className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
               <Lock className="h-5 w-5" />
             </span>
-            <p className="mb-1 text-sm font-semibold">Acesso Restrito</p>
+            <p className="mb-1 text-sm font-semibold">Acesso restrito</p>
             <p className="text-[13px] text-muted-foreground">
               Você não possui um registro de membro da equipe associado à sua conta.
             </p>

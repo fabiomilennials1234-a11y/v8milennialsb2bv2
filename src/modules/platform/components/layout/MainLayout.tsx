@@ -149,14 +149,17 @@ function MainLayoutInner({ children }: MainLayoutProps) {
               rola com a página. Nas rotas de tela cheia (chat, canvas) ela
               fica no topo e o conteúdo ocupa o resto da altura. */}
           <PageTabsSlotProvider value={tabsSlot}>
+            {/* `pb-24`: o dock (suporte, bolha do chat) flutua no canto inferior
+                direito. Sem essa folga, o último controle da página ficava preso
+                por baixo dele — rolar até o fim não o liberava. */}
             <div
               className={cn(
                 "w-full flex flex-col min-w-0 max-w-full",
                 isFullBleed
                   ? "h-full"
                   : isWide
-                  ? "gap-4 pl-4 pr-4 pb-10 pt-3.5 lg:pr-5 min-h-full"
-                  : "gap-4 pl-4 pr-4 pb-10 pt-3.5 lg:pr-5 max-w-[1560px] mx-auto min-h-full",
+                  ? "gap-4 pl-4 pr-4 pb-24 pt-3.5 lg:pr-5 min-h-full"
+                  : "gap-4 pl-4 pr-4 pb-24 pt-3.5 lg:pr-5 max-w-[1560px] mx-auto min-h-full",
               )}
             >
               {!hideNavbar && (

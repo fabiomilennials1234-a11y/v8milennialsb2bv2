@@ -650,14 +650,18 @@ function TagsBlock({ lead }: { lead: LeadShape }) {
                   // `tags.color` é anulável no schema. Sem o `?? undefined`, um
                   // `null` viraria a string "null20" no CSS — cor inválida, chip
                   // sem estilo. `undefined` deixa o Badge usar o próprio default.
+                  // A cor da tag pinta fundo, borda e o ponto — nunca o texto:
+                  // cor escolhida pelo cliente ("Ouro" #FFD700) dava 1,5:1.
                   style={{
                     backgroundColor: t.color ? `${t.color}20` : undefined,
                     borderColor: t.color ? `${t.color}40` : undefined,
-                    color: t.color ?? undefined,
                   }}
                   onClick={() => toggle(t.id)}
                   title="Remover tag"
                 >
+                  {t.color && (
+                    <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                  )}
                   {t.name}
                   <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-80 transition-opacity" />
                 </Badge>

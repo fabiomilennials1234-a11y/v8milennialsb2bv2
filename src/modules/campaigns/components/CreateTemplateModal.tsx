@@ -288,7 +288,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            Criar Novo Template
+            Criar novo template
           </DialogTitle>
         </DialogHeader>
 
@@ -632,7 +632,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
               Cancelar
             </Button>
             <Button type="submit" disabled={createTemplate.isPending}>
-              {createTemplate.isPending ? "Criando..." : "Criar Template"}
+              {createTemplate.isPending ? "Criando..." : "Criar template"}
             </Button>
           </DialogFooter>
         </form>

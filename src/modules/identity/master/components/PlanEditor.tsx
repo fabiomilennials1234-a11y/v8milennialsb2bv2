@@ -159,7 +159,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
           {/* Name & Slug */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Nome de Exibição</Label>
+              <Label>Nome de exibição</Label>
               <Input
                 value={displayName}
                 onChange={(e) => { setDisplayName(e.target.value); markDirty(); }}
@@ -183,10 +183,10 @@ export function PlanEditor({ plan }: PlanEditorProps) {
 
           {/* Pricing Model */}
           <div className="rounded-lg border p-4 space-y-4">
-            <h3 className="text-sm font-semibold">Modelo de Pricing</h3>
+            <h3 className="text-sm font-semibold">Modelo de pricing</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Preço por Usuário/mês (R$)</Label>
+                <Label>Preço por usuário/mês (R$)</Label>
                 <Input
                   type="number"
                   placeholder="NULL = não é per-seat"
@@ -199,7 +199,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Preço Base Mensal (R$)</Label>
+                <Label>Preço base mensal (R$)</Label>
                 <Input
                   type="number"
                   placeholder="NULL = não é package"
@@ -230,7 +230,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Copilots Incl.</Label>
+                <Label>Copilots incl.</Label>
                 <Input
                   type="number"
                   value={includedCopilots}
@@ -277,7 +277,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Volume Mín. Users</Label>
+                <Label>Volume mín. users</Label>
                 <Input
                   type="number"
                   value={discountVolumeMin}
@@ -290,7 +290,7 @@ export function PlanEditor({ plan }: PlanEditorProps) {
           {/* Active toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg border">
             <div>
-              <p className="text-sm font-medium">Plano Ativo</p>
+              <p className="text-sm font-medium">Plano ativo</p>
               <p className="text-xs text-muted-foreground">Organizações podem usar este plano</p>
             </div>
             <Switch checked={isActive} onCheckedChange={(v) => { setIsActive(v); markDirty(); }} />

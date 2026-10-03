@@ -205,7 +205,7 @@ export function BillingOverrideModal({
         {/* Current Status */}
         <div className="p-3 bg-muted rounded-xl flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Status Atual</p>
+            <p className="text-sm text-muted-foreground">Status atual</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge
                 variant={organization.subscription_status === "active" ? "success" : "soft"}
@@ -216,7 +216,7 @@ export function BillingOverrideModal({
                 {organization.subscription_plan || "free"}
               </span>
               {organization.billing_override && (
-                <Badge variant="gold">Override Ativo</Badge>
+                <Badge variant="gold">Override ativo</Badge>
               )}
             </div>
           </div>
@@ -275,7 +275,7 @@ export function BillingOverrideModal({
             </div>
 
             <div className="space-y-2">
-              <Label>Motivo do Override *</Label>
+              <Label>Motivo do override *</Label>
               <Textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -301,7 +301,7 @@ export function BillingOverrideModal({
                 onClick={handlePlanOverride}
                 disabled={!reason || billingOverride.isPending}
               >
-                {billingOverride.isPending ? "Liberando..." : "Liberar Plano"}
+                {billingOverride.isPending ? "Liberando..." : "Liberar plano"}
               </Button>
             </DialogFooter>
           </TabsContent>
@@ -345,7 +345,7 @@ export function BillingOverrideModal({
 
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setSelectedFeatures({})}>
-                    Cancelar Alterações
+                    Cancelar alterações
                   </Button>
                   <Button onClick={handleFeatureOverride} disabled={!featureReason}>
                     Salvar Features ({Object.keys(selectedFeatures).length})

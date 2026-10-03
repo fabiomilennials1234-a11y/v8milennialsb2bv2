@@ -44,11 +44,9 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { CarteiraKPIs } from "@/modules/carteira/components/client/CarteiraKPIs";
-import {
-  CarteiraClientTable,
-  exportPortfolioCsv,
-  type PortfolioClientRow,
-} from "@/modules/carteira/components/client/CarteiraClientTable";
+import { CarteiraClientTable } from "@/modules/carteira/components/client/CarteiraClientTable";
+import { exportPortfolioCsv } from "@/modules/carteira/lib/portfolio-csv";
+import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
 import { CarteiraRadar } from "@/modules/carteira/components/client/CarteiraRadar";
 import { CarteiraBulkBar } from "@/modules/carteira/components/client/CarteiraBulkBar";
 import { AnalyticsKPICards } from "@/modules/carteira/components/client/AnalyticsKPICards";

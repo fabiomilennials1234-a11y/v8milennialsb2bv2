@@ -221,11 +221,13 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                   type="button"
                   disabled={!canMove}
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold transition-opacity",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-opacity",
                     isMoving && "opacity-60",
                     !canMove && "cursor-not-allowed opacity-50",
                   )}
-                  style={{ background: `${row.color}22`, color: row.color }}
+                  // A cor da etapa fica no fundo e no ponto; o texto é tinta —
+                  // "Ciclo vencendo" na cor crua dava 1,9:1.
+                  style={{ background: `${row.color}22` }}
                   aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
                   title={canMove ? undefined : "Sem permissão para mover etapa"}
                 >

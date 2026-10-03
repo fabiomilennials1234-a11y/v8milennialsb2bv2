@@ -1,5 +1,6 @@
 /**
- * A tela "Atividades" — Agenda interna unificada.
+ * A tela "Agenda" — agenda interna unificada (o nome do trilho e do mockup;
+ * até o V5 o título dizia "Atividades" e a lateral, "Agenda").
  *
  * Mostra eventos de 5 fontes internas (meetings, follow_ups,
  * scheduled_messages, pipe_confirmacao e meeting_events — o funil mergeado)
@@ -26,6 +27,7 @@ import {
   addMonths,
   isSameDay,
   isSameMonth,
+  isSameYear,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -466,15 +468,18 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   );
 
   // ── Date label ──────────────────────────────────────────────────────────────
+  // O ano só aparece fora do ano corrente: "quinta-feira, 17 de setembro de
+  // 2026" não cabia ao lado das setas a 390 px e o ano não dizia nada.
   const dateLabel = useMemo(() => {
+    const ano = (d: Date) => (isSameYear(d, new Date()) ? "" : " 'de' yyyy");
     if (view === "day")
-      return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
+      return format(date, `EEEE, d 'de' MMMM${ano(date)}`, { locale: ptBR });
     if (view === "week") {
       const days = getWeekDays(date);
       const [first, last] = [days[0], days[6]];
       if (first.getMonth() === last.getMonth())
-        return `${format(first, "d")} - ${format(last, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`;
-      return `${format(first, "d MMM", { locale: ptBR })} - ${format(last, "d MMM yyyy", { locale: ptBR })}`;
+        return `${format(first, "d")} - ${format(last, `d 'de' MMMM${ano(last)}`, { locale: ptBR })}`;
+      return `${format(first, "d MMM", { locale: ptBR })} - ${format(last, `d MMM${ano(last) ? " yyyy" : ""}`, { locale: ptBR })}`;
     }
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
@@ -560,7 +565,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           com o título da página de baixo, que continua à mostra. O h1 e o nome
           acessível são os mesmos nos dois contextos — só o corpo muda. */}
       <PageHeader
-        title="Atividades"
+        title="Agenda"
         subtitle={
           seesEveryone
             ? "Crie, edite e gerencie as atividades da equipe."
@@ -598,7 +603,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
                 size="icon"
                 onClick={onClose}
                 title="Fechar"
-                aria-label="Fechar Atividades"
+                aria-label="Fechar Agenda"
               >
                 <X />
               </Button>

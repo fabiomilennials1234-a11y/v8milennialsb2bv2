@@ -86,7 +86,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Criar Novo Funil</DialogTitle>
+          <DialogTitle>Criar novo funil</DialogTitle>
           <DialogDescription>
             Crie um funil personalizado com etapas customizáveis.
           </DialogDescription>
@@ -95,7 +95,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
         <div className="space-y-4 py-2">
           {/* Nome */}
           <div className="space-y-2">
-            <Label htmlFor="pipeline-name">Nome do Funil *</Label>
+            <Label htmlFor="pipeline-name">Nome do funil *</Label>
             <Input
               id="pipeline-name"
               value={name}

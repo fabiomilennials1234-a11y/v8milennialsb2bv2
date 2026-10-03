@@ -77,7 +77,7 @@ export function AgendaPanel({ open, onClose, sidebarWidth }: AgendaPanelProps) {
           />
 
           <motion.aside
-            aria-label="Atividades"
+            aria-label="Agenda"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}

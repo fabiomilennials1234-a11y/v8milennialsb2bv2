@@ -347,7 +347,7 @@ export function CreateOpportunityModal({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="scheduled_date">Data Agendada (opcional)</Label>
+                  <Label htmlFor="scheduled_date">Data agendada (opcional)</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -407,7 +407,7 @@ export function CreateOpportunityModal({
                 onClick={handleSubmit}
                 disabled={createPipeWhatsapp.isPending}
               >
-                {createPipeWhatsapp.isPending ? "Criando..." : "Criar Oportunidade"}
+                {createPipeWhatsapp.isPending ? "Criando..." : "Criar oportunidade"}
               </Button>
             )}
           </div>

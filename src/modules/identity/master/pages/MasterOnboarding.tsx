@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { PipelineTemplatesTab } from "../components/onboarding/PipelineTemplatesTab";
 import { AutomationTemplatesTab } from "../components/onboarding/AutomationTemplatesTab";
 import { OnboardingPreviewTab } from "../components/onboarding/OnboardingPreviewTab";
@@ -7,13 +7,13 @@ import { OnboardingPreviewTab } from "../components/onboarding/OnboardingPreview
 export default function MasterOnboarding() {
   return (
     <Tabs defaultValue="pipelines" className="space-y-5">
-      <PageHeader
-        title="Onboarding Templates"
+      <MasterPageHeader
+        title="Templates de onboarding"
         subtitle="Gerencie templates de pipeline e automação para o onboarding de novas organizações"
         tabs={
-          <TabsList variant="pill">
-            <TabsTrigger value="pipelines">Pipeline Templates</TabsTrigger>
-            <TabsTrigger value="automations">Automação Templates</TabsTrigger>
+          <TabsList aria-label="Tipos de template" className="max-w-full overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="pipelines">Templates de pipeline</TabsTrigger>
+            <TabsTrigger value="automations">Templates de automação</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
         }

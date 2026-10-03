@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import {
@@ -170,7 +170,7 @@ export default function MasterStageRoleReview() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
+      <MasterPageHeader
         eyebrow="Refundação de métricas · ADR-0017"
         title="Revisão de etapas Won / Lost"
         subtitle="O classifier sugeriu roles de venda para etapas custom das organizações. Won e Lost movem dinheiro — nada é aplicado sem a sua confirmação."

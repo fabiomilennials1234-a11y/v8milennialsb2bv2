@@ -16,7 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { SOURCE_STYLES } from "./OrderApprovalCard";
+import { SOURCE_STYLES } from "@/modules/carteira/lib/order-source";
 import {
   usePendingOrders,
   useApproveOrder,
@@ -249,7 +249,8 @@ export function CarteiraApprovals() {
               )}
               <div className="mt-auto flex gap-2 border-t border-primary-foreground/15 pt-3.5">
                 <Button
-                  className="flex-1 border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+                  variant="on-gold"
+                  className="flex-1"
                   onClick={() => approveOrder.mutate({ orderId: focused.id })}
                   disabled={busy}
                 >

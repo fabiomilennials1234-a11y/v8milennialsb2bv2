@@ -8,18 +8,18 @@
  */
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { PaymentLinkComposer } from "../components/PaymentLinkComposer";
 import { PaymentLinksList } from "../components/PaymentLinksList";
 
 export default function MasterPaymentLinks() {
   return (
     <Tabs defaultValue="compose" className="space-y-5">
-      <PageHeader
+      <MasterPageHeader
         title="Propostas de pagamento"
         subtitle="Monte o pacote, cote com o motor e gere o link que o cliente paga."
         tabs={
-          <TabsList variant="pill">
+          <TabsList aria-label="Seções das propostas" className="max-w-full overflow-x-auto scrollbar-hide">
             <TabsTrigger value="compose">Montar proposta</TabsTrigger>
             <TabsTrigger value="list">Propostas geradas</TabsTrigger>
           </TabsList>

@@ -174,7 +174,8 @@ export function CarteiraOrders({ searchQuery = "", onSearchChange, onReviewQueue
             </FocusTile>
             {onReviewQueue && (
               <Button
-                className="w-full border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+                variant="on-gold"
+                className="w-full"
                 onClick={onReviewQueue}
                 disabled={(statusCounts?.pending ?? pendingOrders.length) === 0}
               >

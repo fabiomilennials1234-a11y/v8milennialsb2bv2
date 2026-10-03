@@ -98,8 +98,7 @@ export function AtrasadasHero({ tasks, acoes }: { tasks: RevisionTask[]; acoes: 
   );
 }
 
-const BOTAO_BRANCO = "border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90";
-const BOTAO_TRANSLUCIDO = "border-transparent bg-[hsl(40_60%_8%/.1)] text-primary-foreground shadow-none hover:bg-[hsl(40_60%_8%/.16)]";
+const BOTAO_TRANSLUCIDO = "border-transparent bg-primary-foreground/10 text-primary-foreground shadow-none hover:bg-primary-foreground/[.16]";
 const ICONE = "h-10 w-10 rounded-full border-primary-foreground/20 bg-transparent text-primary-foreground shadow-none hover:bg-primary-foreground/10";
 
 function FocoAtrasada({ task, acoes }: { task: RevisionTask; acoes: AcoesDaRevisao }) {
@@ -173,7 +172,7 @@ function FocoAtrasada({ task, acoes }: { task: RevisionTask; acoes: AcoesDaRevis
           </Button>
         ) : (
           <>
-            <Button type="button" variant="outline" className={BOTAO_BRANCO} onClick={() => acoes.onComplete(task)}>
+            <Button type="button" variant="on-gold" onClick={() => acoes.onComplete(task)}>
               <Check />
               Concluir
             </Button>

@@ -11,8 +11,11 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-primary text-primary-foreground shadow-brilho-ouro hover:bg-primary/90 hover:-translate-y-px",
+        // Branco sobre o vermelho de preenchimento dava 3,8:1 no claro. No
+        // claro o fundo é o par forte (~6,5:1); no escuro o `--destructive` já
+        // é mais fechado e passa.
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+          "bg-destructive-strong text-destructive-foreground shadow-sm hover:bg-destructive-strong/90 dark:bg-destructive dark:hover:bg-destructive/90",
         outline:
           "border border-input bg-card shadow-relevo hover:border-foreground/20 hover:bg-card hover:-translate-y-px",
         secondary:
@@ -21,6 +24,8 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // V5: pílula escura — ação secundária forte ("Ver agenda", "Abrir chat")
         ink: "bg-tinta text-tinta-foreground hover:bg-tinta-3 dark:bg-foreground dark:text-background dark:hover:bg-foreground/90",
+        // V5: a ação do cartão de ouro (FocusCard) — branca, texto na tinta do ouro
+        "on-gold": "bg-primary-cta text-primary-foreground hover:bg-primary-cta/90",
       },
       size: {
         default: "h-10 px-4 py-2",

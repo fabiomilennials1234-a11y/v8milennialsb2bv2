@@ -62,7 +62,7 @@ export function TemplateSelectorStep({
           onClick={() => setShowCreateModal(true)}
         >
           <Plus className="w-4 h-4 mr-1" />
-          Novo Template
+          Novo template
         </Button>
       </div>
 
@@ -86,7 +86,7 @@ export function TemplateSelectorStep({
                 onClick={() => setShowCreateModal(true)}
               >
                 <Plus className="w-4 h-4 mr-1" />
-                Criar Primeiro Template
+                Criar primeiro template
               </Button>
             </div>
           </CardContent>

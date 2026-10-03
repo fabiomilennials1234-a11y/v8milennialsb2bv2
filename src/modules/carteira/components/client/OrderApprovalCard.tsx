@@ -9,15 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { PendingOrder } from "@/modules/carteira/hooks/useOrderApproval";
-
-// V5: hex de tema escuro fixo → tons de token (funcionam nos dois temas).
-export const SOURCE_STYLES: Record<string, { className: string; label: string }> = {
-  copilot: { className: "bg-insights/10 text-insights", label: "Copilot" },
-  manual: { className: "bg-primary-soft text-primary-soft-foreground", label: "Manual" },
-  pipe: { className: "bg-success/10 text-success", label: "Funil" },
-  erp: { className: "bg-foreground/[.07] text-foreground/80", label: "ERP" },
-  csv_import: { className: "bg-muted text-muted-foreground", label: "CSV" },
-};
+import { SOURCE_STYLES } from "@/modules/carteira/lib/order-source";
 
 interface OrderApprovalCardProps {
   order: PendingOrder;

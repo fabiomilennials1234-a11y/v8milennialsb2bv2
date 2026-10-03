@@ -44,7 +44,7 @@ import {
   isAccessDeniedError,
   type OrgActivityGroup,
 } from "../hooks/useMasterUserActivity";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 
 const WINDOW_OPTIONS = [
@@ -218,15 +218,19 @@ export default function MasterUsuariosAtivos() {
 
   // Bloqueio antes de qualquer render de conteúdo — inclusive antes do mock de
   // desenvolvimento, para que nem em dev um perfil restrito veja a frota.
+  // O cabeçalho fica mesmo sem acesso: é ele que traz a navegação do Master.
   if (!isLoadingAuth && !isFullMaster) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <ShieldAlert className="h-12 w-12 text-destructive" />
-        <h1 className="text-xl font-bold">Acesso restrito</h1>
-        <p className="max-w-md text-sm text-muted-foreground">
-          Esta tela mostra usuários de todas as organizações e é exclusiva de
-          usuários master com acesso total.
-        </p>
+      <div className="space-y-5">
+        <MasterPageHeader title="Usuários ativos" />
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <ShieldAlert className="h-12 w-12 text-destructive" />
+          <h2 className="text-xl font-bold">Acesso restrito</h2>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Esta tela mostra usuários de todas as organizações e é exclusiva de
+            usuários master com acesso total.
+          </p>
+        </div>
       </div>
     );
   }
@@ -237,7 +241,7 @@ export default function MasterUsuariosAtivos() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-5"
     >
-      <PageHeader
+      <MasterPageHeader
         title="Usuários ativos"
         subtitle={<>Quem deu sinal de uso em cada organização — {windowLabel}.</>}
         actions={

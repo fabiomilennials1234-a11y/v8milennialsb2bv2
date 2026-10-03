@@ -355,7 +355,8 @@ export default function Trash() {
                       </FocusTile>
                     </div>
                     <Button
-                      className="w-full border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+                      variant="on-gold"
+                      className="w-full"
                       onClick={() => handleRestore(foco.id)}
                       disabled={restoreLead.isPending}
                     >

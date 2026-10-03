@@ -139,7 +139,7 @@ export function AddLeadToPipeModal({
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else onOpenChange(v); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Adicionar Lead ao Funil</DialogTitle>
+          <DialogTitle>Adicionar lead ao funil</DialogTitle>
           <DialogDescription>
             Busque um lead existente ou cadastre um novo para adicionar ao funil "{pipelineName}".
           </DialogDescription>
@@ -148,7 +148,7 @@ export function AddLeadToPipeModal({
         <div className="space-y-4 py-2">
           {/* Busca */}
           <div className="space-y-2">
-            <Label>Buscar Lead</Label>
+            <Label>Buscar lead</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -233,7 +233,7 @@ export function AddLeadToPipeModal({
 
           {/* Etapa inicial */}
           <div className="space-y-2">
-            <Label>Etapa Inicial</Label>
+            <Label>Etapa inicial</Label>
             <Select
               value={selectedStageId}
               onValueChange={setSelectedStageId}

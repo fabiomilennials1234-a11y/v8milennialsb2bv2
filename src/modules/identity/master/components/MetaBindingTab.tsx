@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Loader2, Plus, X, FileText, BarChart3, Lock, AlertTriangle, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "./MasterPageHeader";
 
 function AssetIcon({ type, className }: { type: "page" | "ad_account"; className?: string }) {
   return type === "page"
@@ -87,8 +87,10 @@ export function MetaBindingTab() {
   const setDataset = useSetDataset();
   const [filter, setFilter] = useState("");
 
-  const assets = data?.assets ?? [];
-  const orgs = data?.orgs ?? [];
+  // Memorizados: o `?? []` criava um array novo a cada render e invalidava os
+  // `useMemo` abaixo toda vez.
+  const assets = useMemo(() => data?.assets ?? [], [data]);
+  const orgs = useMemo(() => data?.orgs ?? [], [data]);
   const unbound = useMemo(() => assets.filter((a) => !a.boundOrgId), [assets]);
   const byOrg = useMemo(() => {
     const m = new Map<string, MetaAsset[]>();
@@ -101,14 +103,36 @@ export function MetaBindingTab() {
     [orgs, filter],
   );
 
-  if (isLoading) return <div className="grid place-items-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  // Único consumidor é /master/meta-assets: este cabeçalho É o da página — e
+  // fica também na carga e no erro, porque é ele que traz a navegação do Master.
+  const cabecalho = (
+    <MasterPageHeader
+      title="Vínculo de ativos da Meta"
+      subtitle="Escolha a organização e vincule as Páginas e Contas de anúncio dela. Páginas trazem os leads; contas otimizam campanha."
+      actions={
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Atualizar
+        </Button>
+      }
+    />
+  );
+
+  if (isLoading) return (
+    <div className="space-y-5">
+      {cabecalho}
+      <div className="grid place-items-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+    </div>
+  );
   if (error) return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
-      <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
-      <div>
-        <p className="text-sm font-medium">Não foi possível carregar os ativos Meta</p>
-        <p className="text-xs text-muted-foreground mt-1">{(error as Error).message}. Verifique o token em meta_app_config.</p>
-        <Button variant="outline" size="sm" className="mt-2 h-7 gap-1" onClick={() => refetch()}><RefreshCw className="w-3 h-3" /> Tentar de novo</Button>
+    <div className="space-y-5">
+      {cabecalho}
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
+        <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
+        <div>
+          <p className="text-sm font-medium">Não foi possível carregar os ativos Meta</p>
+          <p className="text-xs text-muted-foreground mt-1">{(error as Error).message}. Verifique o token em meta_app_config.</p>
+          <Button variant="outline" size="sm" className="mt-2 h-7 gap-1" onClick={() => refetch()}><RefreshCw className="w-3 h-3" /> Tentar de novo</Button>
+        </div>
       </div>
     </div>
   );
@@ -117,16 +141,7 @@ export function MetaBindingTab() {
 
   return (
     <div className="space-y-5">
-      {/* Único consumidor é /master/meta-assets: este cabeçalho É o da página. */}
-      <PageHeader
-        title="Vínculo de Ativos Meta"
-        subtitle="Escolha a organização e vincule as Páginas e Contas de anúncio dela. Páginas trazem os leads; contas otimizam campanha."
-        actions={
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Atualizar
-          </Button>
-        }
-      />
+      {cabecalho}
 
       <div className="flex items-center gap-3">
         <div className="relative max-w-xs flex-1">

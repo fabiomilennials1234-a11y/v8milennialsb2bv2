@@ -13,6 +13,7 @@ import {
   type ConversaAguardando,
 } from "@/modules/analytics/hooks/useConversasAguardando";
 import { useFocoDoLead } from "@/modules/analytics/hooks/useFocoDoLead";
+import { esperaCurta } from "@/modules/analytics/lib/espera-curta";
 
 const MOSTRAR = 10;
 
@@ -181,22 +182,6 @@ function iniciais(nome: string) {
     .join("") || "?";
 }
 
-/** Espera curta e exata — "6 min", "1 h 35 min", "3 d". */
-export function esperaCurta(iso: string | null | undefined, agora = Date.now()) {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  const min = Math.max(0, Math.round((agora - t) / 60_000));
-  if (min < 60) return { valor: String(min), unidade: "min", texto: `${min} min`, longa: false };
-  const h = Math.floor(min / 60);
-  if (h < 24) {
-    const resto = min % 60;
-    return { valor: String(h), unidade: resto ? `h ${resto} min` : "h", texto: resto ? `${h} h ${resto} min` : `${h} h`, longa: true };
-  }
-  const d = Math.floor(h / 24);
-  return { valor: String(d), unidade: d === 1 ? "dia" : "dias", texto: `${d} ${d === 1 ? "dia" : "dias"}`, longa: true };
-}
-
 function LinhaConversa({ conversa }: { conversa: ConversaAguardando }) {
   const espera = esperaCurta(conversa.lastClientMessageAt);
   return (
@@ -258,7 +243,9 @@ function CartaoDoFoco({
             </p>
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        {/* Piso de largura: no celular o bloco do responsável quebra para a
+            linha de baixo em vez de reduzir o nome do cliente a "F…". */}
+        <div className="min-w-[9rem] flex-1">
           <p className="text-[11px] font-bold text-primary-foreground/70">Cliente</p>
           <p className="truncate text-[17px] font-extrabold tracking-[-0.02em]">{conversa.displayName}</p>
           <p className="truncate text-[12px] text-primary-foreground/70">
@@ -326,8 +313,8 @@ function CartaoDoFoco({
         <AbrirConversaButton
           leadId={conversa.leadId}
           phone={conversa.phoneNumber}
-          variant="outline"
-          className="h-11 justify-center rounded-full border-transparent bg-white px-5 text-[13px] font-bold text-neutral-900 shadow-none hover:bg-white/90"
+          variant="on-gold"
+          className="h-11 justify-center px-5 text-[13px] font-bold"
           aria-label={`Abrir conversa com ${conversa.displayName}`}
         >
           Abrir conversa

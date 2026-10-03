@@ -393,7 +393,7 @@ function PairCard({
 
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-primary-foreground/15 pt-3.5">
         <Button
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
+          variant="on-gold"
           onClick={() => onMerge(dup.lead_a_id, dup.lead_b_id, dup.lead_a_name, dup.lead_b_name)}
         >
           <Merge className="h-3.5 w-3.5" />

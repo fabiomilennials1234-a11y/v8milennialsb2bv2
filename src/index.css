@@ -115,6 +115,9 @@
     /* ouro em superfície: fundo tintado (pílula, linha selecionada) */
     --gold-soft: 48 100% 91%;
     --gold-soft-foreground: 32 90% 30%;
+    /* ação branca SOBRE o ouro (botão do FocusCard). Mora só aqui: o ouro não
+       muda entre claro e escuro, então o par também não muda. */
+    --gold-cta: 0 0% 100%;
     /* linhas da grade da bancada */
     --canvas-grid: 42 12% 88.5%;
     /* contorno do cartão: no claro o cartão é separado pela sombra, não pela

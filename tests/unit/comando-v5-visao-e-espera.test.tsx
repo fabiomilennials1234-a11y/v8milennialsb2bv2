@@ -22,7 +22,7 @@ vi.mock("@/modules/identity", () => ({
 }));
 
 import { ComandoVisaoProvider, useComandoScope, type ComandoVisao } from "@/modules/analytics/hooks/useComandoScope";
-import { esperaCurta } from "@/modules/analytics/components/dashboard/v2/CardConversasAguardando";
+import { esperaCurta } from "@/modules/analytics/lib/espera-curta";
 
 function escopoCom(visao: ComandoVisao | null) {
   const wrapper = ({ children }: { children: ReactNode }) => (

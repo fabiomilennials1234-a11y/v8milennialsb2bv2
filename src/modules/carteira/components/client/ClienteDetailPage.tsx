@@ -60,7 +60,7 @@ function alertSeverityClass(severity: string) {
 function churnClass(p: number) {
   if (p >= 70) return "bg-destructive/10 text-destructive";
   if (p >= 40) return "bg-warning/15 text-warning-strong";
-  return "bg-success/10 text-success";
+  return "bg-success/10 text-success-strong";
 }
 
 function SkeletonBlock({ className }: { className?: string }) {

@@ -39,6 +39,8 @@ const COMPOSITOR_NO_CANTO = [
   /^\/atendimento(\/|$)/,
   /^\/copilot\/(novo|[^/]+\/editar)$/,
   /^\/automacoes\/[^/]+$/,
+  // Oráculo: o "Perguntar" da página fica no canto, como o enviar do chat.
+  /^\/oraculo(\/|$)/,
 ];
 
 /** Rolagem menor que isto não decide nada — tremor de trackpad. */
@@ -109,12 +111,15 @@ export function SupportFab() {
           type="button"
           data-support-fab
           onClick={open}
+          // "Suporte", não "Ajuda": o "?" do trilho já se chama Ajuda e leva à
+          // central de artigos — dois controles com o mesmo nome e destinos
+          // diferentes confundiam.
           aria-label={
             attention
-              ? `Ajuda — ${total} resposta${total > 1 ? "s" : ""} não lida${total > 1 ? "s" : ""}`
-              : "Ajuda"
+              ? `Suporte — ${total} resposta${total > 1 ? "s" : ""} não lida${total > 1 ? "s" : ""}`
+              : "Suporte"
           }
-          title="Ajuda"
+          title="Suporte"
           className={cn(
             "relative grid h-11 w-11 place-items-center rounded-full transition-[transform,box-shadow,background-color]",
             "bg-tinta text-primary shadow-relevo-tinta ring-1 ring-tinta-line hover:-translate-y-px hover:bg-tinta-3",

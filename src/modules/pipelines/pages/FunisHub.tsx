@@ -158,11 +158,16 @@ export default function FunisHub() {
           </Button>
         }
         tabs={
+          // `min-w-0 max-w-full` na raiz: sem eles ela não encolhe no slot da
+          // barra, a pílula vaza da tela em vez de rolar e "Todos os funis" (a
+          // ativa) fica cortada na borda — a pílula só traz a ativa para dentro
+          // quando ela mesma rola.
           <Tabs
             value={HUB_TAB}
             onValueChange={(v) => {
               if (v !== HUB_TAB && defaultPath) navigate(defaultPath, { state: { view: v } });
             }}
+            className="min-w-0 max-w-full"
           >
             <TabsList variant="pill" aria-label="Visão do funil">
               {HUB_VIEWS.map(({ value, label, icon: Icon }) => (
@@ -188,21 +193,28 @@ export default function FunisHub() {
       {/* Carregando: o esqueleto já tem a forma da grade — o cabeçalho não
           espera dado nenhum, então ele não some enquanto a lista chega. */}
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Carregando funis">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Carregando funis">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[150px] rounded-card" />
+            <Skeleton key={i} className="h-[76px] rounded-card" />
           ))}
         </div>
       ) : (
         <>
           {/* Uma grade só (mockup V5): cartão por funil, e o último é a porta de
               criar. Só fatos do funil — sem contagem por cartão (seriam N
-              consultas) e sem mini-barras (decisão do líder). */}
+              consultas) e sem mini-barras (decisão do líder). Por isso o cartão
+              é uma linha densa (ladrilho · nome · apoio · seta): com 132 px de
+              altura e nada no miolo, ele lia como cartão quebrado. */}
           {(allFunnels.length > 0 || endedTemporary.length > 0) && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {allFunnels.map((funil) => {
                 const isDefault = settings?.default_pipeline_id === funil.key;
                 const TileIcon = funil.temporary ? Timer : funil.icon;
+                const apoio = funil.temporary
+                  ? funil.temporary.endsAt
+                    ? `Funil temporário · termina ${new Date(funil.temporary.endsAt).toLocaleDateString("pt-BR")}`
+                    : "Funil temporário"
+                  : funil.description;
                 return (
                   /* O cartão hospeda o menu de ações, e botão dentro de botão é
                      HTML inválido (o menu nem abriria). A navegação é o miolo do
@@ -210,7 +222,7 @@ export default function FunisHub() {
                   <div
                     key={funil.key}
                     className={cn(
-                      "group relative flex min-h-[132px] flex-col rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
+                      "group relative flex rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
                       "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto",
                       "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
                     )}
@@ -218,72 +230,63 @@ export default function FunisHub() {
                     <button
                       onClick={() => navigate(funil.path)}
                       className={cn(
-                        "flex min-w-0 flex-1 flex-col gap-3.5 rounded-card p-[18px] pr-14 text-left",
+                        "flex min-w-0 flex-1 items-center gap-3.5 rounded-card py-4 pl-4 pr-14 text-left",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       )}
                     >
-                      <span className="flex min-w-0 items-start gap-3">
-                        {/* Ladrilho PREENCHIDO com a cor que o usuário escolheu. */}
-                        <span
-                          className={cn("grid size-[38px] shrink-0 place-items-center rounded-xl", tileText(funil.color))}
-                          style={{ backgroundColor: funil.color }}
-                        >
-                          <TileIcon className="size-[18px]" aria-hidden />
+                      {/* Ladrilho PREENCHIDO com a cor que o usuário escolheu. */}
+                      <span
+                        className={cn("grid size-10 shrink-0 place-items-center self-start rounded-xl", tileText(funil.color))}
+                        style={{ backgroundColor: funil.color }}
+                      >
+                        <TileIcon className="size-[18px]" aria-hidden />
+                      </span>
+                      <span className="flex min-h-10 min-w-0 flex-1 flex-col justify-center">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[14.5px] font-bold leading-snug tracking-[-0.01em]" title={funil.name}>
+                            {funil.name}
+                          </span>
+                          {isDefault && (
+                            <Badge variant="gold" className="shrink-0 px-2 py-0 text-[10px] uppercase tracking-[.04em]">
+                              Padrão
+                            </Badge>
+                          )}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="line-clamp-2 break-words text-sm font-bold leading-snug tracking-[-0.01em]" title={funil.name}>
-                              {funil.name}
-                            </span>
-                            {isDefault && (
-                              <Badge variant="gold" className="shrink-0 px-2 py-0 text-[10px] uppercase tracking-[.04em]">
-                                Padrão
+                        {apoio && <span className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{apoio}</span>}
+                        {(funil.temporary || funil.meta) && (
+                          <span className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {funil.temporary?.daysLeft != null && (
+                              <Badge variant="warning" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                {funil.temporary.daysLeft} {funil.temporary.daysLeft === 1 ? "dia" : "dias"}
+                              </Badge>
+                            )}
+                            {funil.temporary?.teamGoal != null && (
+                              <Badge variant="soft" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                Meta do time: {funil.temporary.teamGoal.toLocaleString("pt-BR")}
+                              </Badge>
+                            )}
+                            {funil.temporary?.bonus != null && funil.temporary.bonus > 0 && (
+                              <Badge variant="gold" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                Bônus {funil.temporary.bonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                              </Badge>
+                            )}
+                            {funil.meta && (
+                              <Badge variant="soft" className="px-2 py-0.5 text-[11px]">
+                                {funil.meta}
                               </Badge>
                             )}
                           </span>
-                          {(funil.temporary || funil.description) && (
-                            <span className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                              {funil.temporary
-                                ? funil.temporary.endsAt
-                                  ? `Funil temporário · termina ${new Date(funil.temporary.endsAt).toLocaleDateString("pt-BR")}`
-                                  : "Funil temporário"
-                                : funil.description}
-                            </span>
-                          )}
-                        </span>
+                        )}
                       </span>
-
-                      {(funil.temporary || funil.meta) && (
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          {funil.temporary?.daysLeft != null && (
-                            <Badge variant="warning" className="px-2 py-0.5 text-[11px] tabular-nums">
-                              {funil.temporary.daysLeft} {funil.temporary.daysLeft === 1 ? "dia" : "dias"}
-                            </Badge>
-                          )}
-                          {funil.temporary?.teamGoal != null && (
-                            <Badge variant="soft" className="px-2 py-0.5 text-[11px] tabular-nums">
-                              Meta do time: {funil.temporary.teamGoal.toLocaleString("pt-BR")}
-                            </Badge>
-                          )}
-                          {funil.temporary?.bonus != null && funil.temporary.bonus > 0 && (
-                            <Badge variant="gold" className="px-2 py-0.5 text-[11px] tabular-nums">
-                              Bônus {funil.temporary.bonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
-                            </Badge>
-                          )}
-                          {funil.meta && (
-                            <Badge variant="soft" className="px-2 py-0.5 text-[11px]">
-                              {funil.meta}
-                            </Badge>
-                          )}
-                        </span>
-                      )}
-                      <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
-                        Abrir quadro
-                        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-                      </span>
+                      {/* "Abrir quadro" segue no nome acessível; à vista, só a seta. */}
+                      <span className="sr-only">Abrir quadro</span>
+                      <ArrowRight
+                        className="size-4 shrink-0 text-muted-foreground transition-[color,transform] group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden
+                      />
                     </button>
                     {funil.pipeline && (
-                      <div className="absolute right-3 top-3">
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
                       </div>
                     )}
@@ -296,12 +299,12 @@ export default function FunisHub() {
                 type="button"
                 onClick={() => setCreateOpen(true)}
                 className={cn(
-                  "flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-card border-[1.5px] border-dashed border-border",
+                  "flex min-h-[76px] items-center justify-center gap-2 rounded-card border-[1.5px] border-dashed border-border",
                   "text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/60 hover:bg-card hover:text-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 )}
               >
-                <Plus className="size-5" aria-hidden />
+                <Plus className="size-4" aria-hidden />
                 Criar funil ou campanha
               </button>
             </div>
@@ -341,11 +344,11 @@ export default function FunisHub() {
                       <button
                         onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
                         className={cn(
-                          "flex min-w-0 flex-1 items-center gap-3.5 rounded-card p-[18px] text-left",
+                          "flex min-w-0 flex-1 items-center gap-3.5 rounded-card p-4 text-left",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         )}
                       >
-                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-muted text-muted-foreground">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
                           <Kanban className="h-5 w-5" aria-hidden />
                         </span>
                         <span className="min-w-0 flex-1">

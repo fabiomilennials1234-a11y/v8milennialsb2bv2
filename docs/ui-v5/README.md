@@ -33,7 +33,8 @@ degrau acima do cartão para continuarem lidas como objeto.
 ## Primitivos (src/components/ui)
 
 - `Button` — pílula. `default` = ouro com brilho (**um por cabeçalho**); `ink` = pílula escura
-  ("Ver agenda", "Abrir chat"); `outline` = branco com sombra; `icon` = quadrado arredondado.
+  ("Ver agenda", "Abrir chat"); `outline` = branco com sombra; `on-gold` = a ação branca **dentro** do
+  `FocusCard` (token `--gold-cta`, nunca `bg-white text-neutral-900` à mão); `icon` = quadrado arredondado.
 - `Badge` — pílula; tons `soft · success · warning · info · gold · ink`.
 - `Card` — bento (raio 22, sombra, sem borda no claro). `CardTitle` é 16 px bold.
 - `Tabs` — `TabsList variant="pill"` (navegação de página, pílula escura com ativo em ouro),
@@ -51,7 +52,9 @@ degrau acima do cartão para continuarem lidas como objeto.
 - **Barra superior** (`TopBar`): organização + plano à esquerda, a pílula da página no centro (o `PageHeader`
   publica `tabs` ali por portal), busca ⌘K, notificações, tema e o usuário à direita. Abaixo de 1080 px a pílula
   desce para uma linha própria.
-- Agenda, Oráculo e Pitstop são **páginas** (`/agenda`, `/oraculo`, `/pitstop`). O Master mora no shell normal.
+- Agenda, Oráculo e Pitstop são **páginas** (`/agenda`, `/oraculo`, `/pitstop`). O Master mora no shell normal:
+  toda página sob `/master` usa `MasterPageHeader` (grupos na barra superior, sub-páginas e a faixa vermelha na
+  página), nunca o `PageHeader` cru — `tests/unit/master-page-header.test.tsx` trava isso.
 
 ## Composição (src/components/ui/page-header.tsx, bento.tsx)
 

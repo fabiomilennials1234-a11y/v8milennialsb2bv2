@@ -16,6 +16,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlertTriangle, ArrowRight, Cpu, MoreHorizontal, Sparkles, Star, Trash2 } from "lucide-react";
 import { DeltaChip, FocusCard, FocusTile } from "@/components/ui/bento";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
@@ -72,7 +73,9 @@ export function AgentFocusCard({
   return (
     <FocusCard className="gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        {/* Piso de largura (como o do PageHeader): quando o nome não cabe ao lado
+            do switch e do ⋯, os controles descem em vez de quebrá-lo palavra a palavra. */}
+        <div className="min-w-[min(100%,14rem)] flex-1">
           <p className="text-[11px] font-bold text-primary-foreground/70">Agente em foco · {agentTypeLabel(agent.template_type)}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h3 className="min-w-0 text-[1.6rem] font-extrabold leading-[1.1] tracking-[-0.035em] max-sm:text-[1.3rem]">{agent.name}</h3>
@@ -240,14 +243,16 @@ export function AgentFocusCard({
               Revisar com IA
             </button>
           )}
-          <button
+          <Button
             type="button"
+            variant="on-gold"
+            size="sm"
             onClick={onConfigure}
-            className={cn(onGoldButton, "bg-tinta-foreground text-primary-foreground shadow-relevo hover:bg-tinta-foreground/90")}
+            className="gap-1.5 px-3.5 text-[12.5px] font-bold shadow-relevo [&_svg]:size-3.5"
           >
             Configurar
             <ArrowRight />
-          </button>
+          </Button>
         </div>
       </div>
     </FocusCard>

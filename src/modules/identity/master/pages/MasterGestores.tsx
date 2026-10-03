@@ -60,7 +60,7 @@ import {
 } from "../hooks/useMasterGestores";
 import { useMasterOrganizations } from "../hooks/useMasterOrganizations";
 import { useMasterAuth } from "../hooks/useMasterAuth";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 
 export default function MasterGestores() {
   const { hasPermission } = useMasterAuth();
@@ -147,14 +147,16 @@ export default function MasterGestores() {
 
   // Gate por permissão granular (ADR-0021 §8). MasterRoute já garante isMaster;
   // aqui refinamos por `gestores`. Masters com `all` passam automaticamente.
+  // O cabeçalho fica mesmo sem acesso: é ele que traz a navegação do Master.
   if (!canManageGestores) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4 text-center">
+      <div className="space-y-5">
+        <MasterPageHeader title="Gestores de portfólio" />
+        <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 text-center">
           <ShieldAlert className="w-16 h-16 text-destructive" />
-          <h1 className="text-2xl font-bold">Acesso Negado</h1>
+          <h2 className="text-2xl font-bold">Acesso negado</h2>
           <p className="text-muted-foreground">
-            Você não tem permissão para gerenciar Gestores de Portfólio.
+            Você não tem permissão para gerenciar gestores de portfólio.
           </p>
         </div>
       </div>
@@ -163,13 +165,13 @@ export default function MasterGestores() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Gestores de Portfólio"
+      <MasterPageHeader
+        title="Gestores de portfólio"
         subtitle="Gerencie gestores e as organizações que cada um administra"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4" />
-            Novo Gestor
+            Novo gestor
           </Button>
         }
       />
@@ -187,43 +189,44 @@ export default function MasterGestores() {
 
       {/* Table */}
       <Card>
+        {/* Carga e vazio FORA da tabela, centrados no cartão. No celular ficam
+            gestor, status e ações; user ID, organizações e data a partir de md/lg. */}
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filtered?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhum gestor encontrado</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Gestor</TableHead>
-                <TableHead>User ID</TableHead>
-                <TableHead>Organizações</TableHead>
+                <TableHead className="max-md:hidden">User ID</TableHead>
+                <TableHead className="max-md:hidden">Organizações</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Criado em</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-lg:hidden">Criado em</TableHead>
+                <TableHead className="w-[100px] max-sm:w-14">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filtered?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhum gestor encontrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered?.map((g) => (
+              {filtered.map((g) => (
                   <TableRow key={g.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{g.full_name || "Sem nome"}</p>
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{g.full_name || "Sem nome"}</p>
                         {g.notes && (
-                          <p className="text-sm text-muted-foreground">{g.notes}</p>
+                          <p className="truncate text-sm text-muted-foreground">{g.notes}</p>
                         )}
+                        <p className="truncate text-xs text-muted-foreground md:hidden">
+                          {g.organization_ids.length === 0
+                            ? "Nenhuma organização"
+                            : `${g.organization_ids.length} ${g.organization_ids.length === 1 ? "organização" : "organizações"}`}
+                        </p>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <button
                         type="button"
                         className="inline-flex items-center gap-1.5 group/copy"
@@ -240,7 +243,7 @@ export default function MasterGestores() {
                         )}
                       </button>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       {g.organization_ids.length === 0 ? (
                         <span className="text-sm text-muted-foreground">Nenhuma</span>
                       ) : (
@@ -265,20 +268,20 @@ export default function MasterGestores() {
                         <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-lg:hidden">
                       {format(new Date(g.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label={`Ações de ${g.full_name || "gestor"}`}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => openOrgsDialog(g)}>
                             <Building2 className="w-4 h-4 mr-2" />
-                            Gerenciar Organizações
+                            Gerenciar organizações
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
@@ -301,10 +304,10 @@ export default function MasterGestores() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -312,7 +315,7 @@ export default function MasterGestores() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo Gestor de Portfólio</DialogTitle>
+            <DialogTitle>Novo gestor de portfólio</DialogTitle>
             <DialogDescription>
               Informe o email. Se já houver uma conta, ela será reaproveitada; caso
               contrário, defina uma senha para criar a conta.

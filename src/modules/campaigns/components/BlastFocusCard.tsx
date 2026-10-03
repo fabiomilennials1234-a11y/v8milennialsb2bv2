@@ -8,6 +8,7 @@
  */
 import { ArrowRight, Filter, Loader2, Pause, Pencil, Play, Smartphone, X } from "lucide-react";
 import { FocusCard, FocusTile } from "@/components/ui/bento";
+import { Button } from "@/components/ui/button";
 import { useBlastPlanProgress, type BlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
 import { cn } from "@/lib/utils";
 import {
@@ -82,7 +83,8 @@ export function BlastFocusCard({
           <div className="min-w-0">
             <p className="text-[3rem] font-extrabold leading-none tracking-[-0.05em] tabular-nums max-sm:text-[2.4rem]">
               {fmt(figures.sent)}
-              <span className="text-[0.5em] font-bold tracking-[-0.03em] text-primary-foreground/40">
+              {/* /60: a /40 o denominador ficava em 2,3:1 sobre o ouro. */}
+              <span className="text-[0.5em] font-bold tracking-[-0.03em] text-primary-foreground/60">
                 /{fmt(figures.total)}
               </span>
             </p>
@@ -182,14 +184,16 @@ export function BlastFocusCard({
             <X />
             Cancelar
           </button>
-          <button
+          <Button
             type="button"
-            className={cn(onGoldButton, "ml-auto bg-tinta-foreground text-primary-foreground shadow-relevo hover:bg-tinta-foreground/90")}
+            variant="on-gold"
+            size="sm"
+            className="ml-auto gap-1.5 px-3.5 text-[12.5px] font-bold shadow-relevo [&_svg]:size-3.5"
             onClick={onOpen}
           >
             Ver leads do disparo
             <ArrowRight />
-          </button>
+          </Button>
         </div>
       </FocusCard>
 

@@ -52,7 +52,7 @@ const ACTION_LABELS: Record<PipeDispatchRuleStepActionType, string> = {
   send_template: "Enviar template",
   wait_response: "Esperar resposta",
   change_stage: "Mudar etapa",
-  assign_sdr: "Atribuir Responsável",
+  assign_sdr: "Atribuir responsável",
   cancel_sequence: "Cancelar sequência",
 };
 

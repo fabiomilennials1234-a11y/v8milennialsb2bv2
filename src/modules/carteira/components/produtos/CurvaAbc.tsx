@@ -127,9 +127,8 @@ export function CurvaAbcHero({
           {produto && (
             <div className="mt-auto pt-1">
               <Button
-                variant="outline"
+                variant="on-gold"
                 onClick={() => onAbrir(produto)}
-                className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
               >
                 Abrir produto
                 <ArrowRight />

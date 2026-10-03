@@ -77,7 +77,7 @@ export function MeetingPerformancePanel({ responsibleMembers }: MeetingPerforman
 
   return (
     <AnalyticsPanel
-      title="Performance por Responsável"
+      title="Performance por responsável"
       subtitle="Reuniões por pré-vendedor (por data da reunião)"
     >
       {/* Filtro de período */}

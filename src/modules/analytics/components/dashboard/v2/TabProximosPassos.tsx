@@ -7,7 +7,8 @@ import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
 import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
 import { useConversasAguardando } from "@/modules/analytics/hooks/useConversasAguardando";
 import { useComandoAgenda } from "@/modules/analytics/hooks/useComandoAgenda";
-import { CardConversasAguardando, esperaCurta } from "./CardConversasAguardando";
+import { CardConversasAguardando } from "./CardConversasAguardando";
+import { esperaCurta } from "@/modules/analytics/lib/espera-curta";
 import { CardProximasAgendas } from "./CardProximasAgendas";
 import { CardTarefasDoDia } from "./CardTarefasDoDia";
 import { CardMetas } from "./CardMetas";
@@ -192,17 +193,18 @@ export function TabProximosPassos() {
       </KpiRow>
 
       {/* Herói: quem falou e não foi respondido — o único bloco que é dinheiro
-          escapando. Embaixo, metas em 2/3 (precisam de largura para o
-          gráfico) e, à direita, agenda e tarefas, listas curtas. */}
+          escapando. Embaixo, metas e tarefas em 2/3 (o gráfico precisa de
+          largura) e a agenda à direita — as duas colunas terminam juntas, sem
+          bancada vazia sob as metas. */}
       <CardConversasAguardando />
 
       <div className="grid items-start gap-4 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
           <CardMetas />
-        </div>
-        <div className="flex min-w-0 flex-col gap-4">
-          <CardProximasAgendas />
           <CardTarefasDoDia />
+        </div>
+        <div className="min-w-0">
+          <CardProximasAgendas />
         </div>
       </div>
     </div>

@@ -609,9 +609,8 @@ export function MetasIndividuais({
           </div>
           <div className="mt-auto pt-1">
             <Button
-              variant="outline"
+              variant="on-gold"
               onClick={() => onEditar(sel.metas[0].goal)}
-              className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
             >
               <Edit2 />
               Ajustar meta

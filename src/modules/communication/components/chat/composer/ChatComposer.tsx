@@ -46,7 +46,8 @@ import {
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
-import { ChatQuickActions, QUICK_ACTION_BUTTON } from "./ChatQuickActions";
+import { ChatQuickActions } from "./ChatQuickActions";
+import { QUICK_ACTION_BUTTON } from "./quick-action-button";
 import { SendMenuDialog } from "./SendMenuDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/lib/menu-sender";

@@ -14,6 +14,7 @@
 import type { ReactNode } from "react";
 import { Mic, FileText, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QUICK_ACTION_BUTTON } from "./quick-action-button";
 
 export interface ChatQuickActionsProps {
   onAudio: () => void;
@@ -25,15 +26,6 @@ export interface ChatQuickActionsProps {
   className?: string;
 }
 
-/** O botão da régua — exportado para as ferramentas extras terem a mesma forma. */
-export const QUICK_ACTION_BUTTON = cn(
-  "inline-flex items-center justify-center rounded-xl",
-  "min-w-[44px] min-h-[44px]",
-  "text-muted-foreground transition-colors",
-  "hover:text-foreground hover:bg-foreground/[.06]",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-  "disabled:opacity-40 disabled:pointer-events-none",
-);
 
 export function ChatQuickActions({
   onAudio,

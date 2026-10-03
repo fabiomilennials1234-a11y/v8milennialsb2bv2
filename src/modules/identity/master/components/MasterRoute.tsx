@@ -42,7 +42,7 @@ export function MasterRoute({ children }: MasterRouteProps) {
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-4 text-center">
           <ShieldAlert className="w-16 h-16 text-destructive" />
-          <h1 className="text-2xl font-bold">Acesso Negado</h1>
+          <h1 className="text-2xl font-bold">Acesso negado</h1>
           <p className="text-muted-foreground">
             Você não tem permissão para acessar esta área.
           </p>

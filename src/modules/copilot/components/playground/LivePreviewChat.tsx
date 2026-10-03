@@ -192,7 +192,7 @@ export function LivePreviewChat({
   const [isSending, setIsSending] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevConfigVersionRef = useRef(configVersion);
 
@@ -214,9 +214,11 @@ export function LivePreviewChat({
     [playgroundTools, agentDocuments],
   );
 
-  // Scroll to bottom
+  // Scroll to bottom — só da lista. `scrollIntoView` rolava também a página:
+  // no celular, ao montar, levava a tela até o fim do chat e cortava o topo.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = messagesListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
 
   // Auto-reset when config changes (debounced)
@@ -485,7 +487,7 @@ export function LivePreviewChat({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div ref={messagesListRef} className="flex-1 overflow-y-auto scroll-smooth p-4 space-y-3 min-h-0">
         {messages.length === 0 && !isSimulating ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-foreground/50">
@@ -598,8 +600,6 @@ export function LivePreviewChat({
             </div>
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Config changed notice */}

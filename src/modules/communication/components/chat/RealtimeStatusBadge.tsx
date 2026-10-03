@@ -71,7 +71,7 @@ function classify(
 }
 
 const variantClasses: Record<Variant, string> = {
-  ok: "bg-success/10 text-success border-success/25",
+  ok: "bg-success/10 text-success-strong border-success/25",
   pending: "bg-warning/15 text-warning-strong border-warning/30",
   polling: "bg-warning/15 text-warning-strong border-warning/30",
   offline: "bg-destructive/10 text-destructive border-destructive/25",

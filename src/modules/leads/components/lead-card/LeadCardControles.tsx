@@ -139,7 +139,7 @@ export function LeadCardControles({
             expectedUpdatedAt={atualizadoEm}
           />
         </Cartao>
-        <Cartao rotulo="Pré-qualificação" valor={tier(preQualificacao)} vazio="Sem tier">
+        <Cartao rotulo="Pré-qualificação" valor={tier(preQualificacao)} vazio="Não definida">
           <QualificationSlot
             leadId={leadId}
             field="pre_qualification_tier"
@@ -147,7 +147,7 @@ export function LeadCardControles({
             current={preQualificacao}
           />
         </Cartao>
-        <Cartao rotulo="Qualificação" valor={tier(qualificacao)} vazio="Sem tier">
+        <Cartao rotulo="Qualificação" valor={tier(qualificacao)} vazio="Não definida">
           <QualificationSlot
             leadId={leadId}
             field="qualification_tier"

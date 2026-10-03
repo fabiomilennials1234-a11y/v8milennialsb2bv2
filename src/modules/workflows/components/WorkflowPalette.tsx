@@ -11,7 +11,7 @@ import { Plus } from "lucide-react";
 import { NODE_COLORS, type WorkflowNodeType } from "@/types/workflow";
 import { PillSearch } from "@/shared/components/PillSearch";
 import { cn } from "@/lib/utils";
-import { visibleNodeGroups } from "./WorkflowToolbar";
+import { visibleNodeGroups } from "@/modules/workflows/lib/node-groups";
 
 export function WorkflowPalette({
   onAddNode,

@@ -456,9 +456,8 @@ function BillingAccount({
                 {onContactSupport && (
                   <div className="mt-auto">
                     <Button
-                      variant="outline"
+                      variant="on-gold"
                       onClick={onContactSupport}
-                      className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
                     >
                       Falar sobre minha assinatura
                     </Button>

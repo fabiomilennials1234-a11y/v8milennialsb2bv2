@@ -83,7 +83,7 @@ export const Composicao: StoryObj = {
               <p className="text-[11px] font-bold opacity-70">Próximo a responder</p>
               <p className="text-[1.35rem] font-extrabold tracking-[-0.03em]">Roberto Sato</p>
               <FocusTile className="text-[14px] font-semibold">“Pode mandar a proposta pro meu e-mail?”</FocusTile>
-              <Button variant="outline" className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90">
+              <Button variant="on-gold">
                 Abrir conversa <ArrowRight />
               </Button>
             </FocusCard>

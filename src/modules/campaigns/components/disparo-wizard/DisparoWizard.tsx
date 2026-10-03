@@ -215,17 +215,22 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
               </Button>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  onClick={wiz.isFirst ? onClose : wiz.back}
-                  disabled={createPlan.isPending}
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  {wiz.isFirst ? "Cancelar" : "Voltar"}
-                </Button>
+                {/* No primeiro passo não há para onde voltar, e a saída é o
+                    "Cancelar" do cabeçalho — repeti-lo aqui punha dois no mesmo
+                    viewport. */}
+                {!wiz.isFirst && (
+                  <Button
+                    variant="ghost"
+                    onClick={wiz.back}
+                    disabled={createPlan.isPending}
+                    className="gap-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Voltar
+                  </Button>
+                )}
 
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+                <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
                   {wiz.blockReason && (
                     <span className="hidden text-xs text-muted-foreground sm:inline">{wiz.blockReason}</span>
                   )}

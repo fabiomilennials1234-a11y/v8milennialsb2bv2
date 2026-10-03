@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Hourglass, Info, ReceiptText, ScrollText, Target, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -326,10 +326,9 @@ function FocoPessoa({
         <p className="text-[13px] text-primary-foreground/75">Não foi possível apurar a comissão de {pessoa.name}.</p>
         <Button
           type="button"
-          variant="outline"
+          variant="on-gold"
           size="sm"
           onClick={refetch}
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
         >
           Tentar novamente
         </Button>
@@ -408,13 +407,13 @@ function FocoPessoa({
       )}
 
       {pendente && (
-        <p className="rounded-2xl bg-[hsl(40_60%_8%/.1)] px-3 py-2 text-[12.5px] font-semibold">
+        <p className="rounded-2xl bg-primary-foreground/10 px-3 py-2 text-[12.5px] font-semibold">
           {s.pendingCount} {s.pendingCount === 1 ? "venda" : "vendas"}, total de {formatBRL(s.pendingRevenue)}, aguardando
           conferência da comissão.
         </p>
       )}
       {!s.goalConfigured && (
-        <p className="rounded-2xl bg-[hsl(40_60%_8%/.1)] px-3 py-2 text-[12.5px] font-semibold">
+        <p className="rounded-2xl bg-primary-foreground/10 px-3 py-2 text-[12.5px] font-semibold">
           Realizado no período: {s.goalCurrent} {unidade}. Configure a meta para apurar o bônus.
         </p>
       )}
@@ -442,9 +441,8 @@ function FocoPessoa({
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
         <Button
           type="button"
-          variant="outline"
+          variant="on-gold"
           onClick={onVerExtrato}
-          className="border-transparent bg-white text-neutral-900 shadow-none hover:bg-white/90"
         >
           <ReceiptText />
           Ver extrato
@@ -484,15 +482,34 @@ function AceleradoresCard({
   const MAX = FAIXAS_ACELERADOR[FAIXAS_ACELERADOR.length - 1].ate;
   const pos = (v: number) => (Math.min(Math.max(v, 0), MAX) / MAX) * 100;
 
-  // Duas pessoas perto demais se sobrepõem: o rótulo desce um degrau
-  // (avatar + nome ocupam ~46 px). Com 3 degraus cabe um grupo de 3 empatados.
+  // O rótulo ("Juliana · 118%") tem largura fixa em px; quanto ele ocupa do
+  // trilho, em %, depende da largura real — a 1440 é um terço do que é a 390.
+  const trilhoRef = useRef<HTMLDivElement>(null);
+  const [largura, setLargura] = useState(0);
+  useEffect(() => {
+    const el = trilhoRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setLargura(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Duas pessoas perto demais se sobrepõem: o rótulo desce um degrau (avatar +
+  // nome ocupam ~46 px). Cada uma vai para o degrau mais alto em que nenhum
+  // vizinho ao alcance do rótulo já está. O cálculo anterior só olhava o
+  // vizinho imediato e ciclava 0→1→2→0, devolvendo a quarta pessoa de um grupo
+  // ao degrau da primeira — e o fio dela cruzava o rótulo de cima.
   const DEGRAU = 46;
+  const DEGRAUS = 4;
+  const ROTULO_PX = 104;
+  const alcance = largura > 0 ? (ROTULO_PX / largura) * 100 : 20;
   const marcadores = [...pessoas]
     .sort((a, b) => a.progresso - b.progresso)
     .reduce<{ p: PessoaComissao & { progresso: number }; left: number; nivel: number }[]>((acc, p) => {
       const left = pos(p.progresso);
-      const ant = acc[acc.length - 1];
-      const nivel = ant && left - ant.left < 20 ? (ant.nivel + 1) % 3 : 0;
+      const vizinhos = acc.filter((m) => Math.abs(left - m.left) < alcance);
+      let nivel = 0;
+      while (nivel < DEGRAUS - 1 && vizinhos.some((m) => m.nivel === nivel)) nivel++;
       acc.push({ p, left, nivel });
       return acc;
     }, []);
@@ -518,7 +535,7 @@ function AceleradoresCard({
       </CardHeader>
       <CardContent>
         <div className="-mx-2 overflow-x-auto px-2 pb-1">
-          <div className="min-w-0 sm:min-w-[620px]">
+          <div ref={trilhoRef} className="min-w-0 sm:min-w-[620px]">
             <div className="flex">
               {FAIXAS_ACELERADOR.map((f) => (
                 <div key={f.mult} className="min-w-0 pr-2" style={{ width: `${((f.ate - f.de) / MAX) * 100}%` }}>
@@ -545,14 +562,17 @@ function AceleradoresCard({
                 marcadores.map(({ p, left, nivel }) => {
                   // Nas bordas o rótulo encosta para dentro — centrado ele saía do cartão.
                   const ancora = left < 8 ? "inicio" : left > 92 ? "fim" : "meio";
+                  // Fio embaixo (z-0), avatar e rótulo em cima (z-10) e o rótulo com
+                  // fundo do cartão: um fio que desce até um degrau mais baixo passa
+                  // POR TRÁS do rótulo de cima, nunca por cima dele.
                   return (
                     <div key={p.id} className="absolute top-0 w-0" style={{ left: `${left}%` }}>
                       <span
-                        className="absolute left-0 top-0 w-px bg-foreground/25"
+                        className="absolute left-0 top-0 z-0 w-px bg-foreground/25"
                         style={{ height: 8 + nivel * DEGRAU }}
                         aria-hidden
                       />
-                      <span className="absolute -translate-x-1/2" style={{ top: 8 + nivel * DEGRAU }}>
+                      <span className="absolute z-10 -translate-x-1/2" style={{ top: 8 + nivel * DEGRAU }}>
                         <UserAvatar
                           name={p.name}
                           avatarUrl={p.avatarUrl}
@@ -563,8 +583,8 @@ function AceleradoresCard({
                       </span>
                       <span
                         className={cn(
-                          "absolute whitespace-nowrap text-[11px] font-bold tabular-nums",
-                          ancora === "inicio" ? "left-[-6px]" : ancora === "fim" ? "right-[-6px]" : "-translate-x-1/2",
+                          "absolute z-10 whitespace-nowrap rounded-full bg-card px-1 text-[11px] font-bold tabular-nums",
+                          ancora === "inicio" ? "left-[-10px]" : ancora === "fim" ? "right-[-10px]" : "-translate-x-1/2",
                         )}
                         style={{ top: 8 + nivel * DEGRAU + 30 }}
                       >

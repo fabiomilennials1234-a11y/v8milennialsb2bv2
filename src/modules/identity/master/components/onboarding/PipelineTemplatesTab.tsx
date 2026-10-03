@@ -28,7 +28,7 @@ export function PipelineTemplatesTab() {
           {templates?.length ?? 0} templates
         </h3>
         <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="w-4 h-4 mr-1" /> Novo Template
+          <Plus className="w-4 h-4 mr-1" /> Novo template
         </Button>
       </div>
 
@@ -49,7 +49,7 @@ export function PipelineTemplatesTab() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{tpl.name}</span>
                   <Badge variant="outline" className="text-[10px]">P{tpl.priority}</Badge>
-                  {!tpl.is_active && <Badge variant="destructive" className="text-[10px]">Inativo</Badge>}
+                  {!tpl.is_active && <Badge variant="soft" className="text-[10px]">Inativo</Badge>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{tpl.description}</p>
                 {tpl.custom_pipelines?.length > 0 && (

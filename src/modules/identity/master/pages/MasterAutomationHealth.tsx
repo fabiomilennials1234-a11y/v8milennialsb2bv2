@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import {
   AlertTriangle,
@@ -65,8 +65,8 @@ export default function MasterAutomationHealth() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Automation Health"
+      <MasterPageHeader
+        title="Automation health"
         subtitle="Visibility de saúde das automações + reprocess de jobs falhados"
         actions={
           <Button
@@ -497,7 +497,7 @@ function EngineTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Copilot Engine Version (Trilha 3.B B3)</h3>
+          <h3 className="text-sm font-medium">Copilot engine version (Trilha 3.B B3)</h3>
           <p className="text-xs text-muted-foreground mt-1">
             v1 = orchestrator atual. v2 = mesma lógica via módulos extraídos (refactor transparente).
             Hoje funcionalmente idênticos. Toggle prepara A/B futura.

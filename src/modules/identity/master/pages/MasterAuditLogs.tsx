@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PageHeader } from "@/components/ui/page-header";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import {
   useMasterAuditLogs,
@@ -71,8 +71,8 @@ export default function MasterAuditLogs() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Logs de Auditoria"
+      <MasterPageHeader
+        title="Logs de auditoria"
         subtitle="Histórico de todas as ações realizadas por Masters"
         actions={
           <Button variant="outline" onClick={() => refetch()}>

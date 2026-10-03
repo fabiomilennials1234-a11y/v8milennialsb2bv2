@@ -484,7 +484,7 @@ function PropostasBlock({
       <KpiRow cols={5}>
         <AnalyticsStatCard
           icon={Briefcase}
-          label="Pipeline Ativo"
+          label="Pipeline ativo"
           value={formatCurrency(displayStats.inProgress)}
           sub={`${displayStats.inProgressCount} propostas`}
           accent="gold"
@@ -492,7 +492,7 @@ function PropostasBlock({
         />
         <AnalyticsStatCard
           icon={CircleDollarSign}
-          label="Vendas Total"
+          label="Vendas total"
           value={formatCurrency(displayStats.sold)}
           sub={`${displayStats.soldCount} vendas`}
           accent="success"
@@ -511,7 +511,7 @@ function PropostasBlock({
         />
         <AnalyticsStatCard
           icon={Package}
-          label="Projetos Vendidos"
+          label="Projetos vendidos"
           value={formatCurrency(displayStats.projeto)}
           sub="valor vendido"
           accent="neutral"
@@ -519,7 +519,7 @@ function PropostasBlock({
           onClick={() => setDrilldownMetric("projetos_vendidos")}
         />
         <AnalyticsStatCard
-          label="Taxa de Conversão"
+          label="Taxa de conversão"
           icon={Percent}
           value={`${displayStats.conversionRate.toFixed(1)}%`}
           sub="vendas / total no pipe"
@@ -547,7 +547,7 @@ function PropostasBlock({
             </AnalyticsPanel>
 
             <AnalyticsPanel
-              title="Performance por Responsável"
+              title="Performance por responsável"
               subtitle="Propostas trabalhadas e valor fechado"
             >
               <MemberLeaderboard
