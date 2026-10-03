@@ -375,10 +375,12 @@ export function DealCardMoney({
   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
 
   return (
-    <section className="flex flex-col rounded-xl border border-border bg-card px-4 py-3.5">
+    // V5: o cartão branco da gaveta, com o título em rótulo micro (mockup:
+    // "PRODUTOS E VALORES"); o texto do título é contrato de teste e fica.
+    <section className="flex flex-col rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo">
       <div className="flex items-center justify-between gap-3 pb-1">
-        <h3 className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
-          <Package className="size-[17px] text-muted-foreground" aria-hidden="true" />
+        <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+          <Package className="size-3.5" aria-hidden="true" />
           Produtos do Negócio
         </h3>
         {onAdicionarProduto && (

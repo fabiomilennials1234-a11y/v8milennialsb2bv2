@@ -208,10 +208,14 @@ export function LeadCardContainer({
             : "Lead não encontrado.";
     return (
       <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain rounded-[inherit] bg-background px-4 pb-6 pt-4 sm:px-5">
-        {aviso && (
+        {/* O aviso (ou o vão dele) ocupa a faixa do "×" da casca, para o
+            título do negócio não nascer embaixo do botão de fechar. */}
+        {aviso ? (
           <p className="mb-3 mr-10 rounded-2xl border border-dashed border-border px-3 py-2 text-[12.5px] text-muted-foreground">
             {aviso}
           </p>
+        ) : (
+          <div className="h-10 shrink-0" aria-hidden="true" />
         )}
         {painelNegocios}
       </div>

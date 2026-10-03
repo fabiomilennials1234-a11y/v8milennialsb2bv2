@@ -53,6 +53,7 @@ function Casa({
   bloqueado,
   emTransito,
   fixa,
+  ouro,
 }: {
   etapa: DealCardStage;
   estado: "passou" | "aqui" | "futuro";
@@ -70,6 +71,8 @@ function Casa({
    * 11,5px sem reticências.
    */
   fixa?: boolean;
+  /** Sobre o cartão de ouro: monocromática em tinta, como a jornada do mockup. */
+  ouro?: boolean;
 }) {
   const ganho = etapa.papel === "ganho";
   const perdido = etapa.papel === "perdido";
@@ -81,6 +84,55 @@ function Casa({
   const tinta = terminal ? (ganho ? "hsl(var(--success))" : "hsl(var(--destructive))") : cor;
 
   const Icone = terminal ? (ganho ? Trophy : X) : estado === "passou" ? Check : Clock;
+  const movivel = !!onMover && estado !== "aqui" && !bloqueado;
+
+  if (ouro) {
+    // Sobre o ouro a cor do funil vira ruído (roxo e azul em cima de amarelo).
+    // A régua fica em tinta: cheia por onde passou, anel onde está, vazada no
+    // futuro. Ganho e perda continuam distintos pelo ícone e pelo vão antes
+    // deles — não pela cor, que aqui não existe.
+    return (
+      <button
+        type="button"
+        disabled={!onMover || estado === "aqui" || bloqueado}
+        onClick={() => onMover?.(etapa.chave)}
+        title={estado === "aqui" ? etapa.nome : `Mover para ${etapa.nome}`}
+        className={cn(
+          "group flex flex-col items-center gap-1.5 rounded pt-0.5",
+          fixa ? "w-[76px] shrink-0" : "min-w-[64px] flex-1",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60",
+          movivel ? "cursor-pointer" : "cursor-default",
+          emTransito && "animate-pulse",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-[28px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+            estado === "passou" && "border-primary-foreground bg-primary-foreground text-primary",
+            estado === "aqui" &&
+              "border-primary-foreground bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary-foreground)/0.14)]",
+            estado === "futuro" && "border-primary-foreground/25 text-primary-foreground/45",
+            movivel && estado === "futuro" && "group-hover:border-primary-foreground/60 group-hover:text-primary-foreground",
+          )}
+          aria-hidden="true"
+        >
+          <Icone className="size-[13px]" />
+        </span>
+        <span
+          className={cn(
+            "line-clamp-2 max-w-full break-words text-center text-[11px] leading-tight",
+            estado === "aqui" ? "font-bold text-primary-foreground" : "font-medium text-primary-foreground/65",
+            movivel && "group-hover:text-primary-foreground",
+          )}
+        >
+          {etapa.nome}
+        </span>
+        <span className={cn("text-[10px] tabular-nums leading-none", data ? "text-primary-foreground/60" : "text-primary-foreground/30")}>
+          {data ?? "—"}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button
@@ -121,7 +173,7 @@ function Casa({
 
       <span
         className={cn(
-          "max-w-full truncate text-[11.5px] leading-tight transition-colors",
+          "line-clamp-2 max-w-full break-words text-center text-[11.5px] leading-tight transition-colors",
           estado === "aqui" ? "font-semibold text-foreground" : "text-muted-foreground",
           onMover && estado !== "aqui" && !bloqueado && "group-hover:text-foreground",
         )}
@@ -149,6 +201,7 @@ export function DealCardStages({
   movimentacoes = [],
   onMover,
   movendo,
+  tom = "cartao",
 }: {
   etapas: DealCardStage[];
   atual: string;
@@ -159,7 +212,10 @@ export function DealCardStages({
   onMover?: (chave: string) => void;
   /** Chave em trânsito — desabilita a trilha inteira enquanto grava. */
   movendo?: string | null;
+  /** `ouro`: a régua mora no cartão de ouro do negócio (V5). */
+  tom?: "cartao" | "ouro";
 }) {
+  const ouro = tom === "ouro";
   const abertas = etapas.filter((e) => e.papel === "aberto");
   const terminais = etapas.filter((e) => e.papel !== "aberto");
   const datas = datasPorEtapa(movimentacoes);
@@ -170,7 +226,12 @@ export function DealCardStages({
 
   if (etapas.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-border py-5 text-center text-[12.5px] text-muted-foreground">
+      <p
+        className={cn(
+          "rounded-lg border border-dashed py-5 text-center text-[12.5px]",
+          ouro ? "border-primary-foreground/25 text-primary-foreground/70" : "border-border text-muted-foreground",
+        )}
+      >
         Este funil não tem etapas ativas.
       </p>
     );
@@ -187,11 +248,15 @@ export function DealCardStages({
       bloqueado={bloqueado}
       emTransito={movendo === etapa.chave}
       fixa={fixa}
+      ouro={ouro}
     />
   );
 
+  // No celular a régua ROLA na horizontal em vez de espremer sete casas em
+  // 350 px até virar textura: cada casa tem piso de largura (`min-w`).
   return (
-    <div className="flex items-start">
+    <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
+    <div className="flex min-w-max items-start sm:min-w-0">
       {/* A linha que liga as casas vive no CONTAINER, não em cada casa: assim
           ela não aparece antes da primeira nem depois da última, que é onde a
           régua costuma vazar.
@@ -201,7 +266,10 @@ export function DealCardStages({
           círculo e deixava um vão solto antes dele. */}
       <div className="relative flex min-w-0 flex-1 items-start">
         <span
-          className="pointer-events-none absolute top-[15px] h-px bg-border"
+          className={cn(
+            "pointer-events-none absolute h-px",
+            ouro ? "top-[14px] bg-primary-foreground/25" : "top-[15px] bg-border",
+          )}
           style={{
             left: `${50 / Math.max(1, abertas.length)}%`,
             right: `${50 / Math.max(1, abertas.length)}%`,
@@ -216,12 +284,16 @@ export function DealCardStages({
       {terminais.length > 0 && (
         <>
           {/* O vão é o argumento: as saídas não são a continuação do caminho. */}
-          <span className="mx-2 mt-[3px] h-6 w-px shrink-0 bg-border" aria-hidden="true" />
+          <span
+            className={cn("mx-2 mt-[3px] h-6 w-px shrink-0", ouro ? "bg-primary-foreground/25" : "bg-border")}
+            aria-hidden="true"
+          />
           <div className="flex shrink-0 items-start">
             {terminais.map((e) => casa(e, e.chaveEntry === atual ? "aqui" : "futuro", true))}
           </div>
         </>
       )}
+    </div>
     </div>
   );
 }

@@ -97,7 +97,10 @@ export function SaleValueRequiredModal({
         if (!next) onCancel();
       }}
     >
-      <DialogContent className="sm:max-w-[420px]">
+      {/* `z-[60]`: no celular quem abre isto é o painel do Negócio, que é um
+          `Sheet` (`z-[51]`); no `z-50` padrão o pedido de valor nascia ATRÁS
+          da folha e travava a tela. Convenção do repo para "acima da folha". */}
+      <DialogContent className="z-[60] sm:max-w-[420px]" overlayClassName="z-[60]">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 ring-1 ring-success/20">

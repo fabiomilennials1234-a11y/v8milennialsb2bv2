@@ -1,7 +1,6 @@
 import type { CommentAttachment } from "../../lib/comment-attachments/files";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarDays, Check, Hourglass, Loader2, MoreHorizontal, Trash2, Wallet, X } from "lucide-react";
-import { KpiTile, ValueUnit } from "@/components/ui/bento";
+import { CalendarCheck, CalendarDays, CircleX, Hourglass, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,39 +22,34 @@ import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio"
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
 /**
- * O Card do Negócio — a coluna DIREITA do painel, no formato do print DataCrazy.
+ * O Card do Negócio — a aba "Negócio" da gaveta do V5.
  *
- * ── O QUE MUDOU E POR QUÊ ─────────────────────────────────────────────────
- * A versão anterior era uma coluna só, empilhando sete seções (Lead, Tempo,
- * Negócio, Valor, Reunião, Movimentação, Anotação) numa rolagem longa. O print
- * do concorrente organiza o mesmo conteúdo em três camadas — três ladrilhos de
- * cabeçalho, um trilho de etapas com data, e um bloco de dinheiro — atrás de
- * abas. Duas consequências práticas, e é por elas que vale copiar:
+ * No mockup não há segundo painel: o cartão do funil abre a gaveta da pessoa,
+ * e o negócio é o conteúdo da aba do meio. Este arquivo desenha esse conteúdo;
+ * a pessoa (cabeçalho, Dados, Histórico) é do `LeadCard`, e quem monta os dois
+ * juntos é o `DealCardPanel`.
  *
- *   1. **o que decide fica acima da dobra.** Tempo, valor e data de criação
- *      respondem "vale a pena mexer nisto agora" sem rolar;
- *   2. **o resto não some, muda de camada.** A movimentação vira aba irmã do
- *      trilho, em vez de sexto bloco de uma pilha que ninguém desce.
+ * ── A COMPOSIÇÃO ──────────────────────────────────────────────────────────
+ *   1. título do negócio (renomeável), funil e dono, com Copiar resumo e o ⋯;
+ *   2. o CARTÃO DE OURO: valor total como manchete, a etapa, o tempo (que acende
+ *      quando passa do dobro da mediana da etapa na org), a régua que move o
+ *      negócio, a data de criação e — aberto — Ganhou/Perdeu; fechado, o
+ *      desfecho. É o resumo que decide "vale a pena mexer nisto agora";
+ *   3. abaixo, as abas do negócio: Informações · Atividades · Checklists ·
+ *      Negócios. Ficam abas (e não cartões lado a lado, como no mockup) porque o
+ *      menu do card do funil abre DIRETO em Checklists (`abaInicial`).
  *
- * ── O BLOCO DO LEAD SAIU DAQUI ────────────────────────────────────────────
- * Ele existia porque o painel era só o negócio, e abrir um negócio sem saber de
- * quem ele é não serve. Agora a pessoa ocupa a coluna da esquerda inteira, com
- * mais campo e mais métrica do que a grade de oito campos dava — repetir os
- * mesmos dados a 40cm de distância é onde as duas verdades começam.
+ * ── A PESSOA NÃO É CONTEÚDO DAQUI ─────────────────────────────────────────
+ * Nome, empresa e telefone moram no cabeçalho da gaveta. Repetir a pessoa
+ * dentro do negócio é onde as duas verdades começam (`deal-card.test.tsx`).
  *
- * ── O PRIMEIRO LADRILHO NÃO É O "#75" DO PRINT ────────────────────────────
- * O DataCrazy abre com o número sequencial do negócio. O Torque **não tem esse
- * número** — não há coluna em `deals` nem sequence no Postgres — e a decisão do
- * dono do produto em 21/08 foi sair **sem migration**. No lugar dele entra o
- * dado que o próprio card já elegeu como manchete: **há quanto tempo isto está
- * aberto**. `value` existe em 1,1% dos negócios; tempo existe em 100%, e é o
- * único que aponta ação. O ladrilho acende em vermelho quando o negócio passa
- * do dobro da mediana da etapa na própria org.
+ * ── SEM NÚMERO SEQUENCIAL ─────────────────────────────────────────────────
+ * O Torque não tem número de negócio (nem coluna, nem sequence) e a decisão de
+ * 21/08 foi sair sem migration: a manchete de tempo é "há quanto tempo isto está
+ * aberto", que existe em 100% dos negócios e é o único dado que aponta ação.
  */
 
 type Aba = DealCardAba;
-type SubAba = "pipeline" | "jornada";
-type AbaDinheiro = "produtos" | "anotacao";
 
 function formatarData(iso: string): string {
   const d = new Date(iso);
@@ -63,56 +57,14 @@ function formatarData(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-/**
- * Os três cartões do topo do print, no cartão de número do V5 (`KpiTile`).
- * O tom vira o chip do ícone; a paleta crua de antes (`sky-400`, `violet-400`)
- * sumia no claro. Mesmos rótulos, mesmos números, mesma nota.
- */
-const TOM_DO_LADRILHO = {
-  azul: "info",
-  verde: "good",
-  roxo: "neutral",
-  alerta: "bad",
-} as const;
+const ROTULO = "text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground";
+const CARTAO = "rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo";
 
-function Ladrilho({
-  rotulo,
-  valor,
-  sufixo,
-  tom,
-  nota,
-  icone,
-}: {
-  rotulo: string;
-  valor: string;
-  sufixo?: string;
-  tom: keyof typeof TOM_DO_LADRILHO;
-  nota?: string;
-  icone: typeof Wallet;
-}) {
-  return (
-    <KpiTile
-      label={rotulo}
-      icon={icone}
-      tone={TOM_DO_LADRILHO[tom]}
-      className={cn(tom === "alerta" && "ring-1 ring-destructive/35")}
-      value={
-        <span className="block truncate">
-          {valor}
-          {sufixo && <ValueUnit>{sufixo}</ValueUnit>}
-        </span>
-      }
-      note={nota}
-    />
-  );
-}
-
-/** A barra de abas do print: sublinhado no ativo, sem moldura. */
+/** As abas do negócio: sublinhado — a hierarquia abaixo do segmentado da gaveta. */
 function Abas<T extends string>({
   itens,
   ativa,
   onTrocar,
-  compacta,
 }: {
   /**
    * `contagem` é número; `contagemTexto` existe para a aba cuja medida é uma
@@ -122,10 +74,10 @@ function Abas<T extends string>({
   itens: { chave: T; rotulo: string; contagem?: number; contagemTexto?: string }[];
   ativa: T;
   onTrocar: (chave: T) => void;
-  compacta?: boolean;
 }) {
   return (
-    <nav className="flex flex-wrap items-center gap-x-1 border-b border-border">
+    // Rola na horizontal no celular em vez de quebrar em duas linhas de abas.
+    <nav className="flex items-center gap-x-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
       {itens.map((i) => {
         const acesa = i.chave === ativa;
         return (
@@ -134,8 +86,7 @@ function Abas<T extends string>({
             type="button"
             onClick={() => onTrocar(i.chave)}
             className={cn(
-              "relative px-3 transition-colors",
-              compacta ? "py-2 text-[12.5px]" : "py-2.5 text-[13px]",
+              "relative shrink-0 whitespace-nowrap px-2.5 py-2.5 text-[13px] transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
               acesa ? "font-semibold text-foreground" : "font-medium text-muted-foreground hover:text-foreground/80",
             )}
@@ -146,9 +97,7 @@ function Abas<T extends string>({
                 {i.contagemTexto ?? i.contagem}
               </span>
             )}
-            {acesa && (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-primary" />
-            )}
+            {acesa && <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-primary" />}
           </button>
         );
       })}
@@ -156,38 +105,50 @@ function Abas<T extends string>({
   );
 }
 
-function AcaoPrimaria({
-  icone: Icone,
-  rotulo,
+/**
+ * Ganhou e Perdeu, no cartão de ouro (mockup: "btn-dark" + translúcido).
+ * `data-desfecho` é de onde a celebração do painel lança o símbolo.
+ */
+function AcaoDeDesfecho({
   tom,
   onClick,
   desabilitado,
 }: {
-  icone: typeof Check;
-  rotulo: string;
   tom: "ganho" | "perda";
   onClick?: () => void;
   desabilitado?: boolean;
 }) {
+  const ganho = tom === "ganho";
+  const Icone = ganho ? Trophy : CircleX;
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={desabilitado}
-      // De onde a celebração do painel lança o símbolo (`useCelebracaoDoDesfecho`).
-      data-desfecho={tom === "ganho" ? "won" : "lost"}
+      data-desfecho={ganho ? "won" : "lost"}
       className={cn(
+        "inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold",
+        "transition-[background-color,transform] active:scale-[.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tinta focus-visible:ring-offset-2 focus-visible:ring-offset-primary",
         "disabled:pointer-events-none disabled:opacity-45",
-        "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-[background-color,border-color,color,transform] active:scale-[.98]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        tom === "ganho"
-          ? "border-success/40 bg-success/10 text-success hover:bg-success/15"
-          : "border-input bg-card text-muted-foreground shadow-relevo hover:border-destructive/40 hover:text-destructive",
+        ganho
+          ? "bg-tinta text-tinta-foreground hover:bg-tinta-3"
+          : "bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/[.16]",
       )}
     >
-      <Icone className="size-3.5" />
-      {rotulo}
+      <Icone className="size-3.5" aria-hidden="true" />
+      {ganho ? "Ganhou" : "Perdeu"}
     </button>
+  );
+}
+
+/** Um bloco translúcido dentro do ouro (o `FocusTile` do V5, em tamanho de gaveta). */
+function BlocoNoOuro({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-2xl border border-primary-foreground/10 bg-primary-foreground/[.07] px-3 py-2">
+      <span className="text-[10px] font-bold uppercase tracking-[.08em] text-primary-foreground/65">{rotulo}</span>
+      <span className="min-w-0 break-words text-[14px] font-extrabold tracking-[-0.02em] tabular-nums">{children}</span>
+    </div>
   );
 }
 
@@ -231,7 +192,7 @@ function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reunia
   const quando = new Date(reuniao.data);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-2xl border border-card-border bg-card px-3.5 py-3 shadow-relevo">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo">
       <span
         className={cn(
           "flex size-7 shrink-0 items-center justify-center rounded-[9px] border",
@@ -418,8 +379,6 @@ export function DealCard({
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
   const [aba, setAba] = useState<Aba>(abaPedida);
-  const [subAba, setSubAba] = useState<SubAba>("pipeline");
-  const [abaDinheiro, setAbaDinheiro] = useState<AbaDinheiro>("produtos");
   const [nota, setNota] = useState(negocio.nota);
 
   // Repor o texto quando o que está salvo muda.
@@ -437,8 +396,6 @@ export function DealCard({
    */
   useEffect(() => {
     setAba(abaPedida);
-    setSubAba("pipeline");
-    setAbaDinheiro("produtos");
     // `abaInicial` FORA da lista de propósito: ele é o pedido de QUEM ABRIU, e
     // reagir a ele arrastaria a pessoa de volta para a aba pedida no meio da
     // navegação — o provider zera o pedido só na próxima abertura.
@@ -455,191 +412,234 @@ export function DealCard({
     negocio.diasNaEtapa > negocio.medianaDaEtapa * 2;
 
   const { total, temValor } = contaDoNegocio(negocio.itens, negocio.valorDoNegocio, negocio.valor);
+  const etapaAtual = negocio.etapas.find((e) => e.chaveEntry === negocio.etapaAtual)?.nome ?? null;
 
   return (
-    <div data-summary-pending={nota !== negocio.nota} className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
-      {/* ── Cabeçalho ─────────────────────────────────────────────────────
-          Não está no print — o negócio do DataCrazy não tem título nem funil
-          visível ali. Aqui tem, e some daqui seria perder o que identifica o
-          negócio e os dois únicos botões que o encerram. */}
-      <header className="flex shrink-0 flex-col items-start gap-3 px-6 pb-3 pt-5 sm:flex-row sm:flex-wrap">
-        <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-[200px]">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <NomeDoNegocio key={negocio.id} titulo={negocio.titulo} nomeLead={negocio.lead.nome} onRenomear={onRenomear} />
-            {negocio.estado === "ganho" && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-success">
-                <button
-                  type="button"
-                  aria-label="Remover de ganho"
-                  title="Remover de ganho"
-                  disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
-                  onClick={() => onDefinirDesfecho?.("open")}
-                  className="grid size-5 place-items-center rounded-full hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <X className="size-3" aria-hidden="true" />
-                </button>
-                Ganho
-              </span>
-            )}
-            {negocio.estado === "perdido" && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/35 bg-destructive/[0.08] py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-destructive">
-                <button
-                  type="button"
-                  aria-label="Remover de perdido"
-                  title="Remover de perdido"
-                  disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
-                  onClick={() => onDefinirDesfecho?.("open")}
-                  className="grid size-5 place-items-center rounded-full hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <X className="size-3" aria-hidden="true" />
-                </button>
-                Perdido
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                className="size-1.5 rounded-full"
-                style={{ background: negocio.funilCor }}
-                aria-hidden="true"
-              />
-              {negocio.funil}
-            </span>
-            {negocio.dono ? <span>{negocio.dono}</span> : <span className="opacity-70">sem dono</span>}
-          </div>
-          {etiquetas && <div className="mt-2">{etiquetas}</div>}
-        </div>
-
-        {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não posições:
-            o desfecho pode ser dado em qualquer etapa. Ao GANHAR, o banco leva
-            o card para a etapa de ganho ou de sucesso do funil, quando há (Emenda 2,
-            20271021000039); sem ela, o card fica e o ganho vale sozinho.
-
-            O bloco anterior condicionava os dois botões a `etapaGanha`/
-            `etapaPerdida` e argumentava que "botão que não tem para onde ir
-            mente". O argumento estava certo e a conclusão envelheceu: medido em
-            2026-08-28, 283 dos 396 funis ativos (71%) não têm etapa `won` — em
-            quase três quartos dos funis o vendedor não tinha botão nenhum para
-            dizer que vendeu. Agora não há para onde ir, e é por isso que o botão
-            aparece sempre.
-
-            O `pr-8` da direita é o vão do "X" do `DialogContent` (`right-4
-            top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
-            do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
-            comum de faxina de funil. */}
-        {(aberto || onExcluir || acaoLigar || acaoCopiar) && (
-          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 pr-8">
-            {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
-                negócio aberto, e o único que não o encerra. */}
-            {acaoCopiar}
-            {acaoLigar}
-            {aberto && (
-              <AcaoPrimaria
-                icone={Check}
-                rotulo="Ganhou"
-                tom="ganho"
-                desabilitado={!!movendo || !!decidindo}
-                onClick={() => onDefinirDesfecho?.("won")}
-              />
-            )}
-            {aberto && (
-              <AcaoPrimaria
-                icone={X}
-                rotulo="Perdeu"
-                tom="perda"
-                desabilitado={!!movendo || !!decidindo}
-                onClick={() => onDefinirDesfecho?.("lost")}
-              />
-            )}
-            {onExcluir && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+    <div data-summary-pending={nota !== negocio.nota} className="flex min-w-0 flex-col gap-4">
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1 basis-[220px]">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <NomeDoNegocio key={negocio.id} titulo={negocio.titulo} nomeLead={negocio.lead.nome} onRenomear={onRenomear} />
+              {negocio.estado === "ganho" && (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-success/40 bg-success/10 py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-success-strong">
                   <button
                     type="button"
-                    disabled={excluindo}
-                    aria-label="Mais opções do negócio"
-                    data-testid="deal-card-kebab"
-                    className={cn(
-                      "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
-                      "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      "disabled:pointer-events-none disabled:opacity-50",
-                    )}
+                    aria-label="Remover de ganho"
+                    title="Remover de ganho"
+                    disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
+                    onClick={() => onDefinirDesfecho?.("open")}
+                    className="grid size-5 place-items-center rounded-full hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {excluindo ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <MoreHorizontal className="size-4" />
-                    )}
+                    <X className="size-3" aria-hidden="true" />
                   </button>
-                </DropdownMenuTrigger>
-                {/* `z-[60]` pelo mesmo motivo da confirmação (ver o bloco no
-                    `DealCardPanel`): no celular o painel é um `Sheet`, que é
-                    `z-[51]`, e o `DropdownMenuContent` padrão é `z-50` — o
-                    menu abriria DENTRO da área da folha e ficaria coberto por
-                    ela. O gatilho responderia ao toque e nada apareceria. */}
-                <DropdownMenuContent align="end" className="z-[60]">
-                  <DropdownMenuItem
-                    onClick={onExcluir}
-                    className="text-destructive focus:text-destructive"
-                    data-testid="deal-card-excluir"
+                  Ganho
+                </span>
+              )}
+              {negocio.estado === "perdido" && (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/35 bg-destructive/[0.08] py-0.5 pl-1 pr-2.5 text-[12px] font-bold text-destructive">
+                  <button
+                    type="button"
+                    aria-label="Remover de perdido"
+                    title="Remover de perdido"
+                    disabled={!onDefinirDesfecho || !!movendo || !!decidindo}
+                    onClick={() => onDefinirDesfecho?.("open")}
+                    className="grid size-5 place-items-center rounded-full hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Trash2 className="mr-2 size-3.5" />
-                    Excluir negócio
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <X className="size-3" aria-hidden="true" />
+                  </button>
+                  Perdido
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 rounded-full" style={{ background: negocio.funilCor }} aria-hidden="true" />
+                {negocio.funil}
+              </span>
+              {negocio.dono ? <span>{negocio.dono}</span> : <span className="opacity-70">sem dono</span>}
+            </div>
+            {etiquetas && <div className="mt-2">{etiquetas}</div>}
+          </div>
+
+          {(acaoCopiar || onExcluir) && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {acaoCopiar}
+              {onExcluir && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={excluindo}
+                      aria-label="Mais opções do negócio"
+                      data-testid="deal-card-kebab"
+                      className={cn(
+                        "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-input bg-card shadow-relevo",
+                        "text-muted-foreground transition-colors hover:text-foreground",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "disabled:pointer-events-none disabled:opacity-50",
+                      )}
+                    >
+                      {excluindo ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+                    </button>
+                  </DropdownMenuTrigger>
+                  {/* `z-[60]`: no celular o painel é um `Sheet` (`z-[51]`) e o
+                      `z-50` padrão do menu abriria por baixo dele. */}
+                  <DropdownMenuContent align="end" className="z-[60]">
+                    <DropdownMenuItem
+                      onClick={onExcluir}
+                      className="text-destructive focus:text-destructive"
+                      data-testid="deal-card-excluir"
+                    >
+                      <Trash2 className="mr-2 size-3.5" />
+                      Excluir negócio
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── O cartão de ouro ─────────────────────────────────────────────
+            O que decide fica aqui, acima da dobra: valor, etapa, tempo, a régua
+            e o desfecho. Um ouro por gaveta (README do V5). */}
+        <section
+          aria-label="Resumo do negócio"
+          className="flex min-w-0 flex-col gap-3.5 rounded-card bg-primary p-4 text-primary-foreground shadow-brilho-ouro"
+        >
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-primary-foreground/70">
+                Valor total
+              </span>
+              {/* Sem valor vira "—", nunca "R$ 0,00": `sale_value` existe em
+                  1,1% dos negócios, e zero afirma que o negócio não vale nada. */}
+              <p className="mt-0.5 text-[1.65rem] font-extrabold leading-none tracking-[-0.035em] tabular-nums">
+                {temValor ? formatBRL(total, 2) : "—"}
+              </p>
+              {negocio.itens.length > 0 && (
+                <p className="mt-1 text-[11.5px] font-semibold text-primary-foreground/70">
+                  {negocio.itens.length} produto(s)
+                </p>
+              )}
+            </div>
+            {etapaAtual && (
+              <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center truncate rounded-full bg-tinta px-2.5 text-[11.5px] font-bold text-tinta-foreground">
+                {etapaAtual}
+              </span>
             )}
           </div>
-        )}
+
+          {/* O tempo: acende quando passa do DOBRO da mediana da etapa na própria
+              org — alarme que toca sempre não é alarme. Negócio fechado não
+              tem tempo: parado não quer dizer nada depois da venda. */}
+          {aberto && (
+            <div
+              className={cn(
+                "inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 self-start rounded-2xl px-3 py-1.5 text-[12px]",
+                estagnado ? "bg-tinta text-tinta-foreground" : "bg-primary-foreground/10",
+              )}
+            >
+              <Hourglass className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="font-bold">{estagnado ? "Parado na etapa" : "Em aberto"}</span>
+              <span className="font-extrabold tabular-nums">
+                {estagnado
+                  ? String(negocio.diasNaEtapa)
+                  : negocio.diasEmAberto === null
+                    ? "—"
+                    : String(negocio.diasEmAberto)}
+              </span>
+              {(estagnado || negocio.diasEmAberto !== null) && <span className="font-semibold">dias</span>}
+              {estagnado ? (
+                <span className="opacity-75">· normal aqui: {negocio.medianaDaEtapa} dias</span>
+              ) : negocio.diasNaEtapa !== null ? (
+                <span className="opacity-75">· {negocio.diasNaEtapa} nesta etapa</span>
+              ) : null}
+            </div>
+          )}
+
+          <DealCardStages
+            tom="ouro"
+            etapas={negocio.etapas}
+            atual={negocio.etapaAtual}
+            cor={negocio.funilCor}
+            movimentacoes={negocio.movimentacoes}
+            onMover={onMoverEtapa}
+            movendo={movendo}
+          />
+
+          <p className="flex flex-wrap items-center gap-x-1.5 text-[11.5px] font-semibold text-primary-foreground/70">
+            <CalendarDays className="size-3.5" aria-hidden="true" />
+            {negocio.criadoEm ? `Criado em ${formatarData(negocio.criadoEm)}` : "Data de criação desconhecida"}
+            {negocio.previsaoFechamento && <span>· previsão {formatarData(negocio.previsaoFechamento)}</span>}
+          </p>
+
+          {/* Desfecho — só quando o negócio já morreu. */}
+          {!aberto && negocio.desfecho && (
+            <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3">
+              <BlocoNoOuro rotulo={negocio.estado === "ganho" ? "Vendido em" : "Perdido em"}>
+                {formatarData(negocio.desfecho.quando)}
+              </BlocoNoOuro>
+              {negocio.desfecho.valorVenda ? (
+                <BlocoNoOuro rotulo="Valor da venda">{formatBRL(negocio.desfecho.valorVenda)}</BlocoNoOuro>
+              ) : null}
+              {negocio.desfecho.motivo && <BlocoNoOuro rotulo="Motivo">{negocio.desfecho.motivo}</BlocoNoOuro>}
+            </div>
+          )}
+
+          {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não
+              posições: aparecem em qualquer etapa — 71% dos funis não têm etapa
+              de ganho. Ao GANHAR, quem leva o card para a etapa de ganho é o
+              banco. Ligar vem antes: é o ato mais frequente e o único que não
+              encerra o negócio — e por isso mora no mesmo grupo. */}
+          {(aberto || acaoLigar) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {acaoLigar}
+              {aberto && (
+                <AcaoDeDesfecho
+                  tom="ganho"
+                  desabilitado={!!movendo || !!decidindo}
+                  onClick={() => onDefinirDesfecho?.("won")}
+                />
+              )}
+              {aberto && (
+                <AcaoDeDesfecho
+                  tom="perda"
+                  desabilitado={!!movendo || !!decidindo}
+                  onClick={() => onDefinirDesfecho?.("lost")}
+                />
+              )}
+            </div>
+          )}
+        </section>
       </header>
 
-      {/* ── Barra de abas do print ────────────────────────────────────────
-          O print tem seis: Histórico · Atividades · Negócios · Arquivos ·
-          Atendimentos · Informações do Negócio. Entram as que têm fonte de dado
-          ligada — as três do print, mais Checklists, que não está no print e
-          tem tabela própria (`checklists`/`checklist_items`) mais o número que
-          o card do funil já mostra. As outras ficam de fora em vez de entrar
-          vazias — aba que abre num "nada aqui" ensina a não clicar em nenhuma:
-            · Arquivos    — não existe anexo de negócio no schema. As três
-                            tabelas de arquivo do produto prendem em ticket,
-                            produto e agente; nenhuma tem `deal_id`.
-            · Atendimentos— é o chat, e ele tem tela própria com muito mais
-                            (busca, envio, mídia). Espelhar um pedaço aqui cria
-                            um segundo lugar de ler conversa.
-            · Histórico   — já está como "Jornada do Negócio", sub-aba do
-                            trilho, que é onde ele responde a pergunta certa. */}
-      <div className="shrink-0 px-6">
-        <Abas
-          ativa={aba}
-          onTrocar={setAba}
-          itens={[
-            { chave: "negocio" as const, rotulo: "Informações do Negócio" },
-            {
-              chave: "atividades" as const,
-              rotulo: "Atividades",
-              contagem: negocio.atividades.length,
-            },
-            /* Checklists é aba, não bloco: é a única coisa aqui que a pessoa
-               MARCA — e o número no selo é o mesmo que o card do funil anuncia
-               como "N atividades em aberto". Até aqui o card prometia esse
-               número e o painel não tinha onde cumpri-lo. */
-            ...(painelChecklists
-              ? [{
-                  chave: "checklists" as const,
-                  rotulo: "Checklists",
-                  contagemTexto: resumoChecklists && resumoChecklists.total > 0
+      {/* ── As abas do negócio ────────────────────────────────────────────
+          Entram as que têm fonte de dado ligada. Ficam de fora em vez de entrar
+          vazias: Arquivos (não há anexo de negócio no schema) e Atendimentos (é
+          o chat, que tem tela própria). */}
+      <Abas
+        ativa={aba}
+        onTrocar={setAba}
+        itens={[
+          { chave: "negocio" as const, rotulo: "Informações do Negócio" },
+          { chave: "atividades" as const, rotulo: "Atividades", contagem: negocio.atividades.length },
+          ...(painelChecklists
+            ? [{
+                chave: "checklists" as const,
+                rotulo: "Checklists",
+                contagemTexto:
+                  resumoChecklists && resumoChecklists.total > 0
                     ? `${resumoChecklists.feitos}/${resumoChecklists.total}`
                     : undefined,
-                }]
-              : []),
-            { chave: "negocios" as const, rotulo: "Negócios", contagem: negocio.outrosNegocios.length },
-          ]}
-        />
-      </div>
+              }]
+            : []),
+          { chave: "negocios" as const, rotulo: "Negócios", contagem: negocio.outrosNegocios.length },
+        ]}
+      />
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+      <div className="relative min-w-0">
         {aba === "atividades" ? (
           <DealCardActivities atividades={negocio.atividades} />
         ) : aba === "checklists" ? (
@@ -652,217 +652,95 @@ export function DealCard({
             onNewDeal={() => onNewDeal?.()}
           />
         ) : (
-          <div className="flex flex-col gap-5">
-            {/* Os três cartões do print. */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Ladrilho
-                icone={Hourglass}
-                tom={estagnado ? "alerta" : "azul"}
-                rotulo={estagnado ? "Parado na etapa" : "Em aberto"}
-                valor={
-                  estagnado
-                    ? String(negocio.diasNaEtapa)
-                    : negocio.diasEmAberto === null
-                      ? "—"
-                      : String(negocio.diasEmAberto)
-                }
-                sufixo={
-                  estagnado || negocio.diasEmAberto !== null ? "dias" : undefined
-                }
-                nota={
-                  estagnado
-                    ? `normal aqui: ${negocio.medianaDaEtapa} dias`
-                    : negocio.diasNaEtapa !== null
-                      ? `${negocio.diasNaEtapa} nesta etapa`
-                      : undefined
-                }
-              />
-              {/* O ladrilho FICA sempre, como no print — mas sem valor ele
-                  mostra "—", não "R$ 0,00". `sale_value` existe em 1,1% dos
-                  38.739 negócios: carimbar zero em 98,9% das aberturas é
-                  afirmar que o negócio não vale nada, e não saber quanto vale
-                  é outra coisa. Decisão do dono do produto em 22/08. */}
-              <Ladrilho
-                icone={Wallet}
-                tom="verde"
-                rotulo="Valor Total"
-                valor={temValor ? formatBRL(total, 2) : "—"}
-                nota={negocio.itens.length > 0 ? `${negocio.itens.length} produto(s)` : undefined}
-              />
-              <Ladrilho
-                icone={CalendarDays}
-                tom="roxo"
-                rotulo="Data de Criação"
-                valor={negocio.criadoEm ? formatarData(negocio.criadoEm) : "—"}
-                nota={
-                  negocio.previsaoFechamento
-                    ? `previsão ${formatarData(negocio.previsaoFechamento)}`
-                    : undefined
-                }
-              />
-            </div>
-
-            {/* Sub-abas do print: a régua e a jornada são a MESMA pergunta
-                ("por onde ele andou") em duas formas — a régua responde onde
-                está, a jornada responde quem o levou lá. */}
-            <div className="flex flex-col gap-4">
-              <Abas
-                compacta
-                ativa={subAba}
-                onTrocar={setSubAba}
-                itens={[
-                  { chave: "pipeline" as const, rotulo: "Funil completo" },
-                  {
-                    chave: "jornada" as const,
-                    rotulo: "Jornada do Negócio",
-                    contagem: negocio.movimentacoes.length,
-                  },
-                ]}
-              />
-              {subAba === "pipeline" ? (
-                <DealCardStages
-                  etapas={negocio.etapas}
-                  atual={negocio.etapaAtual}
-                  cor={negocio.funilCor}
-                  movimentacoes={negocio.movimentacoes}
-                  onMover={onMoverEtapa}
-                  movendo={movendo}
-                />
-              ) : (
-                <DealCardTimeline movimentacoes={negocio.movimentacoes} />
-              )}
-            </div>
-
-            {/* Reunião — fora das abas porque é a única coisa aqui com HORA
-                marcada; enterrar num painel é como se perde reunião. */}
+          <div className="flex flex-col gap-3">
+            {/* Reunião — fora de qualquer dobra: é a única coisa aqui com HORA
+                marcada, e enterrar é como se perde reunião. */}
             {negocio.reuniao && <LinhaDaReuniao reuniao={negocio.reuniao} />}
 
-            {/* Desfecho — só quando o negócio já morreu. */}
-            {!aberto && negocio.desfecho && (
-              <div
-                className={cn(
-                  "flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border px-4 py-3",
-                  negocio.estado === "ganho"
-                    ? "border-success/35 bg-success/[0.07]"
-                    : "border-card-border bg-sunken",
-                )}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-                    {negocio.estado === "ganho" ? "Vendido em" : "Perdido em"}
-                  </span>
-                  <span className="text-[15px] font-extrabold tracking-[-0.02em] tabular-nums">
-                    {formatarData(negocio.desfecho.quando)}
-                  </span>
-                </div>
-                {negocio.desfecho.valorVenda ? (
-                  <div className="flex flex-col">
-                    <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-                      Valor da venda
-                    </span>
-                    <span className="text-[15px] font-extrabold tracking-[-0.02em] tabular-nums text-success">
-                      {formatBRL(negocio.desfecho.valorVenda)}
-                    </span>
-                  </div>
-                ) : null}
-                {negocio.desfecho.motivo && (
-                  <div className="flex flex-col">
-                    <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-                      Motivo
-                    </span>
-                    <span className="text-[14px] font-medium">{negocio.desfecho.motivo}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Segunda barra do print. Das cinco abas dele (Produtos e Valores ·
-                Campos adicionais · Anexos · Histórico · Atividades), Campos
-                adicionais e Anexos não existem para negócio em tabela nenhuma,
-                e Histórico/Atividades já são a Jornada logo acima. Sobra a de
-                dinheiro — e a Anotação, que precisava de casa. */}
-            <div className="flex flex-col gap-4">
-              <Abas
-                compacta
-                ativa={abaDinheiro}
-                onTrocar={setAbaDinheiro}
-                itens={[
-                  { chave: "produtos" as const, rotulo: "Produtos e Valores" },
-                  { chave: "anotacao" as const, rotulo: "Anotação" },
-                ]}
-              />
-              {abaDinheiro === "produtos" ? (
-                <div className="space-y-3">
-                  {negocio.estado === "ganho" && onAjustarPedido && (ajustandoPedido ? (
-                    <AjustarPedidoGanho
-                      key={negocio.id}
-                      itens={negocio.itens}
-                      valor={negocio.valorDoNegocio ?? negocio.valor ?? 0}
-                      onSalvar={onAjustarPedido}
-                      onCancelar={() => setAjustandoPedido(false)}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => setAjustandoPedido(true)}
-                    >
-                      Ajustar pedido ganho
-                    </button>
-                  ))}
-                  {!ajustandoPedido && (
-                    <DealCardMoney
-                      key={negocio.id}
-                      itens={negocio.itens}
-                      valorDoNegocio={negocio.valorDoNegocio}
-                      versaoDoNegocio={negocio.pedidoAtualizadoEm}
-                      valorDoFunil={negocio.valor}
-                      onAdicionarProduto={negocio.estado === "ganho" ? undefined : onAdicionarProduto}
-                      onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
-                      onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
-                      onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
-                    />
-                  )}
-                  {ajustesPedido.length > 0 && (
-                    <section className="space-y-2 rounded-2xl border border-card-border bg-sunken p-4">
-                      <h3 className="text-sm font-bold">Histórico de ajustes</h3>
-                      {ajustesPedido.map(ajuste => (
-                        <div key={ajuste.id} className="text-sm border-b border-border pb-2 last:border-0">
-                          <p className="tabular-nums">
-                            {formatBRL(Number(ajuste.before_value), 2)} → {formatBRL(Number(ajuste.after_value), 2)}
-                          </p>
-                          <p className="whitespace-pre-wrap break-words text-muted-foreground">{ajuste.reason}</p>
-                          <time className="text-xs text-muted-foreground" dateTime={ajuste.created_at}>
-                            {new Date(ajuste.created_at).toLocaleString("pt-BR")}
-                          </time>
-                        </div>
-                      ))}
-                    </section>
-                  )}
-                  {painelPedidoErp}
-                </div>
+            <section aria-label="Produtos e Valores" className="flex flex-col gap-3">
+              {negocio.estado === "ganho" && onAjustarPedido && (ajustandoPedido ? (
+                <AjustarPedidoGanho
+                  key={negocio.id}
+                  itens={negocio.itens}
+                  valor={negocio.valorDoNegocio ?? negocio.valor ?? 0}
+                  onSalvar={onAjustarPedido}
+                  onCancelar={() => setAjustandoPedido(false)}
+                />
               ) : (
-                <textarea
-                  value={nota}
-                  onChange={(e) => setNota(e.target.value)}
-                  onBlur={() => nota !== negocio.nota && onSaveNote?.(nota)}
-                  placeholder="O que precisa ser lembrado sobre este negócio…"
-                  rows={4}
-                  className={cn(
-                    "w-full resize-none rounded-xl border border-input bg-card px-3.5 py-2.5 shadow-relevo",
-                    "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
-                    "transition-colors hover:border-muted-foreground/30",
-                    "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",
-                  )}
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center self-start rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => setAjustandoPedido(true)}
+                >
+                  Ajustar pedido ganho
+                </button>
+              ))}
+              {!ajustandoPedido && (
+                <DealCardMoney
+                  key={negocio.id}
+                  itens={negocio.itens}
+                  valorDoNegocio={negocio.valorDoNegocio}
+                  versaoDoNegocio={negocio.pedidoAtualizadoEm}
+                  valorDoFunil={negocio.valor}
+                  onAdicionarProduto={negocio.estado === "ganho" ? undefined : onAdicionarProduto}
+                  onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
+                  onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
+                  onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
                 />
               )}
-            </div>
+              {ajustesPedido.length > 0 && (
+                <section className={cn(CARTAO, "space-y-2")}>
+                  <h4 className="text-sm font-bold">Histórico de ajustes</h4>
+                  {ajustesPedido.map((ajuste) => (
+                    <div key={ajuste.id} className="border-b border-border pb-2 text-sm last:border-0">
+                      <p className="tabular-nums">
+                        {formatBRL(Number(ajuste.before_value), 2)} → {formatBRL(Number(ajuste.after_value), 2)}
+                      </p>
+                      <p className="whitespace-pre-wrap break-words text-muted-foreground">{ajuste.reason}</p>
+                      <time className="text-xs text-muted-foreground" dateTime={ajuste.created_at}>
+                        {new Date(ajuste.created_at).toLocaleString("pt-BR")}
+                      </time>
+                    </div>
+                  ))}
+                </section>
+              )}
+              {painelPedidoErp}
+            </section>
 
+            {/* A anotação saiu da sub-aba: é campo fixo, como no mockup. Uma
+                aba que esconde o único campo livre do negócio custava um clique
+                em toda leitura. */}
+            <label className={cn(CARTAO, "flex flex-col gap-2")}>
+              <span className={ROTULO}>Anotação do negócio</span>
+              <textarea
+                value={nota}
+                onChange={(e) => setNota(e.target.value)}
+                onBlur={() => nota !== negocio.nota && onSaveNote?.(nota)}
+                placeholder="O que precisa ser lembrado sobre este negócio…"
+                rows={3}
+                className={cn(
+                  "w-full resize-none rounded-xl border border-input bg-background/60 px-3 py-2",
+                  "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
+                  "transition-colors hover:border-muted-foreground/30",
+                  "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",
+                )}
+              />
+            </label>
 
+            {negocio.movimentacoes.length > 0 && (
+              <section className={cn(CARTAO, "flex flex-col gap-2.5")}>
+                <h3 className={cn(ROTULO, "flex items-center gap-1.5")}>
+                  <CalendarCheck className="size-3.5" aria-hidden="true" />
+                  Jornada do Negócio
+                  <span className="tabular-nums opacity-70">{negocio.movimentacoes.length}</span>
+                </h3>
+                <DealCardTimeline movimentacoes={negocio.movimentacoes} />
+              </section>
+            )}
           </div>
         )}
-        {/* Keep drafts and in-flight uploads mounted while switching tabs. */}
-        <div hidden={aba !== "negocio"} className="mt-5 border-t border-border pt-5">
+        {/* Rascunho e anexo subindo continuam montados ao trocar de aba. */}
+        <div hidden={aba !== "negocio"} className="mt-4 border-t border-border pt-4">
           <DealCardComments
             key={negocio.id}
             comentarios={comentarios}

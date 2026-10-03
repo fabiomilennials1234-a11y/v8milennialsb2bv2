@@ -5,18 +5,37 @@ import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
+import { format } from "date-fns";
 import {
   Tag,
   Plus,
   Edit2,
   Trash2,
   MoreHorizontal,
+  Code,
+  Copy,
+  ArrowDownToLine,
+  Globe,
+  Repeat,
+  CalendarClock,
+  FlaskConical,
+  type LucideIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { IconChip, InkPanel, KpiTile } from "@/components/ui/bento";
+import { cn } from "@/lib/utils";
+import {
+  AcaoDoCabecalho,
+  CartaoDeAjustes,
+  LinhaDeAjuste,
+  SlotDeAcoesProvider,
+} from "@/modules/platform/components/settings/settings-ui";
+import { vidroNaTinta } from "@/modules/platform/components/settings/settings-classes";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PreferenciasDeAviso } from "@/modules/platform/components/notifications/PreferenciasDeAviso";
 import { Switch } from "@/components/ui/switch";
@@ -49,7 +68,7 @@ import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } fro
 import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
-import { useOrganization } from "@/modules/identity";
+import { useOrganization, useOrgSwitcher } from "@/modules/identity";
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_BASE_PATH,
@@ -108,8 +127,13 @@ const SandboxPanel = lazy(() =>
 const OraculoPerfilSettings = lazy(() =>
   import("@/modules/copilot").then((m) => ({ default: m.OraculoPerfilSettings }))
 );
-// API Keys não tem mais aba própria: `ApiDocsSettings` já embute o painel de
-// chaves (era a mesma tela em dois lugares).
+// API Keys não tem aba própria: é o painel em tinta no topo de API & Webhooks
+// (a documentação deixou de embuti-lo — era a mesma tela em dois lugares).
+const ApiKeysPanel = lazy(() =>
+  import("@/modules/platform/components/settings/ApiKeysPanel").then((m) => ({
+    default: m.ApiKeysPanel,
+  }))
+);
 
 const colorOptions = [
   "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444",
@@ -204,74 +228,130 @@ function TagsSettings() {
     }
   };
 
+  const coresEmUso = new Set(tags.map((t) => (t.color || "#F5C518").toLowerCase())).size;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeading
-          title="Tags de leads"
-          description="Crie e gerencie tags para organizar seus leads"
-        />
-        {isAdmin && (
-          <Button onClick={() => handleOpenDialog()} size="sm">
+      {/* A ação primária sobe para o cabeçalho da página (mockup V5). */}
+      {isAdmin && (
+        <AcaoDoCabecalho>
+          <Button onClick={() => handleOpenDialog()}>
             <Plus />
             Nova Tag
           </Button>
-        )}
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />
-          ))}
-        </div>
-      ) : tags.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-          Nenhuma tag cadastrada
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {tags.map((tag) => (
-            <motion.div
-              key={tag.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-card py-2 pl-3 pr-1.5 transition-colors hover:border-foreground/20"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                {/* Cor da tag é dado do usuário — fica inline. */}
-                <div
-                  className="h-3.5 w-3.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: tag.color || "#F5C518" }}
-                />
-                <span className="truncate text-sm font-semibold">{tag.name}</span>
-              </div>
-              {isAdmin && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" aria-label={`Ações da tag ${tag.name}`}>
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleOpenDialog(tag)}>
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="text-destructive"
-                      onClick={() => setDeleteTagId(tag.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remover
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </motion.div>
-          ))}
-        </div>
+        </AcaoDoCabecalho>
       )}
+
+      <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <KpiTile
+          label="Tags ativas"
+          value={isLoading ? "—" : tags.length}
+          loading={isLoading}
+          icon={Tag}
+          tone="gold"
+          note={tags.length === 0 ? "Nenhuma tag cadastrada" : `${coresEmUso} ${coresEmUso === 1 ? "cor" : "cores"} em uso`}
+        >
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1" aria-hidden>
+              {tags.slice(0, 16).map((tag) => (
+                // Cor da tag é dado do usuário — fica inline.
+                <span key={tag.id} className="h-3.5 w-3.5 rounded-[4px]" style={{ backgroundColor: tag.color || "#F5C518" }} />
+              ))}
+            </div>
+          )}
+        </KpiTile>
+
+        <Card>
+          <CardContent className="p-5 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <SectionHeading
+                title={
+                  <span className="flex items-center gap-2">
+                    Tags de leads
+                    {!isLoading && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-foreground/75">
+                        {tags.length} {tags.length === 1 ? "tag" : "tags"}
+                      </span>
+                    )}
+                  </span>
+                }
+                description="Crie e gerencie tags para organizar seus leads"
+              />
+            </div>
+
+            {isLoading ? (
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="h-[58px] animate-pulse rounded-2xl bg-muted" />
+                ))}
+              </div>
+            ) : tags.length === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border border-dashed border-border py-10 text-center">
+                <IconChip icon={Tag} tone="gold" />
+                <p className="mt-3 text-sm font-semibold">Nenhuma tag cadastrada</p>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" className="mt-4" onClick={() => handleOpenDialog()}>
+                    <Plus />
+                    Criar a primeira tag
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                {tags.map((tag) => {
+                  const cor = tag.color || "#F5C518";
+                  return (
+                    <motion.div
+                      key={tag.id}
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-card py-2.5 pl-2.5 pr-1.5 transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-relevo"
+                    >
+                      {/* Cor da tag é dado do usuário — fica inline. */}
+                      <span
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px]"
+                        style={{ backgroundColor: `color-mix(in srgb, ${cor} 16%, transparent)` }}
+                      >
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: cor }} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold">{tag.name}</p>
+                        {tag.created_at && (
+                          <p className="text-[11px] text-muted-foreground">
+                            criada em {format(new Date(tag.created_at), "dd/MM/yyyy")}
+                          </p>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" aria-label={`Ações da tag ${tag.name}`}>
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleOpenDialog(tag)}>
+                              <Edit2 className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteTagId(tag.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Remover
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Tag Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -387,38 +467,39 @@ function ConfirmacaoOverdueSettings() {
   };
 
   return (
-    <div className="space-y-4">
-      <SectionHeading
-        title={nomeConfirmacao ? `Atraso · ${nomeConfirmacao}` : "Atraso de reunião"}
-        description={<>Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)</>}
-      />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-2">
-          <Label htmlFor="confirmacao-overdue-days">Dias sem interação para considerar atrasado</Label>
-          <Input
-            id="confirmacao-overdue-days"
-            type="number"
-            min={1}
-            max={365}
-            value={localDays}
-            onChange={(e) => setLocalDays(Number(e.target.value) || 5)}
-            disabled={!isAdmin}
-            className="w-24"
-          />
-        </div>
-        {isAdmin && (
-          <Button
-            onClick={handleSave}
-            disabled={isUpdating || localDays === settings.confirmacao_overdue_days}
-          >
-            {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
-          </Button>
-        )}
+    <LinhaDeAjuste
+      rotulo={nomeConfirmacao ? `Atraso · ${nomeConfirmacao}` : "Atraso de reunião"}
+      htmlFor="confirmacao-overdue-days"
+      ajuda={
+        <>
+          Dias sem interação para considerar atrasado. Leads sem nenhuma atualização (status, data, notas) há esse
+          número de dias aparecem como &quot;Atrasadas&quot; no funil. Itens em Remarcar com atividade recente não entram.
+        </>
+      }
+    >
+      <div className="relative">
+        <Input
+          id="confirmacao-overdue-days"
+          type="number"
+          min={1}
+          max={365}
+          value={localDays}
+          onChange={(e) => setLocalDays(Number(e.target.value) || 5)}
+          disabled={!isAdmin}
+          className="w-[120px] pr-11 tabular-nums"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">dias</span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no funil. Itens em Remarcar com atividade recente não entram.
-      </p>
-    </div>
+      {isAdmin && (
+        <Button
+          variant="outline"
+          onClick={handleSave}
+          disabled={isUpdating || localDays === settings.confirmacao_overdue_days}
+        >
+          {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
+        </Button>
+      )}
+    </LinhaDeAjuste>
   );
 }
 
@@ -450,37 +531,35 @@ function DefaultPipelineSettings() {
   };
 
   return (
-    <div className="space-y-4">
-      <SectionHeading
-        title="Funil padrão"
-        description="Onde entra um lead que chega por integração sem funil de destino declarado"
-      />
-      <div className="grid gap-2 max-w-sm">
-        <Label htmlFor="default-pipeline">Funil de entrada</Label>
-        <Select
-          value={loading ? undefined : current}
-          onValueChange={handleChange}
-          disabled={!isAdmin || isUpdating || loading}
-        >
-          <SelectTrigger id="default-pipeline">
-            <SelectValue placeholder={loading ? "Carregando…" : "Escolha um funil"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>Sem funil padrão</SelectItem>
-            {pipelines.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.label}
-                {p.is_active === false ? " (inativo)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Leads de webhooks e integrações que não declaram destino caem na primeira etapa ativa
-        deste funil. Sem funil padrão, o lead é criado apenas na lista de Leads, sem card.
-      </p>
-    </div>
+    <LinhaDeAjuste
+      rotulo="Funil de entrada"
+      htmlFor="default-pipeline"
+      ajuda={
+        <>
+          Leads de webhooks e integrações que não declaram destino caem na primeira etapa ativa deste funil. Sem funil
+          padrão, o lead é criado apenas na lista de Leads, sem card.
+        </>
+      }
+    >
+      <Select
+        value={loading ? undefined : current}
+        onValueChange={handleChange}
+        disabled={!isAdmin || isUpdating || loading}
+      >
+        <SelectTrigger id="default-pipeline" className="sm:w-[340px]">
+          <SelectValue placeholder={loading ? "Carregando…" : "Escolha um funil"} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Sem funil padrão</SelectItem>
+          {pipelines.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.label}
+              {p.is_active === false ? " (inativo)" : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </LinhaDeAjuste>
   );
 }
 
@@ -507,42 +586,78 @@ function ReorderCycleSettings() {
   };
 
   return (
-    <div className="space-y-4">
-      <SectionHeading
-        title="Carteira de clientes"
-        description="Ciclo padrão de recompra para clientes novos (com menos de 2 pedidos)"
-      />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-2">
-          <Label htmlFor="reorder-cycle-days">Dias entre recompras (padrão)</Label>
-          <Input
-            id="reorder-cycle-days"
-            type="number"
-            min={1}
-            max={365}
-            value={localDays}
-            onChange={(e) => setLocalDays(Number(e.target.value) || 30)}
-            disabled={!isAdmin}
-            className="w-24"
-          />
-        </div>
-        {isAdmin && (
-          <Button
-            onClick={handleSave}
-            disabled={isUpdating || localDays === settings.default_reorder_cycle_days}
-          >
-            {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
-          </Button>
-        )}
+    <LinhaDeAjuste
+      rotulo="Dias entre recompras (padrão)"
+      htmlFor="reorder-cycle-days"
+      ajuda="Ciclo para clientes novos (com menos de 2 pedidos). Clientes com 2+ pedidos calculam o ciclo automaticamente pela média entre compras."
+    >
+      <div className="relative">
+        <Input
+          id="reorder-cycle-days"
+          type="number"
+          min={1}
+          max={365}
+          value={localDays}
+          onChange={(e) => setLocalDays(Number(e.target.value) || 30)}
+          disabled={!isAdmin}
+          className="w-[120px] pr-11 tabular-nums"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">dias</span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Clientes com 2+ pedidos calculam o ciclo automaticamente pela média entre compras.
-      </p>
+      {isAdmin && (
+        <Button
+          variant="outline"
+          onClick={handleSave}
+          disabled={isUpdating || localDays === settings.default_reorder_cycle_days}
+        >
+          {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
+        </Button>
+      )}
+    </LinhaDeAjuste>
+  );
+}
+
+/**
+ * Geral (V5): seções em cartão com linhas (rótulo + ajuda à esquerda, o
+ * controle à direita). Cada ajuste mantém o próprio "Salvar" — não existe
+ * salvamento único da página.
+ */
+function GeneralSettings() {
+  const { organizationId, timezone } = useOrganization();
+  const { orgs } = useOrgSwitcher();
+  const nomeDaOrg = orgs.find((o) => o.id === organizationId)?.name;
+
+  return (
+    <div className="space-y-4">
+      <CartaoDeAjustes titulo="Empresa" descricao="Como a organização aparece para o time">
+        {/* ⚠️ HERDADO: o nome não é salvo daqui (não há escrita ligada a este
+            campo). O restyle só mostra o nome real em vez de um texto fixo. */}
+        <LinhaDeAjuste rotulo="Nome da Empresa" htmlFor="company-name">
+          <Input key={nomeDaOrg ?? "sem-nome"} id="company-name" defaultValue={nomeDaOrg ?? "Torque CRM"} className="sm:w-[340px]" />
+        </LinhaDeAjuste>
+        <LinhaDeAjuste
+          rotulo="Fuso Horário"
+          htmlFor="timezone"
+          ajuda="Corta o dia da organização em agenda, relatórios e metas."
+        >
+          <Input id="timezone" value={timezone ?? "America/Sao_Paulo"} readOnly disabled className="sm:w-[340px]" />
+        </LinhaDeAjuste>
+      </CartaoDeAjustes>
+
+      <CartaoDeAjustes titulo="Funis e entrada de leads" descricao="Para onde vai o lead que chega sem destino declarado">
+        <DefaultPipelineSettings />
+        <ConfirmacaoOverdueSettings />
+      </CartaoDeAjustes>
+
+      <CartaoDeAjustes titulo="Carteira de clientes" descricao="Clientes que compram de novo">
+        <ReorderCycleSettings />
+      </CartaoDeAjustes>
     </div>
   );
 }
 
-function GeneralSettings() {
+/** Aparência — vale só para você, neste navegador. */
+function AparenciaSettings() {
   const { setTheme, resolvedTheme } = useTheme();
   const transition = useThemeTransition();
   const [mounted, setMounted] = useState(false);
@@ -567,56 +682,110 @@ function GeneralSettings() {
   };
 
   return (
-    <div className="space-y-6">
-      <SectionHeading title="Configurações gerais" description="Configurações gerais do sistema" />
+    <CartaoDeAjustes titulo="Aparência" descricao="Vale só para você, neste navegador">
+      <LinhaDeAjuste rotulo="Modo escuro" ajuda="Ativar tema escuro no sistema">
+        <Switch
+          checked={mounted ? !!isDark : false}
+          onCheckedChange={handleDarkModeChange}
+          aria-label="Modo escuro"
+        />
+      </LinhaDeAjuste>
+      {/* ⚠️ HERDADO: a chave de animações não está ligada a nada. */}
+      <LinhaDeAjuste rotulo="Animações" ajuda="Ativar animações e transições">
+        <Switch defaultChecked aria-label="Animações" />
+      </LinhaDeAjuste>
+    </CartaoDeAjustes>
+  );
+}
 
-      <div className="space-y-4">
-        <div className="grid gap-2">
-          <Label htmlFor="company-name">Nome da Empresa</Label>
-          <Input id="company-name" defaultValue="Torque CRM" />
-        </div>
+/**
+ * "Como está configurado" — o resumo fixo da aba Geral. Só lê o que a página
+ * já carrega (organização, plano, funil padrão, fuso, recompra); nada novo é
+ * buscado nem calculado.
+ */
+function ComoEstaConfigurado() {
+  const { organizationId, timezone } = useOrganization();
+  const { orgs } = useOrgSwitcher();
+  const { planName } = useOrgFeatures();
+  const { settings, isLoading } = useOrganizationSettings();
+  const { data: funis = [] } = useFunisDaOrg();
 
-        <div className="grid gap-2">
-          <Label htmlFor="timezone">Fuso Horário</Label>
-          <Input id="timezone" defaultValue="America/Sao_Paulo" disabled />
-        </div>
+  const nome = orgs.find((o) => o.id === organizationId)?.name;
+  const plano = planName && planName !== "free" ? planName.toUpperCase() : null;
+  const funil = settings.default_pipeline_id
+    ? funis.find((f) => f.id === settings.default_pipeline_id)?.label ?? "—"
+    : "Sem funil padrão";
+  // Mesmo critério do seletor de organização: a sandbox nasce com "[Sandbox]" no nome.
+  const ehSandbox = !!nome?.includes("[Sandbox]");
+  const iniciais =
+    (nome ?? "")
+      .replace(/\[.*?\]/g, "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join("")
+      .toUpperCase() || "O";
 
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
-          <div className="space-y-0.5">
-            <Label>Modo escuro</Label>
-            <p className="text-sm text-muted-foreground">
-              Ativar tema escuro no sistema
-            </p>
-          </div>
-          <Switch
-            checked={mounted ? !!isDark : false}
-            onCheckedChange={handleDarkModeChange}
-          />
-        </div>
+  const linhas: { icone: LucideIcon; rotulo: string; valor: ReactNode }[] = [
+    { icone: ArrowDownToLine, rotulo: "Leads novos entram em", valor: isLoading ? "—" : funil },
+    { icone: Globe, rotulo: "Fuso horário", valor: timezone ?? "—" },
+    { icone: Repeat, rotulo: "Recompra sugerida", valor: isLoading ? "—" : `a cada ${settings.default_reorder_cycle_days} dias` },
+    { icone: CalendarClock, rotulo: "Atraso de reunião", valor: isLoading ? "—" : `${settings.confirmacao_overdue_days} dias sem interação` },
+    { icone: FlaskConical, rotulo: "Organização sandbox", valor: ehSandbox ? "Sim" : "Não" },
+  ];
 
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
-          <div className="space-y-0.5">
-            <Label>Animações</Label>
-            <p className="text-sm text-muted-foreground">
-              Ativar animações e transições
-            </p>
-          </div>
-          <Switch defaultChecked />
+  const copiarId = async () => {
+    if (!organizationId) return;
+    try {
+      await navigator.clipboard.writeText(organizationId);
+      toast.success("ID da organização copiado");
+    } catch {
+      toast.error("Não deu para copiar");
+    }
+  };
+
+  return (
+    <InkPanel aria-label="Como está configurado" className="xl:sticky xl:top-4">
+      <div className="flex items-center gap-3 px-1.5 pb-3.5 pt-1">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary text-[15px] font-extrabold text-primary-foreground">
+          {iniciais}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[17px] font-extrabold tracking-[-0.02em]">{nome ?? "Organização"}</p>
+          {plano && <p className="text-[12px] text-tinta-muted">plano {plano}</p>}
         </div>
       </div>
 
-      <div className="border-t border-border pt-6">
-        <DefaultPipelineSettings />
+      <div className={cn(vidroNaTinta, "flex items-center gap-3 py-3")}>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold text-tinta-muted">ID da organização</p>
+          <p className="mt-0.5 break-all font-mono text-[11.5px] text-tinta-foreground">{organizationId ?? "—"}</p>
+        </div>
+        <button
+          type="button"
+          onClick={copiarId}
+          disabled={!organizationId}
+          aria-label="Copiar ID da organização"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[.08] text-tinta-foreground transition-colors hover:bg-white/[.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      <div className="border-t border-border pt-6">
-        <ConfirmacaoOverdueSettings />
+      <div className={cn(vidroNaTinta, "mt-2.5")}>
+        <p className="mb-2 text-[11px] font-bold text-tinta-muted">Como está configurado</p>
+        <dl className="space-y-2.5">
+          {linhas.map(({ icone: Icone, rotulo, valor }) => (
+            <div key={rotulo} className="flex items-start gap-2.5 text-[12.5px]">
+              <Icone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-tinta-muted" aria-hidden />
+              <dt className="min-w-0 flex-1 text-tinta-muted">{rotulo}</dt>
+              <dd className="max-w-[55%] text-right font-bold text-tinta-foreground">{valor}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
-
-      <div className="border-t border-border pt-6">
-        <ReorderCycleSettings />
-      </div>
-    </div>
+    </InkPanel>
   );
 }
 
@@ -629,6 +798,8 @@ export default function Configuracoes() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [slotDeAcoes, setSlotDeAcoes] = useState<HTMLElement | null>(null);
 
   const isOutboundOrg = orgType === "outbound";
   const visibilidade = useMemo(() => ({ isAdmin, isOutboundOrg }), [isAdmin, isOutboundOrg]);
@@ -680,8 +851,12 @@ export default function Configuracoes() {
   };
 
   return (
-    // Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo registro
-    // que alimenta o Pitstop — dois inventários divergiriam.
+    // O cabeçalho publica um alvo; o painel da aba entrega para ele a ação
+    // primária ("Nova Tag", "Nova Instância", "Nova chave") — o estado do
+    // diálogo continua no painel. Só a aba ativa está montada.
+    <SlotDeAcoesProvider value={slotDeAcoes}>
+    {/* Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo registro
+        que alimenta o Pitstop — dois inventários divergiriam. */}
     <Tabs
       value={activeTab.value}
       onValueChange={(value) => {
@@ -693,6 +868,17 @@ export default function Configuracoes() {
       <PageHeader
         title="Configurações"
         subtitle={activeTab.subtitle ?? "Gerencie as configurações do sistema"}
+        actions={
+          <>
+            {activeTab.value === "integracoes" && ver("api-webhooks") && (
+              <Button variant="outline" onClick={() => navigate(`${SETTINGS_BASE_PATH}/api-webhooks`)}>
+                <Code />
+                API & Webhooks
+              </Button>
+            )}
+            <div ref={setSlotDeAcoes} className="contents" />
+          </>
+        }
         tabs={
           <TabsList variant="pill" aria-label="Seções de configurações">
             {tabs.map((tab) => (
@@ -707,22 +893,16 @@ export default function Configuracoes() {
 
       <div>
         <TabsContent value="tags" className="mt-0">
-          <SettingsCard>
-            <TagsSettings />
-          </SettingsCard>
+          <TagsSettings />
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-0">
-          <SettingsCard>
-            <PreferenciasDeAviso />
-          </SettingsCard>
+          <PreferenciasDeAviso />
         </TabsContent>
 
         <TabsContent value="whatsapp" className="mt-0">
           <Suspense fallback={<TabFallback label="WhatsApp" />}>
-            <SettingsCard>
-              <WhatsAppSettings />
-            </SettingsCard>
+            <WhatsAppSettings />
           </Suspense>
         </TabsContent>
 
@@ -738,80 +918,105 @@ export default function Configuracoes() {
           </Suspense>
         </TabsContent>}
 
-        {/* API & Webhooks: as chaves e a documentação (o painel embute a
-            gestão de chaves) e os webhooks de saída. */}
+        {/* API & Webhooks: as chaves (tinta + ouro), os webhooks de saída em
+            tabela e, embaixo, a documentação da API. */}
         <TabsContent value="api-webhooks" className="mt-0 space-y-5">
-          <SecaoDeConfiguracao id="api" titulo="Chaves e documentação da API">
-            <Suspense fallback={<TabFallback label="documentação" />}>
-              <ApiDocsSettings />
+          <SecaoDeConfiguracao id="api" titulo="Chaves de API" oculto>
+            <Suspense fallback={<TabFallback label="chaves de API" />}>
+              <ApiKeysPanel />
             </Suspense>
           </SecaoDeConfiguracao>
-          <SecaoDeConfiguracao id="webhooks" titulo="Webhooks de saída">
+          <SecaoDeConfiguracao id="webhooks" titulo="Webhooks de saída" oculto>
             <Suspense fallback={<TabFallback label="Webhooks" />}>
               <SettingsCard>
                 <WebhookSettings />
               </SettingsCard>
             </Suspense>
           </SecaoDeConfiguracao>
+          <SecaoDeConfiguracao id="documentacao" titulo="Documentação da API" oculto>
+            <Suspense fallback={<TabFallback label="documentação" />}>
+              <ApiDocsSettings />
+            </Suspense>
+          </SecaoDeConfiguracao>
         </TabsContent>
 
-        {/* Geral: a organização e, abaixo, o que antes eram abas próprias. */}
-        <TabsContent value="general" className="mt-0 space-y-5">
-          <SecaoDeConfiguracao id="general" titulo="Organização">
-            <SettingsCard>
-              <GeneralSettings />
-            </SettingsCard>
-          </SecaoDeConfiguracao>
-          <SecaoDeConfiguracao id="sla" titulo="SLA de atendimento">
-            <Suspense fallback={<TabFallback label="SLA" />}>
-              <SettingsCard>
-                <SlaConfigPanel />
-              </SettingsCard>
-            </Suspense>
-          </SecaoDeConfiguracao>
-          <SecaoDeConfiguracao id="oraculo-profile" titulo="Perfil da operação">
-            <Suspense fallback={<TabFallback label="Perfil da operação" />}>
-              <SettingsCard>
-                <OraculoPerfilSettings />
-              </SettingsCard>
-            </Suspense>
-          </SecaoDeConfiguracao>
-          <SecaoDeConfiguracao id="sandbox" titulo="Sandbox">
-            <Suspense fallback={<TabFallback label="Sandbox" />}>
-              <SettingsCard>
-                <SandboxPanel />
-              </SettingsCard>
-            </Suspense>
-          </SecaoDeConfiguracao>
-          {ver("marcos") && (
-            <SecaoDeConfiguracao id="marcos" titulo="Marcos">
-              <Suspense fallback={<TabFallback label="Marcos" />}>
-                <MilestonesConfig />
-              </Suspense>
-            </SecaoDeConfiguracao>
-          )}
-          {ver("ajuda") && (
-            <SecaoDeConfiguracao id="ajuda" titulo="Central de Ajuda">
-              <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
-                <SettingsCard>
-                  <HelpAdminPanel />
-                </SettingsCard>
-              </Suspense>
-            </SecaoDeConfiguracao>
-          )}
+        {/* Geral: seções em cartão à esquerda e, fixo à direita, o resumo
+            "Como está configurado". */}
+        <TabsContent value="general" className="mt-0">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="order-2 min-w-0 space-y-5 xl:order-1">
+              <SecaoDeConfiguracao id="general" titulo="Organização" oculto>
+                <GeneralSettings />
+              </SecaoDeConfiguracao>
+              <SecaoDeConfiguracao id="sla" titulo="SLA de atendimento" oculto>
+                <Suspense fallback={<TabFallback label="SLA" />}>
+                  <SlaConfigPanel />
+                </Suspense>
+              </SecaoDeConfiguracao>
+              <SecaoDeConfiguracao id="sandbox" titulo="Sandbox" oculto>
+                <Suspense fallback={<TabFallback label="Sandbox" />}>
+                  <SandboxPanel />
+                </Suspense>
+              </SecaoDeConfiguracao>
+              <SecaoDeConfiguracao id="oraculo-profile" titulo="Perfil da operação" oculto>
+                <Suspense fallback={<TabFallback label="Perfil da operação" />}>
+                  <SettingsCard>
+                    <OraculoPerfilSettings />
+                  </SettingsCard>
+                </Suspense>
+              </SecaoDeConfiguracao>
+              <SecaoDeConfiguracao id="aparencia" titulo="Aparência" oculto>
+                <AparenciaSettings />
+              </SecaoDeConfiguracao>
+              {ver("marcos") && (
+                <SecaoDeConfiguracao id="marcos" titulo="Marcos">
+                  <Suspense fallback={<TabFallback label="Marcos" />}>
+                    <MilestonesConfig />
+                  </Suspense>
+                </SecaoDeConfiguracao>
+              )}
+              {ver("ajuda") && (
+                <SecaoDeConfiguracao id="ajuda" titulo="Central de Ajuda" oculto>
+                  <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+                    <SettingsCard>
+                      <HelpAdminPanel />
+                    </SettingsCard>
+                  </Suspense>
+                </SecaoDeConfiguracao>
+              )}
+            </div>
+            <div className="order-1 min-w-0 xl:order-2 xl:self-stretch">
+              <ComoEstaConfigurado />
+            </div>
+          </div>
         </TabsContent>
       </div>
       {/* Os três cartões fixos "Banco de Dados / Segurança / API" saíram
           (decisão do CTO, 02/10): não mediam banco, RLS nem latência. */}
     </Tabs>
+    </SlotDeAcoesProvider>
   );
 }
 
 /** Seção de uma aba-grupo: âncora para links antigos e título que separa. */
-function SecaoDeConfiguracao({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
+function SecaoDeConfiguracao({
+  id,
+  titulo,
+  oculto = false,
+  children,
+}: {
+  id: string;
+  titulo: string;
+  /** O conteúdo já traz título visível (cartão, painel em tinta): o da seção fica só para leitor de tela. */
+  oculto?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <section id={`secao-${id}`} aria-labelledby={`secao-${id}-titulo`} className="scroll-mt-24 space-y-3">
-      <h2 id={`secao-${id}-titulo`} className="px-1 text-[13px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+    <section id={`secao-${id}`} aria-labelledby={`secao-${id}-titulo`} className={cn("scroll-mt-24", !oculto && "space-y-3")}>
+      <h2
+        id={`secao-${id}-titulo`}
+        className={cn("px-1 text-[13px] font-bold uppercase tracking-[0.06em] text-muted-foreground", oculto && "sr-only")}
+      >
         {titulo}
       </h2>
       {children}

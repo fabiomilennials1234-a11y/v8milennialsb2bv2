@@ -70,10 +70,6 @@ function quando(iso: string): string {
   });
 }
 
-function iniciais(nome: string): string {
-  return nome.trim().charAt(0).toUpperCase() || "?";
-}
-
 /**
  * Monta a frase com os realces em destaque. O evento traz `texto` com `{0}` e
  * a lista `realces` separada — o card nunca faz parsing de frase pronta, que é

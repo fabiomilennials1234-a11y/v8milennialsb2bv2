@@ -13,8 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError, isSaleValueRequiredError } from "@/lib/rpc-errors";
@@ -31,8 +29,8 @@ import {
   useLeadComments,
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
+import { GavetaLateral } from "../lead-card/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
-import { LeadCardEtiquetas } from "../lead-card/LeadCardEtiquetas";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
@@ -56,23 +54,22 @@ import {
 import type { DealCardComentario, ItemEditado } from "./types";
 
 /**
- * A casca do painel — diálogo de DUAS COLUNAS no desktop, folha no celular.
+ * A casca do painel do Negócio — a gaveta do V5, aberta na aba do negócio.
  *
- * Mesma separação de antes: `DealCard` desenha, `useDealCardData` busca, este
- * arquivo decide onde aparece. O que mudou é quantas colunas aparecem.
+ * Mesma separação de sempre: `DealCard` desenha, `useDealCardData` busca, este
+ * arquivo decide onde aparece — e é dono de toda escrita do negócio (etapa,
+ * desfecho, produto, comentário, exclusão).
  *
- * ── DE DOIS PAINÉIS QUE SE EXCLUEM PARA UM DE DUAS COLUNAS ────────────────
- * Até aqui, clicar na pessoa FECHAVA o negócio e abria a ficha do lead. A
- * regra por trás era boa — "quem empilha passa a ter duas verdades na tela
- * sobre o mesmo lead" — mas o preço era alto: para conferir o telefone de quem
- * está do outro lado da proposta, perdia-se o negócio de vista.
+ * ── DE DUAS COLUNAS PARA A GAVETA DO MOCKUP (02/10) ───────────────────────
+ * No mockup o cartão do funil abre a MESMA gaveta da pessoa: cabeçalho com
+ * Abrir conversa, Ligar e o Copilot; abas Dados · Negócio · Histórico. O painel
+ * de duas colunas (a pessoa encostada à esquerda, formato DataCrazy) virou
+ * isso: a pessoa é a moldura (`LeadCardContainer modo="negocio"`) e o negócio é
+ * a aba do meio, que é a que abre. Continua havendo uma ficha de cada assunto
+ * numa tela só — agora em abas, e com o funil visível atrás.
  *
- * O print do DataCrazy resolve sem quebrar a regra: **não empilha, encosta**.
- * A pessoa ocupa uma coluna proporcional à esquerda, o negócio ocupa o resto.
- * Continua havendo uma ficha de cada assunto; elas só passaram a caber juntas.
- *
- * A ficha INTEIRA do lead não morreu: o lápis e o "Ver ficha completa" da
- * coluna levam até ela, e a lista de Leads continua abrindo o lead direto.
+ * O celular, que antes perdia a pessoa (não cabia a coluna), passa a ter as
+ * três abas também.
  */
 export const DealCardPanel = memo(function DealCardPanel() {
   const { isOpen, entryId, leadId, aba, close, openDeal } = useDealSheet();
@@ -553,24 +550,20 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `tags`. O painel já tem a resposta em mãos — perguntar de novo lá dentro
    * seria uma segunda consulta para um fato que ele acabou de ler.
    */
-  const negocio = (comLead: boolean) =>
+  const negocio =
     isLoading ? (
-      <div className="flex h-full flex-1 items-center justify-center bg-card">
+      <div className="flex items-center justify-center py-16">
         <span className="text-[13px] text-muted-foreground">Carregando…</span>
       </div>
     ) : data ? (
       <DealCard
         negocio={data}
         acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
-        etiquetas={
-          !comLead && leadId ? (
-            <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
-          ) : undefined
-        }
-        /* Vê o negócio → vê o lead → pode ligar. Quem desenha o botão é a
-           raiz (App.tsx), via LeadCallActionSlot. */
+        /* Ligar só quando a gaveta NÃO tem a pessoa no cabeçalho (negócio sem
+           lead): com ela, o Ligar já está na fileira de ações da pessoa, e dois
+           botões de ligar para o mesmo número a 200 px é ruído. */
         acaoLigar={
-          leadId && renderLigar ? renderLigar({ id: leadId, nome: data.lead.nome }) : undefined
+          !leadId && renderLigar ? renderLigar({ id: data.lead.id, nome: data.lead.nome }) : undefined
         }
         onSaveNote={salvarNota}
         onRenomear={(nome, alterarLead) => renomearNegocio.mutateAsync({ nome, alterarLead })}
@@ -608,35 +601,33 @@ export const DealCardPanel = memo(function DealCardPanel() {
         excluindo={excluindo}
       />
     ) : (
-      <div className="flex h-full flex-1 items-center justify-center bg-card px-6 text-center">
+      <div className="flex items-center justify-center rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
         <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
       </div>
     );
 
   /**
-   * `comLead` é o corte de largura, não de importância.
+   * A pessoa é a MOLDURA: o `LeadCardContainer` desenha o cabeçalho dela e as
+   * abas, e o negócio entra como a aba do meio. A coluna recebe o id do LEAD,
+   * nunca o `pipeline_entries.id` (`cards-nunca-empilham.test.tsx`).
    *
-   * No celular não há largura de sobra para a coluna da pessoa sem espremer o
-   * negócio a ponto de a régua de etapas virar textura. Lá o painel volta a ser
-   * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
+   * Negócio órfão de lead não deveria existir (ADR-0023 §2); se existir, a
+   * gaveta abre só com o negócio, em vez de uma moldura vazia acusando falta.
    */
-  const conteudo = (comLead: boolean) => (
-    // Sem moldura própria: a casca do V5 (diálogo/folha, raio 28) emoldura.
-    <div ref={painelRef} className="relative flex h-full min-h-0 overflow-hidden rounded-[inherit] bg-card">
+  const conteudo = (
+    <div ref={painelRef} className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-background">
       {camadaDaCelebracao}
-      {/* A coluna da pessoa só existe quando há pessoa. Um negócio órfão de lead
-          não deveria existir (ADR-0023 §2), mas se existir o painel abre com o
-          negócio ocupando tudo em vez de com uma coluna vazia acusando falta. */}
-      {comLead && leadId && (
+      {leadId ? (
         <LeadCardContainer
           leadId={leadId}
           isOpen={isOpen}
-          forma="coluna"
-          onAbrirFicha={abrirFicha}
+          modo="negocio"
+          painelNegocios={negocio}
           podeCriarEtiqueta={!!souAdmin}
         />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-14 sm:px-5">{negocio}</div>
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{negocio(comLead)}</div>
     </div>
   );
 
@@ -767,40 +758,20 @@ export const DealCardPanel = memo(function DealCardPanel() {
     />
   ) : null;
 
-  if (isMobile) {
-    return (
-      <>
-        <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-          <SheetContent side="bottom" className="h-[96dvh] overflow-hidden rounded-t-panel bg-card p-0">
-            {conteudo(false)}
-          </SheetContent>
-        </Sheet>
-        {dialogoProduto}
-        {dialogoExclusao}
-        {dialogoValor}
-      </>
-    );
-  }
-
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
-      {/* Sem botão de fechar próprio: o `DialogContent` já desenha um
-          `DialogPrimitive.Close` em `right-4 top-4` (ui/dialog.tsx:48-51).
-          O botão que existia aqui ficava em `right-3 top-3` — 4px ao lado —
-          e o resultado era DOIS "X" quase sobrepostos no canto.
-          Fica o do primitivo: ele já traz rótulo `sr-only`, fecha no Esc e
-          devolve o foco ao gatilho, e é o mesmo de todo diálogo do produto.
-
-          O painel acompanha a janela com uma margem curta; as duas colunas
-          aproveitam o espaço extra sem criar rolagem na casca do diálogo. */}
-      <DialogContent className="flex h-[96dvh] w-[calc(100%-2rem)] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
-        {conteudo(true)}
-      </DialogContent>
-    </Dialog>
-    {dialogoProduto}
-    {dialogoExclusao}
-    {dialogoValor}
+      <GavetaLateral
+        aberta={isOpen}
+        onFechar={close}
+        celular={isMobile}
+        largura="negocio"
+        rotulo="Painel do negócio"
+      >
+        {conteudo}
+      </GavetaLateral>
+      {dialogoProduto}
+      {dialogoExclusao}
+      {dialogoValor}
     </>
   );
 });

@@ -244,7 +244,9 @@ export const NewDealDialog = memo(function NewDealDialog({
       </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-lg" data-testid="new-deal-dialog">
+      {/* `z-[60]`/`z-[70]`: no celular a ficha do lead é um `Sheet` (`z-[51]`);
+          no `z-50` padrão o diálogo e as listas nasciam atrás da folha. */}
+      <DialogContent className="z-[60] max-w-lg" overlayClassName="z-[60]" data-testid="new-deal-dialog">
         <DialogHeader>
           <DialogTitle>Novo negócio</DialogTitle>
           <DialogDescription>
@@ -326,7 +328,7 @@ export const NewDealDialog = memo(function NewDealDialog({
                     <SelectTrigger id="new-deal-stage" data-testid="new-deal-stage">
                       <SelectValue placeholder="Escolha a etapa" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[70]">
                       {selected.stages.map((stage) => (
                         <SelectItem key={stage.id} value={stage.id}>
                           {stage.label}
@@ -344,7 +346,7 @@ export const NewDealDialog = memo(function NewDealDialog({
                     <SelectTrigger id="new-deal-owner" data-testid="new-deal-owner">
                       <SelectValue placeholder="Sem dono" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[70]">
                       {selectableMembers.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
                           {member.name}

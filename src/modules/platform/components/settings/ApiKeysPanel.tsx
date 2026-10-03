@@ -4,26 +4,21 @@
  */
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import {
   Key,
   Plus,
   Copy,
   Check,
-  Trash2,
+  Ban,
   Loader2,
   Clock,
-  Shield,
   AlertTriangle,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FocusCard, FocusTile, InkPanel, InkRow, InkSplit } from "@/components/ui/bento";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -50,6 +45,8 @@ import {
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { AcaoDoCabecalho } from "./settings-ui";
+import { botaoNoOuroSecundario } from "./settings-classes";
 
 // ── Available scopes ──────────────────────────────────────────
 
@@ -80,6 +77,7 @@ export function ApiKeysPanel() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
+  const [focoId, setFocoId] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -147,118 +145,192 @@ export function ApiKeysPanel() {
 
   const activeKeys = keys.filter((k) => k.is_active);
   const revokedKeys = keys.filter((k) => !k.is_active);
+  // V5: lista em tinta + a chave em foco no ouro. Seleção local; padrão = 1ª.
+  const foco = activeKeys.find((k) => k.id === focoId) ?? activeKeys[0] ?? null;
+
+  const desde = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR });
+  const rotuloDoEscopo = (valor: string) => AVAILABLE_SCOPES.find((s) => s.value === valor)?.label ?? valor;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
-            <Key className="h-4 w-4 text-muted-foreground" />
-            API Keys
-          </h3>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Gerencie chaves de acesso para integrações externas
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} size="sm">
+    <div className="space-y-4">
+      <AcaoDoCabecalho>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus />
           Nova chave
         </Button>
-      </div>
+      </AcaoDoCabecalho>
 
-      {/* Active keys — tile plano: o painel mora dentro de um cartão. */}
-      <Card className="rounded-xl border-border shadow-none">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Shield className="h-4 w-4 text-success-strong" />
-            Chaves ativas ({activeKeys.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-16" />)}
-            </div>
-          ) : activeKeys.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhuma chave ativa
+      {isLoading ? (
+        <InkPanel title="Chaves de API">
+          <div className="space-y-2" aria-busy>
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-14 rounded-2xl bg-white/[.06]" />
+            ))}
+          </div>
+        </InkPanel>
+      ) : !foco ? (
+        <InkPanel title="Chaves de API" count="0 ativas">
+          <div className="flex flex-col items-center px-4 py-10 text-center">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/[.07] text-primary">
+              <Key className="h-6 w-6" aria-hidden />
+            </span>
+            <p className="mt-3 text-[15px] font-bold">Nenhuma chave ativa</p>
+            <p className="mt-1 max-w-sm text-[12.5px] text-tinta-muted">
+              Gere uma chave para o n8n, o Make ou o seu sistema falar com a API do Torque.
             </p>
-          ) : (
-            <div className="space-y-2">
-              {activeKeys.map((key) => (
-                <motion.div
-                  key={key.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Key className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">{key.name}</p>
-                        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                          {key.key_prefix}...
-                        </code>
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
-                        <span>Scopes: {key.scopes.join(", ")}</span>
-                        <span>{key.rate_limit_per_minute} req/min</span>
-                        {key.last_used_at && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatDistanceToNow(new Date(key.last_used_at), { addSuffix: true, locale: ptBR })}
-                          </span>
+            <Button variant="outline" className="mt-5 text-foreground" onClick={() => setCreateOpen(true)}>
+              <Plus />
+              Gerar chave
+            </Button>
+          </div>
+        </InkPanel>
+      ) : (
+        <InkSplit
+          title="Chaves de API"
+          count={`${activeKeys.length} ${activeKeys.length === 1 ? "ativa" : "ativas"}`}
+          actions={
+            <span className="hidden text-[11.5px] text-tinta-muted sm:inline">
+              A chave inteira só aparece uma vez, na criação
+            </span>
+          }
+          listClassName="lg:max-h-[520px] lg:overflow-y-auto"
+          list={
+            <>
+              {activeKeys.map((key) => {
+                const selecionada = key.id === foco.id;
+                return (
+                  <InkRow key={key.id} selected={selecionada} onClick={() => setFocoId(key.id)}>
+                    <span
+                      className={cn(
+                        "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[11px]",
+                        selecionada ? "bg-primary-foreground text-primary" : "bg-white/[.07] text-primary",
+                      )}
+                    >
+                      <Key className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13.5px] font-bold">{key.name}</span>
+                      <span
+                        className={cn(
+                          "mt-0.5 block truncate font-mono text-[11px]",
+                          selecionada ? "text-primary-foreground/70" : "text-tinta-muted",
                         )}
-                        {key.expires_at && (
-                          <span>
-                            Expira: {format(new Date(key.expires_at), "dd/MM/yyyy")}
-                          </span>
+                      >
+                        {key.key_prefix}••••
+                      </span>
+                    </span>
+                    {key.last_used_at ? (
+                      <span
+                        className={cn(
+                          "shrink-0 text-[11px] font-semibold",
+                          selecionada ? "text-primary-foreground/75" : "text-tinta-muted",
                         )}
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs text-destructive shrink-0"
-                    onClick={() => setRevokeId(key.id)}
-                  >
-                    <Trash2 className="w-3 h-3 mr-1" />
-                    Revogar
-                  </Button>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Revoked keys */}
-      {revokedKeys.length > 0 && (
-        <Card className="rounded-xl border-border shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
-              Chaves revogadas ({revokedKeys.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {revokedKeys.slice(0, 5).map((key) => (
-                <div
-                  key={key.id}
-                  className="flex items-center gap-3 rounded-xl bg-muted/30 p-3 opacity-50"
-                >
-                  <Key className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-sm line-through">{key.name}</p>
-                    <code className="text-[10px] text-muted-foreground font-mono">{key.key_prefix}...</code>
-                  </div>
+                      >
+                        {desde(key.last_used_at)}
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold",
+                          selecionada ? "bg-tinta text-tinta-foreground" : "bg-primary-soft text-primary-soft-foreground",
+                        )}
+                      >
+                        sem uso
+                      </span>
+                    )}
+                  </InkRow>
+                );
+              })}
+              {/* Revogadas: só registro, sem ação. */}
+              {revokedKeys.length > 0 && (
+                <div className="mt-3 border-t border-white/[.08] px-3 pt-3">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[.06em] text-tinta-muted">
+                    Chaves revogadas ({revokedKeys.length})
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {revokedKeys.slice(0, 5).map((key) => (
+                      <li key={key.id} className="flex items-center gap-2 text-[12px] text-tinta-muted">
+                        <Key className="h-3 w-3 shrink-0" aria-hidden />
+                        <span className="truncate line-through">{key.name}</span>
+                        <code className="ml-auto shrink-0 font-mono text-[10.5px]">{key.key_prefix}...</code>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              )}
+            </>
+          }
+          detail={
+            <FocusCard className="gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold text-primary-foreground/70">Chave selecionada</p>
+                  <h3 className="mt-1 truncate text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em] max-sm:text-[1.3rem]">
+                    {foco.name}
+                  </h3>
+                  <p className="mt-1 truncate font-mono text-[12.5px] font-semibold text-primary-foreground/80">
+                    {foco.key_prefix}••••••••••••••••
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[1.6rem] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+                    {foco.rate_limit_per_minute}
+                    <span className="ml-1 text-[12px] font-bold text-primary-foreground/70">req/min</span>
+                  </p>
+                  <p className="mt-1 text-[11px] font-bold text-primary-foreground/65">limite</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1.5 text-[11px] font-bold text-primary-foreground/65">Escopos</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {foco.scopes.length === 0 ? (
+                    <span className="text-[12px] font-semibold text-primary-foreground/70">Nenhum escopo</span>
+                  ) : (
+                    foco.scopes.map((s) => (
+                      <span
+                        key={s}
+                        title={rotuloDoEscopo(s)}
+                        className="rounded-full bg-tinta px-2.5 py-1 font-mono text-[11px] font-bold text-tinta-foreground"
+                      >
+                        {s}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                <FocusTile>
+                  <p className="text-[1rem] font-extrabold tabular-nums tracking-[-0.02em]">
+                    {format(new Date(foco.created_at), "dd/MM/yyyy")}
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-bold text-primary-foreground/65">Criada em</p>
+                </FocusTile>
+                <FocusTile>
+                  <p className="flex items-center gap-1.5 text-[1rem] font-extrabold tracking-[-0.02em]">
+                    <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="truncate">{foco.last_used_at ? desde(foco.last_used_at) : "Nunca"}</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-bold text-primary-foreground/65">Último uso</p>
+                </FocusTile>
+                <FocusTile className="col-span-2 lg:col-span-1">
+                  <p className="text-[1rem] font-extrabold tabular-nums tracking-[-0.02em]">
+                    {foco.expires_at ? format(new Date(foco.expires_at), "dd/MM/yyyy") : "Não expira"}
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-bold text-primary-foreground/65">Validade</p>
+                </FocusTile>
+              </div>
+
+              <div className="mt-auto flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setRevokeId(foco.id)} className={botaoNoOuroSecundario}>
+                  <Ban />
+                  Revogar
+                </button>
+              </div>
+            </FocusCard>
+          }
+        />
       )}
 
       {/* Create Dialog */}

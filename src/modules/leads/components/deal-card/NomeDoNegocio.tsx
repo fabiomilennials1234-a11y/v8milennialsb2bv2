@@ -48,7 +48,9 @@ export function NomeDoNegocio({
   if (!editando) {
     return (
       <div className="flex min-w-0 items-center gap-1.5">
-        <h1 className="truncate text-[18px] font-semibold tracking-[-0.02em]" title={titulo}>
+        {/* Duas linhas antes de cortar: na gaveta de 640 px o título do
+            negócio (empresa — interesse) passava do meio e virava reticências. */}
+        <h1 className="line-clamp-2 break-words text-[18px] font-bold leading-snug tracking-[-0.02em]" title={titulo}>
           {titulo}
         </h1>
         {onRenomear && (

@@ -1,15 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   CheckCircle2,
   Circle,
   Plug,
   Search,
-  ChevronRight,
   Phone,
+  Settings2,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FocusCard, FocusTile, InkRow, InkSplit } from "@/components/ui/bento";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { SlotDeAcoesProvider } from "./settings-ui";
+import { botaoNoOuroPrimario } from "./settings-classes";
 
 // Componentes de configuração existentes (reaproveitados integralmente)
 // `InstagramSettings` (Graph) SAIU do catálogo — decisão do CTO em 14/08/2026.
@@ -459,6 +462,11 @@ type StatusMap = ReturnType<typeof useIntegrationStatuses>;
 
 // ─── Integration Card ───────────────────────────────────
 
+/**
+ * Cartão do catálogo (V5): ícone, estado em pílula, nome, descrição e um
+ * rodapé com a linha de estado conhecida + "Configurar →". O cartão inteiro
+ * abre o modal com o mouse; o botão do rodapé é o alvo de teclado.
+ */
 function IntegrationCard({
   integration,
   status,
@@ -474,38 +482,53 @@ function IntegrationCard({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.25 }}
+      transition={{ delay: index * 0.03, duration: 0.25 }}
       className="h-full"
     >
-      <Card
-        className="group flex h-full cursor-pointer flex-col gap-3 p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none"
+      <div
         onClick={onClick}
+        className="group flex h-full cursor-pointer flex-col rounded-[18px] border border-border bg-card p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-relevo-alto motion-reduce:transition-none"
       >
-        {/* Logo de marca de terceiro — cor literal é a marca, não tema. */}
-        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
-          {integration.logo}
+        <div className="flex items-start justify-between gap-3">
+          {/* Logo de marca de terceiro — cor literal é a marca, não tema. */}
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl shadow-sm">{integration.logo}</div>
+          {status.connected ? (
+            <Badge variant="success" className="shrink-0 gap-1.5">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+              Conectado
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="shrink-0 font-semibold text-muted-foreground">
+              Disponível
+            </Badge>
+          )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <h3 className="mb-1 text-sm font-bold tracking-tight">{integration.name}</h3>
-          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-3 min-w-0 flex-1">
+          <h3 className="text-[15px] font-bold tracking-tight">{integration.name}</h3>
+          <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-muted-foreground">
             {integration.description}
           </p>
         </div>
 
-        {/* Status */}
-        {status.connected ? (
-          <div className="inline-flex items-center gap-1 self-start rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-bold text-success-strong">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Conectado
-          </div>
-        ) : (
-          <button className="inline-flex items-center gap-1 self-start rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground/75 transition-colors group-hover:bg-tinta group-hover:text-tinta-foreground">
-            Configurar
-            <ChevronRight className="h-3 w-3" />
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
+          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
+            {status.connected ? status.detail ?? "Conectado" : "Não conectado"}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+            aria-label={`${status.connected ? "Configurar" : "Conectar"} ${integration.name}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] font-bold text-foreground transition-colors hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {status.connected ? "Configurar" : "Conectar"}
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </button>
-        )}
-      </Card>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -582,7 +605,11 @@ function IntegrationModal({
             {/* Settings Component */}
             <div className="border-t border-border pt-5">
               <h4 className="mb-4 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Configuração</h4>
-              {SettingsComponent && <SettingsComponent />}
+              {/* O painel dentro do modal não publica ação no cabeçalho da
+                  página: o botão fica junto dele. */}
+              <SlotDeAcoesProvider value={null}>
+                {SettingsComponent && <SettingsComponent />}
+              </SlotDeAcoesProvider>
             </div>
           </div>
         </ScrollArea>
@@ -591,10 +618,15 @@ function IntegrationModal({
   );
 }
 
+/** No modal não cabe lista + foco lado a lado — o painel empilha. */
+function WhatsAppEmbutido() {
+  return <WhatsAppSettings embedded />;
+}
+
 function getSettingsComponent(settingsId: string): React.FC | null {
   switch (settingsId) {
     case "whatsapp":
-      return WhatsAppSettings;
+      return WhatsAppEmbutido;
     case "torquecalls":
       return TorqueCallsSettings;
     case "facebook":
@@ -622,6 +654,7 @@ function getSettingsComponent(settingsId: string): React.FC | null {
 
 export default function IntegrationsCatalog() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focoId, setFocoId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");
   const statuses = useIntegrationStatuses();
@@ -642,9 +675,9 @@ export default function IntegrationsCatalog() {
       (!i.flagKey || ROLLOUT_FLAGS[i.flagKey] === true),
   );
 
-  const connectedCount = visibleIntegrations.filter(
-    (i) => statuses[i.id as keyof StatusMap]?.connected,
-  ).length;
+  const statusOf = (i: IntegrationDef) => statuses[i.id as keyof StatusMap];
+  const conectadas = visibleIntegrations.filter((i) => statusOf(i)?.connected);
+  const connectedCount = conectadas.length;
   const totalCount = visibleIntegrations.length;
 
   const filtered = visibleIntegrations.filter((i) => {
@@ -656,12 +689,18 @@ export default function IntegrationsCatalog() {
     return matchesSearch && matchesCategory;
   });
 
+  // V5: o catálogo sai agrupado por categoria sempre ("MENSAGENS (3)" + grade).
+  const grupos = CATEGORY_ORDER.map((cat) => ({
+    cat,
+    itens: filtered.filter((i) => i.category === cat),
+  })).filter((g) => g.itens.length > 0);
+
   const selected = visibleIntegrations.find((i) => i.id === selectedId);
-  const showGrouped = filterCategory !== "all";
+  const foco = conectadas.find((i) => i.id === focoId) ?? conectadas[0] ?? null;
 
   const chipClass = (active: boolean) =>
     cn(
-      "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+      "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       active
         ? "bg-tinta text-tinta-foreground shadow-relevo-tinta dark:bg-foreground dark:text-background"
@@ -670,22 +709,38 @@ export default function IntegrationsCatalog() {
 
   return (
     <div className="space-y-5">
-      {/* Header — a página já tem o PageHeader "Configurações"; aqui é o
-          cabeçalho da seção. */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[17px] font-bold tracking-[-0.02em]">Integrações</h2>
-            <Badge variant={connectedCount > 0 ? "success" : "soft"} className="tabular-nums">
-              {connectedCount}/{totalCount} conectadas
-            </Badge>
-          </div>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            Conecte ferramentas externas para ampliar as capacidades do Torque
-          </p>
+      {/* Filtros: categorias à esquerda (a faixa rola no celular), busca à direita. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+          <button
+            onClick={() => setFilterCategory("all")}
+            aria-pressed={filterCategory === "all"}
+            className={chipClass(filterCategory === "all")}
+          >
+            Todos
+          </button>
+          {CATEGORY_ORDER.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              aria-pressed={filterCategory === cat}
+              className={chipClass(filterCategory === cat)}
+            >
+              {CATEGORY_LABELS[cat]}
+            </button>
+          ))}
+          {/* ⚠️ HERDADO: "Conectadas" não filtra — volta para "Todos". Fica
+              assim até decisão; o restyle só trocou a forma. */}
+          <button
+            onClick={() => setFilterCategory("all")}
+            className={chipClass(false)}
+          >
+            <CheckCircle2 className="h-3 w-3 text-success-strong" />
+            Conectadas
+          </button>
         </div>
 
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full lg:w-64">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar integração..."
@@ -696,76 +751,140 @@ export default function IntegrationsCatalog() {
         </div>
       </div>
 
-      {/* Category filters */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFilterCategory("all")}
-          aria-pressed={filterCategory === "all"}
-          className={chipClass(filterCategory === "all")}
-        >
-          Todos
-        </button>
-        {CATEGORY_ORDER.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setFilterCategory(cat)}
-            aria-pressed={filterCategory === cat}
-            className={chipClass(filterCategory === cat)}
-          >
-            {CATEGORY_LABELS[cat]}
-          </button>
-        ))}
-        {/* ⚠️ HERDADO: "Conectadas" não filtra — volta para "Todos". Fica
-            assim até decisão; o restyle só trocou a forma. */}
-        <button
-          onClick={() => setFilterCategory("all")}
-          className={chipClass(false)}
-        >
-          <CheckCircle2 className="h-3 w-3 text-success-strong" />
-          Conectadas
-        </button>
-      </div>
+      {/* Conectadas agora: lista em tinta + o detalhe da selecionada. Só existe
+          quando há o que listar — sem conexão, o catálogo já diz tudo. */}
+      {foco && (
+        <InkSplit
+          title="Conectadas agora"
+          count={`${connectedCount} ${connectedCount === 1 ? "ativa" : "ativas"}`}
+          actions={
+            <span className="hidden text-[11.5px] text-tinta-muted sm:inline">
+              Selecione para ver recursos e configuração
+            </span>
+          }
+          list={conectadas.map((integration) => {
+            const status = statusOf(integration);
+            const selecionada = integration.id === foco.id;
+            return (
+              <InkRow key={integration.id} selected={selecionada} onClick={() => setFocoId(integration.id)}>
+                <span className="h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[11px]">{integration.logo}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-bold">{integration.name}</span>
+                  <span
+                    className={cn(
+                      "mt-0.5 block truncate text-[11.5px]",
+                      selecionada ? "text-primary-foreground/70" : "text-tinta-muted",
+                    )}
+                  >
+                    {status?.detail ?? "Conectado"}
+                  </span>
+                </span>
+              </InkRow>
+            );
+          })}
+          detail={
+            <FocusCard className="h-full gap-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <Badge variant="ink" className="gap-1.5">
+                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+                    {CATEGORY_LABELS[foco.category]}
+                  </Badge>
+                  <h3 className="mt-2.5 text-[1.45rem] font-extrabold leading-[1.12] tracking-[-0.035em] max-sm:text-[1.25rem]">
+                    {foco.name}
+                  </h3>
+                  <p className="mt-1.5 max-w-[60ch] text-[13px] leading-relaxed text-primary-foreground/75">
+                    {foco.longDescription}
+                  </p>
+                </div>
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl shadow-sm">{foco.logo}</div>
+              </div>
 
-      {/* Grid — flat when "Todos", grouped when filtering by category */}
-      {showGrouped ? (
-        // Grouped by selected category (only 1 group shows)
-        <div>
-          <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-            {CATEGORY_LABELS[filterCategory as IntegrationCategory]}
-          </h3>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {filtered.map((integration, index) => (
-              <IntegrationCard
-                key={integration.id}
-                integration={integration}
-                status={statuses[integration.id as keyof StatusMap]}
-                onClick={() => setSelectedId(integration.id)}
-                index={index}
-              />
-            ))}
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <FocusTile>
+                  <p className="text-[11px] font-bold text-primary-foreground/65">Estado</p>
+                  <p className="mt-1 truncate text-[1rem] font-extrabold tracking-[-0.02em]">
+                    {statusOf(foco)?.detail ?? "Conectado"}
+                  </p>
+                </FocusTile>
+                <FocusTile>
+                  <p className="text-[11px] font-bold text-primary-foreground/65">Recursos</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {foco.features.map((f) => (
+                      <span key={f} className="rounded-full bg-primary-foreground/[.12] px-2.5 py-0.5 text-[11px] font-bold">
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </FocusTile>
+              </div>
+
+              <div className="mt-auto flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(foco.id)}
+                  className={botaoNoOuroPrimario}
+                >
+                  <Settings2 />
+                  Configurar {foco.name}
+                </button>
+              </div>
+            </FocusCard>
+          }
+        />
+      )}
+
+      {/* Catálogo agrupado por categoria */}
+      <section
+        aria-labelledby="catalogo-integracoes-titulo"
+        className="rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo sm:p-6"
+      >
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 id="catalogo-integracoes-titulo" className="text-base font-bold tracking-tight">
+              Catálogo de integrações
+            </h2>
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+              {filtered.length} de {totalCount}
+              {filterCategory === "all" ? " · todas as categorias" : ` · ${CATEGORY_LABELS[filterCategory]}`}
+            </p>
           </div>
+          <Badge variant={connectedCount > 0 ? "success" : "soft"} className="tabular-nums">
+            {connectedCount}/{totalCount} conectadas
+          </Badge>
         </div>
-      ) : (
-        // Flat grid — all integrations without category dividers
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filtered.map((integration, index) => (
-            <IntegrationCard
-              key={integration.id}
-              integration={integration}
-              status={statuses[integration.id as keyof StatusMap]}
-              onClick={() => setSelectedId(integration.id)}
-              index={index}
-            />
+
+        <div className="space-y-6">
+          {grupos.map(({ cat, itens }) => (
+            <div key={cat}>
+              <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                {CATEGORY_LABELS[cat]}
+                <span className="rounded-full bg-muted px-1.5 py-px text-[10px] tabular-nums text-foreground/70">
+                  {itens.length}
+                </span>
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {itens.map((integration, index) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    integration={integration}
+                    status={statusOf(integration)}
+                    onClick={() => setSelectedId(integration.id)}
+                    index={index}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-      )}
 
-      {filtered.length === 0 && (
-        <div className="rounded-card border border-dashed border-border py-12 text-center text-muted-foreground">
-          <Plug className="mx-auto mb-2 h-8 w-8 opacity-40" />
-          <p className="text-sm">Nenhuma integração encontrada</p>
-        </div>
-      )}
+        {filtered.length === 0 && (
+          <div className="rounded-card border border-dashed border-border py-12 text-center text-muted-foreground">
+            <Plug className="mx-auto mb-2 h-8 w-8 opacity-40" />
+            <p className="text-sm">Nenhuma integração encontrada</p>
+          </div>
+        )}
+      </section>
 
       {/* Modal */}
       {selected && (

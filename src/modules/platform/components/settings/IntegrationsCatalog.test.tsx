@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render as rtlRender, screen } from "@testing-library/react";
+import { render as rtlRender, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -144,7 +144,10 @@ describe("IntegrationsCatalog — gate por feature", () => {
   it("TorqueCalls aparece quando a org tem a feature voice_calls", () => {
     voiceCallsEnabled = true;
     render();
-    expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
+    // V5: conectado, o nome aparece também no painel "Conectadas agora" — a
+    // pergunta aqui é o cartão do catálogo.
+    const catalogo = screen.getByRole("region", { name: "Catálogo de integrações" });
+    expect(within(catalogo).getByText("TorqueCalls")).toBeInTheDocument();
   });
 
   it("o badge de conectadas não conta um cartão escondido pela feature", () => {

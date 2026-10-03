@@ -8,11 +8,10 @@ import {
   FlaskConical,
   Plus,
   Loader2,
-  AlertTriangle,
   CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CartaoDeAjustes, LinhaDeAjuste } from "./settings-ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,78 +39,60 @@ export function SandboxPanel() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
-          <FlaskConical className="h-4 w-4 text-muted-foreground" />
-          Sandbox
-        </h3>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">
-          Crie uma cópia da organização para testes sem afetar dados reais
-        </p>
-      </div>
-
+    <CartaoDeAjustes
+      titulo="Sandbox"
+      descricao="Crie uma cópia da organização para testes sem afetar dados reais"
+    >
       {isSandbox && (
-        <Card className="rounded-xl border-warning/40 bg-warning/10 shadow-none">
-          <CardContent className="flex items-center gap-3 p-4">
-            <FlaskConical className="h-5 w-5 shrink-0 text-warning-strong" />
-            <p className="text-sm">
-              Você está em uma organização <strong>Sandbox</strong>. Alterações aqui não afetam a organização principal.
-            </p>
-          </CardContent>
-        </Card>
+        <p className="mb-3 flex items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-3.5 text-sm">
+          <FlaskConical className="h-5 w-5 shrink-0 text-warning-strong" />
+          <span>
+            Você está em uma organização <strong>Sandbox</strong>. Alterações aqui não afetam a organização principal.
+          </span>
+        </p>
       )}
 
-      {/* Mora dentro do cartão da aba: tile plano, não cartão sobre cartão. */}
-      <Card className="rounded-xl border-border shadow-none">
-        <CardContent className="space-y-4 p-5">
-          <div className="flex items-center gap-4 rounded-xl border border-border p-4">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-warning-strong" />
-            <div>
-              <p className="text-sm font-medium">Criar sandbox</p>
-              <p className="text-xs text-muted-foreground">
-                Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead é copiado.
-              </p>
-            </div>
-          </div>
+      <LinhaDeAjuste
+        rotulo="Criar sandbox"
+        ajuda="Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead é copiado."
+      >
+        <Button
+          variant="outline"
+          onClick={() => setConfirmOpen(true)}
+          disabled={createSandbox.isPending}
+        >
+          {createSandbox.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          Criar sandbox
+        </Button>
+      </LinhaDeAjuste>
 
-          <div className="space-y-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
-              O que é clonado:
-            </h4>
-            <ul className="space-y-1.5 text-sm">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
-                Etapas e configurações dos funis
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
-                Tags e campos customizados
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
-                Agentes Copilot (configurações)
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 text-success-strong" />
-                Workflows (estrutura)
-              </li>
-            </ul>
-          </div>
-
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            disabled={createSandbox.isPending}
-          >
-            {createSandbox.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            Criar sandbox
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="mt-1 rounded-2xl bg-muted/50 p-4">
+        <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+          O que é clonado:
+        </h4>
+        <ul className="mt-2 grid gap-1.5 text-[13px] sm:grid-cols-2">
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Etapas e configurações dos funis
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Tags e campos customizados
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Agentes Copilot (configurações)
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Workflows (estrutura)
+          </li>
+        </ul>
+      </div>
 
       {/* Confirmation */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -130,6 +111,6 @@ export function SandboxPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </CartaoDeAjustes>
   );
 }

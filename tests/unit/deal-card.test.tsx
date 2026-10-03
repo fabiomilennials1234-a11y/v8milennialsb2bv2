@@ -447,14 +447,12 @@ describe("DealCard — a pessoa é coluna, não conteúdo do negócio", () => {
 
 describe("DealCard — anotação", () => {
   /**
-   * No painel de duas colunas a anotação deixou de ficar solta na rolagem e
-   * virou a segunda aba do bloco de dinheiro ("Produtos e Valores" · "Anotação").
-   * A textarea só existe depois do clique — antes disto os testes achavam o
-   * campo direto, e passaram a não achar nada.
+   * V5 (02/10): a anotação saiu da sub-aba "Anotação" e virou campo FIXO da aba
+   * Informações, como no mockup. Não há mais o que clicar — o campo é achado
+   * pelo rótulo, porque a caixa de comentário também é um `textbox` na tela.
    */
   function abrirAnotacao() {
-    fireEvent.click(screen.getByRole("button", { name: /^anotação$/i }));
-    return screen.getByRole("textbox");
+    return screen.getByRole("textbox", { name: /anotação do negócio/i });
   }
 
   it("não grava quando o texto não mudou", () => {
@@ -482,7 +480,6 @@ describe("DealCard — anotação", () => {
     expect(abrirAnotacao()).toHaveValue("Nota do e1");
 
     rerender(<DealCard negocio={negocio({ id: "e2", nota: "Nota do e2" })} />);
-    // Trocar de negócio volta para "Produtos e Valores" — de propósito.
     expect(abrirAnotacao()).toHaveValue("Nota do e2");
   });
 });

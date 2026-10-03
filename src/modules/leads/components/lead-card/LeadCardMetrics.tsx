@@ -17,10 +17,50 @@ import type { LeadCardMetrics as Metricas } from "./types";
  * nada para eles; sumir com os dois números seria tirar dado da tela.
  *
  * Os números são os mesmos de antes (`useLeadCardData`, com a precedência de
- * `lib/data-metrics`): só a forma mudou.
+ * `lib/data-metrics`) e são os que saíram da lista de Leads
+ * (`lista-dados-no-card.test.tsx`): só a forma mudou.
  */
 
-function Vidro({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
+/**
+ * Número e unidade em nós SEPARADOS — a regra do V5 ("unidade menor", como o
+ * `ValueUnit`) e o contrato de `lista-dados-no-card.test.tsx`: o número que saiu
+ * da lista de Leads tem de ser achável sozinho na ficha.
+ */
+function Numero({ valor, sufixo, tom }: { valor: string; sufixo?: string; tom: "tinta" | "cartao" }) {
+  return (
+    <>
+      <span>{valor}</span>
+      {sufixo && (
+        <small
+          className={cn(
+            "ml-1 text-[0.72em] font-bold tracking-normal",
+            tom === "tinta" ? "text-tinta-muted" : "text-muted-foreground",
+          )}
+        >
+          {sufixo}
+        </small>
+      )}
+    </>
+  );
+}
+
+/** Dias como número + unidade; `null` vira a palavra do vazio, sem unidade. */
+function emDias(n: number | null, vazio: string): { valor: string; sufixo?: string } {
+  if (n === null) return { valor: vazio };
+  return { valor: String(n), sufixo: n === 1 ? "dia" : "dias" };
+}
+
+function Vidro({
+  rotulo,
+  valor,
+  sufixo,
+  destaque,
+}: {
+  rotulo: string;
+  valor: string;
+  sufixo?: string;
+  destaque?: boolean;
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-[14px] border border-tinta-line bg-tinta-foreground/[0.06] px-2.5 py-2">
       <span
@@ -29,16 +69,11 @@ function Vidro({ rotulo, valor, destaque }: { rotulo: string; valor: string; des
           destaque ? "text-primary" : "text-tinta-foreground",
         )}
       >
-        {valor}
+        <Numero valor={valor} sufixo={sufixo} tom="tinta" />
       </span>
       <span className="truncate text-[10.5px] font-medium text-tinta-muted">{rotulo}</span>
     </div>
   );
-}
-
-function dias(n: number | null, vazio: string): string {
-  if (n === null) return vazio;
-  return n === 1 ? "1 dia" : `${n} dias`;
 }
 
 export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
@@ -72,10 +107,10 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
           <Vidro rotulo="Já comprou" valor={formatBRL(metricas.acumulado)} destaque />
           <Vidro rotulo="Pedidos" valor={String(metricas.pedidos)} />
           <Vidro rotulo="Ticket médio" valor={formatBRL(metricas.ticketMedio)} />
-          <Vidro rotulo="Última compra" valor={metricas.ultimaCompraDias === null ? "—" : `há ${dias(metricas.ultimaCompraDias, "—")}`} />
-          <Vidro rotulo="Ciclo de recompra" valor={dias(metricas.cicloDias, "—")} />
-          <Vidro rotulo="Na base há" valor={dias(metricas.idadeDias, "—")} />
-          <Vidro rotulo="Sem contato" valor={dias(metricas.semContatoDias, "nunca")} />
+          <Vidro rotulo="Última compra" {...emDias(metricas.ultimaCompraDias, "—")} />
+          <Vidro rotulo="Ciclo de recompra" {...emDias(metricas.cicloDias, "—")} />
+          <Vidro rotulo="Na base há" {...emDias(metricas.idadeDias, "—")} />
+          <Vidro rotulo="Sem contato" {...emDias(metricas.semContatoDias, "nunca")} />
         </div>
       </section>
     );
@@ -89,13 +124,13 @@ export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col">
           <span className="text-[16px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums">
-            {dias(metricas.idadeDias, "—")}
+            <Numero {...emDias(metricas.idadeDias, "—")} tom="cartao" />
           </span>
           <span className="text-[11px] text-muted-foreground">Na base há</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[16px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums">
-            {dias(metricas.semContatoDias, "nunca")}
+            <Numero {...emDias(metricas.semContatoDias, "nunca")} tom="cartao" />
           </span>
           <span className="text-[11px] text-muted-foreground">Sem contato</span>
         </div>
