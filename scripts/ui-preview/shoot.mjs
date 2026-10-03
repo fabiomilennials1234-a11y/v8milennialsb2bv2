@@ -1,0 +1,312 @@
+#!/usr/bin/env node
+/**
+ * Screenshots every real route of the app (served by start-vite.mjs, backed
+ * by mock-supabase.mjs) in light + dark at 1440×900 and 390×844.
+ *
+ *   node scripts/ui-preview/shoot.mjs [label] [options]
+ *
+ *   label                 output folder name (default: timestamp)
+ *   --out <dir>           output root (default .ui-shots/<label>, ignorado pelo git)
+ *   --routes a,b,c        only these route names (see routes.mjs)
+ *   --themes dark,light   default: dark,light
+ *   --widths 1440,390     default: 1440,390
+ *   --full-page           capture the whole document height
+ *   --direct              load each route by URL and wait out the intro
+ *                         animation (default: boot on /privacidade, then
+ *                         client-side navigate — same app, no 3.3 s intro)
+ *   --master              include master-only routes (mock must run --master)
+ *   --real-clock          do not pin the browser clock to the fixture clock
+ *   --spawn-mock          if the mock is not answering, start it for THIS run
+ *                         only (with --master when given) and stop it at the
+ *                         end — no server left running between rounds
+ *   --spawn-app           same for the Vite app (start-vite.mjs)
+ *
+ * Vite must already be running (see README.md). The mock too, unless
+ * --spawn-mock.
+ * Output: <out>/<theme>-<width>/<route>.png + <out>/report.json
+ */
+import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { launchBrowser, prepareContext } from "./browser-session.mjs";
+import { ROUTES } from "./routes.mjs";
+import { APP_URL, MOCK_URL } from "./lib/session.mjs";
+
+const argv = process.argv.slice(2);
+const opt = (n, d) => {
+  const i = argv.indexOf(n);
+  return i !== -1 ? argv[i + 1] : d;
+};
+const has = (n) => argv.includes(n);
+const VALUE_OPTS = new Set(["--out", "--routes", "--themes", "--widths"]);
+const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_OPTS.has(argv[i - 1]));
+const label = positional[0] ?? new Date().toISOString().replace(/[:.]/g, "-");
+// Dentro do repo (ignorado pelo git), não num /tmp previsível: outro usuário da
+// máquina poderia criar o diretório antes (CodeQL: insecure temporary file).
+const OUT = opt("--out", join(dirname(fileURLToPath(import.meta.url)), "../../.ui-shots", label));
+const themes = opt("--themes", "dark,light").split(",");
+const widths = opt("--widths", "1440,390").split(",").map(Number);
+const only = opt("--routes", null)?.split(",");
+const FULL_PAGE = has("--full-page");
+const DIRECT = has("--direct");
+const MASTER = has("--master");
+const REAL_CLOCK = has("--real-clock");
+const SPAWN_MOCK = has("--spawn-mock");
+const SPAWN_APP = has("--spawn-app");
+
+const HEIGHT = { 1440: 900, 390: 844 };
+const INTRO_MS = 3500; // TorqueIntro plays once per full page load (3.25 s)
+// TorqueIntro skips public paths and only decides on mount: booting on one of
+// them and then navigating client-side renders the target route with no intro.
+const BOOT_PATH = "/privacidade";
+
+async function health() {
+  try {
+    const r = await fetch(`${MOCK_URL}/__health`);
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mock efêmero: sobe só para esta rodada e cai no fim. Se outra rodada subiu
+ * um mock ao mesmo tempo, a porta já está ocupada — o nosso morre com
+ * EADDRINUSE e reaproveitamos o dela (o poll de saúde abaixo resolve os dois).
+ */
+let ownMock = null;
+async function ensureMock() {
+  let h = await health();
+  if (h || !SPAWN_MOCK) return h;
+  const script = join(dirname(fileURLToPath(import.meta.url)), "mock-supabase.mjs");
+  ownMock = spawn(process.execPath, [script, ...(MASTER ? ["--master"] : [])], { stdio: "ignore" });
+  for (let i = 0; i < 60 && !h; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    h = await health();
+  }
+  return h;
+}
+let ownApp = null;
+async function appUp() {
+  try {
+    await fetch(APP_URL);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function ensureApp() {
+  let up = await appUp();
+  if (up || !SPAWN_APP) return up;
+  const script = join(dirname(fileURLToPath(import.meta.url)), "start-vite.mjs");
+  ownApp = spawn(process.execPath, [script], { stdio: "ignore" });
+  for (let i = 0; i < 120 && !up; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    up = await appUp();
+  }
+  return up;
+}
+const stopOwnMock = () => {
+  if (ownMock && ownMock.exitCode === null) ownMock.kill("SIGTERM");
+  if (ownApp && ownApp.exitCode === null) ownApp.kill("SIGTERM");
+};
+process.on("exit", stopOwnMock);
+
+const mock = await ensureMock();
+if (!mock) {
+  console.error(`✖ mock not reachable at ${MOCK_URL} — run: node scripts/ui-preview/mock-supabase.mjs (or pass --spawn-mock)`);
+  process.exit(1);
+}
+if (!(await ensureApp())) {
+  console.error(`✖ app not reachable at ${APP_URL} — run: node scripts/ui-preview/start-vite.mjs (or pass --spawn-app)`);
+  process.exit(1);
+}
+if (MASTER && !mock.master) console.warn("⚠ --master given but the mock runs without --master; master routes will redirect.");
+
+const routes = ROUTES.filter((r) => (only ? only.includes(r.name) : true)).filter((r) => (r.master ? MASTER : true));
+mkdirSync(OUT, { recursive: true });
+
+const browser = await launchBrowser();
+const report = { label, startedAt: new Date().toISOString(), app: APP_URL, mock: MOCK_URL, master: mock.master, results: [] };
+
+/**
+ * Wait until the screen is still: no HTTP request in flight, no DOM mutation
+ * and no TorqueLoader for `quietMs`, after at least `minMs`. Capped at `maxMs`
+ * (a live clock or spinner never goes quiet — the shot is taken anyway).
+ */
+async function settle(page, inflight, { quietMs = 900, minMs = 1500, maxMs = 15000 } = {}) {
+  await page
+    .evaluate(() => {
+      window.__uiPreviewLastMutation = performance.now();
+      if (window.__uiPreviewObserver) return;
+      window.__uiPreviewObserver = new MutationObserver(() => (window.__uiPreviewLastMutation = performance.now()));
+      window.__uiPreviewObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    })
+    .catch(() => {});
+  const start = Date.now();
+  let quietSince = Date.now();
+  while (Date.now() - start < maxMs) {
+    const domIdleMs = await page.evaluate(() => performance.now() - (window.__uiPreviewLastMutation ?? 0)).catch(() => 0);
+    const loaderVisible = await page.locator("[data-torque-loader]").first().isVisible().catch(() => false);
+    if (inflight.size > 0 || loaderVisible || domIdleMs < quietMs) quietSince = Date.now();
+    if (Date.now() - start >= minMs && Date.now() - quietSince >= quietMs) return true;
+    await page.waitForTimeout(150);
+  }
+  return false;
+}
+
+async function clientNavigate(page, path) {
+  await page.evaluate((p) => {
+    const idx = (window.history.state?.idx ?? 0) + 1;
+    window.history.pushState({ usr: null, key: Math.random().toString(36).slice(2, 10), idx }, "", p);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  }, path);
+}
+
+async function detectState(page) {
+  return page.evaluate(() => {
+    const text = document.body?.innerText ?? "";
+    return {
+      errorBoundary: /Algo deu errado|Atualização Detectada/.test(text) && /recarregar a página|Recarregue a página/i.test(text),
+      envMissing: /Configuração necessária/.test(text) && /VITE_SUPABASE_URL/.test(text),
+      login: location.pathname.startsWith("/auth"),
+      awaitingActivation: /Aguardando Ativação|Conta Desativada/.test(text),
+      featureLocked: /Recurso bloqueado|Faça upgrade|Disponível no plano/i.test(text),
+      notFound: /404|Página não encontrada/i.test(text) && text.length < 600,
+      textSample: text.replace(/\s+/g, " ").slice(0, 240),
+    };
+  });
+}
+
+for (const theme of themes) {
+  for (const width of widths) {
+    const dir = join(OUT, `${theme}-${width}`);
+    mkdirSync(dir, { recursive: true });
+    await fetch(`${MOCK_URL}/__reset`);
+    const mobile = width < 768;
+    const context = await browser.newContext({
+      viewport: { width, height: HEIGHT[width] ?? 900 },
+      deviceScaleFactor: 1,
+      isMobile: mobile,
+      hasTouch: mobile,
+      colorScheme: theme === "light" ? "light" : "dark",
+      reducedMotion: "reduce",
+      locale: "pt-BR",
+      timezoneId: "America/Sao_Paulo",
+    });
+    await prepareContext(context, { theme, master: MASTER, now: REAL_CLOCK ? null : mock.now });
+    const page = await context.newPage();
+
+    const inflight = new Set();
+    let consoleErrors = [];
+    let pageErrors = [];
+    let failed = [];
+    page.on("request", (r) => inflight.add(r));
+    page.on("requestfinished", (r) => inflight.delete(r));
+    page.on("requestfailed", (r) => {
+      inflight.delete(r);
+      // ERR_ABORTED = request cancelled by the app (unmount / AbortController), not a failure
+      if (!/realtime|hot-update|__vite/.test(r.url()) && r.failure()?.errorText !== "net::ERR_ABORTED") failed.push(`${r.method()} ${r.url().slice(0, 160)} — ${r.failure()?.errorText}`);
+    });
+    page.on("console", (m) => {
+      if (m.type() !== "error") return;
+      const t = m.text();
+      if (/X-Frame-Options may only be set|frame-ancestors' is ignored|requires a `DialogTitle`|Download the React DevTools/.test(t)) return;
+      consoleErrors.push(t.slice(0, 400));
+    });
+    page.on("pageerror", (e) => pageErrors.push(String(e?.message ?? e).slice(0, 400)));
+
+    for (const route of routes) {
+      const t0 = Date.now();
+      try {
+      // Fresh app per route: no state, blocker or error boundary leaks between routes.
+      if (DIRECT) {
+        consoleErrors = [];
+        pageErrors = [];
+        failed = [];
+        await page.goto(APP_URL + route.path, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(INTRO_MS);
+      } else {
+        await page.goto(APP_URL + BOOT_PATH, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction(() => (document.getElementById("root")?.childElementCount ?? 0) > 0, null, { timeout: 15000 }).catch(() => {});
+        consoleErrors = [];
+        pageErrors = [];
+        failed = [];
+        await clientNavigate(page, route.path);
+      }
+      const settled = await settle(page, inflight);
+      await page.waitForTimeout(400); // last paint / chart layout
+      const state = await detectState(page);
+      const file = join(dir, `${route.name}.png`);
+      if (FULL_PAGE) {
+        // O layout é h-screen e quem rola é o <main>: sem isto o "página
+        // inteira" sai do tamanho da janela. Destrava a altura só para o print.
+        await page.evaluate(() => {
+          const raiz = document.querySelector('[data-layout="main"]');
+          const main = raiz?.querySelector("main");
+          if (raiz instanceof HTMLElement) raiz.style.height = "auto";
+          if (main instanceof HTMLElement) main.style.overflow = "visible";
+        });
+      }
+      await page.screenshot({ path: file, fullPage: FULL_PAGE });
+      const log = await (await fetch(`${MOCK_URL}/__log?since=${t0}`)).json().catch(() => []);
+      const misses = [...new Set(log.filter((e) => e.miss).map((e) => `${e.kind} ${e.name}${e.note ? ` (${e.note})` : ""}`))];
+      const finalUrl = new URL(page.url());
+      const result = {
+        route: route.name,
+        path: route.path,
+        theme,
+        width,
+        file,
+        finalPath: finalUrl.pathname + finalUrl.search,
+        redirected: finalUrl.pathname !== new URL(APP_URL + route.path).pathname,
+        settled,
+        ...state,
+        consoleErrors: [...new Set(consoleErrors)],
+        pageErrors: [...new Set(pageErrors)],
+        failedRequests: [...new Set(failed)],
+        mockMisses: misses,
+        ms: Date.now() - t0,
+      };
+      report.results.push(result);
+      const flags = [
+        state.errorBoundary && "ERROR-BOUNDARY",
+        state.envMissing && "ENV-MISSING",
+        state.login && "LOGIN",
+        result.redirected && `→${result.finalPath}`,
+        result.pageErrors.length && `${result.pageErrors.length} pageerror`,
+        result.consoleErrors.length && `${result.consoleErrors.length} console.error`,
+      ].filter(Boolean);
+      console.log(`${theme}-${width} ${route.name.padEnd(24)} ${String(result.ms).padStart(5)}ms ${flags.join(" ")}`);
+      } catch (e) {
+        // One bad route must not lose the run; but if a server died, stop.
+        const msg = String(e?.message ?? e).split("\n")[0];
+        report.results.push({ route: route.name, path: route.path, theme, width, error: msg, ms: Date.now() - t0 });
+        console.log(`${theme}-${width} ${route.name.padEnd(24)} FAILED: ${msg}`);
+        if (!(await health())) {
+          console.error(`✖ mock at ${MOCK_URL} stopped answering — aborting.`);
+          writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
+          process.exit(2);
+        }
+        try {
+          await fetch(APP_URL);
+        } catch {
+          console.error(`✖ app at ${APP_URL} stopped answering — aborting.`);
+          writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
+          process.exit(2);
+        }
+      }
+    }
+    await context.close();
+  }
+}
+
+await browser.close();
+// O filho segura o event loop: sem isto o processo nunca termina.
+stopOwnMock();
+report.finishedAt = new Date().toISOString();
+writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
+const bad = report.results.filter((r) => r.error || r.errorBoundary || r.envMissing || r.login || r.pageErrors?.length);
+console.log(`\n${report.results.length} screenshots → ${OUT}`);
+console.log(`report: ${join(OUT, "report.json")}${bad.length ? `  (${bad.length} with errors)` : ""}`);

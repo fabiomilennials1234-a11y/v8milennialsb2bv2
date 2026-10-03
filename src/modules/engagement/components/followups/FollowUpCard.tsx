@@ -42,10 +42,10 @@ interface FollowUpCardProps {
 }
 
 const priorityConfig = {
-  low: { label: "Baixa", class: "bg-muted text-muted-foreground" },
-  normal: { label: "Normal", class: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
-  high: { label: "Alta", class: "bg-chart-5/10 text-chart-5 border-chart-5/20" },
-  urgent: { label: "Urgente", class: "bg-destructive/10 text-destructive border-destructive/20" },
+  low: { label: "Baixa", class: "border-transparent bg-muted text-muted-foreground" },
+  normal: { label: "Normal", class: "border-transparent bg-insights/10 text-insights" },
+  high: { label: "Alta", class: "border-transparent bg-warning/15 text-warning-strong" },
+  urgent: { label: "Urgente", class: "border-transparent bg-destructive/10 text-destructive" },
 };
 
 const pipeIcons = {
@@ -117,13 +117,13 @@ export const FollowUpCard = memo(function FollowUpCard({
     <Collapsible open={isExpanded} onOpenChange={() => onToggleExpand?.()}>
       <div
         className={cn(
-          "rounded-xl border transition-all duration-150",
+          "rounded-card border shadow-relevo transition-[box-shadow,border-color,background-color] duration-150",
           isOverdue && !isCompleted && "border-destructive/30 bg-destructive/5",
-          isDueToday && !isOverdue && !isCompleted && "border-amber-500/30 bg-amber-500/5",
-          isCompleted && "bg-muted/50 border-border opacity-70",
-          !isOverdue && !isDueToday && !isCompleted && "border-border bg-card",
-          isExpanded && "shadow-lg ring-1 ring-primary/20",
-          !isExpanded && "hover:shadow-md hover:border-border/80 cursor-pointer",
+          isDueToday && !isOverdue && !isCompleted && "border-warning/40 bg-warning/10",
+          isCompleted && "border-border bg-muted/50 opacity-70",
+          !isOverdue && !isDueToday && !isCompleted && "border-card-border bg-card",
+          isExpanded && "shadow-relevo-alto ring-1 ring-primary/25",
+          !isExpanded && "cursor-pointer hover:shadow-relevo-alto",
         )}
       >
         {/* Compact Header — always visible */}
@@ -136,13 +136,13 @@ export const FollowUpCard = memo(function FollowUpCard({
                   <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
                 )}
                 {isDueToday && !isOverdue && !isCompleted && (
-                  <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <Clock className="h-4 w-4 flex-shrink-0 text-warning-strong" />
                 )}
                 {isCompleted && (
                   <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
                 )}
-                <h4 className="font-medium text-sm truncate">{followUp.title}</h4>
-                <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", priorityConfig[followUp.priority].class)}>
+                <h4 className="truncate text-sm font-semibold">{followUp.title}</h4>
+                <Badge variant="outline" className={cn("px-2 py-0 text-[10px] font-bold", priorityConfig[followUp.priority].class)}>
                   {priorityConfig[followUp.priority].label}
                 </Badge>
               </div>
@@ -160,16 +160,16 @@ export const FollowUpCard = memo(function FollowUpCard({
             {/* Right: Due date + Source + Avatar + Chevron */}
             <div className="flex items-center gap-2 flex-shrink-0">
               {followUp.source_pipe && PipeIcon && (
-                <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0 hidden sm:flex">
+                <Badge variant="soft" className="hidden gap-1 px-2 py-0 text-[10px] sm:flex">
                   <PipeIcon className="w-3 h-3" />
                   {nomeDoPipe(followUp.source_pipe)}
                 </Badge>
               )}
 
               <div className={cn(
-                "text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap",
+                "whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
                 isOverdue && !isCompleted && "bg-destructive/10 text-destructive",
-                isDueToday && !isOverdue && !isCompleted && "bg-amber-500/10 text-amber-500",
+                isDueToday && !isOverdue && !isCompleted && "bg-warning/15 text-warning-strong",
                 isCompleted && "bg-success/10 text-success",
                 !isOverdue && !isDueToday && !isCompleted && "bg-muted text-muted-foreground"
               )}>
@@ -185,8 +185,8 @@ export const FollowUpCard = memo(function FollowUpCard({
               </div>
 
               {followUp.team_member && (
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-medium text-primary">
+                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-soft">
+                  <span className="text-[10px] font-bold text-primary-soft-foreground">
                     {followUp.team_member.name.substring(0, 2).toUpperCase()}
                   </span>
                 </div>
@@ -212,7 +212,7 @@ export const FollowUpCard = memo(function FollowUpCard({
                     phone={followUp.lead?.phone}
                     size="sm"
                     variant="ghost"
-                    className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
+                    className="h-7 gap-1.5 text-xs text-success hover:bg-success/10 hover:text-success"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     WhatsApp
@@ -309,16 +309,16 @@ export const FollowUpCard = memo(function FollowUpCard({
 
             {/* Completion Section */}
             {!isCompleted && (
-              <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                  <StickyNote className="w-3.5 h-3.5" />
-                  <span className="font-medium">Conclusão</span>
+              <div className="space-y-2 rounded-2xl bg-sunken p-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                  <StickyNote className="h-3.5 w-3.5" />
+                  <span>Conclusão</span>
                 </div>
                 <Textarea
                   placeholder="Notas de conclusão (opcional)..."
                   value={completionNotes}
                   onChange={(e) => setCompletionNotes(e.target.value)}
-                  className="min-h-[60px] text-xs resize-none bg-background/50"
+                  className="min-h-[60px] resize-none text-xs"
                   onClick={(e) => e.stopPropagation()}
                 />
                 <div className="flex items-center gap-2">
@@ -364,7 +364,7 @@ export const FollowUpCard = memo(function FollowUpCard({
                 {followUp.is_automated && (
                   <>
                     <span className="text-border">•</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
+                    <Badge variant="gold" className="px-2 py-0 text-[10px]">
                       Auto
                     </Badge>
                   </>

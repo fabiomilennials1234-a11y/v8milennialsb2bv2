@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Clock, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 
 interface CompetitionBannerProps {
   name: string;
@@ -20,17 +20,17 @@ function CompetitionBannerBase({ name, criteria, metricType, participantCount, e
   const criteriaLabel = criteria === "absolute_value" ? "Valor absoluto" : "% da meta";
   const metricLabel = metricType === "sales" ? "Vendas" : "Reuniões";
 
-  const statusConfig = {
-    draft: { label: "Rascunho", color: "bg-muted text-muted-foreground" },
-    active: { label: "Ativa", color: "bg-success/20 text-success" },
-    ended: { label: "Encerrada", color: "bg-destructive/20 text-destructive" },
+  const statusConfig: Record<CompetitionBannerProps["status"], { label: string; variant: BadgeProps["variant"] }> = {
+    draft: { label: "Rascunho", variant: "soft" },
+    active: { label: "Ativa", variant: "success" },
+    ended: { label: "Encerrada", variant: "destructive" },
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4"
+      className="relative overflow-hidden rounded-card border border-card-border bg-card p-4 text-card-foreground shadow-relevo"
     >
       {/* Ambient glow */}
       {status === "active" && (
@@ -44,13 +44,13 @@ function CompetitionBannerBase({ name, criteria, metricType, participantCount, e
 
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Trophy className="w-5 h-5 text-primary" />
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+            <Trophy className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm">{name}</h3>
-              <Badge className={`text-[10px] ${statusConfig[status].color}`}>
+              <h3 className="text-[15px] font-bold tracking-[-0.02em]">{name}</h3>
+              <Badge variant={statusConfig[status].variant} className="text-[10px]">
                 {statusConfig[status].label}
               </Badge>
             </div>
@@ -67,7 +67,7 @@ function CompetitionBannerBase({ name, criteria, metricType, participantCount, e
         {status === "active" && (
           <div className="flex items-center gap-2 text-sm">
             <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="font-medium">
+            <span className="font-semibold tabular-nums">
               {daysLeft === 0 ? "Último dia!" : daysLeft === 1 ? "1 dia restante" : `${daysLeft} dias restantes`}
             </span>
           </div>

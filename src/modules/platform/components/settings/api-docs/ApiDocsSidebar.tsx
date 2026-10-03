@@ -51,7 +51,7 @@ export function ApiDocsSidebar({ categories, selectedEndpointId, onSelect }: Api
             placeholder="Buscar endpoint..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm bg-muted/30"
+            className="h-9 rounded-full pl-8 text-sm"
           />
         </div>
       </div>
@@ -61,7 +61,7 @@ export function ApiDocsSidebar({ categories, selectedEndpointId, onSelect }: Api
           <div key={category.id} className="mb-1">
             <button
               onClick={() => toggleCategory(category.id)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground transition-colors hover:text-foreground"
             >
               {expandedCategories.has(category.id) ? (
                 <ChevronDown className="w-3 h-3" />
@@ -82,17 +82,17 @@ export function ApiDocsSidebar({ categories, selectedEndpointId, onSelect }: Api
                     key={endpoint.id}
                     onClick={() => onSelect(endpoint.id)}
                     className={cn(
-                      "flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-all",
+                      "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all",
                       selectedEndpointId === endpoint.id
-                        ? "bg-primary/10 text-foreground border-l-2 border-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                        ? "bg-primary-soft font-semibold text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       endpoint.deprecated && "opacity-60",
                     )}
                   >
                     <MethodBadge method={endpoint.method} className="text-[9px] px-1.5 py-0" />
                     <span className="truncate text-left text-[13px]">{endpoint.name}</span>
                     {endpoint.deprecated && (
-                      <span className="text-amber-500 text-[10px] ml-auto">obsoleto</span>
+                      <span className="ml-auto text-[10px] font-semibold text-warning-strong">obsoleto</span>
                     )}
                   </button>
                 ))}

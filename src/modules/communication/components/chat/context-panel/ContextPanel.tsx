@@ -7,16 +7,24 @@
  *   HISTÓRICO — timeline completa de ações do lead (lead_history)
  *   I.A       — mensagens e ações do agente (AITimeline)
  *
- * Header persistente acima das abas: avatar, nome, empresa, score.
+ * Header persistente acima das abas: avatar, nome, empresa — no bloco de ouro
+ * do V5 (o "foco" da tela é o lead da conversa aberta).
+ *
+ * Score e temperatura ("Quente/Morno/Frio") SAÍRAM do header: o produto não usa
+ * mais score de lead (CTO, 01/10) nem calor (03/09 — "fica só qualificação e
+ * pré-qualificação"). As duas qualificações continuam na aba Infos.
  */
-import { useState, type ReactNode } from "react";
-import { Building2, Flame, Loader2 } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowUpRight, Building2, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { FocusCard, FocusTile } from "@/components/ui/bento";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatBRL } from "@/lib/format";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
-import { useLeadById } from "@/modules/leads";
+import { useLeadById, useLeadsDeals } from "@/modules/leads";
+import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
+import { negocioEmDestaque } from "@/modules/communication/lib/negocioEmDestaque";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
@@ -49,28 +57,6 @@ export interface ContextPanelProps {
 
 export type ContextPanelTab = "info" | "history" | "ai";
 
-function getScoreTone(score: number) {
-  if (score >= 80)
-    return {
-      label: "Quente",
-      className:
-        "text-[hsl(358_72%_54%)] bg-[hsl(358_72%_60%/0.10)] border-[hsl(358_72%_60%/0.3)]",
-    };
-  if (score >= 50)
-    return {
-      label: "Morno",
-      className:
-        "text-[hsl(30_96%_48%)] bg-[hsl(30_96%_58%/0.10)] border-[hsl(30_96%_58%/0.3)]",
-    };
-  if (score > 0)
-    return {
-      label: "Frio",
-      className:
-        "text-[hsl(212_86%_54%)] bg-[hsl(212_86%_64%/0.10)] border-[hsl(212_86%_64%/0.3)]",
-    };
-  return null;
-}
-
 export function ContextPanel({
   leadId,
   phoneNumber,
@@ -92,11 +78,18 @@ export function ContextPanel({
   const lead = leadByPhone ?? leadById ?? null;
   const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
+  const [fichaAberta, setFichaAberta] = useState(false);
+
+  // O Negócio do bloco de ouro (CTO, P8a): a MESMA leitura da ficha do lead
+  // (`useLeadsDeals`), só leitura. Hook antes dos retornos antecipados.
+  const idsDoLead = useMemo(() => (activeLeadId ? [activeLeadId] : []), [activeLeadId]);
+  const { data: negociosPorLead } = useLeadsDeals(idsDoLead);
+  const destaque = activeLeadId ? negocioEmDestaque(negociosPorLead?.[activeLeadId]) : null;
 
   if (!phoneNumber && !leadId) {
     return (
-      <div className="flex flex-col h-full bg-background border-l border-border/60">
-        <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+      <div className="flex h-full flex-col">
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             {placeholder ?? "Selecione uma conversa para ver as informações do lead"}
           </p>
@@ -107,8 +100,8 @@ export function ContextPanel({
 
   if (leadLoading) {
     return (
-      <div className="flex flex-col h-full bg-background border-l border-border/60">
-        <div className="flex items-center justify-center h-full">
+      <div className="flex h-full flex-col">
+        <div className="flex h-full items-center justify-center">
           <Loader2
             className="h-5 w-5 animate-spin text-muted-foreground"
             aria-label="Carregando lead"
@@ -125,48 +118,84 @@ export function ContextPanel({
   const displayName =
     lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
   const initials = displayName.slice(0, 2).toUpperCase();
-  const score =
-    typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
-  const scoreTone = getScoreTone(score);
 
   return (
-    <div className="flex flex-col h-full bg-background border-l border-border/60">
-      {/* Header persistente */}
-      <div className="px-4 py-4 border-b border-border/40 flex items-start gap-3 shrink-0">
-        <Avatar className="h-12 w-12 shrink-0">
-          <AvatarFallback className="bg-primary/15 text-primary font-semibold text-base">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-[15px] font-semibold leading-tight truncate text-foreground">
-            {displayName}
-          </span>
-          {lead?.company && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground leading-tight mt-1">
-              <Building2 className="w-3 h-3 opacity-70 shrink-0" />
-              <span className="truncate">{lead.company}</span>
-            </div>
-          )}
-          {score > 0 && scoreTone && (
-            <div className="flex items-center gap-1.5 mt-2">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[10px] font-bold gap-1 h-5",
-                  scoreTone.className,
-                )}
-              >
-                <Flame className="w-3 h-3" />
-                {score}
-              </Badge>
-              <span className="text-[11px] text-muted-foreground">
-                {scoreTone.label}
-              </span>
-            </div>
+    <div className="flex h-full flex-col">
+      {/* Header persistente — bloco de ouro com quem é o interlocutor e, quando
+          existe, o Negócio dele (etapa + valor, só leitura). Score, anel e
+          temperatura NÃO entram (o produto tirou). */}
+      <FocusCard className="m-3 mb-0 shrink-0 gap-3 p-4">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-11 w-11 shrink-0">
+            <AvatarFallback className="bg-primary-foreground/10 text-base font-bold text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[11px] font-bold text-primary-foreground/70">
+              {lead ? "Lead" : "Contato sem lead"}
+            </span>
+            <span className="truncate text-[1.1rem] font-extrabold leading-tight tracking-[-0.02em]">
+              {displayName}
+            </span>
+            {lead?.company && (
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold leading-tight text-primary-foreground/75">
+                <Building2 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{lead.company}</span>
+              </div>
+            )}
+          </div>
+          {phoneNumber && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setFichaAberta(true)}
+                  aria-label={lead ? "Abrir ficha do lead" : "Criar ou vincular lead"}
+                  className="grid h-9 w-9 shrink-0 place-items-center self-start rounded-full bg-primary-foreground/10 text-primary-foreground transition-colors hover:bg-primary-foreground/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/40"
+                >
+                  <ArrowUpRight className="h-4 w-4" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{lead ? "Abrir ficha do lead" : "Criar ou vincular lead"}</TooltipContent>
+            </Tooltip>
           )}
         </div>
-      </div>
+
+        {destaque && (
+          <FocusTile className="flex items-end justify-between gap-3 px-3.5 py-3" data-testid="negocio-do-lead">
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold text-primary-foreground/70">
+                Negócio · {destaque.negocio.stageName}
+              </p>
+              <p className="text-[1.3rem] font-extrabold leading-tight tracking-[-0.03em] tabular-nums">
+                {destaque.negocio.value > 0 ? (
+                  formatBRL(destaque.negocio.value)
+                ) : (
+                  <span className="text-[13px] font-bold text-primary-foreground/60">Sem valor</span>
+                )}
+              </p>
+            </div>
+            <p className="min-w-0 max-w-[50%] truncate text-right text-[11px] font-semibold text-primary-foreground/65" title={destaque.negocio.funnelName}>
+              {destaque.negocio.funnelName}
+              {destaque.outrosAbertos > 0 && (
+                <span className="block text-primary-foreground/55">
+                  +{destaque.outrosAbertos} {destaque.outrosAbertos === 1 ? "aberto" : "abertos"}
+                </span>
+              )}
+            </p>
+          </FocusTile>
+        )}
+      </FocusCard>
+
+      {phoneNumber && (
+        <LeadContactModal
+          isOpen={fichaAberta}
+          onClose={() => setFichaAberta(false)}
+          phoneNumber={phoneNumber}
+          pushName={pushName ?? undefined}
+        />
+      )}
 
       {identitySlot}
 
@@ -176,21 +205,21 @@ export function ContextPanel({
         onValueChange={(v) => setActiveTab(v as ContextPanelTab)}
         className="flex flex-col flex-1 min-h-0"
       >
-        <TabsList className="w-full justify-start gap-5 px-4 pt-2 shrink-0 rounded-none bg-transparent">
-          <TabsTrigger value="info" className="text-[11.5px] uppercase tracking-wider">
+        <TabsList variant="segmented" className="mx-3 mt-3 flex shrink-0">
+          <TabsTrigger value="info" className="flex-1">
             Infos
           </TabsTrigger>
-          <TabsTrigger value="history" className="text-[11.5px] uppercase tracking-wider">
+          <TabsTrigger value="history" className="flex-1">
             Histórico
           </TabsTrigger>
-          <TabsTrigger value="ai" className="text-[11.5px] uppercase tracking-wider">
+          <TabsTrigger value="ai" className="flex-1">
             I.A
           </TabsTrigger>
         </TabsList>
 
         <TabsContent
           value="info"
-          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="mt-2 min-h-0 flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <ContextPanelTabInfo
             lead={lead ?? null}
@@ -201,14 +230,14 @@ export function ContextPanel({
 
         <TabsContent
           value="history"
-          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="mt-2 min-h-0 flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <ContextPanelTabHistory leadId={activeLeadId} />
         </TabsContent>
 
         <TabsContent
           value="ai"
-          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="mt-2 min-h-0 flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <ContextPanelTabAI leadId={activeLeadId} />
         </TabsContent>

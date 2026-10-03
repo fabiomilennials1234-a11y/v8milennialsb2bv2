@@ -178,7 +178,7 @@ describe("RevisionItem", () => {
 
     fireEvent.click(screen.getByText("Ligar para João"));
 
-    expect(screen.getByPlaceholderText(/Notas de conclusao/)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/Notas de conclusão/)).toBeTruthy();
     expect(screen.getByText("Concluir com nota")).toBeTruthy();
     expect(screen.getByText("Concluir sem nota")).toBeTruthy();
   });
@@ -201,7 +201,7 @@ describe("RevisionItem", () => {
 
     fireEvent.click(screen.getByText("Ligar para João"));
 
-    const textarea = screen.getByPlaceholderText(/Notas de conclusao/);
+    const textarea = screen.getByPlaceholderText(/Notas de conclusão/);
     fireEvent.change(textarea, { target: { value: "Ligou e agendou reunião" } });
     fireEvent.click(screen.getByText("Concluir com nota"));
 

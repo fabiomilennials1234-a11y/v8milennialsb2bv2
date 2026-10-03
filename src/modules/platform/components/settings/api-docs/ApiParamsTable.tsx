@@ -14,22 +14,22 @@ export function ApiParamsTable({ params, title }: ApiParamsTableProps) {
   return (
     <div className="space-y-3">
       {title && (
-        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        <h4 className="text-sm font-bold text-foreground">{title}</h4>
       )}
-      <div className="border border-border rounded-lg overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-muted/30 border-b border-border">
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <tr className="border-b border-border bg-muted/40">
+              <th className="text-left px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Nome
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Tipo
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">
-                Obrigatorio
+              <th className="text-left px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground w-24">
+                Obrigatório
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Descricao
               </th>
             </tr>
@@ -79,11 +79,11 @@ function ParamRow({ param, depth }: { param: ApiParam; depth: number }) {
         </td>
         <td className="px-4 py-3">
           {param.required ? (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-red-500/15 text-red-400 border border-red-500/25">
+            <span className="inline-flex items-center rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">
               required
             </span>
           ) : (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">
+            <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
               optional
             </span>
           )}

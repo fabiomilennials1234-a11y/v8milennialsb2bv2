@@ -36,6 +36,9 @@ import { DisparoWizard } from "@/modules/pipelines";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
 import { notifyError } from "@/shared/errors";
 
+const BAR_BTN =
+  "h-8 shrink-0 gap-1.5 rounded-full px-3 text-[13px] text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground [&_svg]:size-3.5";
+
 interface CarteiraBulkBarProps {
   selectedClients: PortfolioClientRow[];
   onClear: () => void;
@@ -65,57 +68,60 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 shadow-2xl"
+          // V5: a barra de massa é tinta flutuante, como a lateral e a barra
+          // inferior — é ferramenta, não conteúdo.
+          className="fixed bottom-6 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-1.5 overflow-x-auto rounded-full border border-tinta-line/60 bg-tinta py-1.5 pl-2 pr-1.5 text-tinta-foreground shadow-relevo-tinta scrollbar-hide"
         >
-          <span className="inline-flex items-center justify-center h-6 min-w-[24px] px-1.5 rounded-md bg-primary text-black text-xs font-bold tabular-nums">
+          <span className="inline-flex h-7 min-w-[28px] shrink-0 items-center justify-center rounded-full bg-primary px-2 text-xs font-bold tabular-nums text-primary-foreground">
             {count}
           </span>
-          <span className="text-sm text-muted-foreground mr-1">selecionados</span>
+          <span className="mr-1 shrink-0 text-sm text-tinta-muted">selecionados</span>
 
           <Button
             size="sm"
-            variant="outline"
-            className="border-border bg-transparent text-foreground hover:bg-muted"
+            variant="ghost"
+            className={BAR_BTN}
             onClick={() => setAssignOpen(true)}
           >
-            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+            <UserPlus />
             Reatribuir
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            className="border-border bg-transparent text-foreground hover:bg-muted"
+            variant="ghost"
+            className={BAR_BTN}
             onClick={() => setTagOpen(true)}
           >
-            <Tag className="mr-1.5 h-3.5 w-3.5" />
+            <Tag />
             Tags
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            className="border-border bg-transparent text-foreground hover:bg-muted"
+            variant="ghost"
+            className={BAR_BTN}
             onClick={() => setDisparoOpen(true)}
           >
-            <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+            <MessageCircle />
             Mensagem
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            className="border-border bg-transparent text-foreground hover:bg-muted"
+            variant="ghost"
+            className={BAR_BTN}
             onClick={() => setCopilotOpen(true)}
           >
-            <Bot className="mr-1.5 h-3.5 w-3.5" />
+            <Bot />
             Acionar Copilot
           </Button>
 
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 ml-1 text-muted-foreground hover:text-foreground"
+            aria-label="Limpar seleção"
+            className="ml-0.5 h-8 w-8 shrink-0 rounded-full text-tinta-muted hover:bg-white/10 hover:text-tinta-foreground"
             onClick={onClear}
           >
-            <X className="h-3.5 w-3.5" />
+            <X />
           </Button>
         </motion.div>
       </AnimatePresence>
@@ -211,14 +217,14 @@ function ReassignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Reatribuir {count} clientes</DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-2">
-          <label className="text-sm font-medium text-muted-foreground">Vendedor responsável</label>
+          <label className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendedor responsável</label>
           <Select value={closerId} onValueChange={setCloserId}>
-            <SelectTrigger className="bg-background border-border">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -235,7 +241,6 @@ function ReassignDialog({
           <Button
             onClick={handleSubmit}
             disabled={mutation.isPending}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Reatribuir
@@ -291,13 +296,13 @@ function TagDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Tags para {count} clientes</DialogTitle>
         </DialogHeader>
         <div className="py-4">
           {leadIds.length < count && (
-            <p className="text-xs text-amber-500 mb-3">
+            <p className="mb-3 text-xs font-medium text-warning-strong">
               {count - leadIds.length} cliente(s) sem lead vinculado serão ignorados.
             </p>
           )}
@@ -306,10 +311,11 @@ function TagDialog({
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                aria-pressed={addTags.includes(tag.id)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                   addTags.includes(tag.id)
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-primary/50"
+                    ? "border-transparent bg-primary-soft text-primary-soft-foreground"
+                    : "border-border text-muted-foreground hover:border-foreground/25 hover:text-foreground"
                 }`}
               >
                 {addTags.includes(tag.id) && <CheckCircle2 className="h-3 w-3" />}
@@ -326,7 +332,6 @@ function TagDialog({
           <Button
             onClick={handleSubmit}
             disabled={!addTags.length || mutation.isPending}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Aplicar {addTags.length} tags
@@ -390,13 +395,13 @@ function CopilotDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Acionar Copilot</DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-3">
           <p className="text-sm text-muted-foreground">
-            Dispara o workflow <span className="font-mono text-primary">recompra_atrasada</span> para{" "}
+            Dispara o workflow <span className="cmd-mono rounded-md bg-muted px-1.5 py-0.5 text-[12px] text-foreground">recompra_atrasada</span> para{" "}
             <span className="font-bold text-foreground">{withLead}</span> clientes com lead vinculado.
           </p>
           <p className="text-xs text-muted-foreground">
@@ -405,13 +410,12 @@ function CopilotDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-border">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button
             onClick={handleFire}
             disabled={firing || !withLead}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {firing && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Acionar {withLead} clientes

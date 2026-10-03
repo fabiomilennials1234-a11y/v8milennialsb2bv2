@@ -34,7 +34,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { BaseNode } from "./BaseNode";
-import { ACTION_LABELS } from "@/types/workflow";
+import { ACTION_LABELS, isDiscontinuedAction } from "@/types/workflow";
 import type { ActionNodeData } from "@/types/workflow";
 
 const MESSAGE_TYPE_ICONS: Record<string, React.ElementType> = {
@@ -72,6 +72,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   remove_tag: Tag,
   update_lead_field: Edit3,
   update_custom_field: Settings2,
+  // Descontinuadas — ícones mantidos para renderizar o nó já salvo.
   update_rating: Star,
   calculate_score: TrendingUp,
   duplicate_to_pipe: Copy,
@@ -116,10 +117,11 @@ function ActionNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="action"
-      icon={<Icon className="w-5 h-5 text-green-500" />}
+      icon={<Icon />}
       title={nodeData.label || "Ação"}
       subtitle={subtitle}
       selected={selected}
+      discontinued={isDiscontinuedAction(nodeData.actionType)}
       warning={(data as Record<string, unknown>).__configIssue as string | undefined}
     />
   );

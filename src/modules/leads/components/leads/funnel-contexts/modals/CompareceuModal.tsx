@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useResponsibleMembers } from "@/modules/identity";
 import { Loader2, UserCheck } from "lucide-react";
+import { IconChip } from "@/components/ui/bento";
 
 interface CompareceuModalProps {
   open: boolean;
@@ -53,9 +54,9 @@ export function CompareceuModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-green-500" />
-            Confirmar Comparecimento
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={UserCheck} tone="good" />
+            Confirmar comparecimento
           </DialogTitle>
         </DialogHeader>
 
@@ -98,7 +99,6 @@ export function CompareceuModal({
           <Button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="bg-green-500 hover:bg-green-600"
           >
             {isLoading ? (
               <>

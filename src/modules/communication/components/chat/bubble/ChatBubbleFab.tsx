@@ -44,8 +44,9 @@ function ChatBubbleFabBase({ isOpen, unreadTotal, onClick }: ChatBubbleFabProps)
         scale: { type: "tween", duration: 0.15, ease: [0.16, 1, 0.3, 1] },
       }}
       style={{
-        background: "var(--gradient-primary)",
-        boxShadow: "var(--shadow-gold)",
+        // V5: ouro sólido com o brilho do sistema (era gradiente).
+        background: "hsl(var(--primary))",
+        boxShadow: "var(--brilho-ouro)",
       }}
       className={
         isOpen
@@ -62,7 +63,7 @@ function ChatBubbleFabBase({ isOpen, unreadTotal, onClick }: ChatBubbleFabProps)
              text-primary-foreground font-semibold text-[13px] tracking-tight
              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
              transition-shadow duration-200
-             hover:shadow-[0_14px_40px_-10px_hsl(47_100%_50%/0.45)]
+             hover:shadow-[0_14px_40px_-10px_hsl(var(--primary)/0.45)]
              motion-reduce:transition-none`
       }
       aria-label={ariaLabel}

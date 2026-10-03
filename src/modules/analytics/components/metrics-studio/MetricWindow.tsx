@@ -1,5 +1,5 @@
 import { memo, useCallback, useRef, useState } from "react";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Loader2, X } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, GripVertical, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CHART_KIND_META, type ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import {
@@ -161,11 +161,10 @@ function MetricWindowBase({
       onPointerDown={editavel ? () => onSelect(win.id) : undefined}
       style={{ left: geo.x, top: geo.y, width: geo.w, height: geo.h, zIndex: win.z }}
       className={cn(
-        "group absolute flex flex-col overflow-hidden rounded-xl border bg-card/95 backdrop-blur-sm",
-        "transition-[box-shadow,border-color] duration-150",
-        selected && editavel
-          ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/.25),0_18px_50px_-12px_hsl(0_0%_0%/.55)]"
-          : "border-border/70 shadow-[0_10px_30px_-16px_hsl(0_0%_0%/.6)] hover:border-border",
+        "group absolute flex flex-col overflow-hidden rounded-card border border-card-border bg-card text-card-foreground",
+        "transition-[box-shadow] duration-200",
+        selected && editavel ? "shadow-relevo-alto ring-2 ring-primary/70" : "shadow-relevo hover:shadow-relevo-alto",
+        editavel && !selected && "outline-dashed outline-[1.5px] -outline-offset-[5px] outline-foreground/15",
         draft && "select-none",
       )}
     >
@@ -176,14 +175,15 @@ function MetricWindowBase({
         onPointerUp={editavel ? endDrag : undefined}
         onPointerCancel={editavel ? endDrag : undefined}
         className={cn(
-          "flex items-start gap-2 border-b border-border/50 px-3 py-2",
+          "flex items-start gap-2 px-4 pb-1 pt-3.5",
           editavel && "cursor-grab active:cursor-grabbing",
         )}
       >
+        {editavel && <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden />}
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{metric.label}</h3>
+          <h3 className="truncate text-[13.5px] font-bold tracking-[-0.02em]">{metric.label}</h3>
           {!compact && (
-            <p className="truncate text-[10px] text-muted-foreground/70">
+            <p className="truncate text-[11px] text-muted-foreground">
               {ROTULO_DO_CORTE[corteEfetivo]}
               {degradou && " · sem funil escolhido"}
             </p>
@@ -196,7 +196,7 @@ function MetricWindowBase({
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onRemove(win.id)}
             aria-label={`Remover ${metric.label}`}
-            className="rounded-md p-1 text-muted-foreground/60 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+            className="-mr-1 -mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -204,20 +204,20 @@ function MetricWindowBase({
       </div>
 
       {/* Corpo */}
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-4 pb-3.5 pt-1">
         {dados.isLoading ? (
           <div className="flex flex-1 items-center justify-center">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/40" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
           </div>
         ) : dados.isError ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
-            <AlertCircle className="h-4 w-4 text-muted-foreground/40" />
-            <p className="text-[11px] text-muted-foreground/70">Não foi possível carregar</p>
+            <AlertCircle className="h-4 w-4 text-destructive/70" />
+            <p className="text-xs font-semibold">Não foi possível carregar</p>
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => dados.refetch()}
-              className="text-[11px] font-semibold text-primary hover:underline"
+              className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
             >
               Tentar de novo
             </button>
@@ -225,14 +225,14 @@ function MetricWindowBase({
         ) : (
           <>
             <div className="flex items-baseline gap-2">
-              <span className="text-[22px] font-extrabold tracking-[-0.04em] tabular-nums">
+              <span className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
                 {formatMetricValue(valor, metric.formatId)}
               </span>
               {variacao !== null && (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
-                    subindo ? "text-emerald-500" : "text-destructive",
+                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums",
+                    subindo ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
                   )}
                   title="Comparado ao período anterior"
                 >
@@ -253,7 +253,7 @@ function MetricWindowBase({
                 número: o primeiro é usado para decidir. */}
             {dados.cobertura !== null && dados.cobertura.parcial && (
               <p
-                className="text-[10px] leading-tight text-amber-500/90"
+                className="text-[11px] leading-tight text-warning-strong"
                 title="Só negócios com valor lançado entram nesta conta"
               >
                 Valor em {dados.cobertura.comValor.toLocaleString("pt-BR")} de{" "}
@@ -268,13 +268,13 @@ function MetricWindowBase({
                 leria como "não bateu nada". */}
             {dados.meta !== null && !compact && (
               <div className="flex flex-col gap-1">
-                <div className="flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground/70">
+                <div className="flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
                   <span className="truncate">Meta: {formatMetricValue(dados.meta, metric.formatId)}</span>
                   {dados.atingimento !== null && (
                     <span
                       className={cn(
                         "shrink-0 font-semibold tabular-nums",
-                        dados.atingimento >= 100 ? "text-emerald-500" : "text-muted-foreground",
+                        dados.atingimento >= 100 ? "text-success" : "text-muted-foreground",
                       )}
                     >
                       {dados.atingimento.toFixed(0)}% da meta
@@ -283,7 +283,7 @@ function MetricWindowBase({
                 </div>
                 {dados.atingimento !== null && (
                   <div
-                    className="h-1 w-full overflow-hidden rounded-full bg-muted"
+                    className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
                     role="progressbar"
                     aria-valuenow={Math.round(dados.atingimento)}
                     aria-valuemin={0}
@@ -296,7 +296,7 @@ function MetricWindowBase({
                     <div
                       className={cn(
                         "h-full rounded-full transition-[width] duration-500",
-                        dados.atingimento >= 100 ? "bg-emerald-500" : "bg-primary",
+                        dados.atingimento >= 100 ? "bg-success" : "bg-primary",
                       )}
                       style={{ width: `${Math.min(100, Math.max(0, dados.atingimento))}%` }}
                     />
@@ -309,7 +309,7 @@ function MetricWindowBase({
               <div className="min-h-0 flex-1">
                 {dados.series.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <span className="text-[11px] text-muted-foreground/50">
+                    <span className="text-xs text-muted-foreground">
                       Sem dado no período {EM_DASH}
                     </span>
                   </div>
@@ -328,7 +328,7 @@ function MetricWindowBase({
       {editavel && (
       <div
         className={cn(
-          "flex items-center gap-1 overflow-x-auto border-t border-border/50 px-2 py-1.5 scrollbar-hide transition-opacity duration-150",
+          "flex items-center gap-1.5 overflow-x-auto border-t border-border/60 px-3 py-2 scrollbar-hide transition-opacity duration-150",
           selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
       >
@@ -338,7 +338,7 @@ function MetricWindowBase({
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => onCorte(win.id, e.target.value as MetricRecorte)}
             aria-label="Corte do dado"
-            className="shrink-0 rounded-md bg-muted/60 px-1.5 py-1 text-[10px] font-semibold text-foreground outline-none"
+            className="h-7 shrink-0 rounded-full bg-muted px-2.5 text-[11px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {cortes.map((c) => (
               <option key={c} value={c}>
@@ -348,24 +348,27 @@ function MetricWindowBase({
           </select>
         )}
 
-        {graficos.length > 1 &&
-          graficos.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => onChart(win.id, kind)}
-              aria-pressed={win.chart === kind}
-              className={cn(
-                "shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors",
-                win.chart === kind
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {CHART_KIND_META[kind].label}
-            </button>
-          ))}
+        {graficos.length > 1 && (
+          <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-[3px]">
+            {graficos.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onChart(win.id, kind)}
+                aria-pressed={win.chart === kind}
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  win.chart === kind
+                    ? "bg-card text-foreground shadow-relevo"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {CHART_KIND_META[kind].label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       )}
 
@@ -374,8 +377,8 @@ function MetricWindowBase({
         <>
           <div onPointerDown={startResize("e")} className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize" aria-hidden />
           <div onPointerDown={startResize("s")} className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize" aria-hidden />
-          <div onPointerDown={startResize("se")} className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize" aria-hidden>
-            <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/35">
+          <div onPointerDown={startResize("se")} className="absolute bottom-0.5 right-0.5 h-4 w-4 cursor-nwse-resize" aria-hidden>
+            <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/40">
               <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.5" fill="none" />
             </svg>
           </div>

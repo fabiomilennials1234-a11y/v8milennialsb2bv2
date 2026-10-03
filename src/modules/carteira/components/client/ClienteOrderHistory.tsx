@@ -23,11 +23,12 @@ interface ClienteOrderHistoryProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Mesmas faixas de antes (ciclo / 1,3× ciclo), em token. */
 function dotColor(gap: number | null, cycleDays: number) {
   if (gap == null || cycleDays === 0) return "bg-muted-foreground";
-  if (gap <= cycleDays) return "bg-emerald-400";
-  if (gap <= cycleDays * 1.3) return "bg-amber-400";
-  return "bg-red-400";
+  if (gap <= cycleDays) return "bg-success";
+  if (gap <= cycleDays * 1.3) return "bg-warning";
+  return "bg-destructive";
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -39,9 +40,11 @@ export function ClienteOrderHistory({
 }: ClienteOrderHistoryProps) {
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-        <ShoppingCart size={28} className="text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Nenhum pedido registrado</p>
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <ShoppingCart size={20} />
+        </span>
+        <p className="text-sm font-bold text-foreground">Nenhum pedido registrado</p>
       </div>
     );
   }
@@ -74,7 +77,7 @@ export function ClienteOrderHistory({
             {/* Dot */}
             <div
               className={cn(
-                "relative z-10 mt-1.5 w-3.5 h-3.5 shrink-0 rounded-full border-2 border-background",
+                "relative z-10 mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-card",
                 dotColor(order.gap, cycleDays),
               )}
             />
@@ -83,7 +86,7 @@ export function ClienteOrderHistory({
             <div className="flex-1 min-w-0 pb-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-card-foreground truncate">
+                  <p className="truncate text-sm font-semibold text-card-foreground">
                     {order.product_name ?? "Pedido"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -96,23 +99,23 @@ export function ClienteOrderHistory({
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-sm font-semibold tabular-nums text-card-foreground">
+                  <span className="text-sm font-bold tabular-nums text-card-foreground">
                     {order.sale_value != null ? formatBRL(order.sale_value) : "—"}
                   </span>
                   <div className="flex items-center gap-1">
                     {invoicedOrderIds?.has(order.id) && (
                       <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0 h-4 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        variant="success"
+                        className="h-5 px-2 py-0 text-[10.5px]"
                       >
-                        <ReceiptText className="w-2.5 h-2.5 mr-0.5" />
+                        <ReceiptText className="mr-1 h-3 w-3" />
                         Faturado
                       </Badge>
                     )}
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 border",
+                        "h-5 px-2 py-0 text-[10.5px]",
                         sourceBadgeClass(order.source),
                       )}
                     >

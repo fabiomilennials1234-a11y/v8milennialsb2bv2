@@ -883,10 +883,10 @@ export function ImportUpsellClientsContent({
             </div>
           </div>
 
-          <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 rounded-xl border border-insights/25 bg-insights/10 p-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-insights" />
             <div>
-              <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Mapeie os campos</p>
+              <p className="text-sm font-semibold text-foreground">Mapeie os campos</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Para cada campo do sistema, escolha qual coluna da planilha contém o dado. <strong>Nome</strong> é obrigatório.
               </p>
@@ -905,7 +905,7 @@ export function ImportUpsellClientsContent({
                       <div className="shrink-0 w-[170px]">
                         <p className="text-sm font-medium">
                           {label}
-                          {required && <span className="text-red-500 ml-0.5">*</span>}
+                          {required && <span className="ml-0.5 text-destructive">*</span>}
                         </p>
                       </div>
                       <span className="text-muted-foreground text-xs shrink-0">←</span>
@@ -943,9 +943,9 @@ export function ImportUpsellClientsContent({
           </div>
 
           {!hasNameMapped && (
-            <div className="flex items-start gap-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 dark:text-red-300">
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-2">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p className="text-xs text-destructive">
                 Mapeie o campo <strong>Nome</strong> a uma coluna da planilha para continuar.
               </p>
             </div>
@@ -1038,9 +1038,9 @@ export function ImportUpsellClientsContent({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="baixo">Baixo</SelectItem>
-                <SelectItem value="medio">Medio</SelectItem>
+                <SelectItem value="medio">Médio</SelectItem>
                 <SelectItem value="alto">Alto</SelectItem>
-                <SelectItem value="estrategico">Estrategico</SelectItem>
+                <SelectItem value="estrategico">Estratégico</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1112,39 +1112,39 @@ export function ImportUpsellClientsContent({
           className="py-6 space-y-6"
         >
           <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-green-500" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+              <Sparkles className="h-8 w-8 text-success" />
             </div>
             <h3 className="text-xl font-bold">Importação concluída!</h3>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-4 bg-green-500/10 rounded-xl text-center">
-              <CheckCircle2 className="w-6 h-6 mx-auto mb-2 text-green-500" />
-              <p className="text-2xl font-bold text-green-500">{result.imported}</p>
+            <div className="rounded-xl bg-success/10 p-4 text-center">
+              <CheckCircle2 className="mx-auto mb-2 h-6 w-6 text-success" />
+              <p className="text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-success">{result.imported}</p>
               <p className="text-xs text-muted-foreground">Importados</p>
             </div>
-            <div className="p-4 bg-blue-500/10 rounded-xl text-center">
-              <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-              <p className="text-2xl font-bold text-blue-500">{result.updated}</p>
+            <div className="rounded-xl bg-insights/10 p-4 text-center">
+              <RefreshCw className="mx-auto mb-2 h-6 w-6 text-insights" />
+              <p className="text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-insights">{result.updated}</p>
               <p className="text-xs text-muted-foreground">Atualizados</p>
             </div>
-            <div className="p-4 bg-amber-500/10 rounded-xl text-center">
-              <AlertCircle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
-              <p className="text-2xl font-bold text-amber-500">{result.duplicates}</p>
+            <div className="rounded-xl bg-warning/10 p-4 text-center">
+              <AlertCircle className="mx-auto mb-2 h-6 w-6 text-warning-strong" />
+              <p className="text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-warning-strong">{result.duplicates}</p>
               <p className="text-xs text-muted-foreground">Duplicados</p>
             </div>
-            <div className="p-4 bg-red-500/10 rounded-xl text-center">
-              <XCircle className="w-6 h-6 mx-auto mb-2 text-red-500" />
-              <p className="text-2xl font-bold text-red-500">{result.invalid}</p>
+            <div className="rounded-xl bg-destructive/10 p-4 text-center">
+              <XCircle className="mx-auto mb-2 h-6 w-6 text-destructive" />
+              <p className="text-2xl font-extrabold tabular-nums tracking-[-0.04em] text-destructive">{result.invalid}</p>
               <p className="text-xs text-muted-foreground">Inválidos</p>
             </div>
           </div>
 
           {result.errors.length > 0 && (
-            <div className="rounded-xl border border-red-200 dark:border-red-900">
+            <div className="rounded-xl border border-destructive/30">
               <button
                 type="button"
-                className="w-full flex items-center justify-between p-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl"
+                className="flex w-full items-center justify-between rounded-xl p-3 text-sm font-semibold text-destructive hover:bg-destructive/5"
                 onClick={() => setShowErrors(!showErrors)}
               >
                 <span className="flex items-center gap-2">
@@ -1158,7 +1158,7 @@ export function ImportUpsellClientsContent({
                   <div className="space-y-1 px-3 pb-3">
                     {result.errors.map((err, i) => (
                       <div key={i} className="text-xs text-muted-foreground flex gap-2">
-                        <span className="text-red-500 font-mono shrink-0">
+                        <span className="shrink-0 font-mono text-destructive">
                           {err.row > 0 ? `L${err.row}` : ""}
                         </span>
                         <span>{err.reason}</span>

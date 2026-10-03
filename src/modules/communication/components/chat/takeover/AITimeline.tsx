@@ -61,19 +61,19 @@ const EVENT_CONFIG: Record<
   },
   action_executed: {
     icon: Zap,
-    colorClass: "text-amber-500",
+    colorClass: "text-warning-strong",
     label: "Ação executada",
     revertible: true,
   },
   stage_moved: {
     icon: ArrowRight,
-    colorClass: "text-blue-500",
-    label: "Stage movido",
+    colorClass: "text-insights",
+    label: "Etapa movida",
     revertible: true,
   },
   tag_added: {
     icon: Tag,
-    colorClass: "text-purple-500",
+    colorClass: "text-bubble-workflow-foreground",
     label: "Tag adicionada",
     revertible: true,
   },
@@ -85,8 +85,8 @@ const EVENT_CONFIG: Record<
   },
   handoff_triggered: {
     icon: Hand,
-    colorClass: "text-orange-500",
-    label: "Handoff solicitado",
+    colorClass: "text-warning-strong",
+    label: "Passagem para humano solicitada",
     revertible: false,
   },
   reverted: {
@@ -98,19 +98,19 @@ const EVENT_CONFIG: Record<
   // Eventos Uazapi (Onda 5)
   mass_send_completed: {
     icon: Megaphone,
-    colorClass: "text-blue-500",
+    colorClass: "text-insights",
     label: "Campanha enviada",
     revertible: false,
   },
   pix_paid: {
     icon: BadgeDollarSign,
-    colorClass: "text-green-500",
+    colorClass: "text-success",
     label: "Pix recebido",
     revertible: false,
   },
   repair_executed: {
     icon: Wrench,
-    colorClass: "text-amber-500",
+    colorClass: "text-warning-strong",
     label: "Conexão reparada",
     revertible: false,
   },
@@ -253,7 +253,7 @@ export function AITimeline({ leadId, hideHeader = false }: AITimelineProps) {
       )}
 
       {!isLoading && !error && events.length > 0 && (
-        <ScrollArea className={hideHeader ? "h-full" : "max-h-[320px]"}>
+        <ScrollArea className={cn(hideHeader ? "h-full" : "max-h-[320px]", "[&_[data-radix-scroll-area-viewport]>div]:!block")}>
           <ol>
             <AnimatePresence initial={false}>
               {events.map((event, index) => (

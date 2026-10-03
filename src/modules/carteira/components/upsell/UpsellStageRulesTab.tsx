@@ -380,22 +380,22 @@ export function UpsellStageRulesTab({ stages }: UpsellStageRulesTabProps) {
       )}
 
       {gaps.length > 0 && overlaps.length === 0 && (
-        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-1">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-amber-600">
+        <div className="space-y-1 rounded-xl border border-warning/30 bg-warning/10 p-3">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-warning-strong">
             <AlertTriangle className="h-4 w-4" />
             Gaps encontrados
           </div>
           {gaps.map((msg, i) => (
-            <p key={i} className="text-xs text-amber-600/80 ml-5.5">{msg}</p>
+            <p key={i} className="ml-5.5 text-xs text-warning-strong/85">{msg}</p>
           ))}
         </div>
       )}
 
       {overlaps.length === 0 && gaps.length === 0 && rules.some((r) => r.enabled) && (
-        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+        <div className="rounded-xl border border-success/25 bg-success/10 p-3">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-success">
             <Check className="h-4 w-4" />
-            Regras validas — sem sobreposicoes ou gaps
+            Regras válidas — sem sobreposições ou gaps
           </div>
         </div>
       )}

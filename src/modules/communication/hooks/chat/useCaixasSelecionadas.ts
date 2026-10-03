@@ -91,6 +91,12 @@ export interface UseCaixasSelecionadasResult {
   alternar: (id: string) => void;
   marcarSomente: (id: string) => void;
   marcarTodas: () => void;
+  /**
+   * Marca EXATAMENTE este conjunto (o atalho de canal: "todas as caixas de
+   * WhatsApp"). Ids fora do permitido são descartados; conjunto que sobra vazio
+   * é sem-op — a seleção nunca fica vazia (ver o cabeçalho).
+   */
+  marcarConjunto: (ids: readonly string[]) => void;
   /** `true` enquanto a lista de caixas ainda não chegou. */
   vazio: boolean;
 }
@@ -177,6 +183,14 @@ export function useCaixasSelecionadas({
     if (todas.length > 0) setMarcadasCruas(todas);
   }, [caixas]);
 
+  const marcarConjunto = useCallback(
+    (ids: readonly string[]) => {
+      const validas = caixas.filter((c) => ids.includes(c.id)).map((c) => c.id);
+      if (validas.length > 0) setMarcadasCruas(validas);
+    },
+    [caixas],
+  );
+
   const caixasMarcadas = useMemo(
     () => marcadas.map((id) => porId.get(id)).filter((c): c is InboxBox => !!c),
     [marcadas, porId],
@@ -188,6 +202,7 @@ export function useCaixasSelecionadas({
     alternar,
     marcarSomente,
     marcarTodas,
+    marcarConjunto,
     vazio: caixas.length === 0,
   };
 }

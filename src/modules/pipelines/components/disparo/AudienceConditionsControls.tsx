@@ -116,7 +116,7 @@ export function AudienceConditionsControls({
         <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="text-sm font-medium leading-none">Condições</span>
         {activeCount > 0 && (
-          <span className="rounded-full border border-primary/30 bg-primary/[0.08] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary">
+          <span className="rounded-full border border-primary/30 bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-soft-foreground">
             {activeCount}
           </span>
         )}

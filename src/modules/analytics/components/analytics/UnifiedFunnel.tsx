@@ -43,7 +43,7 @@ function UnifiedFunnelBase({ steps, title, variant = "compact" }: UnifiedFunnelP
   if (steps.length === 0) return null;
 
   return (
-    <div className="bg-card rounded-lg border border-border p-5">
+    <div className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
       {title && (
         <p className={cn(AT.chartTitle, "mb-4")}>{title}</p>
       )}

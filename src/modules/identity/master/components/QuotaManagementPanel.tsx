@@ -279,7 +279,7 @@ export function QuotaManagementPanel({ organizationId }: QuotaManagementPanelPro
                   Salvando...
                 </>
               ) : (
-                "Salvar Ajuste"
+                "Salvar ajuste"
               )}
             </Button>
           </DialogFooter>

@@ -36,11 +36,11 @@ function typeLabel(type: string | null) {
 function typeBadgeClass(type: string | null) {
   switch (type) {
     case "mrr":
-      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+      return "border-transparent bg-success/10 text-success";
     case "projeto":
-      return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      return "border-transparent bg-insights/10 text-insights";
     default:
-      return "bg-muted text-muted-foreground border-border";
+      return "border-transparent bg-muted text-muted-foreground";
   }
 }
 
@@ -49,9 +49,11 @@ function typeBadgeClass(type: string | null) {
 export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
   if (products.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-        <Package size={28} className="text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Nenhum produto cadastrado</p>
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <Package size={20} />
+        </span>
+        <p className="text-sm font-bold text-foreground">Nenhum produto cadastrado</p>
         <p className="text-xs text-muted-foreground">Adicione produtos ao vincular pedidos a este cliente.</p>
       </div>
     );
@@ -61,13 +63,13 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
     <Table>
       <TableHeader>
         <TableRow className="border-border hover:bg-transparent">
-          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider pl-0">
+          <TableHead className="h-9 pl-0">
             Produto
           </TableHead>
-          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+          <TableHead className="h-9">
             Tipo
           </TableHead>
-          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider text-right pr-0">
+          <TableHead className="h-9 pr-0 text-right">
             Valor
           </TableHead>
         </TableRow>
@@ -86,13 +88,13 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
             <TableCell className="py-2.5">
               <Badge
                 variant="outline"
-                className={cn("text-[10px] px-1.5 py-0 h-5 border", typeBadgeClass(p.product_type))}
+                className={cn("h-5 px-2 py-0 text-[10.5px]", typeBadgeClass(p.product_type))}
               >
                 {typeLabel(p.product_type)}
               </Badge>
             </TableCell>
             <TableCell className="py-2.5 text-right pr-0">
-              <span className="text-sm tabular-nums text-card-foreground">
+              <span className="text-sm font-semibold tabular-nums text-card-foreground">
                 {p.sale_value != null ? formatBRL(p.sale_value) : "—"}
               </span>
             </TableCell>

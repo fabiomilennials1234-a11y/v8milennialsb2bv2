@@ -15,6 +15,8 @@ import { useOrganization } from "@/modules/identity";
  */
 export interface LeadCarteiraMetrics {
   leadId: string;
+  /** `upsell_clients.id` — a chave da rota do Cliente 360 (`/carteira/:clientId`). */
+  clientId?: string;
   /** Receita acumulada do cliente (soma dos pedidos aprovados). */
   lifetimeValue: number;
   /** Ticket médio dos pedidos aprovados. */
@@ -53,7 +55,7 @@ export function useLeadsCarteiraMetrics(leadIds: string[]) {
       const { data, error } = await supabase
         .from("upsell_clients")
         .select(
-          "lead_id, lifetime_value, avg_ticket, order_count, reorder_cycle_days, days_since_last_order, segment",
+          "id, lead_id, lifetime_value, avg_ticket, order_count, reorder_cycle_days, days_since_last_order, segment",
         )
         .eq("organization_id", organizationId)
         .in("lead_id", ids);
@@ -65,6 +67,7 @@ export function useLeadsCarteiraMetrics(leadIds: string[]) {
         if (!row.lead_id) continue;
         map[row.lead_id] = {
           leadId: row.lead_id,
+          clientId: row.id,
           lifetimeValue: num(row.lifetime_value),
           avgTicket: num(row.avg_ticket),
           orderCount: num(row.order_count),

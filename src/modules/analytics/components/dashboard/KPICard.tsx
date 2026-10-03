@@ -38,18 +38,15 @@ function KPICardBase({ title, value, format = "number", icon: Icon, trend, delay
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay }}
-      className="relative bg-card rounded-lg border border-border p-5 hover:border-border/80 transition-colors overflow-hidden group"
+      className="relative overflow-hidden rounded-card border border-card-border bg-card p-[18px] shadow-relevo transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto"
     >
-      {/* Accent bar — racing stripe */}
-      <div className="absolute left-0 top-0 w-[3px] h-full bg-primary/60 group-hover:bg-primary transition-colors" />
-
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          <p className="truncate text-[13px] font-semibold text-foreground/80">
             {title}
           </p>
           <div className="flex items-baseline gap-2 mt-1.5">
-            <p className="text-2xl font-extrabold tracking-[-0.03em] tabular-nums">
+            <p className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
               {formatValue(animated, format)}
             </p>
             {trend && (
@@ -60,8 +57,8 @@ function KPICardBase({ title, value, format = "number", icon: Icon, trend, delay
             )}
           </div>
         </div>
-        <div className="p-2.5 rounded-lg bg-muted">
-          <Icon className="w-4 h-4 text-muted-foreground" />
+        <div className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] bg-muted">
+          <Icon className="h-4 w-4 text-foreground/70" />
         </div>
       </div>
     </motion.div>

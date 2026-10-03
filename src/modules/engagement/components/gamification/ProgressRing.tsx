@@ -13,10 +13,14 @@ interface ProgressRingProps {
   children?: ReactNode;
 }
 
+// V5: o traço usa o preenchimento do token; o texto usa o par legível.
+// Ouro como TEXTO sobre cartão branco reprova contraste — por isso `primary`
+// escreve em `primary-soft-foreground` e pinta o chip em `primary-soft`; o
+// âmbar idem com `warning-strong`.
 const colorMap = {
-  primary: { stroke: "stroke-primary", text: "text-primary", bg: "bg-primary/10" },
+  primary: { stroke: "stroke-primary", text: "text-primary-soft-foreground", bg: "bg-primary-soft" },
   success: { stroke: "stroke-success", text: "text-success", bg: "bg-success/10" },
-  warning: { stroke: "stroke-warning", text: "text-warning", bg: "bg-warning/10" },
+  warning: { stroke: "stroke-warning", text: "text-warning-strong", bg: "bg-warning/15" },
   destructive: { stroke: "stroke-destructive", text: "text-destructive", bg: "bg-destructive/10" },
 };
 
@@ -80,7 +84,7 @@ export function ProgressRing({
                   <Icon className={`w-5 h-5 ${colors.text}`} />
                 </div>
               )}
-              <span className={`text-lg font-bold ${colors.text}`}>
+              <span className={`text-lg font-extrabold tabular-nums tracking-[-0.03em] ${colors.text}`}>
                 {value || `${Math.round(progress)}%`}
               </span>
             </>
@@ -88,7 +92,7 @@ export function ProgressRing({
         </div>
       </div>
       {label && (
-        <p className="text-sm font-medium text-muted-foreground text-center">{label}</p>
+        <p className="text-center text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{label}</p>
       )}
     </div>
   );
@@ -135,7 +139,7 @@ export function MiniProgressRing({
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`text-xs font-bold ${colors.text}`}>
+        <span className={`text-[10.5px] font-bold tabular-nums ${colors.text}`}>
           {Math.round(progress)}%
         </span>
       </div>

@@ -9,8 +9,8 @@ import { useOrganization } from "@/modules/identity";
 
 const PRIORITY_STYLE = (priority: number) => {
   if (priority >= 8) return { tag: "P0", cls: "text-destructive bg-destructive/10" };
-  if (priority >= 5) return { tag: "P1", cls: "text-primary bg-primary/15" };
-  return { tag: "P2", cls: "text-chart-5 bg-chart-5/10" };
+  if (priority >= 5) return { tag: "P1", cls: "text-primary-soft-foreground bg-primary-soft" };
+  return { tag: "P2", cls: "text-insights bg-insights/10" };
 };
 
 interface OraculoBriefingProps {
@@ -44,22 +44,23 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
   if (orgFeatures && !orgFeatures.hasFeature("oraculo")) return null;
 
   if (isLoading) {
-    return <Skeleton className="h-[300px] rounded-2xl" />;
+    return <Skeleton className="h-full min-h-[200px] rounded-2xl" />;
   }
 
   const list = actions ?? [];
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".1s" }}>
-      <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Briefing do Oráculo — próximas jogadas</span>
+    // Corpo da janela "Oráculo" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Próximas jogadas</span>
         {list.length > 0 && (
-          <span className="rounded-full bg-primary/15 px-[9px] py-[3px] text-[10.5px] font-extrabold text-primary tabular-nums">
+          <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
             {list.length} aç{list.length === 1 ? "ão" : "ões"} na fila
           </span>
         )}
       </div>
-      <div className="mt-3.5 flex flex-col gap-[9px]">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         {list.length === 0 && (
           <p className="py-6 text-center text-[13px] text-muted-foreground">
             Fila limpa — nenhuma ação prioritária agora.
@@ -72,17 +73,17 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
           return (
             <div
               key={action.id}
-              className="cmd-slidein group grid grid-cols-[26px_1fr_auto] items-center gap-3 rounded-[11px] border border-border/70 bg-card px-[13px] py-[11px]"
+              className="cmd-slidein group grid grid-cols-[28px_1fr_auto] items-center gap-3 rounded-2xl bg-sunken px-3 py-2.5"
               style={{ animationDelay: `${0.3 + i * 0.12}s` }}
             >
-              <span className={`cmd-mono flex h-[26px] w-[26px] items-center justify-center rounded-md text-[10px] font-extrabold ${p.cls}`}>
+              <span className={`grid h-7 w-7 place-items-center rounded-[9px] text-[10.5px] font-extrabold tabular-nums ${p.cls}`}>
                 {p.tag}
               </span>
               <p className="text-[12.5px] leading-[1.45] text-muted-foreground">
                 <b className="font-bold text-foreground">{action.title}</b>
                 {action.reason ? <> — {action.reason}</> : null}
                 {action.lead_name && (
-                  <span className="mt-[2px] block text-[10.5px] font-semibold text-muted-foreground/60">
+                  <span className="mt-[2px] block text-[11px] font-semibold text-muted-foreground">
                     Lead: {action.lead_name}
                   </span>
                 )}
@@ -91,7 +92,7 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
                 <button
                   type="button"
                   onClick={() => action.lead_id && navigate(`/leads?leadId=${action.lead_id}`)}
-                  className="whitespace-nowrap text-[11.5px] font-bold text-primary"
+                  className="whitespace-nowrap rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold transition-colors hover:border-foreground/25"
                 >
                   Abrir →
                 </button>
@@ -100,7 +101,7 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
                     type="button"
                     aria-label="Dispensar"
                     onClick={() => dismiss.mutate(action.id)}
-                    className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-muted-foreground group-hover:opacity-100"
+                    className="grid h-6 w-6 place-items-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -114,10 +115,10 @@ function OraculoBriefingBase({ onAsk }: OraculoBriefingProps) {
         <button
           type="button"
           onClick={onAsk}
-          className="mt-3 flex w-full cursor-text items-center gap-2 rounded-[9px] border border-border bg-background px-[11px] py-[9px] text-left transition-all hover:border-primary/60 hover:shadow-[0_0_0_3px_hsl(var(--primary)/.15)]"
+          className="mt-3 flex w-full cursor-text items-center gap-2 rounded-full border border-input bg-card px-3.5 py-2 text-left transition-[border-color,box-shadow] hover:border-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="text-[12px] text-muted-foreground/60">Perguntar ao Oráculo...</span>
-          <kbd className="ml-auto rounded border border-border bg-card px-[5px] py-[2px] font-sans text-[10px] font-bold text-muted-foreground">⌘ J</kbd>
+          <span className="text-[13px] text-muted-foreground">Perguntar ao Oráculo…</span>
+          <kbd className="ml-auto rounded-md bg-muted px-1.5 py-0.5 font-sans text-[10px] font-bold text-muted-foreground">⌘ J</kbd>
         </button>
       )}
     </div>

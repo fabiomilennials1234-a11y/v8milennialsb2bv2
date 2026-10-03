@@ -43,7 +43,7 @@ export function LeadCardNotes({
   return (
     <section className="flex flex-col gap-2.5">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+        <h2 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Anotações
         </h2>
         <span
@@ -72,7 +72,7 @@ export function LeadCardNotes({
         }}
         placeholder="O que você precisa lembrar sobre esta pessoa…"
         className={cn(
-          "w-full resize-none rounded-lg border border-border bg-card px-3.5 py-3",
+          "w-full resize-none rounded-xl border border-input bg-card px-3.5 py-3 shadow-relevo",
           "text-[13.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70",
           "transition-colors hover:border-muted-foreground/30",
           "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",

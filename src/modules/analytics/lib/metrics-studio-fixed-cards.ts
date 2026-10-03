@@ -66,7 +66,7 @@ export const FIXED_CARDS: Record<string, FixedCardEntry> = {
     render: CampeoesProdutoCard,
   },
   "meta-mensal": { label: "Meta do mês", descricao: "Meta e realizado do mês corrente", tamanhoPadrao: { w: 320, h: 488 }, render: MetaMensalCard },
-  "indicadores-operacao": { label: "Indicadores da operação", descricao: "Período selecionado; follow-ups atrasados agora", tamanhoPadrao: { w: 984, h: 280 }, render: IndicadoresCard },
+  "indicadores-operacao": { label: "Indicadores da operação", descricao: "Período selecionado; follow-ups atrasados agora", tamanhoPadrao: { w: 984, h: 280 }, semMoldura: true, render: IndicadoresCard },
   "receita-acumulada": { label: "Receita acumulada", descricao: "Comparação com o período anterior", tamanhoPadrao: { w: 648, h: 488 }, render: ReceitaAcumuladaCard },
   "funil-conversao": { label: "Funil de conversão", descricao: "Da entrada do lead à venda no período", tamanhoPadrao: { w: 320, h: 400 }, render: FunilCard },
   "briefing-oraculo": { label: "Oráculo", descricao: "Leitura da operação e conversa com a IA", tamanhoPadrao: { w: 320, h: 400 }, render: BriefingCard },
@@ -77,7 +77,7 @@ export const FIXED_CARDS: Record<string, FixedCardEntry> = {
   "metas-individuais": { label: "Metas individuais", descricao: "Metas por pessoa no mês corrente", tamanhoPadrao: { w: 328, h: 400 }, render: MetasIndividuaisCard, requiresPerformance: true },
   "motivos-perda": { label: "Ganhos e perdas", descricao: "Desfechos dos negócios no período", tamanhoPadrao: { w: 328, h: 400 }, render: PerdasCard },
   "real-esperado": { label: "Realizado versus esperado", descricao: "Evolução em relação à meta do mês corrente", tamanhoPadrao: { w: 640, h: 400 }, render: RealEsperadoCard, requiresPerformance: true },
-  "saude-funil": { label: "Saúde do funil", descricao: "Coortes, gargalos e conversões no período", tamanhoPadrao: { w: 984, h: 980 }, render: SaudeCard },
+  "saude-funil": { label: "Saúde do funil", descricao: "Coortes, gargalos e conversões no período", tamanhoPadrao: { w: 984, h: 980 }, semMoldura: true, render: SaudeCard },
   "mapa-clientes": { label: "Mapa de clientes", descricao: "Distribuição geográfica da base completa — sem filtro de período", tamanhoPadrao: { w: 984, h: 720 }, render: MapaCard },
 };
 

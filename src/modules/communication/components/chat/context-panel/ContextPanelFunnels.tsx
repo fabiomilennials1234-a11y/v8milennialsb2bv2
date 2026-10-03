@@ -152,7 +152,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/60 px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-foreground"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-foreground"
           >
             {createEntry.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Adicionar a um funil
@@ -206,13 +206,13 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         return (
           <div
             key={row.key}
-            className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/20 p-2.5"
+            className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 p-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
               <div className="min-w-0">
-                <div className="truncate text-[12.5px] font-medium text-foreground">{row.label}</div>
-                <div className="text-[10.5px] text-muted-foreground/70">Clique na etapa p/ mover</div>
+                <div className="truncate text-[13px] font-bold text-foreground">{row.label}</div>
+                <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
               </div>
             </div>
 
@@ -222,11 +222,13 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                   type="button"
                   disabled={!canMove}
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold transition-opacity",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-opacity",
                     isMoving && "opacity-60",
                     !canMove && "cursor-not-allowed opacity-50",
                   )}
-                  style={{ background: `${row.color}22`, color: row.color }}
+                  // A cor da etapa fica no fundo e no ponto; o texto é tinta —
+                  // "Ciclo vencendo" na cor crua dava 1,9:1.
+                  style={{ background: `${row.color}22` }}
                   aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
                   title={canMove ? undefined : "Sem permissão para mover etapa"}
                 >
@@ -259,7 +261,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                       >
                         <span
                           className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ background: terminal ? (s.role === "won" ? "#34d399" : "#fb7185") : row.color }}
+                          style={{ background: terminal ? (s.role === "won" ? "hsl(var(--success))" : "hsl(var(--destructive))") : row.color }}
                         />
                         <span className="min-w-0 flex-1 truncate">{s.label}</span>
                         {terminal && (

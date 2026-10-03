@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { ListChecks, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,14 +50,14 @@ export function ChecklistTemplatesManager() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Templates de Checklist</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-base font-bold tracking-tight">Templates de Checklist</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Crie templates reutilizáveis para aplicar nos leads
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setDialogOpen(true)} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus />
             Novo Template
           </Button>
         )}
@@ -66,15 +66,20 @@ export function ChecklistTemplatesManager() {
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />
+            <div key={i} className="h-[86px] animate-pulse rounded-card bg-muted" />
           ))}
         </div>
       ) : templates.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-          Nenhum template cadastrado
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <ListChecks className="h-5 w-5" />
+          </span>
+          <p className="text-sm font-semibold">Nenhum template cadastrado</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        // Aqui o template já mora dentro do cartão de Configurações: sem a
+        // sombra do bento, para não virar cartão-sobre-cartão.
+        <div className="space-y-3 [&>div]:shadow-none">
           {templates.map((t) => (
             <ChecklistCard key={t.id} checklist={t} />
           ))}

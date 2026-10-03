@@ -1,0 +1,174 @@
+import type {
+  CustomPipelineStatus,
+  PipelineStatus,
+  StandardPipelineStatus,
+} from "../../../../hooks/useLeadAllPipelines";
+import { funisSemNegocioAberto } from "../../../../lib/negocio-aberto";
+import type { NewDealOption } from "./NewDealDialog";
+
+/**
+ * O construtor das opções de "Novo negócio" — **fora do painel**.
+ *
+ * Ele nasceu dentro do `CrossPipePanel` (682 linhas, área frágil) e ficou
+ * inalcançável de fora. O Card do Lead precisa exatamente da mesma lista para
+ * oferecer "Criar negócio" — e a alternativa era recalcular a regra num segundo
+ * lugar, que é como duas telas passam a discordar sobre onde a Carteira está
+ * travada e sobre qual funil ainda aceita negócio.
+ *
+ * Aqui não há React de propósito: são decisões sobre dados, e decisão sobre
+ * dados se testa direto, sem montar árvore. O painel continua dono do que é
+ * dele (trilhos, foco, chips); ele passou a **importar** isto no mesmo diff em
+ * que o card passou a usá-lo — se um dia divergirem, é porque alguém copiou de
+ * volta, e não porque nasceram separados.
+ *
+ * ADR-0023 decisão 3: negócio nasce por clique humano. Estas são as portas
+ * possíveis desse clique — nada aqui cria nada.
+ */
+
+/**
+ * SCRUM-641: o mapa curto do trio morreu — `p.label` já chega resolvido pelo
+ * `useLeadAllPipelines` com o nome que a ORG usa (`nomeDoFunil`). Sobra só a
+ * Carteira, que não é funil (D9/ADR-0034) e não tem linha de display.
+ */
+export const SYSTEM_PIPE_SHORT_LABEL: Record<string, string> = {
+  upsell: "Carteira",
+};
+
+const SYSTEM_PIPE_TYPES = new Set<StandardPipelineStatus["pipeType"]>([
+  "whatsapp",
+  "confirmacao",
+  "propostas",
+]);
+
+export function isSystemPipe(p: PipelineStatus): p is StandardPipelineStatus & {
+  pipeType: "whatsapp" | "confirmacao" | "propostas";
+} {
+  return p.type === "standard" && SYSTEM_PIPE_TYPES.has(p.pipeType);
+}
+
+export function isUpsellPipe(p: PipelineStatus): p is StandardPipelineStatus {
+  return p.type === "standard" && p.pipeType === "upsell";
+}
+
+export function isCustomPipe(p: PipelineStatus): p is CustomPipelineStatus {
+  return p.type === "custom";
+}
+
+export interface NewDealGate {
+  allowed: boolean;
+  reason?: string | null;
+}
+
+export interface BuildNewDealOptionsInput {
+  /** Permissão de abrir negócio (`canAddToPipe` de `useLeadActionGates`). */
+  canAdd: NewDealGate;
+  /**
+   * Já houve venda fechada neste lead (`pipe_propostas.status === "vendido"`).
+   * É o que destrava a Carteira — ADR-0023 decisão 8: ela é consequência de
+   * venda, não negócio novo.
+   */
+  vendaFechada: boolean;
+}
+
+/**
+ * Funis em que o lead **não** tem negócio aberto viram opção de abertura.
+ *
+ * Funil com negócio aberto não aparece — o card dele já está na tela. Funil
+ * onde o negócio já fechou (ganho/perdido) aparece: é a recompra
+ * (`funisSemNegocioAberto`).
+ */
+export function buildNewDealOptions(
+  pipelines: PipelineStatus[],
+  { canAdd, vendaFechada }: BuildNewDealOptionsInput,
+): NewDealOption[] {
+  const abriveis = funisSemNegocioAberto(pipelines);
+  const inactiveSystem = abriveis.filter(isSystemPipe);
+  const upsellPipe = pipelines.find(isUpsellPipe) ?? null;
+  const upsellActive = !!upsellPipe?.pipeId;
+  const inactiveCustom = abriveis.filter(isCustomPipe);
+
+  const semPermissao = canAdd.reason ?? "Sem permissão";
+  const out: NewDealOption[] = [];
+
+  for (const p of inactiveSystem) {
+    out.push({
+      key: `sys:${p.pipeType}`,
+      label: p.label,
+      color: p.color,
+      stages: p.stages.map((s) => ({ id: s.id, label: s.label })),
+      supportsValue: p.pipeType === "propostas",
+      supportsMeeting: p.pipeType === "confirmacao",
+      disabled: !canAdd.allowed,
+      disabledReason: semPermissao,
+    });
+  }
+
+  if (upsellPipe && !upsellActive) {
+    // Carteira não é negócio novo: é consequência de venda fechada. Fica
+    // visível e travada em vez de sumir, pra explicar a regra.
+    out.push({
+      key: "sys:upsell",
+      label: SYSTEM_PIPE_SHORT_LABEL.upsell,
+      color: upsellPipe.color,
+      stages: upsellPipe.stages.map((s) => ({ id: s.id, label: s.label })),
+      disabled: !canAdd.allowed || !vendaFechada,
+      disabledReason: !canAdd.allowed
+        ? semPermissao
+        : "Disponível só quando há venda fechada",
+    });
+  }
+
+  const sortedCustoms = [...inactiveCustom].sort((a, b) =>
+    a.pipelineName.localeCompare(b.pipelineName, "pt-BR"),
+  );
+  for (const p of sortedCustoms) {
+    out.push({
+      key: `custom:${p.pipelineId}`,
+      label: p.pipelineName,
+      color: p.pipelineColor,
+      stages: p.stages.map((s) => ({ id: s.id, label: s.name })),
+      disabled: !canAdd.allowed,
+      disabledReason: semPermissao,
+    });
+  }
+
+  return out;
+}
+
+export type NewDealTarget =
+  | { kind: "standard"; pipe: StandardPipelineStatus }
+  | { kind: "custom"; pipe: CustomPipelineStatus };
+
+/**
+ * Traduz a chave da opção de volta para o funil que a mutation espera.
+ *
+ * A chave (`sys:<pipeType>` / `custom:<pipelineId>`) é o contrato entre o modal
+ * e quem cria. Devolver `null` em vez de adivinhar é deliberado: chave que não
+ * casa com funil algum significa que a lista de funis mudou embaixo do modal
+ * aberto, e criar "o mais parecido" gravaria o negócio no lugar errado, calado.
+ */
+export function resolveNewDealTarget(
+  optionKey: string,
+  pipelines: PipelineStatus[],
+): NewDealTarget | null {
+  if (optionKey.startsWith("custom:")) {
+    const pipelineId = optionKey.slice("custom:".length);
+    const pipe = funisSemNegocioAberto(pipelines)
+      .filter(isCustomPipe)
+      .find((p) => p.pipelineId === pipelineId);
+    return pipe ? { kind: "custom", pipe } : null;
+  }
+
+  if (!optionKey.startsWith("sys:")) return null;
+
+  const pipeType = optionKey.slice("sys:".length);
+  if (pipeType === "upsell") {
+    const pipe = pipelines.find(isUpsellPipe) ?? null;
+    return pipe ? { kind: "standard", pipe } : null;
+  }
+
+  const pipe = funisSemNegocioAberto(pipelines)
+    .filter(isSystemPipe)
+    .find((p) => p.pipeType === pipeType);
+  return pipe ? { kind: "standard", pipe } : null;
+}

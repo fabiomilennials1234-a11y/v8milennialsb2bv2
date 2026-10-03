@@ -69,8 +69,8 @@ export function ElevenLabsSettings() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-violet-500/10 rounded-lg">
-          <Mic className="h-5 w-5 text-violet-500" />
+        <div className="p-2 bg-primary-soft rounded-lg">
+          <Mic className="h-5 w-5 text-primary-soft-foreground" />
         </div>
         <div>
           <h3 className="font-semibold">ElevenLabs</h3>
@@ -79,7 +79,7 @@ export function ElevenLabsSettings() {
           </p>
         </div>
         {hasKey && (
-          <Badge variant="outline" className="ml-auto text-green-600 border-green-600">
+          <Badge variant="outline" className="ml-auto text-success-strong border-success/40">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Configurado
           </Badge>

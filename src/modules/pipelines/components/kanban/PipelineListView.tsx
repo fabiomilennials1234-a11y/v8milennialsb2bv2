@@ -83,24 +83,24 @@ function MoveMenu({
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 px-2 opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity"
+        className="h-8 rounded-full px-3 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 sm:opacity-100"
         aria-label="Mover"
         onClick={() => setOpen((v) => !v)}
       >
-        <ArrowRightLeft className="w-4 h-4 mr-1" />
+        <ArrowRightLeft />
         Mover
       </Button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-border bg-popover p-1 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1.5 min-w-[180px] rounded-2xl border border-border bg-popover p-1.5 shadow-relevo-alto"
         >
           {stages.map((s) => (
             <button
               key={s.id}
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-popover-foreground hover:bg-accent transition-colors"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm text-popover-foreground transition-colors hover:bg-accent"
               onClick={() => {
                 onMove(leadId, s.stage_key);
                 setOpen(false);
@@ -138,14 +138,17 @@ function LeadCardItem({
   return (
     <div
       data-testid="lead-card"
-      className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-card/80 cursor-pointer group"
+      className={cn(
+        "group flex cursor-pointer items-center gap-3 rounded-2xl border border-card-border bg-card p-3.5 shadow-relevo",
+        "transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-relevo-alto motion-reduce:hover:translate-y-0",
+      )}
       onClick={() => onLeadClick(lead.id)}
     >
       {/* Main content */}
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm truncate">{lead.name}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
+          <span className="truncate text-sm font-bold tracking-[-0.01em]">{lead.name}</span>
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
             {relativeTime(timeRef)}
           </span>
         </div>
@@ -155,7 +158,7 @@ function LeadCardItem({
         )}
 
         {lead.phone && (
-          <p className="text-xs text-muted-foreground truncate">{lead.phone}</p>
+          <p className="truncate text-xs tabular-nums text-muted-foreground">{lead.phone}</p>
         )}
       </div>
 
@@ -212,7 +215,7 @@ export function PipelineListView({
           <Skeleton
             key={i}
             data-testid="skeleton-card"
-            className="h-20 w-full rounded-lg"
+            className="h-[72px] w-full rounded-2xl"
           />
         ))}
       </div>
@@ -233,25 +236,25 @@ export function PipelineListView({
               role="button"
               aria-pressed={isActive}
               className={cn(
-                "shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                // Etapa escolhida em TINTA (V5): o ouro da página já é do botão
+                // primário e da pílula de visões — aqui seria o terceiro.
                 isActive
-                  ? "bg-[hsl(47_100%_50%)] text-black"
-                  : "bg-card border border-border text-muted-foreground hover:text-foreground"
+                  ? "bg-tinta text-tinta-foreground shadow-relevo-tinta"
+                  : "border border-card-border bg-card text-muted-foreground shadow-relevo hover:text-foreground"
               )}
               onClick={() => setActiveStageKey(stage.stage_key)}
             >
               <div
-                className={cn(
-                  "w-2 h-2 rounded-full",
-                  isActive && "opacity-60"
-                )}
+                className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: stage.color || "#888" }}
               />
               {stage.name}
               <span
                 className={cn(
-                  "text-xs tabular-nums",
-                  isActive ? "text-black/60" : "text-muted-foreground/60"
+                  "text-xs font-bold tabular-nums",
+                  isActive ? "text-tinta-muted" : "text-muted-foreground/70"
                 )}
               >
                 {count}
@@ -263,12 +266,14 @@ export function PipelineListView({
 
       {/* Lead cards */}
       {filteredLeads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
-          <Inbox className="w-10 h-10 opacity-40" />
+        <div className="flex flex-col items-center justify-center gap-3 rounded-panel border border-dashed border-border bg-card/50 py-14 text-muted-foreground">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted">
+            <Inbox className="h-5 w-5" aria-hidden />
+          </span>
           <p className="text-sm">Nenhum lead nesta etapa</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {filteredLeads.map((lead) => (
             <LeadCardItem
               key={lead.id}

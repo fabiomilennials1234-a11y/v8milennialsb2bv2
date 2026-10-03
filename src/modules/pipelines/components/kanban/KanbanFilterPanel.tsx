@@ -13,7 +13,9 @@ import {
   Sparkles,
   CalendarRange,
   Hourglass,
+  SlidersHorizontal,
 } from "lucide-react";
+import { FilterChip } from "@/shared/components/FilterChip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -74,7 +76,7 @@ import {
 export { countActiveFilters, type FilterSectionConfig };
 
 
-// ─── Origin labels (shared source of truth) ────��────────────────────────────
+// ─── Origin labels (shared source of truth) ─────────────────────────────────
 export const originLabels: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
@@ -315,46 +317,36 @@ function formatRangeLabel(range: { startStr: string; endStr: string }): string {
   return start === end ? start : `${start} – ${end}`;
 }
 
-// ─── Component ───────────────────���──────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────────────
 export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelProps) {
   const [open, setOpen] = useState(false);
   const activeCount = countActiveFilters(sections);
 
   return (
     <>
-      {/* Trigger Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn(
-          "gap-2 relative transition-all",
-          activeCount > 0 && "border-primary/50 bg-primary/5 text-primary hover:bg-primary/10"
-        )}
+      {/* Gatilho — chip do V5; a contagem de filtros ativos vai no chip tinta. */}
+      <FilterChip
+        icon={SlidersHorizontal}
+        count={activeCount > 0 ? activeCount : undefined}
         onClick={() => setOpen(true)}
       >
-        <Filter className="w-4 h-4" />
         Filtros
-        {activeCount > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
-            {activeCount}
-          </span>
-        )}
-      </Button>
+      </FilterChip>
 
       {/* Sheet Panel */}
       <Sheet open={open} onOpenChange={setOpen} modal={false}>
         <SheetContent
           side="right"
-          className="w-[380px] sm:max-w-[380px] p-0 flex flex-col"
+          className="flex w-[380px] flex-col overflow-hidden p-0 sm:max-w-[380px]"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <SheetHeader className="flex-row items-center gap-3 space-y-0">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                <Filter className="h-4 w-4 text-primary" />
+          <div className="flex items-center justify-between gap-3 border-b border-border px-6 py-5 pr-14">
+            <SheetHeader className="flex-row items-center gap-3 space-y-0 text-left">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+                <Filter className="h-4 w-4" aria-hidden />
               </div>
               <div>
-                <SheetTitle className="text-base">Filtros</SheetTitle>
+                <SheetTitle className="text-base font-bold tracking-tight">Filtros</SheetTitle>
                 <SheetDescription className="text-xs">
                   {activeCount > 0
                     ? `${activeCount} filtro${activeCount > 1 ? "s" : ""} ativo${activeCount > 1 ? "s" : ""}`
@@ -366,7 +358,7 @@ export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelPro
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-muted-foreground hover:text-destructive"
+                className="h-8 rounded-full text-xs text-muted-foreground hover:text-destructive"
                 onClick={() => {
                   onClearAll();
                 }}
@@ -377,11 +369,11 @@ export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelPro
           </div>
 
           {/* Filter Sections */}
-          <ScrollArea className="flex-1 px-6 py-4">
-            <div className="space-y-6">
+          <ScrollArea className="flex-1 px-6 py-5">
+            <div className="space-y-5">
               {sections.map((section, idx) => (
                 <div key={`${section.type}-${idx}`}>
-                  {idx > 0 && <Separator className="bg-border/50 mb-6" />}
+                  {idx > 0 && <Separator className="mb-5 bg-border/60" />}
                   <SectionRenderer section={section} />
                 </div>
               ))}
@@ -393,7 +385,7 @@ export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelPro
   );
 }
 
-// ─── Section Renderer ────────────────���────────────────────────────────────────
+// ─── Section Renderer ─────────────────────────────────────────────────────────
 function SectionRenderer({ section }: { section: FilterSectionConfig }) {
   switch (section.type) {
     case "responsible":
@@ -451,9 +443,9 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
                 <label
                   key={origin}
                   className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-                    "hover:bg-muted/50",
-                    checked && "bg-primary/5"
+                    "flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors",
+                    "hover:bg-muted/60",
+                    checked && "bg-primary-soft/60"
                   )}
                 >
                   <Checkbox
@@ -490,9 +482,9 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
                   <label
                     key={tag.id}
                     className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-                      "hover:bg-muted/50",
-                      checked && "bg-primary/5"
+                      "flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors",
+                      "hover:bg-muted/60",
+                      checked && "bg-primary-soft/60"
                     )}
                   >
                     <Checkbox
@@ -520,7 +512,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
 
     case "product-type":
       return (
-        <FilterSectionWrapper icon={Package} label="Tipo Produto">
+        <FilterSectionWrapper icon={Package} label="Tipo de produto">
           <Select value={section.value} onValueChange={section.onChange}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos os tipos" />
@@ -542,7 +534,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
               <SelectValue placeholder="Todas" />
             </SelectTrigger>
             <SelectContent className="z-[60]">
-              <SelectItem value="all">Todas as urg��ncias</SelectItem>
+              <SelectItem value="all">Todas as urgências</SelectItem>
               {URGENCY_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
@@ -563,9 +555,9 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
                 <label
                   key={status.id}
                   className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-                    "hover:bg-muted/50",
-                    checked && "bg-primary/5"
+                    "flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors",
+                    "hover:bg-muted/60",
+                    checked && "bg-primary-soft/60"
                   )}
                 >
                   <Checkbox
@@ -608,8 +600,8 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
       return (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Agendados</span>
+            <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <span className="text-sm font-semibold">Agendados</span>
           </div>
           <Switch
             checked={section.value}
@@ -632,10 +624,10 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
                   aria-pressed={active}
                   onClick={() => section.onChange(active ? allValue : opt.value)}
                   className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                    "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
                     active
-                      ? "border-primary/50 bg-primary/10 text-primary"
-                      : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                      ? "border-transparent bg-primary-soft text-primary-soft-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
                   {opt.label}
@@ -668,15 +660,15 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
                     aria-pressed={checked}
                     onClick={() => section.onChange(bucket.id)}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
-                      "hover:bg-muted/50",
-                      checked && "bg-primary/5 text-primary",
+                      "flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors",
+                      "hover:bg-muted/60",
+                      checked && "bg-primary-soft/60 font-semibold text-primary-soft-foreground",
                     )}
                   >
                     <span
                       className={cn(
                         "size-2 shrink-0 rounded-full",
-                        checked ? "bg-primary" : "bg-muted-foreground/30",
+                        checked ? "bg-primary-soft-foreground" : "bg-muted-foreground/30",
                       )}
                     />
                     {bucket.label}
@@ -733,10 +725,10 @@ function CreatedPeriodSection({
                 )
               }
               className={cn(
-                "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                "rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors",
                 active
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  ? "border-transparent bg-primary-soft text-primary-soft-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
               {shortcut.label}
@@ -751,8 +743,8 @@ function CreatedPeriodSection({
             variant="outline"
             size="sm"
             className={cn(
-              "w-full justify-start gap-2 text-xs font-normal",
-              range && !activeShortcut && "border-primary/50 text-primary",
+              "w-full justify-start gap-2 text-xs font-medium",
+              range && !activeShortcut && "border-primary/40 bg-primary-soft text-primary-soft-foreground hover:bg-primary-soft",
             )}
           >
             <CalendarRange className="size-3.5 shrink-0" />
@@ -813,9 +805,9 @@ function TierCheckboxList({
           <label
             key={tier}
             className={cn(
-              "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-              "hover:bg-muted/50",
-              checked && "bg-primary/5"
+              "flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors",
+              "hover:bg-muted/60",
+              checked && "bg-primary-soft/60"
             )}
           >
             <Checkbox
@@ -849,16 +841,16 @@ function FilterSectionWrapper({
 }) {
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+        <span className="text-[11px] font-bold uppercase tracking-[.06em]">{label}</span>
       </div>
       {children}
     </div>
   );
 }
 
-// ─── Filter Chips (inline below search) ─────────���───────────────────────────
+// ─── Filter Chips (inline below search) ─────────────────────────────────────
 export function FilterChips({
   sections,
   onClearAll,
@@ -874,18 +866,18 @@ export function FilterChips({
       {chips.map((chip) => (
         <Badge
           key={chip.id}
-          variant="secondary"
-          className="gap-1 pl-2.5 pr-1.5 py-0.5 text-xs font-normal bg-muted/60 hover:bg-muted cursor-pointer group transition-colors"
+          variant="outline"
+          className="group cursor-pointer gap-1 border-card-border bg-card py-1 pl-3 pr-2 text-xs font-medium shadow-relevo transition-colors hover:bg-muted/60"
           onClick={chip.onRemove}
         >
           {chip.label}
-          <X className="w-3 h-3 text-muted-foreground group-hover:text-destructive transition-colors" />
+          <X className="h-3 w-3 text-muted-foreground transition-colors group-hover:text-destructive" aria-hidden />
         </Badge>
       ))}
       {chips.length > 1 && (
         <button
           onClick={onClearAll}
-          className="text-[11px] text-muted-foreground hover:text-destructive transition-colors ml-1"
+          className="ml-1 rounded-full px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-destructive"
         >
           Limpar tudo
         </button>

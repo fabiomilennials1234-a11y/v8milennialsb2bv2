@@ -80,7 +80,7 @@ export function ConversionTrends({ trends }: Props) {
 
           const trendColor =
             direction === "up"
-              ? "text-green-600 dark:text-green-400"
+              ? "text-success"
               : direction === "down"
               ? "text-destructive"
               : "text-muted-foreground";
@@ -88,7 +88,7 @@ export function ConversionTrends({ trends }: Props) {
           return (
             <div
               key={trend.transition_name}
-              className="flex items-center gap-4 rounded-lg border border-border bg-card p-3"
+              className="flex items-center gap-4 rounded-2xl bg-sunken p-3"
             >
               {/* Sparkline */}
               <div className="shrink-0">

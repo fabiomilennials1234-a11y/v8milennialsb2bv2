@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import { BadgeCard } from "./BadgeCard";
 import type { Badge, UserBadge } from "@/modules/engagement/hooks/useBadges";
+import { IconChip } from "@/components/ui/bento";
 
 interface BadgeGridProps {
   badges: Badge[];
@@ -20,10 +21,10 @@ export function BadgeGrid({ badges, userBadges, progressMap = {} }: BadgeGridPro
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">Conquistas</h3>
-          <span className="text-sm text-muted-foreground">
-            ({unlockedCount}/{totalCount})
+          <IconChip icon={Trophy} tone="gold" />
+          <h3 className="text-[15px] font-bold tracking-[-0.02em]">Conquistas</h3>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+            {unlockedCount}/{totalCount}
           </span>
         </div>
       </div>
@@ -34,7 +35,7 @@ export function BadgeGrid({ badges, userBadges, progressMap = {} }: BadgeGridPro
           initial={{ width: 0 }}
           animate={{ width: `${progressPercent}%` }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full"
+          className="h-full bg-primary rounded-full"
         />
       </div>
 

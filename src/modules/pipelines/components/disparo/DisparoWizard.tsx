@@ -616,7 +616,7 @@ function DisparoWizardInner({
         {/* Cabeçalho editorial */}
         <DialogHeader className="space-y-1.5 border-b border-border/60 px-6 pb-5 pt-6">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/12 text-primary">
+            <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
               <Send className="h-3.5 w-3.5" />
             </span>
             <DialogTitle className="text-lg font-semibold tracking-tight">Disparo</DialogTitle>
@@ -723,7 +723,7 @@ function DisparoWizardInner({
         {/* Rodapé / navegação */}
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/20 px-6 py-4">
           {done ? (
-            <Button className="ml-auto gradient-gold" onClick={() => handleClose(false)}>
+            <Button className="ml-auto" onClick={() => handleClose(false)}>
               Concluir
             </Button>
           ) : (
@@ -746,7 +746,7 @@ function DisparoWizardInner({
 
               {step === "revisao" ? (
                 fireAsPlan ? (
-                  <Button className="gradient-gold" onClick={handleCreatePlan} disabled={!canFire}>
+                  <Button onClick={handleCreatePlan} disabled={!canFire}>
                     {createPlan.isPending ? (
                       <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                     ) : (
@@ -755,7 +755,7 @@ function DisparoWizardInner({
                     {projectedLots != null ? `Agendar ${projectedLots} lotes` : "Agendar lotes"}
                   </Button>
                 ) : (
-                  <Button className="gradient-gold" onClick={handleFire} disabled={!canFire}>
+                  <Button onClick={handleFire} disabled={!canFire}>
                     {blast.isPending ? (
                       <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                     ) : (
@@ -770,7 +770,6 @@ function DisparoWizardInner({
                 )
               ) : (
                 <Button
-                  className="gradient-gold"
                   onClick={() => goTo(STEPS[stepIndex + 1].id)}
                   disabled={step === "publico" ? !canAdvancePublico : !canAdvanceMensagem}
                 >
@@ -808,7 +807,7 @@ function Stepper({
               <span
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors duration-300",
-                  active && "border-primary bg-primary/15 text-primary",
+                  active && "border-primary bg-primary-soft text-primary-soft-foreground",
                   completed && "border-primary bg-primary text-primary-foreground",
                   !active && !completed && "border-border bg-transparent text-muted-foreground",
                 )}
@@ -968,7 +967,7 @@ function PublicoStep({
                 )}
               >
                 <src.icon
-                  className={cn("h-4 w-4", selected ? "text-primary" : "text-muted-foreground")}
+                  className={cn("h-4 w-4", selected ? "text-primary-soft-foreground" : "text-muted-foreground")}
                 />
                 <span className="text-sm font-medium leading-none">{src.label}</span>
                 <span className="text-[11px] leading-tight text-muted-foreground">{src.desc}</span>
@@ -1053,14 +1052,14 @@ function PublicoStep({
         <EmptyAudienceHint source={source} contextKind={contextKind} />
       ) : audienceLoading ? (
         <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
           </span>
           <span className="text-sm text-muted-foreground">Calculando público…</span>
         </div>
       ) : audienceSize === 0 ? (
         <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
             <Users className="h-4 w-4" />
           </span>
           <span className="text-sm text-muted-foreground">
@@ -1120,7 +1119,7 @@ function SegmentPicker({
                   : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground",
               )}
             >
-              {selected && <Check className="h-3 w-3 text-primary" />}
+              {selected && <Check className="h-3 w-3 text-primary-soft-foreground" />}
               {seg.label}
             </button>
           );
@@ -1165,7 +1164,7 @@ function EmptyAudienceHint({
         : "Selecione leads no quadro para disparar manualmente";
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3.5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
         <Users className="h-4 w-4" />
       </span>
       <span className="text-sm text-muted-foreground">{copy}</span>
@@ -1214,7 +1213,7 @@ function FiltroSourcePanel({ active, chips }: { active: boolean; chips: string[]
 function ManualSourcePanel({ count }: { count: number }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
-      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary">
+      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
         <MousePointerClick className="h-4 w-4" />
       </span>
       <div className="min-w-0">
@@ -1678,7 +1677,7 @@ function OverBudgetOption({
       <span
         className={cn(
           "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
-          selected ? "bg-primary/15 text-primary" : "bg-muted/50 text-muted-foreground",
+          selected ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted/50 text-muted-foreground",
         )}
       >
         <Icon className="h-4 w-4" />
@@ -1687,7 +1686,7 @@ function OverBudgetOption({
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium leading-none">{title}</span>
           {recommended && (
-            <span className="rounded-full border border-primary/30 bg-primary/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+            <span className="rounded-full border border-primary/30 bg-primary-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary-soft-foreground">
               Recomendado
             </span>
           )}

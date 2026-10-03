@@ -6,7 +6,8 @@ import { useAnalyticsComercial, type MemberStat } from "@/modules/analytics/hook
 import { AT } from "./analytics-tokens";
 import { AnalyticsEmptyState } from "./AnalyticsEmptyState";
 
-const MEDAL_COLORS = ["text-amber-400", "text-zinc-400", "text-orange-700"];
+// ouro · prata · bronze, em token (prata = `silver`, bronze lê como âmbar escuro)
+const MEDAL_COLORS = ["text-primary-soft-foreground", "text-silver", "text-warning-strong"];
 
 export function ActivityMetrics() {
   const { data: comercialData, isLoading } = useAnalyticsComercial();
@@ -64,7 +65,7 @@ export function ActivityMetrics() {
               {leaderboard.slice(0, 5).map((member, i) => (
                 <div
                   key={member.name}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
                     i === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/30"
                   }`}
                 >

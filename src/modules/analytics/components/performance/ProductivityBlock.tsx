@@ -18,6 +18,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import type { DateRange as RDPDateRange } from "react-day-picker";
+import { KpiRow } from "@/components/ui/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -133,13 +134,13 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Produtividade</h2>
+            <h2 className="text-[17px] font-bold tracking-[-0.02em]">Produtividade</h2>
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                    className="rounded-full p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Como a Produtividade conta"
                   >
                     <Info className="h-4 w-4" />
@@ -154,7 +155,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
               </Tooltip>
             </TooltipProvider>
           </div>
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
             Conta pela <span className="font-medium text-foreground/80">data-da-ação</span>,
             não pela entrada do lead.
@@ -164,9 +165,9 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
         {/* Period + seller selectors — independent from the page month/year */}
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={preset} onValueChange={(v) => setPreset(v as Preset)}>
-            <TabsList className="h-9">
+            <TabsList variant="segmented" aria-label="Período da produtividade">
               {PRESETS.map((p) => (
-                <TabsTrigger key={p.value} value={p.value} className="text-xs">
+                <TabsTrigger key={p.value} value={p.value}>
                   {p.label}
                 </TabsTrigger>
               ))}
@@ -179,7 +180,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 gap-2 border-border/50 bg-secondary/30 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  className="h-9 gap-2 text-xs font-medium tabular-nums"
                 >
                   <CalendarIcon className="h-3.5 w-3.5" />
                   {customRange?.from
@@ -203,7 +204,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
           )}
 
           <Select value={seller} onValueChange={setSeller}>
-            <SelectTrigger className="h-9 w-[160px] border-border/50 bg-secondary/30 text-xs">
+            <SelectTrigger className="h-9 w-[180px] text-xs" aria-label="Vendedor">
               <SelectValue placeholder="Vendedor" />
             </SelectTrigger>
             <SelectContent>
@@ -219,7 +220,7 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
       </div>
 
       {/* 4 counts */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <KpiRow cols={4}>
         {CARDS.map((card) => {
           const Icon = card.icon;
           const value = data ? data[card.key] : 0;
@@ -229,33 +230,37 @@ export function ProductivityBlock({ teamMembers }: ProductivityBlockProps) {
               type="button"
               onClick={() => setDrillType(card.key)}
               className={cn(
-                "group relative overflow-hidden rounded-xl border border-border/60 bg-card p-4 text-left",
-                "transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                // Mesma anatomia do `KpiTile` do bento, mas como BOTÃO — o
+                // cartão abre o detalhamento, e KpiTile é uma div.
+                "group relative flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-card border border-card-border bg-card p-[18px] text-left text-card-foreground shadow-relevo",
+                "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               )}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground/80">
                   {card.label}
                 </span>
-                <Icon className="h-4 w-4 text-muted-foreground/50 transition-colors group-hover:text-primary" />
+                <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70 transition-colors group-hover:bg-primary-soft group-hover:text-primary-soft-foreground">
+                  <Icon className="h-4 w-4" />
+                </span>
               </div>
               {isLoading ? (
-                <Skeleton className="mt-3 h-9 w-16" />
+                <Skeleton className="h-8 w-16" />
               ) : (
-                <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">
+                <p className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
                   {value.toLocaleString("pt-BR")}
                 </p>
               )}
-              <p className="mt-1 text-[11px] text-muted-foreground/70">
+              <p className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
                 Ver leads
               </p>
             </button>
           );
         })}
-      </div>
+      </KpiRow>
 
-      <p className="text-[11px] text-muted-foreground/60 tabular-nums">
+      <p className="text-[12px] text-muted-foreground tabular-nums">
         Período: {rangeLabel}
         {sellerId
           ? ` · ${sellableMembers.find((m) => m.id === sellerId)?.name ?? "vendedor"}`

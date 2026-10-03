@@ -44,7 +44,7 @@ export function MemberLeaderboard({ rows, emptyLabel = "Nenhum responsável cada
             <span
               className={cn(
                 "text-[11px] tabular-nums",
-                isTop ? "text-primary font-extrabold text-[13px]" : "text-muted-foreground"
+                isTop ? "text-[13px] font-extrabold text-primary-soft-foreground" : "text-muted-foreground"
               )}
             >
               {i + 1}
@@ -53,7 +53,7 @@ export function MemberLeaderboard({ rows, emptyLabel = "Nenhum responsável cada
               className={cn(
                 "w-[34px] h-[34px] rounded-full flex items-center justify-center text-[13px] font-bold shrink-0",
                 isTop
-                  ? "bg-primary/15 text-primary border border-primary/40"
+                  ? "border border-primary/40 bg-primary-soft text-primary-soft-foreground"
                   : "bg-muted text-foreground"
               )}
             >
@@ -79,7 +79,7 @@ export function MemberLeaderboard({ rows, emptyLabel = "Nenhum responsável cada
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className={cn("text-base font-bold tabular-nums", row.currency && "text-success")}>
+              <p className={cn("text-base font-extrabold tabular-nums tracking-[-0.02em]", row.currency && "text-success")}>
                 {row.headline}
               </p>
               {row.subline && (

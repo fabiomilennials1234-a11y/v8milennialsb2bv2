@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
  * lista sete (carregando, vazio, erro, com dado, atrasada, concluída, falha ao
  * gravar) e três implementações separadas divergiriam na primeira semana.
  *
- * A anatomia (cmd-cell, cabeçalho com rótulo em caixa alta, lista com divisores)
- * é a que a aba Comando já usa — nenhum token novo.
+ * V5 (2026-10): cartão de bento — raio de cartão, sombra em vez de borda,
+ * cabeçalho sem filete com o ícone num chip tintado e a porta para a tela
+ * completa como pílula de tinta. Estados e contratos idênticos aos de antes.
  */
 interface ComandoCardProps {
   icon: LucideIcon;
@@ -66,38 +67,44 @@ export function ComandoCard({
   const urgent = tone === "urgent" && (count ?? 0) > 0;
 
   return (
-    <section className={cn("cmd-cell flex flex-col", className)}>
-      <header className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
-        <Icon
+    <section
+      className={cn(
+        "flex min-w-0 flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo",
+        className,
+      )}
+    >
+      <header className="flex flex-wrap items-center gap-2 px-5 pb-3 pt-4">
+        <span
           className={cn(
-            "h-4 w-4 shrink-0",
-            urgent ? "text-primary" : "text-muted-foreground/70",
+            "grid h-8 w-8 shrink-0 place-items-center rounded-[10px]",
+            urgent ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/60",
           )}
-          strokeWidth={2.2}
-        />
-        <h3 className="text-[14px] font-bold tracking-[-0.02em]">{title}</h3>
+        >
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
+        </span>
+        <h3 className="text-[15px] font-bold tracking-[-0.02em]">{title}</h3>
         {typeof count === "number" && !isLoading && !isError && (
           <span
             className={cn(
-              "rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums",
-              urgent ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+              "rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
+              urgent ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
             )}
           >
             {count}
           </span>
         )}
         {scopeHint && (
-          <span className="rounded border border-border/70 px-1 py-px text-[9px] font-bold uppercase tracking-[0.06em] text-muted-foreground/70">
+          <span className="rounded-full border border-border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
             {scopeHint}
           </span>
         )}
         {action && (
           <Link
             to={action.to}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-tinta px-3 text-[12px] font-semibold text-tinta-foreground transition-colors hover:bg-tinta-3"
           >
             {action.label}
-            <ArrowRight className="h-3 w-3" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         )}
       </header>
@@ -125,7 +132,7 @@ export function ComandoCard({
               <button
                 type="button"
                 onClick={onRetry}
-                className="mt-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                className="mt-1 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
               >
                 Tentar de novo
               </button>
@@ -146,7 +153,7 @@ export function ComandoCard({
       </div>
 
       {footer && !isLoading && !isError && (
-        <div className="border-t border-border/50 px-4 py-2">{footer}</div>
+        <div className="border-t border-border/50 px-5 py-2.5">{footer}</div>
       )}
     </section>
   );

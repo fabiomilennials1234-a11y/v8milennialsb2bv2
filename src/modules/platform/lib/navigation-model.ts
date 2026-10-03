@@ -130,6 +130,14 @@ export const SIDEBAR_PITSTOP: NavNode = {
   path: "/configuracoes",
 };
 
+/**
+ * V5: o Pitstop deixou de ser painel ao lado da lateral e virou página-hub.
+ * `SIDEBAR_PITSTOP.path` continua `/configuracoes` porque é por ele que o
+ * modelo decide QUEM vê o Pitstop (mesma permissão de antes); o trilho leva
+ * para cá.
+ */
+export const PITSTOP_HUB_PATH = "/pitstop";
+
 export interface PitstopGroup {
   id: string;
   title: string;
@@ -160,7 +168,7 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
   {
     id: "rotas",
     title: "Rotas",
-    hint: "O que vivia no menu “Mais”",
+    hint: "Rotinas de apoio da operação",
     items: [
       { label: "Checklists", icon: ListChecks, path: "/checklists" },
       { label: "Templates", icon: FileText, path: "/templates" },
@@ -278,8 +286,12 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   ...Object.fromEntries(SETTINGS_TAB_PATHS.map((path) => [path, "settings.view"])),
 };
 
+/** V5: trilho de ícones (lateral fixa, sem expandir — CTO 02/10). */
+export const RAIL_WIDTH = 76;
 /** Largura da lateral, em px. Mesma medida validada no estudo. */
 export const SIDEBAR_WIDTH = 248;
 export const SIDEBAR_WIDTH_COLLAPSED = 64;
+/** V5: a lateral flutua a esta distância da borda (e do conteúdo). */
+export const SIDEBAR_GUTTER = 12;
 /** Abaixo disto o Pitstop vira overlay em vez de coluna que empurra. */
 export const PITSTOP_OVERLAY_BREAKPOINT = 1180;

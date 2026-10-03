@@ -147,14 +147,14 @@ export function DealCardChecklists({
               <span
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
-                  tudoFeito ? "bg-emerald-500/15 text-emerald-400" : "bg-muted text-foreground/70",
+                  tudoFeito ? "bg-success/15 text-success" : "bg-muted text-foreground/70",
                 )}
               >
                 {feitos}/{itens}
               </span>
               <div className="h-px min-w-8 flex-1 bg-muted">
                 <div
-                  className={cn("h-full transition-all", tudoFeito ? "bg-emerald-500" : "bg-primary")}
+                  className={cn("h-full transition-all", tudoFeito ? "bg-success" : "bg-primary")}
                   style={{ width: `${(feitos / itens) * 100}%` }}
                 />
               </div>
@@ -437,7 +437,7 @@ function LinhaDoChecklist({
         <span
           className={cn(
             "shrink-0 text-[11px] tabular-nums",
-            completo ? "text-emerald-400" : "text-muted-foreground",
+            completo ? "text-success" : "text-muted-foreground",
           )}
         >
           {checklist.completed_items}/{checklist.total_items}
@@ -487,7 +487,7 @@ function LinhaDoChecklist({
                     })
                   }
                   aria-label={item.title}
-                  className="size-3.5 shrink-0 rounded-[4px] data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-500 data-[state=checked]:text-white"
+                  className="size-3.5 shrink-0 rounded-[4px] data-[state=checked]:border-success data-[state=checked]:bg-success data-[state=checked]:text-success-foreground"
                 />
                 <span
                   className={cn(

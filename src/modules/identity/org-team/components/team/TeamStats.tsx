@@ -1,14 +1,13 @@
 import { motion } from "framer-motion";
 import { 
   Users, 
-  TrendingUp, 
   Calendar, 
   DollarSign,
   Target,
   Percent,
   Activity
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { KpiTile } from "@/components/ui/bento";
 
 interface StatCardProps {
   title: string;
@@ -20,43 +19,32 @@ interface StatCardProps {
   delay?: number;
 }
 
-const colorConfig = {
-  default: "bg-muted text-muted-foreground",
-  primary: "bg-primary/10 text-primary",
-  success: "bg-success/10 text-success",
-  warning: "bg-chart-5/10 text-chart-5",
-  danger: "bg-destructive/10 text-destructive",
-};
+// V5: as cores do cartão viram o tom do chip do KpiTile.
+const toneByColor = {
+  default: "neutral",
+  primary: "gold",
+  success: "good",
+  warning: "info",
+  danger: "bad",
+} as const;
 
-function StatCard({ title, value, subtitle, icon: Icon, trend, color = "default", delay = 0 }: StatCardProps) {
+function StatCard({ title, value, subtitle, icon, trend, color = "default", delay = 0 }: StatCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="bg-card rounded-xl border border-border p-5 hover:shadow-md transition-shadow"
+      className="min-w-0"
     >
-      <div className="flex items-start justify-between">
-        <div className={cn("p-3 rounded-xl", colorConfig[color])}>
-          <Icon className="w-5 h-5" />
-        </div>
-        {trend !== undefined && (
-          <div className={cn(
-            "flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
-            trend >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
-          )}>
-            <TrendingUp className={cn("w-3 h-3", trend < 0 && "rotate-180")} />
-            {Math.abs(trend)}%
-          </div>
-        )}
-      </div>
-      <div className="mt-4">
-        <p className="text-2xl font-bold">{value}</p>
-        <p className="text-sm text-muted-foreground mt-1">{title}</p>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-        )}
-      </div>
+      <KpiTile
+        className="h-full"
+        label={title}
+        value={value}
+        icon={icon}
+        tone={toneByColor[color]}
+        delta={trend}
+        note={subtitle}
+      />
     </motion.div>
   );
 }
@@ -84,28 +72,28 @@ export function TeamStats({ stats }: TeamStatsProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard
-        title="Total Membros"
+        title="Total de membros"
         value={stats.totalMembers}
         subtitle={`${stats.activeSDRs} SDRs, ${stats.activeClosers} Closers`}
         icon={Users}
         delay={0}
       />
       <StatCard
-        title="SDRs Ativos"
+        title="SDRs ativos"
         value={stats.activeSDRs}
         icon={Calendar}
         color="warning"
         delay={0.05}
       />
       <StatCard
-        title="Closers Ativos"
+        title="Closers ativos"
         value={stats.activeClosers}
         icon={DollarSign}
         color="primary"
         delay={0.1}
       />
       <StatCard
-        title="Folha OTE Total"
+        title="Folha OTE total"
         value={formatCurrency(stats.totalOTE)}
         icon={Target}
         color="success"
@@ -135,43 +123,43 @@ export function PerformanceOverview({ data }: PerformanceOverviewProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card rounded-xl border border-border p-6"
+      className="rounded-card border border-card-border bg-card p-5 text-card-foreground shadow-relevo"
     >
-      <h3 className="font-semibold mb-4 flex items-center gap-2">
-        <Activity className="w-5 h-5 text-primary" />
-        Performance Geral do Time
+      <h3 className="mb-4 flex items-center gap-2 text-base font-bold leading-tight tracking-tight">
+        <Activity className="h-[18px] w-[18px] text-muted-foreground" />
+        Performance geral do time
       </h3>
       
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-2">
-            <span className="text-xl font-bold text-primary">{data.avgGoalProgress}%</span>
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft">
+            <span className="text-xl font-extrabold tabular-nums tracking-[-0.04em] text-primary-soft-foreground">{data.avgGoalProgress}%</span>
           </div>
-          <p className="text-sm text-muted-foreground">Meta Média</p>
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Meta média</p>
         </div>
         
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-success/10 flex items-center justify-center mb-2">
-            <DollarSign className="w-6 h-6 text-success" />
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+            <DollarSign className="h-6 w-6 text-success-strong" />
           </div>
-          <p className="text-lg font-bold">{formatCurrency(data.totalSales)}</p>
-          <p className="text-sm text-muted-foreground">Vendas Totais</p>
+          <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em]">{formatCurrency(data.totalSales)}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendas totais</p>
         </div>
         
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-chart-5/10 flex items-center justify-center mb-2">
-            <Calendar className="w-6 h-6 text-chart-5" />
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-insights/10">
+            <Calendar className="h-6 w-6 text-insights" />
           </div>
-          <p className="text-lg font-bold">{data.totalMeetings}</p>
-          <p className="text-sm text-muted-foreground">Reuniões</p>
+          <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em]">{data.totalMeetings}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Reuniões</p>
         </div>
         
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto rounded-full bg-accent flex items-center justify-center mb-2">
-            <Percent className="w-6 h-6 text-accent-foreground" />
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+            <Percent className="h-6 w-6 text-foreground/70" />
           </div>
-          <p className="text-lg font-bold">{data.conversionRate}%</p>
-          <p className="text-sm text-muted-foreground">Conversão</p>
+          <p className="text-lg font-extrabold tabular-nums tracking-[-0.04em]">{data.conversionRate}%</p>
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Conversão</p>
         </div>
       </div>
     </motion.div>

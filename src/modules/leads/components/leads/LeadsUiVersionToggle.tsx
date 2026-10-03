@@ -34,7 +34,7 @@ export function LeadsUiVersionToggle({
             onClick={() => onChange(opt.value)}
             className={cn(
               "h-full rounded-md px-3 text-[12.5px] font-medium tracking-[-0.005em]",
-              "transition-[background-color,color] duration-150 ease-[cubic-bezier(0.2,0,0,1)]",
+              "transition-[background-color,color] duration-150 ease-standard",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
               active
                 ? "bg-primary text-primary-foreground shadow-sm"

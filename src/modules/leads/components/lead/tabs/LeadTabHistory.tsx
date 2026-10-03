@@ -36,7 +36,7 @@ export function LeadTabHistory({ leadId, events }: LeadTabHistoryProps) {
       {leadId && (
         <button
           onClick={() => window.open(`/leads?lead=${leadId}`, "_blank")}
-          className="w-full text-center text-xs text-primary hover:underline py-1 flex items-center justify-center gap-1"
+          className="w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground hover:underline py-1 flex items-center justify-center gap-1"
         >
           <ExternalLink className="w-3 h-3" />
           Ver histórico completo

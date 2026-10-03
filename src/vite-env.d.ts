@@ -5,6 +5,11 @@
 declare const __APP_VERSION__: string;
 
 interface ImportMetaEnv {
+  /**
+   * "true" só no build de produção (Dockerfile): liga a troca entre a
+   * interface nova e a clássica por organização (`UiVersionGuard`).
+   */
+  readonly VITE_UI_SWITCH?: string;
   /** DSN do projeto `torque-web` no Sentry. Sem ele o SDK não chega ao navegador (ADR-0038). */
   readonly VITE_SENTRY_DSN?: string;
   /** Padrão: `production` no build de produção, `development` fora dele. */

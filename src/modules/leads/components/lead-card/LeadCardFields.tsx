@@ -66,7 +66,8 @@ function Linha({
       className={cn(
         // O rótulo cede espaço na coluna do negócio e mantém o teto de 180px
         // na ficha inteira. O valor pode quebrar linha sem alargar a coluna.
-        "group grid grid-cols-[minmax(104px,min(38%,180px))_minmax(0,1fr)] items-baseline gap-4 rounded-md px-2 py-[7px] -mx-2",
+        // V5 (o "Perfil" do mockup): chave à esquerda, valor à direita, em negrito.
+        "group grid grid-cols-[minmax(104px,min(38%,180px))_minmax(0,1fr)] items-baseline gap-4 rounded-lg px-2 py-[6px] -mx-2",
         "transition-colors hover:bg-muted/40",
       )}
     >
@@ -93,7 +94,7 @@ function Linha({
             if (e.key === "Escape") cancel();
           }}
           className={cn(
-            "min-w-0 rounded border border-primary/50 bg-background px-1.5 py-0.5 text-[13.5px]",
+            "min-w-0 rounded-md border border-primary/50 bg-card px-1.5 py-0.5 text-right text-[13.5px] font-semibold",
             "focus:outline-none focus:ring-1 focus:ring-primary/30",
           )}
         />
@@ -104,9 +105,9 @@ function Linha({
           onClick={startEditing}
           title={campo.origemErp ? "Sincronizado do ERP. Altere o cadastro no Toth." : campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined}
           className={cn(
-            "flex min-w-0 items-center gap-1.5 break-words rounded text-left text-[13.5px]",
+            "flex min-w-0 items-center justify-end gap-1.5 break-words rounded text-right text-[13.5px]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            vazio ? "text-muted-foreground/45" : "text-foreground",
+            vazio ? "text-muted-foreground/45" : "font-semibold text-foreground",
             campo.tipo === "documento" || campo.tipo === "moeda" ? "tabular-nums" : undefined,
             editavel && "cursor-text hover:text-foreground",
             !editavel && "cursor-default",
@@ -132,14 +133,14 @@ export function LeadCardFields({
   onSave?: (chave: string, valor: string) => Promise<void>;
 }) {
   return (
-    <div className="flex flex-col gap-7 pb-2">
+    <div className="flex flex-col gap-5">
       {grupos.map((grupo) => {
         const preenchidos = grupo.campos.filter((c) => c.valor !== null && c.valor !== "").length;
 
         return (
           <section key={grupo.titulo} className="flex flex-col gap-1.5">
             <div className="flex items-baseline gap-2.5 pb-1">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+              <h3 className="text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
                 {grupo.titulo}
               </h3>
               {/* Contador discreto: dá noção de completude sem transformar o

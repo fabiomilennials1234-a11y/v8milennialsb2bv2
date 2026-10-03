@@ -19,7 +19,7 @@ vi.mock("@/modules/engagement/components/agenda/AgendaAtividades", () => ({
       <p>conteudo da agenda</p>
       {onClose && (
         <button type="button" onClick={onClose}>
-          Fechar Atividades
+          Fechar Agenda
         </button>
       )}
     </div>
@@ -80,19 +80,20 @@ function abrir(sidebarWidth = 248) {
 describe("AgendaPanel", () => {
   it("fechado não renderiza nada", () => {
     render(<AgendaPanel open={false} onClose={onClose} sidebarWidth={248} />);
-    expect(screen.queryByLabelText("Atividades")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Agenda")).not.toBeInTheDocument();
   });
 
   it("aberto mostra a tela dentro de uma camada nomeada", async () => {
     abrir();
-    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Agenda")).toBeInTheDocument();
     expect(screen.getByText("conteudo da agenda")).toBeInTheDocument();
   });
 
   it("não cobre a tela inteira — é ancorado à direita", async () => {
     abrir();
-    const painel = await screen.findByLabelText("Atividades");
-    expect(painel.className).toContain("right-0");
+    const painel = await screen.findByLabelText("Agenda");
+    // V5: flutua a 12px da borda direita — continua ancorado à direita.
+    expect(painel.className).toContain("right-3");
     expect(painel.className).not.toContain("inset-0");
   });
 
@@ -142,14 +143,14 @@ describe("AgendaPanel", () => {
   it("o botão de fechar da tela chega até o painel", async () => {
     const user = userEvent.setup();
     abrir();
-    await user.click(await screen.findByRole("button", { name: "Fechar Atividades" }));
+    await user.click(await screen.findByRole("button", { name: "Fechar Agenda" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("sai de cena quando fecha", async () => {
     const { rerender } = abrir();
-    await screen.findByLabelText("Atividades");
+    await screen.findByLabelText("Agenda");
     rerender(<AgendaPanel open={false} onClose={onClose} sidebarWidth={248} />);
-    await waitForElementToBeRemoved(() => screen.queryByLabelText("Atividades"));
+    await waitForElementToBeRemoved(() => screen.queryByLabelText("Agenda"));
   });
 });

@@ -205,7 +205,7 @@ export function ScheduleMessageModal({
 
           {/* Quick dates */}
           <div className="space-y-2">
-            <p className="stat-card-label">Quando enviar</p>
+            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Quando enviar</p>
             <div className="flex flex-wrap gap-2">
               {quickDates.map((qd) => {
                 const targetDate = qd.getDate();
@@ -292,7 +292,6 @@ export function ScheduleMessageModal({
           <Button
             onClick={handleSubmit}
             disabled={!isValid || isPending}
-            className="gradient-primary gradient-primary-hover text-white font-semibold border-0"
           >
             {isPending ? "Agendando..." : editingId ? "Salvar" : "Agendar"}
           </Button>

@@ -72,7 +72,7 @@ export function PipelineVelocity() {
         ) : (
           <div className="space-y-4">
             {/* Velocity Score */}
-            <div className="text-center py-3 rounded-lg border border-primary/20 bg-primary/5">
+            <div className="rounded-2xl bg-primary-soft py-3 text-center text-primary-soft-foreground">
               <div className={`${AT.valueLg} text-primary`}>
                 {formatCurrency(velocityScore)}
               </div>
@@ -83,28 +83,28 @@ export function PipelineVelocity() {
 
             {/* Metric Cards */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-2xl bg-sunken p-3">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Target className="h-3 w-3 text-muted-foreground" />
                   <span className={AT.metricLabel}>Deals Fechados</span>
                 </div>
                 <div className={AT.valueMd}>{velocity!.total_closed}</div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-2xl bg-sunken p-3">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <TrendingUp className="h-3 w-3 text-emerald-500" />
+                  <TrendingUp className="h-3 w-3 text-success" />
                   <span className={AT.metricLabel}>Ganhos</span>
                 </div>
-                <div className={`${AT.valueMd} text-emerald-500`}>{velocity!.num_won}</div>
+                <div className={`${AT.valueMd} text-success`}>{velocity!.num_won}</div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-2xl bg-sunken p-3">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Timer className="h-3 w-3 text-muted-foreground" />
                   <span className={AT.metricLabel}>Win Rate</span>
                 </div>
                 <div className={AT.valueMd}>{velocity!.win_rate}%</div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-2xl bg-sunken p-3">
                 <div className="flex items-center gap-1.5 mb-1">
                   <DollarSign className="h-3 w-3 text-muted-foreground" />
                   <span className={AT.metricLabel}>Ticket Médio</span>

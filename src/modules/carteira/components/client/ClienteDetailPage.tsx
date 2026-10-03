@@ -1,8 +1,7 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   MessageCircle,
   ShoppingCart,
   AlertTriangle,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,32 +38,48 @@ import { ClienteTimeline } from "./ClienteTimeline";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Mesmas faixas de antes (80/60), em token. */
 function healthRingColor(score: number) {
-  if (score >= 80) return "text-emerald-400";
-  if (score >= 60) return "text-amber-400";
-  return "text-red-400";
+  if (score >= 80) return "text-success";
+  if (score >= 60) return "text-warning";
+  return "text-destructive";
 }
 
 function alertSeverityClass(severity: string) {
   switch (severity) {
     case "critical":
-      return "bg-red-500/10 text-red-400 border-red-500/20";
+      return "bg-destructive/10 text-destructive border-destructive/20";
     case "warning":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+      return "bg-warning/10 text-warning-strong border-warning/30";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
 }
 
+/** Mesmas faixas de churn de antes (70/40). */
+function churnClass(p: number) {
+  if (p >= 70) return "bg-destructive/10 text-destructive";
+  if (p >= 40) return "bg-warning/15 text-warning-strong";
+  return "bg-success/10 text-success-strong";
+}
+
 function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
+  return <div className={cn("animate-pulse rounded-card bg-muted", className)} />;
+}
+
+/** Cabeçalho de cartão do V5 — título 15px bold, sem filete. */
+function BlockTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <CardHeader className="px-5 pb-2 pt-4">
+      <CardTitle className="text-[15px] tracking-[-0.02em]">{children}</CardTitle>
+    </CardHeader>
+  );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ClienteDetailPage() {
   const { clientId } = useParams<{ clientId: string }>();
-  const navigate = useNavigate();
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -158,14 +174,14 @@ export default function ClienteDetailPage() {
 
   if (loadingClient) {
     return (
-      <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col gap-5" aria-busy="true">
         <SkeletonBlock className="h-16" />
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonBlock key={i} className="h-20" />
+            <SkeletonBlock key={i} className="h-24" />
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <SkeletonBlock className="h-40" />
           <SkeletonBlock className="h-40" />
         </div>
@@ -174,257 +190,215 @@ export default function ClienteDetailPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  //
+  // V5 (2026-10): `PageHeader` com voltar para a Carteira (a tela-mãe certa —
+  // o histórico pode ter vindo de qualquer lugar). O <main> já dá o respiro da
+  // página: o wrapper perdeu o `p-6`, o `max-w-7xl` e o `bg-background` que
+  // escondia a grade da bancada.
 
   return (
-    <div className="flex flex-col min-h-full bg-background">
-      <div className="flex flex-col gap-5 p-5 md:p-6 max-w-7xl mx-auto w-full">
+    <div className="flex flex-col gap-5">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <PageHeader
+        back="/upsell"
+        eyebrow="Cliente 360"
+        title={<span title={clientLabel}>{clientLabel}</span>}
+        subtitle={clientCompany ?? undefined}
+        actions={
+          <>
+            {clientPhone && client?.lead_id && (
+              <AbrirConversaButton
+                leadId={client.lead_id}
+                phone={clientPhone}
+                variant="outline"
+              >
+                <MessageCircle />
+                WhatsApp
+              </AbrirConversaButton>
+            )}
+            <Button onClick={() => setNewOrderOpen(true)}>
+              <ShoppingCart />
+              Novo pedido
+            </Button>
+          </>
+        }
+      />
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <header className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-muted-foreground hover:text-foreground -ml-2"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft size={15} />
-            Voltar
-          </Button>
-
-          {/* Health ring */}
-          <div className="relative w-10 h-10 shrink-0">
+      {/* ── Faixa de estado: health, inadimplência, churn ──────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2.5 rounded-full border border-card-border bg-card py-1 pl-1 pr-3.5 shadow-relevo">
+          <div className="relative h-9 w-9 shrink-0">
             <svg
-              className="w-10 h-10 -rotate-90"
+              className="h-9 w-9 -rotate-90"
               viewBox="0 0 80 80"
+              role="img"
               aria-label={`Health score: ${score}`}
             >
               <circle
                 cx="40" cy="40" r="35"
                 fill="none" stroke="currentColor"
-                strokeWidth="8" className="text-border"
+                strokeWidth="9" className="text-muted"
               />
               <circle
                 cx="40" cy="40" r="35"
                 fill="none" stroke="currentColor"
-                strokeWidth="8" className={ringColor}
+                strokeWidth="9" className={ringColor}
                 strokeDasharray={dashArray}
                 strokeLinecap="round"
               />
             </svg>
-            <span className={cn("absolute inset-0 flex items-center justify-center text-[10px] font-bold", ringColor)}>
+            <span className="absolute inset-0 flex items-center justify-center text-[10.5px] font-extrabold tabular-nums">
               {score}
             </span>
           </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3">
-              <h1
-                className="text-lg font-semibold text-foreground truncate leading-tight"
-                title={clientLabel}
-              >
-                {clientLabel}
-              </h1>
-              {healthHistory.length >= 2 && (
-                <HealthSparkline
-                  data={healthHistory}
-                  width={100}
-                  height={24}
-                  className="flex items-center gap-1 shrink-0"
-                />
-              )}
-            </div>
-            {clientCompany && (
-              <p className="text-xs text-muted-foreground truncate">{clientCompany}</p>
-            )}
-          </div>
-
-          {/* Inadimplência badge (S9) */}
-          {inadimplencia?.isInadimplente && (
-            <span
-              className="flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-xs font-bold tabular-nums bg-red-500/20 text-red-400"
-              title={`${inadimplencia.overdueCount} título(s) atrasado(s)`}
-            >
-              <AlertTriangle size={11} />
-              Inadimplente · {formatBRL(inadimplencia.receitaEmRisco)}
-            </span>
+          <span className="text-[12px] font-bold text-foreground/80">Health</span>
+          {healthHistory.length >= 2 && (
+            <HealthSparkline
+              data={healthHistory}
+              width={90}
+              height={22}
+              className="flex shrink-0 items-center gap-1"
+            />
           )}
+        </div>
 
-          {/* Churn badge */}
-          {client?.churn_probability != null && client.churn_probability > 0 && (
-            <span
-              className={cn(
-                "flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-xs font-bold tabular-nums",
-                client.churn_probability >= 70
-                  ? "bg-red-500/20 text-red-400"
-                  : client.churn_probability >= 40
-                    ? "bg-amber-500/20 text-amber-400"
-                    : "bg-emerald-500/20 text-emerald-400",
-              )}
-            >
-              <TrendingDown size={11} />
-              {client.churn_probability}% churn
-            </span>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            {clientPhone && client?.lead_id && (
-              <AbrirConversaButton
-                leadId={client.lead_id}
-                phone={clientPhone}
-                size="sm"
-                variant="outline"
-                className="gap-1.5 border-border hover:bg-muted hover:border-green-600/50 hover:text-green-400"
-              >
-                <MessageCircle size={13} />
-                WhatsApp
-              </AbrirConversaButton>
-            )}
-            <Button
-              size="sm"
-              className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-              onClick={() => setNewOrderOpen(true)}
-            >
-              <ShoppingCart size={13} />
-              Novo Pedido
-            </Button>
-          </div>
-        </header>
-
-        {/* ── Alert Strip ────────────────────────────────────────────────── */}
-        {alerts.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1 scrollbar-none">
-            {alerts.map((alert) => (
-              <div
-                key={alert.id}
-                className={cn(
-                  "flex items-center gap-1.5 shrink-0 rounded-md px-2.5 py-1.5 border text-xs",
-                  alertSeverityClass(alert.severity),
-                )}
-              >
-                <AlertTriangle size={11} />
-                <span className="whitespace-nowrap">{alert.description ?? alert.title}</span>
-              </div>
-            ))}
-          </div>
+        {/* Inadimplência badge (S9) */}
+        {inadimplencia?.isInadimplente && (
+          <span
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1.5 text-xs font-bold tabular-nums text-destructive"
+            title={`${inadimplencia.overdueCount} título(s) atrasado(s)`}
+          >
+            <AlertTriangle size={12} />
+            Inadimplente · {formatBRL(inadimplencia.receitaEmRisco)}
+          </span>
         )}
 
-        {/* ── Top row: Metrics + Reorder Timeline ────────────────────────── */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
-          <ClienteMetrics client={client ?? {}} />
+        {/* Churn badge */}
+        {client?.churn_probability != null && client.churn_probability > 0 && (
+          <span
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold tabular-nums",
+              churnClass(client.churn_probability),
+            )}
+          >
+            <TrendingDown size={12} />
+            {client.churn_probability}% churn
+          </span>
+        )}
+      </div>
 
-          <Card className="bg-card border-border">
-            <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-card-foreground">
-                Ciclo de Recompra
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              {cycleDays > 0 ? (
-                <ClienteReorderTimeline
-                  cycleDays={cycleDays}
-                  daysSinceLast={daysSinceLast}
-                  lastOrderAt={lastOrderAt}
-                  nextOrderExpected={nextOrderExpected}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Ciclo não calculado ainda.
-                </p>
+      {/* ── Alert Strip ────────────────────────────────────────────────── */}
+      {alerts.length > 0 && (
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 scrollbar-hide">
+          {alerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
+                alertSeverityClass(alert.severity),
               )}
-            </CardContent>
-          </Card>
+            >
+              <AlertTriangle size={11} />
+              <span className="whitespace-nowrap">{alert.description ?? alert.title}</span>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* ── Mid row: Copilot + Products ─────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ClienteCopilotSuggestion
-            clientId={clientId}
-            leadId={client?.lead_id ?? null}
-            clientName={clientName}
-            phone={clientPhone}
-            alerts={alerts}
-            lastOrder={lastOrder}
-            nextOrderExpected={nextOrderExpected}
-          />
+      {/* ── Top row: Metrics + Reorder Timeline ────────────────────────── */}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[1fr_340px]">
+        <ClienteMetrics client={client ?? {}} />
 
-          <Card className="bg-card border-border">
-            <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-card-foreground">
-                Produtos Ativos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              {loadingProducts ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <SkeletonBlock key={i} className="h-8" />
-                  ))}
-                </div>
-              ) : (
-                <ClienteProductsTable products={products} />
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <BlockTitle>Ciclo de recompra</BlockTitle>
+          <CardContent className="px-5 pb-5">
+            {cycleDays > 0 ? (
+              <ClienteReorderTimeline
+                cycleDays={cycleDays}
+                daysSinceLast={daysSinceLast}
+                lastOrderAt={lastOrderAt}
+                nextOrderExpected={nextOrderExpected}
+              />
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Ciclo não calculado ainda.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* ── Financeiro: títulos a receber (SCRUM-229 bloco 4.1) ──────────
-            O ERP sincroniza contas a receber desde a integração do Toth, e até
-            aqui nenhuma superfície da Carteira mostrava — o dado chegava ao
-            banco e morria lá. */}
-        <Card className="bg-card border-border">
-          <CardHeader className="px-4 pt-4 pb-2">
-            <CardTitle className="text-sm font-semibold text-card-foreground">
-              Títulos a receber
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <ClienteTitulos clientId={clientId} />
+      {/* ── Mid row: Copilot + Products ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ClienteCopilotSuggestion
+          clientId={clientId}
+          leadId={client?.lead_id ?? null}
+          clientName={clientName}
+          phone={clientPhone}
+          alerts={alerts}
+          lastOrder={lastOrder}
+          nextOrderExpected={nextOrderExpected}
+        />
+
+        <Card>
+          <BlockTitle>Produtos ativos</BlockTitle>
+          <CardContent className="px-5 pb-5">
+            {loadingProducts ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <SkeletonBlock key={i} className="h-8 rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <ClienteProductsTable products={products} />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Financeiro: títulos a receber (SCRUM-229 bloco 4.1) ──────────
+          O ERP sincroniza contas a receber desde a integração do Toth, e até
+          aqui nenhuma superfície da Carteira mostrava — o dado chegava ao
+          banco e morria lá. */}
+      <Card>
+        <BlockTitle>Títulos a receber</BlockTitle>
+        <CardContent className="px-5 pb-5">
+          <ClienteTitulos clientId={clientId} />
+        </CardContent>
+      </Card>
+
+      {/* ── Bottom row: Order History + Timeline ────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <BlockTitle>Histórico de pedidos</BlockTitle>
+          <CardContent className="max-h-96 overflow-y-auto px-5 pb-5">
+            {loadingOrders ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <SkeletonBlock key={i} className="h-12 rounded-xl" />
+                ))}
+              </div>
+            ) : (
+              <ClienteOrderHistory
+                orders={orders}
+                cycleDays={cycleDays}
+                invoicedOrderIds={invoicedOrderIds}
+              />
+            )}
           </CardContent>
         </Card>
 
-        {/* ── Bottom row: Order History + Timeline ────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="bg-card border-border">
-            <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-card-foreground">
-                Histórico de Pedidos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 max-h-96 overflow-y-auto">
-              {loadingOrders ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <SkeletonBlock key={i} className="h-12" />
-                  ))}
-                </div>
-              ) : (
-                <ClienteOrderHistory
-                  orders={orders}
-                  cycleDays={cycleDays}
-                  invoicedOrderIds={invoicedOrderIds}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border">
-            <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-card-foreground">
-                Atividade Recente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 max-h-96 overflow-y-auto">
-              <ClienteTimeline orders={orders} alerts={alerts} />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quem atende, de que praça, de que segmento. Some sozinho para
-            cliente que não veio de ERP. */}
-        <ClienteDadosErp clientId={clientId} />
-
+        <Card>
+          <BlockTitle>Atividade recente</BlockTitle>
+          <CardContent className="max-h-96 overflow-y-auto px-5 pb-5">
+            <ClienteTimeline orders={orders} alerts={alerts} />
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Quem atende, de que praça, de que segmento. Some sozinho para
+          cliente que não veio de ERP. */}
+      <ClienteDadosErp clientId={clientId} />
 
       <NewOrderModal
         open={newOrderOpen}

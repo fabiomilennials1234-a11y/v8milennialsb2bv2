@@ -1,6 +1,8 @@
 import { ReactNode, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { PageTabsSlotProvider } from "@/components/ui/page-header";
 import { SidebarMobileDrawer } from "./SidebarMobileDrawer";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { OnboardingChecklist } from "@/modules/platform/components/onboarding/OnboardingChecklist";
@@ -16,6 +18,7 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
 import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportFab } from "@/modules/platform/components/support/SupportFab";
+import { UiVersionGuard } from "@/modules/platform/ui-version/UiVersionGuard";
 import { SupportAccess } from "../support/SupportAccess";
 import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
@@ -77,6 +80,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
   const { isMobile } = useViewport();
   const { isChatThreadOpen } = useMobileChatContext();
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
+  // Onde o `PageHeader` publica a pílula da página (centro da `TopBar`).
+  const [tabsSlot, setTabsSlot] = useState<HTMLDivElement | null>(null);
 
   useCopilotToggleRealtime();
   useIncomingMessageToast();
@@ -137,21 +142,37 @@ function MainLayoutInner({ children }: MainLayoutProps) {
             isFullBleed
               ? "overflow-hidden"
               : "overflow-y-auto overflow-x-hidden md:overflow-x-auto",
-            isMobile && !hideBottomNav && "pb-16",
+            // V5: a barra inferior flutua (56px + 12px de margem + safe-area)
+            isMobile && !hideBottomNav && "pb-[calc(5.5rem+env(safe-area-inset-bottom))]",
           )}
         >
-          <div
-            className={cn(
-              "w-full flex flex-col min-w-0 max-w-full",
-              isFullBleed
-                ? "h-full px-0 py-0"
-                : isWide
-                ? "px-4 lg:px-6 py-5 lg:py-6 min-h-full"
-                : "px-4 sm:px-6 lg:px-10 xl:px-12 py-5 sm:py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
-            )}
-          >
-            {children}
-          </div>
+          {/* V5: a barra superior é a primeira linha da área de trabalho e
+              rola com a página. Nas rotas de tela cheia (chat, canvas) ela
+              fica no topo e o conteúdo ocupa o resto da altura. */}
+          <PageTabsSlotProvider value={tabsSlot}>
+            {/* `pb-24`: o dock (suporte, bolha do chat) flutua no canto inferior
+                direito. Sem essa folga, o último controle da página ficava preso
+                por baixo dele — rolar até o fim não o liberava. */}
+            <div
+              className={cn(
+                "w-full flex flex-col min-w-0 max-w-full",
+                isFullBleed
+                  ? "h-full"
+                  : isWide
+                  ? "gap-4 pl-4 pr-4 pb-24 pt-3.5 lg:pr-5 min-h-full"
+                  : "gap-4 pl-4 pr-4 pb-24 pt-3.5 lg:pr-5 max-w-[1560px] mx-auto min-h-full",
+              )}
+            >
+              {!hideNavbar && (
+                <TopBar
+                  onTabsSlot={setTabsSlot}
+                  compact={isMobile}
+                  className={cn(isFullBleed && "shrink-0 px-4 pt-3.5 lg:pr-5")}
+                />
+              )}
+              {isFullBleed ? <div className="flex min-h-0 flex-1 flex-col">{children}</div> : children}
+            </div>
+          </PageTabsSlotProvider>
         </main>
       </div>
 
@@ -168,6 +189,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
         <SupportFab />
         <SupportRealtimeAnnouncement />
       </SupportAccess>
+      {/* Interface nova ou clássica: segue a escolha da org (Configurações › Geral). */}
+      <UiVersionGuard />
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />

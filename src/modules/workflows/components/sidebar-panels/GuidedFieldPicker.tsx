@@ -2,7 +2,8 @@ import { useCustomFieldCatalogue } from '@/modules/leads';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { useEffect, useState } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { GUIDED_RESPONSIBLE_FIELDS, GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
+import { GUIDED_RESPONSIBLE_FIELDS, GUIDED_SCALAR_FIELDS, isDiscontinuedGuidedField } from '@/contracts/workflows/guided-fields';
+import { DiscontinuedBadge, DiscontinuedNotice } from '../DiscontinuedNotice';
 import type { GuidedRuleDraft } from '@/types/workflow';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -94,13 +95,16 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
           {options.isError && <div className="p-3"><p role="alert" className="text-sm text-destructive">Não foi possível carregar campos personalizados.</p>
             <Button type="button" variant="ghost" onClick={() => void options.refetch()}>Tentar carregar campos novamente</Button></div>}
           <CommandGroup heading="Lead">
-            {entries.filter(([field]) => field.startsWith('lead.')).map(([field, aliases]) => <CommandItem key={field} value={field}
+            {/* Descontinuado (score) só aparece quando é o valor já salvo — para
+                ser reconhecido e trocado, nunca para ser escolhido de novo. */}
+            {entries.filter(([field]) => field.startsWith('lead.') && (!isDiscontinuedGuidedField(field) || field === value)).map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Lead', fields[field].label, ...aliases]} onSelect={() => {
                 if (field !== value) onChange(field);
                 setOpen(false); setSearch('');
               }}>
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
               <span>{fields[field].label}</span>
+              {isDiscontinuedGuidedField(field) && <DiscontinuedBadge className="ml-auto" />}
             </CommandItem>)}
           </CommandGroup>
           <CommandGroup heading="Negócio do gatilho">
@@ -163,6 +167,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
       </Command>
     </PopoverContent>
   </Popover>
+    {isDiscontinuedGuidedField(value) && <DiscontinuedNotice />}
     {custom && selected.isError && <><p role="alert" className="text-sm text-destructive">Não foi possível verificar o campo selecionado.</p>
       <Button type="button" variant="outline" onClick={() => void selected.refetch()}>Tentar verificar campo novamente</Button></>}
     {custom && selected.isSuccess && !selected.data && <p role="alert" className="text-sm text-destructive">Campo removido ou sem acesso. Selecione outro campo.</p>}

@@ -1,3 +1,6 @@
+/* V5 (2026-10): Plus Jakarta Sans é a face da interface — geométrica e redonda,
+   é ela que dá o "macio" dos números grandes. Inter fica para a landing. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
@@ -19,39 +22,51 @@
 
 @layer base {
   :root {
-    /* Torque Brand Colors — Light mode with warm personality */
-    --background: 42 25% 96%;
-    --foreground: 30 18% 16%;
+    /* ═══ V5 (2026-10) — "canvas quente com grade, cartões brancos, tinta e ouro"
+       O fundo vira uma bancada: tom quente um degrau abaixo do cartão, com
+       grade de 28px (ver [data-layout="main"]). O cartão sobe para BRANCO
+       puro — é o contraste cartão×bancada que separa os blocos, não a borda.
+       A cor de texto desce de marrom (30 18% 16%) para quase-preto quente:
+       número grande em marrom lia "lavado" no bento. Ouro continua a marca. */
+    --background: 42 18% 94%;
+    --foreground: 36 12% 10%;
 
-    --card: 42 18% 99%;
-    --card-foreground: 30 18% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 36 12% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 30 18% 16%;
+    --popover-foreground: 36 12% 10%;
 
     /* Primary Yellow - Torque Brand Identity */
     --primary: 47 100% 50%;
-    --primary-foreground: 30 18% 15%;
+    --primary-foreground: 40 60% 8%;
 
     /* Secondary - Soft Yellow */
     --secondary: 47 40% 95%;
     --secondary-foreground: 30 18% 20%;
 
     /* Muted */
-    --muted: 42 18% 93%;
-    --muted-foreground: 30 10% 46%;
+    --muted: 42 14% 92%;
+    --muted-foreground: 36 6% 42%;
 
-    /* Accent - Dark Brown */
-    --accent: 36 20% 22%;
-    --accent-foreground: 45 100% 96%;
+    /* V5: --accent deixa de ser MARROM ESCURO no claro. É o fill de hover de
+       todo item shadcn (menu, select, command, ghost) — no escuro isso já tinha
+       sido corrigido (ver .dark); o claro ficou com a tarja marrom sob o mouse.
+       Agora é superfície neutra de hover nos dois temas. */
+    --accent: 42 14% 92%;
+    --accent-foreground: 36 12% 10%;
 
     /* Destructive */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 72% 42%;  /* ~6,5:1 sobre --card light */
 
     /* Success - Gamification Green */
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
+    /* V5: par legível do verde para TEXTO e ícone sobre cartão. --success
+       (142 70% 45%) dá ~2,5:1 sobre branco e reprova AA; é o preenchimento. */
+    --success-strong: 142 72% 27%;
 
     /* Warning */
     --warning: 38 92% 50%;
@@ -71,8 +86,8 @@
     --insights: 205 90% 40%;
     --insights-foreground: 210 40% 98%;
 
-    --border: 40 15% 88%;
-    --input: 40 15% 88%;
+    --border: 40 12% 88%;
+    --input: 40 12% 86%;
     --ring: 47 100% 50%;
 
     /* ─── Profundidade (claro) ──────────────────────────────────────
@@ -84,19 +99,47 @@
        ao contrário do "levantado", que inverte de mecanismo.
        É exatamente o defeito medido no `bg-muted`, que hoje lê afundado
        no claro e levantado no escuro. */
-    --sunken: 40 20% 94%;
+    --sunken: 42 16% 96%;
     --elevated: 0 0% 100%;
+
+    /* ─── V5: tinta, ouro e bancada ─────────────────────────────────
+       --ink é a superfície ESCURA nos dois temas: lateral, painel-herói,
+       tooltip, pílula de navegação. No claro é quase-preto quente; no escuro
+       sobe um degrau acima do cartão para continuar lida como "objeto". */
+    --ink: 40 8% 7%;
+    --ink-2: 40 6% 12%;
+    --ink-3: 40 5% 17%;
+    --ink-line: 40 6% 20%;
+    --ink-foreground: 44 20% 96%;
+    --ink-muted: 40 6% 62%;
+    /* ouro em superfície: fundo tintado (pílula, linha selecionada) */
+    --gold-soft: 48 100% 91%;
+    --gold-soft-foreground: 32 90% 30%;
+    /* ação branca SOBRE o ouro (botão do FocusCard). Mora só aqui: o ouro não
+       muda entre claro e escuro, então o par também não muda. */
+    --gold-cta: 0 0% 100%;
+    /* linhas da grade da bancada */
+    --canvas-grid: 42 12% 88.5%;
+    /* contorno do cartão: no claro o cartão é separado pela sombra, não pela
+       borda — a borda some; no escuro volta como lábio de luz */
+    --card-border: 0 0% 100% / 0;
+    --radius-card: 1.375rem;
+    --radius-panel: 1.75rem;
 
     /* Tinta da pílula de origem do lead. É o único valor que precisa virar
        de lado por tema — o matiz de cada origem mora no ORIGIN_COLORS. */
     --origin-ink-l: 34%;
 
+    /* V5: sombra de bento — curta embaixo (contato) e longa difusa (ar). */
     --relevo:
-      0 1px 2px 0 hsl(30 18% 20% / .06),
-      0 4px 10px -4px hsl(30 18% 20% / .10);
+      0 1px 2px 0 hsl(36 20% 10% / .04),
+      0 8px 24px -12px hsl(36 20% 10% / .12);
     --relevo-alto:
-      0 2px 4px -1px hsl(30 18% 20% / .08),
-      0 16px 40px -12px hsl(30 18% 20% / .18);
+      0 1px 2px 0 hsl(36 20% 10% / .05),
+      0 22px 44px -22px hsl(36 30% 8% / .32);
+    /* painel de tinta e pílula: sombra funda, é o objeto mais "solto" */
+    --relevo-tinta: 0 24px 60px -20px hsl(36 30% 5% / .45);
+    --brilho-ouro: 0 10px 28px -10px hsl(47 100% 42% / .65);
     --afundado:
       inset 0 2px 5px -1px hsl(30 18% 20% / .12),
       inset 0 -1px 0 0 hsl(0 0% 100% / .70);
@@ -136,17 +179,20 @@
     --chat-composer-min-h:      44px;
     --chat-list-row-height:     72px;
 
-    --radius: 0.75rem;
+    /* V5: raio base sobe de 12px para 14px — controles (input, select) ficam
+       em `md` (12px); cartão tem raio próprio (--radius-card, 22px). */
+    --radius: 0.875rem;
 
-    /* Sidebar - Dark Theme */
-    --sidebar-background: 36 20% 18%;
-    --sidebar-foreground: 45 20% 90%;
-    --sidebar-primary: 33 81% 54%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 36 15% 25%;
-    --sidebar-accent-foreground: 45 20% 95%;
-    --sidebar-border: 36 15% 25%;
-    --sidebar-ring: 33 81% 54%;
+    /* Sidebar — V5: TINTA flutuante (era marrom 36 20% 18%). Escura nos dois
+       temas, como antes; muda o tom e o ouro passa a ser o único acento. */
+    --sidebar-background: 40 8% 7%;
+    --sidebar-foreground: 44 14% 88%;
+    --sidebar-primary: 47 100% 50%;
+    --sidebar-primary-foreground: 40 60% 8%;
+    --sidebar-accent: 40 5% 15%;
+    --sidebar-accent-foreground: 44 20% 96%;
+    --sidebar-border: 40 6% 16%;
+    --sidebar-ring: 47 100% 50%;
 
     /* Chart Colors */
     --chart-1: 47 100% 50%;
@@ -239,9 +285,11 @@
        — um de tinta, um de superfície — e isso é mudança de contrato. */
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 84% 68%;  /* ~6:1 sobre --card dark */
 
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
+    --success-strong: 142 62% 58%;
 
     --warning: 38 92% 55%;
     --warning-foreground: 30 18% 10%;
@@ -273,11 +321,30 @@
        Nada mais tem profundidade. */
     --sunken: 0 0% 4%;              /* bloco secundário DENTRO de um card */
     --elevated: 0 0% 12%;           /* card em hover */
+
+    /* V5 no escuro: o fundo continua PRETO PURO (decisão de 20/08). A tinta
+       sobe um degrau acima do cartão (8%) para o painel-herói e a lateral
+       continuarem lidos como objeto sobre o preto. */
+    --ink: 0 0% 10.5%;
+    --ink-2: 0 0% 13%;
+    --ink-3: 0 0% 17%;
+    --ink-line: 0 0% 19%;
+    --ink-foreground: 0 0% 96%;
+    --ink-muted: 0 0% 62%;
+    --gold-soft: 47 60% 12%;
+    --gold-soft-foreground: 47 95% 62%;
+    --canvas-grid: 0 0% 5.5%;
+    --card-border: 0 0% 100% / .055;
     --origin-ink-l: 74%;            /* ver ORIGIN_COLORS no LeadCard.tsx */
 
     --relevo:
       inset 0 1px 0 0 hsl(0 0% 100% / .07),
       0 1px 0 0 hsl(0 0% 0% / 1);
+    --relevo-tinta:
+      inset 0 1px 0 0 hsl(0 0% 100% / .08),
+      0 0 0 1px hsl(0 0% 100% / .05),
+      0 24px 60px -20px hsl(0 0% 0% / 1);
+    --brilho-ouro: 0 10px 28px -12px hsl(47 100% 50% / .45);
     --relevo-alto:
       inset 0 1px 0 0 hsl(0 0% 100% / .10),
       0 0 0 1px hsl(0 0% 100% / .06),
@@ -327,7 +394,8 @@
     --command-palette-bg:     220 15% 10%;
     --command-palette-border: 220 10% 20%;
 
-    --sidebar-background: 0 0% 0%;
+    /* V5: a lateral flutua — precisa de um degrau acima do preto do fundo. */
+    --sidebar-background: 0 0% 6.5%;
     --sidebar-foreground: 0 0% 90%;
 
     /* 🔴 INCONGRUÊNCIA CORRIGIDA — 11 tokens visuais eram declarados SÓ no
@@ -340,9 +408,9 @@
        (5 matizes distintos e legíveis no escuro), agora promovida ao tema. */
     --sidebar-primary: 47 100% 50%;
     --sidebar-primary-foreground: 0 0% 8%;
-    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent: 0 0% 13%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 14%;
+    --sidebar-border: 0 0% 13%;
     --sidebar-ring: 47 100% 50%;
 
     --chart-1: 47 100% 50%;   /* dourado  */
@@ -392,6 +460,10 @@
 
     --success:            142 62% 52%; /* +L vs app: verde escuro some em parede */
     --destructive:          0 72% 60%;
+    /* Pares legíveis (texto): a TV é escura mesmo com o app em claro. */
+    --destructive-strong:   0 84% 68%;
+    --success-strong:       142 62% 58%;
+    --warning-strong:       38 92% 62%;
     --warning:             38 92% 58%;
 
     /* ─── Escala tipográfica — cinco degraus, só cinco ────────────────
@@ -480,6 +552,17 @@
   @media (prefers-reduced-motion: reduce) {
     .tv-value-loading { animation: none; opacity: 0.55; }
   }
+
+  /* Tinta é escura nos DOIS temas. Os pares legíveis de texto semântico
+     (`-strong`) são calibrados contra o cartão — no claro, escuros; dentro da
+     tinta isso dá vermelho/verde escuro sobre quase-preto. Aqui a superfície
+     reescopa os três para os valores do escuro. */
+  .bg-tinta,
+  .bg-sidebar {
+    --destructive-strong: 0 84% 68%;
+    --success-strong: 142 62% 58%;
+    --warning-strong: 38 92% 62%;
+  }
 }
 
 @layer base {
@@ -489,9 +572,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
-    /* cv11: alterna numeral "1" com serif (legível em timestamps 11:11); ss01: "a" alternativo */
-    font-feature-settings: "cv11", "ss01";
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
     min-height: 100vh;
     /* PWA safe-area: respeita home indicator (iPhone) e barras de navegação */
     padding-bottom: env(safe-area-inset-bottom);
@@ -512,6 +593,16 @@
       overflow-x: hidden;
       max-width: 100vw;
     }
+  }
+
+  /* V5 — a bancada: grade de 28px no fundo da área de trabalho. Fica no
+     layout (não no body) para não vazar em login, landing e TV. */
+  [data-layout="main"] {
+    background-image:
+      linear-gradient(hsl(var(--canvas-grid)) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--canvas-grid)) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
   }
 
   /* Durante a transição de tema, só o fundo principal fica transparente (sidebar mantém a cor) */
@@ -537,8 +628,8 @@
   }
 
   h1 {
-    @apply text-2xl font-bold;
-    letter-spacing: -0.03em;
+    @apply text-2xl font-extrabold;
+    letter-spacing: -0.035em;
   }
 
   h2 {
@@ -625,26 +716,6 @@
 
   .metric-card {
     @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
-  }
-
-  /* ─── Copilot: gold hover treatment ──────────────────────────────
-     Scoped to .copilot-surface (applied on the copilot screens' roots).
-     Every enabled button "lights up" gold on hover — a discreet gold glow
-     + subtle lift. Single source of truth for the effect across all copilot
-     buttons. Excludes toggles/switches/radios and the active pill (which
-     keeps its own solid gold fill). Portaled surfaces (dialogs, dropdowns,
-     selects) render outside .copilot-surface and are intentionally untouched. */
-  .copilot-surface button:not([data-gradient]) {
-    transition-property: color, background-color, border-color, box-shadow, transform;
-    transition-duration: 180ms;
-    transition-timing-function: ease-out;
-  }
-
-  .copilot-surface button:not(:disabled):not([data-disabled]):not([data-state="active"]):not([role="switch"]):not([role="checkbox"]):not([role="radio"]):not([data-gradient]):hover {
-    transform: translateY(-1px);
-    box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.14),
-      0 3px 12px -5px hsl(var(--primary) / 0.20);
   }
 
   .kanban-column {

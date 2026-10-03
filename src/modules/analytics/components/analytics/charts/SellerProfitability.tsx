@@ -15,9 +15,9 @@ function formatCurrency(value: number): string {
 }
 
 function roiColor(roi: number): string {
-  if (roi >= 6) return "text-green-600 bg-green-50 dark:bg-green-950";
-  if (roi >= 3) return "text-yellow-600 bg-yellow-50 dark:bg-yellow-950";
-  return "text-destructive bg-red-50 dark:bg-red-950";
+  if (roi >= 6) return "text-success bg-success/10";
+  if (roi >= 3) return "text-warning-strong bg-warning/10";
+  return "text-destructive bg-destructive/10";
 }
 
 function roiLabel(roi: number): string {
@@ -83,7 +83,7 @@ export function SellerProfitability({ data }: Props) {
                     {formatCurrency(seller.commission_total)}
                   </td>
                   <td className="py-2 pr-3 text-right">
-                    <span className={seller.margin >= 60 ? "text-green-600" : seller.margin >= 30 ? "text-yellow-600" : "text-destructive"}>
+                    <span className={seller.margin >= 60 ? "text-success" : seller.margin >= 30 ? "text-warning-strong" : "text-destructive"}>
                       {seller.margin.toFixed(1)}%
                     </span>
                   </td>
@@ -99,15 +99,15 @@ export function SellerProfitability({ data }: Props) {
         </div>
         <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-green-100 border border-green-600" />
+            <span className="w-2 h-2 rounded-sm bg-success/15 border border-success" />
             ROI &gt;6x
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-600" />
+            <span className="w-2 h-2 rounded-sm bg-warning/20 border border-warning" />
             3–6x
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-red-100 border border-red-600" />
+            <span className="w-2 h-2 rounded-sm bg-destructive/15 border border-destructive" />
             &lt;3x
           </span>
         </div>

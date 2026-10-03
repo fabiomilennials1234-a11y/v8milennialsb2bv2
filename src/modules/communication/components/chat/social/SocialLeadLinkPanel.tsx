@@ -105,7 +105,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background border-l border-border/60">
+    <div className="flex h-full flex-col">
       <div className="flex flex-col items-center justify-center h-full gap-5 px-6 text-center">
         <div className="relative">
           {contact.avatar_url ? (
@@ -118,7 +118,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
             <div
               className={cn(
                 "w-16 h-16 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-lg select-none",
-                gradient.ink ? "text-[#1c1c1c]" : "text-white",
+                gradient.ink ? "text-tinta" : "text-tinta-foreground",
               )}
               style={{ background: gradient.background }}
               aria-hidden
@@ -163,7 +163,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
         </div>
 
         {orphanIdentity && (
-          <div className="w-full max-w-[260px] rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 text-left">
+          <div className="w-full max-w-[260px] rounded-xl border border-border/60 bg-sunken px-3 py-2.5 text-left">
             <p className="text-xs text-muted-foreground leading-relaxed">
               O vínculo anterior aponta para um lead que foi para a lixeira.
               Desfaça-o para poder vincular de novo.

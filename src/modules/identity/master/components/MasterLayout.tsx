@@ -1,29 +1,25 @@
 /**
- * Layout específico para área Master
+ * Layout da área Master.
  *
- * Inclui sidebar própria e header com indicador de modo Master.
+ * V5 (onda "mais perto do mockup", 02/10): mora DENTRO do shell normal do app
+ * (trilho de ícones + barra superior — `App.tsx` monta `MainLayout` em volta),
+ * sem lateral própria.
+ *
+ * A moldura master (pílula dos grupos na barra superior, selo "Modo master",
+ * sub-páginas e faixa vermelha) NÃO mora aqui: ela é do `MasterPageHeader`,
+ * que cada página renderiza no lugar do `PageHeader`. Aqui ela vinha antes do
+ * título e com a pílula dentro da página — divergia de todas as outras telas.
+ *
+ * O padding da página mora no <main> do `MainLayout`; as páginas não somam o
+ * próprio.
  */
 
 import { Outlet } from "react-router-dom";
-import { MasterSidebar } from "./MasterSidebar";
-import { Shield } from "lucide-react";
 
 export function MasterLayout() {
   return (
-    <div className="flex h-screen bg-background">
-      <MasterSidebar />
-      
-      <main className="flex-1 overflow-y-auto">
-        {/* Master Mode Indicator */}
-        <div className="sticky top-0 z-10 bg-red-600 text-white px-4 py-1.5 flex items-center justify-center gap-2 text-sm font-medium">
-          <Shield className="w-4 h-4" />
-          <span>Modo Master Admin - Acesso Total ao Sistema</span>
-        </div>
-        
-        <div className="p-6">
-          <Outlet />
-        </div>
-      </main>
+    <div className="min-w-0">
+      <Outlet />
     </div>
   );
 }

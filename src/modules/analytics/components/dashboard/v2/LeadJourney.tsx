@@ -74,7 +74,7 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
   }, [transitions]);
 
   if (isLoading) {
-    return <Skeleton className="h-[400px] rounded-2xl" />;
+    return <Skeleton className="h-full min-h-[240px] rounded-2xl" />;
   }
 
   // Etapas = from da 1ª transição + to de cada transição da cadeia
@@ -83,9 +83,10 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
     : [];
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".25s" }}>
-      <span className="cmd-lbl">Jornada do lead — tempo entre etapas</span>
-      <div className="mt-1 text-[11px] font-semibold text-muted-foreground/60">
+    // Corpo da janela "Jornada do lead" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Tempo entre etapas</span>
+      <div className="mt-0.5 text-xs text-muted-foreground">
         caminho mais percorrido no funil e quantos dias o lead leva em cada passo
       </div>
 
@@ -95,7 +96,7 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
         </p>
       ) : (
         <>
-          <div className="mt-4 flex flex-col">
+          <div className="mb-4 mt-4 flex flex-col">
             {stages.map((label, i) => {
               const Icon = STEP_ICONS[Math.min(i, STEP_ICONS.length - 1)];
               const isLast = i === stages.length - 1;
@@ -105,16 +106,16 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
               const tag = gap === null
                 ? null
                 : isSlowest
-                  ? { text: "gargalo", cls: "text-[hsl(0_70%_62%)] bg-destructive/10" }
+                  ? { text: "gargalo", cls: "text-destructive bg-destructive/10" }
                   : gap.avg_hours <= maxHours * 0.25
                     ? { text: "rápido", cls: "text-success bg-success/10" }
-                    : { text: "normal", cls: "text-muted-foreground bg-background" };
+                    : { text: "normal", cls: "text-muted-foreground bg-muted" };
               return (
                 <div key={`${label}-${i}`} className="contents">
                   <div className="grid grid-cols-[38px_1fr] items-center gap-3">
                     <span
                       className={`flex h-[34px] w-[34px] items-center justify-center rounded-full border-2 ${
-                        isClosing ? "border-success bg-success/10 text-success" : "border-primary bg-primary/15 text-primary"
+                        isClosing ? "border-success bg-success/10 text-success" : "border-primary bg-primary-soft text-primary-soft-foreground"
                       }`}
                     >
                       <Icon className="h-[15px] w-[15px]" strokeWidth={2} />
@@ -122,7 +123,7 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
                     <span className="truncate text-[13px] font-bold" title={label}>
                       {label}
                       {isClosing && totalSales > 0 && (
-                        <small className="mt-[1px] block text-[10.5px] font-semibold text-muted-foreground/60">
+                        <small className="mt-[1px] block text-[11px] font-semibold text-muted-foreground">
                           {totalSales} venda{totalSales === 1 ? "" : "s"} no período
                         </small>
                       )}
@@ -131,18 +132,17 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
                   {gap !== null && (
                     <div className="grid min-h-[44px] grid-cols-[38px_1fr] items-center gap-3">
                       <span className="relative mx-auto my-1 h-full min-h-[36px] w-[3px] overflow-hidden rounded-sm bg-border/70">
-                        <i className={`absolute inset-0 ${isSlowest ? "bg-[hsl(0_62%_52%)]" : "bg-primary"}`} />
+                        <i className={`absolute inset-0 ${isSlowest ? "bg-destructive" : "bg-primary"}`} />
                       </span>
                       <span className="flex items-center gap-2.5">
-                        <span className={`w-16 flex-none text-[13px] font-extrabold tabular-nums ${isSlowest ? "text-[hsl(0_70%_62%)]" : ""}`}>
+                        <span className={`w-16 flex-none text-[13px] font-extrabold tracking-[-0.02em] tabular-nums ${isSlowest ? "text-destructive" : ""}`}>
                           {fmtDays(gap.avg_hours)}
                         </span>
-                        <span className="h-[7px] flex-1 overflow-hidden rounded-full bg-background">
+                        <span className="h-[7px] flex-1 overflow-hidden rounded-full bg-muted">
                           <i
-                            className="block h-full rounded-full"
+                            className={`block h-full rounded-full ${isSlowest ? "bg-destructive/80" : "bg-primary/70"}`}
                             style={{
                               width: `${maxHours > 0 ? Math.max((gap.avg_hours / maxHours) * 100, 6) : 0}%`,
-                              background: isSlowest ? "hsl(0 62% 52% / .8)" : "hsl(47 100% 50% / .65)",
                             }}
                           />
                         </span>
@@ -158,8 +158,8 @@ function LeadJourneyBase({ startDate, endDate, totalSales }: LeadJourneyProps) {
               );
             })}
           </div>
-          <div className="mt-4 flex items-center justify-between rounded-[11px] border border-border/70 bg-card px-3.5 py-[11px]">
-            <span className="text-[11.5px] font-semibold text-muted-foreground">
+          <div className="mt-auto flex items-center justify-between rounded-2xl bg-sunken px-3.5 py-2.5">
+            <span className="text-xs font-semibold text-muted-foreground">
               Caminho completo: <b className="font-extrabold text-foreground">{fmtDays(totalHours)}</b> em média
             </span>
           </div>

@@ -63,7 +63,9 @@ export function FloatingDock() {
     <div
       ref={setContainer ?? undefined}
       data-floating-dock
-      className="pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-3"
+      // V5: no celular a barra inferior flutua (56px + 12px + safe-area); o
+      // dock sobe junto para não ficar por baixo dela.
+      className="pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-3 max-md:bottom-[calc(5.75rem+env(safe-area-inset-bottom))] max-md:right-4"
     />
   );
 }

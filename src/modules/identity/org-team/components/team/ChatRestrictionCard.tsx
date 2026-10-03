@@ -55,13 +55,13 @@ function Stat({
     <div className="min-w-0">
       <div
         className={cn(
-          "text-2xl font-semibold tabular-nums tracking-tight",
-          tone === "warning" ? "text-primary" : "text-foreground",
+          "text-2xl font-extrabold leading-[1.05] tabular-nums tracking-[-0.04em]",
+          tone === "warning" ? "text-warning-strong" : "text-foreground",
         )}
       >
         {nf.format(value)}
       </div>
-      <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{label}</div>
+      <div className="mt-1 text-xs leading-snug text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -143,15 +143,15 @@ export function ChatRestrictionCard() {
     <>
       <div
         className={cn(
-          "rounded-xl border bg-card px-5 py-4 transition-colors",
-          enabled ? "border-primary/30" : "border-border",
+          "rounded-card border bg-card px-5 py-[18px] text-card-foreground shadow-relevo transition-colors",
+          enabled ? "border-primary/40" : "border-card-border",
         )}
       >
         <div className="flex items-start gap-4">
           <div
             className={cn(
-              "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-              enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+              "grid h-9 w-9 shrink-0 place-items-center rounded-[10px] transition-colors",
+              enabled ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-foreground/70",
             )}
           >
             <ShieldCheck className="h-[18px] w-[18px]" />
@@ -159,14 +159,14 @@ export function ChatRestrictionCard() {
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-medium leading-none">Isolamento por responsável</h3>
+              <h3 className="text-base font-bold leading-tight tracking-tight">Isolamento por responsável</h3>
               {enabled && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground">
                   Ativo
                 </span>
               )}
             </div>
-            <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
               Cada vendedor vê no chat apenas as conversas dos leads de que é responsável.
               Vale para todo membro não-admin, inclusive quem for contratado depois.
               Exceções individuais ficam em Permissões.
@@ -205,7 +205,7 @@ export function ChatRestrictionCard() {
                     Medindo esta organização...
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4">
+                  <div className="space-y-4 rounded-xl border border-border/60 bg-sunken p-4">
                     <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
                       <Stat value={total} label="conversas no chat" />
                       <Stat value={restritas} label="ficam só para admin" tone="warning" />
@@ -217,7 +217,7 @@ export function ChatRestrictionCard() {
 
                     {/* A proporção é o que decide, não o número absoluto. */}
                     <div className="space-y-1.5">
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
                         <div
                           className="h-full rounded-full bg-primary transition-all"
                           style={{ width: `${Math.min(pct, 100)}%` }}

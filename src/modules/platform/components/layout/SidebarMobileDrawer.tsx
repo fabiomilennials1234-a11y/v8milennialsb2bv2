@@ -11,12 +11,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { Menu, Search } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { SidebarBrand } from "./SidebarBrand";
@@ -40,40 +38,12 @@ export function SidebarMobileDrawer() {
     return () => window.removeEventListener("v8:open-mobile-nav", handler);
   }, []);
 
-  const title =
-    model.primary.find((item) => model.isActive(item.path))?.label ?? "Torque";
-
   return (
     <>
-      {/* Terceira (e última) superfície `bg-sidebar` do app. As outras duas — o
-          <aside> do desktop e o SheetContent logo abaixo — já ancoram a cor; sem
-          a âncora aqui o sino do <AlertsDropdown /> (Button `ghost`, que não tem
-          cor em repouso) herdava `--foreground` e sumia no tema claro. */}
-      <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar text-sidebar-foreground px-3">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Abrir menu"
-          className="grid h-8 w-8 place-items-center rounded-lg text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Menu className="h-[18px] w-[18px]" />
-        </button>
-
-        <span className="flex-1 truncate text-[15px] font-bold tracking-tight text-sidebar-foreground">
-          {title}
-        </span>
-
-        <AlertsDropdown />
-
-        <NavLink
-          to="/faq"
-          aria-label="Ajuda"
-          className="grid h-8 w-8 place-items-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
-        >
-          <Search className="h-[17px] w-[17px]" />
-        </NavLink>
-      </header>
-
+      {/* V5: o topo escuro (hambúrguer + título + sino + uma lupa que levava a
+          /faq) saiu. O topo do celular é a mesma barra clara do desktop, em
+          versão compacta (`TopBar compact`, montada pelo MainLayout); a gaveta
+          abre pelo "Mais" da barra inferior (evento `v8:open-mobile-nav`). */}
       <Sheet open={open} onOpenChange={setOpen}>
         {/* Mesma âncora de cor do `<aside>` do desktop (ver Sidebar.tsx): a gaveta
             também pinta `bg-sidebar`, escuro nos dois temas, então sem

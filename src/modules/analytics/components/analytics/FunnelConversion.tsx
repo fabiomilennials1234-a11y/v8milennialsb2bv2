@@ -79,9 +79,9 @@ export function FunnelConversion() {
                       {i > 0 && (
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                           stage.conversion_rate >= 50
-                            ? "bg-emerald-500/10 text-emerald-500"
+                            ? "bg-success/10 text-success"
                             : stage.conversion_rate >= 25
-                            ? "bg-amber-500/10 text-amber-500"
+                            ? "bg-warning/10 text-warning-strong"
                             : "bg-destructive/10 text-destructive"
                         }`}>
                           {stage.conversion_rate.toFixed(1)}%

@@ -92,22 +92,25 @@ export function statusOf(conv: number, goal: number): HealthStatus {
   return "bad";
 }
 
+// V5: estado em token — verde/vermelho crus e o halo literal quebravam o escuro.
+// "Atenção" lê em ouro de texto (`primary-soft-foreground`): o `primary` puro
+// não tem contraste como texto sobre o cartão claro.
 export const STATUS_TEXT: Record<HealthStatus, string> = {
-  ok: "text-emerald-500",
-  warn: "text-primary",
-  bad: "text-red-500",
+  ok: "text-success",
+  warn: "text-primary-soft-foreground",
+  bad: "text-destructive",
 };
 
 export const STATUS_LED: Record<HealthStatus, string> = {
-  ok: "bg-emerald-500 shadow-[0_0_8px_hsl(152_76%_40%/.55)]",
-  warn: "bg-primary shadow-[0_0_8px_hsl(47_100%_50%/.55)]",
-  bad: "bg-red-500 shadow-[0_0_8px_hsl(0_72%_51%/.6)]",
+  ok: "bg-success ring-2 ring-success/20",
+  warn: "bg-primary ring-2 ring-primary/25",
+  bad: "bg-destructive ring-2 ring-destructive/20",
 };
 
 export const STATUS_CHIP: Record<HealthStatus, { label: string; cls: string }> = {
-  ok: { label: "Saudável", cls: "bg-emerald-500/10 text-emerald-500" },
-  warn: { label: "Atenção", cls: "bg-primary/10 text-primary" },
-  bad: { label: "Gargalo", cls: "bg-red-500/15 text-red-500" },
+  ok: { label: "Saudável", cls: "bg-success/10 text-success" },
+  warn: { label: "Atenção", cls: "bg-primary-soft text-primary-soft-foreground" },
+  bad: { label: "Gargalo", cls: "bg-destructive/10 text-destructive" },
 };
 
 export function fmtPct(v: number) {
@@ -131,7 +134,7 @@ export function HelpTip({
         </span>
       </TooltipTrigger>
       <TooltipContent align={align} className="max-w-[300px] p-3.5 leading-relaxed">
-        <span className="mb-1.5 block text-[9.5px] font-bold uppercase tracking-[0.16em] text-primary">
+        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.08em] text-primary">
           O que conta aqui
         </span>
         {text}

@@ -230,7 +230,7 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
 
           {step === "done" && (
             <div className="flex flex-col items-center gap-3 py-6">
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
+              <CheckCircle2 className="h-12 w-12 text-success" />
               <p className="text-sm">Migração concluída com sucesso!</p>
             </div>
           )}

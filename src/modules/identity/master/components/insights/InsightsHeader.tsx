@@ -36,11 +36,11 @@ export function InsightsHeader({
       <div className="mx-auto flex max-w-[1180px] flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-insights">
+            <p className="text-[11px] font-bold uppercase tracking-[.08em] text-insights">
               Insights · Unit Economics
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h1 className="truncate font-display text-2xl tracking-[-0.02em] text-foreground md:text-[28px]">
+              <h1 className="truncate text-[1.375rem] font-extrabold leading-[1.1] tracking-[-0.035em] text-foreground md:text-[1.75rem]">
                 {orgName}
               </h1>
               <OrgInsightsCombobox
@@ -61,9 +61,9 @@ export function InsightsHeader({
             type="single"
             value={horizonte}
             onValueChange={(v) => v && onHorizonteChange(v as Horizonte)}
-            variant="outline"
             size="sm"
             aria-label="Horizonte"
+            className="gap-0.5 rounded-full bg-muted p-[3px]"
           >
             {HORIZONTES.map((h) => (
               <ToggleGroupItem
@@ -71,8 +71,10 @@ export function InsightsHeader({
                 value={h.key}
                 aria-label={h.label}
                 className={cn(
-                  "text-xs",
-                  "data-[state=on]:border-insights/30 data-[state=on]:bg-insights/12 data-[state=on]:text-insights",
+                  "h-auto rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground",
+                  "transition-[background-color,color,box-shadow] duration-150 hover:bg-transparent hover:text-foreground",
+                  "focus-visible:ring-insights focus-visible:ring-offset-0",
+                  "data-[state=on]:bg-card data-[state=on]:text-insights data-[state=on]:shadow-relevo",
                 )}
               >
                 {h.label}

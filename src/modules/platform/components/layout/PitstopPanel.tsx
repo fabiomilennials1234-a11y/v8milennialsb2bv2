@@ -23,9 +23,11 @@ interface PitstopPanelProps {
   onClose: () => void;
   groups: PitstopGroup[];
   isActive: (path: string) => boolean;
+  /** Onde o overlay começa: largura da lateral + as margens dela (V5). */
+  overlayLeft?: number;
 }
 
-export function PitstopPanel({ open, onClose, groups, isActive }: PitstopPanelProps) {
+export function PitstopPanel({ open, onClose, groups, isActive, overlayLeft = 272 }: PitstopPanelProps) {
   const { width } = useViewport();
   // width é undefined no primeiro paint (SSR-safe): tratar como desktop evita
   // o painel piscar como overlay antes da medição.
@@ -45,9 +47,11 @@ export function PitstopPanel({ open, onClose, groups, isActive }: PitstopPanelPr
   const panel = (
     <aside
       aria-label="Pitstop"
+      // V5: a coluna também flutua — mesma tinta, mesmo raio e respiro da lateral.
+      style={asOverlay ? { left: overlayLeft } : undefined}
       className={cn(
-        "flex w-[268px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar/95",
-        asOverlay && "fixed inset-y-0 left-16 z-40 shadow-2xl backdrop-blur-xl md:left-[248px]",
+        "my-3 ml-3 flex h-[calc(100vh-1.5rem)] w-[268px] shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta",
+        asOverlay && "fixed inset-y-0 z-40 m-0 my-3 backdrop-blur-xl",
       )}
     >
       <div className="flex items-center gap-2 border-b border-sidebar-border px-4 py-3">
@@ -56,7 +60,7 @@ export function PitstopPanel({ open, onClose, groups, isActive }: PitstopPanelPr
           type="button"
           onClick={onClose}
           aria-label="Fechar Pitstop"
-          className="grid h-7 w-7 place-items-center rounded-md border border-sidebar-border text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="grid h-7 w-7 place-items-center rounded-full border border-sidebar-border text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="h-3.5 w-3.5" />
         </button>

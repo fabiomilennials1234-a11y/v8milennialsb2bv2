@@ -4,6 +4,7 @@ import { ChevronDown, Check, Pencil } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useFunnelOptions, type FunnelOption } from "../../lib/funnel-nav";
+import { funilIcon } from "../../lib/funil-icons";
 import { FunnelIdentityDialog } from "./FunnelIdentityDialog";
 
 /**
@@ -17,6 +18,10 @@ import { FunnelIdentityDialog } from "./FunnelIdentityDialog";
  * A lista é ÚNICA. Havia três blocos rotulados (Estruturais / Customizados /
  * Com prazo); funil não tem mais espécie. `option.group` continua no dado
  * porque ele diz de onde a linha veio, mas não vira mais rótulo na tela.
+ *
+ * V5: o gatilho É o título da página — 28 px extrabold, com o ícone e a cor
+ * que o usuário escolheu num chip tintado à esquerda. O ícone saiu da faixa
+ * de filtros (onde ficava solto ao lado de "Filtros") e veio morar no nome.
  */
 
 interface FunnelSwitcherProps {
@@ -25,12 +30,15 @@ interface FunnelSwitcherProps {
   /** Nome exibido enquanto a lista carrega (o da página). */
   fallbackLabel: string;
   fallbackColor?: string;
+  /** Ícone (`pipelines.icon`) enquanto a lista carrega. */
+  fallbackIcon?: string | null;
 }
 
 export const FunnelSwitcher = memo(function FunnelSwitcher({
   currentKey,
   fallbackLabel,
   fallbackColor = "#64748b",
+  fallbackIcon,
 }: FunnelSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [renomeando, setRenomeando] = useState(false);
@@ -40,6 +48,7 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
   const current = options.find((o) => o.key === currentKey);
   const label = current?.label ?? fallbackLabel;
   const color = current?.color ?? fallbackColor;
+  const Icone = funilIcon(current?.pipeline?.icon ?? fallbackIcon);
 
   // O `sort` era por bloco; achatando, ele tem de ser global — senão funil
   // encerrado, que antes ia pro fim do bloco "Com prazo", cairia no meio da
@@ -63,21 +72,25 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
           aria-expanded={open}
           title="Trocar de funil"
           className={cn(
-            "group inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5",
-            "text-[19px] font-semibold tracking-[-0.02em]",
-            "hover:bg-muted/60 transition-colors duration-150",
+            "group -ml-1.5 inline-flex min-w-0 max-w-full items-center gap-3 rounded-2xl py-1 pl-1.5 pr-2.5 text-left",
+            "transition-colors duration-150 hover:bg-card/80 data-[state=open]:bg-card/80",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
+          {/* Ícone e cor do funil — tinta translúcida sobre a bancada. */}
           <span
-            className="size-2.5 shrink-0 rounded-full"
-            style={{ background: color }}
+            className="grid size-10 shrink-0 place-items-center rounded-[14px] max-sm:size-9"
+            style={{ backgroundColor: `color-mix(in srgb, ${color} 16%, transparent)` }}
             aria-hidden
-          />
-          <span className="truncate">{label}</span>
+          >
+            <Icone className="size-5" style={{ color }} />
+          </span>
+          <span className="min-w-0 truncate text-[1.75rem] font-extrabold leading-[1.1] tracking-[-0.035em] text-foreground max-sm:text-[1.375rem]">
+            {label}
+          </span>
           <ChevronDown
             className={cn(
-              "size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+              "size-5 shrink-0 text-muted-foreground/70 transition-transform duration-200 group-hover:text-foreground",
               open && "rotate-180",
             )}
             aria-hidden
@@ -86,6 +99,9 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-72 max-h-[70vh] overflow-y-auto p-1.5">
+        <p className="px-2 pb-1 pt-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+          Funis
+        </p>
         {isLoading && (
           <p className="px-2 py-3 text-[12px] text-muted-foreground">Carregando funis…</p>
         )}
@@ -103,10 +119,10 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
               onClick={() => go(option)}
               data-testid={`funnel-switcher-option-${option.key}`}
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]",
+                "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px]",
                 "hover:bg-muted/70 transition-colors duration-150",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active && "bg-primary/10 font-semibold",
+                active && "bg-primary-soft font-semibold text-primary-soft-foreground hover:bg-primary-soft",
                 option.ended && "opacity-55",
               )}
             >
@@ -119,7 +135,7 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
               {option.ended && (
                 <span className="shrink-0 text-[10.5px] text-muted-foreground">encerrado</span>
               )}
-              {active && <Check className="size-3.5 shrink-0 text-primary" aria-hidden />}
+              {active && <Check className="size-3.5 shrink-0" aria-hidden />}
             </button>
           );
         })}
@@ -131,7 +147,7 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
             sétima aba de Configurações. */}
         {current?.pipeline && (
           <>
-            <div className="my-1 h-px bg-border" aria-hidden />
+            <div className="my-1.5 h-px bg-border" aria-hidden />
             <button
               type="button"
               onClick={() => {
@@ -140,7 +156,7 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
               }}
               data-testid="funnel-switcher-rename"
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]",
+                "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px]",
                 "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 "transition-colors duration-150",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

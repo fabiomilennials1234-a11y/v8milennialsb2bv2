@@ -30,6 +30,14 @@ export interface ResolvedAudience {
   isError: boolean;
 }
 
+/**
+ * Lista vazia ESTÁVEL. O resultado de `useQuery` é um objeto novo a cada
+ * render, então um `[]` literal aqui também seria — e o efeito do
+ * `AudienceByStage` que espelha `leadIds` no rascunho dispararia a cada render
+ * enquanto nada está escolhido ("Maximum update depth exceeded").
+ */
+const NO_LEADS: string[] = [];
+
 export function useAudienceResolve(sel: AudienceSelection): ResolvedAudience {
   const kind = resolverFor(sel);
 
@@ -53,16 +61,14 @@ export function useAudienceResolve(sel: AudienceSelection): ResolvedAudience {
     enabled: kind === "all-funnels",
   });
 
-  return useMemo<ResolvedAudience>(() => {
-    const active =
-      kind === "pipeline" ? pipeline : kind === "all-funnels" ? allFunnels : null;
-    if (!active) return { leadIds: [], count: 0, isLoading: false, isError: false };
-    const leadIds = active.data ?? [];
-    return {
-      leadIds,
-      count: leadIds.length,
-      isLoading: active.isLoading,
-      isError: active.isError,
-    };
-  }, [kind, pipeline, allFunnels]);
+  const active =
+    kind === "pipeline" ? pipeline : kind === "all-funnels" ? allFunnels : null;
+  const leadIds = active?.data ?? NO_LEADS;
+  const isLoading = active?.isLoading ?? false;
+  const isError = active?.isError ?? false;
+
+  return useMemo<ResolvedAudience>(
+    () => ({ leadIds, count: leadIds.length, isLoading, isError }),
+    [leadIds, isLoading, isError],
+  );
 }

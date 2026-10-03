@@ -124,9 +124,9 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
     <>
       {isAdmin && (
         <div className="flex justify-end mb-2">
-          <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)} className="gap-1.5 text-xs text-muted-foreground">
+          <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)} className="gap-1.5 text-xs">
             <Settings className="h-4 w-4" />
-            Configurar Etapas
+            Configurar etapas
           </Button>
         </div>
       )}
@@ -172,26 +172,26 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: col.color }}
                   />
-                  <h3 className="font-semibold text-sm">{col.title}</h3>
-                  <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
+                  <h3 className="text-sm font-bold tracking-[-0.01em]">{col.title}</h3>
+                  <span className="rounded-full bg-card px-2 py-0.5 text-xs font-bold tabular-nums text-muted-foreground shadow-relevo">
                     {colClients.length}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
+                  <button className="rounded-lg p-1.5 transition-colors hover:bg-card">
                     <Plus className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
+                  <button className="rounded-lg p-1.5 transition-colors hover:bg-card">
                     <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </div>
               </div>
 
               {/* Column footer — Total */}
-              <div className="mb-3 p-2 rounded-lg bg-background/50">
+              <div className="mb-3 rounded-xl bg-card/70 px-3 py-2">
                 <p className="text-xs text-muted-foreground">
                   Total:{" "}
-                  <span className="font-semibold text-foreground">
+                  <span className="font-bold tabular-nums text-foreground">
                     {formatCurrency(colVendas)}
                   </span>
                 </p>

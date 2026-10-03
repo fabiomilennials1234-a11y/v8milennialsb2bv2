@@ -49,8 +49,8 @@ export function CreateChecklistDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <Plus className="w-4 h-4" />
+        <Button>
+          <Plus />
           Novo Template
         </Button>
       </DialogTrigger>
@@ -82,7 +82,7 @@ export function CreateChecklistDialog() {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>

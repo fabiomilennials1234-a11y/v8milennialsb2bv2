@@ -57,6 +57,9 @@ function describeToolCall(
   return `ENVIAR_DOCUMENTO → ⚠️ id não encontrado na base ("${id.slice(0, 60)}") — nada seria enviado`;
 }
 
+/** Frases de lead para começar o teste — atalho, não conteúdo do agente. */
+const PREVIEW_SUGGESTIONS = ["Olá, quero saber mais", "Qual o preço?", "Como funciona?"];
+
 // ─── Media card in message bubbles ─────────────────────
 
 const MEDIA_PATTERN = /\[(video|imagem|documento|image|doc)\]\s*(.+?)(?:\n|$)/gi;
@@ -67,15 +70,15 @@ function MediaCard({ type, fileName }: { type: string; fileName: string }) {
   const isImage = t === "imagem" || t === "image";
 
   const Icon = isVideo ? Video : isImage ? Image : File;
-  const label = isVideo ? "Video" : isImage ? "Imagem" : "Documento";
+  const label = isVideo ? "Vídeo" : isImage ? "Imagem" : "Documento";
   const color = isVideo
-    ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+    ? "bg-insights/10 text-insights border-insights/20"
     : isImage
-    ? "bg-purple-500/10 text-purple-500 border-purple-500/20"
-    : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+    ? "bg-primary-soft text-primary-soft-foreground border-primary/20"
+    : "bg-muted text-foreground/70 border-border";
 
   return (
-    <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 my-1 ${color}`}>
+    <div className={`my-1 flex items-center gap-2.5 rounded-xl border px-3 py-2 ${color}`}>
       <div className="p-1.5 rounded-md bg-foreground/10">
         <Icon className="w-4 h-4" />
       </div>
@@ -190,7 +193,7 @@ export function LivePreviewChat({
   const [isSending, setIsSending] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevConfigVersionRef = useRef(configVersion);
 
@@ -212,9 +215,11 @@ export function LivePreviewChat({
     [playgroundTools, agentDocuments],
   );
 
-  // Scroll to bottom
+  // Scroll to bottom — só da lista. `scrollIntoView` rolava também a página:
+  // no celular, ao montar, levava a tela até o fim do chat e cortava o topo.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = messagesListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
 
   // Auto-reset when config changes (debounced)
@@ -430,21 +435,21 @@ export function LivePreviewChat({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-lg">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-            <Bot className="w-4 h-4 text-primary" />
+    <div className="flex h-full flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+      {/* Header — faixa de tinta: é a "tela do lead", não parte do formulário */}
+      <div className="flex items-center justify-between bg-tinta px-4 py-3 text-tinta-foreground">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <Bot className="w-4 h-4" />
           </div>
-          <div>
-            <p className="text-sm font-medium">{agentName || "Agente"}</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold">{agentName || "Agente"}</p>
             <div className="flex items-center gap-1">
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="border-white/15 bg-white/[.06] px-1.5 py-0 text-[10px] text-tinta-muted">
                 Live Preview
               </Badge>
               {agentId && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-300">
+                <Badge variant="outline" className="border-success/30 bg-success/15 px-1.5 py-0 text-[10px] text-success">
                   KB ativa
                 </Badge>
               )}
@@ -456,7 +461,7 @@ export function LivePreviewChat({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 px-2 gap-1 text-xs"
+            className="h-8 gap-1 px-2.5 text-xs text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground"
             onClick={handleSimulate}
             disabled={!canTest || isSimulating || isSending}
           >
@@ -472,7 +477,8 @@ export function LivePreviewChat({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 px-2 gap-1 text-xs"
+              className="h-8 w-8 rounded-[10px] p-0 text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground"
+              aria-label="Reiniciar conversa"
               onClick={handleReset}
             >
               <RefreshCw className="w-3 h-3" />
@@ -482,10 +488,12 @@ export function LivePreviewChat({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div ref={messagesListRef} className="flex-1 overflow-y-auto scroll-smooth p-4 space-y-3 min-h-0">
         {messages.length === 0 && !isSimulating ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-            <MessageSquare className="w-8 h-8 text-muted-foreground/30" />
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-foreground/50">
+              <MessageSquare className="w-5 h-5" />
+            </span>
             {!canTest ? (
               <p className="text-xs text-muted-foreground">
                 Escreva o prompt do agente para habilitar o teste
@@ -497,20 +505,6 @@ export function LivePreviewChat({
                     ? "Clique em Simular ou envie uma mensagem"
                     : "Envie uma mensagem como se fosse um lead"}
                 </p>
-                <div className="flex flex-wrap gap-1.5 justify-center mt-1">
-                  {["Ola, quero saber mais", "Qual o preco?", "Como funciona?"].map(
-                    (s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className="text-[10px] px-2.5 py-1 rounded-full border hover:bg-muted transition-colors"
-                        onClick={() => setInputValue(s)}
-                      >
-                        {s}
-                      </button>
-                    )
-                  )}
-                </div>
               </>
             )}
           </div>
@@ -526,13 +520,13 @@ export function LivePreviewChat({
                       {msg.toolCalls.map((tc, tcIdx) => (
                         <div
                           key={`tc-${idx}-${tcIdx}`}
-                          className="flex items-center gap-2 rounded-lg border border-amber-600/30 bg-amber-500/10 px-2.5 py-1.5 dark:border-amber-500/20 dark:bg-amber-500/5"
+                          className="flex items-center gap-2 rounded-xl border border-dashed border-warning/40 bg-warning/[.08] px-2.5 py-1.5"
                         >
-                          <Wrench className="w-3.5 h-3.5 text-amber-600 dark:text-amber-500 flex-shrink-0" />
-                          <span className="text-xs text-amber-900 dark:text-amber-200/90">
-                            <span className="font-semibold">{tc.name}</span>
+                          <Wrench className="w-3.5 h-3.5 shrink-0 text-warning-strong" />
+                          <span className="text-xs text-foreground/90">
+                            <span className="font-semibold text-warning-strong">{tc.name}</span>
                             {" "}
-                            <span className="text-amber-800/80 dark:text-amber-200/60">
+                            <span className="text-muted-foreground">
                               {describeToolCall(tc, agentDocuments)}
                             </span>
                           </span>
@@ -546,15 +540,15 @@ export function LivePreviewChat({
                   className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {msg.role === "assistant" && (
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Bot className="w-3.5 h-3.5 text-primary" />
+                    <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary-soft-foreground">
+                      <Bot className="w-3.5 h-3.5" />
                     </div>
                   )}
                   <div
                     className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted rounded-bl-sm"
+                        ? "rounded-br-md bg-tinta text-tinta-foreground"
+                        : "rounded-bl-md border border-border/60 bg-sunken"
                     }`}
                   >
                     {/* Attachment preview in message */}
@@ -574,7 +568,7 @@ export function LivePreviewChat({
                     <MessageContent content={msg.content} isUser={msg.role === "user"} />
                   </div>
                   {msg.role === "user" && (
-                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-muted text-foreground/70">
                       <User className="w-3.5 h-3.5" />
                     </div>
                   )}
@@ -588,7 +582,7 @@ export function LivePreviewChat({
                 .filter((m) => m.toolCall)
                 .map((m, idx) => (
                   <div key={`tool-${idx}`} className="flex justify-center">
-                    <Badge variant="outline" className="text-[10px] gap-1">
+                    <Badge variant="soft" className="gap-1 text-[10px]">
                       {m.toolCall}
                     </Badge>
                   </div>
@@ -599,23 +593,21 @@ export function LivePreviewChat({
         {/* Typing indicator */}
         {(isSending || isSimulating) && (
           <div className="flex gap-2 justify-start">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-3.5 h-3.5 text-primary" />
+            <div className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary-soft-foreground">
+              <Bot className="w-3.5 h-3.5" />
             </div>
-            <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2">
+            <div className="rounded-2xl rounded-bl-md border border-border/60 bg-sunken px-3 py-2">
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
             </div>
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Config changed notice */}
       {prevConfigVersionRef.current !== configVersion && messages.length > 0 && (
-        <div className="px-4 py-1.5 bg-yellow-50 dark:bg-yellow-950/20 border-t border-yellow-200 dark:border-yellow-800">
-          <p className="text-[10px] text-yellow-600 dark:text-yellow-400 text-center">
-            Configuracao alterada — conversa sera reiniciada
+        <div className="border-t border-warning/25 bg-warning/10 px-4 py-1.5">
+          <p className="text-center text-[11px] font-medium text-warning-strong">
+            Configuração alterada — conversa será reiniciada
           </p>
         </div>
       )}
@@ -627,10 +619,10 @@ export function LivePreviewChat({
             <img
               src={pendingAttachment.previewUrl}
               alt={pendingAttachment.fileName}
-              className="w-12 h-12 rounded object-cover border"
+              className="h-12 w-12 rounded-lg border object-cover"
             />
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded border bg-muted text-xs">
+            <div className="flex items-center gap-1.5 rounded-lg border bg-sunken px-2 py-1.5 text-xs">
               <FileText className="w-3.5 h-3.5" />
               {pendingAttachment.fileName}
             </div>
@@ -639,7 +631,8 @@ export function LivePreviewChat({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="h-7 w-7 rounded-[9px]"
+            aria-label="Remover anexo"
             onClick={() => {
               if (pendingAttachment.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
               setPendingAttachment(null);
@@ -650,8 +643,25 @@ export function LivePreviewChat({
         </div>
       )}
 
+      {/* Sugestões — sempre à mão, não só na conversa vazia */}
+      {canTest && (
+        <div className="flex gap-1.5 overflow-x-auto border-t border-border/60 px-3 pt-2.5 scrollbar-hide">
+          {PREVIEW_SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold shadow-relevo transition-colors hover:border-foreground/20 disabled:opacity-50"
+              onClick={() => setInputValue(s)}
+              disabled={isSending || isSimulating}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
-      <div className="flex gap-2 p-3 border-t">
+      <div className={`flex gap-2 p-3 ${canTest ? "" : "border-t border-border/60"}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -664,6 +674,7 @@ export function LivePreviewChat({
           variant="ghost"
           size="icon"
           className="h-9 w-9 flex-shrink-0"
+          aria-label="Anexar arquivo"
           onClick={() => fileInputRef.current?.click()}
           disabled={!canTest || isSending || isSimulating}
         >
@@ -680,12 +691,13 @@ export function LivePreviewChat({
           }}
           placeholder="Fale como se fosse um lead..."
           disabled={!canTest || isSending || isSimulating}
-          className="flex-1 h-9 text-sm"
+          className="h-9 flex-1 rounded-full text-sm"
         />
         <Button
           type="button"
           size="icon"
-          className="h-9 w-9"
+          className="h-9 w-9 rounded-full"
+          aria-label="Enviar"
           onClick={handleSend}
           disabled={(!inputValue.trim() && !pendingAttachment) || !canTest || isSending || isSimulating}
         >
@@ -696,6 +708,9 @@ export function LivePreviewChat({
           )}
         </Button>
       </div>
+      <p className="border-t border-border/60 px-4 py-2 text-[11px] leading-snug text-muted-foreground">
+        Simulação: usa o prompt e as ferramentas desta tela, mesmo antes de salvar. Nada é enviado ao lead.
+      </p>
     </div>
   );
 }

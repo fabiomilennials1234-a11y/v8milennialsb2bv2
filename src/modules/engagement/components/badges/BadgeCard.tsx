@@ -37,18 +37,18 @@ export function BadgeCard({ badge, unlocked, currentValue }: BadgeCardProps) {
       initial={{ scale: 0.9, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       whileHover={{ scale: 1.03 }}
-      className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-colors ${
         unlocked
-          ? "bg-gradient-to-br from-primary/5 to-primary/10 border-primary/30"
-          : "bg-muted/30 border-muted-foreground/10"
+          ? "bg-primary-soft/60 border-primary/30"
+          : "bg-sunken border-transparent"
       }`}
     >
       {/* Ícone */}
       <div
         className={`relative w-14 h-14 rounded-full flex items-center justify-center border-2 ${
           unlocked
-            ? "bg-gradient-to-br from-primary to-primary/80 border-primary/50 shadow-lg shadow-primary/20"
-            : "bg-muted border-muted-foreground/20"
+            ? "bg-primary border-primary/50 shadow-brilho-ouro"
+            : "bg-muted border-border"
         }`}
       >
         {unlocked ? (
@@ -61,16 +61,16 @@ export function BadgeCard({ badge, unlocked, currentValue }: BadgeCardProps) {
             initial={{ scale: 0 }}
             animate={{ scale: [1, 1.3, 1] }}
             transition={{ duration: 0.3, delay: 0.2 }}
-            className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center"
+            className="absolute -top-1 -right-1 w-5 h-5 bg-success rounded-full flex items-center justify-center ring-2 ring-card"
           >
-            <Zap className="w-3 h-3 text-white" />
+            <Zap className="w-3 h-3 text-success-foreground" />
           </motion.div>
         )}
       </div>
 
       {/* Nome e descrição */}
       <div className="text-center">
-        <p className={`text-xs font-semibold ${unlocked ? "text-foreground" : "text-muted-foreground"}`}>
+        <p className={`text-xs font-bold tracking-[-0.01em] ${unlocked ? "text-foreground" : "text-muted-foreground"}`}>
           {badge.name}
         </p>
         {badge.description && (
@@ -85,11 +85,11 @@ export function BadgeCard({ badge, unlocked, currentValue }: BadgeCardProps) {
         <div className="w-full space-y-1">
           <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary/60 rounded-full transition-all duration-500"
+              className="h-full bg-primary rounded-full transition-all duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-[10px] text-muted-foreground text-center">
+          <p className="text-[10px] tabular-nums text-muted-foreground text-center">
             {currentValue}/{badge.criteria_value}
           </p>
         </div>

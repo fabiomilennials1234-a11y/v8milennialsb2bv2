@@ -1,8 +1,8 @@
 /**
- * Página /agenda — a tela "Atividades" que o botão da lateral abre.
+ * Página /agenda — a tela "Agenda" que o botão da lateral abre.
  *
  * Prova o que o pedido exige de ponta a ponta, sem banco:
- *   - cabeçalho "Atividades" + descrição + "Nova atividade" na área principal;
+ *   - cabeçalho "Agenda" + descrição + "Nova atividade" na área principal;
  *   - abas de estado e filtros;
  *   - usuário comum vê SÓ os próprios compromissos;
  *   - admin vê os de todo mundo, com o responsável identificável.
@@ -11,8 +11,12 @@
  * que não é o que esta tela precisa provar.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+// V5: o cabeçalho é o `PageHeader`, que chama `useNavigate` (botão de voltar).
+// Na aplicação a tela sempre vive dentro do roteador — na rota `/agenda` e no
+// `AgendaPanel` montado pela lateral —, então o teste monta o mesmo contexto.
+import { MemoryRouter } from "react-router-dom";
 
 import type { AgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
 
@@ -141,11 +145,32 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 7, 24, 9, 0));
 });
 
+
+/**
+ * V5 (CTO, 02/10): a Agenda abre na SEMANA. Os casos de "quem vê o quê" foram
+ * escritos sobre a grade do MÊS, onde todos os eventos da fixture aparecem —
+ * o que eles provam é visibilidade, não a visão padrão. Por isso montam a tela
+ * e trocam para o Mês; o caso da visão padrão está em "Agenda — moldura".
+ */
+async function renderAgendaNoMes() {
+  const r = render(<Agenda />, { wrapper: MemoryRouter });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Mês" }));
+  // A troca de visão anima (AnimatePresence "wait"): o Mês monta depois.
+  await screen.findByText("Segunda-feira");
+  return r;
+}
+
+/** O número de um KPI pelo rótulo (o contador de atividades virou KPI). */
+function kpi(rotulo: string) {
+  const tile = screen.getByText(rotulo).parentElement!.parentElement!;
+  return within(tile);
+}
+
 describe("Agenda — moldura da tela", () => {
-  it("é uma página do sistema: título, descrição e ação no topo", () => {
-    render(<Agenda />);
+  it("é uma página do sistema: título, descrição e ação no topo", async () => {
+    await renderAgendaNoMes();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Atividades" }),
+      screen.getByRole("heading", { level: 1, name: "Agenda" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Crie, edite e gerencie/)).toBeInTheDocument();
     expect(
@@ -153,26 +178,33 @@ describe("Agenda — moldura da tela", () => {
     ).toBeInTheDocument();
   });
 
-  it("traz as abas de estado e a navegação do mês", () => {
-    render(<Agenda />);
+  it("traz as abas de estado e a navegação do mês", async () => {
+    await renderAgendaNoMes();
     expect(screen.getByRole("tab", { name: "Pendentes" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Todas atividades" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Finalizadas" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
-      /agosto de 2026/i,
-    );
+    expect(screen.getByRole("heading", { level: 2, name: /agosto de 2026/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Período anterior")).toBeInTheDocument();
     expect(screen.getByLabelText("Próximo período")).toBeInTheDocument();
   });
 
-  it("abre na grade do mês, não numa lista de um dia só", () => {
-    render(<Agenda />);
+  it("abre na SEMANA (decisão do CTO, 02/10) e oferece Semana · Mês · Dia", () => {
+    render(<Agenda />, { wrapper: MemoryRouter });
+    expect(screen.getByRole("tab", { name: "Semana" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Mês" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Dia" })).toBeInTheDocument();
+    // A grade do mês (cabeçalho por extenso) NÃO é a primeira coisa.
+    expect(screen.queryByText("Segunda-feira")).toBeNull();
+  });
+
+  it("no Mês, mostra a grade do mês", async () => {
+    await renderAgendaNoMes();
     expect(screen.getByText("Segunda-feira")).toBeInTheDocument();
   });
 });
 
 describe("Agenda — quem vê o quê", () => {
-  it("por padrão a agenda é da OPERAÇÃO: usuário comum vê o do colega também", () => {
+  it("por padrão a agenda é da OPERAÇÃO: usuário comum vê o do colega também", async () => {
     agendaEvents.push(
       rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
       rpcEvent({
@@ -183,14 +215,14 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
-    expect(screen.getByText("2 atividades")).toBeInTheDocument();
+    expect(kpi("Compromissos no mês").getByText("2")).toBeInTheDocument();
   });
 
-  it("sem a permissão `agenda.view_all`, vê o seu e NÃO vê o do colega", () => {
+  it("sem a permissão `agenda.view_all`, vê o seu e NÃO vê o do colega", async () => {
     permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
@@ -202,14 +234,14 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
-    expect(screen.getByText("1 atividade")).toBeInTheDocument();
+    expect(kpi("Compromissos no mês").getByText("1")).toBeInTheDocument();
   });
 
-  it("recortado, enxerga o próprio follow-up, que vem com id de TEAM_MEMBER", () => {
+  it("recortado, enxerga o próprio follow-up, que vem com id de TEAM_MEMBER", async () => {
     permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
@@ -221,11 +253,11 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.getByText(/Ligar amanhã/)).toBeInTheDocument();
   });
 
-  it("recortado, follow-up SEM responsável não some — é o que a pessoa acabou de criar", () => {
+  it("recortado, follow-up SEM responsável não some — é o que a pessoa acabou de criar", async () => {
     permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
@@ -238,11 +270,11 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.getByText(/Retornar ligação/)).toBeInTheDocument();
   });
 
-  it("recortado, reunião marcada POR um colega COM o usuário aparece na agenda dele", () => {
+  it("recortado, reunião marcada POR um colega COM o usuário aparece na agenda dele", async () => {
     permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
@@ -254,30 +286,30 @@ describe("Agenda — quem vê o quê", () => {
     );
 
     // Sem a participação registrada, o convite não é dele.
-    const { unmount } = render(<Agenda />);
+    const { unmount } = await renderAgendaNoMes();
     expect(screen.queryByText(/Reunião com a Ana/)).not.toBeInTheDocument();
     unmount();
 
     participacoes.add("conv-1");
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.getByText(/Reunião com a Ana/)).toBeInTheDocument();
   });
 
-  it("quem vê a operação inteira recebe o filtro de atendente", () => {
-    render(<Agenda />);
+  it("quem vê a operação inteira recebe o filtro de atendente", async () => {
+    await renderAgendaNoMes();
     expect(screen.getByLabelText("Filtrar por atendente")).toBeInTheDocument();
     expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
   });
 
-  it("quem está recortado NÃO recebe o filtro de atendente", () => {
+  it("quem está recortado NÃO recebe o filtro de atendente", async () => {
     permissao.podeVerTodos = false;
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.queryByLabelText("Filtrar por atendente")).toBeNull();
     // O filtro de tipo continua para todos.
     expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
   });
 
-  it("admin atravessa mesmo com a permissão desligada — o cargo não perde a operação", () => {
+  it("admin atravessa mesmo com a permissão desligada — o cargo não perde a operação", async () => {
     // `get-member-permissions` ainda não lê `organization_feature_defaults`:
     // um default de org desligado chegaria aqui como `false` para o admin
     // também. O banco dá `true` para admin antes de qualquer camada; a tela
@@ -294,15 +326,15 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
     expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
     expect(screen.getByText("AS")).toBeInTheDocument(); // iniciais da Ana
-    expect(screen.getByText("2 atividades")).toBeInTheDocument();
+    expect(kpi("Compromissos no mês").getByText("2")).toBeInTheDocument();
   });
 
-  it("enquanto a identidade não resolve, vale a regra restrita", () => {
+  it("enquanto a identidade não resolve, vale a regra restrita", async () => {
     identity.isAdmin = true;
     identity.isReady = false; // ainda carregando
     agendaEvents.push(
@@ -313,11 +345,11 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
   });
 
-  it("enquanto a PERMISSÃO não resolve, vale a regra restrita", () => {
+  it("enquanto a PERMISSÃO não resolve, vale a regra restrita", async () => {
     permissao.carregando = true;
     agendaEvents.push(
       rpcEvent({
@@ -327,7 +359,7 @@ describe("Agenda — quem vê o quê", () => {
       }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
   });
 });
@@ -340,31 +372,33 @@ describe("Agenda — registrar o resultado do compromisso", () => {
     return user;
   }
 
-  it("a contagem do período separa compareceu, não compareceu e sem registro", () => {
+  it("a contagem do período separa compareceu, não compareceu e sem registro", async () => {
     agendaEvents.push(
       rpcEvent({ id: "a", title: "Veio", status: "completed" }),
       rpcEvent({ id: "b", title: "Faltou", status: "no_show" }),
       rpcEvent({ id: "c", title: "Aberta", status: "scheduled" }),
     );
 
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
-    const contagem = screen.getByLabelText("Comparecimento no período");
-    expect(contagem).toHaveTextContent("1");
-    expect(within(contagem).getByText("1 sem registro")).toBeInTheDocument();
+    // V5: a contagem virou KPI — "Reuniões realizadas" e "Aguardando desfecho".
+    expect(kpi("Reuniões realizadas").getByText("1")).toBeInTheDocument();
+    expect(kpi("Reuniões realizadas").getByText(/de 2 com desfecho · 1 não compareceram/)).toBeInTheDocument();
+    expect(kpi("Aguardando desfecho").getByText("1")).toBeInTheDocument();
   });
 
-  it("sem nada registrável, a contagem some — zero sem contexto é ruído", () => {
+  it("sem nada registrável, o KPI diz que não há desfecho — não inventa zero com contexto", async () => {
     agendaEvents.push(
       rpcEvent({ id: "fu", source: "follow_up", event_type: "follow_up", title: "Ligar" }),
     );
-    render(<Agenda />);
-    expect(screen.queryByLabelText("Comparecimento no período")).toBeNull();
+    await renderAgendaNoMes();
+    expect(kpi("Reuniões realizadas").getByText("Nenhum desfecho registrado")).toBeInTheDocument();
+    expect(kpi("Aguardando desfecho").getByText("Tudo registrado")).toBeInTheDocument();
   });
 
   it("registrar 'Compareceu' grava completed na linha certa", async () => {
     agendaEvents.push(rpcEvent({ id: "abc-1", title: "Reunião X" }));
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     await abrirEvento(/Reunião X/);
     const user = userEvent.setup();
@@ -375,7 +409,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
 
   it("registrar 'Não compareceu' grava no_show", async () => {
     agendaEvents.push(rpcEvent({ id: "abc-2", title: "Reunião Y" }));
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     await abrirEvento(/Reunião Y/);
     const user = userEvent.setup();
@@ -388,7 +422,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
     agendaEvents.push(
       rpcEvent({ id: "abc-3", title: "Reunião Z", status: "completed" }),
     );
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     await abrirEvento(/Reunião Z/);
     const user = userEvent.setup();
@@ -406,7 +440,7 @@ describe("Agenda — registrar o resultado do compromisso", () => {
         title: "Ligar amanhã",
       }),
     );
-    render(<Agenda />);
+    await renderAgendaNoMes();
 
     await abrirEvento(/Ligar amanhã/);
     expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
@@ -423,23 +457,40 @@ describe("Agenda — registrar o resultado do compromisso", () => {
    */
   const TETO_CINCO_MONTAGENS = 30_000;
 
-  it("funciona para os cinco tipos, com uma implementação só", async () => {
+  /**
+   * Presença é exclusiva de `event_type=meeting` desde a #2109 (reuniões
+   * canônicas, 14/09 — `podeRegistrarResultado` em agenda-helpers.ts e a nota
+   * do engagement/CLAUDE.md). Este caso nasceu em 24/08, quando QUALQUER tipo
+   * da tabela `meetings` registrava resultado, e passou a falhar na main com a
+   * #2109 sem que ninguém o atualizasse. Ele agora afirma a regra vigente nas
+   * duas pontas: reunião registra; ligação, follow-up, tarefa e "outro" — mesmo
+   * vindo da tabela `meetings` — não oferecem o controle.
+   */
+  it("presença é só de reunião: os outros quatro tipos não oferecem o controle", async () => {
     for (const tipo of ["meeting", "call", "follow_up", "task", "other"]) {
       agendaEvents.length = 0;
       updateMeeting.mockClear();
       agendaEvents.push(
         rpcEvent({ id: `id-${tipo}`, title: `Item ${tipo}`, event_type: tipo }),
       );
-      const { unmount } = render(<Agenda />);
+      const { unmount } = await renderAgendaNoMes();
 
       await abrirEvento(new RegExp(`Item ${tipo}`));
-      const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "Compareceu" }));
+      // Controle positivo: o detalhe ABRIU — a ausência do botão abaixo não
+      // pode ser só a ausência do popover.
+      expect(await screen.findByRole("button", { name: "Fechar detalhes" }), tipo).toBeInTheDocument();
 
-      expect(updateMeeting, tipo).toHaveBeenCalledWith({
-        id: `id-${tipo}`,
-        status: "completed",
-      });
+      if (tipo === "meeting") {
+        const user = userEvent.setup();
+        await user.click(screen.getByRole("button", { name: "Compareceu" }));
+        expect(updateMeeting, tipo).toHaveBeenCalledWith({
+          id: `id-${tipo}`,
+          status: "completed",
+        });
+      } else {
+        expect(screen.queryByRole("button", { name: "Compareceu" }), tipo).toBeNull();
+        expect(updateMeeting, tipo).not.toHaveBeenCalled();
+      }
       unmount();
     }
   }, TETO_CINCO_MONTAGENS);

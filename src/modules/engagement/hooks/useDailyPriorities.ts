@@ -39,8 +39,25 @@ export interface PriorityFollowUp {
 export interface DailyPrioritiesData {
   leads_sem_acao: PriorityLead[];
   followups_vencidos: PriorityFollowUp[];
-  leads_quentes: PriorityLead[];
+  /**
+   * TOLERADO, NÃO USADO. "Lead quente" é `qualification_score >= 70`, e o score
+   * do lead saiu do produto (decisão do CTO, 02/10). A edge
+   * `get-daily-priorities` ainda calcula e devolve a lista — a limpeza do
+   * backend é outra entrega —, então o campo continua no tipo para a resposta
+   * não mentir sobre o que chega. A interface não mostra nem conta.
+   */
+  leads_quentes?: PriorityLead[];
   generated_at: string;
+}
+
+/**
+ * Quantas sugestões a Revisão anuncia ("Sugestões (N)").
+ *
+ * Soma só o que a tela mostra: leads sem contato e follow-ups vencidos.
+ * `leads_quentes` fica de fora de propósito — ver o campo acima.
+ */
+export function contarSugestoesDoDia(data: DailyPrioritiesData | undefined): number {
+  return (data?.leads_sem_acao?.length ?? 0) + (data?.followups_vencidos?.length ?? 0);
 }
 
 // ─── Main Hook ───────────────────────────────────────────
@@ -66,10 +83,7 @@ export function useDailyPriorities() {
     refetchInterval: FIVE_MINUTES,
   });
 
-  const totalPending =
-    (query.data?.leads_sem_acao?.length ?? 0) +
-    (query.data?.followups_vencidos?.length ?? 0) +
-    (query.data?.leads_quentes?.length ?? 0);
+  const totalPending = contarSugestoesDoDia(query.data);
 
   return {
     ...query,

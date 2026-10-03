@@ -31,7 +31,7 @@ export function ClientTier({ segment }: { segment?: string | null }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold",
         tier.tone,
       )}
     >
@@ -44,7 +44,7 @@ export function ClientAvatar({ name }: { name: string }) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-muted/50 text-xs font-semibold text-foreground"
+      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-foreground"
     >
       {name
         .trim()
@@ -116,10 +116,10 @@ export function Client360({
   return (
     <aside
       aria-label={`Cliente 360: ${client.company || client.name}`}
-      className="min-w-0 rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+      className="min-w-0 rounded-card border border-card-border bg-card p-5 shadow-relevo lg:sticky lg:top-4"
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.24em]">
+        <h2 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Cliente 360
         </h2>
         <Button variant="ghost" size="icon" className="size-7" aria-label="Abrir cadastro completo" onClick={() => onOpenLead(client.id)}><MoreHorizontal className="size-4" /></Button>
@@ -139,9 +139,9 @@ export function Client360({
         <ClientAvatar name={client.company || client.name} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold leading-tight">{client.company || client.name}</h3>
+            <h3 className="text-base font-bold leading-tight tracking-[-0.01em]">{client.company || client.name}</h3>
             <ClientTier segment={client.metrics?.segment} />
-            {late && <span className="rounded-md border border-destructive/30 px-2 py-1 text-[10px] text-destructive">Recompra atrasada</span>}
+            {late && <span className="rounded-full bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive">Recompra atrasada</span>}
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground">
             {client.firstPurchaseAt
@@ -150,15 +150,15 @@ export function Client360({
           </p>
         </div>
       </div>
-      <div className="my-4 grid grid-cols-2 divide-x divide-border">
-        <div>
-          <p className="text-xl font-semibold tabular-nums tracking-tight">
+      <div className="my-4 grid grid-cols-2 divide-x divide-border rounded-2xl bg-sunken p-4">
+        <div className="min-w-0 pr-4">
+          <p className="truncate text-[1.4rem] font-extrabold leading-tight tracking-[-0.04em] tabular-nums">
             {client.metrics ? formatBRL(client.metrics.lifetimeValue) : "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Total comprado</p>
         </div>
-        <div className="pl-5">
-          <p className="text-xl font-semibold tabular-nums">
+        <div className="pl-4">
+          <p className="text-[1.4rem] font-extrabold leading-tight tracking-[-0.04em] tabular-nums">
             {client.metrics?.orderCount ?? "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -170,13 +170,13 @@ export function Client360({
         className="border-t border-border py-3"
         aria-label="Previsão de recompra"
       >
-        <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <h4 className="mb-3 flex items-center gap-2 text-sm font-bold">
           <CalendarDays className="size-4 text-muted-foreground" />
           Próxima recompra
         </h4>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-2xl font-semibold tracking-tight">
+            <p className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums">
               {next ? <>{portfolioDate(next)} <span className="text-base font-normal text-muted-foreground">{next.slice(0, 4)}</span></> : "Sem previsão"}
             </p>
             <ReorderCaption client={client} />
@@ -243,7 +243,7 @@ export function Client360({
         )}
       </section>
       <section className="border-t border-border py-3">
-        <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <h4 className="mb-3 flex items-center gap-2 text-sm font-bold">
           <BriefcaseBusiness className="size-4 text-muted-foreground" />
           Negócios em andamento{" "}
           <span className="ml-auto text-xs text-muted-foreground">
@@ -257,7 +257,7 @@ export function Client360({
                 type="button"
                 key={deal.id}
                 onClick={() => onOpenDeal(deal)}
-                className="w-full rounded-lg border border-border bg-background/40 p-3 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full rounded-xl border border-border bg-sunken p-3 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="flex items-center justify-between gap-2 text-xs font-medium">
                   {deal.title}
@@ -272,7 +272,7 @@ export function Client360({
                       <span key={deal.stages?.[i]?.id ?? i} className="relative min-w-16 flex-1 text-center">
                         {i < deal.stageCount - 1 && <span className={cn("absolute left-1/2 right-[-50%] top-1 h-0.5", i < deal.stageIndex! ? "bg-primary" : "bg-muted-foreground/40")} />}
                         <span className={cn("relative mx-auto block size-2.5 rounded-full border-2", i < deal.stageIndex! ? "border-primary bg-primary" : i === deal.stageIndex ? "border-primary bg-card" : "border-muted-foreground/50 bg-muted-foreground/50")} />
-                        <span className={cn("mt-2 block px-1 text-[9px]", i === deal.stageIndex ? "text-primary" : "text-muted-foreground")}>{deal.stages?.[i]?.name ?? (i === deal.stageIndex ? deal.stageName : `Etapa ${i + 1}`)}</span>
+                        <span className={cn("mt-2 block px-1 text-[10px]", i === deal.stageIndex ? "font-semibold text-primary-soft-foreground" : "text-muted-foreground")}>{deal.stages?.[i]?.name ?? (i === deal.stageIndex ? deal.stageName : `Etapa ${i + 1}`)}</span>
                       </span>
                     ))}
                   </div>
@@ -301,7 +301,7 @@ export function Client360({
       </section>
       <section className="border-t border-border pt-3">
         <div className="mb-3 flex items-center justify-between">
-          <h4 className="flex items-center gap-2 text-sm font-medium">
+          <h4 className="flex items-center gap-2 text-sm font-bold">
             <ShoppingCart className="size-4 text-muted-foreground" />
             Últimas compras
           </h4>
@@ -312,12 +312,12 @@ export function Client360({
         ) : purchasesError ? (
           <div role="status" className="text-xs text-destructive">
             Não foi possível carregar compras.
-            <button className="ml-1 underline" onClick={onRetryPurchases}>
+            <button type="button" className="ml-1 underline" onClick={onRetryPurchases}>
               Tentar novamente
             </button>
           </div>
         ) : purchases?.length ? (
-          <div className="divide-y divide-border rounded-lg border border-border">
+          <div className="divide-y divide-border rounded-xl border border-border">
             {purchases.slice(0, 3).map((p) => (
               <div
                 key={p.id}
@@ -325,7 +325,7 @@ export function Client360({
               >
                 <span className="text-muted-foreground">
                   {portfolioDate(p.date)}{" "}
-                  <span className="text-[9px]">· {p.source}</span>
+                  <span className="text-[10px]">· {p.source}</span>
                 </span>
                 <span className="font-medium tabular-nums">
                   {formatBRL(p.value)}

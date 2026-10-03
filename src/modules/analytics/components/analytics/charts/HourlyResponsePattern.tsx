@@ -36,7 +36,7 @@ function CustomTooltip({ active, payload, label }: TooltipProps) {
   if (!active || !payload?.length) return null;
   const count = payload[0]?.value ?? 0;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-md text-xs">
+    <div className="rounded-xl border border-border/60 bg-popover px-3 py-2 shadow-relevo-alto text-xs">
       <p className="font-medium">{label}h</p>
       <p className="text-muted-foreground">
         {count} mensagens recebidas
@@ -122,19 +122,19 @@ export function HourlyResponsePattern({ data }: Props) {
 
         {/* Summary */}
         <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-lg bg-muted/40 p-2">
+          <div className="rounded-xl bg-sunken p-2">
             <p className="text-[10px] text-muted-foreground">Pico manhã</p>
             <p className="text-sm font-semibold">
               {peakMorning ? `${peakMorning.hour}h` : "—"}
             </p>
           </div>
-          <div className="rounded-lg bg-muted/40 p-2">
+          <div className="rounded-xl bg-sunken p-2">
             <p className="text-[10px] text-muted-foreground">Pico tarde</p>
             <p className="text-sm font-semibold">
               {peakAfternoon ? `${peakAfternoon.hour}h` : "—"}
             </p>
           </div>
-          <div className="rounded-lg bg-muted/40 p-2">
+          <div className="rounded-xl bg-sunken p-2">
             <p className="text-[10px] text-muted-foreground">Menor resposta</p>
             <p className="text-sm font-semibold">
               {worstHour ? `${worstHour.hour}h` : "—"}

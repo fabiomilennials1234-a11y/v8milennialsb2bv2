@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 /** Bloco com brilho `animate-shimmer` (DESIGN §12). */
 function ShimmerBlock({ className }: { className?: string }) {
   return (
-    <div className={cn("relative overflow-hidden rounded-2xl bg-muted/60", className)}>
+    <div className={cn("relative overflow-hidden rounded-card bg-muted", className)}>
       <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-foreground/5 to-transparent animate-shimmer" />
     </div>
   );
@@ -31,7 +31,7 @@ export function InsightsSkeleton() {
         </div>
       </div>
       <div className="lg:col-span-12">
-        <div className="flex h-[300px] items-center justify-center rounded-2xl border border-border bg-card">
+        <div className="flex h-[300px] items-center justify-center rounded-card border border-card-border bg-card text-card-foreground shadow-relevo">
           <div className="h-px w-2/3 animate-pulse border-t-2 border-dashed border-border" />
         </div>
       </div>
@@ -46,9 +46,11 @@ interface ErrorStateProps {
 export function InsightsErrorState({ onRetry }: ErrorStateProps) {
   return (
     <div className="flex min-h-[360px] items-center justify-center">
-      <div className="max-w-sm rounded-2xl border border-border bg-card p-8 text-center">
-        <AlertTriangle className="mx-auto h-9 w-9 text-destructive" />
-        <p className="mt-4 text-[15px] font-medium text-foreground">
+      <div className="max-w-sm rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-8 text-center">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-destructive/10 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </span>
+        <p className="mt-4 text-[15px] font-bold tracking-tight text-foreground">
           Não foi possível carregar os indicadores desta organização.
         </p>
         <p className="mt-1.5 text-sm text-muted-foreground">
@@ -71,11 +73,11 @@ interface NoSalesStateProps {
 export function InsightsNoSalesState({ onProjetar }: NoSalesStateProps) {
   return (
     <div className="flex min-h-[360px] items-center justify-center">
-      <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted/60">
-          <Receipt className="h-6 w-6 text-muted-foreground" />
+      <div className="max-w-md rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-8 text-center">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-muted text-foreground/70">
+          <Receipt className="h-6 w-6" />
         </span>
-        <p className="mt-4 text-[15px] font-medium text-foreground">
+        <p className="mt-4 text-[15px] font-bold tracking-tight text-foreground">
           Esta organização ainda não tem vendas registradas.
         </p>
         <p className="mt-1.5 text-sm text-muted-foreground">
@@ -84,7 +86,7 @@ export function InsightsNoSalesState({ onProjetar }: NoSalesStateProps) {
         <Button
           variant="outline"
           size="sm"
-          className="mt-5 border-insights/30 text-insights hover:bg-insights/10 hover:text-insights"
+          className="mt-5 border-insights/30 text-insights hover:border-insights/50 hover:bg-insights/10 hover:text-insights"
           onClick={onProjetar}
         >
           Projetar um cenário meta →

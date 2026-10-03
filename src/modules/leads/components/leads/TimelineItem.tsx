@@ -32,43 +32,43 @@ import type { TimelineEvent, TimelineSource } from "../../hooks/useLeadTimeline"
 // ─── Config ───────────────────────────────────────────────
 
 const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
-  lead_created: { icon: UserPlus, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
-  stage_changed: { icon: ArrowRight, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: UserCheck, label: "Vendedor atribuído", color: "bg-green-500/20 text-green-600" },
-  responsible_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
+  lead_created: { icon: UserPlus, label: "Lead criado", color: "bg-insights/15 text-insights" },
+  stage_changed: { icon: ArrowRight, label: "Etapa alterada", color: "bg-warning/15 text-warning-strong" },
+  sdr_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-success/15 text-success-strong" },
+  closer_assigned: { icon: UserCheck, label: "Vendedor atribuído", color: "bg-success/15 text-success-strong" },
+  responsible_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-success/15 text-success-strong" },
   field_updated: { icon: Edit2, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: FileText, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
-  meeting_scheduled: { icon: Calendar, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
-  meeting_attended: { icon: CheckCircle, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
-  meeting_missed: { icon: XCircle, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
-  meeting_deleted: { icon: CalendarX, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
-  proposal_created: { icon: DollarSign, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
-  proposal_status_changed: { icon: TrendingUp, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
-  proposal_deleted: { icon: Trash2, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
-  product_linked: { icon: Package, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
-  followup_created: { icon: ListTodo, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
-  followup_completed: { icon: CheckSquare, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: Bot, label: "IA", color: "bg-primary/20 text-primary" },
-  copilot_interaction: { icon: Bot, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
-  message_sent: { icon: MessageSquare, label: "Mensagem enviada", color: "bg-green-500/20 text-green-600" },
-  automation_triggered: { icon: Zap, label: "Automação executada", color: "bg-orange-500/20 text-orange-600" },
-  tag_added: { icon: Tag, label: "Tag adicionada", color: "bg-teal-500/20 text-teal-600" },
-  tag_removed: { icon: Tag, label: "Tag removida", color: "bg-red-500/20 text-red-600" },
+  meeting_scheduled: { icon: Calendar, label: "Reunião agendada", color: "bg-insights/15 text-insights" },
+  meeting_attended: { icon: CheckCircle, label: "Compareceu", color: "bg-success/15 text-success-strong" },
+  meeting_missed: { icon: XCircle, label: "Não compareceu", color: "bg-destructive/15 text-destructive" },
+  meeting_deleted: { icon: CalendarX, label: "Reunião removida", color: "bg-destructive/15 text-destructive" },
+  proposal_created: { icon: DollarSign, label: "Proposta criada", color: "bg-insights/15 text-insights" },
+  proposal_status_changed: { icon: TrendingUp, label: "Status da proposta", color: "bg-warning/15 text-warning-strong" },
+  proposal_deleted: { icon: Trash2, label: "Proposta removida", color: "bg-destructive/15 text-destructive" },
+  product_linked: { icon: Package, label: "Produto vinculado", color: "bg-insights/15 text-insights" },
+  followup_created: { icon: ListTodo, label: "Tarefa criada", color: "bg-insights/15 text-insights" },
+  followup_completed: { icon: CheckSquare, label: "Tarefa concluída", color: "bg-success/15 text-success-strong" },
+  ai_toggled: { icon: Bot, label: "IA", color: "bg-primary-soft text-primary-soft-foreground" },
+  copilot_interaction: { icon: Bot, label: "Copilot atendeu", color: "bg-primary-soft text-primary-soft-foreground" },
+  message_sent: { icon: MessageSquare, label: "Mensagem enviada", color: "bg-success/15 text-success-strong" },
+  automation_triggered: { icon: Zap, label: "Automação executada", color: "bg-warning/15 text-warning-strong" },
+  tag_added: { icon: Tag, label: "Tag adicionada", color: "bg-success/15 text-success-strong" },
+  tag_removed: { icon: Tag, label: "Tag removida", color: "bg-destructive/15 text-destructive" },
 };
 
 const FALLBACK_CONFIG = { icon: Clock, label: "", color: "bg-muted text-muted-foreground" };
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
-  agent: { label: "Copilot", className: "bg-purple-500/15 text-purple-600 border-purple-500/20" },
-  automation: { label: "Automação", className: "bg-orange-500/15 text-orange-600 border-orange-500/20" },
+  agent: { label: "Copilot", className: "bg-insights/10 text-insights border-insights/15" },
+  automation: { label: "Automação", className: "bg-warning/10 text-warning-strong border-warning/15" },
   system: { label: "Sistema", className: "bg-muted text-muted-foreground border-border" },
 };
 
 const SOURCE_ICON_COLOR: Record<string, string> = {
   manual: "",
-  agent: "bg-purple-500/20 text-purple-600",
-  automation: "bg-orange-500/20 text-orange-600",
+  agent: "bg-insights/15 text-insights",
+  automation: "bg-warning/15 text-warning-strong",
   system: "bg-muted text-muted-foreground",
 };
 
@@ -88,7 +88,7 @@ function StageChangedDetail({ metadata }: { metadata: Record<string, unknown> })
         </>
       )}
       {toStage && (
-        <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">{String(toStage)}</span>
+        <span className="px-2 py-0.5 rounded bg-primary-soft text-primary-soft-foreground font-medium">{String(toStage)}</span>
       )}
       {pipe && (
         <span className="text-muted-foreground ml-1">em {String(pipe)}</span>
@@ -149,7 +149,7 @@ function MeetingDetail({ metadata }: { metadata: Record<string, unknown> }) {
           href={String(link)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-primary hover:underline"
+          className="flex items-center gap-1.5 font-medium text-insights underline-offset-2 hover:underline"
         >
           <ExternalLink className="w-3 h-3" />
           Link da reunião
@@ -179,14 +179,14 @@ function AutomationDetail({ metadata }: { metadata: Record<string, unknown> }) {
     <div className="space-y-1 text-xs">
       {workflowName && (
         <div className="flex items-center gap-1.5">
-          <Zap className="w-3 h-3 text-orange-500" />
+          <Zap className="w-3 h-3 text-warning-strong" />
           <span className="font-medium">{String(workflowName)}</span>
         </div>
       )}
       {actions && Array.isArray(actions) && actions.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
           {actions.map((a, i) => (
-            <span key={i} className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 text-[10px]">
+            <span key={i} className="px-1.5 py-0.5 rounded bg-warning/10 text-warning-strong text-[10px]">
               {a}
             </span>
           ))}

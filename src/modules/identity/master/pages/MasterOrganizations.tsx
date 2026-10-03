@@ -6,7 +6,6 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Building2,
   Plus,
   Search,
   MoreVertical,
@@ -67,6 +66,7 @@ import { BillingOverrideModal } from "../components/BillingOverrideModal";
 import { OrgSuspensionDialog } from "../components/OrgSuspensionDialog";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 
 export default function MasterOrganizations() {
   const { isOutbounder } = useMasterAuth();
@@ -125,14 +125,14 @@ export default function MasterOrganizations() {
     const statusBadge = (() => {
       switch (status) {
         case "active":
-          return <Badge className="bg-success text-success-foreground">Ativo</Badge>;
+          return <Badge variant="success">Ativo</Badge>;
         case "trial":
-          return <Badge className="bg-blue-500">Trial</Badge>;
+          return <Badge variant="info">Trial</Badge>;
         case "suspended":
-          return <Badge className="bg-warning text-warning-foreground">Suspenso</Badge>;
+          return <Badge variant="warning">Suspenso</Badge>;
         case "cancelled":
         case "expired":
-          return <Badge variant="destructive">Cancelado</Badge>;
+          return <Badge variant="destructive" className="bg-destructive/10 text-destructive hover:bg-destructive/15">Cancelado</Badge>;
         default:
           return <Badge variant="secondary">{status}</Badge>;
       }
@@ -142,7 +142,7 @@ export default function MasterOrganizations() {
       <div className="flex items-center gap-1.5">
         {statusBadge}
         {hasOverride && (
-          <Badge className="bg-purple-500" title="Plano liberado pelo Master — ignora o status da assinatura">
+          <Badge variant="gold" title="Plano liberado pelo Master — ignora o status da assinatura">
             Override
           </Badge>
         )}
@@ -156,25 +156,21 @@ export default function MasterOrganizations() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Building2 className="w-6 h-6" />
-            {isOutbounder ? "Organizações Outbound" : "Organizações"}
-          </h1>
-          <p className="text-muted-foreground">
-            {isOutbounder
-              ? "Gerencie as organizações de outbound"
-              : "Gerencie todas as organizações do sistema"}
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Organização
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title={isOutbounder ? "Organizações outbound" : "Organizações"}
+        subtitle={
+          isOutbounder
+            ? "Gerencie as organizações de outbound"
+            : "Gerencie todas as organizações do sistema"
+        }
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Nova organização
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -187,94 +183,83 @@ export default function MasterOrganizations() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão. No
+          celular, tipo e plano sobem para baixo do slug e a data some: nenhuma
+          coluna sai da tela. */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filteredOrgs?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma organização encontrada</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
-                <TableHead>ID</TableHead>
-                <TableHead>Tipo</TableHead>
+                <TableHead className="max-sm:hidden">Tipo</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Criada em</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-md:hidden">Plano</TableHead>
+                <TableHead className="max-lg:hidden">Criada em</TableHead>
+                <TableHead className="w-[100px] max-sm:w-14">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filteredOrgs?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Nenhuma organização encontrada
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredOrgs?.map((org) => (
+              {filteredOrgs.map((org) => (
                   <TableRow key={org.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{org.name}</p>
-                        <p className="text-sm text-muted-foreground">{org.slug}</p>
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{org.name}</p>
+                        <p className="truncate text-sm text-muted-foreground">{org.slug}</p>
+                        <p className="truncate text-xs text-muted-foreground md:hidden">
+                          <span className="sm:hidden">{org.org_type === "outbound" ? "Outbound" : "CRM"} · </span>
+                          <span className="capitalize">{org.subscription_plan || "free"}</span>
+                        </p>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1.5 group/copy"
-                        onClick={() => {
-                          navigator.clipboard.writeText(org.id);
-                          setCopiedId(org.id);
-                          toast.success("ID copiado");
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                        title={org.id}
-                      >
-                        <code className="text-xs text-muted-foreground font-mono">
-                          {org.id.slice(0, 8)}...
-                        </code>
-                        {copiedId === org.id ? (
-                          <Check className="w-3 h-3 text-emerald-500" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover/copy:opacity-100 transition-opacity" />
-                        )}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={org.org_type === "outbound" ? "default" : "secondary"}>
+                    <TableCell className="max-sm:hidden">
+                      <Badge variant={org.org_type === "outbound" ? "info" : "soft"}>
                         {org.org_type === "outbound" ? "Outbound" : "CRM"}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(org.subscription_status, org.billing_override)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <span className="capitalize">{org.subscription_plan || "free"}</span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-lg:hidden">
                       {format(new Date(org.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label={`Ações de ${org.name}`}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* V5: a coluna de ID saiu da tabela; o copiar continua aqui. */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              navigator.clipboard.writeText(org.id);
+                              setCopiedId(org.id);
+                              toast.success("ID copiado");
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === org.id ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                            Copiar ID
+                          </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Eye className="w-4 h-4 mr-2" />
-                            Ver Detalhes
+                            Ver detalhes
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Users className="w-4 h-4 mr-2" />
-                            Ver Membros
+                            Ver membros
                           </DropdownMenuItem>
                           {!isOutbounder && (
                             <>
@@ -286,7 +271,7 @@ export default function MasterOrganizations() {
                                 }}
                               >
                                 <CreditCard className="w-4 h-4 mr-2" />
-                                Liberar Plano
+                                Liberar plano
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
@@ -326,10 +311,10 @@ export default function MasterOrganizations() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -337,12 +322,12 @@ export default function MasterOrganizations() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Organização</DialogTitle>
+            <DialogTitle>Nova organização</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {!isOutbounder && (
               <div className="space-y-2">
-                <Label>Tipo de Organização</Label>
+                <Label>Tipo de organização</Label>
                 <div className="flex gap-2">
                   <Button
                     type="button"

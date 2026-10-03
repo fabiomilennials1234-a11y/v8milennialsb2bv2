@@ -111,10 +111,10 @@ export function ResponseByOrigin({ data }: Props) {
                     {ORIGIN_LABELS[row.origin] ?? row.origin}
                   </td>
                   <td className="py-2 pr-3">
-                    <RateBar value={row.response_rate} color="bg-blue-500" />
+                    <RateBar value={row.response_rate} color="bg-insights" />
                   </td>
                   <td className="py-2 pr-3">
-                    <RateBar value={row.close_rate} color="bg-green-500" />
+                    <RateBar value={row.close_rate} color="bg-success" />
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                     {formatResponseTime(row.avg_response_seconds)}

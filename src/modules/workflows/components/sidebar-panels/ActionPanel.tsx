@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -876,28 +875,13 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         </>
       )}
 
-      {/* Update Rating */}
-      {at === "update_rating" && (
-        <div className="space-y-2">
-          <Label>Rating (0-10): {data.ratingValue ?? 5}</Label>
-          <Slider
-            value={[data.ratingValue ?? 5]}
-            onValueChange={([v]) => onUpdate({ ratingValue: v })}
-            min={0}
-            max={10}
-            step={1}
-          />
-        </div>
-      )}
-
-      {/* Calculate Score */}
-      {at === "calculate_score" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
-            Chama a IA para calcular o lead score automaticamente com base nos
-            dados do lead e histórico de conversas.
-          </p>
-        </div>
+      {/* Update Rating / Calculate Score — descontinuadas (CTO, 02/10). Sem
+          campo de edição: o seletor acima já mostra o selo e a dica. O valor
+          salvo só é exibido para quem for reconstruir o passo. */}
+      {at === "update_rating" && typeof data.ratingValue === "number" && (
+        <p className="text-xs text-muted-foreground">
+          Configuração salva: rating <span className="font-semibold tabular-nums text-foreground">{data.ratingValue}</span>
+        </p>
       )}
 
       {/* Duplicate to Pipe */}
@@ -1243,8 +1227,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       )}
 
       {at === "summarize_conversation" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
+        <div className="rounded-xl border border-border/60 bg-sunken p-3">
+          <p className="text-xs text-muted-foreground">
             Resume automaticamente o histórico de conversa do lead e salva no
             contexto do workflow. Útil antes de um handoff para Copilot ou para
             enriquecer notificações.
@@ -1253,8 +1237,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       )}
 
       {at === "evaluate_conversation" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
+        <div className="rounded-xl border border-border/60 bg-sunken p-3">
+          <p className="text-xs text-muted-foreground">
             Avalia a qualidade da conversa com IA: tom, engajamento,
             qualificação. O resultado fica disponível nas condições seguintes.
           </p>
@@ -2636,10 +2620,10 @@ function AudioRecorderField({
           {isRecording && (
             <div className="flex items-center gap-3">
               <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/70 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
               </span>
-              <span className="text-sm font-medium text-red-600">
+              <span className="text-sm font-medium tabular-nums text-destructive">
                 Gravando... {formatTime(recordingTime)}
               </span>
               <Button
@@ -2714,7 +2698,7 @@ function AudioRecorderField({
                     <Play className="w-4 h-4" />
                   )}
                 </Button>
-                <span className="text-sm text-green-700 dark:text-green-400">
+                <span className="text-sm font-medium text-success">
                   Áudio salvo
                 </span>
               </div>

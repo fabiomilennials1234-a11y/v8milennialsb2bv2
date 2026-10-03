@@ -65,7 +65,7 @@ export function OrgSuspensionDialog({
             {suspend ? (
               <PowerOff className="w-5 h-5 text-warning" />
             ) : (
-              <Power className="w-5 h-5 text-success" />
+              <Power className="w-5 h-5 text-success-strong" />
             )}
             {suspend ? "Suspender" : "Reativar"} {org.name}
           </AlertDialogTitle>

@@ -451,7 +451,7 @@ export function BehaviorWindowsEditor({
                         className={cn(
                           "flex-1",
                           wIdx === null
-                            ? "bg-rose-500/40"
+                            ? "bg-destructive/40"
                             : WINDOW_COLORS[wIdx % WINDOW_COLORS.length],
                         )}
                         style={{ minWidth: "1px" }}
@@ -472,10 +472,10 @@ export function BehaviorWindowsEditor({
         </div>
 
         {!hasFullCoverage && (
-          <div className="rounded-md border border-rose-500/40 bg-rose-500/5 p-3 text-sm flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+          <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/[.06] p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
             <div>
-              <div className="font-medium text-rose-500">
+              <div className="font-semibold text-destructive">
                 Cobertura 24/7 incompleta - nao e possivel salvar
               </div>
               <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
@@ -491,9 +491,9 @@ export function BehaviorWindowsEditor({
         )}
 
         {hasFullCoverage && (
-          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/[.06] p-3 text-sm">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+            <span className="text-success">
               Todos os horarios cobertos.
             </span>
           </div>
@@ -527,7 +527,7 @@ export function BehaviorWindowsEditor({
               )}
             </>
           ) : (
-            <div className="text-rose-500">
+            <div className="text-destructive">
               Nenhuma janela cobre este momento.
             </div>
           )}

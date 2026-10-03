@@ -68,8 +68,9 @@ export type {
 } from "./hooks/useLeadAllPipelines";
 
 // ── Hooks: negócios do lead (posição + título + desfecho) ─────────────────
-// Reusado pelo painel do chat (seção "Negócios"), que precisa da mesma leitura
-// que o card do Negócio faz — sem ela, duas contas para o mesmo negócio.
+// Reusado pelo painel do chat — a seção "Negócios" e a etapa+valor no bloco do
+// lead (V5, P8a) — que precisa da mesma leitura que o card do Negócio faz; sem
+// ela, duas contas para o mesmo negócio.
 export { useLeadsDeals } from "./hooks/useLeadsDeals";
 export type { LeadDeal } from "./hooks/useLeadsDeals";
 export { dealBoardPath } from "./lib/deal-board-path";

@@ -27,6 +27,8 @@ import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
 import { FunnelIdentitySection } from "./FunnelIdentitySection";
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 // StageFamily, não PipelineType: este diálogo também veste a Carteira (via
 // slots) — as famílias upsell_* são resíduo D9, não funil (SCRUM-618).
@@ -115,14 +117,19 @@ export function PipeSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[900px]" style={{ maxHeight: '85vh', overflow: 'hidden' }}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
+            <IconChip icon={Settings2} tone="gold" />
             Configurações — {titulo}
           </DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue={abaInicial}>
-          <TabsList className={`grid w-full ${TAB_GRID[tabCount]}`}>
+          {/* Abas DENTRO do diálogo: alternador claro do V5 (`segmented`).
+              Rola no celular; vira grade do mesmo tamanho a partir de `sm`. */}
+          <TabsList
+            variant="segmented"
+            className={cn("w-full justify-start overflow-x-auto scrollbar-hide sm:grid", TAB_GRID[tabCount])}
+          >
             {!isUpsell && (
               <TabsTrigger value="geral" className="gap-1.5 text-xs">
                 <Palette className="w-3.5 h-3.5" />

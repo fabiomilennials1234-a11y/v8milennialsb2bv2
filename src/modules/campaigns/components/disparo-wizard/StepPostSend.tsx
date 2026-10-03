@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { useFunnelStageOptions } from "./use-funnel-stage-options";
 import { StepHeader } from "./StepHeader";
 import type { DisparoDraft } from "./wizard-machine";
-import { kickerDoPasso } from "./wizard-machine";
+import { eyebrowDoPasso } from "./wizard-machine";
 
 interface StepPostSendProps {
   draft: DisparoDraft;
@@ -63,7 +63,7 @@ function ChoiceCard({
       <div
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-          active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+          active ? "bg-primary-soft text-primary-soft-foreground" : "bg-muted text-muted-foreground",
         )}
       >
         <Icon className="h-4 w-4" />
@@ -133,7 +133,7 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker={kickerDoPasso("postsend")}
+        kicker={eyebrowDoPasso("postsend")}
         title="E depois do envio?"
         subtitle="Se quiser, mova cada contato pra uma etapa do funil assim que a mensagem dele for enviada. O disparo pode levar dias — o contato só muda de etapa na vez dele."
       />
@@ -232,15 +232,15 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: reduced ? 0 : 0.2 }}
-                      className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-4"
+                      className="flex items-center gap-3 rounded-2xl border border-border/60 bg-sunken p-4"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground">
                         <MoveRight className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{draft.postSendLabel}</p>
                         {sameAsOrigin ? (
-                          <p className="flex items-center gap-1.5 text-xs text-amber-500">
+                          <p className="flex items-center gap-1.5 text-xs text-warning-strong">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             Este é o mesmo lugar de onde o público saiu — os contatos não vão mudar de etapa.
                           </p>

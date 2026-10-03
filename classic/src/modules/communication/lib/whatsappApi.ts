@@ -1,0 +1,430 @@
+/**
+ * whatsappApi — provider-agnostic client for WhatsApp instance operations.
+ *
+ * Calls the whatsapp-api-proxy edge function (JWT-authenticated, tenant-
+ * bounded, rate-limited). The proxy selects the backend (Evolution or
+ * Uazapi) based on whatsapp_instances.provider. Tokens never transit via
+ * the browser.
+ *
+ * Replaces the Evolution-only src/lib/evolutionApi.ts which is kept as a
+ * deprecated shim during the transition (removed in Fase 7).
+ */
+
+import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "./edgeFunctionError";
+import { sharePendingRead } from "./sharePendingRead";
+
+type ProxyResponse<T> = {
+  ok?: boolean;
+  result?: T;
+  instance_id?: string;
+  error?: string;
+};
+
+// Implementação compartilhada com os hooks de envio do chat — ver
+// `./edgeFunctionError`. Mantido como wrapper local só pra não mexer nas ~20
+// call-sites deste arquivo.
+const extractFunctionError = extractEdgeFunctionError;
+
+async function callProxy<T = unknown>(
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<T> {
+  const resolvedBody: Record<string, unknown> = { action, ...body };
+  if (!resolvedBody.organization_id) {
+    const storedOrg = localStorage.getItem("selected_org_id");
+    if (storedOrg) resolvedBody.organization_id = storedOrg;
+  }
+  const invoke = async (accessToken?: string): Promise<T> => {
+    const { data, error } = await supabase.functions.invoke<ProxyResponse<T>>(
+      "whatsapp-api-proxy",
+      {
+        body: resolvedBody,
+        ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
+      }
+    );
+    if (error) {
+      const msg = await extractFunctionError(error);
+      throw new Error(`whatsapp-api-proxy: ${msg}`);
+    }
+    if (!data?.ok) throw new Error(data?.error ?? "Unknown proxy error");
+    return (data.result ?? (data as unknown as T)) as T;
+  };
+  // Only these read operations may share transport. Sends/lifecycle mutations
+  // always run independently. No settled response is cached here.
+  if (action !== "getStatus" && action !== "getMessageLimits") return invoke();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!session?.user.id || !resolvedBody.organization_id) return invoke(session?.access_token);
+  // Include the credential, not just the user ID: a refreshed/new session must
+  // never join an earlier session's pending request. Pin that same JWT on HTTP.
+  const key = JSON.stringify([session.user.id, session.access_token, resolvedBody]);
+  return sharePendingRead(key, () => invoke(session.access_token));
+}
+
+// ============================================================================
+// Instance lifecycle
+// ============================================================================
+
+export type CreateInstanceResult = {
+  provider_instance_id: string;
+  provider_token?: string;
+  status: InstanceStatus;
+};
+
+export type InstanceStatus = {
+  connected: boolean;
+  state: "connecting" | "connected" | "disconnected" | "hibernated" | "unknown";
+  qrcode?: string;
+  paircode?: string;
+  /** Connected account's own number as bare digits. Best-effort from provider. */
+  owner?: string;
+};
+
+export async function createWhatsAppInstance(
+  instanceName: string,
+  organizationId?: string
+): Promise<{ instance_id: string; result: CreateInstanceResult }> {
+  const { data, error } = await supabase.functions.invoke<ProxyResponse<CreateInstanceResult>>(
+    "whatsapp-api-proxy",
+    {
+      body: {
+        action: "createInstance",
+        organization_id: organizationId,
+        payload: { instance_name: instanceName },
+      },
+    }
+  );
+  if (error) {
+    const msg = await extractFunctionError(error);
+    throw new Error(`whatsapp-api-proxy: ${msg}`);
+  }
+  if (!data?.ok || !data.result || !data.instance_id) {
+    throw new Error(data?.error ?? "createInstance returned invalid response");
+  }
+  return { instance_id: data.instance_id, result: data.result };
+}
+
+export async function getInstanceStatus(
+  instanceId: string,
+  organizationId?: string
+): Promise<InstanceStatus> {
+  return await callProxy<InstanceStatus>("getStatus", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
+}
+
+export async function connectInstanceQR(
+  instanceId: string,
+  phone?: string,
+  organizationId?: string
+): Promise<{ qrcode?: string; paircode?: string }> {
+  return await callProxy<{ qrcode?: string; paircode?: string }>("connectQR", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+    payload: phone ? { phone } : {},
+  });
+}
+
+export async function deleteWhatsAppInstance(
+  instanceId: string,
+  organizationId?: string
+): Promise<void> {
+  await callProxy("deleteInstance", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
+}
+
+export async function logoutWhatsAppInstance(
+  instanceId: string,
+  organizationId?: string
+): Promise<void> {
+  await callProxy("logoutInstance", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
+}
+
+// ============================================================================
+// Message actions — Uazapi-only. Evolution instances return a provider error
+// which the caller should surface as a feature-unavailable toast.
+// ============================================================================
+
+export async function reactToMessage(
+  instanceId: string,
+  messageId: string,
+  number: string,
+  emoji: string
+): Promise<void> {
+  await callProxy("react", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number, emoji },
+  });
+}
+
+export async function editMessage(
+  instanceId: string,
+  messageId: string,
+  number: string,
+  text: string
+): Promise<void> {
+  await callProxy("editMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number, text },
+  });
+}
+
+export async function pinMessage(
+  instanceId: string,
+  messageId: string,
+  number: string
+): Promise<void> {
+  await callProxy("pinMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number },
+  });
+}
+
+export async function deleteMessage(
+  instanceId: string,
+  messageId: string,
+  number: string
+): Promise<void> {
+  await callProxy("deleteMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number },
+  });
+}
+
+/**
+ * Marca mensagens como lidas no WhatsApp (tique azul para o contato).
+ *
+ * Aceita lote: o endpoint `/message/markread` da Uazapi recebe `id` como ARRAY.
+ * Mandar string crua devolvia 400 `Invalid payload` — por isso nenhum read
+ * receipt saía do CRM. O `message_id` composto que guardamos
+ * (`<owner>:<ID>`) é aceito pelo provedor, não precisa converter.
+ */
+export async function markMessageRead(
+  instanceId: string,
+  messageIds: string | string[]
+): Promise<void> {
+  const ids = (Array.isArray(messageIds) ? messageIds : [messageIds]).filter(
+    (id) => typeof id === "string" && id.length > 0
+  );
+  if (ids.length === 0) return;
+  await callProxy("markRead", {
+    instance_id: instanceId,
+    payload: { message_ids: ids },
+  });
+}
+
+// ============================================================================
+// Rich send — Uazapi-only
+// ============================================================================
+
+export type MenuChoice = { title: string; description?: string };
+
+export async function sendMenu(
+  instanceId: string,
+  number: string,
+  type: "list" | "button" | "cta",
+  text: string,
+  choices: MenuChoice[],
+  extras?: {
+    /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+    listButtonLabel?: string;
+    /** Só em `cta`: o endereço que o botão abre. */
+    ctaUrl?: string;
+    footer?: string;
+  },
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendMenu", {
+    instance_id: instanceId,
+    payload: { number, type, text, choices, ...extras },
+  });
+}
+
+/** Ponto no mapa, conforme capacidade do provider. */
+export async function sendLocation(
+  instanceId: string,
+  number: string,
+  local: { latitude: number; longitude: number; name?: string; address?: string },
+  leadId?: string,
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendLocation", { instance_id: instanceId, payload: { number, ...local, ...(leadId ? { lead_id: leadId } : {}) } });
+}
+
+/** Cartão de contato; UAZAPI aceita um por mensagem. */
+export async function sendContact(
+  instanceId: string,
+  number: string,
+  contacts: Array<{
+    nome: string;
+    telefones: Array<{ numero: string; waId?: string }>;
+    emails?: string[];
+  }>,
+  leadId?: string,
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendContact", { instance_id: instanceId, payload: { number, contacts, ...(leadId ? { lead_id: leadId } : {}) } });
+}
+
+export async function sendPixButton(
+  instanceId: string,
+  number: string,
+  pixkey: string,
+  merchantName: string,
+  amount: number,
+  opts?: { pixkeyType?: "cpf" | "cnpj" | "phone" | "email" | "random"; text?: string }
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendPixButton", {
+    instance_id: instanceId,
+    payload: { number, pixkey, merchantName, amount, ...opts },
+  });
+}
+
+// ============================================================================
+// Presence, media download, history sync, limits — Uazapi-only
+// ============================================================================
+
+export async function setPresence(
+  instanceId: string,
+  number: string,
+  state: "composing" | "available"
+): Promise<void> {
+  await callProxy("setPresence", {
+    instance_id: instanceId,
+    payload: { number, state },
+  });
+}
+
+export async function downloadMedia(
+  instanceId: string,
+  messageId: string
+): Promise<{ base64: string; mimetype: string }> {
+  return callProxy("downloadMedia", {
+    instance_id: instanceId,
+    payload: { message_id: messageId },
+  });
+}
+
+export async function syncHistory(
+  instanceId: string,
+  opts?: { chatJid?: string; limit?: number; cursor?: string }
+): Promise<{ messages: unknown[]; nextCursor?: string }> {
+  return callProxy("historySync", {
+    instance_id: instanceId,
+    payload: {
+      chat_jid: opts?.chatJid,
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    },
+  });
+}
+
+export async function getMessageLimits(
+  instanceId: string,
+  organizationId?: string
+): Promise<{ current: number | null; limit: number | null; reachout_timelock?: number; can_send_new_messages?: boolean | null }> {
+  return callProxy("getMessageLimits", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
+}
+
+// ─── Operação do canal oficial (Meta) ────────────────────────────────────────
+//
+// As quatro abaixo devolvem 422 em canal que não as tem — nunca 500. Quem clica
+// é um vendedor ou um admin, e um erro genérico viraria "não foi possível" numa
+// hora em que ele precisa saber que ESTE canal não faz isso.
+
+/** Bloqueia o contato: ele deixa de conseguir escrever para este número. */
+export async function blockUser(instanceId: string, number: string): Promise<void> {
+  await callProxy("blockUser", { instance_id: instanceId, payload: { number } });
+}
+
+export async function unblockUser(instanceId: string, number: string): Promise<void> {
+  await callProxy("unblockUser", { instance_id: instanceId, payload: { number } });
+}
+
+export async function listBlocked(instanceId: string): Promise<unknown> {
+  const r = await callProxy<{ blocked: unknown }>("listBlocked", { instance_id: instanceId, payload: {} });
+  return r.blocked;
+}
+
+/**
+ * Saúde do número, do lado da Meta — verde, amarelo ou vermelho.
+ *
+ * É o feedback dos clientes que a determina: bloqueios e denúncias derrubam a
+ * nota, e vermelho é o degrau antes de a Meta limitar o número.
+ */
+export async function numberHealth(instanceId: string): Promise<unknown> {
+  const r = await callProxy<{ health: unknown }>("numberHealth", { instance_id: instanceId, payload: {} });
+  return r.health;
+}
+
+/** Cria o convite de opt-in. O corpo devolvido traz o `id` que vira o link. */
+export async function createSignupInvite(
+  instanceId: string,
+  convite: {
+    mensagem: string;
+    confirmacao: string;
+    nome: string;
+    politicaDePrivacidade: string;
+    site: string;
+    codigoPromocional?: string;
+  },
+): Promise<unknown> {
+  const r = await callProxy<{ invite: unknown }>("createSignupInvite", {
+    instance_id: instanceId,
+    payload: convite,
+  });
+  return r.invite;
+}
+
+export async function listSignupInvites(instanceId: string, limite = 20): Promise<unknown> {
+  const r = await callProxy<{ invites: unknown }>("listSignupInvites", {
+    instance_id: instanceId,
+    payload: { limite },
+  });
+  return r.invites;
+}
+
+/** Ask WhatsApp to recover older messages; acceptance is asynchronous. */
+export async function requestHistoryRecovery(
+  instanceId: string,
+  opts: { chatJid: string; mode?: "history" | "exact"; messageId?: string; count?: number },
+): Promise<{ success: boolean; mode?: string }> {
+  return callProxy("requestHistory", {
+    instance_id: instanceId,
+    payload: { number: opts.chatJid, mode: opts.mode ?? "history", messageid: opts.messageId, count: opts.count },
+  });
+}
+
+export function transcribeAudio(instanceId: string, rowId: string) {
+  return callProxy<{ text: string; provider: string; createdAt: string; cached: boolean }>("transcribeAudio", { instance_id: instanceId, payload: { row_id: rowId } });
+}
+
+// ============================================================================
+// Grupos (nó de automação `send_to_group`)
+// ============================================================================
+
+export type InstanceGroup = { jid: string; name: string };
+export type InstanceGroupList = { groups: InstanceGroup[]; truncated: boolean };
+
+/**
+ * Os grupos de que a instância participa, para o seletor do nó "Enviar p/
+ * grupo". Só Uazapi lista (422 `groups_not_supported` nos demais) e só quem
+ * edita automações pode listar (403) — o painel cai no campo manual nos dois.
+ */
+export async function listGroups(instanceId: string): Promise<InstanceGroupList> {
+  const r = await callProxy<Partial<InstanceGroupList>>("listGroups", {
+    instance_id: instanceId,
+    payload: {},
+  });
+  return {
+    groups: Array.isArray(r?.groups) ? r.groups : [],
+    truncated: r?.truncated === true,
+  };
+}

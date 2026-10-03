@@ -2,20 +2,26 @@ import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { memo, useCallback } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
-import { GitBranch, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { NODE_COLORS, CONDITION_OPERATOR_LABELS } from "@/types/workflow";
+import { GitBranch } from "lucide-react";
+import { CONDITION_OPERATOR_LABELS } from "@/types/workflow";
+import { isDiscontinuedGuidedField } from "@/contracts/workflows/guided-fields";
+import { DiscontinuedBadge } from "../DiscontinuedNotice";
+import { NodeDeleteButton, NodeIconChip } from "./BaseNode";
+import { NODE_HANDLE_CLASS, nodeCardClassName } from "./node-style";
 import type { ConditionNodeData } from "@/types/workflow";
 
 function ConditionNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as ConditionNodeData;
-  const colors = NODE_COLORS.condition;
   const operatorLabel = nodeData.operator
     ? CONDITION_OPERATOR_LABELS[nodeData.operator]
     : "";
   const subtitle = nodeData.guidedCondition ? summarizeGuidedCondition(nodeData.guidedCondition) : nodeData.field
     ? `${nodeData.field} ${operatorLabel} ${nodeData.value || ""}`
     : "Configure a condição";
+  // Condição guiada por score (descontinuada) ou condição legada por rating/score.
+  const discontinued = (!!nodeData.guidedCondition && "field" in nodeData.guidedCondition
+    && isDiscontinuedGuidedField(nodeData.guidedCondition.field))
+    || (!nodeData.guidedCondition && (nodeData.field === "score" || nodeData.field === "rating"));
 
   const { deleteElements } = useReactFlow();
   const handleDelete = useCallback(
@@ -27,65 +33,48 @@ function ConditionNodeComponent({ id, data, selected }: NodeProps) {
   );
 
   return (
-    <div
-      className={cn(
-        "group relative w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
-        colors.border,
-        colors.bgLight,
-        colors.bgDark,
-        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg"
-      )}
-    >
-      <button
-        onClick={handleDelete}
-        className="absolute -top-2 -right-2 z-10 hidden group-hover:flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 transition-colors"
-        title="Excluir nó"
-      >
-        <X className="w-3 h-3" />
-      </button>
+    <div className={nodeCardClassName({ nodeType: "condition", selected, className: "w-[280px]" })}>
+      <NodeDeleteButton onClick={handleDelete} />
 
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="!w-3 !h-3 !bg-muted-foreground/50 !border-2 !border-background"
-      />
+      <Handle type="target" position={Position.Top} className={NODE_HANDLE_CLASS} />
 
       <div className="p-3">
         <div className="flex items-center gap-2.5">
-          <div className={cn("p-1.5 rounded-lg", colors.bgLight, colors.bgDark)}>
-            <GitBranch className="w-5 h-5 text-yellow-500" />
-          </div>
+          <NodeIconChip nodeType="condition">
+            <GitBranch />
+          </NodeIconChip>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground truncate">
+            <p className="truncate text-sm font-bold tracking-[-0.01em] text-foreground">
               {nodeData.label || "Condição"}
             </p>
             <p className="text-xs text-muted-foreground truncate" title={subtitle}>{subtitle}</p>
           </div>
         </div>
+        {discontinued && <DiscontinuedBadge className="mt-2" />}
       </div>
 
       {/* Duas saídas: Sim (esquerda) e Não (direita) */}
       <div className="flex justify-between px-6 pb-2">
         <div className="relative">
-          <span className="text-[10px] font-medium text-green-600 dark:text-green-400">
+          <span className="text-[10px] font-bold text-success">
             Sim
           </span>
           <Handle
             type="source"
             position={Position.Bottom}
             id="yes"
-            className="!w-3 !h-3 !bg-green-500 !border-2 !border-background !left-2"
+            className="!w-3 !h-3 !bg-success !border-2 !border-background !left-2"
           />
         </div>
         <div className="relative">
-          <span className="text-[10px] font-medium text-red-500 dark:text-red-400">
+          <span className="text-[10px] font-bold text-destructive">
             Não
           </span>
           <Handle
             type="source"
             position={Position.Bottom}
             id="no"
-            className="!w-3 !h-3 !bg-red-500 !border-2 !border-background !left-2"
+            className="!w-3 !h-3 !bg-destructive !border-2 !border-background !left-2"
           />
         </div>
       </div>

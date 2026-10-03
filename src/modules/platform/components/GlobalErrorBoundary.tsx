@@ -74,14 +74,21 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div role="alert" className="flex w-full max-w-sm flex-col items-center text-center">
-          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full border border-border/70 bg-muted/40">
+          {/* V5: chip tintado (âmbar no erro, ouro na versão nova) e título apertado. */}
+          <div
+            className={
+              isChunkError
+                ? "mb-5 grid h-11 w-11 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground"
+                : "mb-5 grid h-11 w-11 place-items-center rounded-xl bg-warning/15 text-warning-strong"
+            }
+          >
             {isChunkError ? (
-              <RefreshCw className="h-5 w-5 text-muted-foreground" aria-hidden />
+              <RefreshCw className="h-5 w-5" aria-hidden />
             ) : (
-              <AlertTriangle className="h-5 w-5 text-muted-foreground" aria-hidden />
+              <AlertTriangle className="h-5 w-5" aria-hidden />
             )}
           </div>
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          <h2 className="text-xl font-extrabold tracking-[-0.02em] text-foreground">
             {isChunkError ? "Há uma versão nova do Torque" : "Algo deu errado nesta tela"}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -94,14 +101,14 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             <button
               type="button"
               onClick={this.handleGoHome}
-              className="h-9 rounded-lg border border-border px-4 text-sm transition-colors hover:bg-muted"
+              className="h-10 rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-colors hover:border-foreground/20"
             >
               Ir para o início
             </button>
             <button
               type="button"
               onClick={this.handleReload}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-brilho-ouro transition-colors hover:bg-primary/90"
             >
               <RefreshCw className="h-4 w-4" aria-hidden />
               Recarregar

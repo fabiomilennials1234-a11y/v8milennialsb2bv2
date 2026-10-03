@@ -187,6 +187,7 @@ export function useNavigationModel(): NavigationModel {
   const isPitstopRoute = useMemo(
     () =>
       location.pathname.startsWith("/configuracoes") ||
+      location.pathname.startsWith("/pitstop") ||
       pitstopGroups.some((group) =>
         group.items.some((item) => isRouteActive(location.pathname, item.path)),
       ),

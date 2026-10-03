@@ -55,30 +55,94 @@ export interface SettingsTab {
   adminOnly?: boolean;
   /** Aba só existe em org outbound (Marcos). */
   outboundOnly?: boolean;
+  /**
+   * V5 (CTO, 02/10): a aba deixou de ser aba e virou SEÇÃO de outra — `group`
+   * é o `value` da aba que a hospeda. O endereço antigo continua resolvendo:
+   * abre o grupo já rolado até a seção.
+   */
+  group?: string;
+  /** A aba saiu das Configurações e mora em outra tela (Checklists → /checklists). */
+  redirect?: string;
+  /** Frase do cabeçalho quando a aba está aberta. */
+  subtitle?: string;
 }
 
+/**
+ * Sete abas, decisão do CTO de 02/10 (eram quinze, que rolavam na pílula):
+ * Tags · Notificações · WhatsApp · Integrações · Assinatura e cobrança ·
+ * API & Webhooks · Geral. Todas com rota própria. As antigas continuam no
+ * registro como seções (`group`) ou desvio (`redirect`), para link velho não
+ * quebrar.
+ */
 export const SETTINGS_TABS: SettingsTab[] = [
-  { value: "tags", slug: "tags", label: "Tags", icon: Tag, primary: true },
+  {
+    value: "tags",
+    slug: "tags",
+    label: "Tags",
+    icon: Tag,
+    primary: true,
+    subtitle: "Tags organizam os leads e disparam automações.",
+  },
   {
     value: "notifications",
     slug: "notificacoes",
     label: "Notificações",
     icon: Bell,
     primary: true,
+    subtitle: "O que te avisa, como e quando.",
   },
-  { value: "whatsapp", slug: "whatsapp", label: "WhatsApp", icon: MessageSquare, primary: true },
-  { value: "integracoes", slug: "integracoes", label: "Integrações", icon: Plug },
-  { value: "billing", slug: "assinatura", label: "Assinatura e cobrança", icon: CreditCard, adminOnly: true },
-  { value: "webhooks", slug: "webhooks", label: "Webhooks", icon: Webhook },
-  { value: "api", slug: "api-docs", label: "API & Chaves", icon: Code },
-  { value: "sla", slug: "sla", label: "SLA", icon: Timer },
-  { value: "api-keys", slug: "api-keys", label: "API Keys", icon: Key },
-  { value: "sandbox", slug: "sandbox", label: "Sandbox", icon: FlaskConical },
-  { value: "checklists", slug: "checklists", label: "Checklists", icon: ClipboardList },
-  { value: "oraculo-profile", slug: "perfil-operacao", label: "Perfil da operação", icon: BrainCircuit },
-  { value: "general", slug: "geral", label: "Geral", icon: Settings },
-  { value: "marcos", slug: "marcos", label: "Marcos", icon: Award, outboundOnly: true },
-  { value: "ajuda", slug: "ajuda", label: "Central de Ajuda", icon: HelpCircle, adminOnly: true },
+  {
+    value: "whatsapp",
+    slug: "whatsapp",
+    label: "WhatsApp",
+    icon: MessageSquare,
+    primary: true,
+    subtitle: "Números conectados, quem atende cada caixa e o canal oficial.",
+  },
+  {
+    value: "integracoes",
+    slug: "integracoes",
+    label: "Integrações",
+    icon: Plug,
+    primary: true,
+    subtitle: "Conecte o Torque às ferramentas que a operação já usa.",
+  },
+  {
+    value: "billing",
+    slug: "assinatura",
+    label: "Assinatura e cobrança",
+    icon: CreditCard,
+    primary: true,
+    adminOnly: true,
+    subtitle: "Plano, limites de uso e histórico de cobranças.",
+  },
+  {
+    value: "api-webhooks",
+    slug: "api-webhooks",
+    label: "API & Webhooks",
+    icon: Code,
+    primary: true,
+    subtitle: "Chaves de API, webhooks de saída e a entrada de leads por webhook.",
+  },
+  {
+    value: "general",
+    slug: "geral",
+    label: "Geral",
+    icon: Settings,
+    primary: true,
+    subtitle: "Empresa, atendimento e os ajustes que valem para a organização inteira.",
+  },
+  // ── Seções das abas acima (endereços antigos) ───────────────────────────────
+  { value: "webhooks", slug: "webhooks", label: "Webhooks", icon: Webhook, group: "api-webhooks" },
+  { value: "api", slug: "api-docs", label: "API & Chaves", icon: Code, group: "api-webhooks" },
+  { value: "api-keys", slug: "api-keys", label: "API Keys", icon: Key, group: "api-webhooks" },
+  { value: "sla", slug: "sla", label: "SLA", icon: Timer, group: "general" },
+  { value: "sandbox", slug: "sandbox", label: "Sandbox", icon: FlaskConical, group: "general" },
+  { value: "oraculo-profile", slug: "perfil-operacao", label: "Perfil da operação", icon: BrainCircuit, group: "general" },
+  { value: "marcos", slug: "marcos", label: "Marcos", icon: Award, outboundOnly: true, group: "general" },
+  { value: "ajuda", slug: "ajuda", label: "Central de Ajuda", icon: HelpCircle, adminOnly: true, group: "general" },
+  // Duplicava `/checklists` (Pitstop › Rotas). Link antigo vai para lá.
+  { value: "checklists", slug: "checklists", label: "Checklists", icon: ClipboardList, redirect: "/checklists" },
 ];
 
 export const SETTINGS_BASE_PATH = "/configuracoes";
@@ -97,10 +161,20 @@ export const isPrimarySettingsTab = (tab: SettingsTab): boolean => tab.primary =
  * "Outros" e se identifica por `?tab=` — assim o link continua reabrindo a
  * mesma aba sem que cada ajuste vire rota e item de painel.
  */
-export const settingsTabPath = (tab: SettingsTab): string =>
-  isPrimarySettingsTab(tab)
+export const settingsTabPath = (tab: SettingsTab): string => {
+  if (tab.redirect) return tab.redirect;
+  if (tab.group) {
+    const host = SETTINGS_TABS.find((t) => t.value === tab.group);
+    if (host) return `${SETTINGS_BASE_PATH}/${host.slug}?secao=${tab.value}`;
+  }
+  return isPrimarySettingsTab(tab)
     ? `${SETTINGS_BASE_PATH}/${tab.slug}`
     : `${SETTINGS_OTHERS_PATH}?tab=${tab.value}`;
+};
+
+/** A aba que hospeda uma seção (ou a própria aba, se não for seção). */
+export const hostSettingsTab = (tab: SettingsTab): SettingsTab =>
+  (tab.group && SETTINGS_TABS.find((t) => t.value === tab.group)) || tab;
 
 /** Rotas reais (sem query) — usado para semear a matriz de permissão de view. */
 export const SETTINGS_TAB_PATHS: string[] = [
@@ -113,16 +187,23 @@ export interface SettingsTabVisibility {
   isOutboundOrg: boolean;
 }
 
-export function visibleSettingsTabs({
-  isAdmin,
-  isOutboundOrg,
-}: SettingsTabVisibility): SettingsTab[] {
-  return SETTINGS_TABS.filter(
-    (tab) => (!tab.adminOnly || isAdmin) && (!tab.outboundOnly || isOutboundOrg),
-  );
+const podeVer = (tab: SettingsTab, { isAdmin, isOutboundOrg }: SettingsTabVisibility) =>
+  (!tab.adminOnly || isAdmin) && (!tab.outboundOnly || isOutboundOrg);
+
+/** As ABAS (pílulas) visíveis — sem seções nem desvios. */
+export function visibleSettingsTabs(visibility: SettingsTabVisibility): SettingsTab[] {
+  return SETTINGS_TABS.filter((tab) => !tab.group && !tab.redirect && podeVer(tab, visibility));
 }
 
-/** As três com rota própria — as portas do Pitstop. */
+/** As seções de uma aba-grupo que este usuário pode ver. */
+export function visibleSettingsSections(groupValue: string, visibility: SettingsTabVisibility): SettingsTab[] {
+  return SETTINGS_TABS.filter((tab) => tab.group === groupValue && podeVer(tab, visibility));
+}
+
+/** Seção visível? (Marcos fora de outbound e Ajuda sem admin não.) */
+export const canSeeSettingsTab = podeVer;
+
+/** As abas com rota própria — as portas do Pitstop. */
 export const visiblePrimarySettingsTabs = (v: SettingsTabVisibility): SettingsTab[] =>
   visibleSettingsTabs(v).filter(isPrimarySettingsTab);
 

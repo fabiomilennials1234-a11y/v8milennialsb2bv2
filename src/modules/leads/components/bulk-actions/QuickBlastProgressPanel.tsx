@@ -10,6 +10,17 @@ import { useUserRole } from "@/modules/identity";
 
 const ACTIVE = new Set(["queued", "running", "paused"]);
 
+/**
+ * O status do job vinha cru na tela ("queued", "running"). Rótulo em pt-BR e
+ * tom do V5 por estado; um status desconhecido cai no próprio valor, para
+ * nunca esconder o que o banco disse.
+ */
+const STATUS_LABEL: Record<string, { label: string; variant: "info" | "success" | "warning" }> = {
+  queued: { label: "Na fila", variant: "info" },
+  running: { label: "Enviando", variant: "success" },
+  paused: { label: "Pausado", variant: "warning" },
+};
+
 function isQuickBlast(job: UazapiSenderJob): boolean {
   const track = (job.payload as { trackSource?: string } | null)?.trackSource;
   return track === "quick-blast";
@@ -60,22 +71,24 @@ export function QuickBlastProgressPanel() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 24, scale: 0.98 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              className="rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur"
+              className="rounded-card border border-card-border bg-card/95 p-3.5 shadow-relevo-alto backdrop-blur"
             >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-sm font-medium">
-                  <Zap className="h-3.5 w-3.5 text-primary" />
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-bold">
+                  <span className="grid h-6 w-6 place-items-center rounded-lg bg-primary-soft text-primary-soft-foreground">
+                    <Zap className="h-3.5 w-3.5" />
+                  </span>
                   Disparo rápido
                 </div>
-                <Badge variant={job.status === "paused" ? "outline" : "secondary"} className="tabular-nums">
-                  {job.status}
+                <Badge variant={STATUS_LABEL[job.status]?.variant ?? "soft"}>
+                  {STATUS_LABEL[job.status]?.label ?? job.status}
                 </Badge>
               </div>
 
-              <Progress value={pct} className="h-1.5" />
+              <Progress value={pct} className="h-2" />
 
               <div className="mt-1.5 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="text-xs font-medium tabular-nums text-muted-foreground">
                   {job.sent}/{job.total_messages} enviadas
                   {job.failed > 0 ? ` · ${job.failed} falhas` : ""}
                 </span>
@@ -86,7 +99,7 @@ export function QuickBlastProgressPanel() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6"
+                        className="h-7 w-7 rounded-full"
                         disabled={control.isPending}
                         aria-label="Pausar"
                         onClick={() => control.mutate({ job_id: job.id, action: "pause" })}
@@ -97,7 +110,7 @@ export function QuickBlastProgressPanel() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6"
+                        className="h-7 w-7 rounded-full"
                         disabled={control.isPending}
                         aria-label="Retomar"
                         onClick={() => control.mutate({ job_id: job.id, action: "resume" })}
@@ -108,7 +121,7 @@ export function QuickBlastProgressPanel() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-6 w-6 text-destructive hover:text-destructive"
+                      className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
                       disabled={control.isPending}
                       aria-label="Parar"
                       onClick={() => control.mutate({ job_id: job.id, action: "stop" })}

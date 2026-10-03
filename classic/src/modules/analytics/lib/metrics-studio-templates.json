@@ -1,0 +1,222 @@
+[
+  {
+    "key": "visao-geral",
+    "nome": "Visão Geral",
+    "ordem": 1,
+    "layout": [
+      {
+        "id": "visao-geral-indicadores-operacao",
+        "fixo": "indicadores-operacao",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 16,
+        "w": 984,
+        "h": 280,
+        "z": 1
+      },
+      {
+        "id": "visao-geral-meta-mensal",
+        "fixo": "meta-mensal",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 312,
+        "w": 320,
+        "h": 488,
+        "z": 2
+      },
+      {
+        "id": "visao-geral-receita-acumulada",
+        "fixo": "receita-acumulada",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 352,
+        "y": 312,
+        "w": 648,
+        "h": 488,
+        "z": 3
+      },
+      {
+        "id": "visao-geral-funil-conversao",
+        "fixo": "funil-conversao",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 816,
+        "w": 320,
+        "h": 400,
+        "z": 4
+      },
+      {
+        "id": "visao-geral-briefing-oraculo",
+        "fixo": "briefing-oraculo",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 352,
+        "y": 816,
+        "w": 320,
+        "h": 400,
+        "z": 5
+      },
+      {
+        "id": "visao-geral-operacao-ao-vivo",
+        "fixo": "operacao-ao-vivo",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 688,
+        "y": 816,
+        "w": 312,
+        "h": 400,
+        "z": 6
+      }
+    ]
+  },
+  {
+    "key": "performance",
+    "nome": "Performance",
+    "ordem": 2,
+    "layout": [
+      {
+        "id": "performance-ranking-vendedores",
+        "fixo": "ranking-vendedores",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 16,
+        "w": 640,
+        "h": 400,
+        "z": 1
+      },
+      {
+        "id": "performance-campeoes-produto",
+        "fixo": "campeoes-produto",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 672,
+        "y": 16,
+        "w": 328,
+        "h": 400,
+        "z": 2
+      },
+      {
+        "id": "performance-atividade-equipe",
+        "fixo": "atividade-equipe",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 432,
+        "w": 640,
+        "h": 400,
+        "z": 3
+      },
+      {
+        "id": "performance-jornada-lead",
+        "fixo": "jornada-lead",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 672,
+        "y": 432,
+        "w": 328,
+        "h": 400,
+        "z": 4
+      },
+      {
+        "id": "performance-metas-equipe",
+        "fixo": "metas-equipe",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 848,
+        "w": 640,
+        "h": 400,
+        "z": 5
+      },
+      {
+        "id": "performance-metas-individuais",
+        "fixo": "metas-individuais",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 672,
+        "y": 848,
+        "w": 328,
+        "h": 400,
+        "z": 6
+      },
+      {
+        "id": "performance-motivos-perda",
+        "fixo": "motivos-perda",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 1264,
+        "w": 328,
+        "h": 400,
+        "z": 7
+      },
+      {
+        "id": "performance-real-esperado",
+        "fixo": "real-esperado",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 360,
+        "y": 1264,
+        "w": 640,
+        "h": 400,
+        "z": 8
+      }
+    ]
+  },
+  {
+    "key": "saude",
+    "nome": "Saúde",
+    "ordem": 3,
+    "layout": [
+      {
+        "id": "saude-saude-funil",
+        "fixo": "saude-funil",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 16,
+        "w": 984,
+        "h": 980,
+        "z": 1
+      }
+    ]
+  },
+  {
+    "key": "mapa",
+    "nome": "Mapa",
+    "ordem": 4,
+    "layout": [
+      {
+        "id": "mapa-mapa-clientes",
+        "fixo": "mapa-clientes",
+        "metricId": "",
+        "corte": "total",
+        "chart": "number",
+        "x": 16,
+        "y": 16,
+        "w": 984,
+        "h": 720,
+        "z": 1
+      }
+    ]
+  }
+]

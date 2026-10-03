@@ -397,7 +397,11 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       relacao: standing.relacao,
       prova: standing.prova,
       situacao: standing.maisAvancado
-        ? { funil: standing.maisAvancado.funnelName, funilCor: standing.maisAvancado.funnelColor }
+        ? {
+            funil: standing.maisAvancado.funnelName,
+            funilCor: standing.maisAvancado.funnelColor,
+            negocioId: standing.maisAvancado.id,
+          }
         : null,
 
       dono,
@@ -419,6 +423,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
         // fica vazio em lead sem histórico.
         idadeDias: diasDesde(texto(l, "created_at")) ?? 0,
         semContatoDias: diasDesde(timeline.data?.metrics.lastContact),
+        clienteId: carteira?.clientId ?? null,
       },
 
       negocios,

@@ -26,16 +26,20 @@ export function sourceLabel(source: string | null): string {
   }
 }
 
+/**
+ * V5: tons de token (antes azul/roxo cru, que no claro reprovava contraste).
+ * A borda fica transparente — a pílula é o fundo tintado.
+ */
 export function sourceBadgeClass(source: string | null): string {
   switch (source) {
     case "pipe":
-      return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      return "border-transparent bg-insights/10 text-insights";
     case "copilot":
-      return "bg-primary/10 text-primary border-primary/20";
+      return "border-transparent bg-primary-soft text-primary-soft-foreground";
     case "erp":
-      return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+      return "border-transparent bg-foreground/[.07] text-foreground/80";
     default:
-      return "bg-muted text-muted-foreground border-border";
+      return "border-transparent bg-muted text-muted-foreground";
   }
 }
 

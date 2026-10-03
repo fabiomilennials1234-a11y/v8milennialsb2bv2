@@ -38,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { cn } from "@/lib/utils";
 import {
   useCopilotReasoning,
@@ -84,29 +85,22 @@ export default function CopilotReasoning() {
   }, [orgs]);
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-purple-500/10">
-            <Brain className="w-6 h-6 text-purple-500" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Copilot Reasoning</h1>
-            <p className="text-sm text-muted-foreground">
-              Chain-of-thought capturado dos agentes durante a conversa
-            </p>
-          </div>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
-          Atualizar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title="Copilot reasoning"
+        subtitle="Chain-of-thought capturado dos agentes durante a conversa"
+        actions={
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
+            Atualizar
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Filter className="w-4 h-4" />
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
             Filtros
           </CardTitle>
         </CardHeader>
@@ -176,7 +170,7 @@ export default function CopilotReasoning() {
 
       <Card>
         <CardHeader className="pb-3 flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold">
+          <CardTitle>
             {isLoading ? "Carregando..." : `${rows?.length ?? 0} reasoning chains`}
           </CardTitle>
         </CardHeader>
@@ -186,12 +180,14 @@ export default function CopilotReasoning() {
               Buscando…
             </div>
           ) : !rows || rows.length === 0 ? (
-            <div className="py-12 text-center">
-              <Brain className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
+            <div className="flex flex-col items-center py-12 text-center">
+              <span className="mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                <Brain className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-semibold">
                 Nenhum reasoning capturado nessa janela.
               </p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
+              <p className="text-[13px] text-muted-foreground mt-1">
                 Verifique se o agente tem <code className="bg-muted px-1 rounded">reasoning_mode</code> ≠ <code className="bg-muted px-1 rounded">off</code>.
               </p>
             </div>
@@ -246,7 +242,7 @@ export default function CopilotReasoning() {
                         </TableCell>
                         <TableCell>
                           {r.llm_model ? (
-                            <Badge variant="secondary" className="font-mono text-xs">
+                            <Badge variant="soft" className="font-mono text-xs">
                               {r.llm_model}
                             </Badge>
                           ) : (
@@ -269,7 +265,7 @@ export default function CopilotReasoning() {
                                 <span><span className="font-semibold">Conversation:</span> <code>{r.entity_id ?? "—"}</code></span>
                                 <span><span className="font-semibold">Status:</span> {r.status}</span>
                               </div>
-                              <ScrollArea className="max-h-[420px] rounded-md border bg-background">
+                              <ScrollArea className="max-h-[420px] rounded-xl border bg-background">
                                 <pre className="p-4 text-xs whitespace-pre-wrap font-mono leading-relaxed">
                                   {r.reasoning ?? "(sem conteúdo)"}
                                 </pre>

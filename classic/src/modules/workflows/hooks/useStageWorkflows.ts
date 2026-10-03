@@ -1,0 +1,381 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/modules/identity";
+import type { Workflow, TriggerConfigStageChanged } from "@/types/workflow";
+
+interface StageWorkflow {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
+/**
+ * Busca workflows vinculados a uma etapa específica de um funil semeado.
+ * Filtra por trigger_type = 'stage_changed' e verifica trigger_config.
+ */
+export function useStageWorkflows(
+  pipeType: string | undefined,
+  stageKey: string | undefined
+) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflows", organizationId, pipeType, stageKey],
+    queryFn: async (): Promise<StageWorkflow[]> => {
+      if (!organizationId || !pipeType || !stageKey) return [];
+
+      // SCRUM-627: o editor grava `pipeline_id` (uuid) em vez do slug legado
+      // `pipe_type`. O badge do kanban tem que enxergar os dois formatos —
+      // resolve o funil da org com este slug uma vez e casa por qualquer um.
+      const { data: pipe } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", pipeType)
+        .maybeSingle();
+      const pipelineId = (pipe as { id: string } | null)?.id ?? null;
+      const { data: stage } = pipelineId
+        ? await supabase
+            .from("pipeline_stages")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", pipelineId)
+            .eq("stage_key", stageKey)
+            .maybeSingle()
+        : { data: null };
+      const stageId = (stage as { id?: string } | null)?.id;
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_type, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return [];
+
+      // Filter in JS because trigger_config is JSONB and we need complex matching
+      return (data as unknown as Workflow[]).filter((w) => {
+        const cfg = w.trigger_config as TriggerConfigStageChanged;
+        if (!cfg) return false;
+
+        // Match por slug legado OU pipeline_id novo (SCRUM-627)
+        const casaFunil = cfg.pipe_type === pipeType ||
+          (!!pipelineId && cfg.pipeline_id === pipelineId);
+        if (!casaFunil) return false;
+
+        // If workflow has specific stages array, check if this stage is included
+        if (cfg.stages && cfg.stages.length > 0) {
+          return cfg.stages.includes(stageKey) || (!!stageId && cfg.stages.includes(stageId));
+        }
+
+        // If workflow has to_stage, match it
+        if (cfg.to_stage) {
+          return cfg.to_stage === stageKey || (!!stageId && cfg.to_stage === stageId);
+        }
+
+        // No stage filter = matches all stages in this pipe
+        return true;
+      }).map((w) => ({
+        id: w.id,
+        name: w.name,
+        is_active: w.is_active,
+      }));
+    },
+    enabled: isReady && !!organizationId && !!pipeType && !!stageKey,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Busca workflows vinculados a uma etapa de qualquer funil por pipeline_id.
+ */
+export function useCustomPipeStageWorkflows(
+  pipelineId: string | undefined,
+  stageId: string | undefined
+) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflows-custom", organizationId, pipelineId, stageId],
+    queryFn: async (): Promise<StageWorkflow[]> => {
+      if (!organizationId || !pipelineId || !stageId) return [];
+
+      const { data: stage } = await supabase
+        .from("pipeline_stages")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_id", pipelineId)
+        .eq("stage_key", stageId)
+        .maybeSingle();
+      const canonicalStageId = (stage as { id?: string } | null)?.id;
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_type, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return (data as unknown as Workflow[]).filter((w) => {
+        const cfg = w.trigger_config as TriggerConfigStageChanged;
+        if (!cfg) return false;
+
+        if (cfg.pipeline_id !== pipelineId) return false;
+
+        if (cfg.stages && cfg.stages.length > 0) {
+          return cfg.stages.includes(stageId)
+            || (!!canonicalStageId && cfg.stages.includes(canonicalStageId));
+        }
+
+        if (cfg.to_stage) {
+          return cfg.to_stage === stageId
+            || (!!canonicalStageId && cfg.to_stage === canonicalStageId);
+        }
+
+        return true;
+      }).map((w) => ({
+        id: w.id,
+        name: w.name,
+        is_active: w.is_active,
+      }));
+    },
+    enabled: isReady && !!organizationId && !!pipelineId && !!stageId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Busca contagem de workflows por etapa para um pipe inteiro.
+ * Mais eficiente que chamar useStageWorkflows para cada coluna.
+ */
+export function useStageWorkflowCounts(pipeType: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflow-counts", organizationId, pipeType],
+    queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
+      if (!organizationId || !pipeType) return {};
+
+      // SCRUM-627: mesmo caso do useStageWorkflows — configs novas trazem
+      // `pipeline_id`, as legadas trazem o slug.
+      const { data: pipe } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", pipeType)
+        .maybeSingle();
+      const pipelineId = (pipe as { id: string } | null)?.id ?? null;
+      const { data: stageRows } = pipelineId
+        ? await supabase
+            .from("pipeline_stages")
+            .select("id, stage_key")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", pipelineId)
+        : { data: [] };
+      const keyById = new Map(
+        ((stageRows ?? []) as Array<{ id: string; stage_key: string }>).map((stage) => [stage.id, stage.stage_key]),
+      );
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return {};
+
+      const counts: Record<string, { total: number; active: number }> = {};
+
+      for (const row of data as unknown as Workflow[]) {
+        const cfg = row.trigger_config as TriggerConfigStageChanged;
+        if (!cfg) continue;
+        const casaFunil = cfg.pipe_type === pipeType ||
+          (!!pipelineId && cfg.pipeline_id === pipelineId);
+        if (!casaFunil) continue;
+
+        const stages = cfg.stages && cfg.stages.length > 0
+          ? cfg.stages
+          : cfg.to_stage
+          ? [cfg.to_stage]
+          : null;
+
+        if (stages) {
+          for (const ref of stages) {
+            const s = keyById.get(ref) ?? ref;
+            if (!counts[s]) counts[s] = { total: 0, active: 0 };
+            counts[s].total++;
+            if (row.is_active) counts[s].active++;
+          }
+        }
+        // If no specific stages, it applies to ALL stages - we mark as "__all__"
+        if (!stages) {
+          if (!counts["__all__"]) counts["__all__"] = { total: 0, active: 0 };
+          counts["__all__"].total++;
+          if (row.is_active) counts["__all__"].active++;
+        }
+      }
+
+      return counts;
+    },
+    enabled: isReady && !!organizationId && !!pipeType,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Mesmo cálculo por pipeline_id. Converte UUID novo para stage_key do kanban.
+ */
+export function useCustomPipeWorkflowCounts(pipelineId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflow-counts-custom", organizationId, pipelineId],
+    queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
+      if (!organizationId || !pipelineId) return {};
+
+      const { data: stageRows } = await supabase
+        .from("pipeline_stages")
+        .select("id, stage_key")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_id", pipelineId);
+      const keyById = new Map(
+        ((stageRows ?? []) as Array<{ id: string; stage_key: string }>).map((stage) => [stage.id, stage.stage_key]),
+      );
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return {};
+
+      const counts: Record<string, { total: number; active: number }> = {};
+
+      for (const row of data as unknown as Workflow[]) {
+        const cfg = row.trigger_config as TriggerConfigStageChanged;
+        if (!cfg || cfg.pipeline_id !== pipelineId) continue;
+
+        const stages = cfg.stages && cfg.stages.length > 0
+          ? cfg.stages
+          : cfg.to_stage
+          ? [cfg.to_stage]
+          : null;
+
+        if (stages) {
+          for (const ref of stages) {
+            const s = keyById.get(ref) ?? ref;
+            if (!counts[s]) counts[s] = { total: 0, active: 0 };
+            counts[s].total++;
+            if (row.is_active) counts[s].active++;
+          }
+        }
+        if (!stages) {
+          if (!counts["__all__"]) counts["__all__"] = { total: 0, active: 0 };
+          counts["__all__"].total++;
+          if (row.is_active) counts["__all__"].active++;
+        }
+      }
+
+      return counts;
+    },
+    enabled: isReady && !!organizationId && !!pipelineId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Busca workflows vinculados a uma etapa específica de uma campanha.
+ */
+export function useCampaignStageWorkflows(
+  campanhaId: string | undefined,
+  stageId: string | undefined
+) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflows-campaign", organizationId, campanhaId, stageId],
+    queryFn: async (): Promise<StageWorkflow[]> => {
+      if (!organizationId || !campanhaId || !stageId) return [];
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_type, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return (data as unknown as Workflow[])
+        .filter((w) => {
+          const cfg = w.trigger_config as TriggerConfigStageChanged;
+          if (!cfg || cfg.campanha_id !== campanhaId) return false;
+          if (cfg.stages && cfg.stages.length > 0) return cfg.stages.includes(stageId);
+          if (cfg.to_stage) return cfg.to_stage === stageId;
+          return true;
+        })
+        .map((w) => ({ id: w.id, name: w.name, is_active: w.is_active }));
+    },
+    enabled: isReady && !!organizationId && !!campanhaId && !!stageId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Conta workflows vinculados a cada etapa de uma campanha.
+ */
+export function useCampaignWorkflowCounts(campanhaId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflow-counts-campaign", organizationId, campanhaId],
+    queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
+      if (!organizationId || !campanhaId) return {};
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return {};
+
+      const counts: Record<string, { total: number; active: number }> = {};
+
+      for (const row of data as unknown as Workflow[]) {
+        const cfg = row.trigger_config as TriggerConfigStageChanged;
+        if (!cfg || cfg.campanha_id !== campanhaId) continue;
+
+        const stages = cfg.stages && cfg.stages.length > 0
+          ? cfg.stages
+          : cfg.to_stage
+          ? [cfg.to_stage]
+          : null;
+
+        if (stages) {
+          for (const s of stages) {
+            if (!counts[s]) counts[s] = { total: 0, active: 0 };
+            counts[s].total++;
+            if (row.is_active) counts[s].active++;
+          }
+        }
+        if (!stages) {
+          if (!counts["__all__"]) counts["__all__"] = { total: 0, active: 0 };
+          counts["__all__"].total++;
+          if (row.is_active) counts["__all__"].active++;
+        }
+      }
+
+      return counts;
+    },
+    enabled: isReady && !!organizationId && !!campanhaId,
+    staleTime: 5 * 60 * 1000,
+  });
+}

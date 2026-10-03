@@ -1,13 +1,15 @@
-import { motion } from "framer-motion";
 import {
   Users, TrendingUp, UserCheck, UserX, Trophy, Heart,
-  AlertTriangle, CalendarDays
+  AlertTriangle, CalendarDays, type LucideIcon,
 } from "lucide-react";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { useUpsellMetrics } from "@/modules/carteira/hooks/useUpsellMetrics";
 
 interface UpsellStatsProps {
   view: "base" | "gestao";
 }
+
+type Tone = "gold" | "good" | "bad" | "info" | "neutral";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -18,105 +20,97 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+/*
+ * V5 (2026-10): os cartões `glass-card` viram `KpiTile`. Mesmos números e
+ * subtítulos; a cor de cada um passa do texto para o chip do ícone, no tom
+ * de token equivalente ao de antes (primary→ouro, success→verde,
+ * chart-5→info, destructive→vermelho).
+ */
 export function UpsellStats({ view }: UpsellStatsProps) {
   const metrics = useUpsellMetrics();
 
-  const baseStats = [
+  const baseStats: { icon: LucideIcon; label: string; value: string; subtitle: string; tone: Tone }[] = [
     {
       icon: Users,
-      label: "Total Clientes",
+      label: "Total de clientes",
       value: String(metrics.totalClientes),
       subtitle: `${metrics.clientesAtivos} ativos`,
-      color: "text-primary",
+      tone: "gold",
     },
     {
       icon: TrendingUp,
-      label: "Vendas Total",
+      label: "Vendas total",
       value: formatCurrency(metrics.vendasTotal),
       subtitle: `${metrics.totalClientes} clientes`,
-      color: "text-success",
-      valueColor: "text-success",
+      tone: "good",
     },
     {
       icon: CalendarDays,
-      label: "Vendas do Mês",
+      label: "Vendas do mês",
       value: formatCurrency(metrics.vendasMes),
       subtitle: "faturamento mensal",
-      color: "text-chart-5",
-      valueColor: "text-chart-5",
+      tone: "info",
     },
     {
       icon: UserCheck,
       label: "Ativos",
       value: String(metrics.clientesAtivos),
       subtitle: "clientes ativos",
-      color: "text-emerald-500",
+      tone: "good",
     },
     {
       icon: UserX,
       label: "Inativos",
       value: String(metrics.clientesInativos),
       subtitle: "clientes inativos",
-      color: "text-muted-foreground",
+      tone: "neutral",
     },
   ];
 
-  const gestaoStats = [
+  const gestaoStats: typeof baseStats = [
     {
       icon: Trophy,
       label: "Campeões",
       value: String(metrics.gestaoCampeoes),
       subtitle: "melhores clientes",
-      color: "text-success",
-      valueColor: "text-success",
+      tone: "good",
     },
     {
       icon: Heart,
       label: "Fiéis",
       value: String(metrics.gestaoFieis),
       subtitle: "clientes recorrentes",
-      color: "text-primary",
-      valueColor: "text-primary",
+      tone: "gold",
     },
     {
       icon: AlertTriangle,
-      label: "Em Risco",
+      label: "Em risco",
       value: String(metrics.gestaoEmRisco),
       subtitle: "precisam de atenção",
-      color: "text-chart-5",
-      valueColor: "text-chart-5",
+      tone: "info",
     },
     {
       icon: UserX,
       label: "Inativos",
       value: String(metrics.gestaoInativos),
       subtitle: "sem atividade recente",
-      color: "text-destructive",
-      valueColor: "text-destructive",
+      tone: "bad",
     },
   ];
 
   const stats = view === "base" ? baseStats : gestaoStats;
-  const gridCols = view === "base" ? "md:grid-cols-5" : "md:grid-cols-4";
-
   return (
-    <div className={`grid grid-cols-2 ${gridCols} gap-4`}>
-      {stats.map((stat, index) => (
-        <motion.div
+    <KpiRow cols={view === "base" ? 5 : 4} className={view === "base" ? "lg:grid-cols-3 xl:grid-cols-5" : undefined}>
+      {stats.map((stat) => (
+        <KpiTile
           key={stat.label}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.05 }}
-          className="glass-card p-4"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">{stat.label}</p>
-            <stat.icon className={`w-4 h-4 ${stat.color}`} />
-          </div>
-          <p className={`text-xl font-bold ${stat.valueColor || ""}`}>{stat.value}</p>
-          <p className="text-xs text-muted-foreground">{stat.subtitle}</p>
-        </motion.div>
+          label={stat.label}
+          value={stat.value}
+          icon={stat.icon}
+          tone={stat.tone}
+          note={stat.subtitle}
+        />
       ))}
-    </div>
+    </KpiRow>
   );
 }

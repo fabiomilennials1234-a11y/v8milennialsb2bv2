@@ -44,7 +44,7 @@ function SocialIdentityRow({ contact }: { contact: SocialContact }) {
   const unlink = useUnlinkSocialConversation(contact.messaging_channel_id);
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-muted/20 shrink-0">
+    <div className="mx-3 mt-2 flex shrink-0 items-center gap-2 rounded-xl bg-sunken px-3 py-2">
       <ChannelBadge channel="instagram" size={14} />
       <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
         {contactLabel(contact)}

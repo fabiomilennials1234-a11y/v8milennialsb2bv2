@@ -7,10 +7,12 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Activity,
+  CalendarDays,
+  ListFilter,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -28,6 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MasterPageHeader } from "../components/MasterPageHeader";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import {
   useMasterAuditLogs,
   useMasterAuditActions,
@@ -47,19 +51,15 @@ export default function MasterAuditLogs() {
   const { data: stats } = useMasterAuditStats();
 
   const getActionBadge = (action: string) => {
-    const colors: Record<string, string> = {
-      BILLING_OVERRIDE: "bg-purple-500",
-      FEATURE_ENABLE: "bg-green-500",
-      FEATURE_DISABLE: "bg-red-500",
-      USER_UPDATE: "bg-blue-500",
-      ORG_CREATE: "bg-emerald-500",
-      ORG_DELETE: "bg-red-600",
+    const tones: Record<string, BadgeProps["variant"]> = {
+      BILLING_OVERRIDE: "gold",
+      FEATURE_ENABLE: "success",
+      FEATURE_DISABLE: "destructive",
+      USER_UPDATE: "info",
+      ORG_CREATE: "success",
+      ORG_DELETE: "destructive",
     };
-    return (
-      <Badge className={colors[action] || "bg-muted text-muted-foreground"}>
-        {action.replace(/_/g, " ")}
-      </Badge>
-    );
+    return <Badge variant={tones[action] ?? "soft"}>{action.replace(/_/g, " ")}</Badge>;
   };
 
   const formatDetails = (details: Record<string, any> | null) => {
@@ -70,50 +70,31 @@ export default function MasterAuditLogs() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Activity className="w-6 h-6" />
-            Logs de Auditoria
-          </h1>
-          <p className="text-muted-foreground">
-            Histórico de todas as ações realizadas por Masters
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => refetch()}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title="Logs de auditoria"
+        subtitle="Histórico de todas as ações realizadas por Masters"
+        actions={
+          <Button variant="outline" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
+        }
+      />
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats?.totalToday || 0}</div>
-            <p className="text-sm text-muted-foreground">Ações hoje</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats?.totalWeek || 0}</div>
-            <p className="text-sm text-muted-foreground">Últimos 7 dias</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">
-              {Object.keys(stats?.byAction || {}).length || 0}
-            </div>
-            <p className="text-sm text-muted-foreground">Tipos de ação</p>
-          </CardContent>
-        </Card>
-      </div>
+      <KpiRow cols={3}>
+        <KpiTile label="Ações hoje" icon={Activity} value={stats?.totalToday || 0} />
+        <KpiTile label="Últimos 7 dias" icon={CalendarDays} value={stats?.totalWeek || 0} />
+        <KpiTile
+          label="Tipos de ação"
+          icon={ListFilter}
+          value={Object.keys(stats?.byAction || {}).length || 0}
+        />
+      </KpiRow>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-2">
         <Select 
           value={actionFilter || "__all__"} 
           onValueChange={(value) => setActionFilter(value === "__all__" ? "" : value)}

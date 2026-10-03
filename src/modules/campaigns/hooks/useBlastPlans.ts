@@ -31,6 +31,10 @@ export interface BlastPlan {
   next_release_date: string | null;
   created_at: string;
   updated_at: string;
+  /** Procedência do público (`buildAudienceSource` / planilha). Planos antigos
+   *  podem não ter — o painel cai para "sem origem registrada". */
+  source?: Record<string, unknown> | null;
+  pipeline_id?: string | null;
 }
 
 export interface BlastPlanLotBreakdown {
@@ -159,6 +163,16 @@ export interface BlastPlanProgress {
   pending: number;
   /** Reclassificados sent → failed pelo sync do poll (ADR-0016, #948). */
   failed: number;
+  /** O mesmo recorte por lote (`blast_plan_recipients.lot_index`, 0-based),
+   *  em ordem — alimenta as barras "Progresso por lote" do painel. */
+  byLot?: BlastPlanLotProgress[];
+}
+
+export interface BlastPlanLotProgress {
+  lotIndex: number;
+  total: number;
+  /** Processados = enviados + ignorados + falhas. */
+  processed: number;
 }
 
 /** Per-plan recipient progress (sent / skipped / pending / failed), for the Disparos panel. */
@@ -169,17 +183,25 @@ export function useBlastPlanProgress(planId: string | null) {
       if (!planId) return { total: 0, sent: 0, skipped: 0, pending: 0, failed: 0 };
       const { data, error } = await supabase
         .from("blast_plan_recipients" as any)
-        .select("status")
+        .select("status, lot_index")
         .eq("plan_id", planId);
       if (error) throw error;
-      const rows = (data ?? []) as unknown as { status: string }[];
+      const rows = (data ?? []) as unknown as { status: string; lot_index: number | null }[];
       const p: BlastPlanProgress = { total: rows.length, sent: 0, skipped: 0, pending: 0, failed: 0 };
+      const lots = new Map<number, BlastPlanLotProgress>();
       for (const r of rows) {
+        const done = r.status === "sent" || r.status === "skipped" || r.status === "failed";
         if (r.status === "sent") p.sent += 1;
         else if (r.status === "skipped") p.skipped += 1;
         else if (r.status === "failed") p.failed += 1;
         else p.pending += 1;
+        const idx = r.lot_index ?? 0;
+        const lot = lots.get(idx) ?? { lotIndex: idx, total: 0, processed: 0 };
+        lot.total += 1;
+        if (done) lot.processed += 1;
+        lots.set(idx, lot);
       }
+      p.byLot = [...lots.values()].sort((a, b) => a.lotIndex - b.lotIndex);
       return p;
     },
     enabled: !!planId,

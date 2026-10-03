@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { EventTypeKey, ViewType } from "./agenda-helpers";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "./agenda-helpers";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,14 +73,12 @@ export function AgendaTopBar({
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-2 px-4 py-2.5 border-b border-border/30 bg-card/40 backdrop-blur-sm shrink-0 flex-wrap"
+      className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-card shrink-0 flex-wrap"
     >
-      {/* Icon + Title */}
+      {/* Icon + Title — chip tintado do V5 (ouro de superfície, não de texto) */}
       <div className="flex items-center gap-2 mr-1">
-        <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-          <CalendarDays className="w-3.5 h-3.5 text-primary" />
-        </div>
-        <span className="font-semibold text-sm text-foreground/90">Agenda</span>
+        <IconChip icon={CalendarDays} tone="gold" />
+        <span className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Agenda</span>
       </div>
 
       {/* Navigation */}
@@ -87,15 +86,15 @@ export function AgendaTopBar({
         <Button
           variant="ghost"
           size="icon"
-          className="w-7 h-7 rounded-lg"
+          className="w-8 h-8 rounded-full"
           onClick={() => onNavigate("prev")}
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="h-7 px-2.5 text-xs rounded-lg font-medium"
+          className="h-8 px-3"
           onClick={() => onNavigate("today")}
         >
           Hoje
@@ -103,7 +102,7 @@ export function AgendaTopBar({
         <Button
           variant="ghost"
           size="icon"
-          className="w-7 h-7 rounded-lg"
+          className="w-8 h-8 rounded-full"
           onClick={() => onNavigate("next")}
         >
           <ChevronRight className="w-3.5 h-3.5" />
@@ -111,7 +110,7 @@ export function AgendaTopBar({
       </div>
 
       {/* Date label */}
-      <span className="text-sm font-medium text-foreground/70 capitalize flex-1 min-w-0 truncate">
+      <span className="text-sm font-semibold text-foreground/80 capitalize flex-1 min-w-0 truncate">
         {dateLabel}
       </span>
 
@@ -119,14 +118,14 @@ export function AgendaTopBar({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-7 gap-1.5 rounded-lg px-2.5 text-xs"
+            className="h-8 gap-1.5 px-3"
           >
             <Filter className="w-3.5 h-3.5" />
             Filtrar
             {!allActive && (
-              <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 text-[10px] font-medium text-primary">
+              <span className="ml-0.5 rounded-full bg-primary-soft px-1.5 text-[10px] font-bold tabular-nums text-primary-soft-foreground">
                 {activeCount}
               </span>
             )}
@@ -156,9 +155,10 @@ export function AgendaTopBar({
       {/* Google Calendar status indicator */}
       {googleConnected && (
         <Badge
-          variant="outline"
-          className="text-[9px] h-4 px-1.5 gap-1 text-muted-foreground/60 border-border/30"
+          variant="soft"
+          className="text-[10px] h-5 px-2 gap-1 text-muted-foreground"
         >
+          {/* Azul do Google: cor de marca de terceiro, não estado — fica literal. */}
           <span
             className="w-1.5 h-1.5 rounded-full"
             style={{ backgroundColor: "#4285F4" }}
@@ -171,7 +171,7 @@ export function AgendaTopBar({
       <Button
         variant="ghost"
         size="icon"
-        className="w-7 h-7 rounded-lg"
+        className="w-8 h-8"
         onClick={onRefresh}
         disabled={isLoading}
         title="Atualizar"
@@ -184,7 +184,7 @@ export function AgendaTopBar({
       {/* New Event */}
       <Button
         size="sm"
-        className="gap-1.5 h-7 text-xs rounded-lg"
+        className="gap-1.5 h-8"
         onClick={onNewEvent}
       >
         <Plus className="w-3.5 h-3.5" />

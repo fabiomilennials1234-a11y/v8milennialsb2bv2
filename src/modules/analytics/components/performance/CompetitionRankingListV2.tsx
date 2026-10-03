@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { motion, useAnimation, LayoutGroup } from "framer-motion";
+import { ArrowDown, ArrowUp, Flame, ListOrdered } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { IconChip } from "@/components/ui/bento";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,14 +41,11 @@ function formatValue(value: number, metricType: string) {
   return `R$ ${value.toLocaleString("pt-BR")}`;
 }
 
+// Mesmas faixas do pódio, em token: bateu / perto / meio / longe.
 function getProgressColor(progress: number) {
   if (progress >= 100) return { bar: "bg-success", text: "text-success" };
-  if (progress >= 80)
-    return {
-      bar: "bg-gradient-to-r from-orange-500 to-amber-400",
-      text: "text-orange-400",
-    };
-  if (progress >= 50) return { bar: "bg-blue-500", text: "text-blue-400" };
+  if (progress >= 80) return { bar: "bg-warning", text: "text-warning-strong" };
+  if (progress >= 50) return { bar: "bg-insights", text: "text-insights" };
   return { bar: "bg-destructive", text: "text-destructive" };
 }
 
@@ -113,11 +112,11 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.35, ease: "easeOut" }}
-      className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-muted/50 border border-border/50"
+      className="flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors hover:bg-muted/50"
     >
       {/* Position */}
       <span
-        className="text-sm text-center shrink-0 font-extrabold text-muted-foreground/60 w-6"
+        className="w-6 shrink-0 text-center text-sm font-extrabold tabular-nums text-muted-foreground"
       >
         {user.position}
       </span>
@@ -128,13 +127,15 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 1 + index * 0.1, type: "spring" }}
-          className={`text-[10px] font-bold shrink-0 px-1.5 py-0.5 rounded-full ${
+          className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
             change.delta < 0
-              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300"
-              : "bg-red-500/20 text-red-600 dark:text-red-300"
+              ? "bg-success/10 text-success"
+              : "bg-destructive/10 text-destructive"
           }`}
+          aria-label={change.delta < 0 ? `Subiu ${Math.abs(change.delta)}` : `Caiu ${change.delta}`}
         >
-          {change.delta < 0 ? `↑${Math.abs(change.delta)}` : `↓${change.delta}`}
+          {change.delta < 0 ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
+          {Math.abs(change.delta)}
         </motion.span>
       )}
 
@@ -147,22 +148,19 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
       />
 
       {/* Name */}
-      <span
-        className="truncate shrink-0"
-        style={{ fontWeight: 600, fontSize: 14, maxWidth: 140 }}
-      >
+      <span className="max-w-[140px] shrink-0 truncate text-sm font-semibold">
         {user.name}
       </span>
 
       {/* Value */}
       <span
-        className="shrink-0 min-w-[60px] text-right text-sm font-extrabold text-primary"
+        className="min-w-[60px] shrink-0 text-right text-sm font-extrabold tabular-nums tracking-[-0.02em] text-foreground"
       >
         {formattedValue}
       </span>
 
       {/* Progress bar */}
-      <div className="flex-1 h-1 rounded-full overflow-hidden bg-muted/50">
+      <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-muted">
         <motion.div
           initial={{ width: 0 }}
           animate={controls}
@@ -173,10 +171,9 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
 
       {/* Progress text */}
       <span
-        className={`shrink-0 ${text}`}
-        style={{ fontSize: 11, fontWeight: 600, minWidth: 46, textAlign: "right" }}
+        className={`inline-flex min-w-[46px] shrink-0 items-center justify-end gap-0.5 text-[11px] font-bold tabular-nums ${text}`}
       >
-        {user.goalProgress >= 80 && "\uD83D\uDD25 "}
+        {user.goalProgress >= 80 && <Flame className="h-3 w-3" aria-hidden />}
         {user.goalProgress}%
         {user.goalProgress >= 100 && " \u2713"}
       </span>
@@ -196,17 +193,18 @@ function CompetitionRankingListV2Base({
   if (users.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <section className="rounded-card border border-card-border bg-card p-2 text-card-foreground shadow-relevo">
       {/* Section header */}
-      <h3
-        className="uppercase tracking-wider mb-3 text-sm font-bold text-muted-foreground"
-      >
-        Ranking Completo
-      </h3>
+      <header className="flex items-center gap-2 px-3 pb-2 pt-2.5">
+        <IconChip icon={ListOrdered} />
+        <h3 className="text-[15px] font-bold tracking-[-0.02em]">
+          Ranking Completo
+        </h3>
+      </header>
 
       {/* List */}
       <LayoutGroup>
-        <div className="space-y-1.5">
+        <div className="space-y-0.5">
           {users.map((user, i) => (
             <motion.div
               key={user.id}
@@ -224,7 +222,7 @@ function CompetitionRankingListV2Base({
           ))}
         </div>
       </LayoutGroup>
-    </div>
+    </section>
   );
 }
 

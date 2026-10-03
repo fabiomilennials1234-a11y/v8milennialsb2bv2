@@ -65,8 +65,8 @@ export function GotoPanel({ data, onUpdate, allNodes = [] }: GotoPanelProps) {
         )}
       </div>
 
-      <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-950 border border-teal-200 dark:border-teal-800">
-        <p className="text-xs text-teal-700 dark:text-teal-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Pula a execução diretamente para o nó selecionado. Funciona como um "jump"
           no fluxo. Respeita o limite de loops configurado no workflow.
         </p>

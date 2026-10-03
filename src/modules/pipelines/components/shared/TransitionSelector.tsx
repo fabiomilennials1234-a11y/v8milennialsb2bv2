@@ -86,8 +86,8 @@ export function TransitionSelector({
   );
 
   return (
-    <div className="space-y-2 mt-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-      <Label className="text-xs font-medium text-green-700 dark:text-green-300">
+    <div className="mt-2 space-y-2 rounded-2xl border border-success/30 bg-success/10 p-3">
+      <Label className="text-xs font-semibold text-success">
         Ao chegar nesta etapa, mover lead para:
       </Label>
       <Select value={selectedPipeValue || "__none__"} onValueChange={handlePipeChange}>

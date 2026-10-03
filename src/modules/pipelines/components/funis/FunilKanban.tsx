@@ -88,6 +88,8 @@ interface FunilKanbanProps {
    * sem override, o badge por pipeline_id (funil custom) é usado.
    */
   renderStageBadge?: (col: { id: string; title: string }) => ReactNode;
+  /** "+" ao pé da coluna — só onde a página sabe criar direto na etapa. */
+  onCreateInStage?: (stage: CustomPipelineStage) => void;
 }
 
 function FunilStageBadge({
@@ -139,6 +141,7 @@ export function FunilKanban({
   onDisparar,
   onDeleteAllLeads,
   renderStageBadge,
+  onCreateInStage,
 }: FunilKanbanProps) {
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
@@ -264,6 +267,7 @@ export function FunilKanban({
           id: stage.stage_key,
           title: stage.name,
           color: stage.color || "#64748b",
+          role: stage.stage_role ?? null,
           items,
           totalCount: slot?.totalCount ?? items.length,
           hasMore: slot?.hasMore ?? false,
@@ -294,6 +298,14 @@ export function FunilKanban({
         disabled={!canMovePipe}
         closedGrouping={closedGrouping}
         onDeleteAllLeads={onDeleteAllLeads}
+        onCreateInColumn={
+          onCreateInStage
+            ? (stageKey) => {
+                const stage = stages.find((s) => s.stage_key === stageKey);
+                if (stage) onCreateInStage(stage);
+              }
+            : undefined
+        }
         onExportStage={(stageKey, stageTitle) => {
           const col = columns.find((c) => c.id === stageKey);
           setStageToExport({ id: stageKey, title: stageTitle, count: col?.items.length ?? 0 });

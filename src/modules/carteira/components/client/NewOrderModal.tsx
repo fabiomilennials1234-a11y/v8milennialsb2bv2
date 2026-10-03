@@ -322,8 +322,8 @@ export function NewOrderModal({
                         "flex items-center gap-1.5 px-3 py-2 rounded-lg shrink-0",
                         "text-sm font-medium transition-all",
                         prefilled
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                          : "bg-muted/40 border border-border/50 hover:border-emerald-500/40 text-muted-foreground hover:text-emerald-400",
+                          ? "border border-success/30 bg-success/10 text-success"
+                          : "border border-border/60 bg-muted/40 text-muted-foreground hover:border-success/40 hover:text-success",
                       )}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />

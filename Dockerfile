@@ -41,6 +41,9 @@ ARG SENTRY_URL=https://de.sentry.io
 # Feature flags
 ARG VITE_CHAT_ONDA_2B=true
 ARG VITE_CHAT_BUBBLE=true
+# Interface nova (V5) ou clássica, por organização: a guarda das duas builds só
+# troca quando este é "true" (docs/ui-v5/interface-por-organizacao.md).
+ARG VITE_UI_SWITCH=true
 
 ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY} \
@@ -54,9 +57,12 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
     VITE_SENTRY_REPLAY_ON_ERROR_RATE=${VITE_SENTRY_REPLAY_ON_ERROR_RATE} \
     VITE_CHAT_ONDA_2B=${VITE_CHAT_ONDA_2B} \
-    VITE_CHAT_BUBBLE=${VITE_CHAT_BUBBLE}
+    VITE_CHAT_BUBBLE=${VITE_CHAT_BUBBLE} \
+    VITE_UI_SWITCH=${VITE_UI_SWITCH}
 
-RUN npm run build
+# Duas builds no mesmo dist/: V5 (src/) e clássica (classic/), mescladas por
+# scripts/ui-classic/merge-dist.mjs. O nginx abaixo escolhe pelo cookie.
+RUN npm run build:dual
 
 # ---- Stage 2: Serve com Nginx ----
 FROM nginx:alpine
@@ -96,6 +102,18 @@ printf '%s\n' \
   "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://app.cal.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://n8nwebhook.v3l8jq.easypanel.host https://app.cal.com https://cal.com; frame-src https://app.cal.com https://cal.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/lp-headers.conf && \
 printf '%s\n' \
+  '# Interface por organização: o cookie `torque_ui` (gravado pela guarda do app' \
+  '# a partir de organizations.ui_v5_enabled) escolhe o index.html e o sw.js.' \
+  '# Sem cookie = clássica, que é o que todo mundo usava antes. Os assets são a' \
+  '# união das duas builds (nomes com hash), então não dependem do cookie.' \
+  'map $cookie_torque_ui $ui_index {' \
+  '  default /index.classic.html;' \
+  '  v5      /index.html;' \
+  '}' \
+  'map $cookie_torque_ui $ui_sw {' \
+  '  default /sw.classic.js;' \
+  '  v5      /sw.js;' \
+  '}' \
   'server {' \
   '  listen 8080;' \
   '  server_tokens off;' \
@@ -141,16 +159,24 @@ printf '%s\n' \
   '  location = / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files /index.html =404;' \
+  '    try_files $ui_index =404;' \
   '  }' \
   '  location = /index.html {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files $ui_index =404;' \
+  '  }' \
+  '  # O service worker precisa ser o da build servida: ele precacheia o index' \
+  '  # e os assets dela. Mesmo caminho (/sw.js) para o escopo continuar sendo /.' \
+  '  location = /sw.js {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files $ui_sw =404;' \
   '  }' \
   '  location / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files $uri $uri/ /index.html;' \
+  '    try_files $uri $uri/ $ui_index;' \
   '  }' \
   '}' > /etc/nginx/conf.d/default.conf
 

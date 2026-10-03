@@ -317,7 +317,7 @@ export function MobileComposerContextual({
   if (!canReply) {
     return (
       <div className="p-3 border-t border-border/60 bg-background" style={{ paddingBottom: offset || undefined }}>
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-strong">
           <X className="w-4 h-4 shrink-0" />
           <span>Sem permissão para responder neste chat.</span>
         </div>
@@ -506,7 +506,7 @@ export function MobileComposerContextual({
             }}
             disabled={isSending}
             aria-label={`Mensagem para ${contactName}`}
-            className="w-full min-h-[40px] max-h-32 resize-none rounded-2xl border border-border/60 bg-background py-2 leading-5"
+            className="w-full min-h-[40px] max-h-32 resize-none rounded-[20px] border border-border/60 bg-sunken py-2 leading-5 focus-visible:bg-card"
           />
         </div>
 
@@ -517,7 +517,7 @@ export function MobileComposerContextual({
             disabled={isSending}
             size="icon"
             aria-label="Enviar mensagem"
-            className="gradient-primary text-white border-0 shrink-0"
+            className="shrink-0 rounded-full"
           >
             {isSending ? (
               <Loader2 className="w-4 h-4 animate-spin" />

@@ -130,9 +130,9 @@ export function CommandPalette() {
               aria-label="Paleta de comandos"
               className={cn(
                 "w-full max-w-[640px]",
-                "rounded-xl border shadow-2xl",
-                "bg-[hsl(var(--command-palette-bg))]",
-                "border-[hsl(var(--command-palette-border))]",
+                // V5: o mesmo cartão de toda a interface (era um matiz frio,
+                // 220°, que destoava da bancada quente).
+                "rounded-panel border border-card-border bg-card shadow-relevo-alto",
                 "overflow-hidden"
               )}
             >
@@ -168,7 +168,7 @@ export function CommandPalette() {
                   <CommandEmpty className="py-10 text-center">
                     <p className="text-sm text-muted-foreground">Nenhum resultado</p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
-                      Tente &quot;leads&quot;, &quot;analytics&quot; ou o nome de um contato
+                      Tente &quot;leads&quot;, &quot;métricas&quot; ou o nome de um contato
                     </p>
                   </CommandEmpty>
 
@@ -204,17 +204,17 @@ export function CommandPalette() {
                   className={cn(
                     "flex items-center gap-4 px-4 py-2",
                     "border-t border-border/40",
-                    "text-[10px] text-muted-foreground/70"
+                    "text-[11px] text-muted-foreground/80"
                   )}
                 >
                   <span>
-                    <kbd className="font-mono">↑↓</kbd> navegar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">↑↓</kbd> navegar
                   </span>
                   <span>
-                    <kbd className="font-mono">↵</kbd> selecionar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">↵</kbd> selecionar
                   </span>
                   <span>
-                    <kbd className="font-mono">esc</kbd> fechar
+                    <kbd className="mr-1 rounded-md border border-border bg-muted px-1 font-mono">esc</kbd> fechar
                   </span>
                 </div>
               </Command>

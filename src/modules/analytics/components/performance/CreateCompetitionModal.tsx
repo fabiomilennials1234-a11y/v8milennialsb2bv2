@@ -10,6 +10,8 @@ import { useCreateCompetition, useSaveCompetitionEdits, type Competition } from 
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 import { notifyError } from "@/shared/errors";
 
 interface Props {
@@ -36,8 +38,27 @@ const DEFAULT_PRIZES: PrizeInput[] = [
   { position: 3, prize_name: "", prize_value: "", prize_icon: "🎧" },
 ];
 
+// `EMOJIS` é o seletor do ÍCONE DO PRÊMIO — vira `prize_icon` no banco e o
+// pódio o desenha. É dado do usuário, não cópia: fica como está.
 const EMOJIS = ["🏆", "🎁", "🎧", "📱", "💰", "🎯", "⭐", "🔥"];
-const MEDAL_EMOJIS = ["🥇", "🥈", "🥉", "🏅", "🏅"];
+// V5: a colocação era medalha-emoji; agora é chip numerado nas cores do pódio
+// (ouro = primary, prata = silver, bronze = warning).
+const PRIZE_POSITION_TONE = [
+  "bg-primary text-primary-foreground",
+  "bg-silver text-silver-foreground",
+  "bg-warning text-warning-foreground",
+  "bg-muted text-muted-foreground",
+  "bg-muted text-muted-foreground",
+];
+const SELECT_CLASS =
+  "flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+const optionClass = (active: boolean) =>
+  cn(
+    "rounded-2xl border p-3 text-left text-sm transition-colors",
+    active
+      ? "border-primary/50 bg-primary-soft font-semibold text-primary-soft-foreground"
+      : "border-border hover:bg-muted/50",
+  );
 const STEPS = ["Básico", "Participantes", "Prêmios", "Confirmação"];
 
 export function CreateCompetitionModal({ open, onOpenChange, competition, existingParticipants, existingPrizes }: Props) {
@@ -222,8 +243,8 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={Trophy} tone="gold" />
             {isEdit ? "Editar Competição" : "Nova Competição"}
           </DialogTitle>
         </DialogHeader>
@@ -232,11 +253,11 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
         <div className="flex items-center gap-2 mb-4">
           {STEPS.map((s, i) => (
             <div key={s} className="flex items-center gap-2 flex-1">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+              <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold tabular-nums transition-colors ${
                 i <= step ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
               }`}>{i + 1}</div>
-              <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
-              {i < STEPS.length - 1 && <div className={`flex-1 h-0.5 ${i < step ? "bg-primary" : "bg-muted"}`} />}
+              <span className={`text-xs hidden sm:inline ${i <= step ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{s}</span>
+              {i < STEPS.length - 1 && <div className={`flex-1 h-0.5 rounded-full ${i < step ? "bg-primary" : "bg-muted"}`} />}
             </div>
           ))}
         </div>
@@ -256,7 +277,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Mês</Label>
-                  <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={SELECT_CLASS}>
                     {Array.from({ length: 12 }, (_, i) => (
                       <option key={i + 1} value={i + 1}>{new Date(2026, i).toLocaleString("pt-BR", { month: "long" })}</option>
                     ))}
@@ -271,7 +292,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                 <Label>Critério de ranking</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   {(["absolute_value", "goal_percentage"] as const).map((c) => (
-                    <button key={c} onClick={() => setCriteria(c)} className={`p-3 rounded-lg border text-sm text-left transition-colors ${criteria === c ? "border-primary bg-primary/5 font-medium" : "border-border"}`}>
+                    <button key={c} type="button" aria-pressed={criteria === c} onClick={() => setCriteria(c)} className={optionClass(criteria === c)}>
                       {c === "absolute_value" ? "Valor absoluto (R$)" : "% da meta individual"}
                     </button>
                   ))}
@@ -281,7 +302,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                 <Label>Tipo</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   {(["sales", "meetings"] as const).map((t) => (
-                    <button key={t} onClick={() => { setMetricType(t); setSelectedMembers(new Set()); }} className={`p-3 rounded-lg border text-sm text-left transition-colors ${metricType === t ? "border-primary bg-primary/5 font-medium" : "border-border"}`}>
+                    <button key={t} type="button" aria-pressed={metricType === t} onClick={() => { setMetricType(t); setSelectedMembers(new Set()); }} className={optionClass(metricType === t)}>
                       {t === "sales" ? "Vendas" : "Reuniões"}
                     </button>
                   ))}
@@ -296,7 +317,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
               {filteredMembers.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">{selectedMembers.size} de {filteredMembers.length} selecionados</p>
+                    <p className="text-sm tabular-nums text-muted-foreground">{selectedMembers.size} de {filteredMembers.length} selecionados</p>
                     <Button variant="outline" size="sm" onClick={toggleAll}>
                       {selectedMembers.size === filteredMembers.length ? "Desmarcar todos" : "Selecionar todos"}
                     </Button>
@@ -306,16 +327,18 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                       <button
                         key={member.id}
                         onClick={() => toggleMember(member.id)}
-                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
-                          selectedMembers.has(member.id) ? "border-primary bg-primary/5" : "border-border/30"
+                        type="button"
+                        aria-pressed={selectedMembers.has(member.id)}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-2xl border transition-colors ${
+                          selectedMembers.has(member.id) ? "border-primary/50 bg-primary-soft" : "border-transparent hover:bg-muted/50"
                         }`}
                       >
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedMembers.has(member.id) ? "border-primary bg-primary" : "border-muted"}`}>
+                        <div className={`w-5 h-5 shrink-0 rounded-md border-2 flex items-center justify-center ${selectedMembers.has(member.id) ? "border-primary bg-primary" : "border-border"}`}>
                           {selectedMembers.has(member.id) && <Check className="w-3 h-3 text-primary-foreground" />}
                         </div>
                         <UserAvatar name={member.name} avatarUrl={avatarMap.get(member.id)} size="sm" />
                         <div className="flex-1 text-left">
-                          <p className="text-sm font-medium">{member.name}</p>
+                          <p className="text-sm font-semibold">{member.name}</p>
                           <p className="text-xs text-muted-foreground">{member.job_title || (getEffectiveMetricType(member) === "sales" ? "Vendas" : "Reuniões")}</p>
                         </div>
                       </button>
@@ -324,12 +347,12 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-8 text-center">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6 text-muted-foreground" />
+                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                    <AlertCircle className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">Nenhum membro elegível</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-[300px]">
+                    <p className="text-sm font-semibold">Nenhum membro elegível</p>
+                    <p className="text-[13px] text-muted-foreground mt-1 max-w-[300px]">
                       Não há membros ativos com tipo de métrica "{metricType === "sales" ? "Vendas" : "Reuniões"}".
                       Verifique na página de Equipe se os membros têm o tipo de métrica correto configurado.
                     </p>
@@ -343,13 +366,15 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
           {step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
               {prizes.map((prize, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border border-border/50">
-                  <span className="text-lg mt-1">{MEDAL_EMOJIS[idx]}</span>
+                <div key={idx} className="flex items-start gap-2.5 rounded-2xl bg-sunken p-3">
+                  <span className={cn("mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold tabular-nums", PRIZE_POSITION_TONE[idx] ?? PRIZE_POSITION_TONE[3])}>
+                    {idx + 1}º
+                  </span>
                   <div className="flex-1 space-y-2">
                     <div className="flex gap-2">
                       <div className="flex gap-1">
                         {EMOJIS.map((e) => (
-                          <button key={e} onClick={() => updatePrize(idx, "prize_icon", e)} className={`w-7 h-7 rounded text-sm ${prize.prize_icon === e ? "bg-primary/20 ring-1 ring-primary" : "hover:bg-muted"}`}>{e}</button>
+                          <button key={e} type="button" aria-pressed={prize.prize_icon === e} onClick={() => updatePrize(idx, "prize_icon", e)} className={`w-7 h-7 rounded-lg text-sm transition-colors ${prize.prize_icon === e ? "bg-primary-soft ring-1 ring-primary" : "hover:bg-muted"}`}>{e}</button>
                         ))}
                       </div>
                     </div>
@@ -357,7 +382,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                     <Input value={prize.prize_value} onChange={(e) => updatePrize(idx, "prize_value", e.target.value)} placeholder="Valor em R$ (opcional)" type="number" />
                   </div>
                   {prizes.length > 0 && (
-                    <button onClick={() => removePrize(idx)} className="p-1 hover:bg-destructive/10 rounded"><X className="w-4 h-4 text-muted-foreground" /></button>
+                    <button type="button" aria-label={`Remover prêmio do ${idx + 1}º lugar`} onClick={() => removePrize(idx)} className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"><X className="w-4 h-4" /></button>
                   )}
                 </div>
               ))}
@@ -366,17 +391,17 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                   <Plus className="w-4 h-4 mr-1" /> Adicionar posição
                 </Button>
               )}
-              <p className="text-xs text-muted-foreground">Prêmios são opcionais. Você pode criar uma competição apenas pelo ranking.</p>
+              <p className="text-[13px] text-muted-foreground">Prêmios são opcionais. Você pode criar uma competição apenas pelo ranking.</p>
             </motion.div>
           )}
 
           {/* Step 3: Confirmação */}
           {step === 3 && (
             <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+              <div className="rounded-2xl bg-sunken p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold">{name}</h3>
+                  <IconChip icon={Trophy} tone="gold" />
+                  <h3 className="text-[15px] font-bold tracking-[-0.02em]">{name}</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div><span className="text-muted-foreground">Período:</span> {new Date(year, month - 1).toLocaleString("pt-BR", { month: "long", year: "numeric" })}</div>
@@ -386,12 +411,12 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
                 </div>
                 {prizes.filter((p) => p.prize_name.trim()).length > 0 && (
                   <div>
-                    <p className="text-sm font-medium mb-1">Prêmios:</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Prêmios</p>
                     {prizes.filter((p) => p.prize_name.trim()).map((p) => (
                       <div key={p.position} className="flex items-center gap-2 text-sm">
                         <span>{p.prize_icon}</span>
                         <span>{p.position}º — {p.prize_name}</span>
-                        {p.prize_value && <span className="text-muted-foreground">R$ {Number(p.prize_value).toLocaleString("pt-BR")}</span>}
+                        {p.prize_value && <span className="tabular-nums text-muted-foreground">R$ {Number(p.prize_value).toLocaleString("pt-BR")}</span>}
                       </div>
                     ))}
                   </div>
@@ -402,7 +427,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
         </AnimatePresence>
 
         {/* Navigation */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
           {step > 0 ? (
             <Button variant="ghost" onClick={() => setStep(step - 1)}><ArrowLeft className="w-4 h-4 mr-1" /> Voltar</Button>
           ) : <div />}

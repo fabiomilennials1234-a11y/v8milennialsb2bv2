@@ -8,11 +8,10 @@ import {
   FlaskConical,
   Plus,
   Loader2,
-  AlertTriangle,
   CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CartaoDeAjustes, LinhaDeAjuste } from "./settings-ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,78 +39,60 @@ export function SandboxPanel() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <FlaskConical className="w-5 h-5 text-primary" />
-          Sandbox
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Crie uma copia da organizacao para testes sem afetar dados reais
-        </p>
-      </div>
-
+    <CartaoDeAjustes
+      titulo="Sandbox"
+      descricao="Crie uma cópia da organização para testes sem afetar dados reais"
+    >
       {isSandbox && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <FlaskConical className="w-5 h-5 text-amber-500 shrink-0" />
-            <p className="text-sm">
-              Voce esta em uma organizacao <strong>Sandbox</strong>. Alteracoes aqui nao afetam a organizacao principal.
-            </p>
-          </CardContent>
-        </Card>
+        <p className="mb-3 flex items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-3.5 text-sm">
+          <FlaskConical className="h-5 w-5 shrink-0 text-warning-strong" />
+          <span>
+            Você está em uma organização <strong>Sandbox</strong>. Alterações aqui não afetam a organização principal.
+          </span>
+        </p>
       )}
 
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-4 p-4 rounded-lg border border-border">
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Criar sandbox</p>
-              <p className="text-xs text-muted-foreground">
-                Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead e copiado.
-              </p>
-            </div>
-          </div>
+      <LinhaDeAjuste
+        rotulo="Criar sandbox"
+        ajuda="Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead é copiado."
+      >
+        <Button
+          variant="outline"
+          onClick={() => setConfirmOpen(true)}
+          disabled={createSandbox.isPending}
+        >
+          {createSandbox.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          Criar sandbox
+        </Button>
+      </LinhaDeAjuste>
 
-          <div className="space-y-3">
-            <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-              O que e clonado:
-            </h4>
-            <ul className="space-y-1.5 text-sm">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Etapas e configurações dos funis
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Tags e campos customizados
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Agentes Copilot (configuracoes)
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Workflows (estrutura)
-              </li>
-            </ul>
-          </div>
-
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            disabled={createSandbox.isPending}
-            className="gap-2"
-          >
-            {createSandbox.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            Criar sandbox
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="mt-1 rounded-2xl bg-muted/50 p-4">
+        <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+          O que é clonado:
+        </h4>
+        <ul className="mt-2 grid gap-1.5 text-[13px] sm:grid-cols-2">
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Etapas e configurações dos funis
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Tags e campos customizados
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Agentes Copilot (configurações)
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success-strong" />
+            Workflows (estrutura)
+          </li>
+        </ul>
+      </div>
 
       {/* Confirmation */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -119,7 +100,7 @@ export function SandboxPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Criar sandbox?</AlertDialogTitle>
             <AlertDialogDescription>
-              Uma nova organizacao sera criada com as configuracoes da org atual. Troque de organizacao para acessar.
+              Uma nova organização será criada com as configurações da org atual. Troque de organização para acessar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -130,6 +111,6 @@ export function SandboxPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </CartaoDeAjustes>
   );
 }

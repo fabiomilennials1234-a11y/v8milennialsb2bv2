@@ -44,15 +44,15 @@ export function SaudeOriginFilter({ value, onChange }: SaudeOriginFilterProps) {
         <button
           type="button"
           className={cn(
-            "inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-medium",
-            "transition-colors hover:bg-muted/60",
-            value.length > 0 && "border-primary/40 text-foreground"
+            "inline-flex h-9 items-center gap-2 rounded-full border border-input bg-card px-3.5 text-xs font-semibold shadow-relevo",
+            "transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            value.length > 0 && "border-primary/50 text-foreground"
           )}
         >
-          <ListFilter className="h-3.5 w-3.5 opacity-60" />
+          <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
           {label}
           {value.length > 0 && (
-            <span className="rounded-full bg-primary px-1.5 py-px text-[10px] font-extrabold text-primary-foreground">
+            <span className="rounded-full bg-primary px-1.5 py-px text-[10px] font-extrabold tabular-nums text-primary-foreground">
               {value.length}
             </span>
           )}
@@ -87,7 +87,7 @@ export function SaudeOriginFilter({ value, onChange }: SaudeOriginFilterProps) {
                 onChange([]);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-center gap-1.5 border-t border-border py-2.5 text-xs font-semibold text-primary hover:bg-muted/50"
+              className="flex w-full items-center justify-center gap-1.5 border-t border-border py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             >
               <X className="h-3 w-3" />
               Limpar filtro

@@ -62,17 +62,17 @@ export function TemplateSelectorStep({
           onClick={() => setShowCreateModal(true)}
         >
           <Plus className="w-4 h-4 mr-1" />
-          Novo Template
+          Novo template
         </Button>
       </div>
 
       {/* Templates List */}
       {!templates?.length ? (
-        <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
+        <Card className="border-dashed border-warning/50 bg-warning/5">
           <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-amber-600">Nenhum template criado</p>
+              <p className="font-medium text-warning-strong">Nenhum template criado</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Crie templates de mensagem para usar em campanhas semi-automáticas.
                 Templates suportam variáveis como <code className="bg-muted px-1 rounded">{"{nome}"}</code> e{" "}
@@ -86,7 +86,7 @@ export function TemplateSelectorStep({
                 onClick={() => setShowCreateModal(true)}
               >
                 <Plus className="w-4 h-4 mr-1" />
-                Criar Primeiro Template
+                Criar primeiro template
               </Button>
             </div>
           </CardContent>

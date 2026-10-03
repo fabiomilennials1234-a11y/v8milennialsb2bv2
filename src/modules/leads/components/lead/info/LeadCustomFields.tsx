@@ -196,7 +196,7 @@ function FieldRow({ field, currentValue, leadId }: FieldRowProps) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-primary underline underline-offset-2"
+              className="flex items-center gap-1 text-insights underline underline-offset-2"
             >
               {currentValue.length > 30
                 ? currentValue.slice(0, 30) + "…"
@@ -305,7 +305,7 @@ function CustomFieldsEmpty() {
       </p>
       <Link
         to="/configuracoes"
-        className="flex items-center gap-1 text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+        className="flex items-center gap-1 text-xs text-insights underline underline-offset-2 hover:text-insights/80 transition-colors"
       >
         Configurar campos personalizados
         <ExternalLink className="w-3 h-3" />

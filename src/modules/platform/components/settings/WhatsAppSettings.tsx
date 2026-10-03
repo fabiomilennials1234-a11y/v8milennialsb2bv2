@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { motion } from "framer-motion";
+import { format } from "date-fns";
 import {
   MessageSquare,
+  MessageCircle,
   Plus,
   Trash2,
   RefreshCw,
@@ -14,8 +15,15 @@ import {
   Activity,
   Phone,
   AlertTriangle,
+  Smartphone,
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { FocusCard, FocusTile, InkPanel, InkRow, InkSplit, KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { cn } from "@/lib/utils";
+import { AcaoDoCabecalho, PilulaDeEstado, RotuloMicro } from "./settings-ui";
+import { botaoNoOuroPrimario, botaoNoOuroSecundario } from "./settings-classes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +61,7 @@ import {
   useConnectNotificame,
   NotificameOperacaoCard,
   NotificameTemplatesCard,
+  type ProviderProfile,
 } from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { useCanManageWhatsApp, useIdentity } from "@/modules/identity";
@@ -417,7 +426,11 @@ export function QRCodeModal({
   );
 }
 
-function MessageLimitsCard({ instanceId, organizationId }: { instanceId: string; organizationId?: string }) {
+/**
+ * O contador de envios da instância (o mesmo `useMessageLimits` de antes),
+ * agora como sub-bloco do cartão de ouro. Sem limite configurado, não aparece.
+ */
+function LimiteDeMensagens({ instanceId, organizationId }: { instanceId: string; organizationId?: string }) {
   const { data, isLoading } = useMessageLimits(instanceId, organizationId);
   if (isLoading || !data) return null;
   const current = typeof data.current === "number" ? data.current : 0;
@@ -426,27 +439,264 @@ function MessageLimitsCard({ instanceId, organizationId }: { instanceId: string;
   const pct = Math.round((current / limit) * 100);
   const isHigh = pct >= 80;
   return (
-    <div className="flex items-center gap-3 text-xs">
-      <Activity className={`h-3.5 w-3.5 shrink-0 ${isHigh ? "text-amber-500" : "text-muted-foreground"}`} />
-      <div className="flex-1 min-w-0">
-        <div className="flex justify-between mb-1">
-          <span className="text-muted-foreground">Mensagens enviadas</span>
-          <span className={isHigh ? "text-amber-500 font-medium" : "text-muted-foreground"}>
-            {current.toLocaleString()} / {limit.toLocaleString()}
-          </span>
-        </div>
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${isHigh ? "bg-amber-500" : "bg-primary"}`}
-            style={{ width: `${Math.min(pct, 100)}%` }}
-          />
-        </div>
+    <FocusTile>
+      <p className="flex items-center gap-1.5 text-[11px] font-bold text-primary-foreground/65">
+        <Activity className="h-3 w-3" aria-hidden />
+        Mensagens enviadas
+      </p>
+      <p className="mt-1 text-[1rem] font-extrabold tabular-nums tracking-[-0.02em]">
+        {current.toLocaleString("pt-BR")}
+        <span className="ml-1 text-[11px] font-bold text-primary-foreground/60">de {limit.toLocaleString("pt-BR")}</span>
+      </p>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary-foreground/15">
+        <div
+          className={cn("h-full rounded-full transition-all", isHigh ? "bg-destructive" : "bg-primary-foreground")}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
       </div>
-    </div>
+    </FocusTile>
   );
 }
 
-export function WhatsAppSettings() {
+/** Recursos que o provedor do número suporta (perfil em `whatsapp-provider.ts`). */
+const RECURSOS_DO_PROVEDOR: { chave: keyof ProviderProfile["capabilities"]; rotulo: string }[] = [
+  { chave: "menu", rotulo: "Menus" },
+  { chave: "pix", rotulo: "Botão Pix" },
+  { chave: "reactions", rotulo: "Reações" },
+  { chave: "edit", rotulo: "Editar mensagem" },
+  { chave: "pin", rotulo: "Fixar mensagem" },
+  { chave: "historySync", rotulo: "Histórico" },
+  { chave: "massSend", rotulo: "Envio em massa" },
+  { chave: "templates", rotulo: "Templates" },
+  { chave: "window24h", rotulo: "Janela de 24 h" },
+];
+
+const ROTULO_DO_ESTADO: Record<string, string> = {
+  connected: "Conectada",
+  connecting: "Conectando",
+  error: "Erro",
+};
+
+function tomDoEstado(status: string): "bom" | "aviso" | "ruim" {
+  if (status === "connected") return "bom";
+  if (status === "connecting") return "aviso";
+  return "ruim";
+}
+
+function iniciaisDe(nome: string | null | undefined): string {
+  const partes = (nome ?? "").trim().split(/\s+/).filter(Boolean);
+  return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+/** Quem pode responder no número — a mesma lista do diálogo "Vendedores". */
+function QuemAtende({ instanceId, nomes }: { instanceId: string; nomes: Map<string, string> }) {
+  const { data: permitidos = [], isLoading } = useAllowedMembersForInstance(instanceId);
+  const pessoas = permitidos.map((p) => nomes.get(p.team_member_id) ?? null);
+  return (
+    <FocusTile>
+      <p className="text-[11px] font-bold text-primary-foreground/65">Quem atende esta caixa</p>
+      {isLoading ? (
+        <p className="mt-1 text-[1rem] font-extrabold opacity-50">—</p>
+      ) : pessoas.length === 0 ? (
+        <p className="mt-1 text-[13px] font-bold leading-snug">Só administradores e master</p>
+      ) : (
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="flex -space-x-1.5" aria-hidden>
+            {pessoas.slice(0, 4).map((nome, i) => (
+              <span
+                key={i}
+                className="grid h-6 w-6 place-items-center rounded-full border-2 border-primary bg-tinta text-[9px] font-extrabold text-tinta-foreground"
+              >
+                {iniciaisDe(nome)}
+              </span>
+            ))}
+          </span>
+          <span className="text-[13px] font-bold tabular-nums">
+            {pessoas.length} {pessoas.length === 1 ? "pessoa" : "pessoas"}
+          </span>
+        </div>
+      )}
+    </FocusTile>
+  );
+}
+
+/**
+ * Cartão de ouro da instância em foco. Só reapresenta o que a tela já tinha
+ * por instância (número, última conexão, quem atende, envios, sessão caída) e
+ * as MESMAS ações — com as mesmas condições de provedor e permissão.
+ */
+function FocoDaInstancia({
+  instance,
+  nomesDaEquipe,
+  podeGerir,
+  podeEscolherQuemAtende,
+  verificando,
+  desconectando,
+  onQuemAtende,
+  onQrCode,
+  onVerificar,
+  onDesconectar,
+  onRemover,
+}: {
+  instance: WhatsAppInstance;
+  nomesDaEquipe: Map<string, string>;
+  podeGerir: boolean;
+  podeEscolherQuemAtende: boolean;
+  verificando: boolean;
+  desconectando: boolean;
+  onQuemAtende: () => void;
+  onQrCode: () => void;
+  onVerificar: () => void;
+  onDesconectar: () => void;
+  onRemover: () => void;
+}) {
+  const status = deriveInstanceStatus(instance);
+  const isLive = status === "connected";
+  const perfil = getProviderProfile(instance.provider);
+  // Só o caminho QR (Uazapi/Evolution) tem QR Code, logout e "checar
+  // status": os três caem no `whatsapp-api-proxy` → `getWhatsAppProvider`,
+  // que na fatia 1 não conhece `notificame` e responde "Unknown
+  // provider". Esconder é o fail-closed correto — o botão não existe
+  // em vez de existir e explodir.
+  const isQrProvider = perfil.connectKind === "qr";
+  const recursos = RECURSOS_DO_PROVEDOR.filter((r) => perfil.capabilities[r.chave]);
+  const qrPrimario = !isLive && isQrProvider;
+
+  return (
+    <FocusCard className="gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold text-primary-foreground/70">
+            {perfil.official ? "API oficial" : "API não oficial"} ({perfil.label})
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em] max-sm:text-[1.3rem]">
+              {instance.instance_name}
+            </h3>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-tinta px-2.5 py-1 text-[11px] font-bold text-tinta-foreground">
+              <span
+                aria-hidden
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  status === "connected" ? "bg-success" : status === "connecting" ? "bg-warning" : "bg-destructive",
+                )}
+              />
+              {ROTULO_DO_ESTADO[status] ?? "Desconectada"}
+            </span>
+          </div>
+          {instance.phone_number ? (
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-primary-foreground/80">
+              <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>{isLive ? "Número conectado:" : "Último número:"}</span>
+              <span className="whitespace-nowrap font-mono font-bold tabular-nums text-primary-foreground">
+                {formatPhoneBR(instance.phone_number)}
+              </span>
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] text-primary-foreground/70">Sem número registrado</p>
+          )}
+        </div>
+        {podeGerir && (
+          <button
+            type="button"
+            onClick={onRemover}
+            aria-label={`Remover instância ${instance.instance_name}`}
+            title="Remover instância"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-primary-foreground/15 bg-primary-foreground/[.07] transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]">
+        <FocusTile>
+          <p className="text-[11px] font-bold text-primary-foreground/65">{isLive ? "Conectada desde" : "Última conexão"}</p>
+          <p className="mt-1 text-[1rem] font-extrabold tabular-nums tracking-[-0.02em]">
+            {instance.last_connection_at ? format(new Date(instance.last_connection_at), "dd/MM/yyyy HH:mm") : "—"}
+          </p>
+        </FocusTile>
+        <QuemAtende instanceId={instance.id} nomes={nomesDaEquipe} />
+        {isLive && <LimiteDeMensagens instanceId={instance.id} organizationId={instance.organization_id} />}
+      </div>
+
+      {recursos.length > 0 && (
+        <FocusTile className="flex flex-wrap items-center gap-1.5 py-2.5">
+          <span className="mr-1 text-[11px] font-bold text-primary-foreground/65">Recursos desta API</span>
+          {recursos.map((r) => (
+            <span
+              key={r.chave}
+              className="rounded-full bg-primary-foreground/[.12] px-2.5 py-0.5 text-[11px] font-bold"
+            >
+              {r.rotulo}
+            </span>
+          ))}
+        </FocusTile>
+      )}
+
+      {instance.session_dead_since && (
+        <p className="flex items-start gap-2 rounded-2xl bg-primary-foreground/[.1] px-3 py-2.5 text-[12.5px] font-semibold">
+          <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Sessão deslogada
+            {instance.session_dead_reason ? `: ${instance.session_dead_reason}` : ""}.
+            {isQrProvider ? " Rescaneie o QR Code pra reconectar." : ""}
+          </span>
+        </p>
+      )}
+
+      {!perfil.official && (
+        <p className="flex items-start gap-2 rounded-2xl bg-primary-foreground/[.07] px-3 py-2.5 text-[12px] leading-relaxed text-primary-foreground/80">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Conexão via <strong className="text-primary-foreground">API não oficial</strong> do WhatsApp — o número pode
+            ser banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos aos poucos e evite disparos
+            em massa.
+          </span>
+        </p>
+      )}
+
+      <div className="mt-auto flex flex-wrap items-center gap-2">
+        {qrPrimario && (
+          <button type="button" onClick={onQrCode} className={botaoNoOuroPrimario}>
+            <QrCode />
+            {instance.qr_code ? "Ver QR Code" : "Reconectar"}
+          </button>
+        )}
+        {podeEscolherQuemAtende && (
+          <button
+            type="button"
+            onClick={onQuemAtende}
+            title="Definir quem pode responder neste número"
+            className={qrPrimario ? botaoNoOuroSecundario : botaoNoOuroPrimario}
+          >
+            <Users />
+            Vendedores
+          </button>
+        )}
+        {isQrProvider && (
+          <button type="button" onClick={onVerificar} disabled={verificando} className={botaoNoOuroSecundario}>
+            <RefreshCw className={cn(verificando && "animate-spin")} />
+            Verificar status
+          </button>
+        )}
+        {isLive && isQrProvider && (
+          <button
+            type="button"
+            onClick={onDesconectar}
+            disabled={desconectando}
+            className={cn(botaoNoOuroSecundario, "sm:ml-auto")}
+          >
+            <LogOut />
+            Desconectar
+          </button>
+        )}
+      </div>
+    </FocusCard>
+  );
+}
+
+export function WhatsAppSettings({ embedded = false }: { embedded?: boolean } = {}) {
   // Meta Cloud (slice 3/7) is behind a flag until Meta App Review + the Meta
   // migrations are applied. Flag OFF → the connections UI is byte-identical to
   // today (direct Uazapi create dialog, no provider chip).
@@ -510,6 +760,7 @@ export function WhatsAppSettings() {
   const [qrCodeInstanceId, setQrCodeInstanceId] = useState<string | null>(null);
   const [deleteInstanceId, setDeleteInstanceId] = useState<{ id: string; name: string } | null>(null);
   const [vendedoresInstance, setVendedoresInstance] = useState<WhatsAppInstance | null>(null);
+  const [focoId, setFocoId] = useState<string | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [apiStatus, setApiStatus] = useState<"unknown" | "connected" | "error">("unknown");
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
@@ -676,39 +927,6 @@ export function WhatsAppSettings() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "connected":
-        return (
-          <Badge className="bg-success/20 text-success border-success/30">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
-            Conectado
-          </Badge>
-        );
-      case "connecting":
-        return (
-          <Badge className="bg-warning/20 text-warning border-warning/30">
-            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-            Conectando
-          </Badge>
-        );
-      case "error":
-        return (
-          <Badge variant="destructive">
-            <XCircle className="w-3 h-3 mr-1" />
-            Erro
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline">
-            <XCircle className="w-3 h-3 mr-1" />
-            Desconectado
-          </Badge>
-        );
-    }
-  };
-
   // O aviso de "API não oficial" só é verdade sobre números que conectam por QR.
   // Com um canal oficial (Meta Cloud / NotificaMe) na tela, a frase mentiria —
   // e mentir sobre risco de ban é pior que não avisar. Sem instância nenhuma o
@@ -718,92 +936,228 @@ export function WhatsAppSettings() {
   );
   const showUnofficialWarning = instances.length === 0 || hasQrInstance;
 
+  // V5: lista em tinta + cartão de ouro da instância em foco. A seleção é
+  // estado local; o padrão é a primeira instância.
+  const foco = instances.find((i) => i.id === focoId) ?? instances[0] ?? null;
+  const conectadas = instances.filter((i) => deriveInstanceStatus(i) === "connected").length;
+  const nomesDaEquipe = useMemo(
+    () => new Map(teamMembers.map((m) => [m.id, m.name] as [string, string])),
+    [teamMembers],
+  );
+  const provedores = Array.from(new Set(instances.map((i) => getProviderProfile(i.provider).label)));
+  const abrirCriacao = () => (showChooser ? setIsChooserOpen(true) : setIsCreateDialogOpen(true));
+
+  const acoesDoCabecalho = (
+    <AcaoDoCabecalho>
+      <Button
+        onClick={handleTestConnection}
+        variant="outline"
+        disabled={isTestingConnection}
+        title="Testa a conexão do Torque com o provedor"
+      >
+        {isTestingConnection ? (
+          <>
+            <Loader2 className="animate-spin" />
+            Testando...
+          </>
+        ) : (
+          <>
+            <RefreshCw />
+            Testar Conexão
+          </>
+        )}
+      </Button>
+      {canManage && (
+        <Button onClick={abrirCriacao} disabled={!whatsappQuota.can_add}>
+          <Plus />
+          Nova Instância
+        </Button>
+      )}
+    </AcaoDoCabecalho>
+  );
+
+  const notaDoPainel = (
+    <span className="flex flex-wrap items-center gap-2">
+      {apiStatus !== "unknown" && (
+        <PilulaDeEstado tom={apiStatus === "connected" ? "bom" : "ruim"}>
+          {apiStatus === "connected" ? "API Conectada" : "API Desconectada"}
+        </PilulaDeEstado>
+      )}
+      {provedores.length > 0 && (
+        <span className="text-[11.5px] text-tinta-muted">Provedor: {provedores.join(" · ")}</span>
+      )}
+    </span>
+  );
+
+  const avisoDeLimite =
+    canManage && !whatsappQuota.can_add ? (
+      <p className="mb-2 flex items-start gap-2 rounded-2xl bg-destructive/15 px-3 py-2.5 text-[12px] text-destructive-strong">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+        Limite atingido ({whatsappQuota.current_usage}/{whatsappQuota.effective_limit}). Entre em contato para contratar mais.
+      </p>
+    ) : null;
+
+  const listaDeInstancias = (
+    <>
+      {avisoDeLimite}
+      {instances.map((instance) => {
+        const status = deriveInstanceStatus(instance);
+        const selecionada = instance.id === foco?.id;
+        const perfil = getProviderProfile(instance.provider);
+        return (
+          <InkRow key={instance.id} selected={selecionada} onClick={() => setFocoId(instance.id)}>
+            <span
+              className={cn(
+                "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[11px]",
+                selecionada
+                  ? "bg-primary-foreground text-primary"
+                  : status === "connected"
+                    ? "bg-success/15 text-success-strong"
+                    : "bg-destructive/15 text-destructive-strong",
+              )}
+            >
+              <MessageCircle className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13.5px] font-bold">{instance.instance_name}</span>
+              <span
+                className={cn(
+                  "mt-0.5 block truncate text-[11.5px]",
+                  selecionada ? "text-primary-foreground/70" : "text-tinta-muted",
+                )}
+              >
+                {perfil.official ? "API oficial" : "API não oficial"}
+                {instance.phone_number ? ` · ${formatPhoneBR(instance.phone_number)}` : ""}
+              </span>
+            </span>
+            <PilulaDeEstado tom={tomDoEstado(status)} selecionada={selecionada}>
+              {ROTULO_DO_ESTADO[status] ?? "Desconectada"}
+            </PilulaDeEstado>
+          </InkRow>
+        );
+      })}
+      {canManage && (
+        <button
+          type="button"
+          onClick={abrirCriacao}
+          disabled={!whatsappQuota.can_add}
+          className="mt-1.5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 px-3 py-3.5 text-[13px] font-semibold text-tinta-muted transition-colors hover:border-white/25 hover:text-tinta-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" />
+          Nova Instância WhatsApp
+        </button>
+      )}
+    </>
+  );
+
+  const cartaoDeFoco = foco ? (
+    <FocoDaInstancia
+      instance={foco}
+      nomesDaEquipe={nomesDaEquipe}
+      podeGerir={canManage}
+      podeEscolherQuemAtende={canManage && isAdmin}
+      verificando={checkStatus.isPending}
+      desconectando={logout.isPending}
+      onQuemAtende={() => {
+        setVendedoresDirty(false);
+        setVendedoresInstance(foco);
+      }}
+      onQrCode={() => setQrCodeInstanceId(foco.id)}
+      onVerificar={() => handleCheckStatus(foco.id)}
+      onDesconectar={() => handleLogout(foco.id)}
+      onRemover={() => setDeleteInstanceId({ id: foco.id, name: foco.instance_name })}
+    />
+  ) : null;
+
+  const focoAoVivo = foco ? deriveInstanceStatus(foco) === "connected" : false;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Instâncias WhatsApp</h3>
-          <p className="text-sm text-muted-foreground">
-            Gerencie suas conexões WhatsApp via Evolution API
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleTestConnection}
-            variant="outline"
-            size="sm"
-            disabled={isTestingConnection}
-            className="gap-2"
+      {acoesDoCabecalho}
+
+      {!embedded && !isLoading && (
+        <KpiRow cols={2}>
+          <KpiTile
+            label="Instâncias conectadas"
+            value={
+              <>
+                {conectadas}
+                <ValueUnit>de {instances.length}</ValueUnit>
+              </>
+            }
+            icon={Smartphone}
+            tone={instances.length > 0 && conectadas === instances.length ? "good" : "bad"}
+            note={
+              instances.length === 0
+                ? "Nenhum número cadastrado"
+                : conectadas === instances.length
+                  ? "Todas conectadas"
+                  : `${instances.length - conectadas} aguardando reconexão`
+            }
           >
-            {isTestingConnection ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Testando...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                Testar Conexão
-              </>
+            {instances.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {instances.slice(0, 4).map((i) => {
+                  const ok = deriveInstanceStatus(i) === "connected";
+                  return (
+                    <span
+                      key={i.id}
+                      className={cn(
+                        "inline-flex max-w-[160px] items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold",
+                        ok ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
+                      )}
+                    >
+                      <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ok ? "bg-success" : "bg-destructive")} />
+                      <span className="truncate">{i.instance_name}</span>
+                    </span>
+                  );
+                })}
+                {instances.length > 4 && (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-foreground/70">
+                    +{instances.length - 4}
+                  </span>
+                )}
+              </div>
             )}
-          </Button>
-          {apiStatus !== "unknown" && (
-            <Badge
-              variant={apiStatus === "connected" ? "default" : "destructive"}
-              className="gap-1"
-            >
-              {apiStatus === "connected" ? (
-                <>
-                  <CheckCircle2 className="w-3 h-3" />
-                  API Conectada
-                </>
+          </KpiTile>
+          <KpiTile
+            label="Limite do plano"
+            value={
+              whatsappQuota.is_unlimited ? (
+                "Sem limite"
               ) : (
                 <>
-                  <XCircle className="w-3 h-3" />
-                  API Desconectada
+                  {whatsappQuota.current_usage}
+                  <ValueUnit>de {whatsappQuota.effective_limit} instâncias</ValueUnit>
                 </>
-              )}
-            </Badge>
-          )}
-          {!whatsappQuota.is_unlimited && (
-            <Badge variant="outline" className="text-xs">
-              {whatsappQuota.current_usage} de {whatsappQuota.effective_limit} instâncias
-            </Badge>
-          )}
-          {canManage && (
-            <Button
-              onClick={() =>
-                showChooser ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
-              }
-              size="sm"
-              className="gap-2"
-              disabled={!whatsappQuota.can_add}
-            >
-              <Plus className="w-4 h-4" />
-              Nova Instância
-            </Button>
-          )}
-          {canManage && !whatsappQuota.can_add && (
-            <p className="text-xs text-destructive">
-              Limite atingido ({whatsappQuota.current_usage}/{whatsappQuota.effective_limit}). Entre em contato para contratar mais.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {showUnofficialWarning && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p>
-            Conexão via <strong>API não oficial</strong> do WhatsApp — o número pode ser
-            banido pela Meta (política da Meta, não falha do Torque). Aqueça números novos
-            aos poucos e evite disparos em massa.
-          </p>
-        </div>
+              )
+            }
+            icon={Gauge}
+            tone={whatsappQuota.can_add ? "neutral" : "warn"}
+            note={
+              whatsappQuota.is_unlimited
+                ? "O plano não limita números"
+                : whatsappQuota.can_add
+                  ? `${Math.max(0, whatsappQuota.effective_limit - whatsappQuota.current_usage)} vaga(s) livre(s)`
+                  : "Limite atingido"
+            }
+          >
+            {!whatsappQuota.is_unlimited && whatsappQuota.effective_limit > 0 && (
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn("h-full rounded-full", whatsappQuota.can_add ? "bg-primary" : "bg-destructive")}
+                  style={{
+                    width: `${Math.min(100, Math.round((whatsappQuota.current_usage / whatsappQuota.effective_limit) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
+          </KpiTile>
+        </KpiRow>
       )}
 
       {errorDetails && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+        <div className="rounded-card border border-destructive/20 bg-destructive/10 p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
               <p className="text-sm font-medium text-destructive">Erro Detalhado:</p>
@@ -824,171 +1178,86 @@ export function WhatsAppSettings() {
       )}
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
-          ))}
-        </div>
+        <InkPanel title="Instâncias WhatsApp">
+          <div className="space-y-2" aria-busy>
+            {[1, 2].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-2xl bg-white/[.06]" />
+            ))}
+          </div>
+        </InkPanel>
       ) : instances.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-          <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Nenhuma instância WhatsApp cadastrada</p>
-          {canManage && (
-            // Mesma porta que o botão do topo: a org NOVA é justamente o público
-            // mais provável do número oficial, e mandá-la direto pro dialog
-            // Uazapi a deixava sem sequer ver que existe outro caminho.
-            <Button
-              onClick={() =>
-                showChooser ? setIsChooserOpen(true) : setIsCreateDialogOpen(true)
-              }
-              variant="outline"
-              className="mt-4"
-            >
-              Criar primeira instância
-            </Button>
-          )}
-        </div>
+        <InkPanel title="Instâncias WhatsApp" count="0 números">
+          <div className="flex flex-col items-center px-4 py-10 text-center">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/[.07] text-primary">
+              <MessageSquare className="h-6 w-6" aria-hidden />
+            </span>
+            <p className="mt-3 text-[15px] font-bold">Nenhuma instância WhatsApp cadastrada</p>
+            {showUnofficialWarning && (
+              <p className="mt-2 max-w-md text-[12.5px] leading-relaxed text-tinta-muted">
+                O caminho padrão conecta pela <strong className="text-tinta-foreground">API não oficial</strong> do
+                WhatsApp — o número pode ser banido pela Meta (política da Meta, não falha do Torque). Aqueça
+                números novos aos poucos e evite disparos em massa.
+              </p>
+            )}
+            {canManage && (
+              // Mesma porta que o botão do topo: a org NOVA é justamente o público
+              // mais provável do número oficial, e mandá-la direto pro dialog
+              // Uazapi a deixava sem sequer ver que existe outro caminho.
+              <Button onClick={abrirCriacao} variant="outline" className="mt-5 text-foreground">
+                Criar primeira instância
+              </Button>
+            )}
+          </div>
+        </InkPanel>
+      ) : embedded ? (
+        // Dentro do modal da integração não há largura para lista + foco lado
+        // a lado: o foco vem primeiro e a lista embaixo.
+        <InkPanel
+          title="Instâncias WhatsApp"
+          count={`${instances.length} ${instances.length === 1 ? "número" : "números"}`}
+          actions={notaDoPainel}
+        >
+          <div className="flex flex-col gap-3">
+            {cartaoDeFoco}
+            <div className="flex flex-col gap-0.5">{listaDeInstancias}</div>
+          </div>
+        </InkPanel>
       ) : (
-        <div className="space-y-3">
-          {instances.map((instance) => {
-            const effectiveStatus = deriveInstanceStatus(instance);
-            const isLive = effectiveStatus === "connected";
-            // Só o caminho QR (Uazapi/Evolution) tem QR Code, logout e "checar
-            // status": os três caem no `whatsapp-api-proxy` → `getWhatsAppProvider`,
-            // que na fatia 1 não conhece `notificame` e responde "Unknown
-            // provider". Esconder é o fail-closed correto — o botão não existe
-            // em vez de existir e explodir.
-            const isQrProvider = getProviderProfile(instance.provider).connectKind === "qr";
-            return (
-            <motion.div
-              key={instance.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h4 className="font-medium">{instance.instance_name}</h4>
-                    {getStatusBadge(effectiveStatus)}
-                    {showChooser && (
-                      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-                        {getProviderProfile(instance.provider).label}
-                      </Badge>
-                    )}
-                  </div>
-                  {instance.phone_number && (
-                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Phone className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        {isLive ? "Número conectado: " : "Último número: "}
-                        <span className="font-medium text-foreground tabular-nums">
-                          {formatPhoneBR(instance.phone_number)}
-                        </span>
-                      </span>
-                    </p>
-                  )}
-                  {instance.last_connection_at && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Última conexão:{" "}
-                      {new Date(instance.last_connection_at).toLocaleString("pt-BR")}
-                    </p>
-                  )}
-                  {instance.session_dead_since && (
-                    <p className="text-xs text-destructive mt-1">
-                      Sessão deslogada
-                      {instance.session_dead_reason
-                        ? `: ${instance.session_dead_reason}`
-                        : ""}
-                      .{isQrProvider ? " Rescaneie o QR Code pra reconectar." : ""}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {canManage && isAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setVendedoresDirty(false);
-                        setVendedoresInstance(instance);
-                      }}
-                      title="Definir quem pode responder neste número"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      Vendedores
-                    </Button>
-                  )}
-                  {!isLive && isQrProvider && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setQrCodeInstanceId(instance.id)}
-                    >
-                      <QrCode className="w-4 h-4 mr-2" />
-                      {instance.qr_code ? "Ver QR Code" : "Reconectar"}
-                    </Button>
-                  )}
-                  {isQrProvider && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCheckStatus(instance.id)}
-                      disabled={checkStatus.isPending}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {isLive && isQrProvider && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleLogout(instance.id)}
-                      disabled={logout.isPending}
-                    >
-                      <LogOut className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setDeleteInstanceId({
-                          id: instance.id,
-                          name: instance.instance_name,
-                        })
-                      }
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+        <InkSplit
+          title="Instâncias WhatsApp"
+          count={`${instances.length} ${instances.length === 1 ? "número" : "números"}`}
+          actions={notaDoPainel}
+          list={listaDeInstancias}
+          detail={cartaoDeFoco}
+        />
+      )}
 
-              {isLive && (
-                <div className="mt-4 space-y-4 pt-4 border-t border-border/40">
-                  <MessageLimitsCard instanceId={instance.id} organizationId={instance.organization_id} />
-                  <HistorySyncPanel instanceId={instance.id} />
-                  {/* Só o canal oficial tem template HSM — o QR não tem o
-                      conceito, e pedir a lista dele devolveria 422. O card
-                      também se apaga sozinho quando o servidor diz que o canal
-                      não usa templates. */}
-                  {instance.provider === "notificame" && (
-                    <>
-                      <NotificameTemplatesCard instanceId={instance.id} />
-                      {/* Saúde do número, bloqueados e o link de consentimento —
-                          as três coisas que se operam no número e não têm lugar
-                          dentro de uma conversa. */}
-                      <NotificameOperacaoCard instanceId={instance.id} />
-                    </>
-                  )}
-                </div>
-              )}
-            </motion.div>
-            );
-          })}
-        </div>
+      {/* O que se opera no número conectado: importar histórico e, no canal
+          oficial, templates e operação. Era um bloco dentro de cada cartão de
+          instância; agora acompanha a instância em foco. */}
+      {foco && focoAoVivo && (
+        <Card>
+          <CardContent className="space-y-5 p-5 sm:p-6">
+            <div className="min-w-0">
+              <RotuloMicro>Operação do número</RotuloMicro>
+              <h3 className="mt-0.5 truncate text-base font-bold tracking-tight">{foco.instance_name}</h3>
+            </div>
+            <HistorySyncPanel instanceId={foco.id} />
+            {/* Só o canal oficial tem template HSM — o QR não tem o
+                conceito, e pedir a lista dele devolveria 422. O card
+                também se apaga sozinho quando o servidor diz que o canal
+                não usa templates. */}
+            {foco.provider === "notificame" && (
+              <>
+                <NotificameTemplatesCard instanceId={foco.id} />
+                {/* Saúde do número, bloqueados e o link de consentimento —
+                    as três coisas que se operam no número e não têm lugar
+                    dentro de uma conversa. */}
+                <NotificameOperacaoCard instanceId={foco.id} />
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Provider chooser — Uazapi QR vs Meta Oficial vs WhatsApp Oficial (NotificaMe) */}

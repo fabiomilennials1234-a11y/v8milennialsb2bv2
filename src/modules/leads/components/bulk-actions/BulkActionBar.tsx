@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel,
   SelectSeparator, SelectTrigger, SelectValue,
@@ -80,6 +81,14 @@ interface BulkActionBarProps {
   };
 }
 
+/**
+ * Ação sobre a seleção, na pílula de tinta da barra (V5). Os botões são
+ * `ghost` repintados para o fundo escuro: `outline` é cartão branco, e cartão
+ * branco dentro de pílula preta vira seis caixas soltas.
+ */
+const ACAO_NA_TINTA =
+  "h-8 rounded-full px-3 text-xs text-tinta-foreground hover:bg-white/10 hover:text-tinta-foreground focus-visible:outline-primary";
+
 export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escopoFunil }: BulkActionBarProps) {
   const count = selectedIds.size;
   const [moveOpen, setMoveOpen] = useState(false);
@@ -101,33 +110,37 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 shadow-lg"
+          className={cn(
+            "fixed bottom-6 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto scrollbar-hide",
+            "rounded-full border border-tinta-line/60 bg-tinta py-1.5 pl-2 pr-1.5 text-tinta-foreground shadow-relevo-tinta",
+          )}
         >
-          <Badge className="mr-1 tabular-nums">{count}</Badge>
-          <span className="text-sm text-muted-foreground mr-2">selecionados</span>
+          <Badge className="tabular-nums shadow-brilho-ouro">{count}</Badge>
+          <span className="mr-1.5 whitespace-nowrap text-xs font-semibold text-tinta-muted">selecionados</span>
 
-          <Button size="sm" variant="outline" onClick={() => setMoveOpen(true)}>
-            <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" className={ACAO_NA_TINTA} onClick={() => setMoveOpen(true)}>
+            <ArrowRightLeft className="h-3.5 w-3.5" />
             {escopoFunil ? "Mover" : "Adicionar ao funil"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
-            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" className={ACAO_NA_TINTA} onClick={() => setAssignOpen(true)}>
+            <UserPlus className="h-3.5 w-3.5" />
             Atribuir
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setTagOpen(true)}>
-            <Tag className="mr-1.5 h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" className={ACAO_NA_TINTA} onClick={() => setTagOpen(true)}>
+            <Tag className="h-3.5 w-3.5" />
             Tags
           </Button>
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
+            className={ACAO_NA_TINTA}
             onClick={() => (onDisparar ? onDisparar(ids) : setBlastOpen(true))}
           >
-            <Send className="mr-1.5 h-3.5 w-3.5" />
+            <Send className="h-3.5 w-3.5" />
             Disparar
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
-            <FileDown className="mr-1.5 h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" className={ACAO_NA_TINTA} onClick={() => setExportOpen(true)}>
+            <FileDown className="h-3.5 w-3.5" />
             Exportar
           </Button>
           {/* O rótulo diz em QUE o clique mexe. "Excluir", sozinho, era o
@@ -136,18 +149,25 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escop
           {(!escopoFunil || escopoFunil.podeExcluir !== false) && (
             <Button
               size="sm"
-              variant="outline"
-              className="text-destructive hover:text-destructive"
+              variant="ghost"
+              className={cn(ACAO_NA_TINTA, "text-destructive hover:bg-destructive/15 hover:text-destructive")}
               onClick={() => setDeleteOpen(true)}
             >
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
               {escopoFunil
                 ? count === 1 ? "Excluir negócio" : "Excluir negócios"
                 : "Excluir"}
             </Button>
           )}
 
-          <Button size="icon" variant="ghost" className="h-7 w-7 ml-1" onClick={onClear}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="ml-0.5 h-8 w-8 shrink-0 rounded-full text-tinta-muted hover:bg-white/10 hover:text-tinta-foreground focus-visible:outline-primary"
+            onClick={onClear}
+            aria-label="Limpar seleção"
+            title="Limpar seleção"
+          >
             <X className="h-3.5 w-3.5" />
           </Button>
         </motion.div>
@@ -330,7 +350,7 @@ function BulkAssignDialog({
         sdr_id: id,
         sale_responsible_id: id,
       });
-      toast.success(`${leadIds.length} leads atribuidos`);
+      toast.success(`${leadIds.length} leads atribuídos`);
       onOpenChange(false);
       onSuccess();
     } catch (caught) {
@@ -345,11 +365,11 @@ function BulkAssignDialog({
           <DialogTitle>Atribuir {leadIds.length} leads</DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-2">
-          <label className="text-sm font-medium">Responsavel</label>
+          <label className="text-sm font-medium">Responsável</label>
           <Select value={responsibleId} onValueChange={setResponsibleId}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Remover responsavel</SelectItem>
+              <SelectItem value="none">Remover responsável</SelectItem>
               {active.map((m: any) => (
                 <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
               ))}
@@ -416,11 +436,14 @@ function BulkTagDialog({
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                type="button"
+                aria-pressed={addTags.includes(tag.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                   addTags.includes(tag.id)
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-primary/50"
-                }`}
+                    ? "border-primary/50 bg-primary-soft text-primary-soft-foreground"
+                    : "border-border text-muted-foreground hover:border-primary/50",
+                )}
               >
                 {addTags.includes(tag.id) && <CheckCircle2 className="h-3 w-3" />}
                 <span
@@ -461,7 +484,7 @@ function BulkDeleteDialog({
   const handleDelete = async () => {
     try {
       await mutation.mutateAsync({ lead_ids: leadIds });
-      toast.success(`${count} leads movidos para lixeira`);
+      toast.success(`${count} leads movidos para a lixeira`);
       onOpenChange(false);
       onSuccess();
     } catch (caught) {
@@ -475,7 +498,7 @@ function BulkDeleteDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Excluir {count} leads</AlertDialogTitle>
           <AlertDialogDescription>
-            Os leads serao movidos para a lixeira e podem ser restaurados em ate 30 dias.
+            Os leads serão movidos para a lixeira e podem ser restaurados em até 30 dias.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

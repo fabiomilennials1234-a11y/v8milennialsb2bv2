@@ -1,5 +1,5 @@
-import { useParams, Link } from "react-router-dom";
-import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useWorkflowButtonHistory, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
+import { useNavigate, useParams } from "react-router-dom";
+import { useWorkflows, useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useWorkflowButtonHistory, useRetryWorkflowExecution } from "@/modules/workflows/hooks/useWorkflows";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,27 +28,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw, LockKeyhole } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw, LockKeyhole, Ban } from "lucide-react";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { PageHeader } from "@/components/ui/page-header";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutomacoesTabs } from "@/modules/workflows/components/AutomacoesTabs";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
 import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
 import { notifyError } from "@/shared/errors";
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }> = {
-  running: { label: "Executando", variant: "default", icon: Loader2 },
-  processing: { label: "Processando", variant: "default", icon: Loader2 },
-  paused: { label: "Pausado", variant: "secondary", icon: Pause },
-  completed: { label: "Concluído", variant: "default", icon: CheckCircle2 },
+// V5: tons de estado do Badge — verde concluído, vermelho falha, azul em curso.
+const STATUS_CONFIG: Record<string, { label: string; variant: "info" | "soft" | "success" | "destructive" | "warning"; icon: typeof CheckCircle2 }> = {
+  running: { label: "Executando", variant: "info", icon: Loader2 },
+  processing: { label: "Processando", variant: "info", icon: Loader2 },
+  paused: { label: "Pausado", variant: "soft", icon: Pause },
+  completed: { label: "Concluído", variant: "success", icon: CheckCircle2 },
   failed: { label: "Falhou", variant: "destructive", icon: XCircle },
-  cancelled: { label: "Cancelado", variant: "outline", icon: XCircle },
+  cancelled: { label: "Cancelado", variant: "soft", icon: XCircle },
   loop_limit_reached: { label: "Limite de Loop", variant: "destructive", icon: AlertTriangle },
-  waiting_response: { label: "Aguardando Resposta", variant: "outline", icon: Clock },
+  waiting_response: { label: "Aguardando Resposta", variant: "warning", icon: Clock },
 };
 
 const STEP_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  success: { label: "Sucesso", color: "text-green-600" },
-  failed: { label: "Falhou", color: "text-red-600" },
+  success: { label: "Sucesso", color: "text-success" },
+  failed: { label: "Falhou", color: "text-destructive" },
   skipped: { label: "Pulado", color: "text-muted-foreground" },
 };
 
@@ -73,7 +78,10 @@ function errorLabel(code: string | null): string {
 
 export default function AutomacoesExecucoes() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: workflow, isLoading: isLoadingWorkflow } = useWorkflow(id);
+  // Seletor de workflow (D17): execuções são POR workflow — a RPC exige o id.
+  const { data: allWorkflows } = useWorkflows();
   const { data: executions, isLoading: isLoadingExecutions } = useWorkflowExecutions(id);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
   const [retryTargetId, setRetryTargetId] = useState<string | null>(null);
@@ -107,63 +115,77 @@ export default function AutomacoesExecucoes() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-5">
       {/* Onda 2: alerts dead-letter pattern (workflow execution falhas em padrão) */}
       <AlertsBanner category="dead_letter_pattern" />
 
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to={`/automacoes/${id}`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">{workflow.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            Histórico de execuções
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        back={`/automacoes/${id}`}
+        eyebrow="Histórico de execuções"
+        title={workflow.name}
+        tabs={<AutomacoesTabs active="execucoes" workflowId={id ?? null} count={allWorkflows?.length} />}
+        actions={
+          (allWorkflows?.length ?? 0) > 1 ? (
+            <Select value={id} onValueChange={(next) => next !== id && navigate(`/automacoes/${next}/execucoes`)}>
+              <SelectTrigger aria-label="Trocar de workflow" className="h-10 w-64 max-w-full rounded-full">
+                <SelectValue placeholder="Workflow" />
+              </SelectTrigger>
+              <SelectContent>
+                {allWorkflows!.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : undefined
+        }
+      />
 
-      {/* Stats summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <StatCard
+      {/* Stats summary — os mesmos cinco números de antes, da mesma lista. */}
+      <KpiRow cols={5}>
+        <KpiTile
           label="Total"
-          value={executions?.length ?? 0}
+          icon={Activity}
+          tone="neutral"
+          value={(executions?.length ?? 0).toLocaleString("pt-BR")}
         />
-        <StatCard
+        <KpiTile
           label="Concluídos"
-          value={executions?.filter(e => e.status === "completed").length ?? 0}
-          className="text-green-600"
+          icon={CheckCircle2}
+          tone="good"
+          value={<span className="text-success-strong">{(executions?.filter(e => e.status === "completed").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
-        <StatCard
+        <KpiTile
           label="Falharam"
-          value={executions?.filter(e => e.status === "failed" || e.status === "loop_limit_reached").length ?? 0}
-          className="text-red-600"
+          icon={XCircle}
+          tone="bad"
+          value={<span className="text-destructive">{(executions?.filter(e => e.status === "failed" || e.status === "loop_limit_reached").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
-        <StatCard
+        <KpiTile
           label="Cancelados"
-          value={executions?.filter(e => e.status === "cancelled").length ?? 0}
-          className="text-muted-foreground"
+          icon={Ban}
+          tone="neutral"
+          value={<span className="text-muted-foreground">{(executions?.filter(e => e.status === "cancelled").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
-        <StatCard
+        <KpiTile
           label="Em andamento"
-          value={executions?.filter(e => e.status === "running" || e.status === "processing" || e.status === "paused" || e.status === "waiting_response").length ?? 0}
-          className="text-blue-600"
+          icon={Loader2}
+          tone="info"
+          value={<span className="text-insights">{(executions?.filter(e => e.status === "running" || e.status === "processing" || e.status === "paused" || e.status === "waiting_response").length ?? 0).toLocaleString("pt-BR")}</span>}
         />
-      </div>
+      </KpiRow>
 
       {/* Split A/B Analytics */}
       {id && <SplitAbAnalytics workflowId={id} />}
 
       {/* Executions table */}
       {!executions?.length ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="rounded-card border border-dashed border-border bg-card/60 py-12 text-center text-sm text-muted-foreground">
           Nenhuma execução registrada ainda.
         </div>
       ) : (
-        <div className="border rounded-lg">
+        <div className="overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
           <Table>
             <TableHeader>
               <TableRow>
@@ -194,14 +216,14 @@ export default function AutomacoesExecucoes() {
                     onClick={() => setSelectedExecutionId(exec.id)}
                   >
                     <TableCell className="whitespace-nowrap">
-                      <div className="text-sm">
+                      <div className="text-sm font-semibold tabular-nums">
                         {format(new Date(exec.started_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true, locale: ptBR })}
                       </div>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
                       {exec.version_number ? `v${exec.version_number}` : "Legada"}
                     </TableCell>
                     <TableCell>
@@ -220,17 +242,17 @@ export default function AutomacoesExecucoes() {
                           {statusConf.label}
                         </Badge>
                         {retryOf && (
-                          <Badge variant="outline" className="gap-1 text-xs">
+                          <Badge variant="soft" className="gap-1 text-xs">
                             <RotateCw className="h-2.5 w-2.5" />
                             Retry
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-sm tabular-nums text-muted-foreground">
                       {duration}
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate text-sm text-red-600">
+                    <TableCell className={`max-w-[200px] truncate text-sm ${exec.error_code ? "text-destructive" : "text-muted-foreground"}`}>
                       {errorLabel(exec.error_code)}
                     </TableCell>
                     <TableCell>
@@ -238,8 +260,9 @@ export default function AutomacoesExecucoes() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7"
+                          className="h-8 w-8 rounded-[10px]"
                           title="Repetir execução"
+                          aria-label="Repetir execução"
                           onClick={(e) => {
                             e.stopPropagation();
                             setRetryTargetId(exec.id);
@@ -283,24 +306,15 @@ export default function AutomacoesExecucoes() {
               disabled={retryMutation.isPending}
             >
               {retryMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <RotateCw className="h-4 w-4 mr-1" />
+                <RotateCw className="h-4 w-4" />
               )}
               Repetir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function StatCard({ label, value, className }: { label: string; value: number; className?: string }) {
-  return (
-    <div className="border rounded-lg p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={`text-2xl font-bold ${className || ""}`}>{value}</p>
     </div>
   );
 }
@@ -336,7 +350,7 @@ function StepsDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 pr-8">
             <DialogTitle>Steps da Execução</DialogTitle>
             {canRetry && executionId && (
               <Button
@@ -354,8 +368,8 @@ function StepsDialog({
 
         {questions.isError && <p className="text-sm text-muted-foreground">Histórico das perguntas indisponível ou protegido pelas suas permissões.</p>}
         {!questions.isError && questions.data?.map(question => (
-          <div key={question.id} className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
-            <p className="font-medium">Pergunta com botões</p>
+          <div key={question.id} className="rounded-2xl border border-border/70 bg-sunken p-4 text-sm">
+            <p className="font-semibold">Pergunta com botões</p>
             <p className="mt-1 text-muted-foreground">{
               question.state === "queued" ? "Aguardando vez na conversa" :
               question.state === "sending" ? "Envio em andamento" :
@@ -375,8 +389,8 @@ function StepsDialog({
           </div>
         ))}
         {!dataVisible ? (
-          <div role="status" className="rounded-lg border border-border bg-muted/40 p-5 text-sm text-muted-foreground">
-            <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
+          <div role="status" className="rounded-2xl border border-border/70 bg-sunken p-5 text-sm text-muted-foreground">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
               <LockKeyhole className="h-4 w-4" /> Detalhes protegidos
             </div>
             Valores, resultados e caminho seguem suas permissões atuais sobre o lead.
@@ -394,40 +408,40 @@ function StepsDialog({
               return (
                 <div key={step.id} className="flex gap-3 items-start">
                   {/* Step number */}
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                  <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold tabular-nums">
                     {idx + 1}
                   </div>
 
                   {/* Step content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{step.node_label || step.node_type}</span>
-                      <Badge variant="outline" className="text-xs">
+                      <span className="text-sm font-semibold">{step.node_label || step.node_type}</span>
+                      <Badge variant="soft" className="font-mono text-[11px]">
                         {step.node_type}
                       </Badge>
-                      {step.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                      {step.status === "failed" && <XCircle className="h-4 w-4 text-red-500" />}
+                      {step.status === "success" && <CheckCircle2 className={`h-4 w-4 ${conf.color}`} aria-label={conf.label} />}
+                      {step.status === "failed" && <XCircle className={`h-4 w-4 ${conf.color}`} aria-label={conf.label} />}
                       {step.status === "skipped" && <span className="text-xs text-muted-foreground">pulado</span>}
                     </div>
 
                     {(step.output_data as any)?.retry_attempt != null && (
-                      <Badge variant="outline" className="text-xs gap-1 mt-0.5">
+                      <Badge variant="soft" className="text-xs gap-1 mt-0.5">
                         <RotateCw className="h-2.5 w-2.5" />
                         Tentativa {(step.output_data as any).retry_attempt}
                       </Badge>
                     )}
 
                     {step.error_code && (
-                      <p className="text-xs text-red-600 mt-1">{errorLabel(step.error_code)}</p>
+                      <p className="mt-1 text-xs font-medium text-destructive">{errorLabel(step.error_code)}</p>
                     )}
 
                     {step.node_type === "split_ab" && step.output_data && (
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="info" className="text-xs">
                           Variante: {(step.output_data as any).chosenVariant}
                         </Badge>
                         {(step.output_data as any).reused && (
-                          <Badge variant="secondary" className="text-xs">Reutilizada</Badge>
+                          <Badge variant="soft" className="text-xs">Reutilizada</Badge>
                         )}
                         {(step.output_data as any).roll != null && (
                           <span className="text-xs text-muted-foreground">
@@ -438,12 +452,12 @@ function StepsDialog({
                     )}
 
                     {step.node_type !== "split_ab" && step.output_data && Object.keys(step.output_data).length > 0 && (
-                      <pre className="text-xs bg-muted p-2 rounded mt-1 overflow-x-auto">
+                      <pre className="mt-1 overflow-x-auto rounded-xl bg-sunken p-2.5 text-xs">
                         {JSON.stringify(step.output_data, null, 2)}
                       </pre>
                     )}
 
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs tabular-nums text-muted-foreground">
                       {format(new Date(step.executed_at), "HH:mm:ss.SSS", { locale: ptBR })}
                     </p>
                   </div>

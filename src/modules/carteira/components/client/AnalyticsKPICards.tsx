@@ -6,79 +6,59 @@ import {
   type DeltaDirection,
 } from "@/lib/analytics-helpers";
 import { formatBRL } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import {
   DollarSign,
-  Heart,
+  HeartPulse,
   RefreshCw,
   AlertTriangle,
   ShoppingCart,
   Receipt,
 } from "lucide-react";
 
-interface SparklineProps {
-  points: number[];
-  width?: number;
-  height?: number;
-  color?: string;
-}
+/*
+ * V5 (2026-10): os seis cartões viram `KpiTile` com o mini-gráfico embaixo.
+ * Mesmos números, mesmas tendências. As cores das linhas deixam de ser hex
+ * (#34d399/#fbbf24/#f87171) e passam a ser token — o escuro deixa de quebrar.
+ */
+const SPARK_W = 120;
+const SPARK_H = 30;
 
-function Sparkline({ points, width = 64, height = 24, color = "currentColor" }: SparklineProps) {
+function Sparkline({ points, color = "currentColor" }: { points: number[]; color?: string }) {
   if (points.length < 2) return null;
-  const path = generateSparklinePath(points, width, height);
+  const path = generateSparklinePath(points, SPARK_W, SPARK_H);
   return (
-    <svg width={width} height={height} className="overflow-visible">
-      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      viewBox={`-1 -2 ${SPARK_W + 2} ${SPARK_H + 4}`}
+      preserveAspectRatio="none"
+      className="h-8 w-full overflow-visible"
+      aria-hidden
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   );
 }
 
-interface KPICardProps {
-  label: string;
-  value: React.ReactNode;
-  icon: React.ReactNode;
-  delta?: { delta: number; direction: DeltaDirection };
-  sparkline?: number[];
-  sparkColor?: string;
-  sub?: string;
-  valueClassName?: string;
+/** `deriveKPIDelta` devolve o módulo + a direção; o tile quer o número com sinal. */
+function signedDelta(d: { delta: number; direction: DeltaDirection }): number | undefined {
+  if (d.direction === "neutral") return undefined;
+  return d.direction === "up" ? d.delta : -d.delta;
 }
 
-function KPICard({ label, value, icon, delta, sparkline, sparkColor, sub, valueClassName }: KPICardProps) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-          {label}
-        </span>
-        <span className="text-muted-foreground">{icon}</span>
-      </div>
-      <div className="flex items-end justify-between gap-2">
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className={cn("text-xl font-bold tabular-nums leading-tight", valueClassName ?? "text-foreground")}>
-            {value}
-          </span>
-          <div className="flex items-center gap-1.5">
-            {delta && delta.direction !== "neutral" && (
-              <span className={cn(
-                "text-[10px] font-semibold tabular-nums",
-                delta.direction === "up" ? "text-emerald-400" : "text-red-400",
-              )}>
-                {delta.direction === "up" ? "↑" : "↓"}{delta.delta}%
-              </span>
-            )}
-            {sub && (
-              <span className="text-[10px] text-muted-foreground">{sub}</span>
-            )}
-          </div>
-        </div>
-        {sparkline && sparkline.length >= 2 && (
-          <Sparkline points={sparkline} color={sparkColor} />
-        )}
-      </div>
-    </div>
-  );
-}
+const TOKEN = {
+  gold: "hsl(var(--primary))",
+  good: "hsl(var(--success))",
+  warn: "hsl(var(--warning))",
+  bad: "hsl(var(--destructive))",
+};
 
 export function AnalyticsKPICards() {
   const { data: kpis, isLoading: kpisLoading } = usePortfolioKPIs();
@@ -88,21 +68,20 @@ export function AnalyticsKPICards() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
-            <div className="h-3 bg-muted rounded w-2/3 mb-2" />
-            <div className="h-6 bg-muted rounded w-1/2" />
-          </div>
-        ))}
-      </div>
+      <KpiRow cols={3}>
+        {["Receita recorrente", "Health médio", "Taxa de retenção", "Churn previsto", "Recompra atrasada", "Ticket médio"].map(
+          (label) => (
+            <KpiTile key={label} label={label} value="·" loading />
+          ),
+        )}
+      </KpiRow>
     );
   }
 
   if (!kpis || kpis.total_clients === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card/50 px-6 py-8 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Sem dados para analytics</p>
+      <div className="rounded-card border border-dashed border-border bg-card/60 px-6 py-8 text-center">
+        <p className="text-sm font-bold text-muted-foreground">Sem dados para analytics</p>
       </div>
     );
   }
@@ -133,61 +112,88 @@ export function AnalyticsKPICards() {
     ? Math.round((kpis.overdue_count / kpis.total_clients) * 100)
     : 0;
 
+  // Mesmas faixas de antes (70/50).
+  const healthBand = kpis.avg_health >= 70 ? "good" : kpis.avg_health >= 50 ? "warn" : "bad";
+  const healthText =
+    healthBand === "good" ? "text-success" : healthBand === "warn" ? "text-warning-strong" : "text-destructive";
+
+  const churnCount = trends?.churn_summary.count ?? 0;
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-      <KPICard
-        label="Receita Recorrente"
+    <KpiRow cols={3}>
+      <KpiTile
+        label="Receita recorrente"
         value={formatBRL(kpis.total_recurring)}
-        icon={<DollarSign size={14} />}
-        delta={revenueDelta}
-        sparkline={revenueValues}
-        sparkColor="hsl(var(--primary))"
-        sub="vs mês anterior"
-      />
-      <KPICard
-        label="Health Médio"
-        value={kpis.avg_health}
-        icon={<Heart size={14} />}
-        sparkline={healthPoints}
-        sparkColor={kpis.avg_health >= 70 ? "#34d399" : kpis.avg_health >= 50 ? "#fbbf24" : "#f87171"}
-        sub="/100"
-        valueClassName={
-          kpis.avg_health >= 70 ? "text-emerald-400" :
-          kpis.avg_health >= 50 ? "text-amber-400" : "text-red-400"
+        icon={DollarSign}
+        tone="gold"
+        delta={signedDelta(revenueDelta)}
+        deltaLabel="vs mês anterior"
+        note="vs mês anterior"
+      >
+        {revenueValues.length >= 2 && <Sparkline points={revenueValues} color={TOKEN.gold} />}
+      </KpiTile>
+
+      <KpiTile
+        label="Health médio"
+        value={
+          <span className={healthText}>
+            {kpis.avg_health}
+            <ValueUnit>/100</ValueUnit>
+          </span>
         }
-      />
-      <KPICard
-        label="Taxa Retenção"
+        icon={HeartPulse}
+        tone={healthBand === "good" ? "good" : healthBand === "bad" ? "bad" : "neutral"}
+      >
+        {healthPoints.length >= 2 && <Sparkline points={healthPoints} color={TOKEN[healthBand]} />}
+      </KpiTile>
+
+      <KpiTile
+        label="Taxa de retenção"
         value={`${currentRetention}%`}
-        icon={<RefreshCw size={14} />}
-        delta={retentionDelta}
-        sparkline={retentionPoints}
-        sparkColor="#34d399"
-        sub="M1 últimos meses"
+        icon={RefreshCw}
+        tone="good"
+        delta={signedDelta(retentionDelta)}
+        deltaLabel="M1 últimos meses"
+        note="M1 últimos meses"
+      >
+        {retentionPoints.length >= 2 && <Sparkline points={retentionPoints} color={TOKEN.good} />}
+      </KpiTile>
+
+      <KpiTile
+        label="Churn previsto"
+        value={
+          <span className={churnCount > 0 ? "text-destructive" : undefined}>
+            {churnCount.toLocaleString("pt-BR")}
+          </span>
+        }
+        icon={AlertTriangle}
+        tone={churnCount > 0 ? "bad" : "neutral"}
+        note={trends?.churn_summary.total_value ? formatBRL(trends.churn_summary.total_value) + " em risco" : undefined}
       />
-      <KPICard
-        label="Churn Previsto"
-        value={trends?.churn_summary.count ?? 0}
-        icon={<AlertTriangle size={14} />}
-        sub={trends?.churn_summary.total_value ? formatBRL(trends.churn_summary.total_value) + " em risco" : undefined}
-        valueClassName={(trends?.churn_summary.count ?? 0) > 0 ? "text-red-400" : undefined}
+
+      <KpiTile
+        label="Recompra atrasada"
+        value={
+          <span className={kpis.overdue_count > 0 ? "text-destructive" : undefined}>
+            {kpis.overdue_count.toLocaleString("pt-BR")}
+          </span>
+        }
+        icon={ShoppingCart}
+        tone={kpis.overdue_count > 0 ? "bad" : "neutral"}
+        note={`${overduePercent}% da base`}
       />
-      <KPICard
-        label="Recompra Atrasada"
-        value={kpis.overdue_count}
-        icon={<ShoppingCart size={14} />}
-        sub={`${overduePercent}% da base`}
-        valueClassName={kpis.overdue_count > 0 ? "text-destructive" : undefined}
-      />
-      <KPICard
-        label="Ticket Médio"
+
+      <KpiTile
+        label="Ticket médio"
         value={formatBRL(kpis.avg_ticket)}
-        icon={<Receipt size={14} />}
-        delta={ticketDelta}
-        sparkline={ticketValues}
-        sparkColor="hsl(var(--primary))"
-        sub="vs mês anterior"
-      />
-    </div>
+        icon={Receipt}
+        tone="info"
+        delta={signedDelta(ticketDelta)}
+        deltaLabel="vs mês anterior"
+        note="vs mês anterior"
+      >
+        {ticketValues.length >= 2 && <Sparkline points={ticketValues} color={TOKEN.gold} />}
+      </KpiTile>
+    </KpiRow>
   );
 }

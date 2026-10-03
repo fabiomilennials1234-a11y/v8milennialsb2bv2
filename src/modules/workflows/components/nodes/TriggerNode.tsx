@@ -2,14 +2,14 @@ import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Zap, GitBranch, Tag, TrendingUp, Timer } from "lucide-react";
 import { BaseNode } from "./BaseNode";
-import { TRIGGER_LABELS } from "@/types/workflow";
+import { TRIGGER_LABELS, isDiscontinuedTrigger } from "@/types/workflow";
 import type { TriggerNodeData } from "@/types/workflow";
 
 const TRIGGER_ICONS: Record<string, React.ElementType> = {
   lead_created: Zap,
   stage_changed: GitBranch,
   tag_added: Tag,
-  score_reached: TrendingUp,
+  score_reached: TrendingUp, // descontinuado — mantido para renderizar nó salvo
   cron: Timer,
 };
 
@@ -21,10 +21,11 @@ function TriggerNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="trigger"
-      icon={<Icon className="w-5 h-5 text-blue-500" />}
+      icon={<Icon />}
       title={nodeData.label || "Trigger"}
       subtitle={TRIGGER_LABELS[nodeData.triggerType] || "Selecione o trigger"}
       selected={selected}
+      discontinued={isDiscontinuedTrigger(nodeData.triggerType)}
       showTargetHandle={false}
     />
   );

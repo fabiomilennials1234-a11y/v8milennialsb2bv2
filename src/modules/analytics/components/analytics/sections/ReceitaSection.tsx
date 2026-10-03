@@ -35,7 +35,7 @@ export function ReceitaSection() {
     return (
       <div>
         <AnalyticsSectionHeader icon={DollarSign} title="Receita" description="Quanto está faturando e pra onde vai?" />
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           <p className="font-medium">Erro ao carregar receita</p>
           <p className="text-xs text-muted-foreground mt-1">
             {userMessageOf(finErr, "Não foi possível carregar a receita.")}

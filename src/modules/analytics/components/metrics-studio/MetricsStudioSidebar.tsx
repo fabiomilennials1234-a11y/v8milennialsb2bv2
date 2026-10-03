@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronDown, LayoutTemplate, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ROTULO_DO_CORTE,
@@ -24,6 +24,9 @@ interface MetricsStudioSidebarProps {
   onEditar: (def: MetricCustomDefinition) => void;
   onRemover: (def: MetricCustomDefinition) => void;
 }
+
+const ITEM = "flex min-w-0 flex-1 items-start gap-2 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const ROTULO_SECAO = "px-2.5 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
 
 /** Normaliza acento para que "reuniao" ache "Reuniões". */
 const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -61,50 +64,50 @@ export function MetricsStudioSidebar({
   const total = fabrica.length + custom.length;
 
   return (
-    <aside className="flex h-56 w-full shrink-0 flex-col border-r border-border/70 bg-background/60 sm:h-full sm:w-[300px]">
-      <div className="space-y-2.5 border-b border-border/70 px-4 py-3">
+    <aside className="flex h-56 w-full shrink-0 flex-col border-b border-border/60 bg-card sm:h-full sm:w-[300px] sm:border-b-0 sm:border-r">
+      <div className="space-y-3 px-4 pb-3 pt-4">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[13px] font-bold tracking-[-0.02em]">Métricas disponíveis</h2>
-            <p className="text-[11px] text-muted-foreground/70">Clique para soltar no painel.</p>
+            <h2 className="text-[15px] font-bold tracking-[-0.02em]">Métricas disponíveis</h2>
+            <p className="text-xs text-muted-foreground">Clique para soltar no painel.</p>
           </div>
           {podeCompor && (
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="ink"
               onClick={onCriar}
               title="Criar métrica combinando as que já existem"
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              className="h-8 shrink-0 px-3"
             >
-              <Sparkles className="h-3 w-3" />
+              <Sparkles />
               Criar
-            </button>
+            </Button>
           )}
         </div>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar métrica…"
             aria-label="Buscar métrica"
-            className="h-8 w-full rounded-lg border border-border bg-card pl-8 pr-2 text-[12px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/50"
+            className="h-9 w-full rounded-full border border-transparent bg-muted pl-8 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-input focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {total === 0 && (
-          <p className="px-2 py-6 text-center text-[11px] text-muted-foreground/60">
+          <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">
             Nenhuma métrica para “{query}”.
           </p>
         )}
 
         {custom.length > 0 && (
           <>
-            <p className="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground/50">
-              Suas métricas
-            </p>
+            <p className={ROTULO_SECAO}>Suas métricas</p>
             <ul className="mb-2 space-y-px">
               {custom.map((metric) => {
                 const def = porId.get(metric.id);
@@ -113,25 +116,25 @@ export function MetricsStudioSidebar({
                     <button
                       type="button"
                       onClick={() => onAdd(metric)}
-                      className="flex min-w-0 flex-1 items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/60"
+                      className={ITEM}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12px] font-medium">{metric.label}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground/60">
+                        <span className="block truncate text-[13px] font-semibold">{metric.label}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
                           número do período
                         </span>
                       </span>
                       {openMetricIds.has(metric.id) && (
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-soft-foreground" />
                       )}
                     </button>
                     {podeCompor && def && (
-                      <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/item:opacity-100">
+                      <span className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
                         <button
                           type="button"
                           onClick={() => onEditar(def)}
                           aria-label={`Editar ${def.name}`}
-                          className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                          className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                           <Pencil className="h-3 w-3" />
                         </button>
@@ -139,7 +142,7 @@ export function MetricsStudioSidebar({
                           type="button"
                           onClick={() => onRemover(def)}
                           aria-label={`Excluir ${def.name}`}
-                          className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-muted hover:text-destructive"
+                          className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -153,9 +156,7 @@ export function MetricsStudioSidebar({
         )}
 
         {custom.length > 0 && fabrica.length > 0 && (
-          <p className="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground/50">
-            Do sistema
-          </p>
+          <p className={ROTULO_SECAO}>Do sistema</p>
         )}
 
         <ul className="space-y-px">
@@ -168,18 +169,18 @@ export function MetricsStudioSidebar({
                   type="button"
                   onClick={() => onAdd(metric)}
                   title={cortes.map((c) => ROTULO_DO_CORTE[c]).join(" · ")}
-                  className="group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/60"
+                  className={cn(ITEM, "group w-full")}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-medium">{metric.label}</span>
-                    <span className="block truncate text-[10px] text-muted-foreground/60">
+                    <span className="block truncate text-[13px] font-semibold">{metric.label}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
                       {cortes.length > 1 ? `${cortes.length} cortes` : "número do período"}
                     </span>
                   </span>
                   {isOpen ? (
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-soft-foreground" />
                   ) : (
-                    <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                    <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-transparent transition-colors group-hover:text-muted-foreground" />
                   )}
                 </button>
               </li>
@@ -188,14 +189,23 @@ export function MetricsStudioSidebar({
         </ul>
       </div>
 
-      <div className={cn("border-t border-border/70 px-4 py-2 text-[10px] text-muted-foreground/60")}>
+      <div className="border-t border-border/60 px-4 py-2 text-[11px] tabular-nums text-muted-foreground">
         {total} de {metrics.length} métricas
       </div>
-      <details className="max-h-[45%] overflow-auto border-t p-3" open={query.length > 0}>
-        <summary className="cursor-pointer py-2 text-sm font-medium">Cards dos dashboards</summary>
-        <ul className="flex flex-col gap-1">
+      <details className="group/cards max-h-[45%] overflow-auto border-t border-border/60 px-2 pb-2" open={query.length > 0}>
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-2 py-2.5 text-[13px] font-semibold hover:bg-muted [&::-webkit-details-marker]:hidden">
+          <LayoutTemplate className="h-4 w-4 text-muted-foreground" aria-hidden />
+          Cards dos dashboards
+          <ChevronDown className="ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform group-open/cards:rotate-180" aria-hidden />
+        </summary>
+        <ul className="flex flex-col gap-px">
           {Object.entries(FIXED_CARDS).filter(([, card]) => (!card.requiresPerformance || podeVerPorPessoa) && fold(card.label).includes(fold(query))).map(([id, card]) => (
-            <li key={id}><Button variant="ghost" className="h-auto min-h-11 w-full justify-start whitespace-normal text-left" onClick={() => onAddFixed(id, card.tamanhoPadrao)}><Plus className="mr-2 size-4 shrink-0" />{card.label}</Button></li>
+            <li key={id}>
+              <button type="button" className={cn(ITEM, "group w-full items-center")} onClick={() => onAddFixed(id, card.tamanhoPadrao)}>
+                <span className="min-w-0 flex-1 text-[13px] font-semibold">{card.label}</span>
+                <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden />
+              </button>
+            </li>
           ))}
         </ul>
       </details>

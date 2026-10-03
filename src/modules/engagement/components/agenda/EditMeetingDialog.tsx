@@ -41,6 +41,7 @@ import {
   type UpdateMeetingInput,
 } from "@/modules/engagement/hooks/useMeetings";
 import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
+import { IconChip } from "@/components/ui/bento";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -63,6 +64,18 @@ const COLOR_OPTIONS = [
   { value: "#E67C73", label: "Flamingo", hex: "#E67C73" },
   { value: "#D50000", label: "Red", hex: "#D50000" },
 ];
+
+/**
+ * Vocabulário V5 do formulário — o mesmo do `CreateMeetingDialog`.
+ * Rótulo de campo em rótulo micro; escolha em pílula, com o selecionado em
+ * ouro de SUPERFÍCIE (`primary-soft`), nunca ouro de texto.
+ */
+const ROTULO =
+  "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+const CHIP_ATIVO =
+  "border-primary/60 bg-primary-soft text-primary-soft-foreground";
+const CHIP_INATIVO =
+  "border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground";
 
 /** `datetime-local` não aceita offset — o input quer hora local sem fuso. */
 const INPUT_DATETIME = "yyyy-MM-dd'T'HH:mm";
@@ -253,10 +266,8 @@ export function EditMeetingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-              <Pencil className="h-3.5 w-3.5 text-primary" />
-            </div>
+          <DialogTitle className="flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.02em]">
+            <IconChip icon={Pencil} tone="gold" />
             Editar evento
           </DialogTitle>
         </DialogHeader>
@@ -284,7 +295,7 @@ export function EditMeetingDialog({
             <div className="space-y-1.5">
               <Label
                 htmlFor="edit-meeting-title"
-                className="text-xs text-muted-foreground"
+                className={ROTULO}
               >
                 Título *
               </Label>
@@ -299,17 +310,15 @@ export function EditMeetingDialog({
 
             {/* Tipo */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Label className={ROTULO}>Tipo</Label>
               <div className="flex flex-wrap gap-1.5">
                 {EVENT_TYPE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => update("event_type", opt.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs transition-all ${
-                      form.event_type === opt.value
-                        ? "border-primary bg-primary/10 font-medium text-foreground"
-                        : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                      form.event_type === opt.value ? CHIP_ATIVO : CHIP_INATIVO
                     }`}
                   >
                     {opt.label}
@@ -319,8 +328,8 @@ export function EditMeetingDialog({
             </div>
 
             {/* Dia todo + datas */}
-            <div className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2">
-              <Label className="flex-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5">
+              <Label className="flex-1 text-[13px] font-semibold text-foreground">
                 Dia todo
               </Label>
               <Switch
@@ -333,7 +342,7 @@ export function EditMeetingDialog({
               <div className="space-y-1.5">
                 <Label
                   htmlFor="edit-meeting-start"
-                  className="text-xs text-muted-foreground"
+                  className={ROTULO}
                 >
                   Início *
                 </Label>
@@ -354,7 +363,7 @@ export function EditMeetingDialog({
               <div className="space-y-1.5">
                 <Label
                   htmlFor="edit-meeting-end"
-                  className="text-xs text-muted-foreground"
+                  className={ROTULO}
                 >
                   Fim *
                 </Label>
@@ -383,7 +392,7 @@ export function EditMeetingDialog({
 
             {/* Local */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Local</Label>
+              <Label className={ROTULO}>Local</Label>
               <Input
                 placeholder="Endereço ou link"
                 value={form.location}
@@ -393,7 +402,7 @@ export function EditMeetingDialog({
 
             {/* Descrição */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Descrição</Label>
+              <Label className={ROTULO}>Descrição</Label>
               <Textarea
                 placeholder="Notas sobre o evento..."
                 rows={3}
@@ -431,7 +440,7 @@ export function EditMeetingDialog({
 
             {/* Cor */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Cor</Label>
+              <Label className={ROTULO}>Cor</Label>
               <div className="flex flex-wrap gap-2 pt-0.5">
                 {COLOR_OPTIONS.map((opt) => (
                   <button
@@ -441,7 +450,7 @@ export function EditMeetingDialog({
                     title={opt.label}
                     className={`h-5 w-5 flex-shrink-0 rounded-full border-2 transition-all ${
                       form.color === opt.value
-                        ? "scale-125 border-foreground shadow-sm"
+                        ? "scale-125 border-foreground shadow-relevo"
                         : "border-transparent hover:scale-110"
                     }`}
                     style={{ backgroundColor: opt.hex }}
@@ -452,7 +461,7 @@ export function EditMeetingDialog({
 
             {/* Link */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
+              <Label className={ROTULO}>
                 Link da reunião (Meet / Zoom / etc)
               </Label>
               <Input
@@ -464,7 +473,7 @@ export function EditMeetingDialog({
 
             {/* Aviso de desvínculo — não bloqueia, mas não deixa passar calado */}
             {vaiDesvincularLead && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
+              <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-warning-strong">
                 Ao salvar, esta reunião deixará de estar vinculada ao lead que
                 tinha. Escolha um lead no funil novo se não quiser perder o
                 vínculo.

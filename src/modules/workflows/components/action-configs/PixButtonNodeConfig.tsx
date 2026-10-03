@@ -28,8 +28,8 @@ interface Props {
 export function PixButtonNodeConfig({ data, onUpdate }: Props) {
   return (
     <div className="space-y-4">
-      <div className="rounded-md bg-amber-500/5 border border-amber-500/30 p-2">
-        <p className="text-xs text-amber-900 dark:text-amber-200">
+      <div className="rounded-xl border border-warning/30 bg-warning/[.08] p-2.5">
+        <p className="text-xs text-foreground/80">
           Recurso nativo Uazapi. Lead recebe botão "Pagar" no WhatsApp com
           chave PIX pré-preenchida.
         </p>

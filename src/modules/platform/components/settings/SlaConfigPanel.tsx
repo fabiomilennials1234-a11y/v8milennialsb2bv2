@@ -3,9 +3,9 @@ import { Plus, Timer, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -15,9 +15,10 @@ import {
 import { useSlaConfigs, useCreateSlaConfig, useUpdateSlaConfig, useDeleteSlaConfig, SlaConfig } from "@/modules/platform/hooks/useSlaConfigs";
 import { useAllPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
+import { CartaoDeAjustes } from "./settings-ui";
 
 const ESCALATION_ACTIONS = [
-  { value: "notify", label: "Notificar responsavel" },
+  { value: "notify", label: "Notificar responsável" },
   { value: "escalate", label: "Escalar para gestor" },
   { value: "auto_move", label: "Mover automaticamente" },
   { value: "create_followup", label: "Criar follow-up" },
@@ -84,86 +85,71 @@ export function SlaConfigPanel() {
     updateSla.mutate({ id: config.id, is_active: !config.is_active });
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+  const abrirNovo = () => {
+    // Abre já apontando para um funil que a org TEM — o default
+    // estático "whatsapp" pode não existir nela (SCRUM-641).
+    setForm((f) =>
+      tiposDaOrg.includes(f.pipeline_type as (typeof PIPELINE_TYPES)[number])
+        ? f
+        : { ...f, pipeline_type: tiposDaOrg[0] ?? f.pipeline_type, stage_id: "" },
     );
-  }
+    setDialogOpen(true);
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
-            <Timer className="h-5 w-5 text-primary" />
-            SLA por etapa
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Defina prazos maximos por etapa do funil e ações em caso de atraso
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            // Abre já apontando para um funil que a org TEM — o default
-            // estático "whatsapp" pode não existir nela (SCRUM-641).
-            setForm((f) =>
-              tiposDaOrg.includes(f.pipeline_type as (typeof PIPELINE_TYPES)[number])
-                ? f
-                : { ...f, pipeline_type: tiposDaOrg[0] ?? f.pipeline_type, stage_id: "" },
-            );
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="mr-1 h-4 w-4" /> Novo SLA
+    <CartaoDeAjustes
+      titulo="SLA por etapa"
+      descricao="Defina prazos máximos por etapa do funil e ações em caso de atraso"
+      acoes={
+        <Button size="sm" variant="outline" onClick={abrirNovo} disabled={isLoading}>
+          <Plus /> Novo SLA
         </Button>
-      </div>
-
-      {configs.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Timer className="h-8 w-8 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhum SLA configurado</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {configs.map((config) => (
-            <Card key={config.id} className={!config.is_active ? "opacity-50" : ""}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm">
-                      {pipeName(config.pipeline_type)} — {getStageName(config.stage_id)}
-                    </CardTitle>
-                    <Badge variant="outline" className="text-xs tabular-nums">
-                      {config.max_hours}h
-                    </Badge>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {ESCALATION_ACTIONS.find((a) => a.value === config.escalation_action)?.label ?? config.escalation_action}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={config.is_active}
-                      onCheckedChange={() => handleToggle(config)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => deleteSla.mutate(config.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
+      }
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
+      ) : configs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-10 text-center">
+          <Timer className="mb-3 h-7 w-7 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Nenhum SLA configurado</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {configs.map((config) => (
+            <li
+              key={config.id}
+              className={cn("flex flex-wrap items-center gap-3 py-3.5 first:pt-1 last:pb-1", !config.is_active && "opacity-50")}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold tracking-tight">
+                  {pipeName(config.pipeline_type)} — {getStageName(config.stage_id)}
+                </p>
+                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  {ESCALATION_ACTIONS.find((a) => a.value === config.escalation_action)?.label ?? config.escalation_action}
+                </p>
+              </div>
+              <Badge variant="gold" className="text-xs tabular-nums">
+                {config.max_hours}h
+              </Badge>
+              <Switch
+                checked={config.is_active}
+                onCheckedChange={() => handleToggle(config)}
+                aria-label={`SLA de ${pipeName(config.pipeline_type)} — ${getStageName(config.stage_id)} ativo`}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={() => deleteSla.mutate(config.id)}
+                aria-label={`Remover SLA de ${pipeName(config.pipeline_type)} — ${getStageName(config.stage_id)}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
 
       {/* Create dialog */}
@@ -210,7 +196,7 @@ export function SlaConfigPanel() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Tempo maximo (horas)</Label>
+              <Label className="text-xs">Tempo máximo (horas)</Label>
               <Input
                 type="number"
                 min={1}
@@ -220,7 +206,7 @@ export function SlaConfigPanel() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Acao ao estourar</Label>
+              <Label className="text-xs">Ação ao estourar</Label>
               <Select
                 value={form.escalation_action}
                 onValueChange={(v) => setForm({ ...form, escalation_action: v })}
@@ -246,6 +232,6 @@ export function SlaConfigPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </CartaoDeAjustes>
   );
 }

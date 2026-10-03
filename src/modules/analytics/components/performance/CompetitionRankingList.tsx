@@ -28,7 +28,7 @@ function CompetitionRankingListBase({ users, currentUserId, metricType }: Compet
       {users.map((user, i) => {
         const isMe = user.id === currentUserId;
         const barColor = user.goalProgress >= 80 ? "bg-success" : user.goalProgress >= 40 ? "bg-primary" : "bg-destructive";
-        const textColor = user.goalProgress >= 80 ? "text-success" : user.goalProgress >= 40 ? "text-primary" : "text-destructive";
+        const textColor = user.goalProgress >= 80 ? "text-success" : user.goalProgress >= 40 ? "text-primary-soft-foreground" : "text-destructive";
 
         return (
           <motion.div
@@ -36,14 +36,14 @@ function CompetitionRankingListBase({ users, currentUserId, metricType }: Compet
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.06 }}
-            className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl transition-colors ${
               isMe
-                ? "bg-primary/5 border border-primary/20"
-                : "bg-card/50 border border-border/20 hover:bg-card/80"
+                ? "bg-primary-soft border border-primary/30"
+                : "bg-card border border-card-border hover:bg-muted/40"
             }`}
           >
             {/* Position */}
-            <span className="text-sm font-bold text-muted-foreground w-7 text-center">
+            <span className="text-sm font-extrabold tabular-nums text-muted-foreground w-7 text-center">
               {user.position}º
             </span>
 
@@ -58,11 +58,11 @@ function CompetitionRankingListBase({ users, currentUserId, metricType }: Compet
             {/* Name */}
             <span className={`flex-1 text-sm truncate ${isMe ? "font-semibold" : "font-medium"}`}>
               {user.name}
-              {isMe && <span className="text-xs text-primary ml-1">(você)</span>}
+              {isMe && <span className="text-xs text-primary-soft-foreground ml-1">(você)</span>}
             </span>
 
             {/* Value */}
-            <span className="text-sm font-bold text-foreground min-w-[60px] text-right">
+            <span className="text-sm font-extrabold tabular-nums tracking-[-0.02em] text-foreground min-w-[60px] text-right">
               {metricType === "sales" ? fmt(user.value) : `${user.value}`}
             </span>
 
@@ -77,7 +77,7 @@ function CompetitionRankingListBase({ users, currentUserId, metricType }: Compet
             </div>
 
             {/* Percentage */}
-            <span className={`text-xs font-bold w-9 text-right ${textColor}`}>
+            <span className={`text-xs font-bold tabular-nums w-9 text-right ${textColor}`}>
               {user.goalProgress}%
             </span>
 
@@ -87,7 +87,7 @@ function CompetitionRankingListBase({ users, currentUserId, metricType }: Compet
                 animate={{ scale: [1, 1.15, 1] }}
                 transition={{ repeat: Infinity, duration: 1.2 }}
               >
-                <Flame className="w-4 h-4 text-orange-400" />
+                <Flame className="w-4 h-4 text-warning-strong" />
               </motion.div>
             )}
           </motion.div>

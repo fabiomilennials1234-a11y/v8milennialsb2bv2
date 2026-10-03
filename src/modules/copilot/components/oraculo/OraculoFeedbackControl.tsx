@@ -52,7 +52,7 @@ export function OraculoFeedbackControl({ label, value, busy, onSubmit }: Props) 
           type="button"
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground"
+          className="size-7 rounded-[9px] text-muted-foreground hover:bg-success/10 hover:text-success"
           aria-label={label === "esta resposta" ? "Resposta útil" : "Conversa útil"}
           disabled={busy}
           onClick={() => onSubmit({ rating: "positive" })}
@@ -63,7 +63,7 @@ export function OraculoFeedbackControl({ label, value, busy, onSubmit }: Props) 
           type="button"
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground"
+          className="size-7 rounded-[9px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           aria-label={label === "esta resposta" ? "Resposta não ajudou" : "Conversa não ajudou"}
           disabled={busy}
           onClick={() => setNegativeOpen(true)}
@@ -75,13 +75,13 @@ export function OraculoFeedbackControl({ label, value, busy, onSubmit }: Props) 
   }
 
   return (
-    <div className="space-y-2 rounded-xl border border-border/70 bg-background/70 p-3">
-      <p className="text-xs font-medium">O que falhou n{label === "esta resposta" ? "esta resposta" : "esta conversa"}?</p>
+    <div className="space-y-2 rounded-2xl border border-border/70 bg-sunken p-3">
+      <p className="text-xs font-semibold">O que falhou n{label === "esta resposta" ? "esta resposta" : "esta conversa"}?</p>
       <div className="flex flex-wrap gap-1.5">
         {REASONS.map((item) => (
           <label
             key={item.value}
-            className="cursor-pointer rounded-full border border-border px-2.5 py-1 text-[11px] has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+            className="cursor-pointer rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-foreground/20 has-[:checked]:border-primary/40 has-[:checked]:bg-primary-soft has-[:checked]:text-primary-soft-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
           >
             <input
               className="sr-only"
@@ -102,7 +102,7 @@ export function OraculoFeedbackControl({ label, value, busy, onSubmit }: Props) 
         maxLength={2000}
         rows={2}
         placeholder="Contexto opcional"
-        className="min-h-16 resize-none text-xs"
+        className="min-h-16 resize-none rounded-xl text-xs"
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={() => setNegativeOpen(false)} disabled={busy}>

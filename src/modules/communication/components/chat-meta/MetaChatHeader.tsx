@@ -16,10 +16,10 @@ export function MetaChatHeader({ byChannel, channel, onChannelChange, pageId, on
   const showChannelTabs = byChannel.messenger.length > 0 && byChannel.instagram.length > 0;
 
   return (
-    <div className="flex items-center gap-3 border-b px-4 py-3">
+    <div className="flex flex-wrap items-center gap-3 pb-3">
       {showChannelTabs && (
         <Tabs value={channel} onValueChange={(v) => onChannelChange(v as MetaChannel)}>
-          <TabsList>
+          <TabsList variant="pill">
             <TabsTrigger value="messenger">Messenger</TabsTrigger>
             <TabsTrigger value="instagram">Instagram</TabsTrigger>
           </TabsList>
@@ -28,7 +28,7 @@ export function MetaChatHeader({ byChannel, channel, onChannelChange, pageId, on
 
       {pages.length > 1 && (
         <Select value={pageId ?? undefined} onValueChange={onPageChange}>
-          <SelectTrigger className="w-[240px]">
+          <SelectTrigger className="h-10 w-[240px] rounded-full shadow-relevo">
             <SelectValue placeholder="Selecione uma página" />
           </SelectTrigger>
           <SelectContent>
@@ -45,7 +45,7 @@ export function MetaChatHeader({ byChannel, channel, onChannelChange, pageId, on
       )}
 
       {pages.length === 1 && (
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm font-semibold text-muted-foreground">
           {pages[0].instagram_username ? `@${pages[0].instagram_username}` : pages[0].page_name}
         </span>
       )}

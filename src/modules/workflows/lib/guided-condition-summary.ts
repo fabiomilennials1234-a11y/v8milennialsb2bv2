@@ -96,7 +96,8 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
       : `${label} ${condition.operator === 'equals' ? 'é' : 'não é'} ${condition.value === '' ? '…' : condition.value ? 'Sim' : 'Não'}`;
   }
   if (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
-    const label = condition.field === 'lead.custom' ? condition.fieldLabel || 'Campo personalizado' : GUIDED_SCALAR_FIELDS[condition.field].label;
+    // Score do lead descontinuado (CTO, 02/10): a condição salva continua legível, marcada.
+    const label = condition.field === 'lead.custom' ? condition.fieldLabel || 'Campo personalizado' : `${GUIDED_SCALAR_FIELDS[condition.field].label} (descontinuado)`;
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido` : `${label} ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
   }
   const label = condition.field === 'lead.custom' ? condition.fieldLabel || 'Campo personalizado' : GUIDED_SCALAR_FIELDS[condition.field].label;

@@ -25,6 +25,7 @@ import {
   type ManualCallOutcome,
 } from "@/modules/engagement/hooks/useCallLogs";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
 
 interface LogCallModalProps {
   open: boolean;
@@ -80,8 +81,8 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Phone className="w-5 h-5" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={Phone} />
             Registrar ligação
             {leadName && (
               <span className="text-sm font-normal text-muted-foreground">— {leadName}</span>
@@ -132,8 +133,8 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1">
-                <Clock className="w-3 h-3" />
+              <Label className="flex items-center gap-1 text-xs">
+                <Clock className="h-3 w-3" />
                 Duração (min)
               </Label>
               <Input
@@ -158,7 +159,7 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, phoneNumber
             />
           </div>
 
-          <Button onClick={handleSubmit} className="w-full gap-2" disabled={logCall.isPending}>
+          <Button onClick={handleSubmit} className="w-full" disabled={logCall.isPending}>
             {logCall.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (

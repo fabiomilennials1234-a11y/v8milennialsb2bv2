@@ -118,7 +118,7 @@ function NumberField({ label, adorn, value, onChange, dashed, realLine }: Number
           }}
           placeholder="0"
           className={cn(
-            "h-10 w-full rounded-lg border bg-background text-[15px] tabular-nums text-foreground",
+            "h-10 w-full rounded-xl border bg-card text-[15px] font-semibold tabular-nums text-foreground",
             "transition-colors placeholder:text-muted-foreground/50",
             "focus-visible:outline-none focus-visible:border-insights/50 focus-visible:ring-2 focus-visible:ring-insights/40",
             leftAdorn ? "pl-9 pr-3" : "pl-3 pr-9",
@@ -137,7 +137,7 @@ function NumberField({ label, adorn, value, onChange, dashed, realLine }: Number
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
+    <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
       {children}
     </p>
   );
@@ -172,9 +172,9 @@ export function ExpenseInputsPanel({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6">
+    <div className="rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-base text-foreground">Despesas & Investimento</h2>
+        <h2 className="text-base font-bold leading-tight tracking-tight text-foreground">Despesas & Investimento</h2>
         <AutosaveIndicator status={status} onRetry={onRetry} />
       </div>
 
@@ -216,15 +216,16 @@ export function ExpenseInputsPanel({
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <SectionLabel>Despesas</SectionLabel>
-            <div className="inline-flex rounded-lg border border-border bg-background p-0.5">
+            <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
               <button
                 type="button"
                 onClick={() => set({ despesas_mode: "mc" })}
                 aria-pressed={mc}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-insights",
                   mc
-                    ? "bg-insights/15 text-insights"
+                    ? "bg-card text-insights shadow-relevo"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -235,9 +236,10 @@ export function ExpenseInputsPanel({
                 onClick={() => set({ despesas_mode: "detalhado" })}
                 aria-pressed={!mc}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-[background-color,color,box-shadow] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-insights",
                   !mc
-                    ? "bg-insights/15 text-insights"
+                    ? "bg-card text-insights shadow-relevo"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >

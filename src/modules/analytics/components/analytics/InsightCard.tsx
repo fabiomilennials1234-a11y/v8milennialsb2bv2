@@ -22,10 +22,10 @@ const VARIANT_STYLES: Record<InsightVariant, { bg: string; border: string; iconB
     iconColor: "text-success",
   },
   warning: {
-    bg: "bg-amber-500/[0.04]",
-    border: "border-amber-500/10",
-    iconBg: "bg-amber-500/10",
-    iconColor: "text-amber-500",
+    bg: "bg-warning/[0.04]",
+    border: "border-warning/10",
+    iconBg: "bg-warning/10",
+    iconColor: "text-warning-strong",
   },
   danger: {
     bg: "bg-destructive/[0.04]",
@@ -34,10 +34,10 @@ const VARIANT_STYLES: Record<InsightVariant, { bg: string; border: string; iconB
     iconColor: "text-destructive",
   },
   info: {
-    bg: "bg-blue-500/[0.04]",
-    border: "border-blue-500/10",
-    iconBg: "bg-blue-500/10",
-    iconColor: "text-blue-500",
+    bg: "bg-insights/5",
+    border: "border-insights/10",
+    iconBg: "bg-insights/10",
+    iconColor: "text-insights",
   },
 };
 
@@ -53,13 +53,13 @@ function InsightCardBase({ icon: Icon, title, description, variant, delay = 0 }:
       onHoverStart={() => setExpanded(true)}
       onHoverEnd={() => setExpanded(false)}
       className={cn(
-        "rounded-lg border p-4 transition-colors cursor-default",
+        "rounded-2xl border p-4 transition-colors cursor-default",
         s.bg,
         s.border
       )}
     >
       <div className="flex items-start gap-3">
-        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", s.iconBg)}>
+        <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-[10px]", s.iconBg)}>
           <Icon className={cn("w-4 h-4", s.iconColor)} />
         </div>
         <div className="min-w-0">

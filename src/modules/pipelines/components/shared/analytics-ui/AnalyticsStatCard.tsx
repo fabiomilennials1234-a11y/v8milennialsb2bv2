@@ -1,19 +1,27 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { KpiTile, type Tone } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 
-const ACCENT_LINE: Record<string, string> = {
-  gold: "via-primary",
-  success: "via-success",
-  blue: "via-chart-5",
-  neutral: "via-foreground/50",
-};
-
+/**
+ * Tom do número quando `tintValue` está ligado. Ouro vira o par legível do
+ * ouro (`primary-soft-foreground`): ouro puro sobre o cartão branco reprova
+ * contraste no claro.
+ */
 const ACCENT_VALUE: Record<string, string> = {
-  gold: "text-primary",
+  gold: "text-primary-soft-foreground",
   success: "text-success",
   blue: "text-foreground",
   neutral: "text-foreground",
+};
+
+/** Tom do chip do ícone, derivado do accent (mockup: ícone tintado no cartão). */
+const ACCENT_TONE: Record<string, Tone> = {
+  gold: "gold",
+  success: "good",
+  blue: "info",
+  neutral: "neutral",
 };
 
 interface AnalyticsStatCardProps {
@@ -21,15 +29,25 @@ interface AnalyticsStatCardProps {
   value: ReactNode;
   /** Contexto computável: "61% do total", "11 propostas"... */
   sub?: ReactNode;
-  accent?: keyof typeof ACCENT_LINE;
-  /** Tinge o número com a cor do accent (default: só a linha do topo). */
+  accent?: keyof typeof ACCENT_VALUE;
+  /** Tinge o número com a cor do accent (default: número neutro). */
   tintValue?: boolean;
   onClick?: () => void;
   delay?: number;
   className?: string;
+  /** Ícone no chip tintado do `KpiTile` (V5). */
+  icon?: LucideIcon;
+  /** Tom do chip quando o accent não diz (ex.: perda em vermelho). */
+  tone?: Tone;
 }
 
-/** Stat card dos analytics de funil — linha de accent no topo + número tabular. */
+/**
+ * Stat card dos analytics de funil — no V5 é o `KpiTile` do sistema (rótulo,
+ * número grande tabular, nota). Mesma API de antes: os três painéis de
+ * analytics (genérico, Qualificação, Confirmação, Propostas) não mudam de
+ * dado, só de forma. A linha de accent no topo saiu: o tom agora mora no
+ * número (`tintValue`), que é onde a leitura acontece.
+ */
 export function AnalyticsStatCard({
   label,
   value,
@@ -39,35 +57,43 @@ export function AnalyticsStatCard({
   onClick,
   delay = 0,
   className,
+  icon,
+  tone,
 }: AnalyticsStatCardProps) {
+  // O card clicável abre o drilldown — então ele tem de ser alcançável por
+  // teclado também, não só pelo mouse.
+  const onKeyDown = onClick
+    ? (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }
+    : undefined;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      onClick={onClick}
-      className={cn(
-        "relative overflow-hidden rounded-xl border border-border bg-gradient-to-b from-card to-card/70 p-4 pt-[18px]",
-        onClick && "cursor-pointer transition-all hover:ring-1 hover:ring-primary/30",
-        className
-      )}
+      className="min-w-0"
     >
-      <span
+      <KpiTile
+        label={label}
+        icon={icon}
+        tone={tone ?? ACCENT_TONE[accent]}
+        value={<span className={cn("whitespace-nowrap", tintValue && ACCENT_VALUE[accent])}>{value}</span>}
+        note={sub}
         className={cn(
-          "absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent to-transparent opacity-80",
-          ACCENT_LINE[accent]
+          "h-full",
+          onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
         )}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
       />
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "text-2xl font-bold tabular-nums tracking-tight mt-2 whitespace-nowrap",
-          tintValue && ACCENT_VALUE[accent]
-        )}
-      >
-        {value}
-      </p>
-      {sub && <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>}
     </motion.div>
   );
 }

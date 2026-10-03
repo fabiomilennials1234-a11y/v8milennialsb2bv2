@@ -246,7 +246,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
                   type="button"
                   size="sm"
                   variant="secondary"
-                  className="h-6 px-2 text-xs"
+                  className="h-7 px-2.5 text-xs"
                   onClick={() => insertVariable(v.token)}
                 >
                   {v.label}
@@ -258,7 +258,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-6 px-2 text-xs"
+                  className="h-7 px-2.5 text-xs shadow-none"
                   onClick={() => insertVariable(v.token)}
                   title="Resolve apenas para leads da Carteira/Upsell"
                 >
@@ -275,8 +275,8 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
               lead recebe uma das opções ao acaso — reduz risco de bloqueio.
             </p>
             {message.trim().length > 0 && (
-              <div className="rounded-md border border-border bg-muted/40 p-2.5">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Prévia (dados de exemplo)</p>
+              <div className="rounded-xl border border-border/60 bg-sunken p-3">
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Prévia (dados de exemplo)</p>
                 <p className="text-sm whitespace-pre-wrap">{preview}</p>
               </div>
             )}
@@ -302,7 +302,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="qb-min">Delay mín (s)</Label>
+              <Label htmlFor="qb-min">Intervalo mín. (s)</Label>
               <Input
                 id="qb-min"
                 type="number"
@@ -312,7 +312,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="qb-max">Delay máx (s)</Label>
+              <Label htmlFor="qb-max">Intervalo máx. (s)</Label>
               <Input
                 id="qb-max"
                 type="number"
@@ -322,7 +322,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="qb-cap">Máx leads</Label>
+              <Label htmlFor="qb-cap">Máx. de leads</Label>
               <Input
                 id="qb-cap"
                 type="number"
@@ -337,8 +337,8 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
           <div className="space-y-1.5">
             <Label>Imagem (opcional)</Label>
             {imageUrl ? (
-              <div className="flex items-center gap-3 rounded-md border border-border p-2">
-                <img src={imageUrl} alt="anexo" className="h-12 w-12 rounded object-cover" />
+              <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-sunken p-2">
+                <img src={imageUrl} alt="anexo" className="h-12 w-12 rounded-lg object-cover" />
                 <span className="flex-1 truncate text-xs text-muted-foreground">
                   Imagem anexada — a mensagem vira legenda
                 </span>
@@ -347,7 +347,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
                 </Button>
               </div>
             ) : (
-              <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground hover:border-primary">
+              <label className="flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border px-3 text-sm text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground">
                 {uploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -391,9 +391,9 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
           </Button>
           <Button onClick={handleFire} disabled={!canFire}>
             {blast.isPending ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Send className="mr-1.5 h-3.5 w-3.5" />
+              <Send className="h-3.5 w-3.5" />
             )}
             {scheduledFor ? "Agendar" : "Disparar"}
           </Button>

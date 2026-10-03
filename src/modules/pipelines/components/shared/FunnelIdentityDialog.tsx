@@ -10,6 +10,7 @@ import {
   FunnelIdentitySection,
   type FunnelIdentitySectionProps,
 } from "./FunnelIdentitySection";
+import { IconChip } from "@/components/ui/bento";
 
 export interface FunnelIdentityDialogProps
   extends Pick<
@@ -50,8 +51,8 @@ export function FunnelIdentityDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Palette className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={Palette} tone="gold" />
             Renomear funil
           </DialogTitle>
           <DialogDescription>

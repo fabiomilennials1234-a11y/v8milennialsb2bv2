@@ -28,7 +28,7 @@ export function AutomationTemplatesTab() {
   };
 
   return (
-    <div className="space-y-4 mt-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           {templates?.length ?? 0} templates
@@ -38,7 +38,7 @@ export function AutomationTemplatesTab() {
             <Upload className="w-4 h-4 mr-1" /> Importar
           </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="w-4 h-4 mr-1" /> Novo Template
+            <Plus className="w-4 h-4 mr-1" /> Novo template
           </Button>
         </div>
       </div>
@@ -58,7 +58,7 @@ export function AutomationTemplatesTab() {
                   <Badge variant="outline" className="text-[10px]">{tpl.type}</Badge>
                   <Badge variant="secondary" className="text-[10px]">{tpl.trigger_type}</Badge>
                   {!tpl.is_active && (
-                    <Badge variant="destructive" className="text-[10px]">Inativo</Badge>
+                    <Badge variant="soft" className="text-[10px]">Inativo</Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">{tpl.description}</p>

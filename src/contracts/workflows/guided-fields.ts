@@ -50,6 +50,18 @@ export function isGuidedNumberOperator(value: unknown): value is GuidedNumberOpe
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_NUMBER_OPERATORS, value);
 }
 export const GUIDED_SCALAR_FIELDS = { ...GUIDED_TEXT_FIELDS, ...GUIDED_NUMBER_FIELDS };
+
+/**
+ * Campos que a UI não oferece mais para condição nova (CTO, 2026-10-02: o score
+ * do lead saiu do produto). A entrada CONTINUA em `GUIDED_NUMBER_FIELDS` de
+ * propósito: o executor (`supabase/functions/_shared/guided-condition.ts`)
+ * importa este contrato e ainda precisa avaliar condições já salvas. Tirar daqui
+ * é o passo do executor, medido à parte.
+ */
+export const DISCONTINUED_GUIDED_FIELDS: ReadonlySet<string> = new Set(['lead.qualification_score']);
+export function isDiscontinuedGuidedField(value: unknown): boolean {
+  return typeof value === 'string' && DISCONTINUED_GUIDED_FIELDS.has(value);
+}
 export function isGuidedScalarField(value: unknown): value is keyof typeof GUIDED_SCALAR_FIELDS {
   return isGuidedTextField(value) || isGuidedNumberField(value);
 }

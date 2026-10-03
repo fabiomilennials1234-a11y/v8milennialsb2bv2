@@ -59,25 +59,23 @@ function TeamActivityCardBase({ range }: TeamActivityCardProps) {
   }, [sellers]);
 
   if (isLoading) {
-    return <Skeleton className="h-[300px] rounded-2xl" />;
+    return <Skeleton className="h-full min-h-[200px] rounded-2xl" />;
   }
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".2s" }}>
-      <div className="flex items-center justify-between">
-        <span className="cmd-lbl">Atividade da equipe</span>
-        <span className="text-[11px] font-semibold text-muted-foreground/60">
-          tudo que cada vendedor fez no período: leads, follow-ups, reuniões e propostas
-        </span>
-      </div>
-      <div className="mt-2.5">
+    // Corpo da janela "Atividade da equipe" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <p className="text-xs text-muted-foreground">
+        Tudo que cada vendedor fez no período: leads, follow-ups, reuniões e propostas.
+      </p>
+      <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto">
         {rows.length === 0 && (
           <p className="py-6 text-center text-[13px] text-muted-foreground">Sem atividade registrada no período.</p>
         )}
         {rows.map((s) => (
           <div
             key={s.id}
-            className="grid grid-cols-[34px_130px_1fr_auto] items-center gap-3 border-b border-border/70 py-2.5 last:border-b-0"
+            className="grid grid-cols-[34px_130px_1fr_auto] items-center gap-3 border-b border-border/60 py-2.5 last:border-b-0"
           >
             <span
               className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[11px] font-extrabold text-background"
@@ -85,22 +83,22 @@ function TeamActivityCardBase({ range }: TeamActivityCardProps) {
             >
               {initials(s.name)}
             </span>
-            <span className="text-[12.5px] font-bold">
+            <span className="min-w-0 truncate text-[13px] font-bold">
               {s.name}
-              <small className={`block text-[10px] font-semibold ${s.belowAvg ? "text-destructive" : "text-muted-foreground/60"}`}>
+              <small className={`block truncate text-[11px] font-semibold ${s.belowAvg ? "text-destructive" : "text-muted-foreground"}`}>
                 {s.note || " "}
               </small>
             </span>
-            <div className="relative h-[18px] overflow-hidden rounded-md bg-background">
+            <div className="relative h-5 overflow-hidden rounded-full bg-muted">
               <i
-                className="absolute inset-y-0 left-0 rounded-md"
+                className="absolute inset-y-0 left-0 rounded-full"
                 style={{ width: `${s.pct}%`, background: BAR_COLORS[s.colorIdx] }}
               />
-              <span className={`absolute left-[9px] top-1/2 z-[1] -translate-y-1/2 text-[10.5px] font-extrabold ${s.colorIdx === 0 ? "text-background" : ""}`}>
+              <span className={`absolute left-2.5 top-1/2 z-[1] -translate-y-1/2 text-[11px] font-extrabold tabular-nums ${s.colorIdx === 0 ? "text-primary-foreground" : ""}`}>
                 {s.total} aç{s.total === 1 ? "ão" : "ões"}
               </span>
             </div>
-            <span className="flex gap-3 whitespace-nowrap text-[10.5px] font-semibold text-muted-foreground/60">
+            <span className="flex gap-3 whitespace-nowrap text-[11px] font-semibold text-muted-foreground">
               <span><b className="font-extrabold text-foreground">{s.leads}</b> leads</span>
               <span><b className="font-extrabold text-foreground">{s.followups}</b> follow-ups</span>
               <span><b className="font-extrabold text-foreground">{s.reunioes}</b> reuniões</span>

@@ -15,12 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -29,6 +23,7 @@ import {
 import { useCopilotFunnelOptions } from "../../hooks/usePipeTypeOptions";
 
 import { type FunisState } from "./funis-mapping";
+import { IconChip } from "@/components/ui/bento";
 
 // ── Props ──
 
@@ -123,11 +118,11 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <GitBranch className="w-5 h-5 text-primary" />
-          <h3 className="text-sm font-semibold">Funis & Etapas</h3>
+        <div className="flex items-center gap-2.5">
+          <IconChip icon={GitBranch} tone="gold" />
+          <h3 className="text-sm font-bold tracking-tight">Funis & Etapas</h3>
           {activeCount > 0 && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="gold" className="text-[11px] tabular-nums">
               {activeCount} ativo{activeCount !== 1 ? "s" : ""}
             </Badge>
           )}
@@ -139,11 +134,11 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
       </p>
 
       {/* Todos os funis usam o mesmo catálogo e a mesma renderização. */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm">Funis</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-2">
+      <div className="rounded-2xl border border-border/70">
+        <div className="px-4 pb-2 pt-3">
+          <h4 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Funis</h4>
+        </div>
+        <div className="space-y-1.5 px-3 pb-3">
           {pipeTypeOptions.filter((pipe) => pipe.isVisible !== false || state.activePipes.includes(pipe.value)).map((pipe) => {
             const isActive = state.activePipes.includes(pipe.value);
             const isExpanded = expanded[pipe.value] ?? false;
@@ -159,10 +154,10 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
                 }
               >
                 <div
-                  className={`flex items-center justify-between p-2.5 rounded-md border transition-colors ${
+                  className={`flex items-center justify-between rounded-xl border p-2.5 transition-colors ${
                     isActive
-                      ? "bg-primary/5 border-primary/20"
-                      : "hover:bg-muted/50 border-transparent"
+                      ? "border-primary/30 bg-primary-soft/50"
+                      : "border-transparent hover:bg-muted/60"
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -170,16 +165,21 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
                       checked={isActive}
                       onCheckedChange={() => togglePipe(pipe.value)}
                     />
-                    <span className="text-sm font-medium">{pipe.label}</span>
+                    <span className="text-sm font-semibold">{pipe.label}</span>
                     {isActive && pipeStages.length > 0 && (
-                      <Badge variant="outline" className="text-[10px] h-5">
+                      <Badge variant="soft" className="h-5 text-[10px] tabular-nums">
                         {pipeStages.length} etapa{pipeStages.length !== 1 ? "s" : ""}
                       </Badge>
                     )}
                   </div>
                   {isActive && stagesForPipe.length > 0 && (
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 rounded-[9px] p-0"
+                        aria-label={isExpanded ? `Recolher etapas de ${pipe.label}` : `Ver etapas de ${pipe.label}`}
+                      >
                         {isExpanded ? (
                           <ChevronDown className="w-3.5 h-3.5" />
                         ) : (
@@ -247,8 +247,8 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
               </Collapsible>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
     </div>
   );

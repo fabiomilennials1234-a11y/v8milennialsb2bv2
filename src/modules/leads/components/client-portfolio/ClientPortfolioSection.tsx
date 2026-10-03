@@ -100,7 +100,7 @@ export function ClientPortfolioSection({
       filters={filterControls(() => { setSegment("all"); setReorder("all"); })}
       pagination={
         <div
-          className="flex items-center justify-between gap-2 px-5 py-4 text-xs text-muted-foreground"
+          className="flex items-center justify-between gap-2 border-t border-border px-5 py-3 text-[13px] tabular-nums text-muted-foreground"
           aria-live="polite"
         >
           <span>

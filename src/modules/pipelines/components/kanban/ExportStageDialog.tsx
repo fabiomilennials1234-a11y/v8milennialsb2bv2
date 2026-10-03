@@ -119,7 +119,7 @@ export function ExportStageDialog({
                   htmlFor="export-stage-fmt-xlsx"
                   className="flex items-center gap-2 font-normal cursor-pointer"
                 >
-                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                  <FileSpreadsheet className="w-4 h-4 text-success" />
                   Excel (.xlsx)
                 </Label>
               </div>

@@ -12,10 +12,11 @@ interface ClienteReorderTimelineProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Mesmas faixas de antes (80/100% do ciclo), em token. */
 function barColor(pct: number) {
-  if (pct <= 80) return "from-emerald-500 to-emerald-400";
-  if (pct <= 100) return "from-amber-500 to-amber-400";
-  return "from-red-500 to-red-400";
+  if (pct <= 80) return "bg-success";
+  if (pct <= 100) return "bg-warning";
+  return "bg-destructive";
 }
 
 function barBgPulse(pct: number) {
@@ -37,12 +38,12 @@ export function ClienteReorderTimeline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-          Ciclo de Recompra
+        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+          Dias sem pedido / ciclo
         </span>
         <span className={cn(
-          "text-xs font-semibold tabular-nums",
-          pct <= 80 ? "text-emerald-400" : pct <= 100 ? "text-amber-400" : "text-red-400"
+          "text-sm font-extrabold tabular-nums tracking-[-0.02em]",
+          pct <= 80 ? "text-success" : pct <= 100 ? "text-warning-strong" : "text-destructive"
         )}>
           {daysSinceLast}d / {cycleDays}d
         </span>
@@ -52,7 +53,7 @@ export function ClienteReorderTimeline({
       <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden">
         <div
           className={cn(
-            "h-full rounded-full bg-gradient-to-r transition-all",
+            "h-full rounded-full transition-all",
             barColor(pct),
             barBgPulse(pct),
           )}
@@ -61,7 +62,7 @@ export function ClienteReorderTimeline({
         {/* Overflow indicator */}
         {pct > 100 && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[9px] font-bold text-white tracking-wider">
+            <span className="text-[9px] font-bold tracking-wider text-destructive-foreground">
               ATRASADO {Math.round(pct - 100)}%
             </span>
           </div>
@@ -69,7 +70,7 @@ export function ClienteReorderTimeline({
       </div>
 
       {/* Labels */}
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
         <span>Último: {formatDateSafe(lastOrderAt)}</span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground" />

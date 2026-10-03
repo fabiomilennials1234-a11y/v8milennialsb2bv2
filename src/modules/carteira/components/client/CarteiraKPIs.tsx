@@ -1,54 +1,43 @@
+import { AlarmClock, CalendarClock, Filter, HeartPulse, Receipt, Repeat, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { KpiRow, KpiTile, ValueUnit } from "@/components/ui/bento";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
 
-interface KPICardProps {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  valueClassName?: string;
-}
+/**
+ * Resumo da carteira — os cinco números de sempre, do mesmo `get_portfolio_kpis`.
+ *
+ * V5 (mockup, 02/10): ordem Receita · Ticket · Health · Pedidos esperados ·
+ * Recompra atrasada, e só na aba Clientes. O banner amarelo de recompra
+ * atrasada saiu: o número dele (clientes + R$ em risco) mora no último cartão,
+ * com a mesma ação ("Ver clientes" liga o filtro de atrasados).
+ */
+/** Cinco colunas só a partir de xl — em lg a área útil ainda espreme o valor em reais. */
+const ROW_CLASS = "lg:grid-cols-3 xl:grid-cols-5";
 
-function KPICard({ label, value, sub, valueClassName }: KPICardProps) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </div>
-      <div
-        className={`text-[28px] font-bold mt-1 tracking-tight leading-tight ${valueClassName ?? "text-foreground"}`}
-      >
-        {value}
-      </div>
-      {sub && <div className="text-[13px] mt-1 text-muted-foreground">{sub}</div>}
-    </div>
-  );
-}
-
-export function CarteiraKPIs() {
+export function CarteiraKPIs({ onViewOverdue }: { onViewOverdue?: () => void } = {}) {
   const { data, isLoading } = usePortfolioKPIs();
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-4">
-            <div className="space-y-2 animate-pulse">
-              <div className="h-3 bg-muted rounded w-2/3" />
-              <div className="h-7 bg-muted rounded w-1/2" />
-            </div>
-          </div>
-        ))}
-      </div>
+      <KpiRow cols={5} className={ROW_CLASS}>
+        {["Receita recorrente", "Ticket médio", "Health score médio", "Pedidos esperados", "Recompra atrasada"].map(
+          (label) => (
+            <KpiTile key={label} label={label} value="·" loading />
+          ),
+        )}
+      </KpiRow>
     );
   }
 
   if (!data || data.total_clients === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card/50 px-6 py-8 text-center">
-        <p className="text-sm font-medium text-muted-foreground">
-          Sua carteira ainda está vazia
-        </p>
-        <p className="text-[13px] text-muted-foreground/60 mt-1 max-w-md mx-auto">
+      <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-border bg-card/60 px-6 py-8 text-center">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+          <Users className="h-5 w-5" aria-hidden />
+        </span>
+        <p className="text-sm font-bold text-foreground">Sua carteira ainda está vazia</p>
+        <p className="mx-auto max-w-md text-[13px] text-muted-foreground">
           Cadastre clientes manualmente, importe uma planilha ou marque propostas como vendidas. Os KPIs aparecem automaticamente.
         </p>
       </div>
@@ -60,43 +49,68 @@ export function CarteiraKPIs() {
     total_recurring: totalRecurring,
     expected_this_week: expectedThisWeek,
     overdue_count: overdueCount,
+    overdue_revenue: overdueRevenue,
     avg_health: avgHealth,
     avg_ticket: avgTicket,
   } = data;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <KPICard
-        label="Receita Recorrente"
+    <KpiRow cols={5} className={ROW_CLASS}>
+      <KpiTile
+        label="Receita recorrente"
         value={formatBRL(totalRecurring)}
-        sub="clientes em dia com a recompra"
-        valueClassName={totalRecurring > 0 ? "text-primary" : undefined}
+        icon={Repeat}
+        tone="gold"
+        note="clientes em dia com a recompra"
       />
 
-      <KPICard
-        label="Pedidos Esperados"
-        value={expectedThisWeek}
-        sub="próximos 7 dias"
-      />
-
-      <KPICard
-        label="Recompra Atrasada"
-        value={overdueCount}
-        sub={overdueCount > 0 ? "clientes em atraso" : "tudo em dia"}
-        valueClassName={overdueCount > 0 ? "text-destructive" : undefined}
-      />
-
-      <KPICard
-        label="Ticket Médio"
+      <KpiTile
+        label="Ticket médio"
         value={formatBRL(avgTicket)}
-        sub={`${totalClients} clientes ativos`}
+        icon={Receipt}
+        tone="info"
+        note={`${totalClients.toLocaleString("pt-BR")} clientes ativos`}
       />
 
-      <KPICard
-        label="Health Score Médio"
-        value={avgHealth}
-        sub="/100"
+      <KpiTile
+        label="Health score médio"
+        value={
+          <>
+            {avgHealth}
+            <ValueUnit>/100</ValueUnit>
+          </>
+        }
+        icon={HeartPulse}
+        tone={avgHealth >= 70 ? "good" : avgHealth >= 50 ? "neutral" : "bad"}
+        note="média da carteira"
       />
-    </div>
+
+      <KpiTile
+        label="Pedidos esperados"
+        value={expectedThisWeek.toLocaleString("pt-BR")}
+        icon={CalendarClock}
+        tone="neutral"
+        note="próximos 7 dias"
+      />
+
+      <KpiTile
+        label="Recompra atrasada"
+        value={
+          <span className={overdueCount > 0 ? "text-destructive" : undefined}>
+            {overdueCount.toLocaleString("pt-BR")}
+          </span>
+        }
+        icon={AlarmClock}
+        tone={overdueCount > 0 ? "bad" : "good"}
+        note={overdueCount > 0 ? `${formatBRL(overdueRevenue)} em risco` : "tudo em dia"}
+      >
+        {overdueCount > 0 && onViewOverdue && (
+          <Button variant="ink" size="sm" className="h-[30px]" onClick={onViewOverdue}>
+            <Filter />
+            Ver clientes
+          </Button>
+        )}
+      </KpiTile>
+    </KpiRow>
   );
 }

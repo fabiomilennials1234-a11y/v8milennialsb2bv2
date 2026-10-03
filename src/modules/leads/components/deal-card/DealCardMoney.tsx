@@ -51,7 +51,7 @@ import { contaDoNegocio } from "./conta-do-negocio";
  */
 
 const ENTRADA = cn(
-  "h-7 w-full min-w-0 rounded-md border border-border bg-background px-1.5",
+  "h-7 w-full min-w-0 rounded-md border border-input bg-card px-1.5",
   "text-right text-[12.5px] tabular-nums outline-none",
   "focus:border-primary/60",
 );
@@ -80,15 +80,15 @@ function Rodape({
           destaque ? "text-[15px] font-semibold tracking-[-0.01em]" : "text-[13px]",
         )}
       >
-        {tom === "abate" && <Tag className="size-[15px] shrink-0 text-amber-400" aria-hidden="true" />}
+        {tom === "abate" && <Tag className="size-[15px] shrink-0 text-warning-strong" aria-hidden="true" />}
         {rotulo}
       </span>
       {detalhe && <span className="truncate text-[11.5px] text-muted-foreground/70">{detalhe}</span>}
       <span
         className={cn(
           "ml-auto shrink-0 tabular-nums",
-          destaque ? "text-[19px] font-semibold tracking-[-0.02em]" : "text-[13px]",
-          tom === "abate" ? "text-amber-400" : "text-foreground",
+          destaque ? "text-[21px] font-extrabold tracking-[-0.04em]" : "text-[13px]",
+          tom === "abate" ? "text-warning-strong" : "text-foreground",
         )}
       >
         {valor}
@@ -215,7 +215,7 @@ function LinhaDeItem({
             disabled={qtd <= 0 || ocupado}
             title="Salvar"
             aria-label={`Salvar ${item.nome}`}
-            className="rounded p-1 text-emerald-400 transition-colors hover:bg-emerald-400/10 disabled:opacity-40"
+            className="rounded-md p-1 text-success transition-colors hover:bg-success/10 disabled:opacity-40"
           >
             <Check className="size-3.5" />
           </button>
@@ -279,7 +279,7 @@ function LinhaDeItem({
           </span>
         )}
         {item.descontoPercent > 0 && (
-          <span className="shrink-0 text-[10.5px] text-amber-400/90" title="Desconto desta linha">
+          <span className="shrink-0 text-[10.5px] font-semibold text-warning-strong" title="Desconto desta linha">
             −{item.descontoPercent}%
           </span>
         )}
@@ -375,10 +375,12 @@ export function DealCardMoney({
   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
 
   return (
-    <section className="flex flex-col rounded-xl border border-border bg-card px-4 py-3.5">
+    // V5: o cartão branco da gaveta, com o título em rótulo micro (mockup:
+    // "PRODUTOS E VALORES"); o texto do título é contrato de teste e fica.
+    <section className="flex flex-col rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo">
       <div className="flex items-center justify-between gap-3 pb-1">
-        <h3 className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.01em]">
-          <Package className="size-[17px] text-muted-foreground" aria-hidden="true" />
+        <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+          <Package className="size-3.5" aria-hidden="true" />
           Produtos do Negócio
         </h3>
         {onAdicionarProduto && (
@@ -386,7 +388,7 @@ export function DealCardMoney({
             type="button"
             onClick={onAdicionarProduto}
             className={cn(
-              "inline-flex items-center gap-1 text-[12.5px] text-primary underline-offset-2 hover:underline",
+              "inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary-soft-foreground underline-offset-2 hover:underline",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             )}
           >
@@ -488,9 +490,9 @@ export function DealCardMoney({
               <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}
                 value={rascunhoValor} disabled={salvandoValor} autoFocus
                 onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
-              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
+              <button type="button" className="text-sm font-semibold text-primary-soft-foreground disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
               <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
-            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
+            </> : <button type="button" className="text-sm font-semibold text-primary-soft-foreground hover:underline" onClick={() => {
               setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
               setVersaoEditada(versaoDoNegocio);
               setEditandoValor(true);

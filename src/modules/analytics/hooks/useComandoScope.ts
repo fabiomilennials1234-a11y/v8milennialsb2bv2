@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react";
 import { useIdentity, isVirtualTeamMember } from "@/modules/identity";
 import {
   escopoDoUsuario,
@@ -40,8 +41,26 @@ export interface ComandoScope {
  * `is_master_user()` é a primeira linha de `is_org_admin`. As duas pontas
  * concordam de propósito.
  */
+/**
+ * V5 — o admin alterna entre "Central da equipe" e "Minha central" no topo do
+ * Comando. "Minha" só ESTREITA a visão (é exatamente o que um membro vê); não
+ * há caminho para alargar. Sem provedor, vale a visão do papel.
+ *
+ * Master e gestor de portfólio não têm `team_member` real (id virtual,
+ * ADR-0021): para eles "minha" não teria o que filtrar, então a troca é
+ * ignorada e a visão continua a da equipe.
+ */
+export type ComandoVisao = "equipe" | "minha";
+const ComandoVisaoContext = createContext<ComandoVisao | null>(null);
+export const ComandoVisaoProvider = ComandoVisaoContext.Provider;
+
 export function useComandoScope(): ComandoScope {
-  const { isAdmin, teamMemberId, userId, isReady } = useIdentity();
+  const { isAdmin: isAdminDoPapel, teamMemberId, userId, isReady } = useIdentity();
+  const visao = useContext(ComandoVisaoContext);
+  const temMembroReal = !!teamMemberId && !isVirtualTeamMember(teamMemberId);
+  // `isAdmin` aqui quer dizer "está vendo a equipe" — é por ele que os cards
+  // decidem escopo e rótulo.
+  const isAdmin = isAdminDoPapel && !(visao === "minha" && temMembroReal);
 
   return {
     escopo: escopoDoUsuario(isAdmin),

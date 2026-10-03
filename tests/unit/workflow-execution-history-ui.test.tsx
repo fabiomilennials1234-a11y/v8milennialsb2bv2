@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/modules/workflows/hooks/useWorkflows", () => ({
+  useWorkflows: () => ({ data: [] }),
   useWorkflow: () => ({ data: state.workflow, isLoading: false }),
   useWorkflowExecutions: () => ({ data: state.executions, isLoading: false }),
   useWorkflowButtonHistory: () => ({ data: state.questions, isLoading: false, isError: state.historyError }),

@@ -74,13 +74,13 @@ export function LeadMobileCard({
     <div
       onClick={onOpen}
       className={cn(
-        "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
+        "rounded-card border border-card-border bg-card p-4 shadow-relevo transition-colors active:bg-muted/50",
         ciclo?.emEpoca && "border-success/45 bg-success/[0.06]",
-        selecionado && "border-primary/40 bg-primary/5",
+        selecionado && "border-primary/40 bg-primary-soft/60",
       )}
     >
       <div className="min-w-0">
-        <p className="truncate font-semibold">{erpLabel(lead)}</p>
+        <p className="truncate font-bold tracking-[-0.01em]">{erpLabel(lead)}</p>
         {lead.company && (
           <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
             <Building className="h-3 w-3 shrink-0" />
@@ -94,8 +94,8 @@ export function LeadMobileCard({
           se perderem entre badges. */}
       <div className="mt-2 flex items-center gap-2 text-[12.5px]">
         {standing?.relacao === "cliente" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 font-semibold text-primary">
-            <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 font-bold text-primary-soft-foreground">
+            <span className="size-1.5 shrink-0 rounded-full bg-current" />
             Cliente
           </span>
         ) : (
@@ -116,7 +116,7 @@ export function LeadMobileCard({
             )}
           </span>
         ) : (
-          <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-muted-foreground">
+          <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-muted-foreground">
             Sem negócio aberto
           </span>
         )}
@@ -127,12 +127,12 @@ export function LeadMobileCard({
           {originLabel}
         </Badge>
         {lead.pre_sale_responsible?.name && (
-          <Badge variant="outline" className="border-blue-500/30 text-xs text-blue-400">
+          <Badge variant="info" className="text-xs">
             {lead.pre_sale_responsible.name}
           </Badge>
         )}
         {lead.sale_responsible?.name && (
-          <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
+          <Badge variant="success" className="text-xs">
             {lead.sale_responsible.name}
           </Badge>
         )}

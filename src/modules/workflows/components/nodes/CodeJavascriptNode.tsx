@@ -21,7 +21,7 @@ function CodeJavascriptNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="code_javascript"
-      icon={<SquareCode className="w-5 h-5 text-sky-500" />}
+      icon={<SquareCode />}
       title={nodeData.label || "JavaScript"}
       subtitle={buildSubtitle(nodeData)}
       // O nó é autorável, mas o executor ainda não roda o código (fase 1):

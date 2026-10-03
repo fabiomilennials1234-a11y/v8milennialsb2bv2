@@ -139,7 +139,7 @@ export function TinyErpUpsellConfirmDialog({
       <DialogContent className="max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Send className="w-5 h-5 text-blue-500" />
+            <Send className="h-5 w-5 text-insights" />
             Enviar pedido ao TinyERP
           </DialogTitle>
         </DialogHeader>
@@ -160,7 +160,7 @@ export function TinyErpUpsellConfirmDialog({
           <Separator className="my-1" />
           <div className="flex justify-between text-sm font-semibold">
             <span>Total</span>
-            <span className="text-green-500">
+            <span className="tabular-nums text-success">
               {saleValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </span>
           </div>

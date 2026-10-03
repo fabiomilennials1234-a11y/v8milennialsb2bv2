@@ -122,7 +122,7 @@ function StepItem({
       <Link
         to={step.href}
         className={cn(
-          "flex items-start gap-3 px-4 py-3 rounded-lg group",
+          "group mx-2 flex items-start gap-3 rounded-xl px-3 py-2.5",
           "transition-colors hover:bg-muted/50",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           "focus-visible:outline-none",
@@ -134,8 +134,8 @@ function StepItem({
           className={cn(
             "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border mt-0.5 transition-colors",
             done
-              ? "bg-primary border-primary text-primary-foreground"
-              : "border-border bg-background text-transparent",
+              ? "border-success bg-success text-success-foreground"
+              : "border-border bg-card text-transparent",
           )}
           aria-hidden
         >
@@ -146,10 +146,10 @@ function StepItem({
         <div className="flex-1 min-w-0">
           <p
             className={cn(
-              "text-sm font-medium leading-none",
+              "text-sm font-semibold leading-none",
               done
                 ? "text-muted-foreground line-through"
-                : "text-foreground group-hover:text-primary transition-colors",
+                : "text-foreground",
             )}
           >
             {step.label}
@@ -164,7 +164,7 @@ function StepItem({
         <Icon
           className={cn(
             "w-4 h-4 shrink-0 mt-0.5 transition-colors",
-            done ? "text-muted-foreground/40" : "text-muted-foreground group-hover:text-primary",
+            done ? "text-muted-foreground/40" : "text-muted-foreground group-hover:text-foreground",
           )}
           aria-hidden
         />
@@ -183,7 +183,7 @@ function DemoDataSection() {
   return (
     <div className="px-4 pb-4">
       <Separator className="mb-3" />
-      <p className="text-[11px] text-muted-foreground mb-2 font-medium uppercase tracking-wide">
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         Testando o app?
       </p>
 
@@ -263,7 +263,7 @@ function OnboardingCard({
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
       className={cn(
-        "w-72 rounded-xl border border-border bg-card shadow-lg",
+        "w-72 rounded-card border border-card-border bg-card shadow-relevo-alto",
         "overflow-hidden",
       )}
       role="region"
@@ -273,10 +273,10 @@ function OnboardingCard({
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-[15px] font-bold tracking-tight text-foreground">
               Primeiros passos
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs tabular-nums text-muted-foreground">
               {completedCount}/{total} concluídos
             </p>
           </div>
@@ -343,9 +343,9 @@ export function OnboardingChecklist() {
         aria-label={`Onboarding: ${completedCount} de ${STEPS.length} passos concluídos`}
         className={cn(
           "flex items-center gap-1.5 h-8 px-3 rounded-full",
-          "border border-border bg-card",
-          "text-xs font-medium text-foreground",
-          "shadow-sm hover:bg-muted/50 transition-colors",
+          "border border-card-border bg-card",
+          "text-xs font-semibold text-foreground",
+          "shadow-relevo transition-colors hover:border-foreground/20",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           "focus-visible:outline-none",
         )}

@@ -63,10 +63,10 @@ export function ProductivityDrill({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
         <SheetHeader className="border-b border-border/60 px-6 py-5">
-          <SheetTitle className="flex items-center gap-2 text-lg">
+          <SheetTitle className="flex items-center gap-2 text-lg font-extrabold tracking-[-0.03em]">
             {title}
             {rows && (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                 {rows.length}
               </span>
             )}
@@ -88,8 +88,10 @@ export function ProductivityDrill({
               ))
             ) : !rows || rows.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-                <Inbox className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">
+                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                  <Inbox className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-semibold">
                   Nenhum registro neste período.
                 </p>
               </div>
@@ -104,11 +106,11 @@ export function ProductivityDrill({
                   }}
                   className={cn(
                     "group flex w-full items-center gap-3 px-6 py-4 text-left",
-                    "transition-colors hover:bg-secondary/40",
+                    "transition-colors hover:bg-muted/50",
                   )}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
+                    <p className="truncate font-semibold">
                       {row.lead_name || "Sem nome"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
@@ -124,14 +126,14 @@ export function ProductivityDrill({
                           })
                         : "—"}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                    <p className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                       {actionLabel.replace(" em", "")}
                       {row.action_at
                         ? ` · ${format(new Date(row.action_at), "HH:mm", { locale: ptBR })}`
                         : ""}
                     </p>
                   </div>
-                  <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-primary" />
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-foreground" />
                 </button>
               ))
             )}

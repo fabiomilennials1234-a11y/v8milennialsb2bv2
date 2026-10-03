@@ -1,0 +1,318 @@
+diff --git a/classic/src/modules/platform/components/layout/MainLayout.tsx b/classic/src/modules/platform/components/layout/MainLayout.tsx
+index 64976bc8c..4d1ab20b5 100644
+--- a/classic/src/modules/platform/components/layout/MainLayout.tsx
++++ b/classic/src/modules/platform/components/layout/MainLayout.tsx
+@@ -16,6 +16,7 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
+ import { ChatBubble } from "@/modules/communication/components/chat/bubble";
+ import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
+ import { SupportFab } from "@/modules/platform/components/support/SupportFab";
++import { UiVersionGuard } from "@/modules/platform/ui-version/UiVersionGuard";
+ import { SupportAccess } from "../support/SupportAccess";
+ import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
+ import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
+@@ -168,6 +169,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
+         <SupportFab />
+         <SupportRealtimeAnnouncement />
+       </SupportAccess>
++      {/* Interface nova ou clássica: segue a escolha da org (Configurações › Geral). */}
++      <UiVersionGuard />
+       {featureFlags.chatBubble && <ChatBubble />}
+ 
+       <QuickBlastProgressPanel />
+diff --git a/classic/src/modules/platform/pages/Configuracoes.tsx b/classic/src/modules/platform/pages/Configuracoes.tsx
+index 5b3df4c08..8744049ce 100644
+--- a/classic/src/modules/platform/pages/Configuracoes.tsx
++++ b/classic/src/modules/platform/pages/Configuracoes.tsx
+@@ -61,6 +61,7 @@ import { useFunisDaOrg } from "@/modules/pipelines";
+ import { useIdentity } from "@/modules/identity";
+ import { useOrganizationSettings } from "@/modules/identity";
+ import { useOrganization } from "@/modules/identity";
++import { InterfaceDaOrgSetting } from "@/modules/platform/ui-version/InterfaceDaOrgSetting";
+ import {
+   DEFAULT_SETTINGS_TAB,
+   SETTINGS_BASE_PATH,
+@@ -611,6 +612,8 @@ function GeneralSettings() {
+           </div>
+           <Switch defaultChecked />
+         </div>
++
++        <InterfaceDaOrgSetting />
+       </div>
+ 
+       <div className="pt-6 border-t border-border">
+diff --git a/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx b/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx
+new file mode 100644
+index 000000000..eafdebcc1
+--- /dev/null
++++ b/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx
+@@ -0,0 +1,94 @@
++/**
++ * Configurações › Geral › "Nova interface" — lado CLÁSSICO (classic.patch),
++ * no mesmo desenho das caixas "Modo escuro" e "Animações" desta tela. O da V5
++ * está em src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx.
++ *
++ * Vale para a org inteira: pede confirmação e só admin (ou master) muda.
++ */
++import { useState } from "react";
++import { toast } from "sonner";
++import {
++  AlertDialog,
++  AlertDialogAction,
++  AlertDialogCancel,
++  AlertDialogContent,
++  AlertDialogDescription,
++  AlertDialogFooter,
++  AlertDialogHeader,
++  AlertDialogTitle,
++} from "@/components/ui/alert-dialog";
++import { Label } from "@/components/ui/label";
++import { Switch } from "@/components/ui/switch";
++import { useIdentity } from "@/modules/identity";
++import { notifyError } from "@/shared/errors";
++import { trocarUi } from "@torque/ui-version";
++import { ESTA_UI, trocaDeUiLigada } from "./esta-ui";
++import { useOrgInterface } from "./useOrgInterface";
++
++export function InterfaceDaOrgSetting() {
++  const { isAdmin } = useIdentity();
++  const { uiV5Enabled, disponivel, definir, isSaving } = useOrgInterface();
++  const [pedido, setPedido] = useState<boolean | null>(null);
++
++  const ligada = uiV5Enabled === true;
++  const travado = !isAdmin || !disponivel || uiV5Enabled === null || isSaving;
++
++  const ajuda = !disponivel
++    ? "Disponível depois da atualização do banco."
++    : !isAdmin
++      ? "Vale para toda a organização. Só administradores mudam."
++      : "Vale para toda a organização. Desligada, todos usam a interface clássica.";
++
++  async function confirmar() {
++    if (pedido === null) return;
++    const ligar = pedido;
++    setPedido(null);
++    try {
++      await definir(ligar);
++    } catch (error) {
++      notifyError(error, { fallback: "Não foi possível trocar a interface." });
++      return;
++    }
++    const destino = ligar ? "v5" : "classic";
++    if (trocaDeUiLigada() && destino !== ESTA_UI) {
++      void trocarUi(destino);
++      return;
++    }
++    toast.success(ligar ? "Interface nova ligada" : "Interface clássica ligada", {
++      description: "O time passa a usar esta interface na próxima vez que abrir o Torque.",
++    });
++  }
++
++  return (
++    <>
++      <div className="flex items-center justify-between p-4 border rounded-lg">
++        <div className="space-y-0.5">
++          <Label>Nova interface</Label>
++          <p className="text-sm text-muted-foreground">{ajuda}</p>
++        </div>
++        <Switch checked={ligada} onCheckedChange={(v) => setPedido(v)} disabled={travado} aria-label="Nova interface" />
++      </div>
++
++      <AlertDialog open={pedido !== null} onOpenChange={(aberto) => !aberto && setPedido(null)}>
++        <AlertDialogContent>
++          <AlertDialogHeader>
++            <AlertDialogTitle>
++              {pedido ? "Ligar a interface nova para toda a organização?" : "Voltar a organização para a interface clássica?"}
++            </AlertDialogTitle>
++            <AlertDialogDescription>
++              {pedido
++                ? "Todo o time passa para a interface nova na próxima vez que abrir o Torque. Para você, a troca é agora. Dá para voltar a qualquer momento por aqui."
++                : "Todo o time volta para a interface clássica na próxima vez que abrir o Torque. Para você, a troca é agora. Dá para religar a qualquer momento por aqui."}
++            </AlertDialogDescription>
++          </AlertDialogHeader>
++          <AlertDialogFooter>
++            <AlertDialogCancel>Cancelar</AlertDialogCancel>
++            <AlertDialogAction onClick={() => void confirmar()}>
++              {pedido ? "Ligar interface nova" : "Voltar para a clássica"}
++            </AlertDialogAction>
++          </AlertDialogFooter>
++        </AlertDialogContent>
++      </AlertDialog>
++    </>
++  );
++}
+diff --git a/classic/src/modules/platform/ui-version/UiVersionGuard.tsx b/classic/src/modules/platform/ui-version/UiVersionGuard.tsx
+new file mode 100644
+index 000000000..9b812cea9
+--- /dev/null
++++ b/classic/src/modules/platform/ui-version/UiVersionGuard.tsx
+@@ -0,0 +1,54 @@
++/**
++ * Leva a aba para a interface que a organização escolheu — lado CLÁSSICO
++ * (classic.patch). A guarda da V5 está em
++ * src/modules/platform/ui-version/UiVersionGuard.tsx; a decisão é uma só,
++ * importada de `@torque/ui-version` (src/shared/ui-version/core.ts).
++ *
++ * Só age com `VITE_UI_SWITCH=true` (ver `esta-ui.ts`).
++ */
++import { useEffect, useState } from "react";
++import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
++import {
++  decidirUi,
++  gravarCookieUi,
++  lerCookieUi,
++  lerTentativa,
++  trocarUi,
++  uiPedidaPelaOrg,
++} from "@torque/ui-version";
++import { ESTA_UI, trocaDeUiLigada } from "./esta-ui";
++import { useOrgInterface } from "./useOrgInterface";
++
++export function UiVersionGuard() {
++  if (!trocaDeUiLigada()) return null;
++  return <GuardaAtiva />;
++}
++
++function GuardaAtiva() {
++  const { uiV5Enabled, isError } = useOrgInterface();
++  const [trocando, setTrocando] = useState(false);
++
++  useEffect(() => {
++    if (uiV5Enabled === null || isError) return;
++    const pedida = uiPedidaPelaOrg(uiV5Enabled);
++    const decisao = decidirUi({
++      rodando: ESTA_UI,
++      pedida,
++      cookie: lerCookieUi(document.cookie),
++      ultimaTentativa: lerTentativa(),
++      agora: Date.now(),
++    });
++    if (decisao === "sincronizar-cookie") gravarCookieUi(ESTA_UI);
++    else if (decisao === "trocar") {
++      setTrocando(true);
++      void trocarUi(pedida);
++    } else if (decisao === "desistir") {
++      console.warn(
++        `[ui] a org pede a interface "${pedida}", mas o servidor continua entregando "${ESTA_UI}". ` +
++          "O nginx deste ambiente não escolhe pelo cookie — fica aqui.",
++      );
++    }
++  }, [uiV5Enabled, isError]);
++
++  return trocando ? <TorqueLoader message="Abrindo a interface da sua organização…" /> : null;
++}
+diff --git a/classic/src/modules/platform/ui-version/esta-ui.ts b/classic/src/modules/platform/ui-version/esta-ui.ts
+new file mode 100644
+index 000000000..80bc20888
+--- /dev/null
++++ b/classic/src/modules/platform/ui-version/esta-ui.ts
+@@ -0,0 +1,12 @@
++import type { UiVersion } from "@torque/ui-version";
++
++/** Esta é a build CLÁSSICA (classic.patch). A V5 tem o mesmo arquivo com "v5". */
++export const ESTA_UI: UiVersion = "classic";
++
++/**
++ * A troca só age com `VITE_UI_SWITCH=true`, que o Dockerfile liga. Dev,
++ * harness de prints e E2E servem uma build só: ali a guarda recarregaria à toa.
++ */
++export function trocaDeUiLigada(): boolean {
++  return import.meta.env.VITE_UI_SWITCH === "true";
++}
+diff --git a/classic/src/modules/platform/ui-version/useOrgInterface.ts b/classic/src/modules/platform/ui-version/useOrgInterface.ts
+new file mode 100644
+index 000000000..8f41158f9
+--- /dev/null
++++ b/classic/src/modules/platform/ui-version/useOrgInterface.ts
+@@ -0,0 +1,76 @@
++/**
++ * A interface que a organização escolheu: nova (V5) ou clássica.
++ *
++ * Cópia da interface CLÁSSICA (classic.patch). A original, igual, está em
++ * src/modules/platform/ui-version/useOrgInterface.ts.
++ *
++ * Lê `organizations.ui_v5_enabled` numa consulta SEPARADA de
++ * `useOrganizationSettings`: se a migration ainda não chegou, a coluna não
++ * existe e o PostgREST responde 42703 — misturar com as outras colunas
++ * derrubaria junto o prazo de confirmação e o funil padrão.
++ *
++ * Escreve por `set_org_settings` (admin da org ou master). `organizations` não
++ * tem policy de UPDATE para admin, de propósito.
++ */
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import { useOrganization } from "@/modules/identity";
++
++/** PostgREST: coluna inexistente — a migration 20271104120000 não rodou. */
++const COLUNA_AUSENTE = "42703";
++
++export interface InterfaceDaOrg {
++  /** `null` enquanto carrega. Sem a coluna, `false` (clássica). */
++  uiV5Enabled: boolean | null;
++  /** `false` quando o banco ainda não tem a coluna — o switch fica travado. */
++  disponivel: boolean;
++  isError: boolean;
++  definir: (ligar: boolean) => Promise<void>;
++  isSaving: boolean;
++}
++
++export function useOrgInterface(): InterfaceDaOrg {
++  const { organizationId, isReady } = useOrganization();
++  const queryClient = useQueryClient();
++  const queryKey = ["organization-ui", organizationId];
++
++  const query = useQuery({
++    queryKey,
++    queryFn: async () => {
++      const { data, error } = await supabase
++        .from("organizations")
++        // Coluna da 20271104120000 — cast até o próximo `supabase gen types`.
++        .select("ui_v5_enabled" as "id")
++        .eq("id", organizationId!)
++        .maybeSingle();
++      if (error) {
++        if (error.code === COLUNA_AUSENTE) return { uiV5Enabled: false, disponivel: false };
++        throw error;
++      }
++      const linha = data as { ui_v5_enabled?: boolean } | null;
++      return { uiV5Enabled: linha?.ui_v5_enabled === true, disponivel: true };
++    },
++    enabled: isReady && !!organizationId,
++    staleTime: 60_000,
++  });
++
++  const mutation = useMutation({
++    mutationFn: async (ligar: boolean) => {
++      if (!organizationId) throw new Error("Sem organização");
++      const { error } = await supabase.rpc("set_org_settings" as never, {
++        p_org_id: organizationId,
++        p_patch: { ui_v5_enabled: ligar },
++      } as never);
++      if (error) throw error;
++    },
++    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
++  });
++
++  return {
++    uiV5Enabled: query.data?.uiV5Enabled ?? null,
++    disponivel: query.data?.disponivel ?? true,
++    isError: query.isError,
++    definir: mutation.mutateAsync,
++    isSaving: mutation.isPending,
++  };
++}
+diff --git a/classic/tailwind.config.ts b/classic/tailwind.config.ts
+index 32f47352a..db24ce28b 100644
+--- a/classic/tailwind.config.ts
++++ b/classic/tailwind.config.ts
+@@ -2,7 +2,10 @@ import type { Config } from "tailwindcss";
+ 
+ export default {
+   darkMode: ["class"],
+-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
++  // Interface clássica (classic.patch): `relative` faz o glob partir DESTA
++  // pasta. Sem ele, o build roda da raiz do repo e o Tailwind varreria o
++  // `src/` da V5 — CSS da clássica com as classes da outra interface.
++  content: { relative: true, files: ["./src/**/*.{ts,tsx}"] },
+   prefix: "",
+   theme: {
+     container: {

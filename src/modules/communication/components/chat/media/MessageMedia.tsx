@@ -152,7 +152,7 @@ export function MessageVideo({ src }: MessageVideoProps) {
           href={src}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-primary hover:underline flex items-center gap-1"
+          className="text-xs font-medium text-insights hover:underline flex items-center gap-1"
         >
           <Download className="w-3 h-3" />
           Baixar vídeo

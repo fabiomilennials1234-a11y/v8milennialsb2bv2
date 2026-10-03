@@ -116,7 +116,7 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
             size="sm"
             className={cn(
               "gap-1.5",
-              activeView && "border-primary/50 bg-primary/5 text-primary"
+              activeView && "border-transparent bg-primary-soft text-primary-soft-foreground"
             )}
           >
             <TriggerIcon className="w-4 h-4" />
@@ -138,7 +138,7 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-start gap-2 text-primary"
+                  className="w-full justify-start gap-2 font-semibold text-primary-soft-foreground"
                   onClick={() => {
                     setSaveDialogOpen(true);
                     setPopoverOpen(false);
@@ -171,7 +171,7 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
 
           {systemViews.length > 0 && (
             <div className="p-1">
-              <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Padrão
               </p>
               {systemViews.map((view) => (
@@ -191,7 +191,7 @@ export function SavedViewsDropdown<T extends Record<string, unknown>>({
             <>
               {systemViews.length > 0 && <Separator />}
               <div className="p-1">
-                <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                   Minhas Views
                 </p>
                 {userViews.map((view) => (
@@ -264,16 +264,16 @@ function ViewItem({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors group",
+        "group flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 transition-colors",
         "hover:bg-muted/50",
-        isActive && "bg-primary/10 text-primary"
+        isActive && "bg-primary-soft font-semibold text-primary-soft-foreground"
       )}
       onClick={() => onSelect(view)}
     >
       <Bookmark
         className={cn(
           "w-3.5 h-3.5 shrink-0",
-          isActive ? "text-primary" : "text-muted-foreground"
+          isActive ? "text-primary-soft-foreground" : "text-muted-foreground"
         )}
       />
       <span className="text-sm flex-1 truncate">{view.name}</span>
@@ -286,7 +286,7 @@ function ViewItem({
             asChild
             onClick={(e) => e.stopPropagation()}
           >
-            <button className="p-0.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity">
+            <button className="rounded-md p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100">
               <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>

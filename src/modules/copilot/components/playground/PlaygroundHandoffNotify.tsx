@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import type { PlaygroundData } from "./types";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundHandoffNotifyProps {
   data: PlaygroundData;
@@ -40,7 +41,9 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
   if (!isTransferEnabled) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Phone className="w-10 h-10 text-muted-foreground/40 mb-3" />
+        <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-foreground/50">
+          <Phone className="w-5 h-5" />
+        </span>
         <p className="text-sm text-muted-foreground">
           Ative a ferramenta <span className="font-medium text-foreground">Transferir para Humano</span> na aba Ferramentas para configurar notificações.
         </p>
@@ -77,8 +80,8 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-1">
-        <h3 className="text-sm font-medium flex items-center gap-2">
-          <Phone className="w-4 h-4" />
+        <h3 className="flex items-center gap-2.5 text-sm font-bold tracking-tight">
+          <IconChip icon={Phone} tone="good" />
           Notificação WhatsApp na Transferência
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -88,7 +91,7 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
 
       {/* Status badge */}
       <div>
-        <Badge variant={hasPhones ? "default" : "secondary"} className="text-[10px]">
+        <Badge variant={hasPhones ? "success" : "soft"} className="text-[11px]">
           {hasPhones ? `Ativo — ${phones.length} número(s)` : "Inativo — adicione números para ativar"}
         </Badge>
       </div>
@@ -99,7 +102,7 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
           {phones.map((entry, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2"
+              className="flex items-center gap-2 rounded-xl border border-border/60 bg-sunken px-3 py-2"
             >
               <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="text-sm font-mono">{entry.phone}</span>
@@ -109,7 +112,8 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
               <Button
                 variant="ghost"
                 size="icon"
-                className="ml-auto h-6 w-6 text-muted-foreground hover:text-destructive"
+                className="ml-auto h-7 w-7 rounded-[9px] text-muted-foreground hover:text-destructive"
+                aria-label={`Remover ${entry.phone}`}
                 onClick={() => removePhone(i)}
               >
                 <X className="w-3.5 h-3.5" />
@@ -138,6 +142,7 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
         <Button
           variant="outline"
           size="icon"
+          aria-label="Adicionar número"
           onClick={addPhone}
           disabled={!isValidPhone(newPhone.replace(/\D/g, ""))}
         >
@@ -149,7 +154,7 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          <label className="text-sm font-medium">Instruções de roteamento</label>
+          <label className="text-sm font-semibold">Instruções de roteamento</label>
         </div>
         <Textarea
           placeholder='Ex: "Notifique todos. Se pedido > R$5k, marque como PRIORIDADE ALTA." ou "Notifique 5511999... (gerente) apenas quando urgente. Notifique 5511888... (SDR) sempre."'
@@ -175,8 +180,8 @@ export function PlaygroundHandoffNotify({ data, onChange }: PlaygroundHandoffNot
           {showPreview ? "Ocultar preview" : "Ver preview da mensagem"}
         </Button>
         {showPreview && (
-          <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">
+          <div className="rounded-2xl border border-border/60 bg-sunken p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
               Formato da mensagem (exemplo)
             </p>
             <pre className="text-xs whitespace-pre-wrap font-sans leading-relaxed text-foreground/80">

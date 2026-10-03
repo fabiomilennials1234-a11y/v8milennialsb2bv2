@@ -83,10 +83,13 @@ export function AgendaFilterBar({
       {/* Abas de estado */}
       {/* `max-w-full overflow-x-auto` porque em 360px os três rótulos não cabem
           e "Finalizadas" ficava cortada — inalcançável, não só feia. */}
+      {/* V5: o segmentado (`TabsList variant="segmented"`) na forma, mas com a
+          semântica manual de sempre — não há `tabpanel` por estado, a aba só
+          recorta a mesma grade. */}
       <div
         role="tablist"
         aria-label="Estado das atividades"
-        className="scrollbar-hide -mx-1 flex max-w-full items-center gap-1 self-start overflow-x-auto rounded-full border border-border bg-sunken p-1 sm:mx-0"
+        className="scrollbar-hide -mx-1 inline-flex max-w-full items-center gap-0.5 self-start overflow-x-auto rounded-full bg-muted p-[3px] sm:mx-0"
       >
         {STATUS_TABS.map((tab) => {
           const active = status === tab.key;
@@ -98,16 +101,16 @@ export function AgendaFilterBar({
               aria-selected={active}
               onClick={() => onStatusChange(tab.key)}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] transition-colors",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                // A aba ativa se distingue por SUPERFÍCIE (`bg-card` + borda +
-                // sombra sobre o `bg-sunken` do trilho), não por cor de texto.
-                // `--muted-foreground` no rótulo inativo mede 3,95:1 sobre o
-                // afundado do tema claro contra 7,85:1 no escuro — um tema
-                // pior que o outro é exatamente o que o DESIGN.md reprova.
+                "shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                // A aba ativa se distingue por SUPERFÍCIE (`bg-card` + relevo
+                // sobre o `bg-muted` do trilho), não por cor de texto.
+                // `--muted-foreground` no rótulo inativo mede ~4,4:1 sobre o
+                // `--muted` do tema claro — abaixo de AA para 12px — por isso
+                // o inativo fica em `foreground/70`, legível nos dois temas.
                 active
-                  ? "border border-border bg-card font-semibold text-foreground shadow-sm"
-                  : "font-medium text-foreground/80 hover:text-foreground",
+                  ? "bg-card text-foreground shadow-relevo"
+                  : "text-foreground/70 hover:text-foreground",
               )}
             >
               {tab.label}
@@ -143,8 +146,10 @@ export function AgendaFilterBar({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Filtrar por tipo"
+            // Mesma forma do `SelectTrigger` ao lado (fundo do cartão, borda do
+            // input) — os dois filtros leem como um par.
             className={cn(
-              "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm sm:w-[170px]",
+              "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm sm:w-[170px]",
               "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
             )}
           >

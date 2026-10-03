@@ -19,26 +19,29 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-// O switcher tem suíte própria (funnel-nav-switcher.test.tsx) e arrasta
-// react-router + os hooks de funil. Aqui ele é um slot como os outros.
-vi.mock("@/modules/pipelines/components/shared/FunnelSwitcher", () => ({
-  FunnelSwitcher: ({ fallbackLabel }: { fallbackLabel: string }) => (
-    <button data-testid="switcher">{fallbackLabel}</button>
-  ),
+// V5: o seletor do título virou a faixa de funis em chips (título fixo
+// "Funis"). A faixa arrasta react-router + os hooks de funil; aqui ela é um
+// slot como os outros.
+vi.mock("@/modules/pipelines/components/shared/FunnelChipStrip", () => ({
+  FunnelChipStrip: () => <nav data-testid="switcher">Funis</nav>,
 }));
 
+import { MemoryRouter } from "react-router-dom";
 import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
 
 function montar(props: Partial<React.ComponentProps<typeof FunnelControlBar>> = {}) {
   const onSearchChange = props.onSearchChange ?? vi.fn();
+  // O cabeçalho é o `PageHeader` do sistema, que usa `useNavigate`.
   render(
-    <FunnelControlBar
-      funnelKey="sys:whatsapp"
-      funnelLabel="Qualificação"
-      search=""
-      onSearchChange={onSearchChange}
-      {...props}
-    />,
+    <MemoryRouter>
+      <FunnelControlBar
+        funnelKey="sys:whatsapp"
+        funnelLabel="Qualificação"
+        search=""
+        onSearchChange={onSearchChange}
+        {...props}
+      />
+    </MemoryRouter>,
   );
   return onSearchChange;
 }
@@ -85,7 +88,7 @@ describe("FunnelControlBar — os controles entram por slot", () => {
     expect(screen.queryByTestId("views")).toBeNull();
   });
 
-  it("a ordem é: funil, busca, e depois os slots da página", () => {
+  it("a ordem é: cabeçalho com a ação primária, faixa de funis, busca e os slots da barra", () => {
     montar({
       views: <button data-testid="views">Views</button>,
       primaryAction: <button data-testid="primary">Novo negócio</button>,
@@ -96,9 +99,16 @@ describe("FunnelControlBar — os controles entram por slot", () => {
       e.getAttribute("data-testid"),
     );
 
+    // V5 (mockup): o primário mora no cabeçalho, acima da faixa de funis.
+    expect(ordem.indexOf("primary")).toBeLessThan(ordem.indexOf("switcher"));
     expect(ordem.indexOf("switcher")).toBeLessThan(ordem.indexOf("funnel-search"));
     expect(ordem.indexOf("funnel-search")).toBeLessThan(ordem.indexOf("views"));
-    expect(ordem.indexOf("views")).toBeLessThan(ordem.indexOf("primary"));
+  });
+
+  it("o título é fixo: \"Funis\", não o nome do funil", () => {
+    montar();
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Funis");
   });
 });
 
@@ -125,12 +135,14 @@ describe("FunnelControlBar — busca", () => {
 
   it("aceita placeholder próprio da página, com um padrão sensato", () => {
     const { unmount } = render(
-      <FunnelControlBar
-        funnelKey="sys:whatsapp"
-        funnelLabel="Qualificação"
-        search=""
-        onSearchChange={vi.fn()}
-      />,
+      <MemoryRouter>
+        <FunnelControlBar
+          funnelKey="sys:whatsapp"
+          funnelLabel="Qualificação"
+          search=""
+          onSearchChange={vi.fn()}
+        />
+      </MemoryRouter>,
     );
     expect(screen.getByTestId("funnel-search")).toHaveAttribute(
       "placeholder",

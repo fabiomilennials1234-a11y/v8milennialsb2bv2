@@ -43,31 +43,31 @@ interface ClientDetailModalProps {
 
 const potencialConfig: Record<string, { class: string; label: string }> = {
   baixo: { class: "bg-muted text-muted-foreground", label: "Baixo" },
-  medio: { class: "bg-primary/10 text-primary", label: "Medio" },
-  alto: { class: "bg-green-500/10 text-green-600", label: "Alto" },
-  estrategico: { class: "bg-purple-500/10 text-purple-600", label: "Estrategico" },
+  medio: { class: "bg-primary-soft text-primary-soft-foreground", label: "Médio" },
+  alto: { class: "bg-success/10 text-success", label: "Alto" },
+  estrategico: { class: "bg-insights/10 text-insights", label: "Estratégico" },
 };
 
 // ── Timeline config (same pattern as LeadDetailModal) ──
 
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
-  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
-  responsible_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
+  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-insights/10 text-insights" },
+  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-warning/15 text-warning-strong" },
+  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-success/10 text-success" },
+  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-success/10 text-success" },
+  responsible_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsável atribuído", color: "bg-success/10 text-success" },
   field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
-  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
-  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
-  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
-  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
-  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
-  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
-  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
-  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
-  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
-  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
+  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-insights/10 text-insights" },
+  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-success/10 text-success" },
+  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-destructive/10 text-destructive" },
+  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-destructive/10 text-destructive" },
+  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-primary-soft text-primary-soft-foreground" },
+  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-warning/15 text-warning-strong" },
+  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-destructive/10 text-destructive" },
+  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-primary-soft text-primary-soft-foreground" },
+  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-insights/10 text-insights" },
+  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-success/10 text-success" },
   ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA", color: "bg-primary/20 text-primary" },
   copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
 };
@@ -168,8 +168,8 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-primary/10">
-              <User className="w-4 h-4 text-primary" />
+            <div className="rounded-[10px] bg-primary-soft p-1.5 text-primary-soft-foreground">
+              <User className="h-4 w-4" />
             </div>
             {erpLabel(client)}
             {!client.is_active && (
@@ -179,7 +179,7 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList variant="segmented" className="self-start">
             <TabsTrigger value="dados">Dados</TabsTrigger>
             <TabsTrigger value="pedidos">Pedidos ({orders.length})</TabsTrigger>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -224,12 +224,12 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <div className="p-1 rounded bg-green-500/10 mt-0.5">
-                  <DollarSign className="h-3.5 w-3.5 text-green-600" />
+                <div className="mt-0.5 rounded-md bg-success/10 p-1">
+                  <DollarSign className="h-3.5 w-3.5 text-success" />
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Total Vendas</p>
-                  <p className="font-semibold text-green-600">
+                  <p className="font-bold tabular-nums text-success">
                     {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(totalVendas)}
                   </p>
                 </div>
@@ -242,9 +242,9 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="baixo">Baixo</SelectItem>
-                    <SelectItem value="medio">Medio</SelectItem>
+                    <SelectItem value="medio">Médio</SelectItem>
                     <SelectItem value="alto">Alto</SelectItem>
-                    <SelectItem value="estrategico">Estrategico</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -276,22 +276,22 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
             ) : (
               <div className="space-y-2">
                 {orders.map((o) => (
-                  <div key={o.id} className="p-3 rounded-lg border border-border bg-card text-sm">
+                  <div key={o.id} className="rounded-xl border border-border/70 bg-card p-3 text-sm">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
-                        <div className="p-1 rounded bg-green-500/10">
-                          <ShoppingCart className="h-3 w-3 text-green-600" />
+                        <div className="rounded-md bg-success/10 p-1">
+                          <ShoppingCart className="h-3 w-3 text-success" />
                         </div>
                         <span className="font-medium">{o.product_name}</span>
                       </div>
-                      <span className="text-green-600 font-semibold">
+                      <span className="font-semibold tabular-nums text-success">
                         R$ {Number(o.sale_value).toLocaleString("pt-BR")}
                       </span>
                     </div>
                     <div className="flex justify-between items-center mt-1 ml-7 text-xs text-muted-foreground">
                       <span>{new Date(o.sold_at).toLocaleDateString("pt-BR")}</span>
                       <div className="flex items-center gap-2">
-                        <Badge className={`text-[10px] border-0 ${o.origin === "upsell" ? "bg-primary/10 text-primary" : "bg-blue-500/10 text-blue-600"}`}>
+                        <Badge className={`text-[10px] border-0 ${o.origin === "upsell" ? "bg-primary-soft text-primary-soft-foreground" : "bg-insights/10 text-insights"}`}>
                           {o.origin === "upsell" ? "Upsell" : "New Business"}
                         </Badge>
                         <Badge className="text-[10px] border-0 bg-muted text-muted-foreground">{o.product_type}</Badge>
@@ -323,7 +323,7 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
                 {history.length > historyLimit && (
                   <button
                     onClick={() => setHistoryLimit((prev) => prev + 50)}
-                    className="w-full text-center text-sm text-primary hover:underline py-2"
+                    className="w-full py-2 text-center text-sm font-semibold text-primary-soft-foreground hover:underline"
                   >
                     Carregar mais ({history.length - historyLimit} restantes)
                   </button>

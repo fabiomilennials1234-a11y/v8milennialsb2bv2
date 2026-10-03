@@ -45,17 +45,14 @@ export function HumanPauseBadge({
 
   return (
     <div className="hidden md:inline-flex items-center gap-1.5">
-      <Badge
-        variant="outline"
-        className="border-amber-400 text-amber-600 gap-1.5 text-xs"
-      >
+      <Badge variant="warning" className="gap-1.5 text-xs">
         <PauseCircle className="h-3 w-3" />
         Copilot pausado · {timeText}
       </Badge>
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 px-2 text-xs text-amber-600 hover:text-amber-700"
+        className="h-7 rounded-full px-2.5 text-xs text-warning-strong hover:bg-warning/10 hover:text-warning-strong"
         onClick={onReactivate}
         disabled={isReactivating}
       >

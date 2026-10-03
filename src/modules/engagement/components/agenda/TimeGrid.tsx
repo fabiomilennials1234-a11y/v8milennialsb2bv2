@@ -50,10 +50,12 @@ export function TimeGrid({
   const totalHeight = HOUR_HEIGHT * 24;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    // V5: cartão de bento, como a grade do mês. (Visão semanal — hoje inerte,
+    // ver `AgendaAtividades`; o restyle só a mantém coerente se voltar.)
+    <div className="flex flex-col flex-1 overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
       {/* Day headers */}
       <div
-        className="flex border-b border-border/30 shrink-0 bg-card/30"
+        className="flex border-b border-border shrink-0"
         style={{ paddingLeft: "52px" }}
       >
         {days.map((day) => {
@@ -63,9 +65,11 @@ export function TimeGrid({
               key={day.toISOString()}
               className="flex-1 py-3 flex flex-col items-center gap-0.5"
             >
+              {/* Hoje se marca pela pastilha de ouro abaixo — ouro como TEXTO
+                  dá ~1,7:1 no tema claro (DESIGN.md § Cor). */}
               <span
-                className={`text-[10px] uppercase tracking-widest font-medium ${
-                  today ? "text-primary" : "text-muted-foreground/50"
+                className={`text-[10px] font-bold uppercase tracking-[.06em] ${
+                  today ? "text-foreground" : "text-muted-foreground"
                 }`}
               >
                 {DAY_NAMES_SHORT[day.getDay()]}
@@ -73,7 +77,7 @@ export function TimeGrid({
               <span
                 className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
                   today
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-brilho-ouro"
                     : "text-foreground/80 hover:bg-muted"
                 }`}
               >
@@ -99,7 +103,7 @@ export function TimeGrid({
                 }}
               >
                 {hour > 0 && (
-                  <span className="text-[10px] text-muted-foreground/40 leading-none -mt-2">
+                  <span className="text-[10px] font-semibold tabular-nums text-muted-foreground/70 leading-none -mt-2">
                     {String(hour).padStart(2, "0")}:00
                   </span>
                 )}
@@ -118,8 +122,8 @@ export function TimeGrid({
             return (
               <div
                 key={day.toISOString()}
-                className={`flex-1 relative border-l border-border/20 ${
-                  isCurrentDay ? "bg-primary/[0.015]" : ""
+                className={`flex-1 relative border-l border-border/60 ${
+                  isCurrentDay ? "bg-primary-soft/30" : ""
                 }`}
               >
                 {/* Hour rows */}
@@ -167,7 +171,7 @@ export function TimeGrid({
                     className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
                     style={{ top: `${nowTop}px` }}
                   >
-                    <div className="w-2 h-2 rounded-full bg-primary shrink-0 -ml-1 shadow-sm" />
+                    <div className="w-2 h-2 rounded-full bg-primary shrink-0 -ml-1 shadow-brilho-ouro" />
                     <div className="flex-1 h-px bg-primary/50" />
                   </div>
                 )}

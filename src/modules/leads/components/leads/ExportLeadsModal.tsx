@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText, Filter } from "lucide-react";
 import { useCanDo } from "@/modules/identity";
 import { useVentimaisExportDetails } from "../../hooks/useVentimaisExportDetails";
+import { IconChip } from "@/components/ui/bento";
 import { notifyError } from "@/shared/errors";
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
@@ -82,7 +83,7 @@ export function ExportLeadsContent({ onDone, listFilters, pipelineId }: ExportLe
           <div className="flex items-center gap-2">
             <RadioGroupItem value="xlsx" id="fmt-xlsx" />
             <Label htmlFor="fmt-xlsx" className="flex items-center gap-2 font-normal cursor-pointer">
-              <FileSpreadsheet className="w-4 h-4 text-green-600" />
+              <FileSpreadsheet className="w-4 h-4 text-success-strong" />
               Excel (.xlsx)
             </Label>
           </div>
@@ -113,8 +114,8 @@ export function ExportLeadsContent({ onDone, listFilters, pipelineId }: ExportLe
         </RadioGroup>
       </div>
       {filtersActive && (
-        <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-          <Filter className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary-soft px-3 py-2 text-xs text-primary-soft-foreground">
+          <Filter className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>Os filtros ativos da lista serão aplicados à exportação.</span>
         </div>
       )}
@@ -158,8 +159,8 @@ export function ExportLeadsModal({ open, onOpenChange, listFilters }: ExportLead
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileDown className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={FileDown} tone="gold" />
             Exportar leads
           </DialogTitle>
         </DialogHeader>

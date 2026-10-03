@@ -31,8 +31,8 @@ import { StatusDot } from "./StatusDot";
  * conversas recentes antes do CTA de abrir um novo chamado.
  */
 const PANEL_CLASS = cn(
-  "fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground",
-  "shadow-[0_32px_80px_-12px_rgba(0,0,0,0.85)]",
+  "fixed z-50 flex flex-col overflow-hidden rounded-panel border border-card-border bg-card text-card-foreground",
+  "shadow-relevo-alto",
   // Canto inferior-direito, à esquerda da coluna de FABs, altura limitada.
   "bottom-6 left-auto right-24 w-[392px] max-w-[calc(100vw-1.5rem)] max-h-[min(560px,calc(100vh-7rem))]",
   // Abre com fade + slide curto de baixo.
@@ -71,7 +71,7 @@ export function SupportPanel() {
           {composing ? (
             <>
               <header className="border-b border-border/60 px-5 pb-3.5 pt-4">
-                <DialogPrimitive.Title className="text-[15px] font-semibold tracking-tight">
+                <DialogPrimitive.Title className="text-base font-bold tracking-tight">
                   Abrir chamado
                 </DialogPrimitive.Title>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -141,7 +141,7 @@ function TicketList({
           {/* Presença honesta: sem número de SLA fabricado. */}
           <span className="text-xs text-muted-foreground">Equipe de suporte · respondemos rápido</span>
         </div>
-        <DialogPrimitive.Title className="mt-3 text-xl font-semibold tracking-tight">
+        <DialogPrimitive.Title className="mt-3 text-xl font-extrabold tracking-[-0.02em]">
           Precisa de ajuda?
         </DialogPrimitive.Title>
         <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -163,7 +163,7 @@ function TicketList({
         ) : (
           <>
             <div className="flex items-center justify-between px-5 pb-1.5 pt-4">
-              <span className="text-[10.5px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Continuar conversa
               </span>
               {/* "ver todos" omitido de propósito: a Central de Ajuda (#1042)
@@ -191,7 +191,7 @@ function TicketList({
         <button
           type="button"
           onClick={onNew}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-brilho-ouro transition hover:-translate-y-px hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <Send className="h-4 w-4" aria-hidden />
           Enviar mensagem
@@ -215,16 +215,16 @@ function TicketRow({
       <button
         type="button"
         onClick={() => onSelect(ticket.id)}
-        className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-2.5 text-left transition hover:border-border hover:bg-muted/40"
+        className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-card p-2.5 text-left transition hover:border-foreground/20 hover:bg-muted/40"
       >
-        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-soft-foreground">
           <Headset className="h-4 w-4" aria-hidden />
           <StatusDot status={ticket.status} className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border-2 border-card" />
         </span>
         <div className="min-w-0 flex-1">
           {/* Assunto quebra em linhas em vez de cortar — o painel e estreito e o titulo vai ate 200 chars. */}
           <p
-            className="break-words text-sm font-medium leading-snug text-foreground"
+            className="break-words text-sm font-semibold leading-snug text-foreground"
             title={ticket.title}
           >
             {ticket.title}
@@ -253,10 +253,10 @@ function TicketRow({
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-8 py-14 text-center">
-      <div className="mb-1 grid h-10 w-10 place-items-center rounded-xl border border-border/60 bg-muted/30">
+      <div className="mb-1 grid h-10 w-10 place-items-center rounded-xl bg-muted">
         <Inbox className="h-4 w-4 text-muted-foreground" aria-hidden />
       </div>
-      <p className="text-sm font-medium text-foreground">Nenhum chamado por aqui</p>
+      <p className="text-sm font-semibold text-foreground">Nenhum chamado por aqui</p>
       <p className="max-w-[26ch] text-xs leading-relaxed text-muted-foreground">
         Quando algo quebrar ou você tiver uma dúvida, abra um chamado e o suporte responde neste
         painel.

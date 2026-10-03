@@ -10,7 +10,7 @@ interface Props {
 
 const BUCKET_COLORS: Record<string, { bar: string; bg: string; text: string }> = {
   "<2min":   { bar: "bg-success",    bg: "bg-success/10",    text: "text-success" },
-  "2-5min":  { bar: "bg-blue-500",   bg: "bg-blue-500/10",   text: "text-blue-600 dark:text-blue-400" },
+  "2-5min":  { bar: "bg-insights",   bg: "bg-insights/10",   text: "text-insights" },
   "5-15min": { bar: "bg-warning",    bg: "bg-warning/10",    text: "text-warning" },
   ">15min":  { bar: "bg-destructive",bg: "bg-destructive/10",text: "text-destructive" },
 };
@@ -73,7 +73,7 @@ export function SpeedConversionCorrelation({ data }: Props) {
           return (
             <div
               key={row.bucket_label}
-              className={`rounded-lg p-3 ${colors.bg} border border-border/30`}
+              className={`rounded-2xl p-3 ${colors.bg}`}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold">
@@ -105,8 +105,8 @@ export function SpeedConversionCorrelation({ data }: Props) {
 
         {/* Insight card */}
         {multiplier && parseFloat(multiplier) > 1 && (
-          <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 mt-1">
-            <p className="text-xs font-medium text-green-700 dark:text-green-400">
+          <div className="rounded-2xl border border-success/30 bg-success/5 p-3 mt-1">
+            <p className="text-xs font-medium text-success">
               Responder em &lt;2min gera{" "}
               <span className="font-bold">{multiplier}x mais conversões</span> do que
               responder após 15min.

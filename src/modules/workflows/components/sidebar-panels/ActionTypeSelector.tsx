@@ -1,6 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, QUESTION_BUTTONS_FLAG, type WorkflowActionType } from "@/types/workflow";
+import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, QUESTION_BUTTONS_FLAG, isDiscontinuedAction, type WorkflowActionType } from "@/types/workflow";
+import { DiscontinuedNotice } from "../DiscontinuedNotice";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
@@ -19,7 +20,15 @@ export function ActionTypeSelector({ value, onChange }: { value: WorkflowActionT
       <SelectContent className="max-h-80">{categories.map(category => <SelectGroup key={category.label}>
         <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">{category.label}</SelectLabel>
         {category.actions.map(action => <SelectItem key={action} value={action}>{ACTION_LABELS[action]}</SelectItem>)}
-      </SelectGroup>)}</SelectContent>
+      </SelectGroup>)}
+        {/* Ação descontinuada (rating/score) só aparece quando já é a salva —
+            o seletor não pode ficar em branco num workflow de produção. */}
+        {isDiscontinuedAction(value) && <SelectGroup>
+          <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">Descontinuado</SelectLabel>
+          <SelectItem value={value}>{ACTION_LABELS[value]}</SelectItem>
+        </SelectGroup>}
+      </SelectContent>
     </Select>
+    {isDiscontinuedAction(value) && <DiscontinuedNotice />}
   </div>;
 }

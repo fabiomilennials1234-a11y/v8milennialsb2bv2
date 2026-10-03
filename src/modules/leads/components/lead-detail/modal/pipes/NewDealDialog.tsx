@@ -230,8 +230,8 @@ export const NewDealDialog = memo(function NewDealDialog({
           title={noOptions ? "O lead já está em todos os funis" : undefined}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md font-semibold",
-            "border border-primary/30 bg-primary/10 text-primary",
-            "hover:bg-primary/15 hover:border-primary/50",
+            "border border-primary/30 bg-primary-soft text-primary-soft-foreground",
+            "hover:border-primary/50 hover:bg-primary/25",
             "transition-colors duration-150",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             "disabled:opacity-45 disabled:pointer-events-none",
@@ -244,7 +244,9 @@ export const NewDealDialog = memo(function NewDealDialog({
       </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-lg" data-testid="new-deal-dialog">
+      {/* `z-[60]`/`z-[70]`: no celular a ficha do lead é um `Sheet` (`z-[51]`);
+          no `z-50` padrão o diálogo e as listas nasciam atrás da folha. */}
+      <DialogContent className="z-[60] max-w-lg" overlayClassName="z-[60]" data-testid="new-deal-dialog">
         <DialogHeader>
           <DialogTitle>Novo negócio</DialogTitle>
           <DialogDescription>
@@ -326,7 +328,7 @@ export const NewDealDialog = memo(function NewDealDialog({
                     <SelectTrigger id="new-deal-stage" data-testid="new-deal-stage">
                       <SelectValue placeholder="Escolha a etapa" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[70]">
                       {selected.stages.map((stage) => (
                         <SelectItem key={stage.id} value={stage.id}>
                           {stage.label}
@@ -344,7 +346,7 @@ export const NewDealDialog = memo(function NewDealDialog({
                     <SelectTrigger id="new-deal-owner" data-testid="new-deal-owner">
                       <SelectValue placeholder="Sem dono" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[70]">
                       {selectableMembers.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
                           {member.name}

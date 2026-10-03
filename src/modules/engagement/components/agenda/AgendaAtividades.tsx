@@ -1,5 +1,6 @@
 /**
- * A tela "Atividades" — Agenda interna unificada.
+ * A tela "Agenda" — agenda interna unificada (o nome do trilho e do mockup;
+ * até o V5 o título dizia "Atividades" e a lateral, "Agenda").
  *
  * Mostra eventos de 5 fontes internas (meetings, follow_ups,
  * scheduled_messages, pipe_confirmacao e meeting_events — o funil mergeado)
@@ -26,20 +27,29 @@ import {
   addMonths,
   isSameDay,
   isSameMonth,
+  isSameYear,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Check,
+  Clock,
+  Hourglass,
   Plus,
   RefreshCw,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useViewport } from "@/shared/hooks/use-viewport";
+import { AgendaProximo } from "./AgendaProximo";
 import { cn } from "@/lib/utils";
 import { useAuth, useCanDo, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
@@ -64,6 +74,7 @@ import type {
 } from "./agenda-helpers";
 import {
   EVENT_TYPE_KEYS,
+  EVENT_TYPE_LABELS,
   getWeekDays,
   normalizeAgendaEvents,
   normalizeGoogleEvents,
@@ -94,6 +105,7 @@ import { EditMeetingDialog } from "./EditMeetingDialog";
 // de `communication` (ver CLAUDE.md do módulo), e o barrel é o caminho que a
 // regra de boundaries permite.
 import { ScheduleMessageModal } from "@/modules/communication";
+import { IconChip } from "@/components/ui/bento";
 import { notifyError } from "@/shared/errors";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
@@ -124,10 +136,12 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const { userId, teamMemberId, isAdmin, isReady: identityReady } = useIdentity();
   const { data: teamMembers = [] } = useTeamMembers();
 
-  // A grade do mês é a visão principal. O dia continua acessível: era a visão
-  // de produção antes desta tela e a lista cronológica é o que a operação usa
-  // para tocar o dia. A semana segue inerte (reversível), como já estava.
-  const [view, setView] = useState<ViewType>("month");
+  // V5 (CTO, 02/10): a SEMANA é a visão principal no computador — ela existia
+  // no código e estava inalcançável. No celular abre no Dia (a grade do mês e a
+  // da semana não cabem a 390 px). O Dia continua sendo LISTA cronológica, a
+  // decisão de 24/08.
+  const { isMobile } = useViewport();
+  const [view, setView] = useState<ViewType>(() => (isMobile ? "day" : "week"));
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -221,7 +235,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const googleOwnerCalendars = useMemo(() => {
     const list: Array<{ id: string; name: string; color: string }> = [];
     if (gcalStatus?.connected) {
-      list.push({ id: ownUserId, name: "Meu Calendario", color: USER_COLORS[0] });
+      list.push({ id: ownUserId, name: "Meu Calendário", color: USER_COLORS[0] });
     }
     sharingData?.incoming?.forEach((share, idx) => {
       list.push({
@@ -338,6 +352,37 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     return { ...r, total: r.compareceu + r.naoCompareceu + r.semRegistro };
   }, [eventosNoPeriodo]);
 
+  /** "4 reuniões · 2 ligações" — a nota do KPI de compromissos. */
+  const contagemPorTipo = useMemo(() => {
+    const PLURAL: Record<EventTypeKey, string> = {
+      meeting: "reuniões",
+      call: "ligações",
+      follow_up: "follow-ups",
+      task: "tarefas",
+      other: "outros",
+    };
+    const conta = new Map<EventTypeKey, number>();
+    for (const e of eventosNoPeriodo) {
+      const tipo = normalizeEventType(e.eventType);
+      conta.set(tipo, (conta.get(tipo) ?? 0) + 1);
+    }
+    return [...conta.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([tipo, n]) => `${n} ${n === 1 ? EVENT_TYPE_LABELS[tipo].toLowerCase() : PLURAL[tipo]}`)
+      .join(" · ");
+  }, [eventosNoPeriodo]);
+
+  /** Hoje, independentemente da visão: quantos e qual é o próximo. */
+  const hoje = useMemo(() => {
+    const agora = Date.now();
+    const doDia = allEvents.filter((e) => isSameDay(e.start, new Date()));
+    const proximo = doDia
+      .filter((e) => e.start.getTime() >= agora)
+      .sort((a, b) => a.start.getTime() - b.start.getTime())[0];
+    return { total: doDia.length, proximo };
+  }, [allEvents]);
+
   // ── Mutations ───────────────────────────────────────────────────────────────
   const deleteMeeting = useDeleteMeeting();
   const updateMeeting = useUpdateMeeting();
@@ -373,7 +418,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
   const handleDeleteGoogleEvent = useCallback(
     async (event: UnifiedEvent) => {
-      if (!session?.access_token) throw new Error("Nao autenticado");
+      if (!session?.access_token) throw new Error("Não autenticado");
 
       const base = (
         (import.meta.env.VITE_SUPABASE_URL as string) ?? ""
@@ -398,7 +443,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         throw new Error("delete failed");
       }
 
-      toast.success("Evento excluido");
+      toast.success("Evento excluído");
       refetchGoogle();
     },
     [session, refetchGoogle],
@@ -421,15 +466,18 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   );
 
   // ── Date label ──────────────────────────────────────────────────────────────
+  // O ano só aparece fora do ano corrente: "quinta-feira, 17 de setembro de
+  // 2026" não cabia ao lado das setas a 390 px e o ano não dizia nada.
   const dateLabel = useMemo(() => {
+    const ano = (d: Date) => (isSameYear(d, new Date()) ? "" : " 'de' yyyy");
     if (view === "day")
-      return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
+      return format(date, `EEEE, d 'de' MMMM${ano(date)}`, { locale: ptBR });
     if (view === "week") {
       const days = getWeekDays(date);
       const [first, last] = [days[0], days[6]];
       if (first.getMonth() === last.getMonth())
-        return `${format(first, "d")} - ${format(last, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`;
-      return `${format(first, "d MMM", { locale: ptBR })} - ${format(last, "d MMM yyyy", { locale: ptBR })}`;
+        return `${format(first, "d")} - ${format(last, `d 'de' MMMM${ano(last)}`, { locale: ptBR })}`;
+      return `${format(first, "d MMM", { locale: ptBR })} - ${format(last, `d MMM${ano(last) ? " yyyy" : ""}`, { locale: ptBR })}`;
     }
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
@@ -508,51 +556,100 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      {/* Cabeçalho da página — mesmo molde de Leads/Copilot */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-2xl font-bold"
-          >
-            Atividades
-          </motion.h1>
-          <p className="mt-1 text-muted-foreground">
-            {seesEveryone
-              ? "Crie, edite e gerencie as atividades da equipe."
-              : "Crie, edite e gerencie suas atividades."}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            title="Atualizar"
-            aria-label="Atualizar agenda"
-          >
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          </Button>
-          <Button onClick={handleNewEvent} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova atividade
-          </Button>
-          {onClose && (
+      {/* Cabeçalho — o `PageHeader` do V5 nos DOIS lugares onde a tela vive.
+          No painel sobreposto (`onClose` presente) o título desce para o
+          tamanho que o próprio `PageHeader` já usa no celular: o painel é uma
+          camada sobre outra página, e um título de página cheio ali competiria
+          com o título da página de baixo, que continua à mostra. O h1 e o nome
+          acessível são os mesmos nos dois contextos — só o corpo muda. */}
+      <PageHeader
+        title="Agenda"
+        subtitle={
+          seesEveryone
+            ? "Crie, edite e gerencie as atividades da equipe."
+            : "Crie, edite e gerencie suas atividades."
+        }
+        className={cn(onClose && "[&_h1]:text-[1.375rem]")}
+        tabs={
+          <Tabs value={view} onValueChange={(v) => setView(v as ViewType)}>
+            <TabsList variant="pill" aria-label="Visão da agenda">
+              <TabsTrigger value="week">Semana</TabsTrigger>
+              <TabsTrigger value="month">Mês</TabsTrigger>
+              <TabsTrigger value="day">Dia</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
+        actions={
+          <>
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
-              onClick={onClose}
-              title="Fechar"
-              aria-label="Fechar Atividades"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              title="Atualizar"
+              aria-label="Atualizar agenda"
             >
-              <X className="h-4 w-4" />
+              <RefreshCw className={cn(isLoading && "animate-spin")} />
             </Button>
-          )}
-        </div>
-      </div>
+            <Button onClick={handleNewEvent}>
+              <Plus />
+              Nova atividade
+            </Button>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                title="Fechar"
+                aria-label="Fechar Agenda"
+              >
+                <X />
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {/* KPIs do período à vista. Todos DERIVADOS da lista já em tela — acompanham
+          filtros e escopo, e não podem divergir do que a grade mostra. */}
+      <KpiRow cols={4}>
+        <KpiTile
+          label={view === "week" ? "Compromissos na semana" : view === "month" ? "Compromissos no mês" : "Compromissos no dia"}
+          value={isLoading ? "·" : eventosNoPeriodo.length.toLocaleString("pt-BR")}
+          icon={CalendarDays}
+          tone="gold"
+          loading={isLoading}
+          note={contagemPorTipo || "Nada marcado no período"}
+        />
+        <KpiTile
+          label="Reuniões realizadas"
+          value={isLoading ? "·" : `${resumo.compareceu}`}
+          icon={Check}
+          tone="good"
+          loading={isLoading}
+          note={
+            resumo.compareceu + resumo.naoCompareceu > 0
+              ? `de ${resumo.compareceu + resumo.naoCompareceu} com desfecho · ${resumo.naoCompareceu} não compareceram`
+              : "Nenhum desfecho registrado"
+          }
+        />
+        <KpiTile
+          label={`Hoje · ${format(new Date(), "EEEE", { locale: ptBR })}`}
+          value={isLoading ? "·" : hoje.total.toLocaleString("pt-BR")}
+          icon={Clock}
+          tone="info"
+          loading={isLoading}
+          note={hoje.proximo ? `próximo: ${format(hoje.proximo.start, "HH:mm")} · ${hoje.proximo.leadName ?? hoje.proximo.title}` : "Nada mais hoje"}
+        />
+        <KpiTile
+          label="Aguardando desfecho"
+          value={isLoading ? "·" : resumo.semRegistro.toLocaleString("pt-BR")}
+          icon={Hourglass}
+          tone={resumo.semRegistro > 0 ? "bad" : "neutral"}
+          loading={isLoading}
+          note={resumo.semRegistro > 0 ? "Reuniões passadas sem compareceu/faltou" : "Tudo registrado"}
+        />
+      </KpiRow>
 
       {/* Abas de estado + filtros */}
       <AgendaFilterBar
@@ -567,97 +664,43 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
       {/* Navegação de período + alternância de visão */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1">
-          <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-foreground">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {/* `first-letter:uppercase`, e não `capitalize`: o rótulo vem do
+              date-fns em minúsculas ("agosto de 2026") e `capitalize` subiria
+              também o "De". */}
+          <h2 className="truncate text-[15px] font-bold tracking-[-0.02em] text-foreground first-letter:uppercase">
             {dateLabel}
           </h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => navigate("prev")}
-            aria-label="Período anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => navigate("next")}
-            aria-label="Próximo período"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => navigate("today")}
-          >
-            Hoje
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {isLoading
-              ? "Carregando…"
-              : eventosNoPeriodo.length === 0
-                ? "Nenhuma atividade"
-                : `${eventosNoPeriodo.length} ${eventosNoPeriodo.length === 1 ? "atividade" : "atividades"}`}
-          </span>
-
-          {/* Comparecimento do período. Some quando não há nada registrável —
-              zero sem contexto é ruído, não informação.
-              O número é DERIVADO da lista já em tela: acompanha os filtros,
-              acompanha o escopo de quem está vendo, e não pode divergir do que
-              a grade mostra. Trocar um resultado move de balde; não soma. */}
-          {!isLoading && resumo.total > 0 && (
-            <div
-              className="flex items-center gap-2.5 text-xs tabular-nums"
-              aria-label="Comparecimento no período"
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => navigate("prev")}
+              aria-label="Período anterior"
             >
-              <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
-                {resumo.compareceu}
-                <span className="sr-only">compareceram</span>
-              </span>
-              <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
-                <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
-                {resumo.naoCompareceu}
-                <span className="sr-only">não compareceram</span>
-              </span>
-              {resumo.semRegistro > 0 && (
-                <span className="text-muted-foreground">
-                  {resumo.semRegistro} sem registro
-                </span>
-              )}
-            </div>
-          )}
-          {/* Mesma linguagem do segmentado de estado: pílula sobre superfície
-              afundada. Dois segmentados com formas diferentes lado a lado leem
-              como dois sistemas. */}
-          <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
-            {(["month", "day"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                aria-pressed={view === v}
-                className={cn(
-                  "rounded-full px-3 py-1 text-[12px] transition-colors",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  view === v
-                    ? "border border-border bg-card font-semibold text-foreground shadow-sm"
-                    : "font-medium text-foreground/80 hover:text-foreground",
-                )}
-              >
-                {v === "month" ? "Mês" : "Dia"}
-              </button>
-            ))}
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => navigate("next")}
+              aria-label="Próximo período"
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3"
+              onClick={() => navigate("today")}
+            >
+              Hoje
+            </Button>
           </div>
         </div>
+
       </div>
 
       {/* Estado de ERRO — sem isto, RPC quebrada renderiza um calendário vazio
@@ -666,21 +709,19 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         <div
           role="alert"
           aria-live="polite"
-          // Cor crua sempre em par `x dark:y` — o idioma que a #1792 fixou em
-          // `SessionDeadBanner`. Só o tom escuro deixaria o texto a 1,1:1 no
-          // tema claro.
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-800 dark:text-red-100"
+          // Só token: a cor de estado mora na borda, no banho e no ícone; o
+          // TEXTO fica em `foreground`/`muted-foreground`. Vermelho como texto
+          // é o que obrigava o par de escala `x dark:y` aqui antes — com o
+          // texto neutro o contraste vale nos dois temas sem par nenhum.
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
         >
           <div className="flex min-w-0 items-center gap-3">
-            <AlertTriangle
-              className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
-              aria-hidden="true"
-            />
+            <IconChip icon={AlertTriangle} tone="bad" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-red-800 dark:text-red-50">
+              <p className="text-sm font-semibold text-foreground">
                 Não foi possível carregar a agenda.
               </p>
-              <p className="mt-0.5 text-xs text-red-700/90 dark:text-red-200/80">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 O calendário abaixo pode estar incompleto.
               </p>
             </div>
@@ -689,15 +730,18 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            className="shrink-0 gap-2 border-red-500/40 bg-red-500/10 text-red-800 hover:bg-red-500/20 hover:text-red-900 dark:border-red-400/40 dark:text-red-50 dark:hover:text-white"
+            className="shrink-0"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw />
             Tentar de novo
           </Button>
         </div>
       )}
 
-      {/* Calendário */}
+      {/* Calendário + coluna do próximo compromisso (fora do painel sobreposto,
+          que é estreito demais para duas colunas). */}
+      <div className={cn("grid min-h-0 flex-1 items-start gap-4", !onClose && "xl:grid-cols-[minmax(0,1fr)_340px]")}>
+      <div className="flex min-h-0 min-w-0 flex-col">
       <AnimatePresence mode="wait">
         <motion.div
           key={view}
@@ -734,6 +778,17 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           )}
         </motion.div>
       </AnimatePresence>
+      </div>
+      {!onClose && (
+        <AgendaProximo
+          events={allEvents}
+          onEventClick={handleEventClick}
+          googleConnected={googleConnected}
+          googleEmail={gcalStatus?.google_email ?? null}
+          className="max-xl:hidden"
+        />
+      )}
+      </div>
 
       {/* Event popover */}
       <AnimatePresence>

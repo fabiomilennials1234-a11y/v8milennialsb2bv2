@@ -66,7 +66,7 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
       <BaseNode
         nodeId={id}
         nodeType="wait_business_window"
-        icon={<CalendarClock className="w-5 h-5 text-amber-500" />}
+        icon={<CalendarClock />}
         title={nodeData.label || "Janela Comercial"}
         subtitle={subtitle}
         selected={selected}
@@ -75,7 +75,7 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
       >
         {hasRoutes && (
           <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Saídas por janela</div>
+            <div className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Saídas por janela</div>
             {routeHandles.map((rh) => (
               <div key={rh.key} className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground truncate">{rh.windowName}</span>
@@ -105,7 +105,7 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
                 id={rh.key}
                 aria-label={`Saída ${rh.windowName}`}
                 style={{ left: `${left}%` }}
-                className="!w-3 !h-3 !bg-amber-500 !border-2 !border-background"
+                className="!w-3 !h-3 !bg-warning !border-2 !border-background"
               />
             );
           })}
@@ -115,7 +115,7 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
             id="default"
             aria-label="Saída padrão"
             style={{ left: `${((routeHandles.length + 1) / (routeHandles.length + 2)) * 100}%` }}
-            className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-background"
+            className="!w-3 !h-3 !bg-success !border-2 !border-background"
           />}
         </>
       )}

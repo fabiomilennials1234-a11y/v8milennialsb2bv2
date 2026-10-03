@@ -18,8 +18,9 @@ interface StudioTooltipProps {
  */
 export function StudioTooltip({ title, rows, formatId }: StudioTooltipProps) {
   return (
-    <div className="pointer-events-none rounded-lg border border-border/70 bg-popover/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+    // V5: tooltip é tinta — o mesmo vocabulário do Tooltip primitivo.
+    <div className="pointer-events-none rounded-xl border border-tinta-line/60 bg-tinta px-3 py-2 text-tinta-foreground shadow-relevo-tinta">
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.06em] text-tinta-muted">
         {title}
       </div>
       <div className="space-y-0.5">
@@ -28,8 +29,8 @@ export function StudioTooltip({ title, rows, formatId }: StudioTooltipProps) {
             {row.swatch && (
               <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: row.swatch }} />
             )}
-            <span className="text-muted-foreground">{row.label}</span>
-            <span className="ml-auto font-semibold tabular-nums text-foreground">
+            <span className="text-tinta-muted">{row.label}</span>
+            <span className="ml-auto font-bold tabular-nums text-tinta-foreground">
               {formatMetricValue(row.value, formatId)}
             </span>
           </div>

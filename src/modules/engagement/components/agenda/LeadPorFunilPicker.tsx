@@ -57,6 +57,10 @@ export const SEM_FUNIL = "__sem_funil__";
 /** 300ms — o mesmo dos outros dois campos de busca de lead do app. */
 const DEBOUNCE_MS = 300;
 
+/** Rótulo de campo do V5 — o mesmo dos dois diálogos que montam o picker. */
+const ROTULO =
+  "text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground";
+
 /**
  * O que conta como "o negócio do lead" na hora de RESOLVER um vínculo sozinho.
  *
@@ -299,10 +303,10 @@ export function LeadPorFunilPicker({
     <div className="space-y-4">
       {/* ── Funil ───────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Funil</Label>
+        <Label className={ROTULO}>Funil</Label>
 
         {erroFunis ? (
-          <p className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+          <p className="flex items-center gap-1.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Não foi possível carregar os funis.
           </p>
@@ -344,12 +348,12 @@ export function LeadPorFunilPicker({
 
       {/* ── Lead ────────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Lead</Label>
+        <Label className={ROTULO}>Lead</Label>
 
         {leadId ? (
           /* Escolhido — chip com o nome resolvido pelo id. */
-          <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
-            <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
               {carregandoLead ? (
                 <span className="text-muted-foreground">Carregando lead...</span>
               ) : leadEscolhido ? (
@@ -370,7 +374,7 @@ export function LeadPorFunilPicker({
               type="button"
               onClick={limparLead}
               disabled={disabled}
-              className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50"
             >
               <X className="h-3 w-3" />
               Limpar
@@ -379,7 +383,7 @@ export function LeadPorFunilPicker({
         ) : !pipelineId ? (
           /* Nenhum funil — o campo existe, explica o que falta e não mente
              oferecendo uma busca que não teria onde procurar. */
-          <div className="rounded-lg border border-dashed border-border/40 px-3 py-2.5">
+          <div className="rounded-xl border border-dashed border-border px-3 py-2.5">
             <p className="text-[11px] text-muted-foreground">
               Escolha um funil acima para buscar os leads dele.
             </p>
@@ -387,7 +391,7 @@ export function LeadPorFunilPicker({
         ) : (
           <div className="space-y-1.5">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-8"
                 placeholder={`Buscar lead em ${
@@ -424,9 +428,9 @@ export function LeadPorFunilPicker({
           seria pedir confirmação de algo que não tem alternativa. */}
       {leadId && entradasAmbiguas.length > 1 && (
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Negócio</Label>
-          <div className="overflow-hidden rounded-lg border border-amber-500/30">
-            <p className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
+          <Label className={ROTULO}>Negócio</Label>
+          <div className="overflow-hidden rounded-xl border border-warning/40">
+            <p className="border-b border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning-strong">
               {/* "abertos" não é enfeite: a lista já não oferece entrada
                   encerrada, e dizer só "negócios" faria a pessoa procurar na
                   lista um negócio fechado que ela sabe que existe. */}
@@ -441,11 +445,11 @@ export function LeadPorFunilPicker({
                   type="button"
                   disabled={disabled}
                   onClick={() => escolherEntrada(entrada)}
-                  className={`flex w-full flex-col items-start gap-0.5 border-b border-border/30 px-3 py-2 text-left transition-colors last:border-b-0 disabled:opacity-50 ${
-                    escolhida ? "bg-primary/10" : "hover:bg-muted/40"
+                  className={`flex w-full flex-col items-start gap-0.5 border-b border-border/60 px-3 py-2 text-left transition-colors last:border-b-0 disabled:opacity-50 ${
+                    escolhida ? "bg-primary-soft" : "hover:bg-muted/60"
                   }`}
                 >
-                  <span className="w-full truncate text-xs text-foreground">
+                  <span className="w-full truncate text-xs font-semibold text-foreground">
                     {/* `stage_name` vem do embed da própria entrada. Cair no
                         `stage_key` é degradação, não erro: 41 das 48.174
                         entradas de prod estão sem `stage_id` (etapa apagada) e
@@ -514,7 +518,7 @@ function ListaDeLeads({
 }: ListaDeLeadsProps) {
   if (erro) {
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
         <p className="flex items-start gap-1.5 text-[11px] text-destructive">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
@@ -538,7 +542,7 @@ function ListaDeLeads({
   // cada tecla.
   if (buscando && leads.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-border/40 py-6">
+      <div className="flex items-center justify-center rounded-xl border border-border py-6">
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
@@ -546,7 +550,7 @@ function ListaDeLeads({
 
   if (leads.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border/40 px-3 py-2.5">
+      <div className="rounded-xl border border-dashed border-border px-3 py-2.5">
         <p className="text-[11px] text-muted-foreground">
           {temTermo
             ? "Nenhum lead deste funil corresponde à busca."
@@ -557,7 +561,7 @@ function ListaDeLeads({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40">
+    <div className="overflow-hidden rounded-xl border border-border">
       <div className="max-h-52 overflow-y-auto">
         {leads.map((lead) => {
           const sub = subtitulo(lead);
@@ -567,9 +571,9 @@ function ListaDeLeads({
               type="button"
               disabled={disabled}
               onClick={() => onEscolher(lead)}
-              className="flex w-full flex-col items-start gap-0.5 border-b border-border/30 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/40 disabled:opacity-50"
+              className="flex w-full flex-col items-start gap-0.5 border-b border-border/60 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/60 disabled:opacity-50"
             >
-              <span className="w-full truncate text-xs text-foreground">
+              <span className="w-full truncate text-xs font-semibold text-foreground">
                 {lead.name}
               </span>
               {sub && (
@@ -582,7 +586,7 @@ function ListaDeLeads({
         })}
       </div>
       {temMais && (
-        <p className="border-t border-border/30 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+        <p className="border-t border-border/60 bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
           Mostrando os primeiros resultados — refine a busca para achar outros.
         </p>
       )}

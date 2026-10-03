@@ -7,7 +7,8 @@ import { MetaBindingTab } from "../components/MetaBindingTab";
 
 export default function MasterMetaAssets() {
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    // Largura de leitura: a lista de organizações fica estreita de propósito.
+    <div className="max-w-4xl">
       <MetaBindingTab />
     </div>
   );

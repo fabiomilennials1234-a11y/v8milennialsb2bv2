@@ -125,7 +125,7 @@ export function DeletePipelineDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-destructive" />
-            Excluir Funil "{pipeline.name}"?
+            Excluir funil "{pipeline.name}"?
           </AlertDialogTitle>
           <AlertDialogDescription>
             {bloqueado ? (
@@ -211,9 +211,9 @@ export function DeletePipelineDialog({
 
         {/* Funil padrão da org (624): substituto obrigatório ANTES do delete. */}
         {!bloqueado && ehPadrao && (
-          <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="space-y-2 rounded-2xl border border-warning/35 bg-warning/10 p-3">
             <div className="flex items-start gap-2 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
               <span>
                 Este é o <strong>funil padrão</strong> da organização — leads que chegam
                 sem destino declarado caem nele. Escolha o novo padrão antes de excluir.
@@ -251,7 +251,7 @@ export function DeletePipelineDialog({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {excluir.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Excluir Funil
+              Excluir funil
             </AlertDialogAction>
           )}
         </AlertDialogFooter>

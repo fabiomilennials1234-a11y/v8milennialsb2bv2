@@ -36,7 +36,7 @@ export function FeedbackSummary({ summary }: { summary: Summary | undefined }) {
         </button>
       )}
       {open && summary.reasons.length > 0 && (
-        <ul className="absolute z-10 mt-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-border bg-popover p-2 text-xs shadow-lg">
+        <ul className="absolute z-10 mt-1 max-h-48 w-64 overflow-y-auto rounded-xl border border-border bg-popover p-2 text-xs shadow-relevo-alto">
           {summary.reasons.map((reason, i) => (
             <li key={i} className="border-b border-border/40 py-1.5 last:border-0 text-foreground">
               {reason}

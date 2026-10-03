@@ -93,6 +93,12 @@ export interface LeadCardMetrics {
   idadeDias: number;
   /** Dias desde a última mensagem trocada. `null` quando nunca houve. */
   semContatoDias: number | null;
+  /**
+   * `upsell_clients.id` — a porta do Cliente 360 (`/carteira/:clientId`).
+   * `null` quando a compra veio só do funil e a pessoa não tem linha na
+   * carteira: aí o botão não aparece, em vez de levar a uma página vazia.
+   */
+  clienteId?: string | null;
 }
 
 export type TipoDeCampo = "texto" | "email" | "telefone" | "documento" | "url" | "data" | "moeda";
@@ -192,7 +198,16 @@ export interface LeadCardData {
   relacao: LeadRelacao;
   prova: ProvaDeCompra | null;
   /** O Negócio aberto mais avançado. `null` = sem negócio aberto. */
-  situacao: { funil: string; funilCor: string } | null;
+  situacao: {
+    funil: string;
+    funilCor: string;
+    /**
+     * O `pipeline_entries.id` desse negócio — o que a aba Negócios destaca no
+     * cartão de ouro. Opcional porque as fixtures da visualização não o têm;
+     * sem ele o destaque cai no primeiro aberto da lista.
+     */
+    negocioId?: string;
+  } | null;
 
   dono: { nome: string; papel: string } | null;
 

@@ -254,7 +254,7 @@ describe("ConditionPanel — campo personalizado", () => {
       <ConditionPanel data={baseData({ field: "custom.Campo Extinto" })} onUpdate={vi.fn()} />,
     );
     expect(screen.getByText("Campo Extinto (não existe mais)")).toBeInTheDocument();
-    expect(screen.getByText(/nunca sera verdadeira/i)).toBeInTheDocument();
+    expect(screen.getByText(/nunca será verdadeira/i)).toBeInTheDocument();
   });
 
   it("entrar em campo personalizado por um operador numérico cai em contains", () => {

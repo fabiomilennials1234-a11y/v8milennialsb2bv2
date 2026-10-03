@@ -17,11 +17,11 @@ import { useWorkflowConfigScan } from "@/modules/workflows";
 const KIND = {
   podre: {
     label: "Apodreceu",
-    classe: "bg-red-500/10 text-red-400 border-red-500/20",
+    classe: "bg-destructive/10 text-destructive border-destructive/20",
   },
   vazio: {
     label: "Nunca preenchido",
-    classe: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    classe: "bg-warning/15 text-warning-strong border-warning/40",
   },
 } as const;
 
@@ -33,8 +33,8 @@ export default function WorkflowConfigTab() {
   const orgs = new Set(problemas?.map((p) => p.organizationName)).size;
 
   return (
-    <div className="space-y-6">
-      <Card className="border-primary/20 bg-primary/[0.03]">
+    <div className="space-y-5">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Info className="h-4 w-4" /> Como ler esta aba
@@ -83,11 +83,11 @@ export default function WorkflowConfigTab() {
           {isLoading ? (
             <p className="py-6 text-sm text-muted-foreground">Varrendo os workflows ativos…</p>
           ) : error ? (
-            <p className="py-6 text-sm text-red-400">
+            <p className="py-6 text-sm text-destructive">
               Não consegui varrer: {(error as Error).message}
             </p>
           ) : !problemas?.length ? (
-            <p className="flex items-center gap-2 py-6 text-sm text-emerald-400">
+            <p className="flex items-center gap-2 py-6 text-sm text-success-strong">
               <CheckCircle2 className="h-4 w-4" />
               Nenhum workflow ativo com nó incompleto. Nada a consertar.
             </p>
@@ -108,7 +108,7 @@ export default function WorkflowConfigTab() {
                     <TableCell className="font-medium">{p.organizationName}</TableCell>
                     <TableCell className="text-muted-foreground">{p.workflowName}</TableCell>
                     <TableCell>{p.nodeLabel}</TableCell>
-                    <TableCell className="text-amber-500 dark:text-amber-400">{p.missing}</TableCell>
+                    <TableCell className="text-warning-strong">{p.missing}</TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline" className={KIND[p.kind].classe}>
                         {KIND[p.kind].label}

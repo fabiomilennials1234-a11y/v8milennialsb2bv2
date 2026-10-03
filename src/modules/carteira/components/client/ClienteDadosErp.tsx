@@ -96,12 +96,12 @@ export function ClienteDadosErp({ clientId }: { clientId: string | undefined }) 
   if (destaques.length === 0 && detalhes.length === 0) return null;
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader className="px-4 pt-4 pb-2 flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-semibold text-card-foreground">Dados do ERP</CardTitle>
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 px-5 pb-2 pt-4">
+        <CardTitle className="text-[15px] tracking-[-0.02em]">Dados do ERP</CardTitle>
         <div className="flex items-center gap-1">
           {pessoa && (
-            <Badge variant="outline" className="text-[10px] font-normal">
+            <Badge variant="soft" className="text-[10.5px]">
               {pessoa}
             </Badge>
           )}
@@ -109,22 +109,24 @@ export function ClienteDadosErp({ clientId }: { clientId: string | undefined }) 
               Mostrar o código sem inventar tradução é mais honesto que chamar
               de "ativo" o que ninguém confirmou que é. */}
           {data.erp_status && (
-            <Badge variant="outline" className="text-[10px] font-normal">
+            <Badge variant="soft" className="text-[10.5px]">
               situação {data.erp_status}
             </Badge>
           )}
         </div>
       </CardHeader>
 
-      <CardContent className="px-4 pb-4 space-y-3">
+      <CardContent className="space-y-3 px-5 pb-5">
         {destaques.length > 0 && (
           <ul className="grid gap-2 sm:grid-cols-2">
             {destaques.map(({ Icon, label, value }) => (
               <li key={label} className="flex items-start gap-2">
-                <Icon size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-foreground/60">
+                  <Icon size={13} />
+                </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-muted-foreground leading-none mb-0.5">{label}</p>
-                  <p className="text-xs text-card-foreground break-words">{value}</p>
+                  <p className="mb-0.5 text-[11px] leading-none text-muted-foreground">{label}</p>
+                  <p className="break-words text-[13px] font-semibold text-card-foreground">{value}</p>
                 </div>
               </li>
             ))}
@@ -132,7 +134,7 @@ export function ClienteDadosErp({ clientId }: { clientId: string | undefined }) 
         )}
 
         {detalhes.length > 0 && (
-          <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2 pt-2 border-t border-border">
+          <dl className="grid gap-x-4 gap-y-1 border-t border-border/70 pt-3 sm:grid-cols-2">
             {detalhes.map(({ label, value }) => (
               <div key={label} className="flex items-baseline justify-between gap-2 min-w-0">
                 <dt className="text-[11px] text-muted-foreground shrink-0">{label}</dt>

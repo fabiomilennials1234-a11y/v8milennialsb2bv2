@@ -67,3 +67,32 @@ it("marks the row's account unread, without selecting the conversation", async (
   expect(props.onMarkUnread).toHaveBeenCalledWith("5548999000111", "inst-1");
   expect(props.onSelect).not.toHaveBeenCalled();
 });
+
+describe("ConversationListItem — linha de três andares (V5)", () => {
+  it("'Pediu atendente' aparece quando o lead está na fila de handoff", () => {
+    render(<ConversationListItem {...baseProps({ waitingHumanLeadIds: new Set(["lead-1"]) })} />);
+    expect(screen.getByText("Pediu atendente")).toBeInTheDocument();
+  });
+
+  it("sem fila de handoff, não há 'Pediu atendente'", () => {
+    render(<ConversationListItem {...baseProps({ waitingHumanLeadIds: new Set(["outro-lead"]) })} />);
+    expect(screen.queryByText("Pediu atendente")).not.toBeInTheDocument();
+  });
+
+  it("selo 'IA' quando a última mensagem saiu do Copilot", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({
+          contact: contact({ last_message_direction: "outgoing", last_message_sent_source: "copilot" }),
+        })}
+      />,
+    );
+    expect(screen.getByTitle("A última mensagem foi do Copilot")).toHaveTextContent("IA");
+  });
+
+  it("mensagem manual de saída continua prefixada com 'Você:'", () => {
+    render(<ConversationListItem {...baseProps({ contact: contact({ last_message_direction: "outgoing" }) })} />);
+    expect(screen.getByText("Você:")).toBeInTheDocument();
+    expect(screen.queryByTitle("A última mensagem foi do Copilot")).not.toBeInTheDocument();
+  });
+});

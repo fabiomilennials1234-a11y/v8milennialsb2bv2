@@ -134,3 +134,9 @@ scripts/recovery/
 # Ensaio transacional do #1721 — artefato montado, nao versionado
 .ensaio-*.montado.sql
 .apply-*.montado.sql
+
+# Build da interface clássica (scripts/ui-classic/merge-dist.mjs junta em dist/)
+dist-classic/
+
+# Prints da harness de UI (scripts/ui-preview/shoot.mjs)
+.ui-shots/

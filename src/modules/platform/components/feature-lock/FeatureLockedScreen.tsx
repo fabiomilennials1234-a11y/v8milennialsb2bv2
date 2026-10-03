@@ -23,20 +23,17 @@ export function FeatureLockedScreen({ feature }: { feature: FeatureKey }) {
       data-testid="feature-locked-screen"
       className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6"
     >
-      <div className="h-16 w-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mb-5">
-        <Lock className="h-8 w-8 text-amber-500" />
+      <div className="h-16 w-16 rounded-2xl bg-warning/15 flex items-center justify-center mb-5">
+        <Lock className="h-8 w-8 text-warning-strong" />
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight mb-2">{label} está bloqueado</h2>
+      <h2 className="mb-2 text-2xl font-extrabold tracking-[-0.035em]">{label} está bloqueado</h2>
       <p className="text-muted-foreground max-w-md mb-6">
         {target
           ? <>Disponível no plano <strong>{target}</strong>. {meta?.description}</>
           : <>Esse recurso não está no seu plano atual. {meta?.description}</>}
       </p>
-      <Button
-        className="gradient-primary gradient-primary-hover text-white font-semibold border-0"
-        onClick={handleUpgrade}
-      >
-        <Sparkles className="w-4 h-4 mr-2" />
+      <Button onClick={handleUpgrade}>
+        <Sparkles />
         {target ? "Fazer upgrade" : "Falar com Comercial"}
       </Button>
     </div>

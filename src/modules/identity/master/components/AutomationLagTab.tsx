@@ -22,9 +22,9 @@ import {
 
 const SEV_LABEL = { bom: "Bom", atencao: "Atenção", ruim: "Ruim" } as const;
 const SEV_CLASS = {
-  bom: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  atencao: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  ruim: "bg-red-500/10 text-red-400 border-red-500/20",
+  bom: "bg-success/10 text-success-strong border-success/20",
+  atencao: "bg-warning/15 text-warning-strong border-warning/40",
+  ruim: "bg-destructive/10 text-destructive border-destructive/20",
 } as const;
 
 function LagBadge({ ms }: { ms: number | null | undefined }) {
@@ -40,9 +40,9 @@ function LagBadge({ ms }: { ms: number | null | undefined }) {
 /** Rótulo + valor + a frase que explica o que aquilo significa. */
 function Metric({ label, value, hint }: { label: string; value: React.ReactNode; hint: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+    <div className="rounded-2xl bg-sunken p-4">
+      <div className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-extrabold tabular-nums tracking-[-0.04em]">{value}</div>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{hint}</p>
     </div>
   );
@@ -54,9 +54,9 @@ export default function AutomationLagTab() {
   const { data: byWorkflow } = useWorkflowLagByWorkflow(7, 10);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Como ler ────────────────────────────────────────────────────── */}
-      <Card className="border-primary/20 bg-primary/[0.03]">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Info className="h-4 w-4" /> Como ler esta aba
@@ -163,9 +163,9 @@ export default function AutomationLagTab() {
             </Table>
           )}
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-            Faixas: até 1 minuto é <span className="text-emerald-400">bom</span>; até 5 minutos é{" "}
-            <span className="text-amber-400">atenção</span>; acima disso é{" "}
-            <span className="text-red-400">ruim</span> e o vendedor percebe como “não disparou”.
+            Faixas: até 1 minuto é <span className="text-success-strong">bom</span>; até 5 minutos é{" "}
+            <span className="text-warning-strong">atenção</span>; acima disso é{" "}
+            <span className="text-destructive">ruim</span> e o vendedor percebe como “não disparou”.
           </p>
         </CardContent>
       </Card>

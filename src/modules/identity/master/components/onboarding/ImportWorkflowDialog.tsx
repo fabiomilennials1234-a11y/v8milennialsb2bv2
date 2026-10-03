@@ -50,7 +50,7 @@ export function ImportWorkflowDialog({ onClose }: Props) {
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-6 space-y-5">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Importar Workflow</h3>
+          <h3 className="text-lg font-semibold">Importar workflow</h3>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>
@@ -98,7 +98,7 @@ export function ImportWorkflowDialog({ onClose }: Props) {
                   <div className="flex gap-1 mt-0.5">
                     <span className="text-[10px] text-muted-foreground">{wf.trigger_type}</span>
                     {wf.is_active && (
-                      <span className="text-[10px] text-green-500">ativo</span>
+                      <span className="text-[10px] text-success-strong">ativo</span>
                     )}
                   </div>
                 </div>

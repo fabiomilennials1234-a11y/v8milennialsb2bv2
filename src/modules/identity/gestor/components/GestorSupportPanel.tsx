@@ -125,7 +125,7 @@ export function GestorSupportPanel({ open, onOpenChange }: Props) {
         {view === "compose" ? (
           <>
             <SheetHeader className="border-b border-border/50 px-6 pb-4 pt-6 text-left">
-              <SheetTitle className="text-base font-semibold">Abrir chamado</SheetTitle>
+              <SheetTitle className="text-base font-bold tracking-tight">Abrir chamado</SheetTitle>
               <SheetDescription className="text-xs">
                 Escolha a organização e conte o que houve. O suporte da Torque responde por aqui.
               </SheetDescription>
@@ -175,7 +175,7 @@ function OrgAnchorField({
 }) {
   return (
     <fieldset className="space-y-2.5">
-      <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Label className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
         Organização
       </Label>
       <Select value={value} onValueChange={onChange}>
@@ -211,7 +211,7 @@ function GestorTicketList({
   return (
     <>
       <SheetHeader className="border-b border-border/50 px-6 pb-4 pt-6 text-left">
-        <SheetTitle className="text-base font-semibold">Suporte</SheetTitle>
+        <SheetTitle className="text-base font-bold tracking-tight">Suporte</SheetTitle>
         <SheetDescription className="text-xs">
           Chamados das suas organizações vinculadas. Abra e acompanhe por aqui.
         </SheetDescription>
@@ -231,11 +231,11 @@ function GestorTicketList({
                 <button
                   type="button"
                   onClick={() => onSelect(t)}
-                  className="flex w-full items-center gap-3 px-6 py-3.5 text-left transition-colors hover:bg-muted/40"
+                  className="flex w-full items-center gap-3 px-6 py-3.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                 >
                   <StatusDot status={t.status} className="mt-1.5 self-start" />
                   <div className="min-w-0 flex-1">
-                    {/* Assunto quebra em linhas em vez de cortar — vai ate 200 chars e a folha e estreita. */}
+                    {/* Assunto quebra em linhas em vez de cortar — vai até 200 chars e a folha é estreita. */}
                     <p
                       className="break-words text-sm font-medium leading-snug text-foreground"
                       title={t.title}
@@ -266,7 +266,7 @@ function GestorTicketList({
         )}
       </div>
 
-      <div className="border-t border-border/50 bg-muted/20 px-6 py-4">
+      <div className="border-t border-border/50 bg-sunken px-6 py-4">
         {!canCompose && (
           <p className="mb-2.5 text-xs text-muted-foreground">
             Vincule ao menos uma organização para abrir um chamado.
@@ -284,10 +284,10 @@ function GestorTicketList({
 function EmptyState() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-8 py-16 text-center">
-      <div className="mb-1 grid h-10 w-10 place-items-center rounded-xl border border-border/60 bg-muted/30">
-        <LifeBuoy className="h-4 w-4 text-muted-foreground" aria-hidden />
+      <div className="mb-1 grid h-10 w-10 place-items-center rounded-xl bg-muted text-foreground/70">
+        <LifeBuoy className="h-4 w-4" aria-hidden />
       </div>
-      <p className="text-sm font-medium text-foreground">Nenhum chamado por aqui</p>
+      <p className="text-sm font-semibold text-foreground">Nenhum chamado por aqui</p>
       <p className="max-w-[28ch] text-xs leading-relaxed text-muted-foreground">
         Abra um chamado quando precisar de ajuda com uma das organizações que você gere.
       </p>

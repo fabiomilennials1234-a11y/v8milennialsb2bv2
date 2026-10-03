@@ -12,7 +12,9 @@ import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
 import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
 import { useTeamGoals } from "@/modules/engagement";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface TabPerformanceV2Props {
@@ -110,22 +112,32 @@ function TabPerformanceV2Base({ month, year, range, monthlyRange, section }: Tab
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento" && g.target_value > 0);
 
   const monthlyQueries = show("metas-equipe") || show("real-esperado") ? [gaugeQuery, goalsQuery] : [];
-  if (isError || monthlyQueries.some((query) => query.isError)) return <div role="alert" className="p-4 text-sm">Não foi possível carregar a performance.<Button variant="link" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button></div>;
-  if (isLoading || monthlyQueries.some((query) => query.isLoading)) return <Skeleton className="h-full min-h-32 w-full" />;
+  if (isError || monthlyQueries.some((query) => query.isError)) return (
+    <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 py-4 text-center">
+      <AlertTriangle className="h-5 w-5 text-destructive/80" aria-hidden />
+      <p className="text-[13px] font-semibold">Não foi possível carregar a performance.</p>
+      <Button variant="outline" size="sm" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button>
+    </div>
+  );
+  if (isLoading || monthlyQueries.some((query) => query.isLoading)) return <Skeleton className="h-full min-h-32 w-full rounded-2xl" />;
+
+  // No Estúdio cada seção mora numa janela, que JÁ é o cartão. Sem `section`
+  // (grade completa, hoje sem consumidor) cada bloco volta a ser o cartão.
+  const cartao = section ? "" : "rounded-card border border-card-border bg-card p-5 shadow-relevo";
 
   return (
-    <div className={section ? "h-full [&>*]:h-full" : "mt-3.5 grid grid-cols-12 gap-3.5"}>
+    <div className={section ? "h-full [&>*]:h-full" : "mt-3.5 grid grid-cols-12 gap-4"}>
       {/* Peças period-scoped — seguem o range global */}
-      {show("ranking") && <div className="col-span-8">
+      {show("ranking") && <div className={cn("col-span-8", cartao)}>
         <RankingPodium range={range} teamSalesTotal={totalMetrics?.vendaTotal ?? 0} />
       </div>}
-      {show("produtos") && <div className="col-span-4">
+      {show("produtos") && <div className={cn("col-span-4", cartao)}>
         <ProductChampions range={range} />
       </div>}
-      {show("atividade") && <div className="col-span-8">
+      {show("atividade") && <div className={cn("col-span-8", cartao)}>
         <TeamActivityCard range={range} />
       </div>}
-      {show("jornada") && <div className="col-span-4">
+      {show("jornada") && <div className={cn("col-span-4", cartao)}>
         <LeadJourney
           startDate={range.start.toISOString()}
           endDate={range.end.toISOString()}
@@ -134,20 +146,20 @@ function TabPerformanceV2Base({ month, year, range, monthlyRange, section }: Tab
       </div>}
 
       {/* Blocos vindos da antiga aba Inteligência */}
-      {show("metas-equipe") && <div className="col-span-5">
+      {show("metas-equipe") && <div className={cn("col-span-5", cartao)}>
         <TeamGoalsGauges gauges={gauges} expectedPercent={expectedPercent} />
       </div>}
-      {show("metas-individuais") && <div className="col-span-4">
+      {show("metas-individuais") && <div className={cn("col-span-4", cartao)}>
         <IndividualGoalsList month={month} year={year} />
       </div>}
-      {show("perdas") && <div className="col-span-3">
+      {show("perdas") && <div className={cn("col-span-3", cartao)}>
         <LossReasonsCard
           startDate={range.start.toISOString()}
           endDate={range.end.toISOString()}
           totalWon={totalMetrics?.funnelVendas ?? 0}
         />
       </div>}
-      {show("real-esperado") && <div className="col-span-12">
+      {show("real-esperado") && <div className={cn("col-span-12", cartao)}>
         {/* Metas mensais: dailySales vem do gaugeMetrics (mês), não do range. */}
         <RealVsExpectedChart
           dailySales={gaugeMetrics?.dailySales ?? []}
