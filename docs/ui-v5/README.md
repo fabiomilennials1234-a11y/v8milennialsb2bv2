@@ -6,6 +6,11 @@ Linguagem: **bancada quente com grade, cartões brancos de bento, tinta e ouro.*
 O que é tela real e o que era só ideia do mockup está em
 [`validacao-telas.md`](./validacao-telas.md). **Estilo do mockup, conteúdo da main.**
 
+**Onda 2 (02/10):** o CTO pediu a **estrutura** do mockup também — trilho de ícones + barra
+superior, "fila em tinta + foco em ouro" (`InkSplit`) nas telas de trabalho, Agenda em semana,
+Configurações em 7 abas, ficha do lead e painel do Negócio em gaveta. As decisões e as travas estão
+em [`decisoes-onda-mockup.md`](./decisoes-onda-mockup.md).
+
 ## Tokens (src/index.css · tailwind.config.ts)
 
 | Papel | Token | Tailwind |
@@ -38,6 +43,15 @@ degrau acima do cartão para continuarem lidas como objeto.
 - `Dialog`/`AlertDialog` — branco, raio 28. `Sheet` lateral — flutua (12 px de respiro, raio 28) a partir de `sm`.
 - `Tooltip` — tinta.
 - `Table` — cabeçalho em rótulo micro maiúsculo.
+
+## Shell (src/modules/platform/components/layout)
+
+- **Trilho de ícones** (`Sidebar`, 76 px, sem expandir): Comando · Métricas · Chat · Disparos · Funis · Leads |
+  Copilot · Automações | Oráculo — e no pé Agenda · Master · Ajuda · Pitstop · avatar. Rótulo no tooltip.
+- **Barra superior** (`TopBar`): organização + plano à esquerda, a pílula da página no centro (o `PageHeader`
+  publica `tabs` ali por portal), busca ⌘K, notificações, tema e o usuário à direita. Abaixo de 1080 px a pílula
+  desce para uma linha própria.
+- Agenda, Oráculo e Pitstop são **páginas** (`/agenda`, `/oraculo`, `/pitstop`). O Master mora no shell normal.
 
 ## Composição (src/components/ui/page-header.tsx, bento.tsx)
 
