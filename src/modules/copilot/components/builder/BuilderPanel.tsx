@@ -11,10 +11,10 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Loader2, Send, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBuilderSession } from "@/modules/copilot/hooks/useBuilderSession";
 import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 interface BuilderPanelProps {
   agentId?: string;
@@ -56,9 +56,7 @@ export function BuilderPanel({
       {
         onSuccess: (res) => onApplyActions(res.actions),
         onError: (err) => {
-          toast.error("Não consegui responder agora", {
-            description: err instanceof Error ? err.message : "Tente novamente.",
-          });
+          notifyError(err, { fallback: "Não consegui responder agora." });
           setDraft(text); // restore so the user doesn't lose what they typed
         },
       },

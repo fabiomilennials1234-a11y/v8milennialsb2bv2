@@ -5,8 +5,8 @@ import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/modules/carteira/
 import { LeadCard } from "@/modules/leads";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
+import { notifyError } from "@/shared/errors";
 
 type CampanhaStatus = Database["public"]["Enums"]["upsell_campanha_status"];
 
@@ -113,8 +113,8 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
 
     try {
       await updateCampanha.mutateAsync(updates);
-    } catch {
-      toast.error("Erro ao mover campanha");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível mover campanha." });
     }
   };
 
@@ -143,8 +143,8 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
       }
 
       await updateCampanha.mutateAsync(updates);
-    } catch {
-      toast.error("Erro ao atualizar campanha");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar campanha." });
     }
   };
 

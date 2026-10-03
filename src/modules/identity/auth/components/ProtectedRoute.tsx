@@ -10,6 +10,7 @@ import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
 import { IS_DEMO_MODE } from '@/core/demo-mode';
+import { LoadFailedScreen } from '../../components/LoadFailedScreen';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -18,7 +19,12 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, requireOrganization = true }: ProtectedRouteProps) {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
+  const {
+    data: teamMember,
+    isLoading: teamMemberLoading,
+    error: teamMemberError,
+    refetch: refetchTeamMember,
+  } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useIdentity();
   const { isGestor, isLoading: gestorLoading } = useGestor();
   // Gate de MFA. A propria rota /seguranca/mfa fica de fora, senao o redirect
@@ -28,8 +34,12 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   const { required: precisaMfa, isLoading: mfaLoading } = useMfaRequired(isMaster, !naRotaDeMfa);
   // Só consultamos quando não há vínculo ativo — é o único caso ambíguo.
   const semVinculoAtivo = !teamMemberLoading && !teamMember?.organization_id;
-  const { data: foiDesativado, isLoading: desativadoLoading } =
-    useDeactivatedMembership(semVinculoAtivo && !isMaster && !isGestor);
+  const {
+    data: foiDesativado,
+    isLoading: desativadoLoading,
+    error: desativadoError,
+    refetch: refetchDesativado,
+  } = useDeactivatedMembership(semVinculoAtivo && !isMaster && !isGestor);
 
   // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
   // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
@@ -64,6 +74,26 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   }
 
   if (requireOrganization && !isMaster) {
+    // Consulta que FALHOU não é "sem vínculo". Antes daqui, erro de rede virava
+    // "Aguardando Ativação — sua conta está sendo configurada": uma mentira
+    // sobre a conta do cliente (ADR-0038, achado na validação ponta a ponta).
+    // O acesso continua fechado; a tela só para de inventar o motivo.
+    const loadError = (!teamMember && teamMemberError) || (!isGestor && desativadoError) || null;
+    if (loadError) {
+      return (
+        <LoadFailedScreen
+          error={loadError}
+          fallback="Não foi possível verificar seu acesso. Tente de novo em instantes."
+          source="boot:team_member"
+          onRetry={() => {
+            void refetchTeamMember();
+            void refetchDesativado();
+          }}
+          onSignOut={() => signOut()}
+        />
+      );
+    }
+
     if (!teamMember || !teamMember.organization_id) {
       // Gestor de Portfólio (ADR-0021): não tem team_member enquanto não entra
       // numa org vinculada pelo hub. Não está "sendo configurado" — mandar pra
@@ -129,24 +159,6 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
         </div>
       );
     }
-  }
-
-  if (teamMemberError && !teamMember && requireOrganization && !isMaster) {
-    console.error('[ProtectedRoute] Error fetching team member:', teamMemberError);
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
-          <AlertTriangle className="h-12 w-12 text-red-500" />
-          <h2 className="text-xl font-semibold">Erro ao Carregar</h2>
-          <p className="text-muted-foreground">
-            Não foi possível carregar os dados do usuário. Tente novamente.
-          </p>
-          <Button onClick={() => window.location.reload()}>
-            Recarregar página
-          </Button>
-        </div>
-      </div>
-    );
   }
 
   return <>{children}</>;

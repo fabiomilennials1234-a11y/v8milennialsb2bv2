@@ -27,6 +27,7 @@ import {
   type DuplicateGroup,
 } from "../hooks/useDuplicateLeads";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 export default function Duplicates() {
   const { data: duplicates, isLoading, isError, error, refetch } = useDuplicateLeads();
@@ -54,8 +55,8 @@ export default function Duplicates() {
       await mergeMutation.mutateAsync({ keep_id: mergeTarget.keep, merge_id: mergeTarget.merge });
       toast.success("Leads mesclados com sucesso");
       setMergeTarget(null);
-    } catch {
-      toast.error("Erro ao mesclar leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível mesclar leads." });
     }
   }, [mergeTarget, mergeMutation]);
 

@@ -59,7 +59,7 @@ export default function MasterAutomationHealth() {
       await reprocess.mutateAsync({ type, id });
       toast.success(`Reprocessado: ${label}`);
     } catch (e) {
-      toast.error(`Falha: ${e instanceof Error ? e.message : "erro"}`);
+      notifyError(e, { fallback: `Não foi possível reprocessar: ${label}.` });
     }
   };
 
@@ -397,7 +397,7 @@ function AlertsTab() {
                     onClick={() => {
                       resolve.mutate(alert.id, {
                         onSuccess: () => toast.success("Alert resolvido"),
-                        onError: (e) => toast.error(`Falha: ${e instanceof Error ? e.message : "erro"}`),
+                        onError: (e) => notifyError(e, { fallback: "Não foi possível resolver o alerta." }),
                       });
                     }}
                   >
@@ -536,7 +536,7 @@ function EngineTab() {
                           { orgId: org.id, version: next },
                           {
                             onSuccess: () => toast.success(`${org.name} → ${next}`),
-                            onError: (e) => toast.error(e instanceof Error ? e.message : "Falha"),
+                            onError: (e) => notifyError(e, { fallback: "Não foi possível trocar a versão do Copilot." }),
                           },
                         );
                       }}
@@ -585,3 +585,4 @@ function severityVariant(s: SystemAlert["severity"]): BadgeProps["variant"] {
 }
 
 import type { SystemAlert } from "@/modules/workflows/hooks/useAutomationHealth";
+import { notifyError } from "@/shared/errors";

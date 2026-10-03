@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { EnviadorDeMenu, TipoDeMenu } from "@/modules/communication/lib/menu-sender";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   open: boolean;
@@ -114,7 +115,7 @@ export function SendMenuDialog({ open, onOpenChange, enviador }: Props) {
       setCtaUrl("");
       setChoices([{ title: "", description: "" }]);
     } catch (e) {
-      toast.error((e as Error).message);
+      notifyError(e, { fallback: "Não foi possível enviar o menu." });
     } finally {
       setSending(false);
     }

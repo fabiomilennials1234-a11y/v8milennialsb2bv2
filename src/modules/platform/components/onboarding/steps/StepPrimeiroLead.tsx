@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { UserPlus, CheckCircle2, ArrowRight, Loader2, ChevronRight } from "lucide-react";
 import { useCreateLead } from "@/modules/leads";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   onNext: () => void;
@@ -28,7 +28,7 @@ export function StepPrimeiroLead({ onNext }: Props) {
       });
       setDone(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao criar lead");
+      notifyError(err, { fallback: "Não foi possível criar lead." });
     }
   };
 

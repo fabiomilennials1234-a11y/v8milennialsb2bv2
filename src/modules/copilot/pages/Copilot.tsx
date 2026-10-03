@@ -65,6 +65,7 @@ import { CopilotTabs } from "@/modules/copilot/components/CopilotTabs";
 import { AGENT_TYPE_ORDER, agentTypeLabel } from "@/modules/copilot/lib/agent-labels";
 import { FilterChip } from "@/shared/components/FilterChip";
 import { FilterRow } from "@/shared/components/PillSearch";
+import { notifyError } from "@/shared/errors";
 
 const initialOf = (name: string) => (name.trim().charAt(0) || "?").toUpperCase();
 
@@ -144,7 +145,7 @@ export default function Copilot() {
       if (!newId) throw new Error("Falha ao criar rascunho");
       navigate(`/copilot/${newId}/editar?builder=1`);
     } catch (e) {
-      toast.error("Não foi possível iniciar o assistente. Tente novamente.");
+      notifyError(e, { fallback: "Não foi possível iniciar o assistente. Tente novamente." });
     }
   };
 

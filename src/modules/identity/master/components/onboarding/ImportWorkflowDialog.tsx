@@ -15,6 +15,7 @@ import {
   useCreateAutomationTemplate,
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   onClose: () => void;
@@ -41,7 +42,7 @@ export function ImportWorkflowDialog({ onClose }: Props) {
       });
       toast.success(`Workflow "${wf.name}" importado como template`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao importar");
+      notifyError(err, { fallback: "Não foi possível importar." });
     }
   };
 

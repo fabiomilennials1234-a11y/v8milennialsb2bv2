@@ -9,6 +9,7 @@ import {
 import { AutomationTemplateEditor } from "./AutomationTemplateEditor";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function AutomationTemplatesTab() {
   const { data: templates, isLoading } = useAutomationTemplates();
@@ -21,8 +22,8 @@ export function AutomationTemplatesTab() {
     try {
       await deleteMutation.mutateAsync(id);
       toast.success("Template removido");
-    } catch {
-      toast.error("Erro ao remover template");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover template." });
     }
   };
 

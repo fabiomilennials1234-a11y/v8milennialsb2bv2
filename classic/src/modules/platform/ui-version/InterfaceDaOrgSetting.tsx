@@ -20,7 +20,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useIdentity } from "@/modules/identity";
-import { getErrorMessage } from "@/shared/errors";
+import { notifyError } from "@/shared/errors";
 import { trocarUi } from "@torque/ui-version";
 import { ESTA_UI, trocaDeUiLigada } from "./esta-ui";
 import { useOrgInterface } from "./useOrgInterface";
@@ -46,7 +46,7 @@ export function InterfaceDaOrgSetting() {
     try {
       await definir(ligar);
     } catch (error) {
-      toast.error("Não foi possível trocar a interface", { description: getErrorMessage(error) });
+      notifyError(error, { fallback: "Não foi possível trocar a interface." });
       return;
     }
     const destino = ligar ? "v5" : "classic";

@@ -27,6 +27,7 @@ import {
   ATTACHMENT_ACCEPT,
 } from "@/modules/communication/lib/attachment-media-type";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
+import { notifyError } from "@/shared/errors";
 
 interface ChatBubbleComposerProps {
   phoneNumber: string;
@@ -74,11 +75,7 @@ export function ChatBubbleComposer({
         leadId,
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar." });
     }
   };
 
@@ -144,11 +141,7 @@ export function ChatBubbleComposer({
             : "Imagem enviada!",
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar arquivo",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     }
   };
 
@@ -171,11 +164,7 @@ export function ChatBubbleComposer({
         leadId,
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar áudio",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
   };
 

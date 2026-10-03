@@ -27,6 +27,7 @@ import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hook
 import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 // Origin labels and colors mapping (enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
@@ -160,7 +161,7 @@ export function CreateOpportunityModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar oportunidade");
+      notifyError(error, { fallback: "Não foi possível criar oportunidade." });
       console.error(error);
     }
   };

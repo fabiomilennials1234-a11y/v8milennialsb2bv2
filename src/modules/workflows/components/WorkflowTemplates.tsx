@@ -24,6 +24,7 @@ import { countDiscontinuedSteps } from "@/modules/workflows/lib/discontinued-ste
 import { IconChip } from "@/components/ui/bento";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TRIGGER_LABELS } from "@/types/workflow";
+import { notifyError } from "@/shared/errors";
 
 // Reexportado por compatibilidade: a interface agora é contrato compartilhado
 // (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
@@ -230,7 +231,7 @@ export function WorkflowTemplates({
       toast.success("Workflow criado a partir do template");
       navigate(`/automacoes/${result.id}`);
     } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao criar workflow");
+      notifyError(err, { fallback: "Não foi possível criar workflow." });
     }
   }
 

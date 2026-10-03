@@ -67,10 +67,12 @@ import {
   type MasterTicketFilters,
 } from "../hooks/useMasterSupportTickets";
 import { useMasterQueueChannel } from "../hooks/useMasterQueueChannel";
+import { TicketDiagnosisPanel } from "../components/support/TicketDiagnosisPanel";
 import {
   useMasterSupportUnread,
   useMarkMasterRepliesRead,
 } from "../hooks/useMasterSupportUnread";
+import { notifyError } from "@/shared/errors";
 
 const ALL = "__all__";
 
@@ -443,7 +445,7 @@ function TicketRow({
             onValueChange={(v) =>
               triage.mutate(
                 { ticketId: ticket.id, severidade: v as TicketSeveridade },
-                { onError: () => toast.error("Não deu para definir a severidade.") },
+                { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para definir a severidade." }) },
               )
             }
           >
@@ -474,7 +476,7 @@ function TicketRow({
             onValueChange={(v) =>
               triage.mutate(
                 { ticketId: ticket.id, status: v as TicketStatus },
-                { onError: () => toast.error("Não deu para mudar o status.") },
+                { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para mudar o status." }) },
               )
             }
           >
@@ -598,7 +600,7 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}.`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
+      notifyError(err, { fallback: "Não deu para enviar." });
     }
   }
 
@@ -608,6 +610,16 @@ function TicketDetail({ ticket }: { ticket: MasterSupportTicket }) {
   return (
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
+        {/* Etapa 4 do processo de fix: responder o cliente e executar o prompt. */}
+        <TicketDiagnosisPanel
+          ticketId={ticket.id}
+          comments={comments}
+          onUseReply={(text) => {
+            setIsInternal(false);
+            setBody(text);
+          }}
+        />
+
         {ticket.description && (
           <div className="space-y-2 rounded-lg border border-border/50 bg-background/50 p-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
@@ -800,7 +812,7 @@ function DefectField({ ticket }: { ticket: MasterSupportTicket }) {
 
     triage.mutate(
       { ticketId: ticket.id, defect_url: parsed.url },
-      { onError: () => toast.error("Não deu para vincular o defeito.") },
+      { onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para vincular o defeito." }) },
     );
   }
 

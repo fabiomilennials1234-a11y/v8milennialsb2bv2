@@ -15,6 +15,7 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /** Extrai a mensagem real de erro do corpo de uma FunctionsHttpError. */
 async function extractFunctionError(error: unknown): Promise<Error> {
@@ -116,7 +117,7 @@ export function useConnectOmie() {
       toast.success("Omie conectado com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao conectar o Omie", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível conectar o Omie." });
     },
   });
 }
@@ -138,7 +139,7 @@ export function useDisconnectOmie() {
       toast.success("Omie desconectado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao desconectar", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível desconectar." });
     },
   });
 }
@@ -170,7 +171,7 @@ export function useSyncOmieClientes() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar clientes", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar clientes." });
     },
   });
 }
@@ -195,7 +196,7 @@ export function useSyncOmiePedidos() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar pedidos", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar pedidos." });
     },
   });
 }
@@ -225,7 +226,7 @@ export function useSyncOmieFinanceiro() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar faturamento", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar faturamento." });
     },
   });
 }
@@ -314,7 +315,7 @@ export function useUpdateOmieSyncMode() {
       queryClient.invalidateQueries({ queryKey: ["omie-status"] });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar modo de sincronização", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível atualizar modo de sincronização." });
     },
   });
 }

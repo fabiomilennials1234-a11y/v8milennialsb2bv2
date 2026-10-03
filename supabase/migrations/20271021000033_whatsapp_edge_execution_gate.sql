@@ -127,7 +127,7 @@ BEGIN
   END IF;
   v_revision := coalesce(v_revision, 0);
   IF v_revision <> p_expected_revision THEN
-    RAISE EXCEPTION 'stale edge execution gate revision' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'stale edge execution gate revision' USING ERRCODE = 'PT409';
   END IF;
   IF v_revision = 0 AND p_mode <> 'inline' THEN
     RAISE EXCEPTION 'edge execution gate must initialize inline' USING ERRCODE = '55000';

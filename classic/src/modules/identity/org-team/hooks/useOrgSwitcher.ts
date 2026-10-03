@@ -74,10 +74,15 @@ export function useOrgSwitcher() {
       // Usuário normal: apenas orgs com team_member ativo
       const { data, error } = await supabase
         .from("team_members")
+        // FK nomeada de propósito: `team_members` e `organizations` se ligam
+        // também por tabelas-ponte (toth_order_preparers, pipeline_entries…),
+        // e sem a dica o PostgREST responde 300/PGRST201 — o seletor de org
+        // quebra para todo usuário. Medido na branch com a migration
+        // 20271021000016 (ainda pendente em prod em 2026-09-30).
         .select(`
           organization_id,
           role,
-          organizations!inner(id, name, slug, org_type)
+          organizations!team_members_organization_id_fkey!inner(id, name, slug, org_type)
         `)
         .eq("user_id", user.id)
         .eq("is_active", true);

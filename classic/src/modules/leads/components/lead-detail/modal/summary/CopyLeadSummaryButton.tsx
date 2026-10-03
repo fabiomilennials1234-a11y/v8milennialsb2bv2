@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 import { loadLeadSummary } from "./load-summary";
+import { notifyError } from "@/shared/errors";
 
 export function CopyLeadSummaryButton({
   leadId,
@@ -64,11 +65,7 @@ export function CopyLeadSummaryButton({
         setManualText(text);
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível copiar o resumo. Tente novamente.",
-      );
+      notifyError(error, { fallback: "Não foi possível copiar o resumo. Tente novamente." });
     } finally {
       inFlight.current = false;
       setBusy(false);

@@ -19,6 +19,7 @@ import {
 } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateTemplateModalProps {
   open: boolean;
@@ -255,7 +256,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
       onSuccess?.(newTemplate.id);
     } catch (error: any) {
       console.error("Erro ao criar template:", error);
-      toast.error(error?.message || "Erro ao criar template. Verifique suas permissões.");
+      notifyError(error, { fallback: "Não foi possível criar template. Verifique suas permissões." });
     }
   };
 

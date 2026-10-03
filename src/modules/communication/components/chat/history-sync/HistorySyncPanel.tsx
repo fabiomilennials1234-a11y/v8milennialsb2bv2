@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { HistorySyncDialog } from "./HistorySyncDialog";
 import { SyncProgressCard } from "./SyncProgressCard";
 import { useHistorySyncJobs, useCreateHistorySyncJob } from "@/modules/communication/hooks/useHistorySyncJobs";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   instanceId: string;
@@ -34,7 +35,7 @@ export function HistorySyncPanel({ instanceId }: Props) {
       });
       toast.success("Atualização incremental agendada");
     } catch (e) {
-      toast.error(`Erro: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível agendar a atualização." });
     }
   };
 

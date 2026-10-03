@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ChevronRight, Headset, Inbox, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { registerSupportLauncher } from "@/shared/errors";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { useSupportUnread } from "@/modules/platform/hooks/useSupportUnread";
 import { useSupportTicketsChannel } from "@/modules/platform/hooks/useSupportTicketsChannel";
@@ -42,10 +43,24 @@ const PANEL_CLASS = cn(
 );
 
 export function SupportPanel() {
-  const { isOpen, close, ticketId, composing, openNewTicket, openTicket, backToList } =
-    useSupportPanel();
+  const {
+    isOpen,
+    close,
+    ticketId,
+    composing,
+    prefill,
+    openNewTicket,
+    openNewTicketWith,
+    openTicket,
+    backToList,
+  } = useSupportPanel();
 
   useSupportTicketsChannel(); // status changes by staff reach the customer's list live
+
+  // "Falar com suporte" num toast de erro abre este painel com o código do erro
+  // no rascunho (ADR-0038). O registro acompanha o painel montado — ele fica
+  // atrás de <SupportAccess>; sem painel, o toast só oferece copiar o código.
+  useEffect(() => registerSupportLauncher(openNewTicketWith), [openNewTicketWith]);
 
   return (
     <DialogPrimitive.Root open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -63,7 +78,13 @@ export function SupportPanel() {
                   Conte o que houve. A gente responde por aqui.
                 </p>
               </header>
-              <NewTicketForm onCreated={openTicket} onCancel={backToList} />
+              <NewTicketForm
+                // Um rascunho novo (outro erro) remonta o formulário do zero.
+                key={prefill ? `${prefill.title}:${prefill.description}` : "blank"}
+                initialDraft={prefill ?? undefined}
+                onCreated={openTicket}
+                onCancel={backToList}
+              />
             </>
           ) : ticketId ? (
             <>

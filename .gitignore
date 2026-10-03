@@ -97,6 +97,7 @@ services/**/.venv/
 # Playwright MCP screenshots/logs (local, ephemeral)
 .playwright-mcp/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 scripts/basic4u-clients.json
 
 # Scripts one-off de ops/incidentes — arquivar fora do repo (Desktop/torque-ops-archive-*)

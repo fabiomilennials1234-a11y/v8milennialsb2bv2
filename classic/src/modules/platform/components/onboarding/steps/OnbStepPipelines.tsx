@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, ArrowRight, Workflow } from "lucide-react";
 import { useOnboardingAdvance } from "@/modules/platform/hooks/useOnboardingAdvance";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface PipelineResult {
   type: string;
@@ -26,7 +26,7 @@ export function OnbStepPipelines() {
       setPipelines(result.pipelines ?? []);
       setApplied(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao aplicar funis");
+      notifyError(err, { fallback: "Não foi possível aplicar funis." });
     }
   };
 

@@ -36,3 +36,4 @@ owner: claude-agent
 - [[ADR-2026-06-29-send-to-number-workflow-node|Workflow node send_to_number — envio p/ número fixo + resumo da conversa]]
 - [[ADR-2026-08-24-suspensao-de-org-corta-acesso|Suspensão de org corta acesso no banco, não na tela]]
 - [[ADR-2026-09-01-funil-e-funil|Funil é funil — um tipo de funil, comportamento por stage_role, nunca por slug]]
+- [[ADR-2026-09-30-erro-e-contrato-sentry-observa-excecao|Erro é contrato; o Sentry volta para observar exceção]] 🟡 draft

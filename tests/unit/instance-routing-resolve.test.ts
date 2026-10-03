@@ -9,7 +9,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockSupabase } from "../helpers/supabase-mock";
 import {
+  GROUP_PROVIDERS,
   LEGACY_PROVIDERS,
+  resolvePinnedInstance,
   resolveRoutedInstance,
 } from "../../supabase/functions/_shared/instance-routing.ts";
 
@@ -641,5 +643,66 @@ describe("nó de números avulsos: o canal oficial não entra", () => {
     mockTable("whatsapp_instances", [INST_OFICIAL]);
     const r = await resolveEstreito({});
     expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+});
+
+// ─── resolvePinnedInstance (nó send_to_group) ─────────────────────────────
+//
+// O grupo é da INSTÂNCIA: só o número que participa dele pode mandar. Então não
+// há atalho de "uma viva só", não há recuo, não há conversa do lead — ou a
+// instância nomeada está viva, ou o envio falha sem trocar de número.
+
+describe("resolvePinnedInstance", () => {
+  const pin = (instanceId: string | null | undefined, providers: readonly string[] = GROUP_PROVIDERS) =>
+    resolvePinnedInstance(sb, { organizationId: ORG, instanceId, providers });
+
+  it("devolve a instância nomeada quando viva", async () => {
+    const r = await pin(INST_2.id);
+    expect(r).toMatchObject({ ok: true, instance: { id: INST_2.id } });
+  });
+
+  it("instância inexistente → no_instance_resolved, SEM cair no atalho de uma viva só", async () => {
+    // Só uma instância viva na org: resolveRoutedInstance usaria ela. Aqui não.
+    mockTable("whatsapp_instances", [INST_1]);
+    const r = await pin("nao-existe");
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("id vazio → no_instance_resolved", async () => {
+    expect(await pin("")).toMatchObject({ ok: false, code: "no_instance_resolved" });
+    expect(await pin(null)).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("instância caída → instance_disconnected, sem trocar por outra viva", async () => {
+    const r = await pin(INST_MORTA.id);
+    expect(r).toMatchObject({ ok: false, code: "instance_disconnected" });
+    if (!r.ok) expect(r.message).toContain("Antiga");
+  });
+
+  it("sessão morta com status congelado em connected → instance_disconnected", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_DESLOGADA]);
+    const r = await pin(INST_DESLOGADA.id);
+    expect(r).toMatchObject({ ok: false, code: "instance_disconnected" });
+  });
+
+  it("instância de OUTRA org → no_instance_resolved (fronteira do tenant)", async () => {
+    const r = await pin(INST_ALHEIA.id);
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("provedor fora do universo (canal oficial, meta) → no_instance_resolved", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL, INST_META]);
+    expect(await pin(INST_OFICIAL.id)).toMatchObject({ ok: false, code: "no_instance_resolved" });
+    expect(await pin(INST_META.id)).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("evolution viva fica fora de GROUP_PROVIDERS", async () => {
+    const evo = { ...INST_1, id: "inst-evo", provider: "evolution" };
+    mockTable("whatsapp_instances", [evo]);
+    expect(await pin(evo.id)).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("GROUP_PROVIDERS é só uazapi", () => {
+    expect(GROUP_PROVIDERS).toEqual(["uazapi"]);
   });
 });

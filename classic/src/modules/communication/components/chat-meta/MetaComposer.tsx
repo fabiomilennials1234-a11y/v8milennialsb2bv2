@@ -8,6 +8,7 @@ import { useMetaSend } from "@/modules/communication/hooks/chat-meta/useMetaSend
 import { isWithin24hWindow } from "@/modules/communication/hooks/chat-meta/types";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   conversationId: string;
@@ -32,7 +33,7 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
       await mutateAsync({ conversationId, text: text.trim() });
       setText("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar mensagem");
+      notifyError(err, { fallback: "Não foi possível enviar mensagem." });
     }
   }
 
@@ -51,14 +52,14 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
       .from(CHAT_MEDIA_BUCKET)
       .upload(path, file, { contentType: file.type, upsert: false });
     if (error || !data) {
-      toast.error(`Falha no upload${error ? `: ${error.message}` : ""}`);
+      notifyError(error, { fallback: "Não foi possível enviar o arquivo." });
       return;
     }
     const { data: pub } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
     try {
       await mutateAsync({ conversationId, mediaUrl: pub.publicUrl, mediaType: "image" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar imagem");
+      notifyError(err, { fallback: "Não foi possível enviar imagem." });
     }
   }
 

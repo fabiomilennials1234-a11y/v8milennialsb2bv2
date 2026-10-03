@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
 import { tothConnectionsTable, type TothConnectionRow } from "../lib/toth-table";
+import { notifyError } from "@/shared/errors";
 
 /** Extrai a mensagem real de erro do corpo de uma FunctionsHttpError. */
 async function extractFunctionError(error: unknown): Promise<Error> {
@@ -225,7 +226,7 @@ export function useConnectToth() {
       }
     },
     onError: (error: Error) => {
-      toast.error("Erro ao conectar o Toth", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível conectar o Toth." });
     },
   });
 }
@@ -247,7 +248,7 @@ export function useDisconnectToth() {
       toast.success("Toth desconectado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao desconectar", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível desconectar." });
     },
   });
 }
@@ -287,7 +288,7 @@ export function useSyncTothClientes() {
       );
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar clientes", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar clientes." });
     },
   });
 }
@@ -330,7 +331,7 @@ export function useSyncTothCobrancas() {
       );
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar cobranças", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar cobranças." });
     },
   });
 }
@@ -422,7 +423,7 @@ export function useSyncTothPedidos() {
       );
     },
     onError: (error: Error) => {
-      toast.error("Erro ao sincronizar pedidos", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível sincronizar pedidos." });
     },
   });
 }
@@ -488,7 +489,7 @@ export function useSimulateTothClientes() {
       return data as TothDryRunResult;
     },
     onError: (error: Error) => {
-      toast.error("Erro ao simular", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível simular." });
     },
   });
 }
@@ -536,7 +537,7 @@ export function useUpdateTothActiveWindow() {
       queryClient.invalidateQueries({ queryKey: ["toth-status"] });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao salvar a janela de cliente ativo", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível salvar a janela de cliente ativo." });
     },
   });
 }
@@ -571,7 +572,7 @@ export function useUpdateTothEmpresa() {
       queryClient.invalidateQueries({ queryKey: ["toth-status"] });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao salvar a empresa do grupo", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível salvar a empresa do grupo." });
     },
   });
 }
@@ -594,7 +595,7 @@ export function useUpdateTothSyncMode() {
       queryClient.invalidateQueries({ queryKey: ["toth-status"] });
     },
     onError: (error: Error) => {
-      toast.error("Erro ao atualizar modo de sincronização", { description: error.message });
+      notifyError(error, { fallback: "Não foi possível atualizar modo de sincronização." });
     },
   });
 }

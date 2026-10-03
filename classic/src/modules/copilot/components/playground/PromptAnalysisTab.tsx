@@ -10,6 +10,7 @@ import {
   type PromptSuggestion,
 } from "@/modules/copilot/hooks/usePromptAnalysis";
 import { PromptAnalysisSuggestionCard } from "./PromptAnalysisSuggestionCard";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   agentId: string | undefined;
@@ -75,8 +76,8 @@ export function PromptAnalysisTab({ agentId }: Props) {
         onSuccess: () => {
           toast.success(`Sugestão aplicada na seção ${suggestion.section}`);
         },
-        onError: () => {
-          toast.error("Erro ao aplicar sugestão.");
+        onError: (caught: unknown) => {
+          notifyError(caught, { fallback: "Não foi possível aplicar sugestão." });
         },
       },
     );

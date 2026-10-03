@@ -49,7 +49,7 @@ import {
   type CustomField,
 } from "../../../hooks/useLeadCustomFields";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,8 +183,8 @@ const StandardFieldRow = memo(function StandardFieldRow({ def, currentValue, onS
       await Promise.resolve(onSave(def.key, draft));
       editingRef.current = false;
       setEditing(false);
-    } catch {
-      toast.error(`Erro ao salvar ${def.label.toLowerCase()}`);
+    } catch (error) {
+      notifyError(error, { fallback: `Não foi possível salvar ${def.label.toLowerCase()}.` });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -301,8 +301,8 @@ const CustomFieldRow = memo(function CustomFieldRow({ field, currentValue, leadI
         value: draft === "" ? null : draft,
       });
       setEditing(false);
-    } catch {
-      toast.error("Erro ao salvar campo");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar campo." });
     }
   }, [saveField, leadId, field.id, draft]);
 
@@ -327,7 +327,7 @@ const CustomFieldRow = memo(function CustomFieldRow({ field, currentValue, leadI
           onCheckedChange={(val) =>
             saveField.mutate(
               { leadId, fieldId: field.id, value: String(val) },
-              { onError: () => toast.error("Erro ao salvar campo") }
+              { onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar campo." }) }
             )
           }
         />

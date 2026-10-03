@@ -28,6 +28,7 @@ import {
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   open: boolean;
@@ -148,7 +149,7 @@ export function CreateTemporaryFunnelModal({ open, onOpenChange }: Props) {
       resetForm();
       navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar funil temporário");
+      notifyError(error, { fallback: "Não foi possível criar funil temporário." });
     }
   };
 

@@ -4,7 +4,7 @@ import {
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Debounced auto-save for a single field/value. Skips the initial render so
@@ -85,7 +85,7 @@ export function useAutoSaveField<T>({
       const error = err instanceof Error ? err : new Error(String(err));
       setLastError(error);
       if (onErrorRef.current) onErrorRef.current(err);
-      else toast.error(error.message || "Erro ao salvar");
+      else notifyError(error, { fallback: "Não foi possível salvar." });
     } finally {
       setIsSaving(false);
     }

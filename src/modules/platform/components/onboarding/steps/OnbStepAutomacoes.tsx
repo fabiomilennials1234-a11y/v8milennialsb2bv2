@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { notifyError } from "@/shared/errors";
 
 interface AutomationTemplate {
   id: string;
@@ -54,7 +55,7 @@ export function OnbStepAutomacoes() {
       });
       setSelections(initial);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao carregar automações");
+      notifyError(err, { fallback: "Não foi possível carregar automações." });
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export function OnbStepAutomacoes() {
         payload: { selections: Object.values(selections) },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao ativar automações");
+      notifyError(err, { fallback: "Não foi possível ativar automações." });
     }
   };
 

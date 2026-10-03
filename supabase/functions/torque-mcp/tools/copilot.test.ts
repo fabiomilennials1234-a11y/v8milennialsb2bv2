@@ -27,6 +27,7 @@ Deno.test("extractPromptSources — tolerates missing/unparseable fields", () =>
 });
 
 import { buildPromptUpdate } from "./copilot.ts";
+import { textOf } from "../../_shared/mcp/content.ts";
 
 Deno.test("buildPromptUpdate — only provided sections, prompt_hash nulled", () => {
   assertEquals(
@@ -276,7 +277,7 @@ Deno.test("copilot.set_sections — tool_instructions alone is a valid edit", as
     { agent_id: "a1", tool_instructions: { QUALIFICAR_LEAD: "nova regra" } },
     ctxOf(db),
   );
-  const parsed = JSON.parse(res.content[0].text);
+  const parsed = JSON.parse(textOf(res));
   assertEquals(parsed.dryRun, true);
   assertEquals(parsed.plan.changed, []);
   assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
@@ -298,7 +299,7 @@ Deno.test("copilot.set_sections — tool_instructions as JSON string is accepted
     { agent_id: "a1", tool_instructions: JSON.stringify({ QUALIFICAR_LEAD: "nova regra" }) },
     ctxOf(db),
   );
-  const parsed = JSON.parse(res.content[0].text);
+  const parsed = JSON.parse(textOf(res));
   assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
   assertStringIncludes(String(parsed.plan.update.system_prompt), "nova regra");
 });
@@ -312,7 +313,7 @@ Deno.test("copilot.set_sections — tool_instructions string that isn't an objec
     ctxOf(db),
   );
   assertEquals(res.isError, true);
-  assertStringIncludes(res.content[0].text, "must be an object");
+  assertStringIncludes(textOf(res), "must be an object");
 });
 
 Deno.test("copilot.set_sections — unknown tool id is refused, not silently dropped", async () => {
@@ -324,7 +325,7 @@ Deno.test("copilot.set_sections — unknown tool id is refused, not silently dro
     ctxOf(db),
   );
   assertEquals(res.isError, true);
-  assertStringIncludes(res.content[0].text, "Unknown tool id");
+  assertStringIncludes(textOf(res), "Unknown tool id");
 });
 
 Deno.test("copilot.set_sections — dry-run returns confirmToken and does NOT write", async () => {
@@ -345,7 +346,7 @@ Deno.test("copilot.set_sections — dry-run returns confirmToken and does NOT wr
     { agent_id: "a1", sections: { flow: "novo fluxo" } },
     ctxOf(db),
   );
-  const parsed = JSON.parse(res.content[0].text);
+  const parsed = JSON.parse(textOf(res));
   assertEquals(parsed.dryRun, true);
   assertEquals(parsed.applied, false);
   assertEquals(typeof parsed.confirmToken, "string");
@@ -362,7 +363,7 @@ Deno.test("copilot.set_sections — requires at least one section", async () => 
     ctxOf(db),
   );
   assertEquals(res.isError, true);
-  assertStringIncludes(res.content[0].text, "at least one");
+  assertStringIncludes(textOf(res), "at least one");
 });
 
 Deno.test("copilot.set_sections — agent not found → throws", async () => {
@@ -427,13 +428,13 @@ Deno.test("copilot.set_sections — apply round-trip writes recompiled prompt on
     { agent_id: "a1", sections: { flow: "novo fluxo de atendimento" } },
     ctxOf(db),
   );
-  const token = JSON.parse(dry.content[0].text).confirmToken;
+  const token = JSON.parse(textOf(dry)).confirmToken;
 
   const applied = await copilotSetSectionsTool.handler(
     { agent_id: "a1", sections: { flow: "novo fluxo de atendimento" }, confirm_token: token },
     ctxOf(db),
   );
-  const parsed = JSON.parse(applied.content[0].text);
+  const parsed = JSON.parse(textOf(applied));
   assertEquals(parsed.applied, true);
   assertEquals(writes, 1); // applied exactly once
   const update = captured as unknown as Record<string, unknown>;
@@ -452,7 +453,7 @@ Deno.test("update_prompt: object promptSections is written (was dropped by array
   };
   const db = makeStub({ agent });
   const dry = JSON.parse(
-    (await copilotUpdatePromptTool.handler(
+    textOf(await copilotUpdatePromptTool.handler(
       {
         agent_id: "a1",
         promptSections: {
@@ -464,7 +465,7 @@ Deno.test("update_prompt: object promptSections is written (was dropped by array
         },
       },
       ctxOf(db),
-    )).content[0].text,
+    )),
   );
   // The planned update must carry conversation_style.promptSections (not dropped)
   const planUpd = dry.plan.update;

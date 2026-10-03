@@ -159,6 +159,29 @@ export function useEfeitoDeDesfecho(entryId: string): EfeitoAtivo | null {
   );
 }
 
+const NENHUMA_ENTRADA: ReadonlySet<string> = new Set();
+let emDesfecho: ReadonlySet<string> = NENHUMA_ENTRADA;
+
+/** Snapshot estável: mesmo objeto enquanto o conjunto de ids não muda. */
+function entradasEmDesfecho(): ReadonlySet<string> {
+  if (desfechos.size === emDesfecho.size && [...desfechos.keys()].every((id) => emDesfecho.has(id))) {
+    return emDesfecho;
+  }
+  emDesfecho = desfechos.size ? new Set(desfechos.keys()) : NENHUMA_ENTRADA;
+  return emDesfecho;
+}
+
+/**
+ * Entradas com efeito de ganho/perda pendente ou tocando — inclusive o que o
+ * painel ainda segura. O board as mantém SOLTAS na coluna até a onda acabar:
+ * sem isso o card ganho cairia direto na pilha de encerrados e a celebração
+ * tocaria num card que ninguém vê. Com movimento reduzido não há efeito, e o
+ * card vai direto para a pilha.
+ */
+export function useEntradasEmDesfecho(): ReadonlySet<string> {
+  return useSyncExternalStore(assinar, entradasEmDesfecho, () => NENHUMA_ENTRADA);
+}
+
 /** Opacidade da onda: entra rápido, segura, sai devagar. `p` é o progresso 0–1. */
 export function opacidadeDaOnda(p: number): number {
   if (p <= 0 || p >= 1) return 0;

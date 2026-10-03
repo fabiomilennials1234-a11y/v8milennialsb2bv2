@@ -13,7 +13,7 @@ import { PipeSettingsDialog } from "@/modules/pipelines";
 import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface UpsellGestaoKanbanProps {
   searchQuery: string;
@@ -97,8 +97,8 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
 
     try {
       await updateClient.mutateAsync({ id: clientId, gestao_stage: stageKey, gestao_manual_override: true });
-    } catch {
-      toast.error("Erro ao mover cliente");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível mover cliente." });
     }
   };
 

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export type CallDirection = "inbound" | "outbound";
 
@@ -152,7 +153,7 @@ export function useLogCall() {
       queryClient.invalidateQueries({ queryKey: ["lead-timeline"] });
     },
     onError: (error: Error) => {
-      toast.error(`Erro: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível registrar a ligação." });
     },
   });
 }

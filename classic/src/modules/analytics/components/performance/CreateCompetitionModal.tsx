@@ -10,6 +10,7 @@ import { useCreateCompetition, useSaveCompetitionEdits, type Competition } from 
 import { useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   open: boolean;
@@ -165,7 +166,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
       toast.success(status === "active" ? "Competição criada e ativada!" : "Competição salva como rascunho.");
       handleClose();
     } catch (err: any) {
-      toast.error("Erro ao criar competição: " + (err?.message || ""));
+      notifyError(err, { fallback: "Não foi possível criar competição." });
     }
   };
 
@@ -198,7 +199,7 @@ export function CreateCompetitionModal({ open, onOpenChange, competition, existi
       toast.success("Competição atualizada!");
       handleClose();
     } catch (err: any) {
-      toast.error("Erro ao salvar competição: " + (err?.message || ""));
+      notifyError(err, { fallback: "Não foi possível salvar competição." });
     }
   };
 

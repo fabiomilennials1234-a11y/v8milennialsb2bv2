@@ -8,6 +8,7 @@ import { CreatePipelineModal, useAvailableSystemPipes, useCreateCustomPipeline, 
 import type { SystemPipeType } from "@/modules/pipelines";
 import { FUNIL_DE_VENDAS_NOME, FUNIL_DE_VENDAS_STAGES } from "@/contracts/pipe";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateNewModalProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
       if (pipeline?.slug) navigate(`/funil/${pipeline.slug}`);
       handleClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao criar funil");
+      notifyError(e, { fallback: "Não foi possível criar funil." });
     }
   };
 
@@ -60,8 +61,8 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
       const route = pipeRoute(pipeType);
       if (route) navigate(route);
       handleClose();
-    } catch {
-      toast.error("Erro ao ativar funil");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ativar funil." });
     }
   };
 

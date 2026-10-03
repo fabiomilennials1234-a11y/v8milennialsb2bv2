@@ -18,7 +18,7 @@ import { useWhatsAppInstances } from "@/modules/communication";
 import { useQuickBlast } from "@/modules/leads/hooks/useQuickBlast";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
-import { blastErrorMessage } from "@/modules/leads/lib/blast-error-messages";
+import { blastErrorMessage, isKnownBlastError } from "@/modules/leads/lib/blast-error-messages";
 import {
   instancesToNumbers,
   isBlastableInstance,
@@ -26,6 +26,7 @@ import {
   rotuloDaInstancia,
   type InstanceLike,
 } from "@/shared/disparo/disparo-numbers";
+import { notifyError } from "@/shared/errors";
 
 interface QuickBlastDialogProps {
   open: boolean;
@@ -171,7 +172,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
       const { data } = supabase.storage.from("media").getPublicUrl(path);
       setImageUrl(data.publicUrl);
     } catch (e) {
-      toast.error(`Falha no upload: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível enviar o arquivo." });
     } finally {
       setUploading(false);
     }
@@ -207,7 +208,12 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
       onDone?.();
     } catch (e) {
       // The backend answers with a machine code; translate it before showing.
-      toast.error(blastErrorMessage((e as Error).message));
+      // An unmapped code goes through the error contract (ADR-0038): the user
+      // sees the generic blast message with a copyable reference, and the gap
+      // is reported instead of shown as raw text.
+      const code = e instanceof Error ? e.message : null;
+      if (isKnownBlastError(code)) toast.error(blastErrorMessage(code));
+      else notifyError(e, { fallback: blastErrorMessage(null) });
     }
   }
 

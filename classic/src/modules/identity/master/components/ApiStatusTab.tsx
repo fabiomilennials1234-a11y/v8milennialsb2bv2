@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { userMessageOf } from "@/shared/errors";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -200,9 +201,9 @@ export function ApiStatusTab() {
     try {
       const { data, error } = await supabase.functions.invoke("check-api-health");
 
-      if (error) {
-        throw new Error(error.message || "Edge function error");
-      }
+      // O erro original, não uma cópia da mensagem: o status HTTP (401 sessão,
+      // 5xx fora do ar) é o que o normalizador usa para escolher a frase.
+      if (error) throw error;
 
       // Handle response — may be string or already parsed
       let response: HealthCheckResponse;
@@ -219,9 +220,9 @@ export function ApiStatusTab() {
       setResults(response.results);
       setLastCheck(response.checked_at);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("Health check failed:", msg);
-      setFetchError(msg);
+      // A causa técnica fica no console de quem opera; a tela mostra a frase.
+      console.error("Health check failed:", e instanceof Error ? e.message : String(e));
+      setFetchError(userMessageOf(e, "Não foi possível consultar o status das APIs."));
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +291,7 @@ export function ApiStatusTab() {
               <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p className="text-sm font-medium text-red-600 dark:text-red-400">Falha ao verificar APIs</p>
-                <p className="text-xs text-muted-foreground font-mono break-all">{fetchError}</p>
+                <p className="text-xs text-muted-foreground">{fetchError}</p>
               </div>
             </div>
           </CardContent>

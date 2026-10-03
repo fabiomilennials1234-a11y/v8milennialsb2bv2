@@ -28,7 +28,13 @@ export async function checkSubscription(
     p_org_id: organizationId,
   } as any);
 
-  if (error || !data) {
+  // Falha de consulta NÃO é assinatura vencida. Antes daqui, qualquer erro da RPC
+  // (rede, timeout) virava `expired` + `isBlocked` e um cliente pagante via
+  // "assinatura bloqueada". Quem chama decide — e o guard mantém o acesso
+  // fechado, mas diz a verdade: não deu para verificar (ADR-0038).
+  if (error) throw error;
+
+  if (!data) {
     return {
       status: 'expired',
       plan: null,
@@ -63,13 +69,16 @@ export async function checkCurrentUserSubscription(): Promise<SubscriptionStatus
   if (!user) return null;
 
   // Buscar organização do usuário (limit 1 pois masters podem estar em múltiplas orgs)
-  const { data: teamMember } = await supabase
+  const { data: teamMember, error } = await supabase
     .from('team_members')
     .select('organization_id')
     .eq('user_id', user.id)
     .eq('is_active', true)
     .limit(1)
     .maybeSingle();
+
+  // Erro ≠ "sem organização": o `null` abaixo significa ausência de vínculo.
+  if (error) throw error;
 
   if (!teamMember?.organization_id) {
     return null;

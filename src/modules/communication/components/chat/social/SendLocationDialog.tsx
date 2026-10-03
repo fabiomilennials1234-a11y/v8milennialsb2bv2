@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { notifyError } from "@/shared/errors";
 
 export function SendLocationDialog({
   open,
@@ -72,7 +73,7 @@ export function SendLocationDialog({
   const submeter = async () => {
     let location;
     try { location = parseLocation(lat, lng); }
-    catch (error) { toast.error((error as Error).message); return; }
+    catch (error) { notifyError(error, { fallback: "Localização inválida." }); return; }
     const { latitude, longitude } = location;
 
     setEnviando(true);
@@ -90,7 +91,7 @@ export function SendLocationDialog({
       setLat("");
       setLng("");
     } catch (e) {
-      toast.error((e as Error).message);
+      notifyError(e, { fallback: "Não foi possível enviar a localização." });
     } finally {
       setEnviando(false);
     }

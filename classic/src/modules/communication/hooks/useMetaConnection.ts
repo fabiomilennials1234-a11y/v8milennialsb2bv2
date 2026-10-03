@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import { metaOAuthErrorMessage } from "@/modules/communication/lib/meta-oauth-errors";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -306,10 +307,7 @@ export function useMetaOAuthCallback() {
 
     if (metaStatus === "error") {
       const reason = searchParams.get("reason") || "erro_desconhecido";
-      return {
-        success: false,
-        message: `Erro ao conectar: ${reason.replace(/_/g, " ")}`,
-      };
+      return { success: false, message: metaOAuthErrorMessage(reason) };
     }
 
     return null;

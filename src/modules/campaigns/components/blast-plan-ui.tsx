@@ -12,6 +12,7 @@ import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { blastOutcome } from "@/modules/campaigns/lib/blast-outcome";
 import {
   useBlastPlanControl,
@@ -174,7 +175,7 @@ export function useBlastPlanActions(plan: BlastPlan) {
         action === "pause" ? "Disparo pausado" : action === "resume" ? "Disparo retomado" : "Disparo cancelado",
       );
     } catch (e) {
-      toast.error((e as Error).message || "Não foi possível atualizar o disparo");
+      notifyError(e, { fallback: "Não foi possível atualizar o disparo." });
     }
   };
 
@@ -196,7 +197,7 @@ export function useBlastPlanActions(plan: BlastPlan) {
       toast.success("Disparo atualizado");
       setEditOpen(false);
     } catch (e) {
-      toast.error((e as Error).message || "Não foi possível editar o disparo");
+      notifyError(e, { fallback: "Não foi possível editar o disparo." });
     }
   };
 

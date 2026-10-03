@@ -1,5 +1,11 @@
--- Restore the previous error contract; approval rows are unchanged.
--- Prefer the complete feature rollback if revision conflicts are occurring.
+-- Passo 7 da cadeia de rollback do condicional guiado (ver
+-- .specs/condicional-guiado/grants-and-rollback.md). Mantém PT409 de propósito.
+--
+-- Este arquivo restaurava ERRCODE 40001. O PostgREST repete sem limite toda
+-- transação que falha com 40001, então um conflito de revisão viraria laço
+-- infinito ocupando um núcleo do banco (incidente de 2026-10-01, ver
+-- 20271101000002_conflito_de_negocio_sem_40001.sql). O passo continua na cadeia
+-- para não mudar a ordem; no rollback completo o passo 8 remove a função.
 BEGIN;
 CREATE OR REPLACE FUNCTION public.set_workflow_data_grant(
   p_workflow_id uuid, p_fields text[], p_expected_revision integer
@@ -32,7 +38,7 @@ BEGIN
   SELECT g.revision INTO v_revision FROM public.workflow_data_grants g
     WHERE g.workflow_id = p_workflow_id AND g.organization_id = v_organization_id;
   IF coalesce(v_revision, 0) <> p_expected_revision THEN
-    RAISE EXCEPTION 'grant_revision_conflict' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'grant_revision_conflict' USING ERRCODE = 'PT409';
   END IF;
   INSERT INTO public.workflow_data_grants AS g
     (workflow_id, organization_id, fields, revision, approved_by)

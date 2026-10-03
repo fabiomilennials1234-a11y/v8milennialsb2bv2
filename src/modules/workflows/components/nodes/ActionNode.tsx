@@ -28,6 +28,7 @@ import {
   ShoppingBag,
   Bell,
   Brain,
+  Users,
   FileSearch,
   CheckCircle,
   Briefcase,
@@ -63,6 +64,8 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   send_whatsapp_template: FileText,
   send_meta_message: Instagram,
   send_semi_automatic: Send,
+  send_to_number: Send,
+  send_to_group: Users,
   // Lead Management
   move_stage: ArrowRightLeft,
   add_tag: Tag,

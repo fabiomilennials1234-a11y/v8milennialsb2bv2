@@ -8,6 +8,9 @@
  * Funis do lead · Responsáveis · Tags · Qualificação · Contato · Campos
  * personalizados · Notas. Mesmos dados, mesmos slots de escrita.
  *
+ * Exceção por org: onde `mostraNegocioNoChat` libera (hoje só a Riofix), entra
+ * a seção "Negócios" logo abaixo dos funis — ver `lib/negocioNoChat.ts`.
+ *
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.
  */
@@ -37,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUpdateLead } from "@/modules/leads";
-import { useResponsibleMembers } from "@/modules/identity";
+import { useOrganization, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
@@ -48,7 +51,10 @@ import {
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
+import { ContextPanelNegocios } from "./ContextPanelNegocios";
+import { mostraNegocioNoChat } from "@/modules/communication/lib/negocioNoChat";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
+import { notifyError } from "@/shared/errors";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -122,6 +128,8 @@ export function ContextPanelTabInfo({
   phoneNumber,
 }: ContextPanelTabInfoProps) {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const { organizationId } = useOrganization();
+  const comNegocios = mostraNegocioNoChat(organizationId);
 
   if (!lead && phoneNumber) {
     return (
@@ -176,6 +184,14 @@ export function ContextPanelTabInfo({
         <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
         </Secao>
+
+        {/* Negócios do lead — exceção por org (`mostraNegocioNoChat`, hoje só a
+            Riofix). Logo depois dos funis: os dois dizem onde o lead está. */}
+        {comNegocios && (
+          <Secao rotulo="Negócios">
+            <ContextPanelNegocios key={`${organizationId}:${activeLeadId}`} leadId={activeLeadId} />
+          </Secao>
+        )}
 
         <ResponsaveisBlock lead={lead} />
 
@@ -346,7 +362,7 @@ function ContatoBlock({ lead }: { lead: LeadShape }) {
       { id: lead.id, ...patch } as any,
       {
         onSuccess: () => toast.success("Atualizado"),
-        onError: () => toast.error("Falha ao salvar"),
+        onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar." }),
       },
     );
   };
@@ -563,8 +579,8 @@ function TagsBlock({ lead }: { lead: LeadShape }) {
       qc.invalidateQueries({ queryKey: ["lead_by_phone"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["lead-detail"] });
-    } catch {
-      toast.error("Erro ao atualizar tag");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar tag." });
     } finally {
       setBusy(null);
     }
@@ -774,7 +790,7 @@ function NotesBlock({
         ref.current?.blur();
         setFocused(false);
       },
-      onError: (err: any) => toast.error(err?.message || "Erro ao salvar nota"),
+      onError: (err: any) => notifyError(err, { fallback: "Não foi possível salvar nota." }),
     });
   }, [draft, addNote]);
 

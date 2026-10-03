@@ -21,6 +21,7 @@ import {
   type LeadVisibilityLevel,
 } from "@/modules/identity/permissions/lib/leadVisibility";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface FeaturePermission {
   key: string;
@@ -383,7 +384,7 @@ export function MemberPermissions() {
         setLocalOverrides({});
         queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
       } catch (err: any) {
-        toast.error(err?.message || "Erro ao salvar a política da organização.");
+        notifyError(err, { fallback: "Não foi possível salvar a política da organização." });
         console.error("[MemberPermissions] org save error:", err);
       } finally {
         setIsSaving(false);
@@ -439,7 +440,7 @@ export function MemberPermissions() {
       queryClient.invalidateQueries({ queryKey: ["member_feature_permissions"] });
       queryClient.invalidateQueries({ queryKey: ["feature-permissions"] });
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar permissões.");
+      notifyError(err, { fallback: "Não foi possível salvar permissões." });
       console.error("[MemberPermissions] save error:", err);
     } finally {
       setIsSaving(false);
@@ -466,7 +467,7 @@ export function MemberPermissions() {
         setLocalOverrides({});
         queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
       } catch (err: any) {
-        toast.error(err?.message || "Erro ao restaurar a política.");
+        notifyError(err, { fallback: "Não foi possível restaurar a política." });
         console.error("[MemberPermissions] org reset error:", err);
       } finally {
         setIsSaving(false);
@@ -495,7 +496,7 @@ export function MemberPermissions() {
       queryClient.invalidateQueries({ queryKey: ["member_feature_permissions"] });
       queryClient.invalidateQueries({ queryKey: ["feature-permissions"] });
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao resetar permissões.");
+      notifyError(err, { fallback: "Não foi possível resetar permissões." });
       console.error("[MemberPermissions] reset error:", err);
     } finally {
       setIsSaving(false);

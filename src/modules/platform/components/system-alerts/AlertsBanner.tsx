@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSystemAlerts, useResolveAlert } from "@/modules/workflows/hooks/useAutomationHealth";
+import { notifyError } from "@/shared/errors";
 
 interface AlertsBannerProps {
   category?: string;
@@ -40,7 +41,7 @@ export function AlertsBanner({ category, organizationId, className }: AlertsBann
               onClick={() => {
                 resolve.mutate(alert.id, {
                   onSuccess: () => toast.success("Alert marcado resolvido"),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Falha"),
+                  onError: (e) => notifyError(e, { fallback: "Não foi possível resolver o alerta." }),
                 });
               }}
             >

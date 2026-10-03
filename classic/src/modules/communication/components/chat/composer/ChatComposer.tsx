@@ -53,6 +53,7 @@ import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/l
 import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/communication/lib/accepted-interactive-message";
 import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whatsappApi";
 import { SendPixDialog } from "./SendPixDialog";
+import { notifyError } from "@/shared/errors";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -197,7 +198,7 @@ export function ChatComposer({
       });
       setMessage("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar mensagem");
+      notifyError(err, { fallback: "Não foi possível enviar mensagem." });
     }
   }, [message, instanceName, phoneNumber, instanceId, sendMessage, setMessage]);
 
@@ -235,7 +236,7 @@ export function ChatComposer({
         setMessage("");
         toast.success("Template enviado!");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
+        notifyError(err, { fallback: "Não foi possível enviar template." });
       }
       return;
     }
@@ -334,7 +335,7 @@ export function ChatComposer({
           : "Imagem enviada!",
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
+      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     } finally {
       setIsPreparing(false);
     }
@@ -367,7 +368,7 @@ export function ChatComposer({
       });
       toast.success("Áudio enviado!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
+      notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
   }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
 

@@ -10,7 +10,7 @@
  *
  * SEM CORS E SEM OPTIONS — EXCEÇÃO DELIBERADA, NÃO ESQUECIMENTO
  * -------------------------------------------------------------
- * O `CLAUDE.md` da raiz manda todo edge function devolver `getCorsHeaders(req)`
+ * O padrão (`supabase/functions/CLAUDE.md`) manda todo edge function devolver `getCorsHeaders(req)`
  * e responder OPTIONS cedo. Quem chama ESTA função é a VPS, um processo Go — não
  * existe navegador, não existe preflight, e um `Access-Control-Allow-Origin`
  * aqui só serviria para convidar página web a falar com a ingestão. É o mesmo

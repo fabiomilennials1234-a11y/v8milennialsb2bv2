@@ -1,7 +1,6 @@
 import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useCallback, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Minus, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -54,6 +53,7 @@ import {
   faltamEtapas,
 } from "@/modules/analytics/lib/metricas-com-etapa";
 import { useFunisDaOrg, useEtapasDoFunil } from "@/modules/pipelines";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Compositor de métrica personalizada — Emenda 1 do ADR-0023 (SCRUM-316..320).
@@ -178,7 +178,7 @@ export function MetricComposer({
       // O banco é a autoridade: mesmo com o cliente validando, um `INSERT`
       // pode cair (nome repetido, regra apertada depois da gravação). A
       // mensagem dele é mais precisa que qualquer coisa que se invente aqui.
-      toast.error(e instanceof Error ? e.message : "Não foi possível salvar a métrica");
+      notifyError(e, { fallback: "Não foi possível salvar a métrica." });
     }
   }, [arvore, formatoEfetivo, nomeLimpo, onFechar, onSalvar, validacao]);
 

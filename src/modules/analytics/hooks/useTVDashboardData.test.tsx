@@ -44,6 +44,7 @@ beforeEach(() => {
   state.member = { id: "member-a", organization_id: "org-a", name: "A", metric_type: "sales" };
   state.proposals = []; state.confirmations = []; state.whatsapp = [];
   state.teamGoals = [{ type: "vendas", name: "Meta", target_value: 1000, team_member_id: null }];
+  state.individualGoals = { salesGoals: [{ id: "member-a", name: "A", goal: 200 }], meetingsGoals: [{ id: "sdr-a", name: "SDR", goal: 10 }] };
   state.performance = { totals: { marcadas: 4, comparecidas: 2, noShowRate: 50 }, bySDR: [{ id: "sdr-a", comparecidas: 2 }] };
   state.rpc.mockReset().mockResolvedValue({ data: sales, error: null });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,6 +52,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); focusManager.setFocused(undefined); vi.useRealTimers(); });
 
 describe("TV financial query budget", () => {
+  it("keeps personal metrics scoped when only a company goal exists", async () => {
+    state.identity.isAdmin = false;
+    state.teamGoals = [{ type: "faturamento", name: "Faturamento", target_value: 280000, team_member_id: null }];
+    state.individualGoals = { salesGoals: [], meetingsGoals: [] };
+    const { result } = renderHook(useTVDashboardData, { wrapper });
+    await settle();
+    expect(result.current.data?.metaVendasMes).toBe(0);
+    expect(state.rpc).toHaveBeenCalledWith("get_sales_metrics", expect.objectContaining({
+      p_org_id: "org-a", p_filter_member_id: "member-a",
+    }));
+  });
+
   it("recomposes changed lists, goals and SDR distribution without requerying the ledger", async () => {
     const { result, rerender } = renderHook(useTVDashboardData, { wrapper });
     await settle();

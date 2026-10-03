@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { MasterPageHeader } from "../components/MasterPageHeader";
+import { notifyError } from "@/shared/errors";
 
 interface FeatureFlag {
   id: string;
@@ -94,8 +95,8 @@ export default function MasterFeatures() {
       setCreateOpen(false);
       resetForm();
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível criar a feature." });
     },
   });
 
@@ -112,8 +113,8 @@ export default function MasterFeatures() {
       toast.success("Feature atualizada!");
       setEditOpen(false);
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível atualizar a feature." });
     },
   });
 
@@ -126,8 +127,8 @@ export default function MasterFeatures() {
       queryClient.invalidateQueries({ queryKey: ["master-features"] });
       toast.success("Feature excluída!");
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível excluir a feature." });
     },
   });
 

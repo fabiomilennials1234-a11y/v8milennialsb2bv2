@@ -33,6 +33,7 @@ import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import { deriveLeadStanding } from "../lib/lead-relacao-situacao";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
 import type { QualificationTier } from "../components/lead-detail/modal/types";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Duplicatas — fila em tinta + o par em ouro (mockup V5).
@@ -118,8 +119,8 @@ export default function Duplicates() {
       await mergeMutation.mutateAsync({ keep_id: mergeTarget.keep, merge_id: mergeTarget.merge });
       toast.success("Leads mesclados com sucesso");
       setMergeTarget(null);
-    } catch {
-      toast.error("Erro ao mesclar leads");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível mesclar leads." });
     }
   }, [mergeTarget, mergeMutation]);
 

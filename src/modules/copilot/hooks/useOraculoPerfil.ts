@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OraculoPerfilChave } from "./useOraculoTurno";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface OraculoPerfilRow {
   team_member_id: string;
@@ -57,7 +58,7 @@ export function useOraculoPerfil(organizationId: string | null) {
       toast.success("Perfil da operação atualizado");
       return queryClient.invalidateQueries({ queryKey: key });
     },
-    onError: () => toast.error("Não consegui atualizar o perfil. Tente novamente."),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não consegui atualizar o perfil. Tente novamente." }),
   });
 
   return {

@@ -34,6 +34,7 @@ import {
 import { useCanDo } from "@/modules/identity";
 import { SocialLeadPicker } from "./SocialLeadPicker";
 import { SocialCreateLeadDialog } from "./SocialCreateLeadDialog";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Nome sugerido para o lead novo.
@@ -82,9 +83,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
       toast.error("Esta conversa já está vinculada a um lead que não está mais na lista.");
       return;
     }
-    toast.error(
-      error instanceof Error ? error.message : "Não foi possível vincular a conversa",
-    );
+    notifyError(error, { fallback: "Não foi possível vincular a conversa." });
   };
 
   const handlePick = (leadId: string) => {
@@ -183,11 +182,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
                       toast.success("Vínculo anterior desfeito");
                     },
                     onError: (error) =>
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Não foi possível desfazer o vínculo",
-                      ),
+                      notifyError(error, { fallback: "Não foi possível desfazer o vínculo." }),
                   },
                 )
               }

@@ -37,6 +37,7 @@ import {
 } from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ export function MobileComposerContextual({
       });
       setMessage("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar");
+      notifyError(err, { fallback: "Não foi possível enviar." });
     }
   }, [message, instanceName, phoneNumber, instanceId, leadId, sendMessage, setMessage]);
 
@@ -173,7 +174,7 @@ export function MobileComposerContextual({
       });
       toast.success("Áudio enviado!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
+      notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
   }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
 
@@ -199,8 +200,8 @@ export function MobileComposerContextual({
       // não dispara mais o arquivo direto pro cliente.
       setPendingAttachment({ data: base64, name: file.name, mime: file.type });
       setAttachmentCaption("");
-    } catch {
-      toast.error("Erro ao ler arquivo. Tente novamente.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ler arquivo. Tente novamente." });
     }
   }, [isSending]);
 
@@ -232,7 +233,7 @@ export function MobileComposerContextual({
           : "Imagem enviada!",
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
+      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     }
   }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
 
@@ -269,7 +270,7 @@ export function MobileComposerContextual({
         setMessage("");
         toast.success("Template enviado!");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
+        notifyError(err, { fallback: "Não foi possível enviar template." });
       }
       return;
     }

@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { SupportPrefill } from "@/shared/errors";
 
 /**
  * O painel tem três telas, e a tela é derivada do estado — não um enum à parte
@@ -10,11 +11,19 @@ export interface SupportPanelContextType {
   ticketId: string | null;
   /** Formulário de abertura visível. */
   composing: boolean;
+  /** Rascunho com que o formulário abre, quando o Chamado nasce de um erro. */
+  prefill: SupportPrefill | null;
 
   /** Abre o painel na lista. */
   open: () => void;
   /** Abre o painel direto no formulário — é o que o Cmd+K faz. */
   openNewTicket: () => void;
+  /**
+   * Abre o formulário já preenchido. Método à parte, e não um argumento opcional
+   * de `openNewTicket`, porque este é passado direto como `onClick` e receberia
+   * o evento do mouse como rascunho.
+   */
+  openNewTicketWith: (prefill: SupportPrefill) => void;
   /** Abre o thread de um chamado. */
   openTicket: (ticketId: string) => void;
   /** Volta para a lista sem fechar o painel. */

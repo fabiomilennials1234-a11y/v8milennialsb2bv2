@@ -58,6 +58,7 @@ import {
 } from "@/lib/template-variables";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const MEDIA_TYPE_CONFIG: Record<Exclude<MediaType, "text">, { label: string; icon: typeof Image; accept: string }> = {
   image: { label: "Imagem", icon: Image, accept: "image/jpeg,image/png,image/webp,image/gif" },
@@ -320,7 +321,7 @@ export default function MessageTemplates() {
       setMediaUrl(urlData.publicUrl);
       toast.success("Arquivo enviado");
     } catch (err: any) {
-      toast.error(err.message || "Erro no upload");
+      notifyError(err, { fallback: "Não foi possível enviar o arquivo." });
     } finally {
       setUploading(false);
     }

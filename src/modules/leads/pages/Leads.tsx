@@ -125,6 +125,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
+import { notifyError } from "@/shared/errors";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -696,7 +697,7 @@ function LeadsInner() {
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
         toast.error("Erro: organização não encontrada. Execute o script SQL de vinculação.");
       } else {
-        toast.error(`Erro ao salvar lead: ${error?.message || 'Erro desconhecido'}`);
+        notifyError(error, { fallback: "Não foi possível salvar lead." });
       }
     }
   };

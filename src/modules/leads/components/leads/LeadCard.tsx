@@ -216,6 +216,11 @@ export interface LeadCardData extends DraggableItem {
    * papel da etapa quando o card não tem negócio. O card só pinta.
    */
   outcome?: "won" | "lost" | null;
+  /**
+   * Quando o negócio foi ganho ou perdido (ISO). O board agrupa os encerrados
+   * da coluna por mês desta data (`cardClosedAt`, no módulo pipelines).
+   */
+  closedAt?: string | null;
 }
 
 export interface LeadCardProps {

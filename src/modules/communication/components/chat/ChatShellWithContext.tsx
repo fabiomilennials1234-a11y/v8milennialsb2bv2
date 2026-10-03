@@ -64,6 +64,7 @@ import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes"
 import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
 import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
 import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
+import { pedirAtualizacaoDeNaoLidas } from "@/modules/communication/hooks/chat/unreadRefresh";
 import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
 import {
@@ -1051,9 +1052,14 @@ export function ChatShellWithContext() {
           p_instance_id: instanceId,
           p_normalized_phone: norm,
         }))
-        .then(undefined, () => {
-          /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
-        });
+        .then(
+          // Read-state gravado: as contagens (badge e ponto por caixa) pedem
+          // releitura pelo throttle, nunca direto — ver `unreadRefresh.ts`.
+          () => pedirAtualizacaoDeNaoLidas(queryClient),
+          () => {
+            /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
+          },
+        );
     },
     [queryClient, organizationId],
   );

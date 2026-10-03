@@ -8,7 +8,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import {
   useLeadTagsAttached,
@@ -17,6 +16,7 @@ import {
 } from "../../../../hooks/lead/useLeadTagsAttached";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Horizontal bar of tag chips in the lead modal header.
@@ -68,8 +68,7 @@ export const LeadTagsBar = memo(function LeadTagsBar({
         description: `Tag "${tagName}" removida`,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao remover tag";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível remover a tag." });
     }
   };
 
@@ -84,8 +83,7 @@ export const LeadTagsBar = memo(function LeadTagsBar({
       setComboOpen(false);
       setSearch("");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao adicionar tag";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível adicionar a tag." });
     }
   };
 

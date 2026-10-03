@@ -77,6 +77,7 @@ import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits
 import { HistorySyncPanel } from "@/modules/communication/components/chat/history-sync/HistorySyncPanel";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Derives effective instance status from `status` + `session_dead_since`.
@@ -165,7 +166,7 @@ export function QRCodeModal({
       .catch((error) => {
         kickedRef.current = null; // allow a retry on the next open
         console.error("Erro ao gerar QR Code:", error);
-        toast.error(error.message || "Erro ao gerar QR Code");
+        notifyError(error, { fallback: "Não foi possível gerar QR Code." });
       });
   }, [isOpen, instance?.id, effectiveStatus, pairMode]);
 
@@ -808,7 +809,7 @@ export function WhatsAppSettings({ embedded = false }: { embedded?: boolean } = 
       setVendedoresDirty(false);
       setVendedoresInstance(null);
     } catch (e: any) {
-      toast.error(e.message || "Erro ao salvar");
+      notifyError(e, { fallback: "Não foi possível salvar." });
     }
   };
 

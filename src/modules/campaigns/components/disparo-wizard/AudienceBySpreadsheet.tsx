@@ -47,6 +47,7 @@ import {
   type ParsedSpreadsheet,
 } from "./spreadsheet-parse";
 import type { DisparoDraft } from "./wizard-machine";
+import { notifyError } from "@/shared/errors";
 
 interface AudienceBySpreadsheetProps {
   draft: DisparoDraft;
@@ -130,8 +131,8 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       if (result.map.phone < 0) {
         toast.warning("Não detectei a coluna de telefone — selecione manualmente.");
       }
-    } catch {
-      toast.error("Não consegui ler o arquivo. Use um CSV válido.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não consegui ler o arquivo. Use um CSV válido." });
     }
   };
 
@@ -163,7 +164,7 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       });
       setPreview({ report: res.report, recipients: res.recipient_count });
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao calcular o público.");
+      notifyError(e, { fallback: "Não foi possível calcular o público." });
     }
   };
 
@@ -192,7 +193,7 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       });
       toast.success(`${ids.length.toLocaleString("pt-BR")} contatos prontos pro disparo.`);
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao preparar o público.");
+      notifyError(e, { fallback: "Não foi possível preparar o público." });
     }
   };
 

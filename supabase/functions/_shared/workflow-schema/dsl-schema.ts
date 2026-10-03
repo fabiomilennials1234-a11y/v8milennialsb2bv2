@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import { ACTION_TYPE_SET, TRIGGER_TYPE_SET } from "./enums.ts";
+import { isValidGroupJid } from "../whatsapp-jid.ts";
 import type { DeclSpec, Step } from "./dsl.ts";
 
 const cfg = z.record(z.unknown());
@@ -48,6 +49,14 @@ const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => strin
       : [];
     if (phones.length === 0) return "send_to_number requires at least one notifyPhones entry";
     if (!c.messageTemplate) return "send_to_number requires messageTemplate";
+    return null;
+  },
+  // Um grupo, por uma instância nomeada. Mesmas três exigências do executor
+  // (`action-handlers/send-to-group.ts`) e do painel (`node-requirements.ts`).
+  send_to_group: (c) => {
+    if (!isValidGroupJid(c.groupJid)) return "send_to_group requires a valid groupJid";
+    if (!c.whatsappInstanceId) return "send_to_group requires whatsappInstanceId";
+    if (!c.messageTemplate) return "send_to_group requires messageTemplate";
     return null;
   },
   move_stage: (c) => {

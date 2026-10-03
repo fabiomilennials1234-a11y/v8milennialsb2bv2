@@ -31,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { notifyError } from "@/shared/errors";
 
 interface Preview {
   conversas_total: number;
@@ -121,7 +122,7 @@ export function ChatRestrictionCard() {
           : "Isolamento desligado. O time volta a ver todas as conversas.",
       );
     } catch (err: any) {
-      toast.error(err?.message ?? "Não foi possível alterar a política.");
+      notifyError(err, { fallback: "Não foi possível alterar a política." });
     } finally {
       setIsSaving(false);
       setConfirmOpen(false);

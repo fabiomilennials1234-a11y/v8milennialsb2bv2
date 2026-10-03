@@ -22,6 +22,7 @@ import {
 } from "@/modules/platform/lib/support-ticket-draft";
 import { useUploadTicketAttachment } from "@/modules/platform/hooks/useTicketAttachments";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { notifyError } from "@/shared/errors";
 
 const TIPO_ICONS: Record<TicketTipo, typeof AlertTriangle> = {
   bug: AlertTriangle,
@@ -45,6 +46,11 @@ interface Props {
   submitDisabled?: boolean;
   /** Estado de envio quando o submit é injetado. */
   isSubmitting?: boolean;
+  /**
+   * Rascunho inicial. Um Chamado aberto a partir de um toast de erro chega com o
+   * código do erro na descrição e já marcado como defeito (ADR-0038).
+   */
+  initialDraft?: Pick<TicketDraft, "title" | "description">;
 }
 
 export function NewTicketForm({
@@ -54,8 +60,11 @@ export function NewTicketForm({
   beforeFields,
   submitDisabled = false,
   isSubmitting = false,
+  initialDraft,
 }: Props) {
-  const [draft, setDraft] = useState<TicketDraft>(emptyTicketDraft());
+  const [draft, setDraft] = useState<TicketDraft>(() =>
+    initialDraft ? { ...emptyTicketDraft(), ...initialDraft, tipo: "bug" } : emptyTicketDraft(),
+  );
   const [submitted, setSubmitted] = useState(false);
   // Os arquivos esperam em memória: o caminho no bucket começa pelo id do
   // Chamado, que só existe depois do INSERT (ADR-0022, 2).
@@ -125,7 +134,7 @@ export function NewTicketForm({
         toast.error(rateLimitMessage(limit.nextAt), { duration: 8000 });
         return;
       }
-      toast.error(err instanceof Error ? err.message : "Não deu para abrir o chamado.");
+      notifyError(err, { fallback: "Não deu para abrir o chamado." });
     }
   }
 

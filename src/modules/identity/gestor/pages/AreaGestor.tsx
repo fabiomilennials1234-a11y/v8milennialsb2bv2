@@ -12,7 +12,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -31,6 +30,7 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { setSelectedOrgId } from "../../org-team/hooks/useCurrentTeamMember";
 import { useGestorOrganizations } from "../hooks/useGestorOrganizations";
+import { notifyError } from "@/shared/errors";
 
 const number = new Intl.NumberFormat("pt-BR");
 
@@ -69,11 +69,7 @@ export default function AreaGestor() {
       await queryClient.invalidateQueries();
       navigate("/dashboard");
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível abrir a organização.",
-      );
+      notifyError(error, { fallback: "Não foi possível abrir a organização." });
     } finally {
       entering.current = false;
       setEnteringId(null);

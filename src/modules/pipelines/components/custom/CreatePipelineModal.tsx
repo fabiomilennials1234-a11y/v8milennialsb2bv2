@@ -16,6 +16,7 @@ import { Loader2, Kanban, Target, Users, ShoppingBag, Heart, Briefcase, Star, Za
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { notifyError } from "@/shared/errors";
 
 interface CreatePipelineModalProps {
   open: boolean;
@@ -71,7 +72,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
       resetForm();
       navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar funil");
+      notifyError(error, { fallback: "Não foi possível criar funil." });
     }
   };
 

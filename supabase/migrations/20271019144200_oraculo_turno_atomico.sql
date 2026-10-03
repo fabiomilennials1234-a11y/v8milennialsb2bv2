@@ -25,7 +25,7 @@ BEGIN
     RAISE EXCEPTION 'Conversa indisponível' USING ERRCODE = '42501';
   END IF;
   IF v_conversation.last_message_at IS DISTINCT FROM p_expected_last_message_at THEN
-    RAISE EXCEPTION 'A conversa recebeu outro turno; recarregue antes de continuar' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'A conversa recebeu outro turno; recarregue antes de continuar' USING ERRCODE = 'PT409';
   END IF;
 
   v_now := greatest(clock_timestamp(), v_conversation.last_message_at + interval '2 microseconds');

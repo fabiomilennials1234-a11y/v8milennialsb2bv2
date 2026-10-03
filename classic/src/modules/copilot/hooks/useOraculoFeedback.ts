@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   OraculoFeedbackReason,
   OraculoFeedbackValue,
 } from "../components/oraculo/OraculoFeedbackControl";
+import { notifyError } from "@/shared/errors";
 
 interface FeedbackRecord extends OraculoFeedbackValue {
   id: string;
@@ -71,7 +71,7 @@ export function useOraculoFeedback(
           : { ...next, conversation: record };
       });
     },
-    onError: () => toast.error("Não consegui salvar o feedback. Tente novamente."),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não consegui salvar o feedback. Tente novamente." }),
   });
 
   return {

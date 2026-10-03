@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { useCreateSavedView, useUpdateSavedView } from "@/modules/platform/hooks/useSavedViews";
 import type { SavedView, SavedViewEntityType } from "@/types/saved-views";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface SaveViewDialogProps {
   open: boolean;
@@ -66,8 +67,8 @@ export function SaveViewDialog({
         toast.success("View criada");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao salvar view");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar view." });
     }
   };
 

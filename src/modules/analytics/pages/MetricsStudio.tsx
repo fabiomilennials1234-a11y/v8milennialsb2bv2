@@ -3,7 +3,6 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarDays, ChartNoAxesCombined, Check, Download, HeartPulse, Info, LayoutDashboard, LayoutTemplate, Loader2, Map as MapIcon, Pencil, Plus, Trash2, Trophy, type LucideIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
@@ -33,9 +32,10 @@ import { mesDeReferencia } from "@/modules/analytics/lib/metrics-studio-mes-refe
 import templates from "@/modules/analytics/lib/metrics-studio-templates.json";
 import { zonedDateParts } from "@/shared/time/zoned-day";
 import { useCurrentTeamMember, useFeaturePermission, useIdentity, useOrganization } from "@/modules/identity";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 const Analytics = lazy(() => import("@/modules/analytics/components/dashboard/TabAnalyticsV2").then((m) => ({ default: m.TabAnalyticsV2 })));
-const showError = (error: unknown) => toast.error(error instanceof Error ? error.message : "Não foi possível concluir a alteração");
+const showError = (error: unknown) => notifyError(error, { fallback: "Não foi possível concluir a alteração." });
 
 const ICONE_DO_TEMPLATE: Record<string, LucideIcon> = {
   "visao-geral": LayoutDashboard,
@@ -213,7 +213,7 @@ export default function MetricsStudio() {
       </AlertDescription></Alert>}
       {incompleto && <Alert className="rounded-2xl border-warning/40 bg-warning/10"><AlertTitle>Intervalo incompleto</AlertTitle><AlertDescription className="text-muted-foreground">Escolha a data inicial e a final. Todos os cards continuam no último período completo.</AlertDescription></Alert>}
 
-      {erro ? <Alert variant="destructive" className="rounded-2xl bg-destructive/5"><AlertTitle>Não foi possível carregar o painel</AlertTitle><AlertDescription>{erro.message}
+      {erro ? <Alert variant="destructive" className="rounded-2xl bg-destructive/5"><AlertTitle>Não foi possível carregar o painel</AlertTitle><AlertDescription>{userMessageOf(erro, "Não foi possível carregar o painel.")}
         <Button variant="outline" size="sm" className="ml-1" onClick={() => { abas.refetch(); persistence.refetch(); }}>Tentar novamente</Button>
       </AlertDescription></Alert> : carregando ? <TorqueLoader variant="inline" /> : (
         // Visualização: os cards pousam direto na bancada, como um bento — a

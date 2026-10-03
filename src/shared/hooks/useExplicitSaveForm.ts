@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Explicit-save form helper for sections where multiple fields must commit
@@ -69,7 +69,7 @@ export function useExplicitSaveForm<T>({
       const error = err instanceof Error ? err : new Error(String(err));
       setLastError(error);
       setIsPending(false);
-      toast.error(error.message || "Erro ao salvar");
+      notifyError(error, { fallback: "Não foi possível salvar." });
       throw error;
     }
   }, [state]);

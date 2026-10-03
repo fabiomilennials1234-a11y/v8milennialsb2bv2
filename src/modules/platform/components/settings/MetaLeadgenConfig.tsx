@@ -42,6 +42,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -773,7 +774,7 @@ export function MetaLeadgenConfig() {
       queryClient.invalidateQueries({ queryKey: ["meta_leadgen_configs"] });
       toast.success("Configuração salva!");
     },
-    onError: () => toast.error("Erro ao salvar configuração"),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar configuração." }),
   });
 
   if (!isConnected) {

@@ -28,6 +28,7 @@ import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineSt
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 // Origin labels and colors mapping (enum lead_origin).
 // V5: a cor da origem vira um PONTO dentro de uma pílula neutra (cor de
@@ -164,7 +165,7 @@ export function CreateOpportunityModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar oportunidade");
+      notifyError(error, { fallback: "Não foi possível criar oportunidade." });
       console.error(error);
     }
   };

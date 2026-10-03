@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useUpdateLead } from "../useLeads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import type { LeadContactFormData } from "../../components/lead/info/LeadContactInfo";
+import { notifyError } from "@/shared/errors";
 
 interface Lead {
   id: string;
@@ -81,8 +82,8 @@ export function useLeadForm(
       logAction({ leadId: lead.id, action: "field_updated", description: "Dados do lead atualizados via chat" });
       toast.success("Lead atualizado!");
       return true;
-    } catch {
-      toast.error("Não foi possível salvar o lead. Tente novamente.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar o lead. Tente novamente." });
       return false;
     }
   };

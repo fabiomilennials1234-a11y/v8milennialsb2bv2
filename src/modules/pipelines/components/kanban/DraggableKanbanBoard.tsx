@@ -51,6 +51,12 @@ import {
   sortColumnItems,
   type ColumnSortKey,
 } from "@/modules/pipelines/lib/column-sort";
+import {
+  partitionClosedOutcomes,
+  type ClosedGroupingAccessors,
+  type ClosedOutcome,
+} from "@/modules/pipelines/lib/closed-outcome-groups";
+import { ClosedOutcomeStack } from "./ClosedOutcomeStack";
 
 // `DraggableItem` tem definição canônica em contracts (quebra import direto
 // leads→pipelines). Re-exportado para manter a API pública inalterada.
@@ -85,6 +91,12 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
   disabled?: boolean;
+  /**
+   * Empilha os cards encerrados (ganhos e perdidos) de cada coluna num grupo
+   * por desfecho, subdividido por mês. Sem os acessores, a coluna é uma lista
+   * plana como sempre foi. Ver `closed-outcome-groups`.
+   */
+  closedGrouping?: ClosedGroupingAccessors<T>;
 }
 
 /**
@@ -121,6 +133,7 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn,
   sortKey,
   onSortChange,
+  autoLoadMore = true,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -132,6 +145,12 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   sortKey?: ColumnSortKey;
   onSortChange?: (stageId: string, sortKey: ColumnSortKey) => void;
+  /**
+   * `false` troca o carregamento por rolagem por um botão. Com cards
+   * empilhados a coluna encolhe, o sentinela fica sempre visível e carregaria
+   * página atrás de página até o fim da etapa sem ninguém pedir.
+   */
+  autoLoadMore?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -272,9 +291,15 @@ function DroppableColumn<T extends DraggableItem>({
 
       <div className="min-h-[100px] flex-1 space-y-2.5 overflow-y-auto px-2.5 pb-2.5">
         {children}
-        {column.hasMore && column.onLoadMore && (
+        {column.hasMore && column.onLoadMore && (autoLoadMore ? (
           <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
-        )}
+        ) : (
+          <LoadMoreButton
+            onLoadMore={column.onLoadMore}
+            isFetching={column.isFetchingMore ?? false}
+            remaining={column.totalCount !== undefined ? column.totalCount - column.items.length : null}
+          />
+        ))}
         {!column.hasMore && column.isFetchingMore && (
           <div className="flex justify-center py-2">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -374,6 +399,42 @@ function LoadMoreSentinel({ onLoadMore, isFetching }: { onLoadMore: () => void; 
   );
 }
 
+function LoadMoreButton({ onLoadMore, isFetching, remaining }: {
+  onLoadMore: () => void;
+  isFetching: boolean;
+  remaining: number | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onLoadMore}
+      disabled={isFetching}
+      className={cn(
+        "flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-2",
+        "text-[11px] font-medium text-muted-foreground transition-colors",
+        "hover:bg-background hover:text-foreground disabled:opacity-60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
+      {isFetching && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+      Carregar mais
+      {remaining !== null && remaining > 0 && (
+        <span className="tabular-nums text-muted-foreground/70">· {remaining} na etapa</span>
+      )}
+    </button>
+  );
+}
+
+const groupKey = (columnId: string, outcome: ClosedOutcome) => `${columnId}::${outcome}`;
+const monthKey = (columnId: string, outcome: ClosedOutcome, month: string) => `${columnId}::${outcome}::${month}`;
+
+function toggleIn(set: ReadonlySet<string>, key: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
 export function DraggableKanbanBoard<T extends DraggableItem>({
   columns,
   onStatusChange,
@@ -385,6 +446,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   onExportStage,
   onCreateInColumn,
   disabled,
+  closedGrouping,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
   // Ordenação por coluna: cada etapa guarda a sua. Fica no board (e não na
@@ -394,6 +456,10 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   const handleSortChange = useCallback((stageId: string, sortKey: ColumnSortKey) => {
     setSortByColumn((prev) => ({ ...prev, [stageId]: sortKey }));
   }, []);
+  // Grupos de encerrados abertos e meses abertos dentro deles. Leitura da
+  // coluna, como a ordenação: vive no board, não entra em URL nem em view salva.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [openMonths, setOpenMonths] = useState<ReadonlySet<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -524,6 +590,24 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
         {columns.map((column) => {
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
           const sortedItems = sortColumnItems(column.items, columnSort);
+          const { open: openItems, closed: closedGroups } = closedGrouping
+            ? partitionClosedOutcomes(sortedItems, closedGrouping)
+            : { open: sortedItems, closed: [] };
+
+          // Só o que está NA TELA entra no SortableContext.
+          const visibleClosed = closedGroups.flatMap((group) =>
+            expandedGroups.has(groupKey(column.id, group.outcome))
+              ? group.months
+                  .filter((m) => openMonths.has(monthKey(column.id, group.outcome, m.key)))
+                  .flatMap((m) => m.items)
+              : [],
+          );
+          const closedCount = closedGroups.reduce((n, g) => n + g.items.length, 0);
+          const hidesClosed = visibleClosed.length < closedCount;
+          const renderSortable = (item: T) => (
+            <SortableCard key={item.id} item={item} renderCard={renderCard} />
+          );
+
           return (
             <DroppableColumn
               key={column.id}
@@ -536,18 +620,57 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
               onCreateInColumn={onCreateInColumn}
               sortKey={columnSort}
               onSortChange={handleSortChange}
+              autoLoadMore={!hidesClosed}
             >
               <SortableContext
-                items={sortedItems.map((item) => item.id)}
+                items={[...visibleClosed, ...openItems].map((item) => item.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {sortedItems.map((item) => (
-                  <SortableCard
-                    key={item.id}
-                    item={item}
-                    renderCard={renderCard}
-                  />
-                ))}
+                {closedGroups.map((group) => {
+                  const gKey = groupKey(column.id, group.outcome);
+                  const expanded = expandedGroups.has(gKey);
+                  const prefix = `${gKey}::`;
+                  return (
+                    <ClosedOutcomeStack<T>
+                      key={gKey}
+                      group={group}
+                      expanded={expanded}
+                      hasMore={column.hasMore}
+                      openMonths={
+                        new Set(
+                          [...openMonths]
+                            .filter((k) => k.startsWith(prefix))
+                            .map((k) => k.slice(prefix.length)),
+                        )
+                      }
+                      onToggleExpanded={() => {
+                        setExpandedGroups((prev) => toggleIn(prev, gKey));
+                        // Um mês só abre sozinho ao expandir (um clique a menos
+                        // para nada). Agrupar fecha os meses, para a próxima
+                        // abertura começar do resumo.
+                        setOpenMonths((prev) => {
+                          const next = new Set([...prev].filter((k) => !k.startsWith(prefix)));
+                          if (!expanded && group.months.length === 1) {
+                            next.add(monthKey(column.id, group.outcome, group.months[0].key));
+                          }
+                          return next;
+                        });
+                      }}
+                      onToggleMonth={(m) =>
+                        setOpenMonths((prev) => toggleIn(prev, monthKey(column.id, group.outcome, m)))
+                      }
+                      onOpenAllMonths={() =>
+                        setOpenMonths((prev) => {
+                          const next = new Set(prev);
+                          for (const m of group.months) next.add(monthKey(column.id, group.outcome, m.key));
+                          return next;
+                        })
+                      }
+                      renderItem={renderSortable}
+                    />
+                  );
+                })}
+                {openItems.map(renderSortable)}
               </SortableContext>
             </DroppableColumn>
           );

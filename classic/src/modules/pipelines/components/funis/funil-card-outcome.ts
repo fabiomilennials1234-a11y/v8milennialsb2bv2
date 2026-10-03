@@ -24,3 +24,24 @@ export function cardOutcome(entry: EntryWithOutcome, stageRole: StageRole | null
   if (typeof outcome === "string") return outcome === "won" || outcome === "lost" ? outcome : null;
   return stageRole === "won" || stageRole === "lost" ? stageRole : null;
 }
+
+interface EntryWithDates extends EntryWithOutcome {
+  stage_changed_at?: string | null;
+  entered_at?: string | null;
+  created_at?: string | null;
+}
+
+/**
+ * QUANDO o negócio foi ganho ou perdido — a data que separa o grupo de
+ * encerrados da coluna por mês.
+ *
+ * A fonte é `deals.outcome_at`, projetado como `metadata.deal_outcome_at`
+ * (20271021000040). Sem a chave — card sem negócio, ou leitor anterior à
+ * migration — recua para a entrada na etapa: no funil com etapa de ganho ou de
+ * perda, é quando o card chegou nela, o que aproxima o desfecho.
+ */
+export function cardClosedAt(entry: EntryWithDates): string | null {
+  const at = entry.metadata?.deal_outcome_at;
+  if (typeof at === "string" && at) return at;
+  return entry.stage_changed_at ?? entry.entered_at ?? entry.created_at ?? null;
+}

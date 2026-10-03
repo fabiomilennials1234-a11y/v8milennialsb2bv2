@@ -11,6 +11,7 @@ import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLeads } from "@/modules/leads";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateClientModalProps {
   open: boolean;
@@ -88,7 +89,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
       if (err?.code === "23505") {
         toast.error("Este lead ja e um cliente na base");
       } else {
-        toast.error("Erro ao criar cliente: " + (err?.message || ""));
+        notifyError(err, { fallback: "Não foi possível criar cliente." });
       }
     }
   };

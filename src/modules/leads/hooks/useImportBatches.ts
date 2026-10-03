@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface ImportBatch {
   id: string;
@@ -50,7 +51,7 @@ export function useRollbackImport() {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao reverter: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível reverter." });
     },
   });
 }

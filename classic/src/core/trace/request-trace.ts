@@ -89,6 +89,47 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url;
 }
 
+const POSTGREST_PATH = /\/rest\/v1\//;
+
+/**
+ * Erro do PostgREST que chega sem corpo vira erro sem nada.
+ *
+ * O postgrest-js monta o erro a partir do corpo; o status fica na resposta, que
+ * quem lança (`if (error) throw error`) não repassa. Sem corpo — todo `HEAD`
+ * (contagem com `head: true`) e o 5xx vazio do gateway — sobra `{ message: "" }`,
+ * e o contrato do ADR-0038 classifica como `unknown · sem mensagem`
+ * (TORQUE-WEB-4: `leads-count` falhando na tarde do incidente de CPU).
+ *
+ * Aqui o corpo vazio vira o envelope que o postgrest-js já sabe ler, com o
+ * status dentro. 404 vazio fica intacto: o postgrest-js o trata como "nada" (204),
+ * não como erro, e trocar o corpo inverteria isso.
+ */
+async function withStatusInEmptyBody(response: Response, method: string, url: string): Promise<Response> {
+  if (response.ok || response.status === 404 || response.status < 400 || !POSTGREST_PATH.test(url)) return response;
+
+  if (method !== "HEAD") {
+    // Telemetria nunca muda o comportamento da chamada: se nem o clone se lê,
+    // a resposta original segue como veio.
+    const body = await response.clone().text().catch(() => null);
+    if (body !== "") return response;
+  }
+
+  const envelope = {
+    code: "",
+    message: `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+    details: null,
+    hint: null,
+    status: response.status,
+  };
+  const headers = new Headers(response.headers);
+  headers.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(envelope), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 /**
  * Envolve um `fetch` carimbando os headers de trace em toda saída, e anotando
  * as falhas no buffer de erros do cliente.
@@ -117,7 +158,7 @@ export function createTracedFetch(baseFetch?: typeof fetch): typeof fetch {
       // se consome uma vez.
       if (!response.ok) recordRequestFailure(method, url, response.status);
 
-      return response;
+      return await withStatusInEmptyBody(response, method, url);
     } catch (error) {
       // Status 0: a requisição nem chegou a ter resposta.
       recordRequestFailure(method, url, 0);

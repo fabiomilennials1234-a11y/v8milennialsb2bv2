@@ -7,6 +7,7 @@ import { useExportLeads, useVentimaisExportDetails } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import { notifyError } from "@/shared/errors";
 
 type ExportFormat = "csv" | "xlsx";
 
@@ -73,7 +74,7 @@ export function ExportStageDialog({
       }
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao exportar. Tente novamente.");
+      notifyError(e, { fallback: "Não foi possível exportar. Tente novamente." });
     }
   };
 

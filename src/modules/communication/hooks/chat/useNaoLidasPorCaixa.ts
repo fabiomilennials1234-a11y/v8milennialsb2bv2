@@ -55,6 +55,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { boxUsesChannelMessages } from "./inbox-box-source";
 import type { InboxBox } from "./types";
+import {
+  NAO_LIDAS_POR_CAIXA_QUERY_ROOT,
+  UNREAD_FALLBACK_POLL_MS,
+  UNREAD_STALE_TIME_MS,
+} from "./unreadRefresh";
 
 /**
  * O que se sabe sobre a contagem de uma caixa.
@@ -99,7 +104,7 @@ export function naoLidasPorCaixaQueryKey(
   organizationId: string | null | undefined,
   idsOrdenados: readonly string[],
 ) {
-  return ["nao_lidas_por_caixa", organizationId ?? null, idsOrdenados.join(",")] as const;
+  return [NAO_LIDAS_POR_CAIXA_QUERY_ROOT, organizationId ?? null, idsOrdenados.join(",")] as const;
 }
 
 /** Contagem crua da RPC, já somada por instância. Record e não Map: o cache do
@@ -157,14 +162,18 @@ export function useNaoLidasPorCaixa(
     // a fazer — e uma org só de canal oficial não pode gastar uma ida à rede
     // para receber a resposta vazia que já sabemos.
     enabled: !!organizationId && idsComFonte.length > 0,
-    // Curto porque a novidade é o produto: o ponto no seletor existe para
-    // aparecer logo. O refetch de fundo é de 60s, a MESMA cadência que o badge
-    // global já paga, porque o realtime de mensagens invalida os caches da
-    // lista — e uma caixa DESMARCADA não tem lista para ser invalidada. Sem
-    // esse fundo, justamente a caixa que o seletor precisa acender é a que
-    // nunca acenderia.
-    staleTime: 15_000,
-    refetchInterval: 60_000,
+    // POR EVENTO, não por relógio (incidente 2026-10-02 — ver `unreadRefresh.ts`).
+    // A releitura vem do realtime de `whatsapp_messages` (mensagem incoming de
+    // QUALQUER caixa da org, inclusive as desmarcadas — o canal filtra por org,
+    // não pela seleção) e de quem grava read-state, sempre pelo throttle de
+    // `pedirAtualizacaoDeNaoLidas`. O intervalo abaixo é só a rede de segurança
+    // para o realtime que falha calado: lento de propósito, e parado com a aba
+    // escondida (`refetchIntervalInBackground` fica `false`).
+    staleTime: UNREAD_STALE_TIME_MS,
+    refetchInterval: UNREAD_FALLBACK_POLL_MS,
+    // O default do app é `false`; aqui voltar à aba é o momento de conferir.
+    // `staleTime` limita: trocar de aba em rajada não vira rajada de RPC.
+    refetchOnWindowFocus: true,
   });
 
   const porCaixa = useMemo(() => {

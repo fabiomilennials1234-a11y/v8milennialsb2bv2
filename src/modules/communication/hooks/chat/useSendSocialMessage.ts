@@ -15,6 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { userMessageOf } from "@/shared/errors";
 
 import { chatQueryKeys } from "./shared/queryKeys";
 
@@ -100,7 +101,7 @@ async function readInvokeError(error: unknown): Promise<SocialSendError> {
   }
   return new SocialSendError(
     "unknown",
-    error instanceof Error ? error.message : "Não foi possível enviar",
+    userMessageOf(error, "Não foi possível enviar"),
   );
 }
 

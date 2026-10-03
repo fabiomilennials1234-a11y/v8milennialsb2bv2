@@ -9,6 +9,7 @@ import {
   opacidadeDaOnda,
   prepararDissolucao,
   useEfeitoDeDesfecho,
+  useEntradasEmDesfecho,
   useFantasmas,
 } from "./card-effects";
 import { CardOutcomeBurst } from "../components/leads/card/CardOutcomeBurst";
@@ -111,6 +112,36 @@ describe("ganho e perda", () => {
     const camada = screen.getByTestId("card-efeito-won");
     expect(camada).toHaveClass("pointer-events-none");
     expect(camada.querySelector("canvas")).toBeNull();
+  });
+});
+
+describe("entradas em desfecho (o board as mantém soltas)", () => {
+  it("lista a entrada do disparo até o efeito acabar — inclusive segurado pelo painel", () => {
+    const { result } = renderHook(() => useEntradasEmDesfecho());
+    expect(result.current.size).toBe(0);
+
+    act(() => definirPainelAberto(true));
+    act(() => dispararEfeitoDeDesfecho("e-1", "won"));
+    expect([...result.current]).toEqual(["e-1"]);
+
+    act(() => definirPainelAberto(false));
+    act(() => vi.advanceTimersByTime(220 + 4000));
+    expect(result.current.size).toBe(0);
+  });
+
+  it("devolve o mesmo conjunto enquanto nada muda (snapshot estável)", () => {
+    act(() => dispararEfeitoDeDesfecho("e-1", "lost"));
+    const { result, rerender } = renderHook(() => useEntradasEmDesfecho());
+    const primeiro = result.current;
+    rerender();
+    expect(result.current).toBe(primeiro);
+  });
+
+  it("com movimento reduzido não há efeito: a entrada vai direto para a pilha", () => {
+    reduzido(true);
+    const { result } = renderHook(() => useEntradasEmDesfecho());
+    act(() => dispararEfeitoDeDesfecho("e-1", "won"));
+    expect(result.current.size).toBe(0);
   });
 });
 

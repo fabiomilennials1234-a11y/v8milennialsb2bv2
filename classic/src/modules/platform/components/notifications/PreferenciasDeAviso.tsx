@@ -17,6 +17,7 @@ import { usePushSubscription } from "../../hooks/use-push-subscription";
 import { motorDeSom } from "../../lib/motor-de-som";
 import { timbreDoTipo } from "../../lib/decisao-de-entrega";
 import type { PreferenciasDeAviso as Preferencias } from "../../lib/preferencias-de-aviso";
+import { notifyError } from "@/shared/errors";
 
 /**
  * A tela de preferências de Aviso.
@@ -62,8 +63,8 @@ export function PreferenciasDeAviso() {
   const aplicar = async (mudanca: Partial<Preferencias>) => {
     try {
       await salvar(mudanca);
-    } catch {
-      toast.error("Não deu para salvar. Tente de novo.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não deu para salvar. Tente de novo." });
     }
   };
 

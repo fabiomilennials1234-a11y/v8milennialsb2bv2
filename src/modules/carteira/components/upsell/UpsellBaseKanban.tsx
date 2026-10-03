@@ -14,7 +14,7 @@ import { UpsellStageRulesTab } from "./UpsellStageRulesTab";
 import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface UpsellBaseKanbanProps {
   searchQuery: string;
@@ -101,8 +101,8 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
 
     try {
       await updateClient.mutateAsync({ id: clientId, tipo_cliente_tempo: stageKey });
-    } catch {
-      toast.error("Erro ao mover cliente");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível mover cliente." });
     }
   };
 

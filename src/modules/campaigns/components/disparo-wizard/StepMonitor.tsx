@@ -44,6 +44,7 @@ import {
   skipReasonLabel,
   failureReasonLabel,
 } from "@/modules/campaigns/lib/blast-recipient-view";
+import { notifyError } from "@/shared/errors";
 
 interface StepMonitorProps {
   draft: DisparoDraft;
@@ -112,7 +113,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
         action === "pause" ? "Disparo pausado" : action === "resume" ? "Disparo retomado" : "Disparo cancelado",
       );
     } catch (e) {
-      toast.error((e as Error).message ?? "Não foi possível atualizar o disparo");
+      notifyError(e, { fallback: "Não foi possível atualizar o disparo." });
     }
   };
 

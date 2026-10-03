@@ -36,6 +36,7 @@ import {
 import { StatusDot } from "./StatusDot";
 import { AttachmentGallery } from "./AttachmentGallery";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   ticketId: string;
@@ -88,7 +89,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}. Tente enviar de novo.`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
+      notifyError(err, { fallback: "Não deu para enviar." });
     }
   }
 
@@ -178,7 +179,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
             disabled={reopen.isPending}
             onClick={() =>
               reopen.mutate(ticketId, {
-                onError: () => toast.error("Não deu para reabrir o chamado."),
+                onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para reabrir o chamado." }),
               })
             }
           >

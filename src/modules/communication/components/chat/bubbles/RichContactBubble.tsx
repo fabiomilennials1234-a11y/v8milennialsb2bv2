@@ -1,6 +1,7 @@
 import { Contact, Copy, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseLocation } from '@/modules/communication/lib/rich-message-input';
+import { notifyError } from "@/shared/errors";
 
 export function RichContactBubble({ content, location }: { content: string | null; location: boolean }) {
   const lines = (content ?? '').split('\n');
@@ -19,7 +20,7 @@ export function RichContactBubble({ content, location }: { content: string | nul
     {mapsUrl && <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center underline underline-offset-4">Abrir no mapa</a>}
     {phone && <button type="button" className="flex min-h-9 items-center gap-2 text-xs" onClick={async () => {
       try { await navigator.clipboard.writeText(phone); toast.success('Telefone copiado'); }
-      catch { toast.error('Não foi possível copiar o telefone'); }
+      catch (caught) { notifyError(caught, { fallback: "Não foi possível copiar o telefone." }); }
     }}><Copy className="h-3.5 w-3.5" />Copiar telefone</button>}
   </div>;
 }

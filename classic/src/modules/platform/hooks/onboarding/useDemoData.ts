@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 // ─── Check se demo data existe ────────────────────────────────────────────────
 
 export function useHasDemoData() {
@@ -61,7 +62,7 @@ export function useSeedDemoData() {
       qc.invalidateQueries({ queryKey: ["has-demo-data", organizationId] });
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao popular dados demo.");
+      notifyError(error, { fallback: "Não foi possível popular dados demo." });
     },
   });
 }
@@ -89,7 +90,7 @@ export function useRemoveDemoData() {
       qc.invalidateQueries({ queryKey: ["has-demo-data", organizationId] });
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao remover dados demo.");
+      notifyError(error, { fallback: "Não foi possível remover dados demo." });
     },
   });
 }

@@ -56,6 +56,7 @@ import {
   type AutomationJob,
 } from "../hooks/useMasterOperations";
 import { ApiStatusTab } from "../components/ApiStatusTab";
+import { notifyError } from "@/shared/errors";
 
 // ─── Aba 1: Visão Geral ─────────────────────────────────
 
@@ -506,8 +507,8 @@ function JobsTab() {
         description: result.message,
         variant: result.success ? "default" : "destructive",
       });
-    } catch {
-      toast({ title: "Erro", description: "Falha ao executar retry", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível executar retry." });
     }
   };
 

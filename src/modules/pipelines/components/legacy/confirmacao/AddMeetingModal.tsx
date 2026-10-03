@@ -23,7 +23,7 @@ import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalend
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 import { logger } from "@/modules/platform";
-import { getErrorMessage } from "@/shared/errors";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 interface AddMeetingModalProps {
   open: boolean;
@@ -328,7 +328,7 @@ export function AddMeetingModal({
             console.warn("[AddMeetingModal] Google Calendar error:", errData);
             toast.success("Reunião adicionada com sucesso!");
             toast.warning("Não foi possível criar o evento no Google Calendar", {
-              description: (errData as { message?: string }).message ?? "Verifique se o Google Calendar está conectado.",
+              description: userMessageOf(errData, "Verifique se o Google Calendar está conectado."),
             });
           }
         } catch (gcErr) {
@@ -343,14 +343,13 @@ export function AddMeetingModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      const message = getErrorMessage(error);
       console.error("[AddMeetingModal] Falha ao adicionar reunião:", error);
       void logger.error(
         "Falha ao adicionar reunião",
         error instanceof Error ? error : new Error(String(error)),
         { resource: "pipelines", action: "add-meeting-failed", metadata: { leadId: selectedLeadId, status } },
       );
-      toast.error("Erro ao adicionar reunião", { description: message });
+      notifyError(error, { fallback: "Não foi possível adicionar a reunião." });
     } finally {
       setIsSubmitting(false);
     }

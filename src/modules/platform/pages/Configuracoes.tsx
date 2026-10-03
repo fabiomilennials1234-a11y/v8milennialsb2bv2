@@ -82,6 +82,7 @@ import {
 import { toast } from "sonner";
 import { useSupportPanel } from "../components/support/SupportPanelContext";
 import { useSupportAvailable } from "../components/support/useSupportAvailable";
+import { notifyError } from "@/shared/errors";
 
 const BillingSettings = lazy(() => import("@/modules/billing").then(m => ({ default: m.BillingSettings })));
 
@@ -463,7 +464,7 @@ function ConfirmacaoOverdueSettings() {
       toast.success("Configuração salva!");
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      toast.error("Erro ao salvar");
+      notifyError(e, { fallback: "Não foi possível salvar." });
     }
   };
 
@@ -526,8 +527,8 @@ function DefaultPipelineSettings() {
     try {
       await updateSettings({ default_pipeline_id: next });
       toast.success(next ? "Funil padrão atualizado!" : "Funil padrão removido");
-    } catch {
-      toast.error("Erro ao salvar o funil padrão");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar o funil padrão." });
     }
   };
 
@@ -581,8 +582,8 @@ function ReorderCycleSettings() {
       setSaved(true);
       toast.success("Ciclo de recompra salvo!");
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      toast.error("Erro ao salvar");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar." });
     }
   };
 

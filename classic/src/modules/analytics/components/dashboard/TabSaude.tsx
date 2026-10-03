@@ -35,6 +35,7 @@ import { format } from "date-fns";
 import { FunnelStageLeadsSheet } from "./FunnelStageLeadsSheet";
 import { SaudeOriginFilter } from "./SaudeOriginFilter";
 import { ORIGIN_LABELS } from "@/modules/analytics/hooks/useMktOriginConfig";
+import { userMessageOf } from "@/shared/errors";
 
 const MATRIX_TOOLTIPS: Record<string, string> = {
   Vinculados:
@@ -84,7 +85,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
       <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
         <p className="font-medium">Erro ao carregar a saúde do funil</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {error instanceof Error ? error.message : "Verifique a conexão e tente de novo."}
+          {userMessageOf(error, "Não foi possível carregar a saúde do funil.")}
         </p>
         <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
           Tentar de novo

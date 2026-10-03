@@ -15,6 +15,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
+import { notifyError } from "@/shared/errors";
 
 /**
  * A forma do lead é DERIVADA da tabela, não redeclarada.
@@ -63,8 +64,8 @@ function PriorityLeadsBase() {
       onSuccess: (data) => {
         toast.success(`${data.processed || 0} leads analisados com IA!`);
       },
-      onError: () => {
-        toast.error("Erro ao calcular scores em lote");
+      onError: (caught: unknown) => {
+        notifyError(caught, { fallback: "Não foi possível calcular scores em lote." });
       },
     });
   };

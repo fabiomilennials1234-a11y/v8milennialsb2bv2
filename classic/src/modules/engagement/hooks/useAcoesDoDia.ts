@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface AcaoDoDia {
   id: string;
@@ -209,8 +210,8 @@ export function useCreateAcaoDoDia() {
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
       toast.success("Ação adicionada às tarefas do dia!");
     },
-    onError: () => {
-      toast.error("Erro ao criar ação do dia");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível criar ação do dia." });
     },
   });
 }
@@ -250,8 +251,8 @@ export function useCompleteAcaoDoDia() {
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
       toast.success("Tarefa concluída!");
     },
-    onError: () => {
-      toast.error("Erro ao completar tarefa");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível completar tarefa." });
     },
   });
 }
@@ -274,8 +275,8 @@ export function useUncompleteAcaoDoDia() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
     },
-    onError: () => {
-      toast.error("Erro ao desfazer conclusão");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível desfazer conclusão." });
     },
   });
 }
@@ -296,8 +297,8 @@ export function useDeleteAcaoDoDia() {
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
       toast.success("Tarefa removida");
     },
-    onError: () => {
-      toast.error("Erro ao remover tarefa");
+    onError: (caught: unknown) => {
+      notifyError(caught, { fallback: "Não foi possível remover tarefa." });
     },
   });
 }

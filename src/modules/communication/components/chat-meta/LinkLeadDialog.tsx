@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 import { useLeads, type Lead } from "@/modules/leads";
 import { useMetaLinkLead } from "@/modules/communication/hooks/chat-meta/useMetaLinkLead";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   conversationId: string;
@@ -30,7 +31,7 @@ export function LinkLeadDialog({ conversationId, open, onOpenChange }: Props) {
       toast.success("Lead vinculado");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao vincular lead");
+      notifyError(err, { fallback: "Não foi possível vincular lead." });
     }
   }
 

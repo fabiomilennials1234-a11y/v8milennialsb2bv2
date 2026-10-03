@@ -47,6 +47,7 @@ import {
   NotificameTemplatesError,
   type TemplateProblem,
 } from "../../hooks/useNotificameTemplates";
+import { notifyError } from "@/shared/errors";
 
 const LANGUAGES = [
   { value: "pt_BR", label: "Português (Brasil)" },
@@ -277,11 +278,7 @@ export function NotificameTemplateEditor({
         setProblems(e.problems);
         return;
       }
-      toast({
-        title: "Não foi possível criar o template",
-        description: e instanceof Error ? e.message : "Tente novamente",
-        variant: "destructive",
-      });
+      notifyError(e, { fallback: "Não foi possível criar o template." });
     }
   }
 

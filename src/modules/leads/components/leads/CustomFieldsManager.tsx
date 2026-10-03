@@ -40,6 +40,7 @@ import {
   useDeleteCustomField,
   type CustomField,
 } from "../../hooks/useLeadCustomFields";
+import { notifyError } from "@/shared/errors";
 
 const fieldTypeIcons: Record<string, any> = {
   text: Type,
@@ -100,7 +101,7 @@ export function CustomFieldsManager() {
       if (error.message?.includes("duplicate")) {
         toast.error("Já existe um campo com esse nome");
       } else {
-        toast.error("Erro ao criar campo: " + error.message);
+        notifyError(error, { fallback: "Não foi possível criar campo." });
       }
     }
   };
@@ -114,7 +115,7 @@ export function CustomFieldsManager() {
       toast.success("Campo excluído com sucesso!");
       setFieldToDelete(null);
     } catch (error: any) {
-      toast.error("Erro ao excluir campo: " + error.message);
+      notifyError(error, { fallback: "Não foi possível excluir campo." });
     }
   };
 

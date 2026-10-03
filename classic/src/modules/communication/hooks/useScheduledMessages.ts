@@ -5,6 +5,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import type { TablesInsert } from "@/integrations/supabase/types";
+import { notifyError } from "@/shared/errors";
 
 export interface ScheduledMessage {
   id: string;
@@ -173,7 +174,7 @@ export function useCreateScheduledMessage() {
       );
     },
     onError: (err: Error) => {
-      toast.error(err.message || "Erro ao agendar mensagem");
+      notifyError(err, { fallback: "Não foi possível agendar mensagem." });
     },
   });
 }
@@ -221,7 +222,7 @@ export function useCancelScheduledMessage() {
     onError: (err: Error) => {
       // Sem isto a falha era muda: a mutation não tinha `onError`, então a
       // pessoa via o item continuar na lista sem nenhuma explicação.
-      toast.error(err.message || "Erro ao cancelar agendamento");
+      notifyError(err, { fallback: "Não foi possível cancelar agendamento." });
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
     },
@@ -270,7 +271,7 @@ export function useUpdateScheduledMessage() {
       toast.success("Agendamento atualizado");
     },
     onError: (err: Error) => {
-      toast.error(err.message || "Erro ao atualizar agendamento");
+      notifyError(err, { fallback: "Não foi possível atualizar agendamento." });
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
     },

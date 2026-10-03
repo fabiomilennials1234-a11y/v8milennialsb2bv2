@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 import {
   useReactMessage,
@@ -75,15 +76,14 @@ export function MessageBubbleActions({
       toast.error("Disponível apenas em instâncias Uazapi");
       return;
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    toast.error(`${fallback}: ${msg}`);
+    notifyError(err, { fallback });
   };
 
   const handleReact = async (emoji: string) => {
     try {
       await reactMut.mutateAsync({ instanceId, messageId, number, emoji });
     } catch (e) {
-      handleError(e, "Erro ao reagir");
+      handleError(e, "Não foi possível reagir à mensagem.");
     }
   };
 
@@ -92,7 +92,7 @@ export function MessageBubbleActions({
       await pinMut.mutateAsync({ instanceId, messageId, number });
       toast.success(isPinned ? "Mensagem desafixada" : "Mensagem fixada");
     } catch (e) {
-      handleError(e, "Erro ao fixar");
+      handleError(e, isPinned ? "Não foi possível desafixar a mensagem." : "Não foi possível fixar a mensagem.");
     }
   };
 
@@ -101,7 +101,7 @@ export function MessageBubbleActions({
       await markReadMut.mutateAsync({ instanceId, messageId, number });
       toast.success("Marcada como lida");
     } catch (e) {
-      handleError(e, "Erro ao marcar como lida");
+      handleError(e, "Não foi possível marcar a mensagem como lida.");
     }
   };
 
@@ -115,7 +115,7 @@ export function MessageBubbleActions({
       link.click();
       toast.success("Download iniciado");
     } catch (e) {
-      handleError(e, "Erro ao baixar mídia");
+      handleError(e, "Não foi possível baixar a mídia.");
     }
   };
 
@@ -125,7 +125,7 @@ export function MessageBubbleActions({
       setDeleteOpen(false);
       toast.success("Mensagem apagada");
     } catch (e) {
-      handleError(e, "Erro ao apagar");
+      handleError(e, "Não foi possível apagar a mensagem.");
     }
   };
 

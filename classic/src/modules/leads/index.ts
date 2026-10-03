@@ -67,6 +67,13 @@ export type {
   PipelineStatus,
 } from "./hooks/useLeadAllPipelines";
 
+// ── Hooks: negócios do lead (posição + título + desfecho) ─────────────────
+// Reusado pelo painel do chat (seção "Negócios"), que precisa da mesma leitura
+// que o card do Negócio faz — sem ela, duas contas para o mesmo negócio.
+export { useLeadsDeals } from "./hooks/useLeadsDeals";
+export type { LeadDeal } from "./hooks/useLeadsDeals";
+export { dealBoardPath } from "./lib/deal-board-path";
+
 // ── Hooks: lead origins registry (fonte única de lista/label/cor) ──────────
 export {
   useLeadOrigins,
@@ -286,7 +293,7 @@ export type { LeadCardData, LeadCardVariant, LeadCardProps } from "./components/
 // Efeitos do card: ganho/perda (anéis) e exclusão (poeira). O board monta o
 // host; quem exclui prepara a dissolução antes. Ver `lib/card-effects.ts`.
 export { CardEffectsHost } from "./components/leads/card/CardEffectsHost";
-export { prepararDissolucao } from "./lib/card-effects";
+export { prepararDissolucao, useEntradasEmDesfecho } from "./lib/card-effects";
 export type { Dissolucao } from "./lib/card-effects";
 export { LeadModal } from "./components/leads/LeadModal";
 export { LeadScoreBadge } from "./components/leads/LeadScoreBadge";

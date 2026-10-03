@@ -11,21 +11,27 @@ const state = vi.hoisted(() => ({
   system: false,
   terminal: false,
   writes: 0,
+  lastPatch: null as Record<string, unknown> | null,
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {
-  from: () => {
+  from: (table: string) => {
     let patch: Record<string, unknown> = {};
+    let eqId: string | null = null;
+    const keys: Record<string, string> = { "stage-new": "novo", "stage-proposal": "proposta" };
     const chain = {
       update: (value: Record<string, unknown>) => { patch = value; return chain; },
       insert: (value: Record<string, unknown>) => { patch = value; return chain; },
-      eq: () => chain,
+      eq: (_col: string, value: string) => { eqId = value; return chain; },
       select: () => chain,
       single: async () => {
+        if (table === "pipeline_stages") {
+          return { data: { stage_key: keys[eqId ?? ""] }, error: null };
+        }
         if (state.fail) return { data: null, error: new Error("write rejected") };
         state.writes++;
+        state.lastPatch = patch;
         // Contract of pipeline_entries_stage_mirror: UUID goes in stage_id;
         // a UUID written to stage_key cannot resolve a stage with a slug key.
-        const keys: Record<string, string> = { "stage-new": "novo", "stage-proposal": "proposta" };
         const stageId = patch.stage_id as string | undefined;
         const stageKey = stageId ? keys[stageId] : patch.stage_key as string;
         state.entry = { ...state.entry, stage_key: stageKey,
@@ -76,7 +82,7 @@ function setup() {
 beforeEach(() => {
   state.entry = { id: "entry", lead_id: "lead", pipeline_id: "pipeline", stage_key: "novo", stage_id: "stage-new" };
   state.hasEntry = true; state.fail = false; state.allowed = true;
-  state.system = false; state.terminal = false; state.writes = 0;
+  state.system = false; state.terminal = false; state.writes = 0; state.lastPatch = null;
 });
 
 describe("chat → funnel, without Realtime", () => {
@@ -88,6 +94,16 @@ describe("chat → funnel, without Realtime", () => {
     await waitFor(() => expect(state.entry.stage_id).toBe("stage-proposal"));
     await waitFor(() => expect(screen.getByTestId("board")).toHaveTextContent("entry"));
     expect(client.getQueryState(["pipeline-stage-counts", "pipeline", "org"])?.isInvalidated).toBe(true);
+  });
+
+  // Os gatilhos que fecham o negócio, gravam histórico e capturam venda são
+  // `UPDATE OF stage_key`: sem a key no SET, o card mudava de etapa calado.
+  it("sends stage_key in the same SET as stage_id", async () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Etapa em Envase: Novo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Proposta" }));
+    await waitFor(() => expect(state.lastPatch).not.toBeNull());
+    expect(state.lastPatch).toMatchObject({ stage_id: "stage-proposal", stage_key: "proposta" });
   });
 
   it("adds a custom funnel with a valid initial stage", async () => {

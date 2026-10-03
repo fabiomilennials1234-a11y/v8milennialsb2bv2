@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { invalidateProductQueries, type ProductType } from "@/modules/carteira/hooks/useProducts";
+import { notifyError } from "@/shared/errors";
 
 // -- System fields that the user can map spreadsheet columns to --
 const SYSTEM_FIELDS = [
@@ -268,7 +269,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
       setMapping(autoMapping);
       setStep("mapping");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao ler o arquivo");
+      notifyError(err, { fallback: "Não foi possível ler o arquivo." });
     }
   }, []);
 
@@ -431,7 +432,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
       onOpenChange(false);
       reset();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao importar");
+      notifyError(err, { fallback: "Não foi possível importar." });
     } finally {
       setIsImporting(false);
     }

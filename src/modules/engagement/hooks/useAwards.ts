@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface Award {
   id: string;
@@ -58,7 +59,7 @@ export function useCreateAward() {
       toast.success("Premiação criada com sucesso!");
     },
     onError: (error) => {
-      toast.error("Erro ao criar premiação: " + error.message);
+      notifyError(error, { fallback: "Não foi possível criar premiação." });
     },
   });
 }
@@ -83,7 +84,7 @@ export function useUpdateAward() {
       toast.success("Premiação atualizada com sucesso!");
     },
     onError: (error) => {
-      toast.error("Erro ao atualizar premiação: " + error.message);
+      notifyError(error, { fallback: "Não foi possível atualizar premiação." });
     },
   });
 }
@@ -101,7 +102,7 @@ export function useDeleteAward() {
       toast.success("Premiação removida com sucesso!");
     },
     onError: (error) => {
-      toast.error("Erro ao remover premiação: " + error.message);
+      notifyError(error, { fallback: "Não foi possível remover premiação." });
     },
   });
 }

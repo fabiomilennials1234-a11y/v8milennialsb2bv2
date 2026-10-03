@@ -21,6 +21,7 @@ import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as shar
 import { sendWhatsAppTemplate as sharedSendWhatsAppTemplate, sendWhatsAppMenu as sharedSendWhatsAppMenu, sendWhatsAppPixButton as sharedSendWhatsAppPixButton } from "./action-handlers/send-whatsapp-rich.ts";
 import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSendSemiAutomatic } from "./action-handlers/send-meta.ts";
 import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
+import { sendToGroup as sharedSendToGroup } from "./action-handlers/send-to-group.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
 import {
@@ -456,6 +457,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "send_to_number":
       result = await sharedSendToNumber(toActionInput(ctx));
+      break;
+    case "send_to_group":
+      result = await sharedSendToGroup(toActionInput(ctx));
       break;
 
     // ── Unified "Enviar Mensagem" node — dispatch by messageType (ADR-0012) ──

@@ -4,6 +4,7 @@ import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 // Inline types matching the migration schema.
@@ -354,7 +355,7 @@ export function useCreateMeeting() {
       toast.success("Reunião criada com sucesso");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao criar reunião");
+      notifyError(error, { fallback: "Não foi possível criar reunião." });
     },
   });
 }
@@ -396,7 +397,7 @@ export function useUpdateMeeting() {
       toast.success("Reunião atualizada");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao atualizar reunião");
+      notifyError(error, { fallback: "Não foi possível atualizar reunião." });
     },
   });
 }
@@ -448,7 +449,7 @@ export function useDeleteMeeting() {
       toast.success("Reunião excluída");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao excluir reunião");
+      notifyError(error, { fallback: "Não foi possível excluir reunião." });
     },
   });
 }
@@ -481,7 +482,7 @@ export function useUpdateParticipantStatus() {
       toast.success("Status de participação atualizado");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao atualizar participação");
+      notifyError(error, { fallback: "Não foi possível atualizar participação." });
     },
   });
 }

@@ -126,6 +126,7 @@ export type WorkflowActionType =
   | "send_meta_message"
   | "send_semi_automatic"
   | "send_to_number"
+  | "send_to_group"
   // Lead Management
   | "move_stage"
   | "add_tag"
@@ -557,6 +558,10 @@ export interface ActionNodeData {
   // messageTemplate (acima) carrega o texto; reusa o mesmo resolvedor de variáveis.
   notifyPhones?: string[];
   includeConversationSummary?: boolean;
+  // Enviar para grupo (send_to_group) — UM grupo (`…@g.us`) da instância fixa
+  // `whatsappInstanceId`. `groupName` é só rótulo; o executor usa `groupJid`.
+  groupJid?: string;
+  groupName?: string;
   // Move stage
   /** O funil de destino (`pipelines.id`) — canônico, qualquer funil (SCRUM-627). */
   pipelineId?: string;
@@ -1196,6 +1201,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_meta_message: "Enviar Mensagem no Instagram",
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
+  send_to_group: "Enviar p/ grupo",
   // Lead Management
   move_stage: "Mover para Etapa",
   add_tag: "Adicionar Tag",
@@ -1321,6 +1327,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_meta_message",
       "send_semi_automatic",
       "send_to_number",
+      "send_to_group",
     ],
   },
   {

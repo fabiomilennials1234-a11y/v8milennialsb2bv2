@@ -7,6 +7,7 @@ import { useAuth } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface CommentComposerProps {
   leadId: string;
@@ -151,8 +152,7 @@ export const CommentComposer = memo(function CommentComposer({ leadId, organizat
       writeDraft(key, "");
       toast.success("Comentário publicado");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao comentar";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível publicar o comentário." });
     }
   };
 

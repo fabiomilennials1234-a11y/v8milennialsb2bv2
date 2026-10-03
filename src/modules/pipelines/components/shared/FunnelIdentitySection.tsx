@@ -9,6 +9,7 @@ import { useFeaturePermission } from "@/modules/identity";
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "../custom/CreatePipelineModal";
 import { useUpdatePipelineIdentity } from "../../hooks/config/usePipelineIdentity";
 import { DeletePipelineDialog } from "./DeletePipelineDialog";
+import { notifyError } from "@/shared/errors";
 
 export interface FunnelIdentitySectionProps {
   /** Linha canônica do funil em `pipelines` — qualquer espécie. */
@@ -81,7 +82,7 @@ export function FunnelIdentitySection({
       toast.success("Funil atualizado");
       onSaved?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar");
+      notifyError(error, { fallback: "Não foi possível atualizar." });
     }
   };
 

@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface ClientData {
   name?: string;
@@ -111,8 +112,7 @@ export function TinyErpUpsellConfirmDialog({
       onOpenChange(false);
       onComplete();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      toast.error("Erro ao enviar pedido", { description: msg });
+      notifyError(err, { fallback: "Não foi possível enviar o pedido ao TinyERP." });
     } finally {
       setIsPushing(false);
     }

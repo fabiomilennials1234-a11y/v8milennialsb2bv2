@@ -10,6 +10,7 @@ import { Lock, ArrowRight, Loader2, CheckCircle2, AlertCircle } from 'lucide-rea
 import { Link } from 'react-router-dom';
 import torqueLogo from '@/assets/torque-logo.png';
 import { validatePassword } from '@/lib/password-validation';
+import { notifyError } from "@/shared/errors";
 
 export default function ResetPassword() {
   // Self-hosted reset: the raw token comes from the URL path (/reset-password/:token),
@@ -55,8 +56,8 @@ export default function ResetPassword() {
         setSuccess(true);
         toast({ title: 'Senha redefinida!', description: 'Sua senha foi alterada com sucesso.' });
       }
-    } catch {
-      toast({ title: 'Erro inesperado', description: 'Tente novamente mais tarde.', variant: 'destructive' });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível redefinir a senha." });
     } finally {
       setLoading(false);
     }

@@ -38,7 +38,7 @@ BEGIN
       CONTINUE; -- Retry after success must not move/close again.
     END IF;
     IF v_pipeline IS DISTINCT FROM p_source_pipeline_id THEN
-      RAISE EXCEPTION 'O negócio mudou de funil. Atualize a seleção.' USING ERRCODE = '40001';
+      RAISE EXCEPTION 'O negócio mudou de funil. Atualize a seleção.' USING ERRCODE = 'PT409';
     END IF;
     PERFORM public.mover_negocio(v_id, p_target_pipeline_id, p_target_stage_id::text);
     IF NOT EXISTS (SELECT 1 FROM public.pipeline_entries

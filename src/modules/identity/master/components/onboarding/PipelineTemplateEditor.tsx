@@ -12,6 +12,7 @@ import {
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const COLORS = ["#7dc4e4", "#a6d189", "#ca9ee6", "#f6c177", "#e78284", "#8caaee"];
 
@@ -101,7 +102,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
       toast.success(templateId ? "Template atualizado" : "Template criado");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+      notifyError(err, { fallback: "Não foi possível salvar." });
     }
   };
 

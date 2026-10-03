@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { isQuestionImageAsset, QUESTION_IMAGE_MAX_BYTES, type QuestionImageAsset } from "@/contracts/workflows/question-image";
+import { userMessageOf } from "@/shared/errors";
 
 interface Props {
   workflowId?: string;
@@ -63,7 +64,7 @@ export function QuestionButtonsImage({ workflowId, image, onChange }: Props) {
       setPreviewUrl(result.data.previewUrl);
       onChange(result.data.image);
     } catch (failure) {
-      if (alive.current) setError(failure instanceof Error ? failure.message : "Não foi possível enviar a imagem.");
+      if (alive.current) setError(userMessageOf(failure, "Não foi possível enviar a imagem."));
     } finally { if (alive.current) setUploading(false); }
   };
   return <section className="space-y-3">

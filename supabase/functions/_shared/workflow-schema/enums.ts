@@ -71,6 +71,7 @@ export const ACTION_TYPES = [
   "send_meta_message",
   "send_semi_automatic",
   "send_to_number",
+  "send_to_group",
   "move_stage",
   "add_tag",
   "remove_tag",

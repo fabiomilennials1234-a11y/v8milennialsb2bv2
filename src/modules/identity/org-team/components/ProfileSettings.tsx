@@ -11,6 +11,7 @@ import { useGestor } from "../../gestor/hooks/useGestor";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function ProfileSettings() {
   const { user } = useAuth();
@@ -101,7 +102,7 @@ export function ProfileSettings() {
       toast.success("Foto de perfil atualizada!");
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error);
-      toast.error(error.message || "Erro ao fazer upload da foto");
+      notifyError(error, { fallback: "Não foi possível fazer upload da foto." });
     } finally {
       setIsUploading(false);
       // Limpar o input para permitir re-upload do mesmo arquivo

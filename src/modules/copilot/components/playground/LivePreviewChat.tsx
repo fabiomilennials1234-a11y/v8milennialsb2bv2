@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { PlaygroundToolState } from "./types";
 import { buildPreviewTools, buildSendDocumentTool, type DryRunToolCall } from "@/lib/copilot/dry-run-engine";
 import { useAgentDocuments } from "../../hooks/useAgentDocuments";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Descrição do card de ferramenta no preview.
@@ -266,8 +267,8 @@ export function LivePreviewChat({
         fileName: file.name,
         previewUrl,
       });
-    } catch {
-      toast.error("Erro ao ler arquivo");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ler arquivo." });
     }
   }, []);
 
@@ -367,7 +368,7 @@ export function LivePreviewChat({
         ]);
       }
     } catch (err: any) {
-      toast.error("Erro ao enviar mensagem", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível enviar mensagem." });
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsSending(false);
@@ -420,7 +421,7 @@ export function LivePreviewChat({
         await new Promise<void>((r) => setTimeout(r, 1000));
       }
     } catch (err: any) {
-      toast.error("Erro na simulacao", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível simular." });
     } finally {
       setIsSimulating(false);
     }

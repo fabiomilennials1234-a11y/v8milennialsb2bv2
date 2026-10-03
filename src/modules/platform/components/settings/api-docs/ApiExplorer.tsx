@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { JsonBlock } from "./JsonBlock";
 import type { ApiEndpoint, ApiParam } from "@/lib/api-docs/types";
 import type { OrgContext } from "@/lib/api-docs/code-generators";
+import { userMessageOf } from "@/shared/errors";
 
 interface ApiExplorerProps {
   endpoint: ApiEndpoint;
@@ -107,7 +108,7 @@ export function ApiExplorer({ endpoint, orgContext }: ApiExplorerProps) {
         duration,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro desconhecido");
+      setError(userMessageOf(err, "Não foi possível enviar a requisição."));
     } finally {
       setIsLoading(false);
     }

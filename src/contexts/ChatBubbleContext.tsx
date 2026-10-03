@@ -23,7 +23,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useChatBubbleState } from "@/modules/communication/hooks/useChatBubbleState";
@@ -34,6 +34,12 @@ import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useRe
 import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import { normalizePhone } from "@/lib/normalizePhone";
+import {
+  UNREAD_FALLBACK_POLL_MS,
+  UNREAD_STALE_TIME_MS,
+  UNREAD_TOTAL_QUERY_ROOT,
+  pedirAtualizacaoDeNaoLidas,
+} from "@/modules/communication/hooks/chat/unreadRefresh";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
 
 /**
@@ -125,15 +131,20 @@ function writeLastSeen(phone: string): void {
 
 // V3 Fase 2: persiste read-state no servidor (conversation_read_state) ao ler
 // uma conversa. Fire-and-forget; localStorage continua sendo o fallback.
-function markReadServer(instanceId: string | null, phone: string): void {
+// Gravado o read-state, o badge pede releitura — pelo throttle, nunca direto:
+// clicar em dez conversas seguidas não pode virar dez RPCs de contagem.
+function markReadServer(instanceId: string | null, phone: string, queryClient: QueryClient): void {
   if (!instanceId) return;
   const norm = normalizePhone(phone);
   if (!norm) return;
   void supabase
     .rpc("mark_conversation_read", { p_instance_id: instanceId, p_normalized_phone: norm } as never)
-    .then(undefined, () => {
-      /* tabela/perm indisponível — localStorage cobre */
-    });
+    .then(
+      () => pedirAtualizacaoDeNaoLidas(queryClient),
+      () => {
+        /* tabela/perm indisponível — localStorage cobre */
+      },
+    );
 }
 
 interface ChatBubbleProviderProps {
@@ -144,6 +155,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
   const { data: teamMember } = useCurrentTeamMember();
   const userId = teamMember?.user_id ?? teamMember?.id ?? null;
   const organizationId = teamMember?.organization_id ?? null;
+  const queryClient = useQueryClient();
 
   const { isOpen, isMinimized, setOpen, setMinimized, toggleMinimized } =
     useChatBubbleState(userId);
@@ -257,7 +269,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
 
   // Badge server-side: 1 RPC pra todas as instâncias permitidas.
   const serverUnreadQuery = useQuery({
-    queryKey: ["unread-total-server", organizationId, instanceIds],
+    queryKey: [UNREAD_TOTAL_QUERY_ROOT, organizationId, instanceIds],
     queryFn: async (): Promise<number> => {
       if (!organizationId || instanceIds.length === 0) return 0;
       const { data, error } = await supabase.rpc("get_unread_total", {
@@ -267,8 +279,14 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       return (data as number) ?? 0;
     },
     enabled: useServerUnread && !!organizationId && instanceIds.length > 0,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    // POR EVENTO, não por relógio (incidente 2026-10-02 — ver `unreadRefresh.ts`).
+    // Este provider monta em TODA tela; o polling de 60 s que vivia aqui era
+    // uma RPC por minuto por aba aberta, de até 14 s cada. A releitura agora
+    // vem do realtime de mensagem incoming e do read-state, com teto de 1 a
+    // cada 20 s por aba. O intervalo abaixo é só a rede de segurança.
+    staleTime: UNREAD_STALE_TIME_MS,
+    refetchInterval: UNREAD_FALLBACK_POLL_MS,
+    refetchOnWindowFocus: true,
   });
 
   // Fallback localStorage (só quando flag desligada): caminho antigo intocado.
@@ -441,8 +459,8 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
     setPendingLeadName(null);
     setNeedsPhoneHint(false);
     writeLastSeen(phone);
-    markReadServer(instanceId, phone);
-  }, []);
+    markReadServer(instanceId, phone, queryClient);
+  }, [queryClient]);
 
   const backToList = useCallback(() => {
     setSelectedPhone(null);
@@ -457,8 +475,8 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
 
   const markAsRead = useCallback((phone: string, instanceId: string) => {
     writeLastSeen(phone);
-    markReadServer(instanceId, phone);
-  }, []);
+    markReadServer(instanceId, phone, queryClient);
+  }, [queryClient]);
 
   const setListInstanceFilter = useCallback((next: string | "all") => {
     setListInstanceFilterState(next);

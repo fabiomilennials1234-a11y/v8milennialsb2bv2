@@ -23,6 +23,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDebounce } from "@/shared/hooks/useDebounce";
+import { unwrapFunctionsError } from "@/shared/errors";
 
 /** A saída literal de `billing_quote_price`. Espelha o jsonb, sem reinterpretar. */
 export interface BillingQuote {
@@ -94,7 +95,10 @@ async function fetchQuote(input: QuoteInput): Promise<BillingQuote> {
     headers: { "X-User-JWT": jwt },
   });
 
-  if (error) throw error;
+  // A recusa do motor vem como 422 com o motivo em PT no corpo; o
+  // `FunctionsHttpError` cru só diz "non-2xx". Lê o corpo aqui para quem mostra
+  // o erro (`userMessageOf`) receber o motivo (ADR-0038).
+  if (error) throw await unwrapFunctionsError(error);
   if (!data?.success) {
     // A recusa do motor é MENSAGEM DE NEGÓCIO, não falha técnica: "pix não é
     // vendido no ciclo mensal" é o motor dizendo o que a casa vende. Engolir

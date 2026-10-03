@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
 import {
   useLeadCustomFields,
   useLeadCustomFieldValues,
@@ -20,6 +19,7 @@ import {
 } from "../../../../hooks/useLeadCustomFields";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 const DEFAULT_VISIBLE = 5;
 const DEBOUNCE_MS = 1500;
@@ -71,8 +71,7 @@ export const LeadCustomFieldsBlock = memo(function LeadCustomFieldsBlock({
         description: `Campo personalizado "${field.field_name}" atualizado`,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao salvar campo";
-      toast.error(msg);
+      notifyError(err, { fallback: "Não foi possível salvar o campo personalizado." });
     }
   };
 

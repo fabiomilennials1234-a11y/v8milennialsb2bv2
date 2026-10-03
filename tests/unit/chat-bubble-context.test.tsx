@@ -22,7 +22,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ── Hooks compartilhados mockados ───────────────────────────────────────────
 const teamMemberRef = { value: { id: "tm1", organization_id: "org-A", user_id: "u1" } };
-vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
+// Dublê por SPREAD: o módulo re-exporta `isVirtualTeamMember`, que
+// `usePreferredInstance` usa; um dublê por LISTA o apagava e derrubava o provider.
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/identity/org-team/hooks/useTeamMembers")>()),
   useCurrentTeamMember: () => ({ data: teamMemberRef.value }),
 }));
 
@@ -66,7 +69,7 @@ vi.mock("@tanstack/react-query", async () => {
 
 // supabase só chamado se useQueries do Provider invocasse queryFn — não vai porque mockamos useQueries.
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: vi.fn() },
+  supabase: { from: vi.fn(), rpc: vi.fn(() => Promise.resolve({ data: null, error: null })) },
 }));
 
 // normalizePhone canônico — usa real implementation.
@@ -363,5 +366,26 @@ describe("Provider integração com Provider mount", () => {
       </QueryClientProvider>,
     );
     expect(container.querySelector('[data-testid="child"]')).not.toBeNull();
+  });
+});
+
+// Incidente 2026-10-02: este provider monta em TODA tela, e o badge pollava
+// `get_unread_total` a cada 60 s por aba — até 14 s de banco por chamada.
+describe("badge de não-lidas — por evento, não por relógio", () => {
+  it("a query do badge não tem refetchInterval ≤ 60 s e relê ao voltar o foco", () => {
+    const qc = newQc();
+    renderHook(() => useChatBubble(), { wrapper: wrapWithProvider(qc) });
+    const query = qc.getQueryCache().find({ queryKey: ["unread-total-server"], exact: false });
+    expect(query).toBeDefined();
+    const opts = query!.options as {
+      refetchInterval?: unknown;
+      refetchOnWindowFocus?: unknown;
+      refetchIntervalInBackground?: unknown;
+    };
+    expect(typeof opts.refetchInterval).toBe("number");
+    expect(opts.refetchInterval as number).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(opts.refetchOnWindowFocus).toBe(true);
+    // Aba em segundo plano não consulta.
+    expect(opts.refetchIntervalInBackground).not.toBe(true);
   });
 });

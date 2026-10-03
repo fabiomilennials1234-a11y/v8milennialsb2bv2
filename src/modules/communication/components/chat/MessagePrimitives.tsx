@@ -57,6 +57,7 @@ import {
 import { useEditMessage, isFeatureUnavailable } from "@/modules/communication/hooks/useMessageActions";
 import { toast } from "sonner";
 import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // MessagesAreaErrorBoundary
@@ -268,7 +269,7 @@ export function MessageBubble({
       if (isFeatureUnavailable(e)) {
         toast.error("Disponível apenas em instâncias Uazapi");
       } else {
-        toast.error(`Erro ao editar: ${(e as Error).message}`);
+        notifyError(e, { fallback: "Não foi possível editar." });
       }
     }
   };

@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/modules/identity";
 import {
   useConversationNotes,
@@ -24,6 +23,7 @@ import {
   useDeleteConversationNote,
   type ConversationNote,
 } from "@/modules/communication/hooks/useConversationNotes";
+import { notifyError } from "@/shared/errors";
 
 interface ConversationNotesProps {
   leadId: string;
@@ -31,7 +31,6 @@ interface ConversationNotesProps {
 
 export default function ConversationNotes({ leadId }: ConversationNotesProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { data: notes, isLoading } = useConversationNotes(leadId);
   const createNote = useCreateConversationNote();
   const updateNote = useUpdateConversationNote();
@@ -75,8 +74,8 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
       await createNote.mutateAsync({ leadId, content: trimmed });
       setNewNoteContent("");
       setShowNewNote(false);
-    } catch {
-      toast({ title: "Erro ao salvar nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível salvar nota." });
     }
   };
 
@@ -97,16 +96,16 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
       await updateNote.mutateAsync({ id: editingId, leadId, content: trimmed });
       setEditingId(null);
       setEditContent("");
-    } catch {
-      toast({ title: "Erro ao atualizar nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível atualizar nota." });
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteNote.mutateAsync({ id, leadId });
-    } catch {
-      toast({ title: "Erro ao excluir nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível excluir nota." });
     }
   };
 

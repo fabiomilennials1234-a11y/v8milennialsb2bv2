@@ -10,6 +10,7 @@ import {
 } from "../../../../hooks/useLeadAllPipelines";
 import { usePipeOps } from "../../../../pipe-ops";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+import { notifyError } from "@/shared/errors";
 import type { NewDealOption, NewDealValues } from "./NewDealDialog";
 import {
   buildNewDealOptions,
@@ -97,8 +98,7 @@ export function useAbrirNegocio({
         });
         toast.success(`Negócio aberto em ${pipe.label}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao criar negócio";
-        toast.error(msg);
+        notifyError(err, { fallback: "Não foi possível criar o negócio." });
         // Repropaga: o modal segura o rascunho digitado em vez de fechar como
         // se tivesse dado certo.
         throw err;
@@ -143,8 +143,7 @@ export function useAbrirNegocio({
         });
         toast.success(`Negócio aberto em ${pipe.pipelineName}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao criar negócio";
-        toast.error(msg);
+        notifyError(err, { fallback: "Não foi possível criar o negócio." });
         throw err;
       }
     },

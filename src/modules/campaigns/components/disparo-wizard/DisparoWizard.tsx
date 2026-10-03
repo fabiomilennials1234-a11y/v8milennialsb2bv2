@@ -33,6 +33,7 @@ import { instancesToNumbers } from "@/shared/disparo/disparo-numbers";
 import { DISPARO_STEPS, type DisparoNumber } from "./wizard-machine";
 import { DisparoPreview } from "./DisparoPreview";
 import { DisparosTabs } from "../DisparosTabs";
+import { notifyError } from "@/shared/errors";
 
 /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
 function todayInSaoPaulo(): string {
@@ -140,7 +141,7 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
       setPlanId(res.plan_id);
       wiz.release();
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao iniciar o disparo.");
+      notifyError(e, { fallback: "Não foi possível iniciar o disparo." });
     }
   };
 

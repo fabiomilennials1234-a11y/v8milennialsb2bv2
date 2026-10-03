@@ -35,6 +35,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 /** Campos extras para importação de clientes de carteira */
 const UPSELL_EXTRA_FIELDS = ["potencial", "data_primeira_venda"] as const;
@@ -418,8 +419,8 @@ export function ImportUpsellClientsContent({
       );
       setSelectedStageKey(defaultStage?.stage_key ?? "");
       setStep("preview");
-    } catch {
-      toast.error("Erro ao processar arquivo. Verifique se o campo Nome está mapeado corretamente.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível processar arquivo. Verifique se o campo Nome está mapeado corretamente." });
     }
   };
 
@@ -530,7 +531,7 @@ export function ImportUpsellClientsContent({
                 .single();
               if (leadError || !newLead) {
                 invalid++;
-                errors.push({ row: fileRow, reason: `Erro ao criar lead: ${leadError?.message || "resposta vazia"}` });
+                errors.push({ row: fileRow, reason: userMessageOf(leadError, "Não foi possível criar o lead.") });
                 continue;
               }
               leadId = newLead.id;
@@ -606,7 +607,7 @@ export function ImportUpsellClientsContent({
               } else {
                 console.error(`[ImportUpsell] Row ${fileRow} error:`, clientError.message, clientError.code);
                 invalid++;
-                errors.push({ row: fileRow, reason: clientError.message || "Erro ao criar cliente upsell" });
+                errors.push({ row: fileRow, reason: userMessageOf(clientError, "Não foi possível criar o cliente.") });
               }
             } else {
               imported++;
@@ -628,7 +629,7 @@ export function ImportUpsellClientsContent({
           } catch (err) {
             console.error(`[ImportUpsell] Row ${fileRow} unexpected error:`, err);
             invalid++;
-            errors.push({ row: fileRow, reason: err instanceof Error ? err.message : "Erro inesperado" });
+            errors.push({ row: fileRow, reason: userMessageOf(err, "Não foi possível importar esta linha.") });
           }
         }
         setProgress(Math.round(((i + batch.length) / rows.length) * 100));

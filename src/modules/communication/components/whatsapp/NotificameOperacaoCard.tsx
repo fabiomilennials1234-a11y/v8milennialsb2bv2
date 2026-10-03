@@ -41,6 +41,7 @@ import {
   lerSaudeDoNumero,
   type NivelDeSaude,
 } from "@/modules/communication/lib/notificame-operacao";
+import { notifyError } from "@/shared/errors";
 
 const CORES: Record<NivelDeSaude, { rotulo: string; classe: string }> = {
   verde: { rotulo: "Qualidade alta", classe: "bg-success/10 text-success border-success/25" },
@@ -81,7 +82,7 @@ export function NotificameOperacaoCard({ instanceId }: { instanceId: string }) {
       toast.success("Contato desbloqueado");
       queryClient.invalidateQueries({ queryKey: ["notificame-bloqueados", instanceId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => notifyError(e, { fallback: "Não foi possível desbloquear o contato." }),
   });
 
   const criarConvite = useMutation({
@@ -100,7 +101,7 @@ export function NotificameOperacaoCard({ instanceId }: { instanceId: string }) {
       setLinkGerado(String(id));
       toast.success("Convite criado");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => notifyError(e, { fallback: "Não foi possível criar o convite." }),
   });
 
   // Canal que não é oficial não tem nada disso — o card some inteiro em vez de

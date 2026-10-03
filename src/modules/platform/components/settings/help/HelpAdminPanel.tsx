@@ -62,6 +62,7 @@ import {
   type HelpArticleMedia,
 } from "@/modules/platform/hooks/useHelpCenter";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const iconOptions = [
   "Rocket", "LayoutGrid", "MessageSquare", "Bot", "Calendar",
@@ -113,8 +114,8 @@ function CategoryForm({ category, open, onOpenChange }: CategoryFormProps) {
         toast.success("Categoria criada!");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao salvar categoria");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar categoria." });
     }
   };
 
@@ -236,8 +237,8 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
         media: [...f.media, { url, type: isGif ? "gif" : "image", caption: "" }],
       }));
       toast.success("Mídia enviada!");
-    } catch {
-      toast.error("Erro ao enviar mídia");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível enviar mídia." });
     }
   };
 
@@ -288,8 +289,8 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
         toast.success("Artigo criado!");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao salvar artigo");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar artigo." });
     }
   };
 
@@ -498,8 +499,8 @@ export function HelpAdminPanel() {
         toast.success("Artigo removido!");
       }
       setDeleteTarget(null);
-    } catch {
-      toast.error("Erro ao remover");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover." });
     }
   };
 

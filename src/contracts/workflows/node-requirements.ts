@@ -135,6 +135,15 @@ export const NODE_REQUIREMENTS: Record<string, NodeRequirement[]> = {
     { anyOf: ["stickerUrl"], label: "figurinha", when: midiaDoTipo("sticker"), executorError: "No sticker URL configured" },
   ],
 
+  // Um grupo, por um número preso. As três strings são as do executor
+  // (`action-handlers/send-to-group.ts`) — e as mesmas três exigências do
+  // validador da DSL (`workflow-schema/dsl-schema.ts`).
+  send_to_group: [
+    { anyOf: ["whatsappInstanceId"], label: "número que envia", executorError: "send_to_group requires whatsappInstanceId" },
+    { anyOf: ["groupJid"], label: "grupo de destino", executorError: "send_to_group requires a valid groupJid" },
+    { anyOf: ["messageTemplate"], label: "mensagem", executorError: "Empty message template" },
+  ],
+
   // Rodízio resolve o responsável em tempo de execução — exigir aqui seria falso
   // positivo, e falso positivo que bloqueia é pior que gate nenhum.
   assign_responsible: [

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export interface SmsMessage {
   id: string;
@@ -93,7 +94,7 @@ export function useSendSms() {
       queryClient.invalidateQueries({ queryKey: ["sms-messages"] });
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao enviar SMS: ${error.message}`);
+      notifyError(error, { fallback: "Não foi possível enviar SMS." });
     },
   });
 }

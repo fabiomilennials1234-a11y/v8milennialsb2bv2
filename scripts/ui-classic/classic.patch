@@ -20,7 +20,7 @@ index 64976bc8c..4d1ab20b5 100644
  
        <QuickBlastProgressPanel />
 diff --git a/classic/src/modules/platform/pages/Configuracoes.tsx b/classic/src/modules/platform/pages/Configuracoes.tsx
-index 5fee1da72..cbf3130b6 100644
+index 5b3df4c08..8744049ce 100644
 --- a/classic/src/modules/platform/pages/Configuracoes.tsx
 +++ b/classic/src/modules/platform/pages/Configuracoes.tsx
 @@ -61,6 +61,7 @@ import { useFunisDaOrg } from "@/modules/pipelines";
@@ -31,7 +31,7 @@ index 5fee1da72..cbf3130b6 100644
  import {
    DEFAULT_SETTINGS_TAB,
    SETTINGS_BASE_PATH,
-@@ -610,6 +611,8 @@ function GeneralSettings() {
+@@ -611,6 +612,8 @@ function GeneralSettings() {
            </div>
            <Switch defaultChecked />
          </div>
@@ -42,7 +42,7 @@ index 5fee1da72..cbf3130b6 100644
        <div className="pt-6 border-t border-border">
 diff --git a/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx b/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx
 new file mode 100644
-index 000000000..cdcd98fb4
+index 000000000..eafdebcc1
 --- /dev/null
 +++ b/classic/src/modules/platform/ui-version/InterfaceDaOrgSetting.tsx
 @@ -0,0 +1,94 @@
@@ -68,7 +68,7 @@ index 000000000..cdcd98fb4
 +import { Label } from "@/components/ui/label";
 +import { Switch } from "@/components/ui/switch";
 +import { useIdentity } from "@/modules/identity";
-+import { getErrorMessage } from "@/shared/errors";
++import { notifyError } from "@/shared/errors";
 +import { trocarUi } from "@torque/ui-version";
 +import { ESTA_UI, trocaDeUiLigada } from "./esta-ui";
 +import { useOrgInterface } from "./useOrgInterface";
@@ -94,7 +94,7 @@ index 000000000..cdcd98fb4
 +    try {
 +      await definir(ligar);
 +    } catch (error) {
-+      toast.error("Não foi possível trocar a interface", { description: getErrorMessage(error) });
++      notifyError(error, { fallback: "Não foi possível trocar a interface." });
 +      return;
 +    }
 +    const destino = ligar ? "v5" : "classic";

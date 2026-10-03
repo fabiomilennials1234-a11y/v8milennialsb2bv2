@@ -11,6 +11,7 @@ import { describe, it, expect } from "vitest";
 import {
   isGroupJid,
   isLidJid,
+  isValidGroupJid,
   jidToPhone,
   nonIndividualKind,
   resolveHistoryChatJid,
@@ -147,5 +148,45 @@ describe("resolveHistoryChatJid", () => {
 
   it("sem nenhum identificador, devolve missing", () => {
     expect(resolveHistoryChatJid({ text: "oi" })).toEqual({ kind: "missing" });
+  });
+});
+
+/**
+ * `isValidGroupJid` é o portão do nó `send_to_group` (destino escolhido pelo
+ * operador e gravado no JSON do workflow). Ao contrário de `isGroupJid`, que é
+ * classificação tolerante por substring, este é ESTRITO: o JID viaja intacto
+ * até o `/send/text`, então qualquer coisa além do formato canônico é recusada.
+ */
+describe("isValidGroupJid — formato estrito do destino de grupo", () => {
+  it.each([
+    ["formato novo (120363…)", "120363041234567890@g.us"],
+    ["formato legado (criador-timestamp)", "5548999998888-1612345678@g.us"],
+    ["mínimo de 5 dígitos", "12345@g.us"],
+  ])("aceita %s", (_nome, jid) => {
+    expect(isValidGroupJid(jid)).toBe(true);
+  });
+
+  it.each([
+    ["JID de telefone", "5548999998888@s.whatsapp.net"],
+    ["LID", "210028246085780@lid"],
+    ["sufixo com lixo depois (injeção)", "120363041234567890@g.us.evil"],
+    ["sufixo com lixo antes", "x120363041234567890@g.us"],
+    ["sem sufixo", "120363041234567890"],
+    ["letras no local", "abc123456@g.us"],
+    ["espaço ao redor", " 120363041234567890@g.us"],
+    ["quebra de linha", "120363041234567890@g.us\n"],
+    ["poucos dígitos", "1234@g.us"],
+    ["dígitos demais", `${"1".repeat(26)}@g.us`],
+    ["dois hífens", "12345-12345-12345@g.us"],
+    ["string vazia", ""],
+    ["não-string", 120363041234567890],
+    ["null", null],
+    ["undefined", undefined],
+  ])("recusa %s", (_nome, jid) => {
+    expect(isValidGroupJid(jid)).toBe(false);
+  });
+
+  it("isGroupJid continua tolerante (classificação, não validação)", () => {
+    expect(isGroupJid("120363041234567890@g.us.evil")).toBe(true);
   });
 });

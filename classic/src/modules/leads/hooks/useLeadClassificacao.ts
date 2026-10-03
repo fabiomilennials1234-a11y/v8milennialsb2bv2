@@ -17,6 +17,7 @@ import {
   LEAD_CLASSIFICACAO_CONFIG,
   type LeadClassificacao,
 } from "../lib/lead-classificacao";
+import { notifyError } from "@/shared/errors";
 
 export function useLeadClassificacao() {
   const queryClient = useQueryClient();
@@ -68,11 +69,7 @@ export function useLeadClassificacao() {
       });
     },
     onError: (error: unknown) => {
-      toast({
-        title: "Não foi possível mudar a classificação",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
+      notifyError(error, { fallback: "Não foi possível mudar a classificação." });
     },
   });
 }

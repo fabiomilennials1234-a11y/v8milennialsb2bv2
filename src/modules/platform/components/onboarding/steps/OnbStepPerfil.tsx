@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 import { useOnboardingAdvance } from "@/modules/platform/hooks/useOnboardingAdvance";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface QuestionConfig {
   key: string;
@@ -113,7 +113,7 @@ export function OnbStepPerfil() {
       try {
         await advance.mutateAsync({ action: "advance_profile", payload: { answers } });
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao salvar perfil");
+        notifyError(err, { fallback: "Não foi possível salvar perfil." });
       }
       return;
     }

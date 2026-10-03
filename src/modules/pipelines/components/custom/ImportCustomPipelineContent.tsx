@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { CustomPipelineStage } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import { notifyError } from "@/shared/errors";
 
 interface PreviewLead {
   name: string;
@@ -163,8 +164,7 @@ export function ImportCustomPipelineContent({
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      toast.error(`Erro durante a importação: ${msg}`);
+      notifyError(error, { fallback: "Não foi possível concluir a importação." });
       setStep("preview");
     }
   };
@@ -300,8 +300,8 @@ export function ImportCustomPipelineContent({
                   );
                   setSelectedStageId(defaultStage?.id ?? "");
                   setStep("preview");
-                } catch {
-                  toast.error("Erro ao processar arquivo");
+                } catch (caught) {
+                  notifyError(caught, { fallback: "Não foi possível processar arquivo." });
                 }
               }}
             >

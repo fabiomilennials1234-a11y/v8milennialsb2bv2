@@ -44,6 +44,7 @@ import {
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -204,7 +205,7 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
       handleClose();
       navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar funil");
+      notifyError(error, { fallback: "Não foi possível criar funil." });
     }
   };
 
@@ -540,8 +541,8 @@ function ActivateHiddenFunnelDialog({
       await enablePipe.mutateAsync(pipeType as SystemPipeType);
       toast.success(`"${displayName}" ativado com sucesso`);
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao ativar funil");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ativar funil." });
     }
   };
 

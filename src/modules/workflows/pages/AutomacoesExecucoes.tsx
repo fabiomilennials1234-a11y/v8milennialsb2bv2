@@ -37,6 +37,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import SplitAbAnalytics from "@/modules/workflows/components/SplitAbAnalytics";
 import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
+import { notifyError } from "@/shared/errors";
 
 // V5: tons de estado do Badge — verde concluído, vermelho falha, azul em curso.
 const STATUS_CONFIG: Record<string, { label: string; variant: "info" | "soft" | "success" | "destructive" | "warning"; icon: typeof CheckCircle2 }> = {
@@ -93,7 +94,7 @@ export default function AutomacoesExecucoes() {
       setRetryTargetId(null);
       setSelectedExecutionId(null);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao repetir execução");
+      notifyError(err, { fallback: "Não foi possível repetir execução." });
     }
   };
 

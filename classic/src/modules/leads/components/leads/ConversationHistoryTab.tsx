@@ -25,6 +25,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import ConversationNotes from "@/modules/communication/components/chat/ConversationNotes";
 import { useChatBubbleOptional } from "@/modules/communication/hooks/useChatBubble";
+import { notifyError } from "@/shared/errors";
 
 interface ConversationHistoryTabProps {
   leadId: string;
@@ -90,11 +91,7 @@ export function ConversationHistoryTab({ leadId, leadName, leadPhone }: Conversa
           setSummaryExpanded(true);
         },
         onError: (error) => {
-          toast({
-            title: "Erro ao gerar resumo",
-            description: error instanceof Error ? error.message : "Tente novamente.",
-            variant: "destructive",
-          });
+          notifyError(error, { fallback: "Não foi possível gerar resumo." });
         },
       }
     );
