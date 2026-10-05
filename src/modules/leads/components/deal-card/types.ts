@@ -210,6 +210,8 @@ export interface ItemEditado {
 
 export interface DealCardData {
   pedidoAtualizadoEm?: string | null;
+  /** Venda anterior ao CRM: `id` é o `deals.id`, não uma entrada de funil. */
+  vendaHistorica?: boolean;
   /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
   id: string;
   /**
