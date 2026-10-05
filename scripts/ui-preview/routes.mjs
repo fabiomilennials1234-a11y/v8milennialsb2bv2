@@ -59,5 +59,9 @@ export const ROUTES = [
   { name: "master-plans", path: "/master/plans", master: true },
   { name: "master-features", path: "/master/features", master: true },
   { name: "master-support-tickets", path: "/master/support-tickets", master: true },
+  { name: "master-operacao", path: "/master/operacao", master: true },
+  { name: "master-implementacao", path: "/master/implementacao", master: true },
+  { name: "master-monitoramento", path: "/master/monitoramento", master: true },
+  { name: "master-testes", path: "/master/testes", master: true },
   { name: "insights", path: "/insights", master: true },
 ];
