@@ -11,7 +11,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       getSession: () => mockGetSession(),
       getUser: () => mockGetUser(),
     },
-    from: vi.fn().mockReturnValue({
+    from: () => ({
       insert: (...args: unknown[]) => mockInsert(...args),
     }),
   },

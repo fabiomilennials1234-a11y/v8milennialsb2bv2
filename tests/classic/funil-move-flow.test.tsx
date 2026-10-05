@@ -22,7 +22,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { toast } from "sonner";
 
 const moverAsync = vi.fn().mockResolvedValue(undefined);
@@ -169,35 +169,43 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 // ── Select do shadcn vira <button> por opção — Radix Select não roda em jsdom.
 const SelectCtx = createContext<(v: string) => void>(() => {});
+type MockProps = {
+  children?: ReactNode;
+  onValueChange?: (v: string) => void;
+  value?: string;
+  open?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
+};
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children, onValueChange }: any) => (
-    <SelectCtx.Provider value={onValueChange}>{children}</SelectCtx.Provider>
+  Select: ({ children, onValueChange }: MockProps) => (
+    <SelectCtx.Provider value={onValueChange ?? (() => {})}>{children}</SelectCtx.Provider>
   ),
-  SelectTrigger: ({ children }: any) => <div>{children}</div>,
+  SelectTrigger: ({ children }: MockProps) => <div>{children}</div>,
   SelectValue: () => null,
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => {
+  SelectContent: ({ children }: MockProps) => <div>{children}</div>,
+  SelectItem: ({ children, value }: MockProps) => {
     const onChange = useContext(SelectCtx);
     return (
-      <button type="button" onClick={() => onChange(value)}>
+      <button type="button" onClick={() => onChange(value ?? "")}>
         {children}
       </button>
     );
   },
 }));
 vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({ open, children }: any) => (open ? <div>{children}</div> : null),
-  AlertDialogContent: ({ children }: any) => <div>{children}</div>,
-  AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
-  AlertDialogTitle: ({ children }: any) => <h2>{children}</h2>,
-  AlertDialogDescription: ({ children }: any) => <p>{children}</p>,
-  AlertDialogFooter: ({ children }: any) => <div>{children}</div>,
-  AlertDialogAction: ({ children, onClick, disabled }: any) => (
+  AlertDialog: ({ open, children }: MockProps) => (open ? <div>{children}</div> : null),
+  AlertDialogContent: ({ children }: MockProps) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: MockProps) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: MockProps) => <h2>{children}</h2>,
+  AlertDialogDescription: ({ children }: MockProps) => <p>{children}</p>,
+  AlertDialogFooter: ({ children }: MockProps) => <div>{children}</div>,
+  AlertDialogAction: ({ children, onClick, disabled }: MockProps) => (
     <button type="button" onClick={onClick} disabled={disabled}>
       {children}
     </button>
   ),
-  AlertDialogCancel: ({ children, onClick }: any) => (
+  AlertDialogCancel: ({ children, onClick }: MockProps) => (
     <button type="button" onClick={onClick}>
       {children}
     </button>
