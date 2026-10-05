@@ -7,8 +7,8 @@
 -- idx_whatsapp_messages_org (organization_id), 39 MB: 6 scans em 3h40 desde o
 -- restart das 15:55 UTC (até 19:39) — consultas ad-hoc via MCP e PostgREST por
 -- org + direction + created_at, que idx_whatsapp_msgs_org_dir_ts cobre. Para
--- org sozinho o substituto é idx_whatsapp_msgs_org_lead_dir (44 MB, o índice
--- mais usado da tabela). `organization_id` é 1ª coluna de outros 11 índices; a
+-- org sozinho o substituto é idx_whatsapp_msgs_org_lead_dir (44 MB, ~440 mil
+-- scans desde o restart). `organization_id` é 1ª coluna de outros 11 índices; a
 -- FK organization_id → organizations (ON DELETE CASCADE) segue coberta. É um dos 21 índices que todo UPDATE
 -- não-HOT e todo INSERT regravam. Origem: baseline 20260101000000:32548.
 --
