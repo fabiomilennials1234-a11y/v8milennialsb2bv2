@@ -12,23 +12,22 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 import { correcaoVendaError, useCorrigirVendaHistorica } from "@/modules/leads/components/deal-card/useCorrigirVendaHistorica";
 
 beforeEach(() => { rpc.mockReset(); eq.mockClear(); maybeSingle.mockReset(); });
-function setup() {
+function setup(versao: string | null = "2026-09-30T19:21:00Z") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidar = vi.spyOn(client, "invalidateQueries");
   const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  return { ...renderHook(() => useCorrigirVendaHistorica("deal-1", "org-1"), { wrapper }), invalidar };
+  return { ...renderHook(() => useCorrigirVendaHistorica("deal-1", "org-1", versao), { wrapper }), invalidar };
 }
 const correcao = { valor: 175, data: "2026-10-01", motivo: "Faturada em 01/10" };
 
 describe("correção da venda histórica", () => {
-  it("lê a versão do negócio na hora e envia tudo em uma única RPC", async () => {
+  it("envia a versão exibida na ficha e envia tudo em uma única RPC", async () => {
     maybeSingle.mockResolvedValue({ data: { updated_at: "2026-09-30T19:21:00Z" }, error: null });
     rpc.mockResolvedValue({ error: null });
     const { result, invalidar } = setup();
     await result.current.mutateAsync(correcao);
-    expect(eq).toHaveBeenCalledWith("id", "deal-1");
-    expect(eq).toHaveBeenCalledWith("organization_id", "org-1");
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("corrigir_venda_historica", {
+    expect(maybeSingle).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("corrigir_venda_ganha", {
       p_deal_id: "deal-1", p_expected_updated_at: "2026-09-30T19:21:00Z",
       p_value: 175, p_date: "2026-10-01", p_reason: "Faturada em 01/10",
     });
@@ -42,11 +41,17 @@ describe("correção da venda histórica", () => {
     await expect(result.current.mutateAsync(correcao)).rejects.toThrow("outra pessoa");
     expect(invalidar).not.toHaveBeenCalled();
   });
-  it("não chama a RPC quando o negócio some", async () => {
+  it("não chama a RPC sem a versão exibida", async () => {
     maybeSingle.mockResolvedValue({ data: null, error: null });
-    const { result } = setup();
-    await expect(result.current.mutateAsync(correcao)).rejects.toThrow("não encontrada");
+    const { result } = setup(null);
+    await expect(result.current.mutateAsync(correcao)).rejects.toThrow("outra pessoa");
     expect(rpc).not.toHaveBeenCalled();
+  });
+  it("conserva a versão do formulário aberto mesmo após refetch da ficha", async () => {
+    rpc.mockResolvedValue({error:null});
+    const {result} = setup("versao-nova");
+    await result.current.mutateAsync({...correcao,versao:"versao-aberta"});
+    expect(rpc).toHaveBeenCalledWith("corrigir_venda_ganha",expect.objectContaining({p_expected_updated_at:"versao-aberta"}));
   });
   it("traduz os códigos do banco", () => {
     expect(correcaoVendaError({ code: "PGRST202" })).toContain("ainda não está disponível");

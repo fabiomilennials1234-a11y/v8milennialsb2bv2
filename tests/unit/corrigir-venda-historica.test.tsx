@@ -1,15 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CorrigirVendaHistorica } from "@/modules/leads/components/deal-card/CorrigirVendaHistorica";
+import { diaDaVenda } from "@/modules/leads/components/deal-card/dia-da-venda";
+
+import { CorrigirVendaHistorica as CorrecaoClassica } from "../../classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica";
 
 function setup(onSalvar = vi.fn().mockResolvedValue(undefined)) {
   const onCancelar = vi.fn();
-  render(<CorrigirVendaHistorica valor={406.68} data="2026-09-30" onSalvar={onSalvar} onCancelar={onCancelar} />);
+  render(<Formulario valor={406.68} data="2026-09-30" onSalvar={onSalvar} onCancelar={onCancelar} />);
   return { onSalvar, onCancelar };
 }
 const salvar = () => screen.getByRole("button", { name: "Salvar correção" });
 
-describe("formulário de correção da venda histórica", () => {
+let Formulario = CorrigirVendaHistorica;
+
+describe.each([["nova",CorrigirVendaHistorica],["clássica",CorrecaoClassica]] as const)("formulário na interface %s", (_, Componente) => {
+  beforeEach(() => { Formulario = Componente; });
   it("só habilita salvar com mudança real e motivo", () => {
     setup();
     expect(salvar()).toBeDisabled();
@@ -44,4 +50,8 @@ describe("formulário de correção da venda histórica", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("outra pessoa");
     expect(onCancelar).not.toHaveBeenCalled();
   });
+});
+
+it("converte a data no fuso da organização", () => {
+ expect(diaDaVenda("2026-10-01T01:00:00Z","America/Sao_Paulo")).toBe("2026-09-30");
 });
