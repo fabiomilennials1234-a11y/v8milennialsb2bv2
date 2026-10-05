@@ -60,7 +60,7 @@ describe("Riofix bulk controls in the real conversation list", () => {
     const { user, invalidate } = setup();
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar 5521999999999" }));
-    await user.click(screen.getByRole("button", { name: "Arquivar", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Arquivar" }));
     await waitFor(() => expect(api.upsert).toHaveBeenCalledTimes(1));
     expect(api.upsert).toHaveBeenCalledWith(expect.objectContaining({ organization_id: RIOFIX_ORG_ID, instance_id: "box-b", phone_number: "5521999999999" }));
     expect(invalidate).toHaveBeenCalledTimes(2);
@@ -71,7 +71,7 @@ describe("Riofix bulk controls in the real conversation list", () => {
     await user.click(screen.getByRole("checkbox", { name: "Selecionar todas as conversas exibidas" }));
     expect(screen.getByRole("status")).toHaveTextContent("2 selecionadas");
     await user.type(screen.getByPlaceholderText("Buscar conversa..."), "5511");
-    expect(screen.queryByRole("button", { name: "Arquivar", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Arquivar" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar todas as conversas exibidas" }));
     expect(screen.getByRole("status")).toHaveTextContent("1 selecionadas");
@@ -80,10 +80,10 @@ describe("Riofix bulk controls in the real conversation list", () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
-    await user.click(screen.getByRole("button", { name: "Excluir", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
     expect(api.rpc).not.toHaveBeenCalled();
     expect(screen.getByRole("alertdialog")).toHaveTextContent("Excluir 1 conversa?");
-    await user.click(screen.getByRole("button", { name: "Excluir conversas", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Excluir conversas" }));
     await waitFor(() => expect(api.rpc).toHaveBeenCalledWith("soft_delete_whatsapp_conversation", {
       p_organization_id: RIOFIX_ORG_ID, p_instance_id: "box-a", p_phone_number: "5511999999999",
     }));
@@ -91,13 +91,13 @@ describe("Riofix bulk controls in the real conversation list", () => {
   it("members cannot see the bulk delete control", async () => {
     const { user } = setup({ admin: false });
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
-    expect(screen.queryByRole("button", { name: "Excluir", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Excluir" })).not.toBeInTheDocument();
   });
   it("unarchives the exact metadata id, including retired instances of the same line", async () => {
     const { user } = setup({ archived: true });
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
-    await user.click(screen.getByRole("button", { name: "Desarquivar", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Desarquivar" }));
     await waitFor(() => expect(api.update).toHaveBeenCalledWith({ archived_at: null }));
     expect(api.eq.mock.calls).toEqual([["organization_id", RIOFIX_ORG_ID], ["id", "historical-0"]]);
   });
@@ -106,8 +106,8 @@ describe("Riofix bulk controls in the real conversation list", () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
-    await user.click(screen.getByRole("button", { name: "Arquivar", exact: true }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Arquivar", exact: true })).not.toBeDisabled());
+    await user.click(screen.getByRole("button", { name: "Arquivar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Arquivar" })).not.toBeDisabled());
     expect(api.upsert).not.toHaveBeenCalled();
   });
   it("keeps failed rows checked for retry and locks repeated clicks while pending", async () => {
@@ -119,8 +119,8 @@ describe("Riofix bulk controls in the real conversation list", () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     await user.click(screen.getByRole("checkbox", { name: "Selecionar todas as conversas exibidas" }));
-    await user.click(screen.getByRole("button", { name: "Arquivar", exact: true }));
-    expect(screen.getByRole("button", { name: "Arquivar", exact: true })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Arquivar" }));
+    expect(screen.getByRole("button", { name: "Arquivar" })).toBeDisabled();
     await act(async () => finish({ data: { id: "a" }, error: null }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 selecionadas"));
     expect(screen.getByRole("checkbox", { name: "Selecionar 5521999999999" })).toBeChecked();

@@ -25,6 +25,32 @@ falha parcial e bloqueio de ações repetidas. Hook de seleção verifica retorn
 uma ação anterior depois de sair e voltar ao mesmo filtro. O executor verifica
 concorrência e deduplicação por identidade completa.
 
+Resultado local: 35 testes aprovados em seis arquivos; ESLint dos arquivos
+alterados e build de produção aprovados. Smoke no Chrome com a lista real:
+163 conversas virtualizadas, arquivamento somente das 27 filtradas, confirmação
+antes de excluir, viewport mobile de 390px sem overflow e zero erros JavaScript.
+A seleção/desarquivação em Arquivadas depende da navegação desktop que já existe;
+o mobile continua sem acesso à aba Arquivadas.
+
+As duas revisões independentes terminaram sem achados pendentes após corrigir o
+registro de erros parciais. O merge simulado com `e20e76d23` não tem conflitos.
+
+Gates preexistentes impedem considerar o CI todo aprovado:
+
+- `useConversasUnificadas.test.tsx` falha na inicialização do mock, antes de
+  coletar testes. Consta no baseline e foi reproduzido em checkout limpo da main.
+- O gate de dependências aponta as mesmas três violações na branch e na main
+  limpa: dois ciclos em ContextPanel e o hook órfão useSidebarCollapsed.
+- O CI de lint aponta cinco warnings em arquivos de cotações não alterados.
+- Integration/pgTAP falham no preparo do banco por coluna `from_pipeline_id`
+  inexistente; também houve rate limit do registro de imagens Docker.
+- O autoteste de gitleaks aponta arquivos de operações já existentes; o scan de
+  segredos do diff passou. Esses jobs já aparecem falhando no commit da main.
+
+Nenhum baseline ou gate foi desabilitado/ampliado. Os problemas gerais não são
+uma garantia sobre a mudança: a PR deve continuar passando por revisão antes de
+merge, e não deve ser apresentada como CI verde.
+
 Sem operação em conversas reais de produção. A integração usa os mesmos
 endpoints já utilizados nas ações individuais; RLS e verificação de administrador
 no RPC continuam no servidor. O RPC legado de exclusão verifica administrador,
