@@ -5,6 +5,7 @@
  *   joined          → green  "Ao vivo"
  *   joining         → amber  "Conectando"
  *   reconnecting    → amber  "Reconectando"
+ *   errored         → amber  "Reconectando" (falha abaixo do limiar, em backoff)
  *   polling         → orange "Polling"     (circuit breaker tripped)
  *   offline         → red    "Offline"
  *
@@ -39,6 +40,7 @@ function classify(
         tooltip: "Estabelecendo conexao de tempo real.",
       };
     case "reconnecting":
+    case "errored":
       return {
         variant: "pending",
         label: "Reconectando",
@@ -50,7 +52,7 @@ function classify(
       return {
         variant: "polling",
         label: "Polling",
-        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens a cada 10s.`,
+        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens periodicamente.`,
       };
     case "offline":
       return {

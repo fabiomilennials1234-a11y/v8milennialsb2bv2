@@ -22,11 +22,7 @@ import {
   IN_CHUNK_SIZE_FANOUT,
 } from "@/shared/supabase/selectInChunks";
 import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
-import {
-  useWhatsAppRealtimeFallback,
-  FALLBACK_POLL_INTERVAL_MS,
-  JOINED_BACKSTOP_POLL_INTERVAL_MS,
-} from "./useRealtimeFallback";
+import { useReconcileInterval } from "./useRealtimeFallback";
 
 const normalizePhone = (p: string) => {
   let cleaned = p.replace(/\D/g, "");
@@ -67,7 +63,7 @@ export function useWhatsAppContacts(
 ) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
-  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
+  const refetchInterval = useReconcileInterval("lista", organizationId);
 
   const filterArgs = serverFilter?.args ?? null;
   const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
@@ -476,9 +472,9 @@ export function useWhatsAppContacts(
     // A lista lê da tabela-resumo `whatsapp_conversation_summary`, que NÃO está
     // na publicação realtime — depende do evento de `whatsapp_messages` disparar
     // o invalidate embutido. Se esse evento é dropado (apply_rls sob carga), a
-    // conversa nova só aparece no F5. Backstop reconcilia mesmo com canal saudável.
-    refetchInterval: shouldPoll
-      ? FALLBACK_POLL_INTERVAL_MS
-      : JOINED_BACKSTOP_POLL_INTERVAL_MS,
+    // conversa nova só aparece no F5. Backstop reconcilia mesmo com canal
+    // saudável — 300 s, degraus 60→120→300 s em fallback (reconcilePolicy.ts).
+    refetchInterval,
+    refetchOnWindowFocus: true,
   });
 }
