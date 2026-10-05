@@ -1,0 +1,25 @@
+-- runtime_logs · 1B.2 — DROP idx_runtime_logs_status_created (189 MB em 2026-10-05)
+--
+-- TIMESTAMP PROVISÓRIO: renumerar contra o ledger de prod na hora de aplicar.
+--
+-- ⚠️ COMO APLICAR — NUNCA por `apply_migration` nem `supabase db push`
+-- (CONCURRENTLY não roda em transação). psql, autocommit:
+--
+--     PGOPTIONS="-c lock_timeout=3s" psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 \
+--       -f supabase/migrations/20271107130002_runtime_logs_drop_idx_status_created.sql
+--
+-- PRÉ-CONDIÇÃO: 20271107130001 aplicado e VÁLIDO:
+--     SELECT indisvalid FROM pg_index
+--      WHERE indexrelid = 'public.idx_runtime_logs_error_created'::regclass;  -- true
+--
+-- POR QUE: coluna da frente com 3 valores. Único leitor que filtra `status`
+-- é a tela master (`useMasterOperations.ts:95/110`). `status='error'` passa a
+-- usar o parcial; `success`/`skipped` na tela master (uso raro, só master)
+-- cai no varrimento por `created_at`, que é o mesmo caminho do filtro "todos"
+-- hoje — e a tabela encolhe de 694 MB para <200 MB com a fase 1A.
+--
+-- REVERSÃO EXATA (pg_get_indexdef em prod, 2026-10-05):
+--   CREATE INDEX CONCURRENTLY idx_runtime_logs_status_created
+--     ON public.runtime_logs USING btree (status, created_at DESC);
+
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_runtime_logs_status_created;

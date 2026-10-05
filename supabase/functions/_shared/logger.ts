@@ -1,8 +1,10 @@
 /**
  * Runtime logger for Supabase Edge Functions
  *
- * Inserts structured log records into the runtime_logs table.
- * Never throws — silently fails to avoid breaking the main flow.
+ * Inserts structured log records into the runtime_logs table — in batches
+ * (one POST per flush), with per-`module:action` sampling of high-volume
+ * success rows; sampled-out rows go to console.info (function_logs) redacted.
+ * Never throws — failures surface on the function's own console.
  *
  * Security: all payloads pass through redactSecrets() before persisting.
  *
@@ -15,7 +17,7 @@
  * security > debug verbosity.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logError } from "./error-boundary.ts";
 
 /**
@@ -321,6 +323,49 @@ interface LogRuntimeParams {
   gestorId?: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Lote, amostragem e rebaixamento (incidente OOM de 2026-10-05)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Antes: um POST /rest/v1/runtime_logs por chamada — 19.231/h no pico, 92k
+// linhas/dia, 83k delas sucesso do whatsapp-webhook que nenhum leitor consulta.
+// Agora: `logRuntime` redige, amostra e ENFILEIRA; um flush por isolate manda a
+// fila num único insert. `await logRuntime()` significa "enfileirado";
+// `await flushRuntimeLogs()` significa "persistido".
+
+/** Teto da fila: chegou aqui, sai na hora, sem esperar a janela. */
+const BATCH_MAX_ROWS = 100;
+/** Janela de agregação dentro do Edge Runtime. Fora dele, próximo tick. */
+const FLUSH_WINDOW_MS = 250;
+
+/**
+ * Taxa de amostragem por `module:action`, aplicada SÓ a `success`/`skipped`.
+ * Erro é sempre 100%. Linha da trilha do gestor (`actorType`) é sempre 100%.
+ * Ausente da tabela = taxa 1. A linha que entra leva `payload_snapshot._sample_rate`
+ * — multiplique a contagem por 1/_sample_rate para estimar o volume real.
+ * A que fica de fora vai para o console (function_logs, 7 dias) com `rt:1`.
+ */
+export const SUCCESS_SAMPLE_RATE: Readonly<Record<string, number>> = Object.freeze({
+  "webhook:uazapi_process": 0.01,
+  // `uazapi_resolved_by_token_fallback` fica FORA: depois do resolve por RPC só
+  // sai com id explícito no payload — é sinal de anomalia, não volume.
+  "webhook:uazapi_group_message_skipped": 0.01,
+  "webhook:uazapi_agent_message_dispatched": 0.05,
+  "webhook:uazapi_receipt_unmatched": 0.1,
+  "workflow:process_batch": 0.1,
+  "whatsapp:run": 0.1,
+});
+
+type RuntimeLogRow = Record<string, unknown>;
+
+/** Contexto mínimo para relatar a falha — da linha já redigida, nunca do params cru. */
+interface FailureContext {
+  organizationId?: string;
+  module: string;
+  action: string;
+  status: string;
+}
+
 /**
  * Último recurso quando o canal de registro é o que falhou.
  *
@@ -331,7 +376,7 @@ interface LogRuntimeParams {
  */
 async function reportLogFailure(
   cause: unknown,
-  params: LogRuntimeParams,
+  ctx: FailureContext,
   extra?: Record<string, unknown>,
 ): Promise<void> {
   try {
@@ -343,11 +388,11 @@ async function reportLogFailure(
     // never throws, so this stays strictly non-fatal on the hot path.
     await logError(cause, {
       functionName: "logRuntime",
-      organizationId: params.organizationId,
+      organizationId: ctx.organizationId,
       extra: {
-        log_module: params.module,
-        log_action: params.action,
-        log_status: params.status,
+        log_module: ctx.module,
+        log_action: ctx.action,
+        log_status: ctx.status,
         ...extra,
       },
     });
@@ -356,34 +401,362 @@ async function reportLogFailure(
   }
 }
 
+// ── Cliente: um por isolate ────────────────────────────────────────────────
+
+type AdminClient = SupabaseClient;
+let cachedClient: { url: string; key: string; client: AdminClient } | undefined;
+
+function getClient(): AdminClient | null {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  if (cachedClient && cachedClient.url === url && cachedClient.key === key) {
+    return cachedClient.client;
+  }
+  // Mesma configuração de `_shared/supabase-admin.ts`. Um cliente `service_role`
+  // não tem sessão de usuário para renovar nem persistir, mas o auth-js arma um
+  // `setInterval` de 30 s por cliente (`_startAutoRefresh`) que ninguém desarma.
+  //
+  // `global.fetch` resolve `globalThis.fetch` A CADA chamada: o supabase-js
+  // captura o `fetch` no `createClient`, e um cliente de vida longa congelaria
+  // o fetch do primeiro uso (dublês de teste, instrumentação posterior).
+  const client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => globalThis.fetch(input, init) },
+  });
+  cachedClient = { url, key, client };
+  return client;
+}
+
+// ── Fila ───────────────────────────────────────────────────────────────────
+
+interface EdgeRuntimeLike {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+function edgeRuntime(): EdgeRuntimeLike | null {
+  const er = (globalThis as { EdgeRuntime?: Partial<EdgeRuntimeLike> }).EdgeRuntime;
+  return er && typeof er.waitUntil === "function" ? (er as EdgeRuntimeLike) : null;
+}
+
+let queue: RuntimeLogRow[] = [];
+let windowTimer: ReturnType<typeof setTimeout> | undefined;
+/** Resolve a promessa entregue ao `waitUntil` quando a janela foi armada. */
+let releaseWindow: (() => void) | undefined;
+const inFlight = new Set<Promise<void>>();
+
+function registerWaitUntil(p: Promise<unknown>): void {
+  try {
+    edgeRuntime()?.waitUntil(p);
+  } catch {
+    // runtime recusou (isolate já encerrando) — o beforeunload ainda tenta
+  }
+}
+
 /**
- * Inserts a runtime_logs record using the service role key.
- * Never throws — if the insert fails, it reports the failure to the function's
- * own console log (the only channel left when the database is the thing that
- * broke) and returns.
- * All payloadSnapshot data is passed through redactSecrets() before persisting.
+ * Arma a janela de agregação. No Edge Runtime a promessa da janela vai para o
+ * `waitUntil` NA HORA de armar — sem isso o isolate pode ser reciclado depois
+ * da resposta e antes dos 250 ms, levando a fila junto.
  */
+function armWindow(): void {
+  if (windowTimer !== undefined) return;
+  const er = edgeRuntime();
+  const pending = new Promise<void>((resolve) => {
+    releaseWindow = resolve;
+  });
+  windowTimer = setTimeout(() => {
+    windowTimer = undefined;
+    startFlush();
+  }, er ? FLUSH_WINDOW_MS : 0);
+  if (er) registerWaitUntil(pending);
+}
+
+/** Tira a fila inteira e manda num insert. Nunca rejeita. */
+function startFlush(): Promise<void> {
+  if (windowTimer !== undefined) {
+    clearTimeout(windowTimer);
+    windowTimer = undefined;
+  }
+  const release = releaseWindow;
+  releaseWindow = undefined;
+
+  if (queue.length === 0) {
+    release?.();
+    return Promise.resolve();
+  }
+  const batch = queue;
+  queue = [];
+
+  const p: Promise<void> = sendBatch(batch).finally(() => {
+    inFlight.delete(p);
+    release?.();
+  });
+  inFlight.add(p);
+  registerWaitUntil(p);
+  return p;
+}
+
+/**
+ * Esvazia a fila e espera tudo que está em voo. Use em teste, em script e em
+ * qualquer ponto em que "persistido" importe. Nunca rejeita.
+ */
+export async function flushRuntimeLogs(): Promise<void> {
+  do {
+    startFlush();
+    await Promise.all([...inFlight]);
+  } while (queue.length > 0 || inFlight.size > 0);
+}
+
+// Isolate encerrando: última chance de esvaziar a fila. Não dá para aguardar
+// aqui — o `waitUntil` registrado no enfileiramento é a garantia principal;
+// este listener cobre o caso em que o runtime não o honrou.
+try {
+  const target = globalThis as unknown as {
+    addEventListener?: (type: string, fn: () => void) => void;
+  };
+  target.addEventListener?.("beforeunload", () => {
+    startFlush();
+  });
+} catch {
+  // ambiente sem EventTarget global: o flush por janela continua valendo
+}
+
+/** Classe 22 (dado) e 23 (restrição): culpa de UMA linha, não do lote. */
+function isRowLevelError(code: string | undefined): boolean {
+  return typeof code === "string" && (code.startsWith("22") || code.startsWith("23"));
+}
+
+interface InsertError {
+  message: string;
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+}
+
+async function insertRows(client: AdminClient, rows: RuntimeLogRow[]): Promise<InsertError | null> {
+  // `supabase-js` RESOLVE com `{ error }` em vez de lançar: descartar este
+  // retorno fazia a falha de escrita não produzir sinal nenhum.
+  const { error } = await client.from("runtime_logs").insert(rows);
+  return error ?? null;
+}
+
+/**
+ * Um insert para o lote inteiro. Se o banco recusar por erro de DADO (22xxx/
+ * 23xxx), uma linha envenenada não pode levar as outras 99 junto: o lote é
+ * refeito linha a linha (só neste caso — falha de rede/permissão não se
+ * multiplica em N POSTs). Seja como for, a falha gera UM relato e devolve ao
+ * console as linhas perdidas, já redigidas.
+ */
+async function sendBatch(batch: RuntimeLogRow[]): Promise<void> {
+  try {
+    const client = getClient();
+    if (!client) {
+      reportBatchFailure(new Error("runtime_logs: credenciais ausentes no flush"), batch);
+      return;
+    }
+
+    const error = await insertRows(client, batch);
+    if (!error) return;
+
+    if (batch.length > 1 && isRowLevelError(error.code)) {
+      const lost: RuntimeLogRow[] = [];
+      let lastError: InsertError = error;
+      for (const row of batch) {
+        try {
+          const single = await insertRows(client, [row]);
+          if (single) {
+            lost.push(row);
+            lastError = single;
+          }
+        } catch {
+          lost.push(row);
+        }
+      }
+      if (lost.length > 0) {
+        reportBatchFailure(new Error(`runtime_logs insert failed: ${consoleText(lastError.message)}`), lost, {
+          db_code: lastError.code,
+          db_details: safeDbDetails(lastError.details),
+          db_hint: lastError.hint,
+        });
+      }
+      return;
+    }
+
+    reportBatchFailure(new Error(`runtime_logs insert failed: ${consoleText(error.message)}`), batch, {
+      db_code: error.code,
+      db_details: safeDbDetails(error.details),
+      db_hint: error.hint,
+    });
+  } catch (err) {
+    reportBatchFailure(err, batch);
+  }
+}
+
+/** Teto de `error_message` quando a linha vai ao console. */
+const CONSOLE_ERROR_MESSAGE_MAX = 500;
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…[+${value.length - max}]` : value;
+}
+
+/**
+ * Sequência de dígitos com até 2 separadores entre eles: "5511987654321",
+ * "(11) 98765-4321", "123.456.789-09", "12.345.678/0001-95". Não começa nem
+ * termina colada em letra, dígito ou hífen: segmento de uuid/hex
+ * ("…-0123456789ab", "12345678-1234-…") não é telefone.
+ */
+const DIGIT_RUN_RE = /(?<![\w-])\d(?:[\s().\/-]{0,2}\d)+(?![\w-])/g;
+/** Data/hora ISO ("2026-10-05", "2026-10-05 15") não é PII — passa intacta. */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2})?$/;
+
+/** Dígito verificador de CPF (11) / CNPJ (14) válido → é documento, não telefone. */
+function isTaxIdDigits(d: string): boolean {
+  if (/^(\d)\1+$/.test(d)) return false;
+  const dv = (base: string, pesos: number[]) => {
+    const s = pesos.reduce((acc, p, i) => acc + Number(base[i]) * p, 0) % 11;
+    return s < 2 ? 0 : 11 - s;
+  };
+  if (d.length === 11) {
+    const p1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
+    const p2 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d, p1) === Number(d[9]) && dv(d, p2) === Number(d[10]);
+  }
+  if (d.length === 14) {
+    const p1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const p2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d, p1) === Number(d[12]) && dv(d, p2) === Number(d[13]);
+  }
+  return false;
+}
+// JID do WhatsApp (`<dígitos>@s.whatsapp.net`, `@g.us`, `@lid`) NÃO é e-mail:
+// os dígitos vão para a máscara de telefone e o sufixo fica para diagnóstico.
+const EMAIL_RE =
+  /[A-Z0-9._%+-]+@(?!(?:s\.whatsapp\.net|g\.us|lid|broadcast|newsletter)\b)[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi;
+/** Texto livre: abaixo disto não é telefone nem documento (ano, contagem, status HTTP). */
+const MIN_FREE_TEXT_DIGITS = 8;
+
+/**
+ * Máscara de PII em TEXTO LIVRE (mensagem de erro, `details` do banco) — onde
+ * não há nome de chave para `redactSecrets` decidir. E-mail sai inteiro como
+ * REDACTED. Sequência com ≥8 dígitos é mascarada:
+ *   - CONTÍGUA com ≥10 dígitos (telefone E.164, JID): política de `maskPhone`,
+ *     4 primeiros + 4 últimos — casa com a conversa, igual ao payload;
+ *   - CPF/CNPJ colado (DV válido), com SEPARADOR (CPF/CNPJ/telefone
+ *     formatado) ou 8–9 dígitos: só os 2 últimos, como `maskTaxId` — 4+4
+ *     revelaria 8 dos 11 dígitos de um CPF.
+ * Data ISO e segmento de uuid/hex ficam intactos. Separadores e sufixo de JID
+ * (`@s.whatsapp.net`, `@g.us`) sobrevivem. Só para o CONSOLE: o banco recebe
+ * o texto original.
+ */
+function maskFreeText(value: string): string {
+  return value
+    .replace(EMAIL_RE, REDACTED)
+    .replace(DIGIT_RUN_RE, (run) => {
+      if (ISO_DATE_RE.test(run)) return run;
+      const digits = run.replace(/\D/g, "");
+      const total = digits.length;
+      if (total < MIN_FREE_TEXT_DIGITS) return run;
+      const phoneLike = total >= MIN_MASKABLE_DIGITS && /^\d+$/.test(run) && !isTaxIdDigits(digits);
+      const keepHead = phoneLike ? 4 : 0;
+      const keepTail = phoneLike ? 4 : 2;
+      let seen = 0;
+      return run.replace(/\d/g, (d) => {
+        seen += 1;
+        return seen <= keepHead || seen > total - keepTail ? d : "*";
+      });
+    });
+}
+
+/** Redação completa de texto livre para o console: credencial + PII + teto. */
+function consoleText(value: string): string {
+  return truncate(maskFreeText(String(redactSecrets(value))), CONSOLE_ERROR_MESSAGE_MAX);
+}
+
+/**
+ * Projeção da linha para o CONSOLE (function_logs). Só `payload_snapshot` passa
+ * por `redactSecrets` no enfileiramento; `reasoning` (chain-of-thought do
+ * Copilot, com trecho da conversa do lead) e `error_message` (texto livre)
+ * vão crus ao banco, que é master-only. O console não é: aqui `reasoning` sai
+ * como `reasoning_len` e `error_message` sai redigido e truncado.
+ */
+function toConsoleSafe(row: RuntimeLogRow): RuntimeLogRow {
+  const { reasoning, error_message, ...rest } = row;
+  const out: RuntimeLogRow = { ...rest };
+  if (typeof reasoning === "string") out.reasoning_len = reasoning.length;
+  if (typeof error_message === "string") {
+    out.error_message = consoleText(error_message);
+  } else if (error_message !== undefined) {
+    out.error_message = error_message;
+  }
+  return out;
+}
+
+/**
+ * `details` do PostgREST em violação de NOT NULL/CHECK é "Failing row contains
+ * (...)" — a linha INTEIRA, `reasoning` incluído. Nunca vai ao console assim.
+ */
+function safeDbDetails(details: string | null | undefined): string | null | undefined {
+  if (typeof details !== "string") return details;
+  if (/^failing row contains/i.test(details)) return "[omitido: Failing row contains — linha inteira]";
+  return consoleText(details);
+}
+
+function reportBatchFailure(
+  cause: unknown,
+  rows: RuntimeLogRow[],
+  extra?: Record<string, unknown>,
+): void {
+  try {
+    const first = rows[0] ?? {};
+    // Lote misto: a falha é do canal, não de uma org — não atribuir à 1ª linha.
+    const orgs = new Set(rows.map((r) => r.organization_id ?? null));
+    const organizationId = orgs.size === 1 ? ((first.organization_id as string | null) ?? undefined) : undefined;
+    // Único lugar onde as linhas perdidas sobrevivem — na projeção segura.
+    console.warn(
+      `[logRuntime] lote de ${rows.length} linha(s) perdido:`,
+      JSON.stringify(rows.map(toConsoleSafe)),
+    );
+    void reportLogFailure(
+      cause,
+      {
+        organizationId,
+        module: String(first.module ?? ""),
+        action: String(first.action ?? ""),
+        status: String(first.status ?? ""),
+      },
+      { ...extra, batch_size: rows.length },
+    );
+  } catch {
+    // never let observability reporting break the caller
+  }
+}
+
+function sampleRateFor(params: LogRuntimeParams): number {
+  if (params.status === "error" || params.actorType) return 1;
+  const rate = SUCCESS_SAMPLE_RATE[`${params.module}:${params.action}`];
+  return typeof rate === "number" && rate > 0 && rate < 1 ? rate : 1;
+}
+
+/**
+ * Registra uma linha em `runtime_logs` (service role), em lote.
+ *
+ * Assinatura e contrato preservados para os 449 chamadores: nunca lança, a
+ * promessa resolve. O que mudou é o que a resolução significa — "enfileirado".
+ * Erro e trilha do gestor disparam o flush na hora; o resto espera até 100
+ * linhas ou 250 ms. Todo payload passa por `redactSecrets()` ANTES de entrar na
+ * fila, e é essa mesma linha redigida que vai ao banco, ao console (amostrada
+ * fora) ou ao relato de falha.
+ */
+// deno-lint-ignore require-await
 export async function logRuntime(params: LogRuntimeParams): Promise<void> {
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) return;
-
-    // Mesma configuração de `_shared/supabase-admin.ts`. Um cliente `service_role`
-    // não tem sessão de usuário para renovar nem persistir, mas o auth-js arma um
-    // `setInterval` de 30 s por cliente (`_startAutoRefresh`) que ninguém desarma.
-    // Como `logRuntime` cria um cliente POR CHAMADA dentro de isolates de vida
-    // longa, cada requisição registrada deixava um temporizador para trás — em
-    // todas as 78+ edge functions.
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    if (!Deno.env.get("SUPABASE_URL") || !Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return;
 
     const sanitizedPayload = params.payloadSnapshot
       ? (redactSecrets(params.payloadSnapshot) as Record<string, unknown>)
       : undefined;
 
-    const row: Record<string, unknown> = {
+    const row: RuntimeLogRow = {
       organization_id: params.organizationId || null,
       module: params.module,
       action: params.action,
@@ -402,32 +775,36 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       request_id: params.requestId ?? null,
     };
 
-    // ADR-0021 §7: só toca as colunas de atribuição do gestor quando há ator
-    // gestor. Mantém o insert idêntico para todo o resto — o dia em que a
-    // migration 20270211000003 ainda não rodou, log normal não referencia
-    // colunas inexistentes e não cai no drop silencioso.
+    // ADR-0021 §7: só toca as colunas de atribuição do gestor quando há ator.
     if (params.actorType) {
       row.actor_type = params.actorType;
       if (params.gestorId) row.gestor_id = params.gestorId;
     }
 
-    // `supabase-js` RESOLVE com `{ error }` em vez de lançar: descartar este
-    // retorno fazia a falha de escrita não produzir sinal nenhum — `logRuntime`
-    // ficava muda exatamente durante a indisponibilidade do banco, que é quando
-    // a linha mais importa. O `catch` abaixo nunca veria isto.
-    const { error: insertError } = await supabase.from("runtime_logs").insert(row);
-    if (insertError) {
-      await reportLogFailure(
-        new Error(`runtime_logs insert failed: ${insertError.message}`),
-        params,
-        {
-          db_code: insertError.code,
-          db_details: insertError.details,
-          db_hint: insertError.hint,
-        },
-      );
+    const rate = sampleRateFor(params);
+    if (rate < 1) {
+      row.payload_snapshot = { ...(sanitizedPayload ?? {}), _sample_rate: rate };
+      if (Math.random() >= rate) {
+        // Rebaixamento: function_logs (7 dias, `query_logs`). A MESMA linha
+        // redigida, na projeção de console — nunca o `params` cru.
+        console.info(JSON.stringify({ rt: 1, ...toConsoleSafe(row) }));
+        return;
+      }
+    }
+
+    queue.push(row);
+    if (params.status === "error" || params.actorType || queue.length >= BATCH_MAX_ROWS) {
+      startFlush();
+    } else {
+      armWindow();
     }
   } catch (err) {
-    await reportLogFailure(err, params);
+    void reportLogFailure(err, {
+      organizationId: params?.organizationId,
+      module: String(params?.module ?? ""),
+      action: String(params?.action ?? ""),
+      status: String(params?.status ?? ""),
+    });
   }
 }
+

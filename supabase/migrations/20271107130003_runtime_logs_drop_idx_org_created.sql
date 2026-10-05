@@ -1,0 +1,47 @@
+-- runtime_logs · 1B.3 — DROP idx_runtime_logs_org_created (147 MB em 2026-10-05)
+--
+-- TIMESTAMP PROVISÓRIO: renumerar contra o ledger de prod na hora de aplicar.
+--
+-- ⚠️ COMO APLICAR — NUNCA por `apply_migration` nem `supabase db push`
+-- (CONCURRENTLY não roda em transação). psql, autocommit:
+--
+--     PGOPTIONS="-c lock_timeout=3s" psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 \
+--       -f supabase/migrations/20271107130003_runtime_logs_drop_idx_org_created.sql
+--
+-- PORTÃO (rodar de novo IMEDIATAMENTE antes de aplicar; tem de voltar VAZIO):
+--
+--     SELECT calls, left(query, 300)
+--       FROM extensions.pg_stat_statements
+--      WHERE query ILIKE '%runtime_logs%'
+--        AND query ILIKE '%organization_id%'
+--        AND query NOT ILIKE '%insert into%';
+--
+--   Verificado em 2026-10-05 via MCP (só SELECT): VAZIO. Ressalva: as
+--   estatísticas foram zeradas no restart de 2026-10-05 15:55:30 UTC
+--   (`pg_stat_statements_info.stats_reset`) — a janela é curta, por isso o
+--   portão se repete na hora de aplicar e a decisão se apoia também na leitura
+--   estrutural abaixo. Re-medido pelo QA às 18:31 UTC: ainda vazio (só 4
+--   queries ad-hoc do MCP), mas a janela era de só 2h36 após o restart.
+--
+--   ⚠️ NÃO APLICAR ANTES DE ~D+7 (2026-10-12): repetir o portão perto dessa
+--   data, quando pg_stat_statements cobre uma semana inteira de tráfego (inclui
+--   telas master de uso raro e jobs semanais). Se voltar QUALQUER query do app
+--   filtrando runtime_logs por organization_id, este arquivo NÃO vai.
+--
+-- LEITORES (estrutural, 2026-10-05):
+--   - `useCopilotReasoning.ts:48-55`: `organization_id` é filtro OPCIONAL
+--     depois de `module='copilot' AND action='reasoning' AND reasoning IS NOT
+--     NULL` — coberto por idx_runtime_logs_module_action_time e
+--     idx_runtime_logs_reasoning_recent.
+--   - `useMasterOperations.ts:91-110`: não filtra organization_id.
+--   - `get_operations_overview`: COUNT(DISTINCT organization_id) com filtro só
+--     em created_at — índice com org na frente não ajuda.
+--   - `fn_voip_apply_vps_event`: só INSERT.
+--   - Policies de runtime_logs: `is_master_user()` e `current_setting('role')`
+--     — nenhuma usa organization_id.
+--
+-- REVERSÃO EXATA (pg_get_indexdef em prod, 2026-10-05):
+--   CREATE INDEX CONCURRENTLY idx_runtime_logs_org_created
+--     ON public.runtime_logs USING btree (organization_id, created_at DESC);
+
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_runtime_logs_org_created;

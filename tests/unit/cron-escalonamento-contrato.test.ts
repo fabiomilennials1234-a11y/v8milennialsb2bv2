@@ -169,3 +169,45 @@ describe('migration de reescalonamento de fase', () => {
     }
   });
 });
+
+/**
+ * Jobs AGENDADOS por migrations posteriores ao reescalonamento. Sem isto o
+ * contrato fica verde por ausência: o snapshot de prod é de 2026-10-02 e não
+ * conhece job criado depois. Cada `cron.schedule('nome', 'agenda', ...)` de
+ * migration mais nova entra (ou substitui o homônimo) na carga medida.
+ */
+const AGENDADOS_DEPOIS = readdirSync(MIGRATIONS)
+  .filter((f) => f.endsWith('.sql') && ARQUIVO !== undefined && f > ARQUIVO)
+  .flatMap((f) =>
+    [...readFileSync(path.join(MIGRATIONS, f), 'utf8').matchAll(
+      /cron\.schedule\(\s*'([^']+)'\s*,\s*'([^']+)'/g,
+    )].map(([, jobname, schedule]) => ({ arquivo: f, jobname, schedule })),
+  );
+
+describe('jobs agendados por migrations novas', () => {
+  const comNovos = [
+    ...depois.filter((j) => !AGENDADOS_DEPOIS.some((n) => n.jobname === j.jobname)),
+    ...AGENDADOS_DEPOIS.map(({ jobname, schedule }) => ({ jobid: 0, jobname, schedule, avgSeconds: null })),
+  ] as Job[];
+
+  it('o parser enxerga os agendamentos (controle contra verde por ausência)', () => {
+    expect(AGENDADOS_DEPOIS.map((j) => j.jobname)).toContain('purge-system-alerts-resolvidos');
+  });
+
+  it(`pico de disparos não-por-minuto continua no máximo ${TETO}`, () => {
+    expect(pico(cargaSemanal(comNovos))).toBeLessThanOrEqual(TETO);
+  });
+
+  it('job novo não divide minuto com purga pesada recorrente', () => {
+    const pesados = new Set<number>();
+    for (const nome of PESADAS_RECORRENTES) {
+      const job = depois.find((j) => j.jobname === nome);
+      for (const t of disparosNaSemana(job!.schedule)) pesados.add(t);
+    }
+    for (const novo of AGENDADOS_DEPOIS) {
+      for (const t of disparosNaSemana(novo.schedule)) {
+        expect(pesados.has(t), `${novo.jobname} (${novo.arquivo}) colide no minuto ${t}`).toBe(false);
+      }
+    }
+  });
+});
