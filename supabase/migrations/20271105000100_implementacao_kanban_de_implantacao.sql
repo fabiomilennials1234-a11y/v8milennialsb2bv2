@@ -97,9 +97,12 @@ AS $$
   )
   SELECT jsonb_build_object(
     -- OR-1: o plano é gravado na própria org. Aceita id OU texto até o OR-4.
+    -- `plan_id` lido via to_jsonb: existe no baseline do repo mas NÃO em prod
+    -- (medido em 05/10/2026). `o.plan_id` direto quebraria o apply em prod.
     'has_plan', EXISTS (
       SELECT 1 FROM public.organizations o
-       WHERE o.id = p_org_id AND (o.plan_id IS NOT NULL OR o.subscription_plan IS NOT NULL)),
+       WHERE o.id = p_org_id
+         AND (o.subscription_plan IS NOT NULL OR to_jsonb(o) ->> 'plan_id' IS NOT NULL)),
     'whatsapp_connected', EXISTS (
       SELECT 1 FROM public.whatsapp_instances w
        WHERE w.organization_id = p_org_id AND w.status = 'connected' AND w.session_dead_since IS NULL),
