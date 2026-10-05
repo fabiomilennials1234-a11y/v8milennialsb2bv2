@@ -30,11 +30,8 @@ export const CRUS = [TEL, EMAIL, CPF, "12345678909", TOKEN, "Lead escreveu"];
 /** Uma invocação do whatsapp-webhook, na ordem e com os await/void do handler. */
 export async function webhookEvent(logRuntime: LogFn, r: () => number, i: number): Promise<number> {
   let calls = 0;
-  await logRuntime({
-    module: "webhook", action: "uazapi_resolved_by_token_fallback", status: "success",
-    payloadSnapshot: { instance_id: INST, organization_id: ORG, event: "messages", had_instance_id_candidate: false },
-  });
-  calls++;
+  // Pós-#2231: o resolve é 1 RPC e `uazapi_resolved_by_token_fallback` só sai com
+  // id explícito no payload (raro, sinal de anomalia) — não faz parte do evento típico.
   const roll = r();
   if (roll < 0.209) {
     await logRuntime({

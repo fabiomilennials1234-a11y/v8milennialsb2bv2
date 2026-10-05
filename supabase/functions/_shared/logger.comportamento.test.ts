@@ -4,7 +4,7 @@
  * Cenário compartilhado em `logger.comportamento.cenario.ts`.
  *
  * Sequência real do whatsapp-webhook por evento:
- *   handler.ts:1571 uazapi_resolved_by_token_fallback  (todo evento)
+ *   (uazapi_resolved_by_token_fallback saiu do evento típico com o #2231)
  *   handler.ts:962  uazapi_group_message_skipped       (~21%)
  *   handler.ts:922  uazapi_agent_message_dispatched    (~13%, `void`)
  *   message-update.ts:189 uazapi_receipt_unmatched     (~4,5%)
@@ -115,14 +115,14 @@ function semCru(texto: string, canal: string) {
 
 // ─── 1. Volume ───────────────────────────────────────────────────────────────
 
-Deno.test("volume — 1 invocação típica (fallback→dispatched→process), tudo sorteado dentro: 1 POST", async () => {
+Deno.test("volume — 1 invocação típica (dispatched→process), tudo sorteado dentro: 1 POST", async () => {
   const h = await run({ edge: true, random: () => 0 }, async (h) => {
     await webhookEvent(logRuntime, () => 0.25, 1);
     assertEquals(h.posts.length, 0, "nada sai antes da janela");
     await drainWaitUntil(h);
   });
   assertEquals(h.posts.length, 1);
-  assertEquals(h.posts[0].length, 3);
+  assertEquals(h.posts[0].length, 2);
 });
 
 Deno.test("volume — 1.000 eventos em rajada: 1 POST por janela, ~1% ao banco, nada some", async () => {

@@ -347,7 +347,8 @@ const FLUSH_WINDOW_MS = 250;
  */
 export const SUCCESS_SAMPLE_RATE: Readonly<Record<string, number>> = Object.freeze({
   "webhook:uazapi_process": 0.01,
-  "webhook:uazapi_resolved_by_token_fallback": 0.01,
+  // `uazapi_resolved_by_token_fallback` fica FORA: depois do resolve por RPC só
+  // sai com id explícito no payload — é sinal de anomalia, não volume.
   "webhook:uazapi_group_message_skipped": 0.01,
   "webhook:uazapi_agent_message_dispatched": 0.05,
   "webhook:uazapi_receipt_unmatched": 0.1,

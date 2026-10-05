@@ -293,9 +293,9 @@ Deno.test("lote — trilha do gestor (actorType) nunca espera a janela nem é am
 
 // ─── Amostragem e rebaixamento ───────────────────────────────────────────────
 
-Deno.test("amostragem — tabela cobre as 7 actions do plano e nada abaixo de 1%", () => {
+Deno.test("amostragem — tabela cobre as 6 actions amostradas e nada abaixo de 1%", () => {
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_process"], 0.01);
-  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_resolved_by_token_fallback"], 0.01);
+  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_resolved_by_token_fallback"], undefined);
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_group_message_skipped"], 0.01);
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_agent_message_dispatched"], 0.05);
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_receipt_unmatched"], 0.1);
@@ -357,7 +357,7 @@ Deno.test("rebaixamento — a linha do console é a REDIGIDA: telefone mascarado
   const h = await withHarness({ respond: () => postgrestCreated(), random: () => 0.5 }, async () => {
     await logRuntime({
       module: "webhook",
-      action: "uazapi_resolved_by_token_fallback",
+      action: "uazapi_process",
       status: "success",
       payloadSnapshot: { phone: telefone, uazapi_token: token, nested: { remote_jid: `${telefone}@s.whatsapp.net` } },
     });
