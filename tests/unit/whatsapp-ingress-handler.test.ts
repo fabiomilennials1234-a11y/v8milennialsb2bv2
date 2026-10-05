@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input); requests.push(url);
     if (url.includes('check_rate_limit')) return json({ allowed: true, remaining: 100 });
-    if (url.includes('whatsapp_instance_secrets')) return json(resolvedId ? { instance_id: resolvedId, organization_id: 'org' } : null);
+    if (url.includes('/rpc/resolve_uazapi_instance')) return json(resolvedId ? [{ id: resolvedId, organization_id: 'org', provider: 'uazapi', via: 'token' }] : []);
     if (url.includes('whatsapp_instances')) return json(resolvedId ? { id: resolvedId, organization_id: 'org', provider: 'uazapi' } : null);
     if (url.includes('whatsapp_webhook_dlq')) return dlqFails ? json({ message: 'write failed', code: '42501' }, 403) : json(null, 201);
     throw new Error('Unexpected backend request');
@@ -86,7 +86,7 @@ it('internal trusted replay bypasses only admission age/rate, retaining secret a
   expect(requests).toHaveLength(0);
   expect((await handler(request({instance:'provider-id',event:'other',timestamp:1}))).status).toBe(200);
   expect(requests.some(url=>url.includes('check_rate_limit'))).toBe(false);
-  expect(requests.some(url=>url.includes('whatsapp_instances'))).toBe(true);
+  expect(requests.some(url=>url.includes('/rpc/resolve_uazapi_instance'))).toBe(true);
   resolvedId='20000000-0000-0000-0000-000000000002';
   expect((await handler(request({instance:'provider-id',event:'other',timestamp:1}))).status).toBe(503);
 });

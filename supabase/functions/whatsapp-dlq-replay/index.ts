@@ -8,8 +8,8 @@
  *
  * Strategy:
  *   - Pick up to BATCH_LIMIT pending rows (resolved_at IS NULL, attempts < MAX_ATTEMPTS).
- *   - For each row, re-run the instance resolution chain (uazapi_instance_id +
- *     uazapi_token + owner fallbacks). The instance may have appeared since
+ *   - For each row, re-run the instance resolution (resolve_uazapi_instance RPC:
+ *     explicit uazapi_instance_id, then per-instance token). The instance may have appeared since
  *     (e.g., after a rebind or repair).
  *   - On success: stamp resolved_at + resolved_instance_id. The actual message
  *     re-insert is handled by re-POSTing the original payload to the live
@@ -23,7 +23,7 @@
  * Idempotency: re-POST goes through whatsapp-webhook UPSERT (message_id,instance_id).
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -44,11 +44,17 @@ type DlqRow = {
   attempts: number;
 };
 
-function pickInstanceCandidates(p: Record<string, unknown>): { instanceId: string | null; token: string | null } {
-  const idFields = [
-    "instance", "instance_id", "instanceId", "InstanceId", "InstanceID",
-    "instanceID", "instanceName", "InstanceName",
-  ];
+/**
+ * Instance-resolution inputs from a parked payload.
+ *
+ * Only fields that carry the Uazapi instance id (`r…`) count as an id.
+ * `instanceName`/`InstanceName` are the customer-chosen DISPLAY name
+ * (uazapi-provider initInstance `name`): treating them as an id would let an
+ * org name its instance after another org's `r…` id and hijack routing, since
+ * the id outranks the token. They are deliberately not read here.
+ */
+export function pickInstanceCandidates(p: Record<string, unknown>): { instanceId: string | null; token: string | null } {
+  const idFields = ["instance", "instance_id", "instanceId", "InstanceId", "InstanceID", "instanceID"];
   const tokenFields = ["token", "Token", "instance_token", "instanceToken"];
   let instanceId: string | null = null;
   let token: string | null = null;
@@ -63,42 +69,38 @@ function pickInstanceCandidates(p: Record<string, unknown>): { instanceId: strin
   return { instanceId, token };
 }
 
-async function tryResolve(
-  supabase: ReturnType<typeof createClient>,
-  payload: Record<string, unknown>,
-  urlPath: string,
-): Promise<string | null> {
-  const { instanceId, token } = pickInstanceCandidates(payload);
-
-  // Try URL path segment first (rebound instances embed uazapi_instance_id there).
+/** Uazapi instance id embedded in a rebound webhook path, if any. */
+export function pathInstanceIdFrom(urlPath: string): string | null {
   // Path format: /functions/v1/whatsapp-webhook/<SECRET>/<UAZAPI_INSTANCE_ID>(/event)?
   const segs = urlPath.split("/").filter(Boolean);
   const ixWebhook = segs.findIndex((s) => s === "whatsapp-webhook");
   const seg2 = ixWebhook >= 0 ? segs[ixWebhook + 2] : undefined;
   const knownEvents = new Set(["messages", "messages_update", "connection", "payment", "payment_response"]);
-  const pathInstanceId = seg2 && !knownEvents.has(seg2) ? seg2 : undefined;
+  return seg2 && !knownEvents.has(seg2) ? seg2 : null;
+}
 
-  const candidate = instanceId ?? pathInstanceId ?? null;
+/**
+ * Same resolver as whatsapp-webhook: one `resolve_uazapi_instance` RPC
+ * (service_role only; explicit id, then token). RPC = POST, so the per-instance
+ * token travels in the body — the old `whatsapp_instance_secrets?
+ * uazapi_token=eq.<TOKEN>` GET put it in edge_logs in clear text.
+ */
+export async function tryResolve(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+  urlPath: string,
+): Promise<string | null> {
+  const { instanceId, token } = pickInstanceCandidates(payload ?? {});
+  const instanceRef = instanceId ?? pathInstanceIdFrom(urlPath);
+  if (!instanceRef && !token) return null;
 
-  if (candidate) {
-    const { data } = await supabase
-      .from("whatsapp_instance_secrets")
-      .select("instance_id")
-      .eq("uazapi_instance_id", candidate)
-      .maybeSingle();
-    if (data?.instance_id) return data.instance_id as string;
-  }
-
-  if (token) {
-    const { data } = await supabase
-      .from("whatsapp_instance_secrets")
-      .select("instance_id")
-      .eq("uazapi_token", token)
-      .maybeSingle();
-    if (data?.instance_id) return data.instance_id as string;
-  }
-
-  return null;
+  const { data, error } = await supabase.rpc("resolve_uazapi_instance", {
+    p_instance_ref: instanceRef,
+    p_token: token,
+  });
+  if (error || !data) return null;
+  const row = (Array.isArray(data) ? data[0] : data) as { id?: unknown } | undefined;
+  return typeof row?.id === "string" && row.id ? row.id : null;
 }
 
 async function replayPayload(

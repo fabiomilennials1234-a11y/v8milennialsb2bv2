@@ -30,7 +30,7 @@ beforeEach(()=>{
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const url=String(input);backendCalls.push(url);
     if(url.includes('check_rate_limit')) return json({allowed:true,remaining:100});
-    if(url.includes('whatsapp_instance_secrets')) return json({instance_id:resolvedId,organization_id:'org'});
+    if(url.includes('/rpc/resolve_uazapi_instance')) return json([{id:resolvedId,organization_id:'org',provider:'uazapi',via:'token'}]);
     if(url.includes('whatsapp_instances')) return json({id:resolvedId,organization_id:'org',provider:'uazapi'});
     throw new Error('Unexpected backend request');
   }));
