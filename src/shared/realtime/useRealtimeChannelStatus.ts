@@ -18,7 +18,15 @@ export function useRealtimeChannelStatus(channelName: string | null): ChannelSta
   );
 }
 
+/**
+ * Chave do status do canal de `whatsapp_messages` da org. Compartilhada pelos
+ * dois montadores (bolha e /chat) — `useWhatsAppMessagesRealtime`.
+ */
+export function whatsAppRealtimeStatusKey(organizationId: string): string {
+  return `whatsapp-messages-patched-${organizationId}`;
+}
+
 export function useWhatsAppRealtimeStatus(organizationId: string | null | undefined): ChannelStatus {
-  const channelName = organizationId ? `whatsapp-messages-patched-${organizationId}` : null;
+  const channelName = organizationId ? whatsAppRealtimeStatusKey(organizationId) : null;
   return useRealtimeChannelStatus(channelName);
 }

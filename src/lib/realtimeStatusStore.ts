@@ -13,6 +13,7 @@ export type RealtimeChannelState =
   | "joining"
   | "joined"
   | "reconnecting"
+  | "errored"       // CHANNEL_ERROR/TIMED_OUT abaixo do limiar do breaker — em backoff
   | "polling"       // circuit breaker tripped — polling is primary
   | "offline"
   | "unknown";
@@ -29,6 +30,19 @@ export type ChannelStatus = {
   state: RealtimeChannelState;
   lastEventAt: number | null;
   lastTransitionAt: number;
+  /**
+   * Desde quando o canal está fora de "joined". Diferente de
+   * `lastTransitionAt`, NÃO reinicia entre estados não saudáveis (o backoff
+   * alterna errored ↔ joining a cada tentativa). É o relógio dos degraus de
+   * fallback em `reconcilePolicy.ts`. Sem significado enquanto "joined".
+   */
+  unhealthySince: number;
+  /**
+   * Quantas vezes o canal entrou em "joined" — inclusive "joined" repetido.
+   * Subir além de 1 = reconexão: eventos da queda se perderam. Assinado por
+   * `useWhatsAppMessagesRealtime` → `chatReconcile.ts`.
+   */
+  joinCount: number;
   reconnectCount: number;
   consecutiveFailures: number;
   circuitOpen: boolean;
@@ -36,16 +50,21 @@ export type ChannelStatus = {
   diagnostics: DiagnosticEvent[];
 };
 
-const initialStatus = (): ChannelStatus => ({
-  state: "unknown",
-  lastEventAt: null,
-  lastTransitionAt: Date.now(),
-  reconnectCount: 0,
-  consecutiveFailures: 0,
-  circuitOpen: false,
-  lastReason: null,
-  diagnostics: [],
-});
+const initialStatus = (): ChannelStatus => {
+  const agora = Date.now();
+  return {
+    state: "unknown",
+    lastEventAt: null,
+    lastTransitionAt: agora,
+    unhealthySince: agora,
+    joinCount: 0,
+    reconnectCount: 0,
+    consecutiveFailures: 0,
+    circuitOpen: false,
+    lastReason: null,
+    diagnostics: [],
+  };
+};
 
 const channels = new Map<string, ChannelStatus>();
 const listeners = new Map<string, Set<() => void>>();
@@ -76,11 +95,21 @@ export function setChannelState(
   reason?: string,
 ): void {
   const prev = getOrInitStatus(name);
-  if (prev.state === state && !reason) return;
+  if (prev.state === state && !reason) {
+    // "joined" repetido é uma RECONEXÃO, não ruído: conta e avisa.
+    if (state !== "joined") return;
+    channels.set(name, { ...prev, joinCount: prev.joinCount + 1 });
+    emit(name);
+    return;
+  }
+  const agora = Date.now();
   const next: ChannelStatus = {
     ...prev,
     state,
-    lastTransitionAt: Date.now(),
+    lastTransitionAt: agora,
+    unhealthySince:
+      prev.state === "joined" && state !== "joined" ? agora : prev.unhealthySince,
+    joinCount: state === "joined" ? prev.joinCount + 1 : prev.joinCount,
     reconnectCount:
       state === "reconnecting" ? prev.reconnectCount + 1 : prev.reconnectCount,
     lastReason: reason ?? prev.lastReason,

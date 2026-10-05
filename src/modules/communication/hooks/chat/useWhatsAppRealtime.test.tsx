@@ -11,7 +11,7 @@
  * patch, a ordem tem que ser a mesma que a RPC devolve
  * (`ORDER BY p.last_message_time DESC`).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -284,5 +284,34 @@ describe("useWhatsAppMessagesRealtime — a thread aberta pertence a uma caixa",
     capturedOnEvent?.(insertDe(TELEFONE, "2026-08-06T15:00:00Z"));
 
     expect(thread(qc, INST)).toHaveLength(1);
+  });
+});
+
+// ─── Contato fora do cache: refetch da lista pelo teto ──────────────────────
+
+describe("useWhatsAppMessagesRealtime — contato fora do cache (Fase B)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("rajada de 5 mensagens de contatos novos → ≤ 2 invalidações, sem cancelar fetch em voo", () => {
+    vi.useFakeTimers();
+    const qc = setup([contato("5548999990001", "2026-08-06T10:00:00Z")]);
+    const spy = vi.spyOn(qc, "invalidateQueries");
+
+    for (let i = 0; i < 5; i++) {
+      capturedOnEvent?.(insertDe(`554890000000${i}`, "2026-08-06T15:00:00Z", INST));
+      vi.advanceTimersByTime(300);
+    }
+    vi.advanceTimersByTime(60_000);
+
+    const daLista = spy.mock.calls.filter(
+      ([filtros]) => (filtros?.queryKey as unknown[] | undefined)?.[0] === "whatsapp_contacts",
+    );
+    expect(daLista.length).toBeGreaterThanOrEqual(1);
+    expect(daLista.length).toBeLessThanOrEqual(2);
+    for (const [, opcoes] of daLista) {
+      expect(opcoes).toEqual({ cancelRefetch: false });
+    }
   });
 });
