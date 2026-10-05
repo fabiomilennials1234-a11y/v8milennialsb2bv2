@@ -19,7 +19,7 @@ beforeEach(()=>{
   const url=new URL(String(input)),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null;
   calls.push({url,method,body});
   if(url.pathname.includes('check_rate_limit')) return json({allowed:true,remaining:100});
-  if(url.pathname.includes('whatsapp_instance_secrets')) return json({instance_id:'instance',organization_id:'org'});
+  if(url.pathname.includes('/rpc/resolve_uazapi_instance')) return json([{id:'instance',organization_id:'org',provider:'uazapi',via:'token'}]);
   if(url.pathname.includes('whatsapp_instances')) return json({id:'instance',organization_id:'org',provider:'uazapi'});
   if(url.pathname.endsWith('/whatsapp_messages')){
    if(fail===method) return json({code:'XX000',message:'fixture failure'},500);

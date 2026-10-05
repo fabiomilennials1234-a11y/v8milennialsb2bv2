@@ -35,7 +35,8 @@ export function LeadCardNewDeal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: teamMember } = useCurrentTeamMember();
+  const memberQuery = useCurrentTeamMember();
+  const teamMember = memberQuery.data;
   const organizationId = teamMember?.organization_id ?? null;
 
   /**
@@ -46,22 +47,34 @@ export function LeadCardNewDeal({
    * `null` desabilita a query (`enabled: !!leadId`) em vez de pagá-la sempre.
    */
   const alvo = open ? leadId : null;
-  const { data: pipelines = [] } = useLeadAllPipelines(alvo);
+  const pipelinesQuery = useLeadAllPipelines(alvo);
   const { canAddToPipe } = useLeadActionGates(leadId);
-  const { usePipePropostaByLeadId } = usePipeOps();
-  const { data: proposta } = usePipePropostaByLeadId(alvo);
+  const { usePipePropostaByLeadId, useCustomPipelines } = usePipeOps();
+  const propostaQuery = usePipePropostaByLeadId(alvo);
+  // A lista custom compõe a chave de useLeadAllPipelines. Esperar ambas evita
+  // abrir com opções parciais e trocar o formulário enquanto a pessoa digita.
+  const customQuery = useCustomPipelines();
 
   const { options, isCreating, criar } = useAbrirNegocio({
     leadId,
     organizationId,
-    pipelines: pipelines as PipelineStatus[],
+    pipelines: (pipelinesQuery.data ?? []) as PipelineStatus[],
     canAdd: canAddToPipe,
-    vendaFechada: proposta?.status === "vendido",
+    vendaFechada: propostaQuery.data?.status === "vendido",
   });
+
+  if (!open) return null;
+
+  const queries = [memberQuery, pipelinesQuery, propostaQuery, customQuery];
+  const isError = queries.some((query) => query.isError);
+  const isLoading = queries.some((query) => query.isPending) || canAddToPipe.isLoading;
 
   return (
     <NewDealDialog
       options={options}
+      isLoading={isLoading}
+      loadError={isError}
+      onRetry={() => void Promise.all(queries.map((query) => query.refetch()))}
       isCreating={isCreating}
       onCreate={criar}
       open={open}

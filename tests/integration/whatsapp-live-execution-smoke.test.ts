@@ -50,7 +50,7 @@ async function backend(input: Request) {
     const body = typeof raw === 'string' && raw ? JSON.parse(raw) : null;
     calls.push({ url, method, body });
     if (url.includes('/rpc/check_rate_limit')) return json({ allowed: true, remaining: 100 });
-    if (url.includes('/whatsapp_instance_secrets')) return json({ instance_id: enabledId, organization_id: organizationId });
+    if (url.includes('/rpc/resolve_uazapi_instance')) return json([{ id: enabledId, organization_id: organizationId, provider: 'uazapi', via: 'token' }]);
     if (url.includes('/whatsapp_instances')) return json({ id: enabledId, organization_id: organizationId, provider: 'uazapi' });
     if (url.includes('/rpc/begin_whatsapp_edge_execution')) return begin();
     if (url.includes('/rpc/complete_whatsapp_edge_execution')) return complete();

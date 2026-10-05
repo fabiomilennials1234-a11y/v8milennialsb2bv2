@@ -73,7 +73,7 @@ beforeEach(() => {
     const body = typeof rawBody === 'string' && rawBody ? JSON.parse(rawBody) : null;
     databaseCalls.push({ url, method, body });
     if (url.includes('/rpc/check_rate_limit')) return json({ allowed: true, remaining: 100 });
-    if (url.includes('/whatsapp_instance_secrets')) return json({ instance_id: resolvedId, organization_id: organizationId });
+    if (url.includes('/rpc/resolve_uazapi_instance')) return json([{ id: resolvedId, organization_id: organizationId, provider: 'uazapi', via: 'token' }]);
     if (url.includes('/whatsapp_instances')) return json({ id: resolvedId, organization_id: organizationId, provider: 'uazapi' });
     if (url.includes('/organizations')) {
       if (groupPolicy === 'error') return json({ code: 'P0001', message: 'policy unavailable' }, 503);

@@ -46,14 +46,14 @@ beforeEach(() => {
 
 describe("optimisticMovePipelineEntry", () => {
   it("remove o card da origem e insere no topo do destino", () => {
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
 
     expect(stageIds(qc, "novo")).toEqual(["e2"]);
     expect(stageIds(qc, "abordado")).toEqual(["e1", "e3"]); // topo da 1ª página
   });
 
   it("reescreve stage_key/status do card movido", () => {
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
     const moved = (qc.getQueryData(pageKey("abordado")) as { pages: Record<string, unknown>[][] })
       .pages.flat().find((e) => e.id === "e1")!;
     expect(moved.stage_key).toBe("abordado");
@@ -62,31 +62,31 @@ describe("optimisticMovePipelineEntry", () => {
   });
 
   it("ajusta as contagens (-1 origem, +1 destino)", () => {
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
     expect(qc.getQueryData(countsKey())).toEqual({ novo: 1, abordado: 2 });
   });
 
   it("nunca deixa contagem negativa", () => {
     qc.setQueryData(countsKey(), { novo: 0, abordado: 1 });
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
     expect((qc.getQueryData(countsKey()) as Record<string, number>).novo).toBe(0);
   });
 
   it("semeia a 1ª página quando a coluna de destino está vazia/sem cache", () => {
     qc.setQueryData(pageKey("abordado"), inf([])); // etapa carregada porém vazia
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e2", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e2", toStage: "abordado" });
     expect(stageIds(qc, "abordado")).toEqual(["e2"]);
   });
 
   it("não duplica se o card já estiver no destino", () => {
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
     expect(stageIds(qc, "abordado").filter((id) => id === "e1")).toHaveLength(1);
   });
 
   it("é no-op quando o card não está em nenhum cache", () => {
     const before = JSON.stringify(qc.getQueryData(pageKey("novo")));
-    optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "inexistente", toStage: "abordado" });
+    optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "inexistente", toStage: "abordado" });
     expect(JSON.stringify(qc.getQueryData(pageKey("novo")))).toBe(before);
     expect(qc.getQueryData(countsKey())).toEqual({ novo: 2, abordado: 1 });
   });
@@ -98,7 +98,7 @@ describe("rollbackPipelineEntryMove", () => {
     const abordadoBefore = JSON.stringify(qc.getQueryData(pageKey("abordado")));
     const countsBefore = JSON.stringify(qc.getQueryData(countsKey()));
 
-    const snap = optimisticMovePipelineEntry(qc, { slug: "whatsapp", id: "e1", toStage: "abordado" });
+    const snap = optimisticMovePipelineEntry(qc, { boardKey: "whatsapp", id: "e1", toStage: "abordado" });
     // mudou de fato
     expect(JSON.stringify(qc.getQueryData(pageKey("novo")))).not.toBe(novoBefore);
 

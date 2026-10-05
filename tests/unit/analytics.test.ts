@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mock Supabase ───────────────────────────────────────
 const mockInsert = vi.fn().mockResolvedValue({ data: null, error: null });
+const mockGetSession = vi.fn();
 const mockGetUser = vi.fn();
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     auth: {
+      getSession: () => mockGetSession(),
       getUser: () => mockGetUser(),
     },
     from: vi.fn().mockReturnValue({
@@ -24,8 +26,8 @@ describe('analytics — track()', () => {
   });
 
   it('calls supabase.from("usage_events").insert with correct fields', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
+    mockGetSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
     });
 
     track({
@@ -52,8 +54,8 @@ describe('analytics — track()', () => {
   });
 
   it('does not throw if Supabase fails', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
+    mockGetSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
     });
     mockInsert.mockRejectedValue(new Error('DB down'));
 
@@ -69,8 +71,8 @@ describe('analytics — track()', () => {
   });
 
   it('does not throw if user is not logged in', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: null },
+    mockGetSession.mockResolvedValue({
+      data: { session: null },
     });
 
     expect(() => {
@@ -86,8 +88,8 @@ describe('analytics — track()', () => {
   });
 
   it('does not call insert if organizationId is empty', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
+    mockGetSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
     });
 
     track({
@@ -97,5 +99,26 @@ describe('analytics — track()', () => {
 
     await new Promise((r) => setTimeout(r, 50));
     expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('lê o usuário da sessão em cache — nunca chama getUser (ida a /auth/v1/user por evento)', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+    });
+
+    track({ event: 'card_moved', organizationId: 'org-1', entityType: 'pipe_x', entityId: 'e-1' });
+
+    await vi.waitFor(() => {
+      expect(mockInsert).toHaveBeenCalledWith({
+        organization_id: 'org-1',
+        user_id: 'user-1',
+        event_type: 'card_moved',
+        entity_type: 'pipe_x',
+        entity_id: 'e-1',
+        metadata: null,
+      });
+    });
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 });

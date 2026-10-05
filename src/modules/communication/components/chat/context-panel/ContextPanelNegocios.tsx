@@ -10,12 +10,16 @@
  * `ContextPanelTabInfo`. Os providers moram aqui dentro, e não no shell do
  * chat, para que nenhuma outra org carregue nada disto.
  */
-import { Briefcase, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Briefcase, Loader2, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DealCardPanel,
   DealPanelProvider,
   LeadCardPanel,
   LeadPanelProvider,
+  LeadNewDealDialog,
+  useLeadActionGates,
   useDealSheet,
 } from "@/modules/leads";
 import { useNegociosDoLeadNoChat } from "@/modules/communication/hooks/chat/useNegociosDoLeadNoChat";
@@ -26,10 +30,26 @@ interface ContextPanelNegociosProps {
 }
 
 export function ContextPanelNegocios({ leadId }: ContextPanelNegociosProps) {
+  const [criando, setCriando] = useState(false);
+  const { canAddToPipe } = useLeadActionGates(leadId);
+
   return (
     <LeadPanelProvider>
       <DealPanelProvider>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mb-3 w-full gap-2"
+          disabled={canAddToPipe.isLoading || !canAddToPipe.allowed}
+          title={canAddToPipe.isLoading ? "Carregando permissões" : !canAddToPipe.allowed ? canAddToPipe.reason : undefined}
+          onClick={() => setCriando(true)}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Adicionar negócio
+        </Button>
         <ListaDeNegocios leadId={leadId} />
+        {criando && <LeadNewDealDialog leadId={leadId} open onOpenChange={setCriando} />}
         <DealCardPanel />
         <LeadCardPanel />
       </DealPanelProvider>

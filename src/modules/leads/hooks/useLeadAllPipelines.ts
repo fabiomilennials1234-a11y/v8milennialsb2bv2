@@ -68,14 +68,7 @@ export function useLeadAllPipelines(leadId: string | null) {
     queryFn: async (): Promise<PipelineStatus[]> => {
       if (!leadId || !orgId) return [];
 
-      const [
-        { data: allEntries },
-        { data: dynamicStages },
-        { data: allPipelines },
-        { data: customStagesAll },
-        { data: pipeUpsell },
-        { data: displayConfigs },
-      ] = await Promise.all([
+      const responses = await Promise.all([
         // Ordem idêntica à de `readActivePipelineEntry`
         // (`pipelines/hooks/model/usePipelineEntries.ts`) e à de `readPipeEntries`
         // (`supabase/functions/_shared/pipeline-adapter.ts`): aberto antes de
@@ -119,6 +112,20 @@ export function useLeadAllPipelines(leadId: string | null) {
           .select("pipe_type, display_name, is_visible, position")
           .eq("organization_id", orgId),
       ]);
+
+      // Falha de leitura não significa ausência de negócio: não oferecer uma
+      // nova abertura com base em uma lista incompleta (ex.: timeout/503).
+      for (const response of responses) {
+        if (response.error) throw response.error;
+      }
+      const [
+        { data: allEntries },
+        { data: dynamicStages },
+        { data: allPipelines },
+        { data: customStagesAll },
+        { data: pipeUpsell },
+        { data: displayConfigs },
+      ] = responses;
 
       const entries = allEntries ?? [];
       const pipelines = (allPipelines ?? []) as { id: string; slug: string; type: string; name: string; color: string; icon: string }[];
