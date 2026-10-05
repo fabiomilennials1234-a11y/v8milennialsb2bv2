@@ -212,7 +212,7 @@ export function useUpdatePipeWhatsapp() {
       if (!status) return { snapshot: null };
       await queryClient.cancelQueries({ queryKey: ["pipeline-page", "whatsapp"] });
       const snapshot = optimisticMovePipelineEntry(queryClient, {
-        slug: "whatsapp",
+        boardKey: "whatsapp",
         id,
         toStage: status,
       });

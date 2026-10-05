@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useCanDo, useOrganization } from "@/modules/identity";
+import { useCanDo, useCurrentTeamMember, useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { flattenMetadata } from "./usePipelineEntries";
 import {
@@ -12,7 +12,17 @@ import {
   type PaginatedFilters,
   type StageData,
 } from "./usePaginatedPipeline";
-import { useMoveLeadInCustomPipe } from "../custom/useCustomPipelines";
+import { executarMoveCustom } from "../custom/useCustomPipelines";
+import { useFunilRealtime } from "./useFunilRealtime";
+import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
+import {
+  aplicarMoveOtimista,
+  cancelarFetchDoMove,
+  colunaDoCardNoCache,
+  reconciliarMoveNoFunil,
+  reverterMoveOtimista,
+  type MoveOtimista,
+} from "@/modules/pipelines/lib/funil-move-cache";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 
 /**
@@ -24,10 +34,11 @@ import type { CustomPipelineStage } from "@/contracts/pipe";
  * qualquer funil (system ou custom). O bloco de filtros é o MESMO objeto
  * (`sharedRpcFilterParams`), então badge e cards nunca divergem de recorte.
  *
- * QueryKeys por pipeline_id (padrão 626): `["pipeline-page", pipelineId, …]` e
- * `["pipeline-stage-counts", pipelineId, …]`. O prefixo `pipeline-page` é o
- * mesmo do board legado de propósito — `invalidateAfterMove` e o realtime já
- * invalidam por esse prefixo, e a página nova pega carona sem mudança lá.
+ * QueryKeys por pipeline_id (padrão 626): `["pipeline-page", pipelineId,
+ * stageKey, …]` e `["pipeline-stage-counts", pipelineId, …]`. O prefixo é o
+ * mesmo do board legado — quem invalida por prefixo de fora (lead drawer,
+ * tags) continua alcançando o board. Move e Realtime DESTA página, ao
+ * contrário, endereçam coluna por coluna (`lib/funil-move-cache`).
  *
  * Na W6 (demolição), `usePaginatedPipeline` colapsa neste hook.
  */
@@ -131,7 +142,8 @@ export function usePaginatedFunil(
   }, [filters.search]);
 
   // Fonte única (SCRUM-621): cards de qualquer funil vivem em pipeline_entries.
-  useRealtimeSubscription("pipeline_entries", ["pipeline-page", "pipeline-stage-counts"]);
+  // Cirúrgico: cada evento invalida só as colunas que toca neste funil.
+  useFunilRealtime(pipelineId);
 
   const filterParams = useMemo(
     () => sharedRpcFilterParams(organizationId ?? "", debouncedSearch, filters),
@@ -163,26 +175,15 @@ export function usePaginatedFunil(
 
   const filtersKey = useMemo(() => JSON.stringify(filterParams), [filterParams]);
 
+  // Chave/busca compartilhadas com o cabeçalho (`useFunilMetrics`): mesmo
+  // recorte ⇒ mesma chave ⇒ uma ida só no mount (ver `stage-counts-query`).
+  const countsArgs = useMemo(
+    () => ({ ...filterParams, p_pipeline_id: pipelineId ?? "" }),
+    [filterParams, pipelineId],
+  );
   const countsQuery = useQuery({
-    queryKey: ["pipeline-stage-counts", pipelineId, organizationId, filtersKey],
-    queryFn: async () => {
-      if (!organizationId || !pipelineId) return {} as Record<string, number>;
-      // `as never` no nome: RPC mais nova que o types.ts gerado de prod —
-      // mesmo padrão de `moverNegocio`; morre no próximo regen.
-      const { data, error } = await supabase.rpc(
-        "get_pipeline_stage_counts_by_id" as never,
-        rpcArgs({ ...filterParams, p_pipeline_id: pipelineId }),
-      );
-      if (error) throw error;
-      // O motor devolve (stage_id, stage_key, cnt) e separa linhas fantasma
-      // (stage_id NULL) — o board endereça coluna por stage_key, então soma
-      // por key (fantasma soma na key que o card ainda carrega).
-      const map: Record<string, number> = {};
-      for (const row of (data ?? []) as Array<{ stage_key: string | null; cnt: number }>) {
-        if (row.stage_key) map[row.stage_key] = (map[row.stage_key] ?? 0) + Number(row.cnt);
-      }
-      return map;
-    },
+    queryKey: stageCountsQueryKey(pipelineId, countsArgs),
+    queryFn: () => fetchStageCounts(countsArgs),
     enabled: isReady && !!organizationId && !!pipelineId,
     staleTime: 30_000,
   });
@@ -243,60 +244,85 @@ export function usePaginatedFunil(
   };
 }
 
+/** Variáveis do move na página unificada. */
+export interface MoverCardNoFunilVars {
+  entryId: string;
+  /** `pipeline_stages.id` (uuid) — o caminho custom move por ele. */
+  stageId: string;
+  /**
+   * `pipeline_stages.stage_key` — o caminho system escreve a key e o espelho
+   * `trg_pe_stage_mirror` resolve o `stage_id` (types.ts gerado de prod ainda
+   * não conhece a coluna `stage_id`; escrever a key é o caminho tipado E o que
+   * os gatilhos de métrica já escutam). Também é a coluna de destino no cache.
+   */
+  stageKey: string;
+  /**
+   * O chamador já aplicou o otimismo (`aplicarMoveOtimista`) e é dono do
+   * rollback — caso do `completarMove`, que move o card ANTES de gravar o
+   * metadata do desfecho. Aqui o hook não aplica nem reverte; só reconcilia.
+   */
+  otimistaDoChamador?: MoveOtimista;
+}
+
+interface MoverCardContext {
+  /** Otimismo aplicado por ESTE hook (rollback é dele). */
+  move: MoveOtimista | null;
+  fromStage: string | null;
+  /** Recusado antes de escrever (sem permissão): nada mudou no banco. */
+  negado?: boolean;
+}
+
 /**
  * Move de card na página unificada — um destino, dois caminhos:
  *
- *   custom  → `useMoveLeadInCustomPipe` (INSTEAD OF da view): preserva TODA a
- *             lógica viva do board custom — auto-transition de etapa final,
- *             gatilhos de workflow, guarda de permissão;
+ *   custom  → `executarMoveCustom` (a MESMA escrita de
+ *             `useMoveLeadInCustomPipe`: auto-transition de etapa final,
+ *             gatilhos de workflow, integração carteira) — sem o `onSuccess`
+ *             de invalidação ampla daquele hook;
  *   system  → UPDATE direto em `pipeline_entries` (fonte única, SCRUM-621): a
  *             MESMA linha que as views `pipe_*` escrevem, então os gatilhos de
- *             métrica/venda disparam idêntico. Os fluxos ricos do board de
- *             sistema (LossReasonDialog, modais de reunião, guarda de valor)
- *             NÃO moram aqui — chegam com a paridade de sistema na SCRUM-633/634;
- *             até lá as rotas `/pipe-*` continuam nas páginas antigas.
+ *             métrica/venda disparam idêntico.
  *
- * Invalida por prefixo `pipeline-page`/`pipeline-stage-counts` (as chaves da
- * página nova) e as chaves do board custom legado — durante o expand as duas
- * páginas convivem e nenhuma pode ficar mentindo.
+ * Cache (`lib/funil-move-cache`):
+ *   onMutate  → card muda de coluna na hora (otimismo) + eco registrado;
+ *   onError   → rollback fiel do snapshot;
+ *   onSettled → UMA reconciliação: colunas de origem e destino + contagem
+ *               deste funil; o resto só marcado como velho.
  */
 export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "custom" } | null | undefined) {
   const queryClient = useQueryClient();
-  const moveCustom = useMoveLeadInCustomPipe();
   const movePermission = useCanDo("move_pipe_record");
+  const { data: teamMember } = useCurrentTeamMember();
 
-  return useMutation({
-    mutationFn: async ({
-      entryId,
-      stageId,
-      stageKey,
-    }: {
-      entryId: string;
-      /** `pipeline_stages.id` (uuid) — o caminho custom move por ele. */
-      stageId: string;
-      /**
-       * `pipeline_stages.stage_key` — o caminho system escreve a key e o
-       * espelho `trg_pe_stage_mirror` resolve o `stage_id` (types.ts gerado de
-       * prod ainda não conhece a coluna `stage_id`; escrever a key é o caminho
-       * tipado E o que os gatilhos de métrica já escutam).
-       */
-      stageKey: string;
-    }) => {
-      if (!pipeline) throw new Error("Funil não carregado");
-
-      if (pipeline.type === "custom") {
-        return moveCustom.mutateAsync({
-          entry_id: entryId,
-          pipeline_id: pipeline.id,
-          stage_id: stageId,
-        });
+  return useMutation<{ lead_id?: string | null } | null, Error, MoverCardNoFunilVars, MoverCardContext>({
+    onMutate: async ({ entryId, stageKey, otimistaDoChamador }) => {
+      if (!pipeline) return { move: null, fromStage: null };
+      if (otimistaDoChamador) {
+        return { move: null, fromStage: otimistaDoChamador.snapshot.fromStage };
       }
+      // Sem permissão o mutationFn recusa — não pisca o card à toa.
+      if (!movePermission.allowed) return { move: null, fromStage: null, negado: true };
+      const origem = colunaDoCardNoCache(queryClient, pipeline.id, entryId);
+      await cancelarFetchDoMove(queryClient, { pipelineId: pipeline.id, stages: [origem, stageKey] });
+      const move = aplicarMoveOtimista(queryClient, { pipelineId: pipeline.id, entryId, toStage: stageKey });
+      return { move, fromStage: move.snapshot.fromStage ?? origem };
+    },
+    mutationFn: async ({ entryId, stageId, stageKey }) => {
+      if (!pipeline) throw new Error("Funil não carregado");
 
       if (!movePermission.allowed) {
         throw new Error(
           movePermission.isLoading
             ? "Permissões ainda carregando — tente novamente"
             : "Sem permissão para mover registros no pipe",
+        );
+      }
+
+      if (pipeline.type === "custom") {
+        if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+        return executarMoveCustom(
+          { entry_id: entryId, pipeline_id: pipeline.id, stage_id: stageId },
+          teamMember.organization_id,
         );
       }
 
@@ -310,18 +336,19 @@ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "cu
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      // Página nova.
-      queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
-      // Páginas antigas conviventes (expand): custom lê por estas…
-      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
-      queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });
-      // …e as de sistema pelas views de compat.
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+    onError: (_err, _vars, context) => {
+      if (context?.move) reverterMoveOtimista(queryClient, context.move);
+    },
+    onSettled: (data, _err, vars, context) => {
+      // Negado por permissão: nenhuma escrita, nada a reconciliar.
+      if (!pipeline || context?.negado) return;
+      reconciliarMoveNoFunil(queryClient, {
+        pipelineId: pipeline.id,
+        entryId: vars.entryId,
+        leadId: data?.lead_id ?? null,
+        fromStage: context?.fromStage ?? null,
+        toStage: vars.stageKey,
+      });
     },
   });
 }

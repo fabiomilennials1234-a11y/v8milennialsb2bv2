@@ -34,6 +34,7 @@ import { useOrganization } from "@/modules/identity";
 import type { DateRange } from "@/lib/metrics-period";
 import { usePipelines } from "../model/usePipelines";
 import { useStagesDoFunil } from "../model/useStagesDoFunil";
+import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
 import {
   usePipeWhatsappMetrics,
   usePipeConfirmacaoMetrics,
@@ -88,38 +89,21 @@ export function useFunilMetrics(
     [stages],
   );
 
+  // Mesma chave/busca do board (`stage-counts-query`): sem filtro no quadro,
+  // cabeçalho e badges pedem o MESMO recorte e a RPC roda uma vez só.
+  const genericArgs = useMemo(
+    () => ({
+      p_pipeline_id: pipelineId ?? "",
+      p_org_id: organizationId ?? "",
+      p_period_after: range?.startStr ?? null,
+      p_period_before: range?.endStr ?? null,
+      p_closed_status_keys: closedKeys.length ? closedKeys : null,
+    }),
+    [pipelineId, organizationId, range?.startStr, range?.endStr, closedKeys],
+  );
   const genericQuery = useQuery({
-    queryKey: [
-      "funil-generic-metrics",
-      pipelineId,
-      range?.startStr ?? "all",
-      range?.endStr ?? "all",
-      closedKeys,
-      organizationId,
-    ],
-    queryFn: async (): Promise<Record<string, number>> => {
-      // Ponte de tipo até o regen: get_pipeline_stage_counts_by_id
-      // (20270908003000) é mais nova que o types.ts gerado. Sem `any` — nome e
-      // args entram como `never` e o shape do retorno é assertado abaixo.
-      const { data, error } = await supabase.rpc(
-        "get_pipeline_stage_counts_by_id" as unknown as never,
-        {
-          p_pipeline_id: pipelineId,
-          p_org_id: organizationId,
-          p_period_after: range?.startStr ?? null,
-          p_period_before: range?.endStr ?? null,
-          p_closed_status_keys: closedKeys.length ? closedKeys : null,
-        } as unknown as never,
-      );
-      if (error) throw error;
-      // Reagrega por stage_key: o motor separa linha fantasma (stage_id NULL)
-      // da linha da etapa real — para métrica de cabeçalho a key basta.
-      const byKey: Record<string, number> = {};
-      for (const row of (data ?? []) as Array<{ stage_key: string; cnt: number | string }>) {
-        byKey[row.stage_key] = (byKey[row.stage_key] ?? 0) + Number(row.cnt);
-      }
-      return byKey;
-    },
+    queryKey: stageCountsQueryKey(pipelineId, genericArgs),
+    queryFn: () => fetchStageCounts(genericArgs),
     enabled: isReady && !!organizationId && !!pipelineId && !stagesLoading,
     staleTime: 60_000,
   });

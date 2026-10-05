@@ -1030,6 +1030,72 @@ export function useAddLeadToCustomPipe() {
   });
 }
 
+export interface MoveCustomInput {
+  entry_id: string;
+  pipeline_id: string;
+  stage_id: string;
+}
+
+/**
+ * O move de funil custom, sem cache: etapa → (auto-transição | UPDATE) →
+ * releitura da entrada → integração carteira. Extraído de
+ * `useMoveLeadInCustomPipe` para a página `/funil` reaproveitar a MESMA escrita
+ * sem herdar o `onSuccess` de invalidação ampla (lá o board tem a sua,
+ * restrita — `lib/funil-move-cache`). Permissão é do chamador.
+ *
+ * Três idas sequenciais (etapa, escrita, releitura): juntar exige RPC nova —
+ * follow-up registrado, fora do escopo de front.
+ */
+export async function executarMoveCustom(
+  { entry_id, pipeline_id, stage_id }: MoveCustomInput,
+  organizationId: string,
+): Promise<CustomPipeEntry> {
+  const { data: stageRow, error: stageError } = await supabase
+    .from("pipeline_stages")
+    .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+    .eq("id", stage_id)
+    .eq("pipeline_id", pipeline_id)
+    .eq("organization_id", organizationId)
+    .single();
+  if (stageError) throw stageError;
+
+  let targetPipelineId = stageRow.target_pipeline_id;
+  let targetStage = stageRow.target_stage_id;
+  if (stageRow.is_final_positive && !targetPipelineId && stageRow.target_pipe_type
+      && stageRow.target_stage_key && !stageRow.target_pipe_type.startsWith("upsell_")) {
+    const { data: target, error } = await supabase.from("pipelines").select("id")
+      .eq("organization_id", organizationId)
+      .eq("slug", stageRow.target_pipe_type).eq("is_active", true).single();
+    if (error) throw error;
+    targetPipelineId = target.id;
+    targetStage = stageRow.target_stage_key;
+  }
+  if (stageRow.is_final_positive && targetPipelineId && targetStage) {
+    // Origem e destino na mesma transação e na mesma posição.
+    await moverNegocio({ entryId: entry_id, targetPipelineId,
+      targetStageKey: targetStage, stageOrigem: stageRow.stage_key });
+  } else {
+    await updateCustomPipelineEntry(entry_id, {
+      stage_id, stage_changed_at: new Date().toISOString(),
+    });
+  }
+  const { data, error } = await supabase.from("pipeline_entries").select("*")
+    .eq("id", entry_id).eq("organization_id", organizationId).single();
+  if (error) throw error;
+  // Carteira não é outro negócio de funil: preserva sua integração.
+  if (stageRow.is_final_positive && data.lead_id && stageRow.target_stage_key) {
+    const field = stageRow.target_pipe_type === "upsell_base" ? "tipo_cliente_tempo"
+      : stageRow.target_pipe_type === "upsell_gestao" ? "gestao_stage" : null;
+    if (field) {
+      const { error: carteiraError } = await supabase.from("upsell_clients")
+        .update({ [field]: stageRow.target_stage_key }).eq("lead_id", data.lead_id)
+        .eq("organization_id", organizationId);
+      if (carteiraError) throw carteiraError;
+    }
+  }
+  return data as CustomPipeEntry;
+}
+
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
@@ -1037,15 +1103,7 @@ export function useMoveLeadInCustomPipe() {
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
-    mutationFn: async ({
-      entry_id,
-      pipeline_id,
-      stage_id,
-    }: {
-      entry_id: string;
-      pipeline_id: string;
-      stage_id: string;
-    }) => {
+    mutationFn: async (input: MoveCustomInput) => {
       if (!teamMember?.organization_id) {
         throw new Error("Organização não encontrada");
       }
@@ -1054,50 +1112,7 @@ export function useMoveLeadInCustomPipe() {
           ? "Permissões ainda carregando — tente novamente"
           : "Sem permissão para mover registros no pipe");
       }
-      const { data: stageRow, error: stageError } = await supabase
-        .from("pipeline_stages")
-        .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
-        .eq("id", stage_id)
-        .eq("pipeline_id", pipeline_id)
-        .eq("organization_id", teamMember.organization_id)
-        .single();
-      if (stageError) throw stageError;
-
-      let targetPipelineId = stageRow.target_pipeline_id;
-      let targetStage = stageRow.target_stage_id;
-      if (stageRow.is_final_positive && !targetPipelineId && stageRow.target_pipe_type
-          && stageRow.target_stage_key && !stageRow.target_pipe_type.startsWith("upsell_")) {
-        const { data: target, error } = await supabase.from("pipelines").select("id")
-          .eq("organization_id", teamMember.organization_id)
-          .eq("slug", stageRow.target_pipe_type).eq("is_active", true).single();
-        if (error) throw error;
-        targetPipelineId = target.id;
-        targetStage = stageRow.target_stage_key;
-      }
-      if (stageRow.is_final_positive && targetPipelineId && targetStage) {
-        // Origem e destino na mesma transação e na mesma posição.
-        await moverNegocio({ entryId: entry_id, targetPipelineId,
-          targetStageKey: targetStage, stageOrigem: stageRow.stage_key });
-      } else {
-        await updateCustomPipelineEntry(entry_id, {
-          stage_id, stage_changed_at: new Date().toISOString(),
-        });
-      }
-      const { data, error } = await supabase.from("pipeline_entries").select("*")
-        .eq("id", entry_id).eq("organization_id", teamMember.organization_id).single();
-      if (error) throw error;
-      // Carteira não é outro negócio de funil: preserva sua integração.
-      if (stageRow.is_final_positive && data.lead_id && stageRow.target_stage_key) {
-        const field = stageRow.target_pipe_type === "upsell_base" ? "tipo_cliente_tempo"
-          : stageRow.target_pipe_type === "upsell_gestao" ? "gestao_stage" : null;
-        if (field) {
-          const { error: carteiraError } = await supabase.from("upsell_clients")
-            .update({ [field]: stageRow.target_stage_key }).eq("lead_id", data.lead_id)
-            .eq("organization_id", teamMember.organization_id);
-          if (carteiraError) throw carteiraError;
-        }
-      }
-      return data as CustomPipeEntry;
+      return executarMoveCustom(input, teamMember.organization_id);
     },
     onSuccess: (data, variables) => {
       invalidateAfterMove(queryClient, data.lead_id ?? undefined);

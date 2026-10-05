@@ -72,7 +72,16 @@ import { useMoverCardNoFunil } from "@/modules/pipelines/hooks/model/usePaginate
 import { useUpdatePipeConfirmacao } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
 import { patchEntryMetadata } from "@/modules/pipelines/lib/entry-metadata";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
-import { moverNegocio, invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
+import { moverNegocio } from "@/modules/pipelines/lib/moverNegocio";
+import {
+  aplicarMoveOtimista,
+  cancelarFetchDoMove,
+  ECO_METADATA_TTL_MS,
+  reconciliarMoveNoFunil,
+  registrarEcoProprio,
+  reverterMoveOtimista,
+  type MoveOtimista,
+} from "@/modules/pipelines/lib/funil-move-cache";
 import { isWonStageKey, parseSaleValue } from "@/modules/pipelines/lib/sale-value-guard";
 import { useSaleValueGuard } from "@/modules/pipelines/hooks/useSaleValueGuard";
 import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
@@ -239,6 +248,19 @@ export function useFunilMoveFlow({
     [selectedLossReason, lossReasons],
   );
 
+  /**
+   * Recarga pós-move DESTE funil — colunas de origem/destino + contagem; o
+   * resto só marcado como velho (`reconciliarMoveNoFunil`). Substitui o
+   * `invalidateAfterMove`, que refazia ativamente toda coluna de todo board.
+   */
+  const reconciliar = useCallback(
+    (entryId: string, leadId: string | null | undefined, fromStage: string | null, toStage: string) => {
+      if (!pipeline) return;
+      reconciliarMoveNoFunil(queryClient, { pipelineId: pipeline.id, entryId, leadId, fromStage, toStage });
+    },
+    [pipeline, queryClient],
+  );
+
   // ── Pós-move das páginas de sistema: trilha + métrica + automação ────────
   const posMoveSistema = useCallback(
     (entry: FunilFlowEntry, stage: CustomPipelineStage, extraTrackMeta?: Record<string, unknown>) => {
@@ -284,6 +306,12 @@ export function useFunilMoveFlow({
    * Passo final de todo fluxo: metadata primeiro (quando houver desfecho),
    * move depois; auto-transição p/ funil custom de destino no fim (família
    * system — o caminho custom já a executa dentro do próprio move).
+   *
+   * Otimismo: o card muda de coluna no cache ANTES da primeira escrita — perda
+   * e venda gravam o metadata antes do move (ordem do ledger), e o usuário não
+   * espera essa ida para ver o card no lugar. Este passo é o dono do rollback
+   * (`otimistaDoChamador`): qualquer falha antes do move concluir devolve o
+   * card à coluna de origem. A ordem das ESCRITAS não muda.
    */
   const completarMove = useCallback(
     async (
@@ -292,9 +320,32 @@ export function useFunilMoveFlow({
       opts: { metadataPatch?: Record<string, unknown>; successToast?: string } = {},
     ) => {
       const entry = findEntry(entryId);
+      let otimista: MoveOtimista | null = null;
+      let moveConcluido = false;
       try {
         if (!movePermission.allowed) throw new Error("Sem permissão para mover registros no pipe");
+        if (pipeline) {
+          await cancelarFetchDoMove(queryClient, {
+            pipelineId: pipeline.id,
+            stages: [entry?.stage_key, stage.stage_key],
+          });
+          otimista = aplicarMoveOtimista(queryClient, {
+            pipelineId: pipeline.id,
+            entryId,
+            toStage: stage.stage_key,
+          });
+        }
         if (opts.metadataPatch && Object.keys(opts.metadataPatch).length > 0) {
+          // O UPDATE do metadata ecoa com a etapa de ORIGEM (o move ainda não
+          // rodou) — esperado, para o Realtime não refazer as colunas por ele.
+          const origem = otimista?.snapshot.fromStage ?? entry?.stage_key;
+          if (pipeline && origem) {
+            registrarEcoProprio(
+              { entryId, pipelineId: pipeline.id, stageKey: origem },
+              Date.now(),
+              ECO_METADATA_TTL_MS,
+            );
+          }
           await patchEntryMetadata(entryId, opts.metadataPatch);
         }
         if (
@@ -313,20 +364,28 @@ export function useFunilMoveFlow({
             targetPipelineId: stage.target_pipeline_id,
             targetStageId: stage.target_stage_id,
           });
-          invalidateAfterMove(queryClient, entry.lead_id);
+          moveConcluido = true;
+          reconciliar(entryId, entry.lead_id, otimista?.snapshot.fromStage ?? entry.stage_key, stage.stage_key);
           toast.success("Negócio movido para o funil de destino automaticamente!");
         } else {
-          await mover.mutateAsync({ entryId, stageId: stage.id, stageKey: stage.stage_key });
+          await mover.mutateAsync({
+            entryId,
+            stageId: stage.id,
+            stageKey: stage.stage_key,
+            otimistaDoChamador: otimista ?? undefined,
+          });
+          moveConcluido = true;
         }
         if (entry) posMoveSistema(entry, stage);
         if (opts.successToast) toast.success(opts.successToast);
       } catch (e) {
+        if (otimista && !moveConcluido) reverterMoveOtimista(queryClient, otimista);
         const msg = e instanceof Error ? e.message : "";
         if (msg.includes("permissão") || msg.includes("Permissões")) toast.error(msg);
         else notifyError(e, { fallback: "Não foi possível mover o lead." });
       }
     },
-    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed],
+    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed, pipeline, reconciliar],
   );
 
   // ── Vendido (won) ────────────────────────────────────────────────────────
@@ -453,7 +512,7 @@ export function useFunilMoveFlow({
           assignedTo: responsibleId,
         });
 
-        invalidateAfterMove(queryClient, entry.lead_id ?? undefined);
+        reconciliar(entryId, entry.lead_id, entry.stage_key, stage.stage_key);
 
         if (entry.lead_id) {
           logAction({
@@ -479,7 +538,7 @@ export function useFunilMoveFlow({
         setProcessingCompareceu(false);
       }
     },
-    [pendingCompareceu, pipeline, pipelines, displayConfigs, updateEntryConfirmacao, queryClient, logAction, organizationId],
+    [pendingCompareceu, pipeline, pipelines, displayConfigs, updateEntryConfirmacao, reconciliar, logAction, organizationId],
   );
 
   // ── O interceptador ──────────────────────────────────────────────────────
@@ -725,8 +784,10 @@ export function useFunilMoveFlow({
         }
         onSuccess={() => {
           setPendingReschedule(null);
-          queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
-          queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+          // A etapa sai da data (D-x) — destino desconhecido aqui, então o
+          // funil inteiro; só ESTE funil, nunca o prefixo de todos os boards.
+          queryClient.invalidateQueries({ queryKey: ["pipeline-page", pipeline?.id] });
+          queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", pipeline?.id] });
         }}
       />
 
@@ -756,7 +817,12 @@ export function useFunilMoveFlow({
               // Efeitos de LEITURA apenas — o UPDATE da origem já rodou no
               // beforeSubmit e o move no modal (ADR-0023 d4).
               posMoveSistema(pending.entry, pending.stage, { moved_to_pipe: "confirmacao" });
-              invalidateAfterMove(queryClient, pending.entry.lead_id ?? undefined);
+              reconciliar(
+                pending.entryId,
+                pending.entry.lead_id,
+                pending.entry.stage_key,
+                pending.stage.stage_key,
+              );
               toast.success(
                 `Reunião agendada e negócio movido para ${
                   nomeDoFunil(

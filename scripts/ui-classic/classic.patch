@@ -1,3 +1,2016 @@
+diff --git a/classic/src/lib/analytics.ts b/classic/src/lib/analytics.ts
+index 9650d31ea..ccdced535 100644
+--- a/classic/src/lib/analytics.ts
++++ b/classic/src/lib/analytics.ts
+@@ -42,8 +42,15 @@ export function track(params: TrackParams): void {
+ 
+ async function trackAsync(params: TrackParams): Promise<void> {
+   try {
+-    const { data: { user } } = await supabase.auth.getUser();
+-    if (!user || !params.organizationId) return;
++    if (!params.organizationId) return;
++    // Sessão em cache, não `getUser()`: este caminho roda a cada evento e o
++    // `getUser()` é uma ida a `/auth/v1/user` por chamada (274–395/h por
++    // usuário em prod, 2026-10-05). O `user_id` aqui é só atribuição — quem
++    // garante que ele é o do chamador é a RLS do INSERT, com o JWT da própria
++    // requisição; validar o token no servidor antes não acrescenta nada.
++    const { data: { session } } = await supabase.auth.getSession();
++    const user = session?.user;
++    if (!user) return;
+ 
+     await supabase.from("usage_events").insert({
+       organization_id: params.organizationId,
+diff --git a/classic/src/lib/realtimeStatusStore.ts b/classic/src/lib/realtimeStatusStore.ts
+index 2898149d1..c500d8e38 100644
+--- a/classic/src/lib/realtimeStatusStore.ts
++++ b/classic/src/lib/realtimeStatusStore.ts
+@@ -13,6 +13,7 @@ export type RealtimeChannelState =
+   | "joining"
+   | "joined"
+   | "reconnecting"
++  | "errored"       // CHANNEL_ERROR/TIMED_OUT abaixo do limiar do breaker — em backoff
+   | "polling"       // circuit breaker tripped — polling is primary
+   | "offline"
+   | "unknown";
+@@ -29,6 +30,19 @@ export type ChannelStatus = {
+   state: RealtimeChannelState;
+   lastEventAt: number | null;
+   lastTransitionAt: number;
++  /**
++   * Desde quando o canal está fora de "joined". Diferente de
++   * `lastTransitionAt`, NÃO reinicia entre estados não saudáveis (o backoff
++   * alterna errored ↔ joining a cada tentativa). É o relógio dos degraus de
++   * fallback em `reconcilePolicy.ts`. Sem significado enquanto "joined".
++   */
++  unhealthySince: number;
++  /**
++   * Quantas vezes o canal entrou em "joined" — inclusive "joined" repetido.
++   * Subir além de 1 = reconexão: eventos da queda se perderam. Assinado por
++   * `useWhatsAppMessagesRealtime` → `chatReconcile.ts`.
++   */
++  joinCount: number;
+   reconnectCount: number;
+   consecutiveFailures: number;
+   circuitOpen: boolean;
+@@ -36,16 +50,21 @@ export type ChannelStatus = {
+   diagnostics: DiagnosticEvent[];
+ };
+ 
+-const initialStatus = (): ChannelStatus => ({
+-  state: "unknown",
+-  lastEventAt: null,
+-  lastTransitionAt: Date.now(),
+-  reconnectCount: 0,
+-  consecutiveFailures: 0,
+-  circuitOpen: false,
+-  lastReason: null,
+-  diagnostics: [],
+-});
++const initialStatus = (): ChannelStatus => {
++  const agora = Date.now();
++  return {
++    state: "unknown",
++    lastEventAt: null,
++    lastTransitionAt: agora,
++    unhealthySince: agora,
++    joinCount: 0,
++    reconnectCount: 0,
++    consecutiveFailures: 0,
++    circuitOpen: false,
++    lastReason: null,
++    diagnostics: [],
++  };
++};
+ 
+ const channels = new Map<string, ChannelStatus>();
+ const listeners = new Map<string, Set<() => void>>();
+@@ -76,11 +95,21 @@ export function setChannelState(
+   reason?: string,
+ ): void {
+   const prev = getOrInitStatus(name);
+-  if (prev.state === state && !reason) return;
++  if (prev.state === state && !reason) {
++    // "joined" repetido é uma RECONEXÃO, não ruído: conta e avisa.
++    if (state !== "joined") return;
++    channels.set(name, { ...prev, joinCount: prev.joinCount + 1 });
++    emit(name);
++    return;
++  }
++  const agora = Date.now();
+   const next: ChannelStatus = {
+     ...prev,
+     state,
+-    lastTransitionAt: Date.now(),
++    lastTransitionAt: agora,
++    unhealthySince:
++      prev.state === "joined" && state !== "joined" ? agora : prev.unhealthySince,
++    joinCount: state === "joined" ? prev.joinCount + 1 : prev.joinCount,
+     reconnectCount:
+       state === "reconnecting" ? prev.reconnectCount + 1 : prev.reconnectCount,
+     lastReason: reason ?? prev.lastReason,
+diff --git a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx b/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
+index e6b5a8c89..39071a847 100644
+--- a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
++++ b/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
+@@ -5,6 +5,7 @@
+  *   joined          → green  "Ao vivo"
+  *   joining         → amber  "Conectando"
+  *   reconnecting    → amber  "Reconectando"
++ *   errored         → amber  "Reconectando" (falha abaixo do limiar, em backoff)
+  *   polling         → orange "Polling"     (circuit breaker tripped)
+  *   offline         → red    "Offline"
+  *
+@@ -39,6 +40,7 @@ function classify(
+         tooltip: "Estabelecendo conexao de tempo real.",
+       };
+     case "reconnecting":
++    case "errored":
+       return {
+         variant: "pending",
+         label: "Reconectando",
+@@ -50,7 +52,7 @@ function classify(
+       return {
+         variant: "polling",
+         label: "Polling",
+-        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens a cada 10s.`,
++        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens periodicamente.`,
+       };
+     case "offline":
+       return {
+diff --git a/classic/src/modules/communication/hooks/chat/chatReconcile.ts b/classic/src/modules/communication/hooks/chat/chatReconcile.ts
+new file mode 100644
+index 000000000..d492b2fb6
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/chatReconcile.ts
+@@ -0,0 +1,141 @@
++/**
++ * Reconciliação do chat por EVENTO, com teto de vazão — espelho de
++ * `unreadRefresh.ts` (mesmo throttle, mesma regra de aba oculta).
++ *
++ * ─── POR QUE ISTO EXISTE (incidente OOM 2026-10-05) ─────────────────────────
++ *
++ * O polling do chat passou a ser LENTO (`reconcilePolicy.ts`: 120 s na thread,
++ * 300 s na lista com canal saudável). O que sustenta a latência baixa agora são
++ * os momentos em que há motivo real para desconfiar do cache:
++ *
++ *   1. o canal RECONECTOU (`joinCount` subiu): eventos emitidos durante a queda
++ *      se perderam — o postgres_changes não reenvia;
++ *   2. chegou mensagem de um contato que a lista em cache não tem (Fase B):
++ *      não há linha para patchar, só a RPC sabe montar a conversa nova.
++ *
++ * ─── O TETO ─────────────────────────────────────────────────────────────────
++ *
++ * Throttle de borda dupla (`criarThrottle`), UM por QueryClient (= um por aba)
++ * e por alvo, janela de 15 s: evento isolado reage na hora; rajada colapsa em
++ * no máximo 1 disparo extra por janela.
++ *
++ * `cancelRefetch: false` em toda invalidação: se a query já está buscando, o
++ * pedido pega carona no fetch em voo em vez de cancelá-lo e abrir outro —
++ * cancelar uma RPC de 11–15 s no pico e recomeçar é pagar duas vezes.
++ */
++import type { QueryClient, QueryKey } from "@tanstack/react-query";
++import { criarThrottle, type Relogio, type Throttle } from "./unreadRefresh";
++
++/** Teto de vazão: no máximo uma reconciliação por alvo por aba a cada 15 s. */
++export const CHAT_RECONCILE_MIN_INTERVAL_MS = 15_000;
++
++const relogioReal: Relogio = {
++  now: () => Date.now(),
++  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
++  clearTimeout: (handle) =>
++    globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
++};
++
++function abaEscondida(): boolean {
++  return typeof document !== "undefined" && document.visibilityState === "hidden";
++}
++
++function invalidar(queryClient: QueryClient, queryKey: QueryKey): void {
++  void queryClient.invalidateQueries(
++    { queryKey, refetchType: abaEscondida() ? "none" : "active" },
++    { cancelRefetch: false },
++  );
++}
++
++/**
++ * Throttles por QueryClient e por alvo. WeakMap pelo mesmo motivo de
++ * `unreadRefresh.ts`: cada teste cria o seu QueryClient, e um throttle global
++ * vazaria a janela de um caso para o seguinte.
++ */
++const throttles = new WeakMap<QueryClient, Map<string, Throttle>>();
++
++function pedir(
++  queryClient: QueryClient,
++  alvo: string,
++  executar: () => void,
++  relogio: Relogio,
++): void {
++  let porAlvo = throttles.get(queryClient);
++  if (!porAlvo) {
++    porAlvo = new Map();
++    throttles.set(queryClient, porAlvo);
++  }
++  let throttle = porAlvo.get(alvo);
++  if (!throttle) {
++    throttle = criarThrottle(executar, CHAT_RECONCILE_MIN_INTERVAL_MS, relogio);
++    porAlvo.set(alvo, throttle);
++  }
++  throttle.request();
++}
++
++/**
++ * Reconcilia thread e lista da org inteira — as raízes `whatsapp_messages` e
++ * `whatsapp_contacts`, sempre com a org na chave (multi-tenant).
++ */
++export function pedirReconciliacaoDoChat(
++  queryClient: QueryClient,
++  organizationId: string,
++  relogio: Relogio = relogioReal,
++): void {
++  pedir(
++    queryClient,
++    `chat:${organizationId}`,
++    () => {
++      invalidar(queryClient, ["whatsapp_messages", organizationId]);
++      invalidar(queryClient, ["whatsapp_contacts", organizationId]);
++    },
++    relogio,
++  );
++}
++
++/** Último `joinCount` já tratado, por QueryClient e org. */
++const joinsTratados = new WeakMap<QueryClient, Map<string, number>>();
++
++/**
++ * Chamado quando o `joinCount` do canal de mensagens muda.
++ *
++ * - `joinCount === 1` é o primeiro join da aba: o cache acabou de nascer, não
++ *   há o que reconciliar.
++ * - O status do canal é compartilhado por dois montadores (bolha e /chat). Os
++ *   dois veem o MESMO `joinCount`; só o primeiro a tratar dispara.
++ */
++export function reconciliarAposReconexao(
++  queryClient: QueryClient,
++  organizationId: string,
++  joinCount: number,
++  relogio: Relogio = relogioReal,
++): void {
++  let porOrg = joinsTratados.get(queryClient);
++  if (!porOrg) {
++    porOrg = new Map();
++    joinsTratados.set(queryClient, porOrg);
++  }
++  const tratado = porOrg.get(organizationId) ?? 0;
++  if (joinCount <= tratado) return;
++  porOrg.set(organizationId, joinCount);
++  if (joinCount <= 1) return;
++  pedirReconciliacaoDoChat(queryClient, organizationId, relogio);
++}
++
++/**
++ * Mensagem de contato que a lista em cache não tem: refaz AQUELA lista, pelo
++ * teto. Borda de ataque mantém o evento isolado instantâneo; rajada (campanha
++ * respondida, por exemplo) colapsa em 1 por janela.
++ */
++export function pedirReconciliacaoDaLista(
++  queryClient: QueryClient,
++  queryKey: QueryKey,
++  relogio: Relogio = relogioReal,
++): void {
++  pedir(
++    queryClient,
++    `lista:${JSON.stringify(queryKey)}`,
++    () => invalidar(queryClient, queryKey),
++    relogio,
++  );
++}
+diff --git a/classic/src/modules/communication/hooks/chat/reconcilePolicy.ts b/classic/src/modules/communication/hooks/chat/reconcilePolicy.ts
+new file mode 100644
+index 000000000..29dbc18c8
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/reconcilePolicy.ts
+@@ -0,0 +1,124 @@
++/**
++ * Política de reconciliação do chat — QUANTO esperar entre dois refetches de
++ * segurança. Função pura, sem React, sem relógio próprio.
++ *
++ * ─── POR QUE ISTO EXISTE (incidente OOM 2026-10-05) ─────────────────────────
++ *
++ * O chat fazia polling de 10 s quando o realtime estava doente e 20 s quando
++ * saudável. Isso é o desenho ao contrário: quando o banco aperta, o realtime
++ * cai, e TODA aba aberta passa a consultar mais rápido — exatamente quando o
++ * banco tem menos folga. Aqui o polling só desacelera sob carga:
++ *
++ *   saudável (canal "joined"):  thread 120 s · lista 300 s
++ *   em fallback, por tempo desde a entrada:
++ *     thread  <60 s → 30 s · <180 s → 60 s · depois 120 s (teto)
++ *     lista   <60 s → 60 s · <180 s → 120 s · depois 300 s (teto)
++ *
++ * Degrau por TEMPO e não por número de falhas: o circuit breaker abre na 5ª
++ * falha e estaciona em cooldown — contar falhas pararia de subir justo ali.
++ *
++ * ─── O JITTER ───────────────────────────────────────────────────────────────
++ *
++ * Só ADITIVO, 0..+25%. Os pisos acima valem literalmente: jitter nunca puxa
++ * para baixo. E DETERMINÍSTICO: o TanStack v5 recalcula `refetchInterval` a
++ * cada render e REINICIA o timer quando o valor muda — `Math.random()` por
++ * render faria o poll nunca disparar. A semente é `misturarSemente(semente da
++ * aba, query.state.dataUpdatedAt)`: estável entre dois fetches, nova a cada
++ * fetch, diferente entre abas (dessincroniza a frota).
++ */
++
++export type PerfilDeReconciliacao = "thread" | "lista";
++
++/** Nada, em estado nenhum, consulta mais rápido que isto. */
++export const PISO_ABSOLUTO_MS = 10_000;
++
++/** Teto do jitter, como fração do intervalo base. Só soma. */
++export const JITTER_MAX_FRACAO = 0.25;
++
++/** Intervalo com o canal saudável. É também o piso do caminho saudável. */
++export const PISO_SAUDAVEL_MS: Readonly<Record<PerfilDeReconciliacao, number>> = {
++  thread: 120_000,
++  lista: 300_000,
++};
++
++/** Primeiro degrau do fallback (o mais rápido que o fallback chega). */
++export const PISO_FALLBACK_MS: Readonly<Record<PerfilDeReconciliacao, number>> = {
++  thread: 30_000,
++  lista: 60_000,
++};
++
++/** Último degrau do fallback. */
++export const TETO_FALLBACK_MS: Readonly<Record<PerfilDeReconciliacao, number>> = {
++  thread: 120_000,
++  lista: 300_000,
++};
++
++const DEGRAU_INTERMEDIARIO_MS: Readonly<Record<PerfilDeReconciliacao, number>> = {
++  thread: 60_000,
++  lista: 120_000,
++};
++
++/** Fronteiras dos degraus, em tempo decorrido desde a entrada no fallback. */
++const FIM_DO_PRIMEIRO_DEGRAU_MS = 60_000;
++const FIM_DO_SEGUNDO_DEGRAU_MS = 180_000;
++
++export interface EntradaDeReconciliacao {
++  perfil: PerfilDeReconciliacao;
++  /** Canal "joined". Todo o resto — inclusive "errored" — é não saudável. */
++  saudavel: boolean;
++  /**
++   * Instante em que o fallback começou, ou `null` se não está em fallback
++   * (saudável, ou ainda na carência de 10 s).
++   */
++  emFallbackDesdeMs: number | null;
++  agoraMs: number;
++  /** uint32. Ver `misturarSemente`. */
++  semente: number;
++}
++
++function baseDoFallback(perfil: PerfilDeReconciliacao, decorridoMs: number): number {
++  if (decorridoMs < FIM_DO_PRIMEIRO_DEGRAU_MS) return PISO_FALLBACK_MS[perfil];
++  if (decorridoMs < FIM_DO_SEGUNDO_DEGRAU_MS) return DEGRAU_INTERMEDIARIO_MS[perfil];
++  return TETO_FALLBACK_MS[perfil];
++}
++
++/** Fração em [0, 1) derivada da semente. */
++function fracaoDaSemente(semente: number): number {
++  return (fmix32(semente >>> 0) >>> 0) / 2 ** 32;
++}
++
++export function intervaloDeReconciliacao(entrada: EntradaDeReconciliacao): number {
++  const { perfil, saudavel, emFallbackDesdeMs, agoraMs, semente } = entrada;
++
++  const base =
++    saudavel || emFallbackDesdeMs === null
++      ? PISO_SAUDAVEL_MS[perfil]
++      : // Relógio que voltou (desde > agora) conta como recém-entrado.
++        baseDoFallback(perfil, Math.max(0, agoraMs - emFallbackDesdeMs));
++
++  const comJitter = Math.floor(base * (1 + JITTER_MAX_FRACAO * fracaoDaSemente(semente)));
++  return Math.max(PISO_ABSOLUTO_MS, comJitter);
++}
++
++/** Finalizador do MurmurHash3: espalha bits de um uint32. */
++function fmix32(h: number): number {
++  h ^= h >>> 16;
++  h = Math.imul(h, 0x85ebca6b);
++  h ^= h >>> 13;
++  h = Math.imul(h, 0xc2b2ae35);
++  h ^= h >>> 16;
++  return h >>> 0;
++}
++
++/**
++ * Combina a semente fixa da aba com `dataUpdatedAt` num uint32.
++ * `dataUpdatedAt` passa de 2^32 (ms desde 1970), então entram as duas metades.
++ */
++export function misturarSemente(sementeDaAba: number, dataUpdatedAt: number): number {
++  const baixo = dataUpdatedAt >>> 0;
++  const alto = Math.floor(dataUpdatedAt / 2 ** 32) >>> 0;
++  let h = fmix32((sementeDaAba >>> 0) ^ 0x9e3779b9);
++  h = fmix32(h ^ baixo);
++  h = fmix32(h ^ alto);
++  return h;
++}
+diff --git a/classic/src/modules/communication/hooks/chat/shared/realtimeUpdate.ts b/classic/src/modules/communication/hooks/chat/shared/realtimeUpdate.ts
+new file mode 100644
+index 000000000..d0aca73e1
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/shared/realtimeUpdate.ts
+@@ -0,0 +1,39 @@
++/**
++ * Funde um UPDATE do Realtime na linha que já está no cache.
++ *
++ * O Realtime NÃO manda a linha inteira num UPDATE. Coluna em TOAST que o UPDATE
++ * não mudou (o `raw_payload` de ~2 kB num UPDATE de `status`) chega AUSENTE:
++ *   - wal2json format-version 2 pula "unchanged TOAST Datum" (wal2json.c,
++ *     "don't send unchanged TOAST Datum");
++ *   - `realtime.apply_rls` tenta recuperá-la do registro antigo, que com
++ *     REPLICA IDENTITY DEFAULT (whatsapp_messages em prod) só traz a PK.
++ * Não há placeholder (`unchanged_toast`): a chave simplesmente não vem.
++ *
++ * Substituir a linha por `payload.new` apagava o `raw_payload` — e com ele o
++ * menu, os botões e o pix da bolha — a cada mudança de status. Por isso:
++ *   - chave ausente ou `undefined` → mantém o valor do cache;
++ *   - `null` explícito → sobrescreve (é mudança real, ex.: `deleted_at`).
++ *
++ * As projeções `uazapi_*` vêm do SELECT (`raw_payload->...`, ver
++ * whatsappMessagesQuery.ts) e têm PRECEDÊNCIA sobre `raw_payload` nos leitores
++ * (uazapiMenuDisplay, uazapiButtonsDisplay, uazapiPixDisplay). O Realtime nunca
++ * as manda. Quando o UPDATE traz um `raw_payload` novo, as projeções do cache
++ * ficaram velhas: descartá-las deixa o leitor cair no `raw_payload` novo em vez
++ * de mostrar o menu antigo.
++ */
++const PROJECAO_DO_RAW_PAYLOAD = /^uazapi_/;
++
++export function mergeRealtimeUpdate<T extends object>(prev: T, incoming: Partial<T>): T {
++  const merged = { ...prev };
++  const rawPayloadNovo = (incoming as Record<string, unknown>).raw_payload !== undefined;
++  if (rawPayloadNovo) {
++    for (const key of Object.keys(merged)) {
++      if (PROJECAO_DO_RAW_PAYLOAD.test(key)) delete (merged as Record<string, unknown>)[key];
++    }
++  }
++  for (const key of Object.keys(incoming) as Array<keyof T>) {
++    const value = incoming[key];
++    if (value !== undefined) merged[key] = value as T[keyof T];
++  }
++  return merged;
++}
+diff --git a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts b/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
+index bb01d8031..5ee0295ff 100644
+--- a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
++++ b/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
+@@ -73,6 +73,7 @@ import {
+ import { chatQueryKeys } from "./shared/queryKeys";
+ import { enriquecerContatos } from "./shared/enriquecerContatos";
+ import { boxUsesChannelMessages } from "./inbox-box-source";
++import { useReconcileInterval } from "./useRealtimeFallback";
+ import { toSocialContact, type SocialConversationRow } from "./social-conversation-row";
+ import type { ChatContact, InboxBox, SocialContact } from "./types";
+ 
+@@ -183,6 +184,7 @@ export function useConversasUnificadas(
+ ): UseConversasUnificadasResult {
+   const { data: teamMember } = useCurrentTeamMember();
+   const organizationId = teamMember?.organization_id ?? null;
++  const intervaloDaLista = useReconcileInterval("lista", organizationId);
+ 
+   const filterArgs = serverFilter?.args ?? null;
+   const limiteChip = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
+@@ -301,6 +303,12 @@ export function useConversasUnificadas(
+     },
+     enabled: !!organizationId && idsChip.length > 0,
+     staleTime: 30_000,
++    // Rede contra evento realtime perdido — antes desta trilha a lista do
++    // /chat NÃO tinha backstop nenhum: conversa nova com evento dropado só
++    // aparecia no F5. 300 s saudável (a RPC custa 11–15 s no pico), degraus
++    // 60→120→300 s em fallback. Ver `reconcilePolicy.ts`.
++    refetchInterval: intervaloDaLista,
++    refetchOnWindowFocus: true,
+   });
+ 
+   const queryOficiais = useQuery({
+diff --git a/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts b/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts
+index 295f32201..44dfe5f20 100644
+--- a/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts
++++ b/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts
+@@ -1,53 +1,109 @@
+ /**
+- * useWhatsAppRealtimeFallback — activates polling when realtime is unhealthy.
++ * Saúde do canal realtime do chat → intervalo de reconciliação.
+  *
+- * Returns { shouldPoll, mode, reason }. Consumers set
+- * `refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false`.
++ * `useReconcileInterval(perfil, org)` devolve a FUNÇÃO que vai em
++ * `refetchInterval` do TanStack. Quem decide o número é `reconcilePolicy.ts`;
++ * aqui só se traduz o estado do canal em "saudável" e "em fallback desde".
+  *
+- * Activation rules:
+- *   - Circuit breaker open (state "polling") → immediate poll
+- *   - Non-healthy state for > 10s → poll as backup
+- *   - State "joined" → no poll
++ * Regras:
++ *   - saudável = canal "joined". Todo o resto — inclusive "errored", que o
++ *     `useRealtimeChannel` grava durante o backoff — é não saudável;
++ *   - circuit breaker aberto (estado "polling") → fallback na hora;
++ *   - outro estado não saudável por ≥ 10 s → fallback.
++ *
++ * Sem tick periódico. O antigo `setInterval` de 5 s re-renderizava todo
++ * consumidor (bolha em toda tela incluída) mesmo com o canal saudável. Agora
++ * o store avisa mudança por `useSyncExternalStore`, e um ÚNICO `setTimeout` é
++ * agendado para o instante em que a carência de 10 s termina.
+  */
+-import { useEffect, useState } from "react";
++import { useCallback, useEffect, useReducer } from "react";
+ import { useWhatsAppRealtimeStatus } from "@/shared/realtime/useRealtimeChannelStatus";
+-import type { RealtimeChannelState } from "@/lib/realtimeStatusStore";
++import type { ChannelStatus, RealtimeChannelState } from "@/lib/realtimeStatusStore";
++import {
++  intervaloDeReconciliacao,
++  misturarSemente,
++  type PerfilDeReconciliacao,
++} from "./reconcilePolicy";
+ 
+ export const FALLBACK_THRESHOLD_MS = 10_000;
+-export const FALLBACK_POLL_INTERVAL_MS = 10_000;
++
+ /**
+- * Backstop de reconciliação aplicado MESMO quando o canal reporta "joined".
+- *
+- * Motivo: sob carga, o `apply_rls()` de `whatsapp_messages` (hot table, ~4.7x
+- * overhead) atrasa/derruba postgres_changes sem derrubar o canal — o estado
+- * fica "joined", `shouldFallback` retorna false e nenhum poll roda, então
+- * mensagens/conversas novas só aparecem no F5. Este intervalo é um refetch de
+- * segurança (belt-and-suspenders) que reconcilia o cache periodicamente. Só
+- * dispara com a aba focada (refetchIntervalInBackground=false, default) → custo
+- * baixo. Mais lento que o poll de fallback pra não pesar no caminho saudável.
++ * Semente fixa desta aba. Sorteada UMA vez no carregamento do módulo — daí
++ * em diante tudo é determinístico (ver `reconcilePolicy.ts`, "O JITTER").
+  */
+-export const JOINED_BACKSTOP_POLL_INTERVAL_MS = 20_000;
+-const TICK_INTERVAL_MS = 5_000;
+-
+-const NON_HEALTHY_STATES: RealtimeChannelState[] = [
+-  "offline",
+-  "reconnecting",
+-  "polling",
+-  "joining",
+-  "unknown",
+-];
++const SEMENTE_DA_ABA = Math.floor(Math.random() * 2 ** 32);
+ 
+ export function shouldFallback(
+   state: RealtimeChannelState,
+   circuitOpen: boolean,
+-  lastTransitionAt: number,
++  unhealthySince: number,
+   now: number,
+   thresholdMs: number = FALLBACK_THRESHOLD_MS,
+ ): boolean {
+   if (state === "joined") return false;
+   if (circuitOpen || state === "polling") return true;
+-  if (!NON_HEALTHY_STATES.includes(state)) return false;
+-  return now - lastTransitionAt >= thresholdMs;
++  return now - unhealthySince >= thresholdMs;
++}
++
++/** Instante em que o fallback começou, ou `null` se não está em fallback. */
++function inicioDoFallback(status: ChannelStatus, now: number): number | null {
++  if (status.state === "joined") return null;
++  if (status.circuitOpen || status.state === "polling") return status.unhealthySince;
++  const vira = status.unhealthySince + FALLBACK_THRESHOLD_MS;
++  return now >= vira ? vira : null;
++}
++
++/**
++ * Estado do canal + início do fallback, re-renderizando no fim da carência.
++ * Nenhum timer vive enquanto o canal está saudável ou já em fallback.
++ */
++function useEstadoDoCanal(organizationId: string | null | undefined) {
++  const status = useWhatsAppRealtimeStatus(organizationId);
++  const [, forcarRender] = useReducer((n: number) => n + 1, 0);
++  const desde = organizationId ? inicioDoFallback(status, Date.now()) : null;
++  const naCarencia = !!organizationId && status.state !== "joined" && desde === null;
++  const fimDaCarencia = status.unhealthySince + FALLBACK_THRESHOLD_MS;
++
++  useEffect(() => {
++    if (!naCarencia) return;
++    const id = setTimeout(forcarRender, Math.max(0, fimDaCarencia - Date.now()));
++    return () => clearTimeout(id);
++  }, [naCarencia, fimDaCarencia]);
++
++  return { status, desde };
++}
++
++/**
++ * O que o intervalo lê da query. Estrutural de propósito: `Query` sem genéricos
++ * é `Query<unknown>`, e uma função que pede `Query<unknown>` não é atribuível a
++ * `refetchInterval` de `useQuery<T>` (parâmetro é contravariante) — o overload
++ * falha e a inferência de `data` da query inteira cai para `{}`.
++ */
++export type QueryComDataUpdatedAt = { state: { dataUpdatedAt: number } };
++
++/**
++ * `refetchInterval` do chat. A função depende só de `query.state.dataUpdatedAt`
++ * e do estado do canal: dois renders entre os mesmos dois fetches devolvem o
++ * MESMO número — o TanStack reinicia o timer quando o valor muda.
++ */
++export function useReconcileInterval(
++  perfil: PerfilDeReconciliacao,
++  organizationId: string | null | undefined,
++): (query: QueryComDataUpdatedAt) => number {
++  const { status, desde } = useEstadoDoCanal(organizationId);
++  const saudavel = status.state === "joined";
++
++  return useCallback(
++    (query: QueryComDataUpdatedAt) =>
++      intervaloDeReconciliacao({
++        perfil,
++        saudavel,
++        emFallbackDesdeMs: desde,
++        agoraMs: Date.now(),
++        semente: misturarSemente(SEMENTE_DA_ABA, query.state.dataUpdatedAt),
++      }),
++    [perfil, saudavel, desde],
++  );
+ }
+ 
+ export type FallbackMode = "realtime" | "polling" | "connecting" | "offline";
+@@ -58,33 +114,26 @@ export type FallbackResult = {
+   reason: string | null;
+ };
+ 
++/** Leitura do estado do canal para UI/diagnóstico. Não decide intervalo. */
+ export function useWhatsAppRealtimeFallback(
+   organizationId: string | null | undefined,
+ ): FallbackResult {
+-  const status = useWhatsAppRealtimeStatus(organizationId);
+-  const [now, setNow] = useState(() => Date.now());
+-
+-  useEffect(() => {
+-    if (!organizationId) return;
+-    const id = setInterval(() => setNow(Date.now()), TICK_INTERVAL_MS);
+-    return () => clearInterval(id);
+-  }, [organizationId]);
++  const { status, desde } = useEstadoDoCanal(organizationId);
+ 
+   if (!organizationId) {
+     return { shouldPoll: false, mode: "offline", reason: null };
+   }
+ 
+-  const poll = shouldFallback(
+-    status.state,
+-    status.circuitOpen,
+-    status.lastTransitionAt,
+-    now,
+-  );
++  const poll = desde !== null;
+ 
+   let mode: FallbackMode;
+   if (status.state === "joined") mode = "realtime";
+   else if (poll) mode = "polling";
+-  else if (status.state === "joining" || status.state === "reconnecting")
++  else if (
++    status.state === "joining" ||
++    status.state === "reconnecting" ||
++    status.state === "errored"
++  )
+     mode = "connecting";
+   else mode = "offline";
+ 
+diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts
+index 30d81769d..df9ef18dd 100644
+--- a/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts
++++ b/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts
+@@ -22,11 +22,7 @@ import {
+   IN_CHUNK_SIZE_FANOUT,
+ } from "@/shared/supabase/selectInChunks";
+ import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
+-import {
+-  useWhatsAppRealtimeFallback,
+-  FALLBACK_POLL_INTERVAL_MS,
+-  JOINED_BACKSTOP_POLL_INTERVAL_MS,
+-} from "./useRealtimeFallback";
++import { useReconcileInterval } from "./useRealtimeFallback";
+ 
+ const normalizePhone = (p: string) => {
+   let cleaned = p.replace(/\D/g, "");
+@@ -67,7 +63,7 @@ export function useWhatsAppContacts(
+ ) {
+   const { data: teamMember } = useCurrentTeamMember();
+   const organizationId = teamMember?.organization_id;
+-  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
++  const refetchInterval = useReconcileInterval("lista", organizationId);
+ 
+   const filterArgs = serverFilter?.args ?? null;
+   const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
+@@ -476,9 +472,9 @@ export function useWhatsAppContacts(
+     // A lista lê da tabela-resumo `whatsapp_conversation_summary`, que NÃO está
+     // na publicação realtime — depende do evento de `whatsapp_messages` disparar
+     // o invalidate embutido. Se esse evento é dropado (apply_rls sob carga), a
+-    // conversa nova só aparece no F5. Backstop reconcilia mesmo com canal saudável.
+-    refetchInterval: shouldPoll
+-      ? FALLBACK_POLL_INTERVAL_MS
+-      : JOINED_BACKSTOP_POLL_INTERVAL_MS,
++    // conversa nova só aparece no F5. Backstop reconcilia mesmo com canal
++    // saudável — 300 s, degraus 60→120→300 s em fallback (reconcilePolicy.ts).
++    refetchInterval,
++    refetchOnWindowFocus: true,
+   });
+ }
+diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppMessages.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppMessages.ts
+index ac7082393..03adf0ab5 100644
+--- a/classic/src/modules/communication/hooks/chat/useWhatsAppMessages.ts
++++ b/classic/src/modules/communication/hooks/chat/useWhatsAppMessages.ts
+@@ -4,13 +4,13 @@ import { useCurrentTeamMember } from '@/modules/identity';
+ import { fetchConversationMessages, isPersistedMessage, MESSAGE_PAGE_SIZE } from '@/modules/communication/lib/whatsappMessagesQuery';
+ import { compareMessages, mergeConcurrentMessages, mergeMessagePages, reconcileConversation, type ThreadSnapshot } from '@/modules/communication/lib/whatsappReconciliation';
+ import { chatQueryKeys } from './shared/queryKeys';
+-import { useWhatsAppRealtimeFallback, FALLBACK_POLL_INTERVAL_MS, JOINED_BACKSTOP_POLL_INTERVAL_MS } from './useRealtimeFallback';
++import { useReconcileInterval } from './useRealtimeFallback';
+ 
+ export function useWhatsAppMessages(phoneNumber: string | null, instanceId: string | null) {
+   const queryClient = useQueryClient();
+   const { data: teamMember } = useCurrentTeamMember();
+   const organizationId = teamMember?.organization_id;
+-  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
++  const refetchInterval = useReconcileInterval('thread', organizationId);
+   const key = chatQueryKeys.messages(organizationId, phoneNumber, instanceId);
+   const snapshotKey = ['whatsapp_thread_snapshot', ...key];
+   const pageKey = ['whatsapp_thread_pagination', ...key];
+@@ -37,7 +37,15 @@ export function useWhatsAppMessages(phoneNumber: string | null, instanceId: stri
+       return mergeConcurrentMessages(before, result.messages, live);
+     },
+     enabled: !!organizationId && !!phoneNumber && !!instanceId,
+-    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : JOINED_BACKSTOP_POLL_INTERVAL_MS,
++    // Rede final contra evento realtime perdido: 120 s saudável, degraus de
++    // 30→60→120 s em fallback (reconcilePolicy.ts). A latência baixa vem de
++    // reconexão e foco (chatReconcile.ts), não do polling.
++    refetchInterval,
++    // Volta de foco reconcilia; staleTime 30 s impede que trocar de aba dez
++    // vezes vire dez RPCs. Cada refetch é 1 `whatsapp_thread_manifest`, com
++    // atalho `unchanged` por fingerprint.
++    staleTime: 30_000,
++    refetchOnWindowFocus: true,
+   });
+   const older = useMutation({
+     mutationFn: async () => {
+diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppRealtime.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppRealtime.ts
+index f2fec0c89..b23e27012 100644
+--- a/classic/src/modules/communication/hooks/chat/useWhatsAppRealtime.ts
++++ b/classic/src/modules/communication/hooks/chat/useWhatsAppRealtime.ts
+@@ -13,7 +13,7 @@
+  * novo no mesmo índice, e sem `sortContactsByRecency` a conversa que acabou de
+  * receber mensagem não sobe — o "chat não atualiza" que o cliente relata.
+  */
+-import { useRef, useCallback } from "react";
++import { useRef, useCallback, useEffect } from "react";
+ import { useQueryClient } from "@tanstack/react-query";
+ import { useCurrentTeamMember } from "@/modules/identity";
+ import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
+@@ -27,8 +27,12 @@ import {
+   type CacheDeContatos,
+ } from "./shared/cacheDeContatos";
+ import { upsertRealtimeMessage } from "./shared/optimistic-messages";
++import { mergeRealtimeUpdate } from "./shared/realtimeUpdate";
+ import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
+ import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
++import { pedirReconciliacaoDaLista, reconciliarAposReconexao } from "./chatReconcile";
++import { getChannelStatus, subscribeChannelStatus } from "@/lib/realtimeStatusStore";
++import { whatsAppRealtimeStatusKey } from "@/shared/realtime/useRealtimeChannelStatus";
+ 
+ const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
+ 
+@@ -100,7 +104,9 @@ export function useWhatsAppMessagesRealtime(
+         } else if (eventType === "UPDATE") {
+           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
+             if (!prev) return prev;
+-            return prev.map((m) => (m.id === message.id ? message : m));
++            // Merge, não troca: coluna TOAST inalterada (raw_payload) chega
++            // ausente no UPDATE — ver `mergeRealtimeUpdate`.
++            return prev.map((m) => (m.id === message.id ? mergeRealtimeUpdate(m, message) : m));
+           });
+         } else if (eventType === "DELETE") {
+           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
+@@ -166,7 +172,11 @@ export function useWhatsAppMessagesRealtime(
+           );
+ 
+           if (existingIdx === -1) {
+-            queryClient.invalidateQueries({ queryKey: query.queryKey });
++            // Contato fora do cache: só a RPC monta a conversa nova. Pelo teto
++            // de `chatReconcile.ts` — evento isolado reage na hora, rajada
++            // (campanha respondida) colapsa em 1 refetch por janela em vez de
++            // 1 RPC de lista por mensagem.
++            pedirReconciliacaoDaLista(queryClient, query.queryKey);
+             continue;
+           }
+ 
+@@ -220,11 +230,32 @@ export function useWhatsAppMessagesRealtime(
+     [organizationId, queryClient],
+   );
+ 
++  // ── Reconexão → reconciliação ─────────────────────────────────────────────
++  //
++  // O postgres_changes não reenvia o que foi emitido durante a queda. Quando o
++  // canal volta a "joined" (o `joinCount` do store sobe), thread e lista são
++  // reconciliadas pelo teto de `chatReconcile.ts`. Assinatura IMPERATIVA no
++  // store, não `useSyncExternalStore`: este hook mora no ChatBubbleProvider,
++  // e re-renderizar o provider a cada transição de status re-renderizaria a
++  // árvore inteira. O 1º join e o mesmo join visto pelos dois montadores
++  // (bolha e /chat) são descartados lá dentro.
++  useEffect(() => {
++    if (!organizationId) return;
++    const statusKey = whatsAppRealtimeStatusKey(organizationId);
++    let ultimo = getChannelStatus(statusKey).joinCount;
++    return subscribeChannelStatus(statusKey, () => {
++      const { joinCount } = getChannelStatus(statusKey);
++      if (joinCount === ultimo) return;
++      ultimo = joinCount;
++      reconciliarAposReconexao(queryClient, organizationId, joinCount);
++    });
++  }, [organizationId, queryClient]);
++
+   useRealtimeChannel({
+     table: "whatsapp_messages",
+     filter: organizationId ? `organization_id=eq.${organizationId}` : undefined,
+     onEvent,
+     enabled: !!organizationId,
+-    statusKey: organizationId ? `whatsapp-messages-patched-${organizationId}` : undefined,
++    statusKey: organizationId ? whatsAppRealtimeStatusKey(organizationId) : undefined,
+   });
+ }
+diff --git a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx b/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
+index 29a8f6333..4e12316b6 100644
+--- a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
++++ b/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
+@@ -72,7 +72,16 @@ import { useMoverCardNoFunil } from "@/modules/pipelines/hooks/model/usePaginate
+ import { useUpdatePipeConfirmacao } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacao";
+ import { patchEntryMetadata } from "@/modules/pipelines/lib/entry-metadata";
+ import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+-import { moverNegocio, invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
++import { moverNegocio } from "@/modules/pipelines/lib/moverNegocio";
++import {
++  aplicarMoveOtimista,
++  cancelarFetchDoMove,
++  ECO_METADATA_TTL_MS,
++  reconciliarMoveNoFunil,
++  registrarEcoProprio,
++  reverterMoveOtimista,
++  type MoveOtimista,
++} from "@/modules/pipelines/lib/funil-move-cache";
+ import { isWonStageKey, parseSaleValue } from "@/modules/pipelines/lib/sale-value-guard";
+ import { useSaleValueGuard } from "@/modules/pipelines/hooks/useSaleValueGuard";
+ import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
+@@ -239,6 +248,19 @@ export function useFunilMoveFlow({
+     [selectedLossReason, lossReasons],
+   );
+ 
++  /**
++   * Recarga pós-move DESTE funil — colunas de origem/destino + contagem; o
++   * resto só marcado como velho (`reconciliarMoveNoFunil`). Substitui o
++   * `invalidateAfterMove`, que refazia ativamente toda coluna de todo board.
++   */
++  const reconciliar = useCallback(
++    (entryId: string, leadId: string | null | undefined, fromStage: string | null, toStage: string) => {
++      if (!pipeline) return;
++      reconciliarMoveNoFunil(queryClient, { pipelineId: pipeline.id, entryId, leadId, fromStage, toStage });
++    },
++    [pipeline, queryClient],
++  );
++
+   // ── Pós-move das páginas de sistema: trilha + métrica + automação ────────
+   const posMoveSistema = useCallback(
+     (entry: FunilFlowEntry, stage: CustomPipelineStage, extraTrackMeta?: Record<string, unknown>) => {
+@@ -284,6 +306,12 @@ export function useFunilMoveFlow({
+    * Passo final de todo fluxo: metadata primeiro (quando houver desfecho),
+    * move depois; auto-transição p/ funil custom de destino no fim (família
+    * system — o caminho custom já a executa dentro do próprio move).
++   *
++   * Otimismo: o card muda de coluna no cache ANTES da primeira escrita — perda
++   * e venda gravam o metadata antes do move (ordem do ledger), e o usuário não
++   * espera essa ida para ver o card no lugar. Este passo é o dono do rollback
++   * (`otimistaDoChamador`): qualquer falha antes do move concluir devolve o
++   * card à coluna de origem. A ordem das ESCRITAS não muda.
+    */
+   const completarMove = useCallback(
+     async (
+@@ -292,9 +320,32 @@ export function useFunilMoveFlow({
+       opts: { metadataPatch?: Record<string, unknown>; successToast?: string } = {},
+     ) => {
+       const entry = findEntry(entryId);
++      let otimista: MoveOtimista | null = null;
++      let moveConcluido = false;
+       try {
+         if (!movePermission.allowed) throw new Error("Sem permissão para mover registros no pipe");
++        if (pipeline) {
++          await cancelarFetchDoMove(queryClient, {
++            pipelineId: pipeline.id,
++            stages: [entry?.stage_key, stage.stage_key],
++          });
++          otimista = aplicarMoveOtimista(queryClient, {
++            pipelineId: pipeline.id,
++            entryId,
++            toStage: stage.stage_key,
++          });
++        }
+         if (opts.metadataPatch && Object.keys(opts.metadataPatch).length > 0) {
++          // O UPDATE do metadata ecoa com a etapa de ORIGEM (o move ainda não
++          // rodou) — esperado, para o Realtime não refazer as colunas por ele.
++          const origem = otimista?.snapshot.fromStage ?? entry?.stage_key;
++          if (pipeline && origem) {
++            registrarEcoProprio(
++              { entryId, pipelineId: pipeline.id, stageKey: origem },
++              Date.now(),
++              ECO_METADATA_TTL_MS,
++            );
++          }
+           await patchEntryMetadata(entryId, opts.metadataPatch);
+         }
+         if (
+@@ -313,20 +364,28 @@ export function useFunilMoveFlow({
+             targetPipelineId: stage.target_pipeline_id,
+             targetStageId: stage.target_stage_id,
+           });
+-          invalidateAfterMove(queryClient, entry.lead_id);
++          moveConcluido = true;
++          reconciliar(entryId, entry.lead_id, otimista?.snapshot.fromStage ?? entry.stage_key, stage.stage_key);
+           toast.success("Negócio movido para o funil de destino automaticamente!");
+         } else {
+-          await mover.mutateAsync({ entryId, stageId: stage.id, stageKey: stage.stage_key });
++          await mover.mutateAsync({
++            entryId,
++            stageId: stage.id,
++            stageKey: stage.stage_key,
++            otimistaDoChamador: otimista ?? undefined,
++          });
++          moveConcluido = true;
+         }
+         if (entry) posMoveSistema(entry, stage);
+         if (opts.successToast) toast.success(opts.successToast);
+       } catch (e) {
++        if (otimista && !moveConcluido) reverterMoveOtimista(queryClient, otimista);
+         const msg = e instanceof Error ? e.message : "";
+         if (msg.includes("permissão") || msg.includes("Permissões")) toast.error(msg);
+         else notifyError(e, { fallback: "Não foi possível mover o lead." });
+       }
+     },
+-    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed],
++    [findEntry, mover, posMoveSistema, ehSystem, organizationId, queryClient, movePermission.allowed, pipeline, reconciliar],
+   );
+ 
+   // ── Vendido (won) ────────────────────────────────────────────────────────
+@@ -453,7 +512,7 @@ export function useFunilMoveFlow({
+           assignedTo: responsibleId,
+         });
+ 
+-        invalidateAfterMove(queryClient, entry.lead_id ?? undefined);
++        reconciliar(entryId, entry.lead_id, entry.stage_key, stage.stage_key);
+ 
+         if (entry.lead_id) {
+           logAction({
+@@ -479,7 +538,7 @@ export function useFunilMoveFlow({
+         setProcessingCompareceu(false);
+       }
+     },
+-    [pendingCompareceu, pipeline, pipelines, displayConfigs, updateEntryConfirmacao, queryClient, logAction, organizationId],
++    [pendingCompareceu, pipeline, pipelines, displayConfigs, updateEntryConfirmacao, reconciliar, logAction, organizationId],
+   );
+ 
+   // ── O interceptador ──────────────────────────────────────────────────────
+@@ -725,8 +784,10 @@ export function useFunilMoveFlow({
+         }
+         onSuccess={() => {
+           setPendingReschedule(null);
+-          queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
+-          queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
++          // A etapa sai da data (D-x) — destino desconhecido aqui, então o
++          // funil inteiro; só ESTE funil, nunca o prefixo de todos os boards.
++          queryClient.invalidateQueries({ queryKey: ["pipeline-page", pipeline?.id] });
++          queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", pipeline?.id] });
+         }}
+       />
+ 
+@@ -756,7 +817,12 @@ export function useFunilMoveFlow({
+               // Efeitos de LEITURA apenas — o UPDATE da origem já rodou no
+               // beforeSubmit e o move no modal (ADR-0023 d4).
+               posMoveSistema(pending.entry, pending.stage, { moved_to_pipe: "confirmacao" });
+-              invalidateAfterMove(queryClient, pending.entry.lead_id ?? undefined);
++              reconciliar(
++                pending.entryId,
++                pending.entry.lead_id,
++                pending.entry.stage_key,
++                pending.stage.stage_key,
++              );
+               toast.success(
+                 `Reunião agendada e negócio movido para ${
+                   nomeDoFunil(
+diff --git a/classic/src/modules/pipelines/hooks/config/useFunilMetrics.ts b/classic/src/modules/pipelines/hooks/config/useFunilMetrics.ts
+index e89899884..8f005cb28 100644
+--- a/classic/src/modules/pipelines/hooks/config/useFunilMetrics.ts
++++ b/classic/src/modules/pipelines/hooks/config/useFunilMetrics.ts
+@@ -34,6 +34,7 @@ import { useOrganization } from "@/modules/identity";
+ import type { DateRange } from "@/lib/metrics-period";
+ import { usePipelines } from "../model/usePipelines";
+ import { useStagesDoFunil } from "../model/useStagesDoFunil";
++import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
+ import {
+   usePipeWhatsappMetrics,
+   usePipeConfirmacaoMetrics,
+@@ -88,38 +89,21 @@ export function useFunilMetrics(
+     [stages],
+   );
+ 
++  // Mesma chave/busca do board (`stage-counts-query`): sem filtro no quadro,
++  // cabeçalho e badges pedem o MESMO recorte e a RPC roda uma vez só.
++  const genericArgs = useMemo(
++    () => ({
++      p_pipeline_id: pipelineId ?? "",
++      p_org_id: organizationId ?? "",
++      p_period_after: range?.startStr ?? null,
++      p_period_before: range?.endStr ?? null,
++      p_closed_status_keys: closedKeys.length ? closedKeys : null,
++    }),
++    [pipelineId, organizationId, range?.startStr, range?.endStr, closedKeys],
++  );
+   const genericQuery = useQuery({
+-    queryKey: [
+-      "funil-generic-metrics",
+-      pipelineId,
+-      range?.startStr ?? "all",
+-      range?.endStr ?? "all",
+-      closedKeys,
+-      organizationId,
+-    ],
+-    queryFn: async (): Promise<Record<string, number>> => {
+-      // Ponte de tipo até o regen: get_pipeline_stage_counts_by_id
+-      // (20270908003000) é mais nova que o types.ts gerado. Sem `any` — nome e
+-      // args entram como `never` e o shape do retorno é assertado abaixo.
+-      const { data, error } = await supabase.rpc(
+-        "get_pipeline_stage_counts_by_id" as unknown as never,
+-        {
+-          p_pipeline_id: pipelineId,
+-          p_org_id: organizationId,
+-          p_period_after: range?.startStr ?? null,
+-          p_period_before: range?.endStr ?? null,
+-          p_closed_status_keys: closedKeys.length ? closedKeys : null,
+-        } as unknown as never,
+-      );
+-      if (error) throw error;
+-      // Reagrega por stage_key: o motor separa linha fantasma (stage_id NULL)
+-      // da linha da etapa real — para métrica de cabeçalho a key basta.
+-      const byKey: Record<string, number> = {};
+-      for (const row of (data ?? []) as Array<{ stage_key: string; cnt: number | string }>) {
+-        byKey[row.stage_key] = (byKey[row.stage_key] ?? 0) + Number(row.cnt);
+-      }
+-      return byKey;
+-    },
++    queryKey: stageCountsQueryKey(pipelineId, genericArgs),
++    queryFn: () => fetchStageCounts(genericArgs),
+     enabled: isReady && !!organizationId && !!pipelineId && !stagesLoading,
+     staleTime: 60_000,
+   });
+diff --git a/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts b/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
+index 553c6b025..17eb7e9ba 100644
+--- a/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
++++ b/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
+@@ -1030,6 +1030,72 @@ export function useAddLeadToCustomPipe() {
+   });
+ }
+ 
++export interface MoveCustomInput {
++  entry_id: string;
++  pipeline_id: string;
++  stage_id: string;
++}
++
++/**
++ * O move de funil custom, sem cache: etapa → (auto-transição | UPDATE) →
++ * releitura da entrada → integração carteira. Extraído de
++ * `useMoveLeadInCustomPipe` para a página `/funil` reaproveitar a MESMA escrita
++ * sem herdar o `onSuccess` de invalidação ampla (lá o board tem a sua,
++ * restrita — `lib/funil-move-cache`). Permissão é do chamador.
++ *
++ * Três idas sequenciais (etapa, escrita, releitura): juntar exige RPC nova —
++ * follow-up registrado, fora do escopo de front.
++ */
++export async function executarMoveCustom(
++  { entry_id, pipeline_id, stage_id }: MoveCustomInput,
++  organizationId: string,
++): Promise<CustomPipeEntry> {
++  const { data: stageRow, error: stageError } = await supabase
++    .from("pipeline_stages")
++    .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
++    .eq("id", stage_id)
++    .eq("pipeline_id", pipeline_id)
++    .eq("organization_id", organizationId)
++    .single();
++  if (stageError) throw stageError;
++
++  let targetPipelineId = stageRow.target_pipeline_id;
++  let targetStage = stageRow.target_stage_id;
++  if (stageRow.is_final_positive && !targetPipelineId && stageRow.target_pipe_type
++      && stageRow.target_stage_key && !stageRow.target_pipe_type.startsWith("upsell_")) {
++    const { data: target, error } = await supabase.from("pipelines").select("id")
++      .eq("organization_id", organizationId)
++      .eq("slug", stageRow.target_pipe_type).eq("is_active", true).single();
++    if (error) throw error;
++    targetPipelineId = target.id;
++    targetStage = stageRow.target_stage_key;
++  }
++  if (stageRow.is_final_positive && targetPipelineId && targetStage) {
++    // Origem e destino na mesma transação e na mesma posição.
++    await moverNegocio({ entryId: entry_id, targetPipelineId,
++      targetStageKey: targetStage, stageOrigem: stageRow.stage_key });
++  } else {
++    await updateCustomPipelineEntry(entry_id, {
++      stage_id, stage_changed_at: new Date().toISOString(),
++    });
++  }
++  const { data, error } = await supabase.from("pipeline_entries").select("*")
++    .eq("id", entry_id).eq("organization_id", organizationId).single();
++  if (error) throw error;
++  // Carteira não é outro negócio de funil: preserva sua integração.
++  if (stageRow.is_final_positive && data.lead_id && stageRow.target_stage_key) {
++    const field = stageRow.target_pipe_type === "upsell_base" ? "tipo_cliente_tempo"
++      : stageRow.target_pipe_type === "upsell_gestao" ? "gestao_stage" : null;
++    if (field) {
++      const { error: carteiraError } = await supabase.from("upsell_clients")
++        .update({ [field]: stageRow.target_stage_key }).eq("lead_id", data.lead_id)
++        .eq("organization_id", organizationId);
++      if (carteiraError) throw carteiraError;
++    }
++  }
++  return data as CustomPipeEntry;
++}
++
+ /** Mover lead entre etapas (drag-and-drop) */
+ export function useMoveLeadInCustomPipe() {
+   const queryClient = useQueryClient();
+@@ -1037,15 +1103,7 @@ export function useMoveLeadInCustomPipe() {
+   const { data: teamMember } = useCurrentTeamMember();
+ 
+   return useMutation({
+-    mutationFn: async ({
+-      entry_id,
+-      pipeline_id,
+-      stage_id,
+-    }: {
+-      entry_id: string;
+-      pipeline_id: string;
+-      stage_id: string;
+-    }) => {
++    mutationFn: async (input: MoveCustomInput) => {
+       if (!teamMember?.organization_id) {
+         throw new Error("Organização não encontrada");
+       }
+@@ -1054,50 +1112,7 @@ export function useMoveLeadInCustomPipe() {
+           ? "Permissões ainda carregando — tente novamente"
+           : "Sem permissão para mover registros no pipe");
+       }
+-      const { data: stageRow, error: stageError } = await supabase
+-        .from("pipeline_stages")
+-        .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+-        .eq("id", stage_id)
+-        .eq("pipeline_id", pipeline_id)
+-        .eq("organization_id", teamMember.organization_id)
+-        .single();
+-      if (stageError) throw stageError;
+-
+-      let targetPipelineId = stageRow.target_pipeline_id;
+-      let targetStage = stageRow.target_stage_id;
+-      if (stageRow.is_final_positive && !targetPipelineId && stageRow.target_pipe_type
+-          && stageRow.target_stage_key && !stageRow.target_pipe_type.startsWith("upsell_")) {
+-        const { data: target, error } = await supabase.from("pipelines").select("id")
+-          .eq("organization_id", teamMember.organization_id)
+-          .eq("slug", stageRow.target_pipe_type).eq("is_active", true).single();
+-        if (error) throw error;
+-        targetPipelineId = target.id;
+-        targetStage = stageRow.target_stage_key;
+-      }
+-      if (stageRow.is_final_positive && targetPipelineId && targetStage) {
+-        // Origem e destino na mesma transação e na mesma posição.
+-        await moverNegocio({ entryId: entry_id, targetPipelineId,
+-          targetStageKey: targetStage, stageOrigem: stageRow.stage_key });
+-      } else {
+-        await updateCustomPipelineEntry(entry_id, {
+-          stage_id, stage_changed_at: new Date().toISOString(),
+-        });
+-      }
+-      const { data, error } = await supabase.from("pipeline_entries").select("*")
+-        .eq("id", entry_id).eq("organization_id", teamMember.organization_id).single();
+-      if (error) throw error;
+-      // Carteira não é outro negócio de funil: preserva sua integração.
+-      if (stageRow.is_final_positive && data.lead_id && stageRow.target_stage_key) {
+-        const field = stageRow.target_pipe_type === "upsell_base" ? "tipo_cliente_tempo"
+-          : stageRow.target_pipe_type === "upsell_gestao" ? "gestao_stage" : null;
+-        if (field) {
+-          const { error: carteiraError } = await supabase.from("upsell_clients")
+-            .update({ [field]: stageRow.target_stage_key }).eq("lead_id", data.lead_id)
+-            .eq("organization_id", teamMember.organization_id);
+-          if (carteiraError) throw carteiraError;
+-        }
+-      }
+-      return data as CustomPipeEntry;
++      return executarMoveCustom(input, teamMember.organization_id);
+     },
+     onSuccess: (data, variables) => {
+       invalidateAfterMove(queryClient, data.lead_id ?? undefined);
+diff --git a/classic/src/modules/pipelines/hooks/legacy/usePipeWhatsapp.ts b/classic/src/modules/pipelines/hooks/legacy/usePipeWhatsapp.ts
+index 7d62fc423..e0f7cf3d0 100644
+--- a/classic/src/modules/pipelines/hooks/legacy/usePipeWhatsapp.ts
++++ b/classic/src/modules/pipelines/hooks/legacy/usePipeWhatsapp.ts
+@@ -212,7 +212,7 @@ export function useUpdatePipeWhatsapp() {
+       if (!status) return { snapshot: null };
+       await queryClient.cancelQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+       const snapshot = optimisticMovePipelineEntry(queryClient, {
+-        slug: "whatsapp",
++        boardKey: "whatsapp",
+         id,
+         toStage: status,
+       });
+diff --git a/classic/src/modules/pipelines/hooks/model/useFunilRealtime.ts b/classic/src/modules/pipelines/hooks/model/useFunilRealtime.ts
+new file mode 100644
+index 000000000..010bb2877
+--- /dev/null
++++ b/classic/src/modules/pipelines/hooks/model/useFunilRealtime.ts
+@@ -0,0 +1,83 @@
++import { useCallback, useEffect, useRef } from "react";
++import { useQueryClient } from "@tanstack/react-query";
++import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
++import { useRealtimeOrgId } from "@/shared/realtime/realtime-org-context";
++import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
++import {
++  invalidarColunasDoFunil,
++  planejarInvalidacaoRealtime,
++  type EventoPipelineEntry,
++} from "@/modules/pipelines/lib/funil-move-cache";
++
++/**
++ * Janela de agrupamento: o primeiro evento abre a janela e o lote dispara ao
++ * fim dela, mesmo que eventos continuem chegando (janela fixa, não debounce —
++ * uma automação em massa não adia a atualização para sempre).
++ */
++export const FUNIL_REALTIME_JANELA_MS = 1_000;
++
++/**
++ * Realtime cirúrgico do board `/funil/:slug`.
++ *
++ * Substitui `useRealtimeSubscription("pipeline_entries", ["pipeline-page", …])`,
++ * que invalidava o PREFIXO — toda coluna de todo board montado, a cada evento
++ * de qualquer card da org. Aqui cada evento vira, no máximo, as colunas que ele
++ * toca neste funil + a contagem deste funil (`planejarInvalidacaoRealtime`).
++ *
++ * Filtro do canal: `organization_id`, não `pipeline_id`. O Realtime avalia o
++ * filtro de UPDATE sobre a linha NOVA — um card que outro usuário (ou uma
++ * auto-transição) tira deste funil chega com `pipeline_id` do destino e um
++ * canal filtrado por este funil nunca o veria; o card ficaria órfão na tela.
++ * O recorte por funil acontece no handler. O isolamento entre orgs continua
++ * na RLS (`apply_rls`) — o filtro é só redução de tráfego, como antes.
++ *
++ * Sem org resolvida o canal NÃO abre (o hook genérico abria sem filtro).
++ */
++export function useFunilRealtime(pipelineId: string | undefined): void {
++  const queryClient = useQueryClient();
++  const organizationId = useRealtimeOrgId();
++  const pipelineIdRef = useRef(pipelineId);
++  pipelineIdRef.current = pipelineId;
++
++  const pendentesRef = useRef<{ pipelineId: string; stages: Set<string> } | null>(null);
++  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++
++  const descarregar = useCallback(() => {
++    timerRef.current = null;
++    const lote = pendentesRef.current;
++    pendentesRef.current = null;
++    if (lote) invalidarColunasDoFunil(queryClient, lote.pipelineId, lote.stages);
++  }, [queryClient]);
++
++  const onEvent = useCallback(
++    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
++      const atual = pipelineIdRef.current;
++      if (!atual) return;
++      const plano = planejarInvalidacaoRealtime(queryClient, atual, payload as unknown as EventoPipelineEntry);
++      if (!plano) return;
++
++      if (!pendentesRef.current || pendentesRef.current.pipelineId !== atual) {
++        pendentesRef.current = { pipelineId: atual, stages: new Set() };
++      }
++      for (const s of plano.stages) pendentesRef.current.stages.add(s);
++      if (!timerRef.current) timerRef.current = setTimeout(descarregar, FUNIL_REALTIME_JANELA_MS);
++    },
++    [queryClient, descarregar],
++  );
++
++  useEffect(
++    () => () => {
++      if (timerRef.current) clearTimeout(timerRef.current);
++      timerRef.current = null;
++      pendentesRef.current = null;
++    },
++    [],
++  );
++
++  useRealtimeChannel({
++    table: "pipeline_entries",
++    filter: organizationId ? `organization_id=eq.${organizationId}` : undefined,
++    onEvent,
++    enabled: !!organizationId && !!pipelineId,
++  });
++}
+diff --git a/classic/src/modules/pipelines/hooks/model/usePaginatedFunil.ts b/classic/src/modules/pipelines/hooks/model/usePaginatedFunil.ts
+index c8ab5e11b..ef60ec701 100644
+--- a/classic/src/modules/pipelines/hooks/model/usePaginatedFunil.ts
++++ b/classic/src/modules/pipelines/hooks/model/usePaginatedFunil.ts
+@@ -1,7 +1,7 @@
+ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import { supabase } from "@/integrations/supabase/client";
+-import { useCanDo, useOrganization } from "@/modules/identity";
++import { useCanDo, useCurrentTeamMember, useOrganization } from "@/modules/identity";
+ import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ import { flattenMetadata } from "./usePipelineEntries";
+ import {
+@@ -12,7 +12,17 @@ import {
+   type PaginatedFilters,
+   type StageData,
+ } from "./usePaginatedPipeline";
+-import { useMoveLeadInCustomPipe } from "../custom/useCustomPipelines";
++import { executarMoveCustom } from "../custom/useCustomPipelines";
++import { useFunilRealtime } from "./useFunilRealtime";
++import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
++import {
++  aplicarMoveOtimista,
++  cancelarFetchDoMove,
++  colunaDoCardNoCache,
++  reconciliarMoveNoFunil,
++  reverterMoveOtimista,
++  type MoveOtimista,
++} from "@/modules/pipelines/lib/funil-move-cache";
+ import type { CustomPipelineStage } from "@/contracts/pipe";
+ 
+ /**
+@@ -24,10 +34,11 @@ import type { CustomPipelineStage } from "@/contracts/pipe";
+  * qualquer funil (system ou custom). O bloco de filtros é o MESMO objeto
+  * (`sharedRpcFilterParams`), então badge e cards nunca divergem de recorte.
+  *
+- * QueryKeys por pipeline_id (padrão 626): `["pipeline-page", pipelineId, …]` e
+- * `["pipeline-stage-counts", pipelineId, …]`. O prefixo `pipeline-page` é o
+- * mesmo do board legado de propósito — `invalidateAfterMove` e o realtime já
+- * invalidam por esse prefixo, e a página nova pega carona sem mudança lá.
++ * QueryKeys por pipeline_id (padrão 626): `["pipeline-page", pipelineId,
++ * stageKey, …]` e `["pipeline-stage-counts", pipelineId, …]`. O prefixo é o
++ * mesmo do board legado — quem invalida por prefixo de fora (lead drawer,
++ * tags) continua alcançando o board. Move e Realtime DESTA página, ao
++ * contrário, endereçam coluna por coluna (`lib/funil-move-cache`).
+  *
+  * Na W6 (demolição), `usePaginatedPipeline` colapsa neste hook.
+  */
+@@ -131,7 +142,8 @@ export function usePaginatedFunil(
+   }, [filters.search]);
+ 
+   // Fonte única (SCRUM-621): cards de qualquer funil vivem em pipeline_entries.
+-  useRealtimeSubscription("pipeline_entries", ["pipeline-page", "pipeline-stage-counts"]);
++  // Cirúrgico: cada evento invalida só as colunas que toca neste funil.
++  useFunilRealtime(pipelineId);
+ 
+   const filterParams = useMemo(
+     () => sharedRpcFilterParams(organizationId ?? "", debouncedSearch, filters),
+@@ -163,26 +175,15 @@ export function usePaginatedFunil(
+ 
+   const filtersKey = useMemo(() => JSON.stringify(filterParams), [filterParams]);
+ 
++  // Chave/busca compartilhadas com o cabeçalho (`useFunilMetrics`): mesmo
++  // recorte ⇒ mesma chave ⇒ uma ida só no mount (ver `stage-counts-query`).
++  const countsArgs = useMemo(
++    () => ({ ...filterParams, p_pipeline_id: pipelineId ?? "" }),
++    [filterParams, pipelineId],
++  );
+   const countsQuery = useQuery({
+-    queryKey: ["pipeline-stage-counts", pipelineId, organizationId, filtersKey],
+-    queryFn: async () => {
+-      if (!organizationId || !pipelineId) return {} as Record<string, number>;
+-      // `as never` no nome: RPC mais nova que o types.ts gerado de prod —
+-      // mesmo padrão de `moverNegocio`; morre no próximo regen.
+-      const { data, error } = await supabase.rpc(
+-        "get_pipeline_stage_counts_by_id" as never,
+-        rpcArgs({ ...filterParams, p_pipeline_id: pipelineId }),
+-      );
+-      if (error) throw error;
+-      // O motor devolve (stage_id, stage_key, cnt) e separa linhas fantasma
+-      // (stage_id NULL) — o board endereça coluna por stage_key, então soma
+-      // por key (fantasma soma na key que o card ainda carrega).
+-      const map: Record<string, number> = {};
+-      for (const row of (data ?? []) as Array<{ stage_key: string | null; cnt: number }>) {
+-        if (row.stage_key) map[row.stage_key] = (map[row.stage_key] ?? 0) + Number(row.cnt);
+-      }
+-      return map;
+-    },
++    queryKey: stageCountsQueryKey(pipelineId, countsArgs),
++    queryFn: () => fetchStageCounts(countsArgs),
+     enabled: isReady && !!organizationId && !!pipelineId,
+     staleTime: 30_000,
+   });
+@@ -243,54 +244,71 @@ export function usePaginatedFunil(
+   };
+ }
+ 
++/** Variáveis do move na página unificada. */
++export interface MoverCardNoFunilVars {
++  entryId: string;
++  /** `pipeline_stages.id` (uuid) — o caminho custom move por ele. */
++  stageId: string;
++  /**
++   * `pipeline_stages.stage_key` — o caminho system escreve a key e o espelho
++   * `trg_pe_stage_mirror` resolve o `stage_id` (types.ts gerado de prod ainda
++   * não conhece a coluna `stage_id`; escrever a key é o caminho tipado E o que
++   * os gatilhos de métrica já escutam). Também é a coluna de destino no cache.
++   */
++  stageKey: string;
++  /**
++   * O chamador já aplicou o otimismo (`aplicarMoveOtimista`) e é dono do
++   * rollback — caso do `completarMove`, que move o card ANTES de gravar o
++   * metadata do desfecho. Aqui o hook não aplica nem reverte; só reconcilia.
++   */
++  otimistaDoChamador?: MoveOtimista;
++}
++
++interface MoverCardContext {
++  /** Otimismo aplicado por ESTE hook (rollback é dele). */
++  move: MoveOtimista | null;
++  fromStage: string | null;
++  /** Recusado antes de escrever (sem permissão): nada mudou no banco. */
++  negado?: boolean;
++}
++
+ /**
+  * Move de card na página unificada — um destino, dois caminhos:
+  *
+- *   custom  → `useMoveLeadInCustomPipe` (INSTEAD OF da view): preserva TODA a
+- *             lógica viva do board custom — auto-transition de etapa final,
+- *             gatilhos de workflow, guarda de permissão;
++ *   custom  → `executarMoveCustom` (a MESMA escrita de
++ *             `useMoveLeadInCustomPipe`: auto-transition de etapa final,
++ *             gatilhos de workflow, integração carteira) — sem o `onSuccess`
++ *             de invalidação ampla daquele hook;
+  *   system  → UPDATE direto em `pipeline_entries` (fonte única, SCRUM-621): a
+  *             MESMA linha que as views `pipe_*` escrevem, então os gatilhos de
+- *             métrica/venda disparam idêntico. Os fluxos ricos do board de
+- *             sistema (LossReasonDialog, modais de reunião, guarda de valor)
+- *             NÃO moram aqui — chegam com a paridade de sistema na SCRUM-633/634;
+- *             até lá as rotas `/pipe-*` continuam nas páginas antigas.
++ *             métrica/venda disparam idêntico.
+  *
+- * Invalida por prefixo `pipeline-page`/`pipeline-stage-counts` (as chaves da
+- * página nova) e as chaves do board custom legado — durante o expand as duas
+- * páginas convivem e nenhuma pode ficar mentindo.
++ * Cache (`lib/funil-move-cache`):
++ *   onMutate  → card muda de coluna na hora (otimismo) + eco registrado;
++ *   onError   → rollback fiel do snapshot;
++ *   onSettled → UMA reconciliação: colunas de origem e destino + contagem
++ *               deste funil; o resto só marcado como velho.
+  */
+ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "custom" } | null | undefined) {
+   const queryClient = useQueryClient();
+-  const moveCustom = useMoveLeadInCustomPipe();
+   const movePermission = useCanDo("move_pipe_record");
++  const { data: teamMember } = useCurrentTeamMember();
+ 
+-  return useMutation({
+-    mutationFn: async ({
+-      entryId,
+-      stageId,
+-      stageKey,
+-    }: {
+-      entryId: string;
+-      /** `pipeline_stages.id` (uuid) — o caminho custom move por ele. */
+-      stageId: string;
+-      /**
+-       * `pipeline_stages.stage_key` — o caminho system escreve a key e o
+-       * espelho `trg_pe_stage_mirror` resolve o `stage_id` (types.ts gerado de
+-       * prod ainda não conhece a coluna `stage_id`; escrever a key é o caminho
+-       * tipado E o que os gatilhos de métrica já escutam).
+-       */
+-      stageKey: string;
+-    }) => {
+-      if (!pipeline) throw new Error("Funil não carregado");
+-
+-      if (pipeline.type === "custom") {
+-        return moveCustom.mutateAsync({
+-          entry_id: entryId,
+-          pipeline_id: pipeline.id,
+-          stage_id: stageId,
+-        });
++  return useMutation<{ lead_id?: string | null } | null, Error, MoverCardNoFunilVars, MoverCardContext>({
++    onMutate: async ({ entryId, stageKey, otimistaDoChamador }) => {
++      if (!pipeline) return { move: null, fromStage: null };
++      if (otimistaDoChamador) {
++        return { move: null, fromStage: otimistaDoChamador.snapshot.fromStage };
+       }
++      // Sem permissão o mutationFn recusa — não pisca o card à toa.
++      if (!movePermission.allowed) return { move: null, fromStage: null, negado: true };
++      const origem = colunaDoCardNoCache(queryClient, pipeline.id, entryId);
++      await cancelarFetchDoMove(queryClient, { pipelineId: pipeline.id, stages: [origem, stageKey] });
++      const move = aplicarMoveOtimista(queryClient, { pipelineId: pipeline.id, entryId, toStage: stageKey });
++      return { move, fromStage: move.snapshot.fromStage ?? origem };
++    },
++    mutationFn: async ({ entryId, stageId, stageKey }) => {
++      if (!pipeline) throw new Error("Funil não carregado");
+ 
+       if (!movePermission.allowed) {
+         throw new Error(
+@@ -300,6 +318,14 @@ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "cu
+         );
+       }
+ 
++      if (pipeline.type === "custom") {
++        if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
++        return executarMoveCustom(
++          { entry_id: entryId, pipeline_id: pipeline.id, stage_id: stageId },
++          teamMember.organization_id,
++        );
++      }
++
+       const { data, error } = await supabase
+         .from("pipeline_entries")
+         .update({ stage_key: stageKey, stage_changed_at: new Date().toISOString() })
+@@ -310,18 +336,19 @@ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "cu
+       if (error) throw error;
+       return data;
+     },
+-    onSuccess: () => {
+-      // Página nova.
+-      queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
+-      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+-      // Páginas antigas conviventes (expand): custom lê por estas…
+-      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+-      queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });
+-      // …e as de sistema pelas views de compat.
+-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
++    onError: (_err, _vars, context) => {
++      if (context?.move) reverterMoveOtimista(queryClient, context.move);
++    },
++    onSettled: (data, _err, vars, context) => {
++      // Negado por permissão: nenhuma escrita, nada a reconciliar.
++      if (!pipeline || context?.negado) return;
++      reconciliarMoveNoFunil(queryClient, {
++        pipelineId: pipeline.id,
++        entryId: vars.entryId,
++        leadId: data?.lead_id ?? null,
++        fromStage: context?.fromStage ?? null,
++        toStage: vars.stageKey,
++      });
+     },
+   });
+ }
+diff --git a/classic/src/modules/pipelines/lib/funil-move-cache.ts b/classic/src/modules/pipelines/lib/funil-move-cache.ts
+new file mode 100644
+index 000000000..f7bab77e6
+--- /dev/null
++++ b/classic/src/modules/pipelines/lib/funil-move-cache.ts
+@@ -0,0 +1,298 @@
++import type { QueryClient, QueryKey } from "@tanstack/react-query";
++import {
++  optimisticMovePipelineEntry,
++  rollbackPipelineEntryMove,
++  type OptimisticMoveSnapshot,
++} from "./optimistic-move";
++
++/**
++ * Cache do board da página unificada `/funil/:slug` — o que um move faz com as
++ * queries, num lugar só.
++ *
++ * Antes daqui, um move custava ~70 `get_pipeline_page` + 5 contagens em 6 s por
++ * pessoa com o board aberto (CP-v2, 2026-10-05): duas rodadas imediatas de
++ * invalidação por PREFIXO (`["pipeline-page"]` = todas as colunas de todos os
++ * boards montados) e mais duas do eco do Realtime. Este módulo troca isso por:
++ *
++ *   1. otimismo — o card muda de coluna no cache na hora, com rollback no erro;
++ *   2. UMA reconciliação, restrita às colunas de origem e destino + contagem
++ *      daquele funil (o resto só é marcado como velho, sem ida ao banco);
++ *   3. um registro de "eco próprio" que o Realtime consulta para não refazer a
++ *      rodada que a reconciliação já fez;
++ *   4. o plano de invalidação do Realtime: só as colunas afetadas pelo evento.
++ *
++ * Chaves (ver `usePaginatedFunil`): `["pipeline-page", pipelineId, stageKey,
++ * orgId, filtersKey]` e `["pipeline-stage-counts", pipelineId, orgId, args]`.
++ */
++
++const PAGE = "pipeline-page";
++const COUNTS = "pipeline-stage-counts";
++
++// ── Otimismo ─────────────────────────────────────────────────────────────────
++
++export interface MoveOtimista {
++  snapshot: OptimisticMoveSnapshot;
++  pipelineId: string;
++  entryId: string;
++  toStage: string;
++}
++
++/**
++ * Move o card entre colunas no cache e registra o eco esperado. Devolve o
++ * necessário para `reverterMoveOtimista` (rollback fiel) — `snapshot.fromStage`
++ * é a coluna de origem que a reconciliação precisa.
++ */
++export function aplicarMoveOtimista(
++  qc: QueryClient,
++  { pipelineId, entryId, toStage }: { pipelineId: string; entryId: string; toStage: string },
++): MoveOtimista {
++  const snapshot = optimisticMovePipelineEntry(qc, { boardKey: pipelineId, id: entryId, toStage });
++  registrarEcoProprio({ entryId, pipelineId, stageKey: toStage });
++  return { snapshot, pipelineId, entryId, toStage };
++}
++
++export function reverterMoveOtimista(qc: QueryClient, move: MoveOtimista): void {
++  rollbackPipelineEntryMove(qc, move.snapshot);
++  esquecerEcoProprio(move.entryId);
++}
++
++/**
++ * Cancela fetch em voo SÓ das colunas que o move toca + contagens do funil —
++ * um refetch antigo que aterrissasse depois do otimismo desfaria o card na
++ * tela. Cancelar o board inteiro interromperia carga de coluna alheia.
++ */
++export async function cancelarFetchDoMove(
++  qc: QueryClient,
++  { pipelineId, stages }: { pipelineId: string; stages: Array<string | null | undefined> },
++): Promise<void> {
++  const alvo = new Set(stages.filter((s): s is string => !!s));
++  await Promise.all([
++    ...[...alvo].map((stage) => qc.cancelQueries({ queryKey: [PAGE, pipelineId, stage] })),
++    qc.cancelQueries({ queryKey: [COUNTS, pipelineId] }),
++  ]);
++}
++
++/** Em que coluna do funil o card está no cache (`null` se em nenhuma). */
++export function colunaDoCardNoCache(qc: QueryClient, pipelineId: string, entryId: string): string | null {
++  for (const [key, data] of qc.getQueriesData({ queryKey: [PAGE, pipelineId] })) {
++    const pages = (data as { pages?: unknown[][] } | undefined)?.pages;
++    if (!Array.isArray(pages)) continue;
++    for (const page of pages) {
++      if ((page as Array<{ id?: string }>).some((e) => e?.id === entryId)) {
++        return (key as unknown[])[2] as string;
++      }
++    }
++  }
++  return null;
++}
++
++// ── Reconciliação (UMA rodada por move) ──────────────────────────────────────
++
++/**
++ * Prefixos que o move deixa velhos em OUTRAS telas. Nenhum é montado na página
++ * `/funil` — por isso `refetchType: "none"`: marca como velho (a tela refaz a
++ * busca ao montar) sem ida ao banco agora. É o mesmo conjunto que
++ * `invalidateAfterMove` + o `onSuccess` de `useMoveLeadInCustomPipe` cobriam,
++ * só que sem disparar refetch ativo em cascata.
++ *
++ *  - views de compat `pipe_*` e `pipeline_entries`: telas legadas de funil;
++ *  - `custom_pipe_*`: board custom legado;
++ *  - `upsell_clients`: o move custom com destino carteira escreve lá;
++ *  - `leads`, `leads-deals`, `leads-sales-metrics`: lista de Leads (rota
++ *    própria; chave por org + página, não por lead).
++ */
++const PREFIXOS_DE_OUTRAS_TELAS = [
++  "pipe_whatsapp",
++  "pipe_confirmacao",
++  "pipe_propostas",
++  "pipeline_entries",
++  "custom_pipe_entries",
++  "custom_pipe_stage_counts",
++  "upsell_clients",
++  "leads",
++  "leads-deals",
++  "leads-sales-metrics",
++] as const;
++
++export interface ReconciliarMoveParams {
++  pipelineId: string;
++  entryId: string;
++  leadId?: string | null;
++  /** Coluna de origem; `null` quando desconhecida (card fora do cache). */
++  fromStage: string | null;
++  toStage: string;
++}
++
++/**
++ * A única invalidação de um move na página `/funil`.
++ *
++ * Refetch ATIVO (só o que está montado busca):
++ *   - colunas de origem e destino DESTE funil — onde o card saiu e entrou;
++ *   - contagens DESTE funil — badges das colunas e cabeçalho;
++ *   - `deal-card-extras` do card e `lead-pipes`/`lead_all_pipelines`/
++ *     `lead-timeline` do lead — o painel do lead abre por cima do board
++ *     (`LeadPanelLayout`); fechado, não há observer e nada busca.
++ *
++ * Marca como velho, sem refetch: boards de OUTROS funis (o move custom pode
++ * atravessar para o funil de destino) e `PREFIXOS_DE_OUTRAS_TELAS`.
++ */
++export function reconciliarMoveNoFunil(qc: QueryClient, p: ReconciliarMoveParams): void {
++  const outroFunil = (key: QueryKey) => key[1] !== p.pipelineId;
++  qc.invalidateQueries({ queryKey: [PAGE], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
++  qc.invalidateQueries({ queryKey: [COUNTS], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
++  for (const prefixo of PREFIXOS_DE_OUTRAS_TELAS) {
++    qc.invalidateQueries({ queryKey: [prefixo], refetchType: "none" });
++  }
++
++  if (p.fromStage) {
++    const colunas = new Set([p.fromStage, p.toStage]);
++    for (const stage of colunas) {
++      qc.invalidateQueries({ queryKey: [PAGE, p.pipelineId, stage] });
++    }
++  } else {
++    // Origem desconhecida: o card não estava em coluna carregada. Ainda assim
++    // restrito a ESTE funil.
++    qc.invalidateQueries({ queryKey: [PAGE, p.pipelineId] });
++  }
++  qc.invalidateQueries({ queryKey: [COUNTS, p.pipelineId] });
++  qc.invalidateQueries({ queryKey: ["deal-card-extras", p.entryId] });
++
++  if (p.leadId) {
++    qc.invalidateQueries({ queryKey: ["lead-pipes", p.leadId] });
++    qc.invalidateQueries({ queryKey: ["lead_all_pipelines", p.leadId] });
++    qc.invalidateQueries({ queryKey: ["lead-timeline", p.leadId] });
++  }
++}
++
++// ── Eco próprio ──────────────────────────────────────────────────────────────
++
++/**
++ * Janela em que o UPDATE do próprio move, ecoado pelo Realtime, é ignorado. A
++ * reconciliação já buscou as colunas depois do commit; o eco só repetiria a
++ * rodada. Folga larga porque o Realtime atrasa sob carga.
++ */
++export const ECO_PROPRIO_TTL_MS = 10_000;
++
++/**
++ * Janela do eco da escrita de METADATA (perda/venda gravam o desfecho antes do
++ * move). Curta: o UPDATE do metadata e o do move saem um atrás do outro.
++ */
++export const ECO_METADATA_TTL_MS = 5_000;
++
++interface EcoEsperado {
++  pipelineId: string;
++  stageKey: string;
++  expiraEm: number;
++}
++
++/**
++ * Ecos esperados por entrada — uma LISTA, porque um fluxo pode escrever a
++ * mesma linha mais de uma vez (metadata na etapa de origem, depois o move para
++ * o destino). Regras (volta 1, R1):
++ *
++ *  - CONSUMO: cada eco esperado é ignorado UMA vez. Sem isso, um eco que já
++ *    chegou continuava "esperado" e engolia um evento legítimo idêntico de
++ *    outro usuário (meu s0→s1; outro s1→s2→s1 em < 10 s ⇒ o s2→s1 era
++ *    descartado, tela presa em s2 com o banco em s1);
++ *  - DESVIO: evento do mesmo id que não casa com nenhum eco esperado significa
++ *    que outra escrita passou na frente — a lista inteira é descartada e o
++ *    evento é processado. Dali em diante nada daquele id é ignorado.
++ */
++const ecosEsperados = new Map<string, EcoEsperado[]>();
++
++export function registrarEcoProprio(
++  { entryId, pipelineId, stageKey }: { entryId: string; pipelineId: string; stageKey: string },
++  agora: number = Date.now(),
++  ttlMs: number = ECO_PROPRIO_TTL_MS,
++): void {
++  const lista = ecosEsperados.get(entryId) ?? [];
++  lista.push({ pipelineId, stageKey, expiraEm: agora + ttlMs });
++  ecosEsperados.set(entryId, lista);
++}
++
++export function esquecerEcoProprio(entryId: string): void {
++  ecosEsperados.delete(entryId);
++}
++
++/**
++ * O evento é eco de uma escrita feita NESTA aba? Casa id + funil + etapa com
++ * um eco esperado e ainda válido — e o CONSOME. Não casar com nenhum (desvio)
++ * descarta os ecos daquele id. Chamar só com evento real do Realtime: a
++ * consulta tem efeito.
++ */
++export function ehEcoProprio(
++  row: { id?: unknown; pipeline_id?: unknown; stage_key?: unknown } | null | undefined,
++  agora: number = Date.now(),
++): boolean {
++  if (!row || typeof row.id !== "string") return false;
++  const lista = ecosEsperados.get(row.id);
++  if (!lista) return false;
++  const vivos = lista.filter((e) => e.expiraEm >= agora);
++  const i = vivos.findIndex((e) => e.pipelineId === row.pipeline_id && e.stageKey === row.stage_key);
++  if (i < 0) {
++    ecosEsperados.delete(row.id);
++    return false;
++  }
++  vivos.splice(i, 1);
++  if (vivos.length > 0) ecosEsperados.set(row.id, vivos);
++  else ecosEsperados.delete(row.id);
++  return true;
++}
++
++/** Só para teste: ecos ainda esperados de uma entrada (leitura sem consumo). */
++export function __ecosEsperados(entryId: string): Array<{ pipelineId: string; stageKey: string }> {
++  return (ecosEsperados.get(entryId) ?? []).map(({ pipelineId, stageKey }) => ({ pipelineId, stageKey }));
++}
++
++/** Só para teste: zera o registro entre casos. */
++export function __limparEcosProprios(): void {
++  ecosEsperados.clear();
++}
++
++// ── Plano do Realtime ────────────────────────────────────────────────────────
++
++export interface EventoPipelineEntry {
++  eventType: "INSERT" | "UPDATE" | "DELETE";
++  new?: Record<string, unknown> | null;
++  old?: Record<string, unknown> | null;
++}
++
++/**
++ * Quais colunas DESTE funil um evento de `pipeline_entries` afeta.
++ *
++ * A origem vem do CACHE, não de `payload.old`: com RLS ligada o Realtime
++ * entrega em `old` só a chave primária (e a tabela não tem REPLICA IDENTITY
++ * FULL no repo), então `old.stage_key` não existe. O cache sabe em que coluna o
++ * card estava — e se ele não está em coluna carregada, a coluna de origem não
++ * tem o que corrigir na tela (a contagem cobre o número).
++ *
++ * Devolve `null` quando o evento não toca este funil (outro funil da mesma
++ * org) ou é o eco do próprio move.
++ */
++export function planejarInvalidacaoRealtime(
++  qc: QueryClient,
++  pipelineId: string,
++  evento: EventoPipelineEntry,
++): { stages: string[] } | null {
++  const novo = evento.eventType === "DELETE" ? null : evento.new ?? null;
++  const id = (novo?.id ?? evento.old?.id) as string | undefined;
++  if (!id) return null;
++  if (novo && ehEcoProprio(novo)) return null;
++
++  const stages = new Set<string>();
++  const noCache = colunaDoCardNoCache(qc, pipelineId, id);
++  if (noCache) stages.add(noCache);
++  if (novo && novo.pipeline_id === pipelineId && typeof novo.stage_key === "string") {
++    stages.add(novo.stage_key);
++  }
++  if (stages.size === 0) return null;
++  return { stages: [...stages] };
++}
++
++/** Aplica um lote de colunas afetadas: só elas + contagens do funil. */
++export function invalidarColunasDoFunil(qc: QueryClient, pipelineId: string, stages: Iterable<string>): void {
++  for (const stage of stages) {
++    qc.invalidateQueries({ queryKey: [PAGE, pipelineId, stage], refetchType: "active" });
++  }
++  qc.invalidateQueries({ queryKey: [COUNTS, pipelineId], refetchType: "active" });
++}
+diff --git a/classic/src/modules/pipelines/lib/optimistic-move.ts b/classic/src/modules/pipelines/lib/optimistic-move.ts
+index 57aa773fa..12d9d9548 100644
+--- a/classic/src/modules/pipelines/lib/optimistic-move.ts
++++ b/classic/src/modules/pipelines/lib/optimistic-move.ts
+@@ -1,18 +1,21 @@
+ import type { QueryClient, QueryKey } from "@tanstack/react-query";
+ 
+ /**
+- * Optimistic drag-and-drop para os boards paginados (`usePaginatedPipeline`).
++ * Optimistic drag-and-drop para os boards paginados — o legado
++ * (`usePaginatedPipeline`, chaveado por slug) e a página unificada
++ * (`usePaginatedFunil`, chaveada por `pipeline_id`).
+  *
+  * O board NÃO é uma query só: cada etapa é um `useInfiniteQuery` com chave
+- * `["pipeline-page", slug, stageKey, orgId, filtersKey]` e data no formato
++ * `["pipeline-page", boardKey, stageKey, orgId, filtersKey]` e data no formato
+  * `{ pages: Entry[][], pageParams }`. As contagens das colunas vivem em
+- * `["pipeline-stage-counts", slug, orgId, filtersKey]` como `Record<stage,num>`.
++ * `["pipeline-stage-counts", boardKey, …]` como `Record<stage,num>`.
++ * `boardKey` é o 2º elemento da chave: o slug no legado, o uuid no `/funil`.
+  *
+  * Antes deste helper o move só refletia na tela quando o eco do Realtime
+  * (debounce 2s) invalidava o board — o card "voltava" e congelava ~2-3s. Aqui
+  * movemos o card no cache na hora e devolvemos um snapshot para rollback no erro.
+  *
+- * Casa por prefixo de chave (`["pipeline-page", slug]`), então TODAS as
++ * Casa por prefixo de chave (`["pipeline-page", boardKey]`), então TODAS as
+  * variantes de filtro da etapa são ajustadas — a reconciliação no `onSettled`
+  * corrige qualquer divergência de filtro que o otimismo tenha deixado passar.
+  */
+@@ -22,6 +25,8 @@ type CacheEntry = [QueryKey, unknown];
+ export interface OptimisticMoveSnapshot {
+   pages: CacheEntry[];
+   counts: CacheEntry[];
++  /** Etapa de onde o card saiu (`null` quando não estava em cache). */
++  fromStage: string | null;
+ }
+ 
+ interface InfiniteData {
+@@ -35,11 +40,11 @@ function isInfinite(data: unknown): data is InfiniteData {
+ 
+ export function optimisticMovePipelineEntry(
+   qc: QueryClient,
+-  opts: { slug: string; id: string; toStage: string }
++  opts: { boardKey: string; id: string; toStage: string }
+ ): OptimisticMoveSnapshot {
+-  const { slug, id, toStage } = opts;
+-  const pageKey: QueryKey = ["pipeline-page", slug];
+-  const countsKey: QueryKey = ["pipeline-stage-counts", slug];
++  const { boardKey, id, toStage } = opts;
++  const pageKey: QueryKey = ["pipeline-page", boardKey];
++  const countsKey: QueryKey = ["pipeline-stage-counts", boardKey];
+ 
+   const pageCaches = qc.getQueriesData({ queryKey: pageKey });
+   const countCaches = qc.getQueriesData({ queryKey: countsKey });
+@@ -48,6 +53,7 @@ export function optimisticMovePipelineEntry(
+   const snapshot: OptimisticMoveSnapshot = {
+     pages: pageCaches.map(([k, d]) => [k, d] as CacheEntry),
+     counts: countCaches.map(([k, d]) => [k, d] as CacheEntry),
++    fromStage: null,
+   };
+ 
+   // 1) Remove o card de todas as páginas onde aparece; captura o card + origem.
+@@ -73,6 +79,7 @@ export function optimisticMovePipelineEntry(
+ 
+   // Card não estava em cache (coluna nunca carregada): reconciliação resolve.
+   if (!moved) return snapshot;
++  snapshot.fromStage = fromStage;
+ 
+   const movedNew = { ...(moved as Record<string, unknown>), stage_key: toStage, status: toStage };
+ 
+diff --git a/classic/src/modules/pipelines/lib/stage-counts-query.ts b/classic/src/modules/pipelines/lib/stage-counts-query.ts
+new file mode 100644
+index 000000000..f348cb821
+--- /dev/null
++++ b/classic/src/modules/pipelines/lib/stage-counts-query.ts
+@@ -0,0 +1,63 @@
++import { supabase } from "@/integrations/supabase/client";
++
++/**
++ * Contagem por etapa de UM funil (`get_pipeline_stage_counts_by_id`) — chave e
++ * busca compartilhadas pelo board (`usePaginatedFunil`) e pelo cabeçalho
++ * (`useFunilMetrics`).
++ *
++ * Por que compartilhar: no mount do `/funil` as duas telas pediam a MESMA
++ * contagem com objetos de argumento diferentes — o board manda o bloco inteiro
++ * de filtros com nulos, o cabeçalho manda só período + chaves de desfecho — e a
++ * RPC rodava duas vezes (CP-v2: 2 chamadas no mesmo segundo). A chave agora é
++ * o recorte CANÔNICO: sem nulos, sem listas vazias, e sem
++ * `p_closed_status_keys` quando não há período (no SQL ele só escolhe a âncora
++ * da data do período — `20270908003000_rpcs_fundidas_por_pipeline_id.sql`,
++ * linhas 160-161; sem período é inerte). Mesmo recorte ⇒ mesma chave ⇒ uma
++ * ida só. Recortes diferentes continuam em chaves diferentes.
++ *
++ * O payload enviado NÃO é o canônico: vai o objeto do chamador, intacto. O
++ * PostgREST resolve a função por nome + argumentos, e omitir parâmetro muda a
++ * resolução (ver `sharedRpcFilterParams`, p_stalled_*).
++ */
++
++export type StageCountsArgs = Record<string, unknown> & { p_pipeline_id: string; p_org_id: string };
++
++function vazio(v: unknown): boolean {
++  return v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
++}
++
++export function recorteCanonicoDeContagem(args: Record<string, unknown>): Record<string, unknown> {
++  const temPeriodo = !vazio(args.p_period_after) || !vazio(args.p_period_before);
++  const out: Record<string, unknown> = {};
++  for (const k of Object.keys(args).sort()) {
++    const v = args[k];
++    if (vazio(v)) continue;
++    if (k === "p_closed_status_keys" && !temPeriodo) continue;
++    out[k] = Array.isArray(v) ? [...v].sort() : v;
++  }
++  return out;
++}
++
++export function stageCountsQueryKey(pipelineId: string | null | undefined, args: Record<string, unknown>) {
++  return [
++    "pipeline-stage-counts",
++    pipelineId,
++    args.p_org_id ?? null,
++    JSON.stringify(recorteCanonicoDeContagem(args)),
++  ] as const;
++}
++
++/** Busca e agrega por `stage_key` (linha fantasma soma na key que carrega). */
++export async function fetchStageCounts(args: StageCountsArgs): Promise<Record<string, number>> {
++  // `as never`: RPC mais nova que o types.ts gerado de prod; morre no regen.
++  const { data, error } = await supabase.rpc(
++    "get_pipeline_stage_counts_by_id" as never,
++    args as never,
++  );
++  if (error) throw error;
++  const map: Record<string, number> = {};
++  for (const row of (data ?? []) as Array<{ stage_key: string | null; cnt: number | string }>) {
++    if (row.stage_key) map[row.stage_key] = (map[row.stage_key] ?? 0) + Number(row.cnt);
++  }
++  return map;
++}
 diff --git a/classic/src/modules/platform/components/layout/MainLayout.tsx b/classic/src/modules/platform/components/layout/MainLayout.tsx
 index 64976bc8c..4d1ab20b5 100644
 --- a/classic/src/modules/platform/components/layout/MainLayout.tsx
@@ -300,6 +2313,27 @@ index 000000000..8f41158f9
 +    isSaving: mutation.isPending,
 +  };
 +}
+diff --git a/classic/src/shared/realtime/useRealtimeChannelStatus.ts b/classic/src/shared/realtime/useRealtimeChannelStatus.ts
+index e320d9506..339917e96 100644
+--- a/classic/src/shared/realtime/useRealtimeChannelStatus.ts
++++ b/classic/src/shared/realtime/useRealtimeChannelStatus.ts
+@@ -18,7 +18,15 @@ export function useRealtimeChannelStatus(channelName: string | null): ChannelSta
+   );
+ }
+ 
++/**
++ * Chave do status do canal de `whatsapp_messages` da org. Compartilhada pelos
++ * dois montadores (bolha e /chat) — `useWhatsAppMessagesRealtime`.
++ */
++export function whatsAppRealtimeStatusKey(organizationId: string): string {
++  return `whatsapp-messages-patched-${organizationId}`;
++}
++
+ export function useWhatsAppRealtimeStatus(organizationId: string | null | undefined): ChannelStatus {
+-  const channelName = organizationId ? `whatsapp-messages-patched-${organizationId}` : null;
++  const channelName = organizationId ? whatsAppRealtimeStatusKey(organizationId) : null;
+   return useRealtimeChannelStatus(channelName);
+ }
 diff --git a/classic/tailwind.config.ts b/classic/tailwind.config.ts
 index 32f47352a..db24ce28b 100644
 --- a/classic/tailwind.config.ts

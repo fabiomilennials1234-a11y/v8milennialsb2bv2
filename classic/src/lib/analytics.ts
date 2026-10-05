@@ -42,8 +42,15 @@ export function track(params: TrackParams): void {
 
 async function trackAsync(params: TrackParams): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !params.organizationId) return;
+    if (!params.organizationId) return;
+    // Sessão em cache, não `getUser()`: este caminho roda a cada evento e o
+    // `getUser()` é uma ida a `/auth/v1/user` por chamada (274–395/h por
+    // usuário em prod, 2026-10-05). O `user_id` aqui é só atribuição — quem
+    // garante que ele é o do chamador é a RLS do INSERT, com o JWT da própria
+    // requisição; validar o token no servidor antes não acrescenta nada.
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) return;
 
     await supabase.from("usage_events").insert({
       organization_id: params.organizationId,
