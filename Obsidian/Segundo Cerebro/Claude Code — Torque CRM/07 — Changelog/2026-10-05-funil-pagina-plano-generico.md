@@ -5,7 +5,7 @@ status: active
 created: 2026-10-05
 updated: 2026-10-05
 tags: [changelog, performance, postgres, funil, migration]
-related: [incidente-2026-10-05-oom-e-restart-desnecessario]
+related: []
 owner: claude-agent
 ---
 
@@ -49,4 +49,4 @@ QA: ids, ordem e contagens idênticos nos 3 modos (custom/auto/generic) para mem
 
 ## Fora de escopo
 - Front do funil (~70 chamadas por move) e RLS de `leads` avaliada por linha — trilhas próprias.
-- Herdado: paginação `created_at < p_cursor` sem desempate (ver [[paginacao-de-conjunto-perde-linha-em-empate]]).
+- Herdado: paginação `created_at < p_cursor` sem desempate.
