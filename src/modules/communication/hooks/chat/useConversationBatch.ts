@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 import { runConversationBatch, type BatchContact, type ConversationBatchAction } from "../../lib/conversationBatch";
 
 export function useConversationBatch(organizationId: string, isAdmin: boolean) {
@@ -23,7 +24,8 @@ export function useConversationBatch(organizationId: string, isAdmin: boolean) {
           const { error } = await supabase.from("whatsapp_conversations")
             .update({ archived_at: null })
             .eq("organization_id", organizationId)
-            .eq("instance_id", contact.instance_id)
+            // The metadata row can belong to a retired instance of this same
+            // phone line. Its conversation_id, returned by the list RPC, is exact.
             .eq("id", contact.conversation_id)
             .is("deleted_at", null)
             .select("id").single();
@@ -40,9 +42,14 @@ export function useConversationBatch(organizationId: string, isAdmin: boolean) {
       });
     },
     // One refresh per batch, scoped to its original org, including partial failures.
-    onSuccess: () => Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations", organizationId] }),
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts", organizationId] }),
-    ]).then(() => undefined),
+    onSuccess: async result => {
+      for (const error of result.errors) {
+        notifyError(error, { fallback: "Não foi possível alterar a conversa.", silent: true, context: { feature: "conversation-batch" } });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations", organizationId] }),
+        queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts", organizationId] }),
+      ]);
+    },
   });
 }

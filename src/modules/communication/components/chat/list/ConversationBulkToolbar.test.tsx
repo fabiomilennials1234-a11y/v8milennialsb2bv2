@@ -4,24 +4,33 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { addErrorReporter } from "@/shared/errors";
 import { RIOFIX_ORG_ID } from "../../../lib/negocioNoChat";
 import { DEFAULT_INBOX_FILTER } from "../../../lib/inboxFilter";
 import { batchContact } from "../../../../../../tests/helpers/conversationBatch";
 import { ConversationList } from "./ConversationList";
 
-const api = vi.hoisted(() => ({ upsert: vi.fn(), rpc: vi.fn(), single: vi.fn(), org: "36971ff5-fd73-4f30-a733-04bf8c90e5b6" }));
+const api = vi.hoisted(() => ({ upsert: vi.fn(), update: vi.fn(), eq: vi.fn(), rpc: vi.fn(), single: vi.fn(), org: "36971ff5-fd73-4f30-a733-04bf8c90e5b6" }));
 vi.mock("@/modules/identity", () => ({ useCurrentTeamMember: () => ({ data: { organization_id: api.org } }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {
-  from: () => ({ upsert: (row: unknown) => { api.upsert(row); return { select: () => ({ single: api.single }) }; } }),
+  from: () => ({
+    upsert: (row: unknown) => { api.upsert(row); return { select: () => ({ single: api.single }) }; },
+    update: (row: unknown) => {
+      api.update(row);
+      const query = { eq: (key: string, value: string) => { api.eq(key, value); return query; }, is: () => query, select: () => ({ single: api.single }) };
+      return query;
+    },
+  }),
   rpc: api.rpc,
 } }));
 vi.mock("@/shared/hooks/use-viewport", () => ({ useViewport: () => ({ isMobile: false }) }));
 
 const contacts = [batchContact("5511999999999"), batchContact("5521999999999", "box-b")];
-function Harness({ org = RIOFIX_ORG_ID, admin = true }: { org?: string; admin?: boolean }) {
+function Harness({ org = RIOFIX_ORG_ID, admin = true, archived = false }: { org?: string; admin?: boolean; archived?: boolean }) {
   const [search, setSearch] = useState("");
-  return <ConversationList contacts={contacts} selectedKey={null} onSelectContact={vi.fn()}
-    searchQuery={search} onSearchChange={setSearch} isLoading={false} activeTab="active" onTabChange={vi.fn()}
+  const rows = archived ? contacts.map((c, i) => ({ ...c, archived_at: "2026-10-05T12:00:00Z", conversation_id: `historical-${i}` })) : contacts;
+  return <ConversationList contacts={rows} selectedKey={null} onSelectContact={vi.fn()}
+    searchQuery={search} onSearchChange={setSearch} isLoading={false} activeTab={archived ? "archived" : "active"} onTabChange={vi.fn()}
     onArchive={vi.fn()} onUnarchive={vi.fn()} onDelete={vi.fn()} isAdmin={admin} organizationId={org}
     instanceId="currently-open-other-box" marcadas={["box-a", "box-b"]} allTags={[]}
     onAddTag={vi.fn()} onRemoveTag={vi.fn()} filter={DEFAULT_INBOX_FILTER} patch={vi.fn()} toggleMulti={vi.fn()}
@@ -73,7 +82,7 @@ describe("Riofix bulk controls in the real conversation list", () => {
     await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
     await user.click(screen.getByRole("button", { name: "Excluir", exact: true }));
     expect(api.rpc).not.toHaveBeenCalled();
-    expect(screen.getByRole("alertdialog")).toHaveTextContent("Excluir 1 conversas?");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Excluir 1 conversa?");
     await user.click(screen.getByRole("button", { name: "Excluir conversas", exact: true }));
     await waitFor(() => expect(api.rpc).toHaveBeenCalledWith("soft_delete_whatsapp_conversation", {
       p_organization_id: RIOFIX_ORG_ID, p_instance_id: "box-a", p_phone_number: "5511999999999",
@@ -84,7 +93,26 @@ describe("Riofix bulk controls in the real conversation list", () => {
     await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
     expect(screen.queryByRole("button", { name: "Excluir", exact: true })).not.toBeInTheDocument();
   });
+  it("unarchives the exact metadata id, including retired instances of the same line", async () => {
+    const { user } = setup({ archived: true });
+    await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
+    await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
+    await user.click(screen.getByRole("button", { name: "Desarquivar", exact: true }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith({ archived_at: null }));
+    expect(api.eq.mock.calls).toEqual([["organization_id", RIOFIX_ORG_ID], ["id", "historical-0"]]);
+  });
+  it("rejects a stale organization before submitting any row", async () => {
+    api.org = "other";
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Selecionar conversas" }));
+    await user.click(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" }));
+    await user.click(screen.getByRole("button", { name: "Arquivar", exact: true }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Arquivar", exact: true })).not.toBeDisabled());
+    expect(api.upsert).not.toHaveBeenCalled();
+  });
   it("keeps failed rows checked for retry and locks repeated clicks while pending", async () => {
+    const report = vi.fn();
+    const unregister = addErrorReporter(report);
     let finish!: (value: unknown) => void;
     api.single.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     api.single.mockResolvedValueOnce({ error: new Error("network") });
@@ -97,5 +125,7 @@ describe("Riofix bulk controls in the real conversation list", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 selecionadas"));
     expect(screen.getByRole("checkbox", { name: "Selecionar 5521999999999" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Selecionar 5511999999999" })).not.toBeChecked();
+    expect(report).toHaveBeenCalledTimes(1);
+    unregister();
   });
 });

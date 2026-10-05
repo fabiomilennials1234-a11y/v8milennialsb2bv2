@@ -35,7 +35,8 @@ export function ConversationBulkToolbar({ organizationId, isAdmin, archived, sel
       onSelection(new Set(result.failed.map(contactKey)));
       const verb = action === "delete" ? "excluídas" : action === "archive" ? "arquivadas" : "desarquivadas";
       if (result.failed.length) {
-        toast.error(`${result.succeeded.length} ${verb}; ${result.failed.length} falharam. As que falharam continuam marcadas para tentar novamente.`);
+        const message = `${result.succeeded.length} ${verb}; ${result.failed.length} falharam. As que falharam continuam marcadas para tentar novamente.`;
+        notifyError(result.errors[0], { fallback: message, message, context: { feature: "conversation-batch" } });
       } else {
         toast.success(`${result.succeeded.length} conversas ${verb}.`);
         onSelecting(false);
@@ -76,7 +77,7 @@ export function ConversationBulkToolbar({ organizationId, isAdmin, archived, sel
       <AlertDialog open={deleting !== null} onOpenChange={open => { if (!open) setDeleting(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir {deleting?.length} conversas?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir {deleting?.length} {deleting?.length === 1 ? "conversa" : "conversas"}?</AlertDialogTitle>
             <AlertDialogDescription>
               As conversas irão para a lixeira por 30 dias, antes da exclusão definitiva. Os leads serão mantidos.
             </AlertDialogDescription>
