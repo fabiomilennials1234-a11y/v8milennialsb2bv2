@@ -37,7 +37,13 @@
 -- ── PRÉ-CONDIÇÃO DURA (não aplicar antes) ──────────────────────────────────
 -- 1. O front com `mergeRealtimeUpdate` (src/modules/communication/hooks/chat/
 --    shared/realtimeUpdate.ts, usado em useWhatsAppRealtime.ts) JÁ EM PROD; e
--- 2. depois disso, UM DIA ÚTIL de janela para as abas abertas no bundle antigo
+-- 2. a interface CLÁSSICA também — `classic/` é servida por padrão (114 de 120
+--    orgs) e o handler dela ainda SUBSTITUI a linha no UPDATE
+--    (classic/src/modules/communication/hooks/chat/useWhatsAppRealtime.ts:100-104).
+--    O SELECT da clássica não traz raw_payload, só as projeções `uazapi_*`.
+--    Portabilidade na trilha perf/classic-port-front-perf; sem ela em prod,
+--    C1 NÃO sobe; e
+-- 3. depois disso, UM DIA ÚTIL de janela para as abas abertas no bundle antigo
 --    morrerem — não existe reload forçado do bundle.
 -- Por quê: hoje, sem C1, raw_payload > 2 kB fica COMPRIMIDO DENTRO do heap
 -- (external = 0) e o wal2json o envia em todo UPDATE. C1 tira do heap ~14%
