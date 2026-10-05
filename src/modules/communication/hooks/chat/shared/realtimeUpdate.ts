@@ -13,9 +13,24 @@
  * menu, os botões e o pix da bolha — a cada mudança de status. Por isso:
  *   - chave ausente ou `undefined` → mantém o valor do cache;
  *   - `null` explícito → sobrescreve (é mudança real, ex.: `deleted_at`).
+ *
+ * As projeções `uazapi_*` vêm do SELECT (`raw_payload->...`, ver
+ * whatsappMessagesQuery.ts) e têm PRECEDÊNCIA sobre `raw_payload` nos leitores
+ * (uazapiMenuDisplay, uazapiButtonsDisplay, uazapiPixDisplay). O Realtime nunca
+ * as manda. Quando o UPDATE traz um `raw_payload` novo, as projeções do cache
+ * ficaram velhas: descartá-las deixa o leitor cair no `raw_payload` novo em vez
+ * de mostrar o menu antigo.
  */
+const PROJECAO_DO_RAW_PAYLOAD = /^uazapi_/;
+
 export function mergeRealtimeUpdate<T extends object>(prev: T, incoming: Partial<T>): T {
   const merged = { ...prev };
+  const rawPayloadNovo = (incoming as Record<string, unknown>).raw_payload !== undefined;
+  if (rawPayloadNovo) {
+    for (const key of Object.keys(merged)) {
+      if (PROJECAO_DO_RAW_PAYLOAD.test(key)) delete (merged as Record<string, unknown>)[key];
+    }
+  }
   for (const key of Object.keys(incoming) as Array<keyof T>) {
     const value = incoming[key];
     if (value !== undefined) merged[key] = value as T[keyof T];

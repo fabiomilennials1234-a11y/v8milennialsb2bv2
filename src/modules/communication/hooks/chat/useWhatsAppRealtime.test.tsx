@@ -30,6 +30,7 @@ vi.mock("@/modules/identity", () => ({
 
 import { useWhatsAppMessagesRealtime } from "./useWhatsAppRealtime";
 import { chatQueryKeys } from "./shared/queryKeys";
+import { readUazapiMenu } from "@/modules/communication/lib/uazapiMenuDisplay";
 
 const ORG = "org-1";
 const INST = "inst-1";
@@ -355,6 +356,21 @@ describe("useWhatsAppMessagesRealtime — UPDATE funde, não substitui", () => {
     expect(m.status).toBe("read");
     expect(m.pinned_at).toBeNull();
     expect(m.raw_payload).toEqual(novoRaw);
+  });
+
+  it("raw_payload novo não fica escondido por projeção uazapi_* antiga do SELECT", () => {
+    // As projeções têm precedência sobre raw_payload nos leitores de display;
+    // se sobrevivessem ao UPDATE, o menu novo nunca apareceria.
+    const qc = setupThread();
+    const novoRaw = {
+      content: { title: "Novos planos", sections: [{ title: "S", rows: [{ title: "Pro" }] }] },
+    };
+
+    capturedOnEvent?.(updateDeStatus({ raw_payload: novoRaw }));
+
+    const m = mensagem(qc);
+    expect("uazapi_menu_title" in m).toBe(false);
+    expect(readUazapiMenu(m)?.title).toBe("Novos planos");
   });
 
   it("chave presente com undefined não apaga o valor do cache", () => {

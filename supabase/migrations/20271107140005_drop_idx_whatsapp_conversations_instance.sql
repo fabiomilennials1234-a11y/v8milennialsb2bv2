@@ -6,9 +6,11 @@
 -- ── POR QUÊ (medido em prod, 2026-10-05) ───────────────────────────────────
 -- idx_whatsapp_conversations_instance (instance_id), 16 kB, é prefixo exato do
 -- UNIQUE whatsapp_conversations_instance_id_phone_number_key (instance_id,
--- phone_number), 48 kB. Teve 7 scans entre 15:55 e 16:08 UTC: o planner o
--- prefere por ser menor, e o UNIQUE atende o mesmo predicado (e a FK de
--- instance_id) numa tabela que cabe em poucas páginas. Redundância pura.
+-- phone_number), 48 kB. Teve 781 scans entre 15:55 e 19:39 UTC: o planner o
+-- prefere por ser menor, e os mesmos predicados ficam cobertos pelo UNIQUE
+-- (instance_id, phone_number) e por idx_whatsapp_conversations_state
+-- (instance_id, deleted_at, archived_at) — inclusive a FK de instance_id —
+-- numa tabela que cabe em poucas páginas. Redundância pura.
 -- Origem: baseline 20260101000000:32444.
 --
 -- ── COMO APLICAR ───────────────────────────────────────────────────────────

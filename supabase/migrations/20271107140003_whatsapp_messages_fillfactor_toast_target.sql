@@ -34,6 +34,18 @@
 -- CREATE INDEX CONCURRENTLY na mesma tabela. Só catálogo: sem rewrite (a doc:
 -- "the table contents will not be modified immediately by this command").
 --
+-- ── PRÉ-CONDIÇÃO DURA (não aplicar antes) ──────────────────────────────────
+-- 1. O front com `mergeRealtimeUpdate` (src/modules/communication/hooks/chat/
+--    shared/realtimeUpdate.ts, usado em useWhatsAppRealtime.ts) JÁ EM PROD; e
+-- 2. depois disso, UM DIA ÚTIL de janela para as abas abertas no bundle antigo
+--    morrerem — não existe reload forçado do bundle.
+-- Por quê: hoje, sem C1, raw_payload > 2 kB fica COMPRIMIDO DENTRO do heap
+-- (external = 0) e o wal2json o envia em todo UPDATE. C1 tira do heap ~14%
+-- deles — justamente menus, botões e pix — e o wal2json v2 OMITE coluna TOAST
+-- inalterada: o UPDATE de status do Realtime passa a chegar SEM raw_payload. O
+-- bundle antigo substitui a linha pelo payload e a bolha perde o menu/botões/
+-- pix até o próximo refetch; o bundle novo funde e preserva.
+--
 -- ── COMO APLICAR ───────────────────────────────────────────────────────────
 -- Roda em transação (diferente das irmãs DROP INDEX CONCURRENTLY), mas aplique
 -- junto delas: psql autocommit no pooler em modo session (porta 5432), com

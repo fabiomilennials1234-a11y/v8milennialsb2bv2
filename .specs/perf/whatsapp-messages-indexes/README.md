@@ -12,6 +12,8 @@ Origem: OOM de prod em 2026-10-05. `whatsapp_messages` = heap 1.921 MB + toast 1
 
 Versões provisórias: renumerar contra o ledger na hora de aplicar. Aplicar por psql autocommit no pooler session (5432) com `SET lock_timeout='3s'`; nunca `apply_migration` nem `db push` (os DROP CONCURRENTLY falham em transação). Registrar as versões no ledger à mão.
 
+**Pré-condição dura de C1:** o front com `mergeRealtimeUpdate` precisa estar em prod e, depois disso, é preciso esperar um dia útil para as abas abertas no bundle antigo morrerem. Não existe reload forçado do bundle. O motivo: C1 tira do heap o `raw_payload` de cerca de 14% das mensagens (menus, botões e pix). Com isso, o UPDATE do Realtime passa a chegar sem esse campo, e o bundle antigo apaga o display da bolha.
+
 Prova: `node --test tests/integration/whatsapp-messages-hot.test.mjs` (PGlite).
 
 ### O que o teste mostrou (fluxo calibrado na distribuição de prod)
