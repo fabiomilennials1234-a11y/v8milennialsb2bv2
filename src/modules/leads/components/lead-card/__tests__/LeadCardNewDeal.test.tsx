@@ -72,7 +72,7 @@ describe("Criação de negócio compartilhada pelo chat e card", () => {
     const { rerender } = render(form());
     expect(screen.getByRole("status")).toHaveTextContent("Carregando funis e permissões");
     expect(screen.queryByTestId("new-deal-sem-funil")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("new-deal-submit")).not.toBeInTheDocument();
+    expect(screen.getByTestId("new-deal-submit")).toBeDisabled();
     if (dependency === "gate") state.gate.isLoading = false;
     else state[dependency].isPending = false;
     rerender(form());
@@ -85,7 +85,7 @@ describe("Criação de negócio compartilhada pelo chat e card", () => {
     state.pipelines.isError = true;
     const { rerender } = render(form());
     expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar os funis");
-    expect(screen.queryByTestId("new-deal-submit")).not.toBeInTheDocument();
+    expect(screen.getByTestId("new-deal-submit")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
     expect(state.pipelines.refetch).toHaveBeenCalledOnce();
     state.pipelines.isError = false;
@@ -116,5 +116,26 @@ describe("Criação de negócio compartilhada pelo chat e card", () => {
     fireEvent.click(screen.getByTestId("new-deal-submit"));
     await waitFor(() => expect(state.close).toHaveBeenCalledWith(false));
     expect(state.create).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["refetch", "permissões"])("preserva o rascunho após indisponibilidade de %s durante a edição", async (dependency) => {
+    const { rerender } = render(form());
+    fireEvent.change(screen.getByTestId("new-deal-value"), { target: { value: "450,25" } });
+    fireEvent.change(screen.getByTestId("new-deal-notes"), { target: { value: "Não perder este pedido" } });
+    if (dependency === "refetch") state.pipelines.isError = true;
+    else state.gate.isLoading = true;
+    rerender(form());
+    expect(screen.getByTestId("new-deal-submit")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    expect(state.create).not.toHaveBeenCalled();
+    state.pipelines.isError = false;
+    state.gate.isLoading = false;
+    rerender(form());
+    expect(screen.getByTestId("new-deal-notes")).toHaveValue("Não perder este pedido");
+    expect(screen.getByTestId("new-deal-value")).toHaveValue("450,25");
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    await waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({
+      ownerId: "tm-1", stageId: "orcamento", saleValue: 450.25, notes: "Não perder este pedido",
+    })));
   });
 });

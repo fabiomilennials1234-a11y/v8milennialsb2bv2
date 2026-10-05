@@ -1,7 +1,4 @@
 import { useCurrentTeamMember } from "@/modules/identity";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { useLeadAllPipelines, type PipelineStatus } from "../../hooks/useLeadAllPipelines";
 import { usePipeOps } from "../../pipe-ops";
@@ -72,37 +69,12 @@ export function LeadCardNewDeal({
   const isError = queries.some((query) => query.isError);
   const isLoading = queries.some((query) => query.isPending) || canAddToPipe.isLoading;
 
-  // O formulário inicializa funil/etapa ao abrir. Só montá-lo com os dados
-  // prontos também diferencia indisponibilidade de "nenhum funil disponível".
-  if (isError || isLoading) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg z-[60]" overlayClassName="z-[60]">
-          <DialogHeader>
-            <DialogTitle>Novo negócio</DialogTitle>
-            <DialogDescription>Escolha um funil para o novo negócio.</DialogDescription>
-          </DialogHeader>
-          {isError ? (
-            <div role="alert" className="space-y-3 text-sm">
-              <p>Não foi possível carregar os funis. Tente novamente.</p>
-              <Button variant="outline" onClick={() => void Promise.all(queries.map((query) => query.refetch()))}>
-                Tentar novamente
-              </Button>
-            </div>
-          ) : (
-            <p role="status" className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Carregando funis e permissões…
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
     <NewDealDialog
       options={options}
+      isLoading={isLoading}
+      loadError={isError}
+      onRetry={() => void Promise.all(queries.map((query) => query.refetch()))}
       isCreating={isCreating}
       onCreate={criar}
       open={open}
