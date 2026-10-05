@@ -1,3 +1,4 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 /**
  * ChatBubbleComposer — composer compact próprio para o Bubble (380×).
  *
@@ -86,7 +87,7 @@ export function ChatBubbleComposer({
     }
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const validationError = getAttachmentValidationError(file);
@@ -99,20 +100,14 @@ export function ChatBubbleComposer({
       e.target.value = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = reader.result as string;
+    const input = e.target;
+    try {
+      const data = await readMediaAsDataUrl(file);
       setAttachment({ data, name: file.name, mime: file.type });
-    };
-    reader.onerror = () => {
-      toast({
-        title: "Erro ao ler arquivo",
-        description: "Não foi possível ler o arquivo selecionado. Tente novamente.",
-        variant: "destructive",
-      });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = ""; // permite re-selecionar mesmo arquivo
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível ler o arquivo." });
+    }
+    input.value = ""; // permite re-selecionar mesmo arquivo
   };
 
   const handleSendAttachment = async () => {
@@ -148,12 +143,7 @@ export function ChatBubbleComposer({
   const handleAudioRecorded = async (blob: Blob) => {
     setIsRecording(false);
     try {
-      const reader = new FileReader();
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      const dataUrl = await readMediaAsDataUrl(blob);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,

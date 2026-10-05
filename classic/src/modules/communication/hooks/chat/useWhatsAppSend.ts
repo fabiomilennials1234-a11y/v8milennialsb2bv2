@@ -1,4 +1,5 @@
 import { providerSendStatus } from "@/modules/communication/lib/providerSendStatus";
+import { useRef } from "react";
 import { useChatReply } from "./useChatReply";
 /**
  * useSendWhatsAppMessage + useSendWhatsAppMedia + useFailedMessages + useRetryMessage
@@ -16,10 +17,11 @@ import {
   friendlyWhatsAppSendError,
   whatsAppSendErrorMessage,
 } from "@/modules/communication/lib/edgeFunctionError";
-import { sendWithBoundedRecovery, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
+import { sendWithBoundedRecovery, SendRetriesExhausted, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
 import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 import { userMessageOf } from "@/shared/errors";
+import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "../../lib/media-operation";
 
 /**
  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
@@ -53,11 +55,13 @@ async function isSzChatInstanceCached(instanceId: string | null | undefined): Pr
   if (!instanceId) return false;
   const cached = szChatCache.get(instanceId);
   if (cached !== undefined) return cached;
-  const { data } = await supabase
+  const { data, error } = await withMediaDeadline("connection", signal => supabase
     .from("whatsapp_instances")
     .select("metadata")
     .eq("id", instanceId)
-    .maybeSingle();
+    .abortSignal(signal)
+    .maybeSingle());
+  if (error) throw new MediaOperationError("connection", "failed");
   const result = (data?.metadata as Record<string, unknown>)?.channel === "sz_chat";
   szChatCache.set(instanceId, result);
   return result;
@@ -175,16 +179,21 @@ async function uploadMediaToStorage(
   // URL pra enviar), então um path não-enumerável impede acesso por adivinhação.
   const filePath = `whatsapp-media/${organizationId}/${crypto.randomUUID()}/${uniqueFileName}`;
 
-  const { error } = await supabase.storage
-    .from("media")
-    .upload(filePath, blob, {
-      contentType: mimeType,
-      upsert: true,
+  // storage-js upload() has no AbortSignal. Sign with the current user's RLS,
+  // then PUT with a cancellable transport. A late signing response cannot send.
+  await withMediaDeadline("upload", async signal => {
+    const { data, error } = await supabase.storage.from("media").createSignedUploadUrl(filePath);
+    signal.throwIfAborted();
+    if (error || !data?.signedUrl) {
+      const status = Number((error as { statusCode?: string } | null)?.statusCode);
+      throw new MediaOperationError("upload", status === 401 ? "unauthorized" : status === 403 ? "forbidden" : "failed");
+    }
+    const response = await fetch(data.signedUrl, {
+      method: "PUT", body: blob, signal,
+      headers: { "Content-Type": mimeType, "cache-control": "max-age=3600", "x-upsert": "false" },
     });
-
-  if (error) {
-    throw new Error(`Erro ao fazer upload: ${error.message}`);
-  }
+    if (!response.ok) throw new MediaOperationError("upload", response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : "failed");
+  }, MEDIA_UPLOAD_TIMEOUT_MS);
 
   const { data: urlData } = supabase.storage
     .from("media")
@@ -409,6 +418,14 @@ export function useSendWhatsAppMedia() {
   const reply = useChatReply();
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  // Keep the current attachment after failure, but a second click must only
+  // reconcile an ambiguous send; uploading again would generate a new URL and
+  // bypass the recovery controller's duplicate protection.
+  const unconfirmed = useRef<{
+    media: string; phone: string; instance: string | null | undefined;
+    org: string; caption: string; quote: string | undefined;
+    confirm: () => Promise<SendResponse | null>;
+  } | null>(null);
 
   return useMutation({
     retry: false, // one recovery controller owns the ten-attempt budget
@@ -443,6 +460,16 @@ export function useSendWhatsAppMedia() {
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
       if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
+      const previous = unconfirmed.current;
+      if (previous && previous.org === teamMember.organization_id && previous.media === media
+        && previous.phone === formattedNumber && previous.instance === instanceId
+        && previous.caption === (caption ?? "") && previous.quote === replyContext?.messageId) {
+        const confirmed = await withMediaDeadline("connection", () => previous.confirm(), 3_000).catch(() => null);
+        if (!confirmed?.data) throw new SendRetriesExhausted();
+        unconfirmed.current = null;
+        const result = confirmed.data.result as { message_id?: string } | undefined;
+        return { ...confirmed.data, _localMessage: { messageId: result?.message_id } };
+      }
       let mediaUrl = media;
 
       if (media.startsWith("data:")) {
@@ -455,11 +482,17 @@ export function useSendWhatsAppMedia() {
       }
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
+      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl);
 
       let data: Record<string, unknown>;
       let error: unknown;
 
       if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
+      if (!isSzChat && !instanceId) throw new Error("Instância WhatsApp não identificada. Recarregue a página.");
+      unconfirmed.current = {
+        media, phone: formattedNumber, instance: instanceId, org: teamMember.organization_id,
+        caption: caption ?? "", quote: replyContext?.messageId, confirm: recovery.confirm,
+      };
       if (isSzChat) {
         const result = await invokeWithTimeout("sz-chat-send", {
           action: "send_message",
@@ -468,7 +501,10 @@ export function useSendWhatsAppMedia() {
           message: caption || "",
           message_type: "media",
           media_url: mediaUrl,
-        }, 60_000, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl));
+        }, 60_000, recovery);
+        // A returned result is success or a definite HTTP rejection. Only
+        // exhausted ambiguous sends throw and retain the confirmation guard.
+        unconfirmed.current = null;
         data = result.data;
         error = result.error;
 
@@ -503,8 +539,9 @@ export function useSendWhatsAppMedia() {
             payload: proxyPayload,
           },
           60_000, // media needs more time (upload + Uazapi)
-          recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl),
+          recovery,
         );
+        unconfirmed.current = null;
         data = result.data;
         error = result.error;
 
@@ -525,6 +562,7 @@ export function useSendWhatsAppMedia() {
         }
       }
 
+      unconfirmed.current = null;
       const d = data as Record<string, any>;
       const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
 
@@ -595,6 +633,10 @@ export function useSendWhatsAppMedia() {
     onSuccess: (data, variables, context) => {
       if (variables.replyContext) reply?.clear(variables.replyContext.messageId);
       // Mesma promoção do envio de texto — ver comentário lá.
+      queryClient.setQueryData<FailedMessage[]>(
+        ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+        (prev = []) => prev.filter(m => m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId),
+      );
       const realMessageId = readProviderMessageId(data);
       if (context?.optimisticId) {
         queryClient.setQueryData<WhatsAppMessage[]>(
@@ -614,7 +656,7 @@ export function useSendWhatsAppMedia() {
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev.filter(m => m.id !== context?.optimisticId),
+        ...prev.filter(m => m.id !== context?.optimisticId && (m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId)),
         {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,

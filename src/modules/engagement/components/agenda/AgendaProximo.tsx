@@ -15,6 +15,7 @@ import { FocusCard, FocusTile, InkPanel } from "@/components/ui/bento";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UnifiedEvent } from "./agenda-helpers";
+import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 const GOOGLE_SETTINGS_PATH = "/configuracoes/integracoes";
 
@@ -73,8 +74,8 @@ export function AgendaProximo({
                 <FocusTile className="flex items-center gap-2">
                   <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="min-w-0">
-                    <span className="block truncate text-[12.5px] font-bold">{proximo.creatorName ?? "Sem responsável"}</span>
-                    <span className="block text-[10.5px] text-primary-foreground/65">Responsável</span>
+                    <span className="block truncate text-[12.5px] font-bold">{proximo.creatorName ?? "Não informado"}</span>
+                    <span className="block text-[10.5px] text-primary-foreground/65">{agendaAttributionLabel(proximo.source)}</span>
                   </span>
                 </FocusTile>
                 <FocusTile className="flex items-center gap-2">

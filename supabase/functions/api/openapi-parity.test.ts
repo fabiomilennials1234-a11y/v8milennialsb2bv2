@@ -45,6 +45,14 @@ Deno.test("openapi — a especificação não promete rota que não existe", () 
   assertEquals(sobrando, [], `documentadas e inexistentes: ${sobrando.join(", ")}`);
 });
 
+Deno.test("openapi — GET deals documenta filtros de criação do negócio separados da sincronização", () => {
+  const spec = JSON.parse(Deno.readTextFileSync(ESPEC));
+  const parameters = spec.paths["/api/v1/deals"].get.parameters;
+  for (const name of ["created_from", "created_to", "updated_since"]) {
+    assertEquals(parameters.some((parameter: { name: string; in: string }) => parameter.name === name && parameter.in === "query"), true, `parâmetro sem documentação: ${name}`);
+  }
+});
+
 /**
  * A armadilha de vocabulário, e por que ela merece um teste.
  *

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
-import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
+import type { CorrecaoVendaHistorica } from "./types";
 
 const hojeLocal = () => new Date().toLocaleDateString("en-CA");
 

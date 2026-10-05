@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { notifyError } from "@/shared/errors";
+import { notifyError, toAppError } from "@/shared/errors";
 
 /**
  * Escrita de `deal_items` — os produtos do negócio.
@@ -91,7 +91,14 @@ export function useEditarValorProposta(entryId: string | null) {
       if (error) throw error;
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
-    onError: (error: Error) => notifyError(error, { fallback: "Não foi possível salvar o valor." }),
+    onError: async (error: Error) => {
+      if (toAppError(error).code === "conflict.stale") {
+        // mutateAsync só devolve o conflito ao editor depois da leitura ativa:
+        // a próxima edição captura a versão atual, sem sobrescrever concorrência.
+        await queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+      }
+      notifyError(error, { fallback: "Não foi possível salvar o valor." });
+    },
   });
 }
 

@@ -20,6 +20,13 @@ import type { LeadCardDeal } from "../lead-card/types";
 
 export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
 
+export interface CorrecaoVendaHistorica {
+  valor: number;
+  /** AAAA-MM-DD, no dia civil da organização. */
+  data: string;
+  motivo: string;
+}
+
 /**
  * `meetings.status` — o desfecho da reunião, como a Agenda o grava.
  *

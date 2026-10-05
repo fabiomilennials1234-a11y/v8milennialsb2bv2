@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Check, Package, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
+// Import puro: o card também roda na preview pública, sem client nem hooks de dados.
+import { toAppError } from "@/shared/errors/to-app-error";
 import type { DealCardItem, ItemEditado } from "./types";
 import { contaDoNegocio } from "./conta-do-negocio";
 
@@ -360,14 +362,19 @@ export function DealCardMoney({
   const [rascunhoValor, setRascunhoValor] = useState("");
   const [salvandoValor, setSalvandoValor] = useState(false);
   const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
+  const [conflitoDeValor, setConflitoDeValor] = useState(false);
   const salvarValor = async () => {
     if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
     setSalvandoValor(true);
     try {
       await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
       setEditandoValor(false);
-    } catch {
-      // O chamador informa o erro; preservar a edição para corrigir/tentar novamente.
+    } catch (error) {
+      if (toAppError(error).code === "conflict.stale") {
+        setEditandoValor(false);
+        setConflitoDeValor(true);
+      }
+      // Outros erros preservam o rascunho para corrigir/tentar novamente.
     } finally { setSalvandoValor(false); }
   };
   const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
@@ -493,11 +500,17 @@ export function DealCardMoney({
               <button type="button" className="text-sm font-semibold text-primary-soft-foreground disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
               <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
             </> : <button type="button" className="text-sm font-semibold text-primary-soft-foreground hover:underline" onClick={() => {
+              setConflitoDeValor(false);
               setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
               setVersaoEditada(versaoDoNegocio);
               setEditandoValor(true);
             }}>{valorDoNegocio == null ? "Definir valor" : "Editar valor"}</button>}
           </div>
+        )}
+        {conflitoDeValor && (
+          <p role="status" className="pt-2 text-xs text-muted-foreground">
+            O valor mudou enquanto você editava. Confira o valor atual e abra a edição novamente.
+          </p>
         )}
       </div>
     </section>

@@ -107,6 +107,7 @@ import { EditMeetingDialog } from "./EditMeetingDialog";
 import { ScheduleMessageModal } from "@/modules/communication";
 import { IconChip } from "@/components/ui/bento";
 import { notifyError } from "@/shared/errors";
+import { useLeadResponsibles } from "@/modules/leads";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -144,6 +145,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const [view, setView] = useState<ViewType>(() => (isMobile ? "day" : "week"));
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
+  const leadResponsibles = useLeadResponsibles(popover?.event.leadId ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
   /** Id CRU da reunião em edição (sem o prefixo de fonte). `null` = fechado. */
@@ -795,6 +797,9 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         {popover && (
           <EventDetailPopover
             state={popover}
+            leadResponsibles={leadResponsibles.data}
+            leadResponsiblesLoading={leadResponsibles.isLoading}
+            leadResponsiblesError={leadResponsibles.isError}
             onClose={() => setPopover(null)}
             onDeleteMeeting={handleDeleteMeeting}
             onSetOutcome={handleSetOutcome}

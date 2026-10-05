@@ -1428,7 +1428,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Lista Negócios da organização. Cursor keyset por `(last_activity_at, id)` — **não** por criação. Use `updated_since` para sincronização incremental: traz o que mudou, incluindo mudança de etapa. Escopo: deal:read.",
+        "description": "Lista Negócios da organização. Cursor keyset por `(last_activity_at, id)` — **não** por criação. Use `updated_since` para sincronização incremental: traz o que mudou, incluindo mudança de etapa. Escopo: deal:read. Filtre a criação do Negócio por created_from/created_to (limites inclusivos). O retorno created_at é do Negócio, não do lead. Esses filtros não mudam a ordenação nem o cursor de last_activity_at. Datas inválidas retornam 422 invalid_created_from/invalid_created_to; início após fim retorna invalid_created_range.",
         "parameters": [
           {
             "name": "pipeline",
@@ -1464,6 +1464,26 @@
                 "lost",
                 "all"
               ]
+            }
+          },
+          {
+            "name": "created_from",
+            "description": "ISO 8601. Data de criação do Negócio >= este instante (inclusivo), não a criação do lead.",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "created_to",
+            "description": "ISO 8601. Data de criação do Negócio <= este instante (inclusivo).",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           },
           {

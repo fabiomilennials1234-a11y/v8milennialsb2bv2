@@ -32,6 +32,8 @@
  *   @/modules/engagement/pages/Revisao
  */
 
+export { agendaAttributionLabel } from "./lib/agenda-attribution";
+
 // ────────────────────────────────────────────────────────────────────────
 // Hooks — Activities (timeline de toques + outcome)
 // ────────────────────────────────────────────────────────────────────────

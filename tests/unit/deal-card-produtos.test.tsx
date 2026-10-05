@@ -84,6 +84,22 @@ describe("valor manual da proposta", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
     await waitFor(() => expect(salvar).toHaveBeenCalledWith(150, "v1"));
   });
+
+  it("após PT409 sai da edição e a próxima tentativa captura a versão recarregada", async () => {
+    const salvar = vi.fn().mockRejectedValueOnce({ code: "PT409", message: "stale", details: null, hint: null }).mockResolvedValueOnce(undefined);
+    const { rerender } = render(<DealCardMoney itens={[]} valorDoNegocio={100} versaoDoNegocio="v1" onEditarValor={salvar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar valor" }));
+    fireEvent.change(screen.getByLabelText("Valor da proposta"), { target: { value: "15000" } });
+    rerender(<DealCardMoney itens={[]} valorDoNegocio={200} versaoDoNegocio="v2" onEditarValor={salvar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
+    await waitFor(() => expect(screen.queryByLabelText("Valor da proposta")).toBeNull());
+    expect(salvar).toHaveBeenNthCalledWith(1, 150, "v1");
+    expect(screen.getByText(/O valor mudou enquanto você editava/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Editar valor" }));
+    fireEvent.change(screen.getByLabelText("Valor da proposta"), { target: { value: "25000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valor" }));
+    await waitFor(() => expect(salvar).toHaveBeenNthCalledWith(2, 250, "v2"));
+  });
 });
 
 describe("contaDoNegocio — a conta mora num lugar só", () => {
