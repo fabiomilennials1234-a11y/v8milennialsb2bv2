@@ -2,22 +2,25 @@
  * calculate-portfolio-health — Cron job that recalculates health scores for
  * all active upsell clients across orgs with customer_portfolio feature enabled.
  *
- * Schedule: triggered by pg_cron (e.g. every 30 minutes) via pg_net.
+ * Schedule: pg_cron `21 6,11-23/2 * * *` via pg_net (invoke_calculate_portfolio_health).
  * Auth: x-cron-secret header.
  *
- * Per client:
- *  - Fetches all order LINES, sorts by sold_at ASC
- *  - Colapsa as linhas no pedido real (cliente + dia UTC) e daí tira o ciclo de
- *    recompra e o avg_ticket — `upsell_orders` é linha-por-item, ver
- *    groupOrdersByDay em _shared/portfolio-health.ts
- *  - Calculates recency / frequency / ticket scores
- *  - Engagement defaults to 50 (neutral) — will be enhanced later
- *  - New clients (< 3 orders) get health_score = 70 (neutral)
- *  - Upserts health columns back into upsell_clients
- *  - Detects signals and syncs client_alerts (create new, resolve stale)
+ * I/O em lote (incidente 2026-10-05: o N+1 por cliente fazia ~4.500 req REST
+ * por execução e derrubou o compute Small por OOM). Por org:
+ *
+ *   1. `portfolio_health_inputs` (keyset de 500) → clientes + pedidos aprovados
+ *      + engajamento + último incoming; na 1ª página, os campos da org.
+ *   2. `computeClientHealth` em memória (_shared/portfolio-health.ts) — o
+ *      score continua em TS, idêntico ao de antes.
+ *   3. `portfolio_health_apply` → numa transação: UPDATE só onde mudou,
+ *      snapshot do dia, resolve/cria alertas; devolve os alertas CRIADOS.
+ *   4. Só depois do commit, só para os alertas criados: notificação WhatsApp
+ *      ao vendedor (crítico + flag da org + closer) e `recompra_atrasada`.
+ *
+ * Orçamento: 2 req de gating + 2 por página + raras por alerta novo.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -26,448 +29,229 @@ import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { shouldFireRetentionTrigger, type RetentionAgent } from "../_shared/retention-gate.ts";
 import { resolveInstance, sendTextViaInstance } from "../_shared/whatsapp-dispatch.ts";
 import {
-  calculateFrequencyScore,
-  calculateHealthScore,
-  calculateRecencyScore,
-  calculateTicketScore,
-  calculateEngagementScore,
-  calculateChurnProbability,
-  deriveHealthStatus,
-  deriveSegment,
-  deriveTrend,
-  detectSignals,
-  groupOrdersByDay,
-  computeCycleDays,
+  applyRowFrom,
+  computeClientHealth,
+  healthInputFromRow,
+  orgAvgTicketFrom,
+  type ClientHealthResult,
   type DetectedSignal,
-  type ProductFrequency,
+  type PortfolioApplyRow,
+  type PortfolioInputsClient,
+  type PortfolioInputsOrg,
 } from "../_shared/portfolio-health.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
-const BATCH_SIZE = 100;
-const ENGAGEMENT_DEFAULT = 50; // neutral — enhanced in future
-const NEW_CLIENT_SCORE = 70;    // < 3 orders → neutral start
+/**
+ * Clientes por página. service_role herda statement_timeout=8s do
+ * authenticator; o EXPLAIN do inputs para a maior org (667 clientes) custou
+ * 7074 — uma página de 500 cabe com folga.
+ */
+const PAGE_SIZE = 500;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface Order {
+type Supabase = SupabaseClient;
+
+interface InputsPage {
+  org: PortfolioInputsOrg | null;
+  clients: PortfolioInputsClient[];
+}
+
+interface InsertedAlert {
   id: string;
-  sale_value: number;
-  sold_at: string;
-  product_name: string;
+  client_id: string;
+  signal_index: number;
+  alert_type: string;
+  severity: string;
+  metadata: Record<string, unknown>;
 }
 
-interface ClientRow {
-  id: string;
-  organization_id: string;
-  lead_id: string | null;
-  closer_id: string | null;
-  name: string;
-  last_order_at: string | null;
+interface ApplyResult {
+  updated: number;
+  snapshots: number;
+  resolved: number;
+  inserted: InsertedAlert[];
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function daysBetween(a: Date, b: Date): number {
-  return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+interface OrgStats {
+  processed: number;
+  /** clientes cujo cálculo ou gravação falhou */
+  failed: number;
+  /** a leitura (portfolio_health_inputs) falhou: a org parou no meio */
+  inputsFailed: boolean;
 }
 
-function productFrequencies(orders: Order[]): ProductFrequency[] {
-  if (orders.length === 0) return [];
-  const counts: Record<string, number> = {};
-  for (const o of orders) {
-    counts[o.product_name] = (counts[o.product_name] ?? 0) + 1;
-  }
-  return Object.entries(counts).map(([productName, count]) => ({
-    productName,
-    appearsInPct: Math.round((count / orders.length) * 100),
-  }));
+interface OrgSettings {
+  orgAvgTicket: number;
+  defaultCycleDays?: number;
+  whatsappAlertsEnabled: boolean;
+  retentionAgent: RetentionAgent | null;
 }
 
-// ─── Per-client processor ────────────────────────────────────────────────────
+interface Computed {
+  client: PortfolioInputsClient;
+  result: ClientHealthResult;
+}
 
-async function processClient(
-  supabase: ReturnType<typeof createClient>,
-  client: ClientRow,
-  orgAvgTicket: number,
-  now: Date,
-  whatsappAlertsEnabled = false,
-  retentionAgent: RetentionAgent | null = null,
-  orgDefaultCycleDays?: number,
-): Promise<{ success: boolean; error?: string }> {
-  // Fetch all orders for this client
-  const { data: orders, error: ordersError } = await supabase
-    .from("upsell_orders")
-    .select("id, sale_value, sold_at, product_name")
-    .eq("client_id", client.id)
-    .eq("approval_status", "approved")
-    .order("sold_at", { ascending: true });
-
-  if (ordersError) {
-    return { success: false, error: ordersError.message };
-  }
-
-  // Fetch engagement data (requires lead_id)
-  let engagementScore = ENGAGEMENT_DEFAULT;
-  let daysSinceLastIncoming: number | null = null;
-
-  if (client.lead_id) {
-    const { data: ctxSummary } = await supabase
-      .from("conversation_context_summary")
-      .select("engagement_score")
-      .eq("lead_id", client.lead_id)
-      .maybeSingle();
-
-    const { data: lastIncoming } = await supabase
-      .from("whatsapp_messages")
-      .select("timestamp")
-      .eq("lead_id", client.lead_id)
-      .eq("direction", "incoming")
-      .order("timestamp", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    daysSinceLastIncoming = lastIncoming
-      ? Math.round(daysBetween(new Date(lastIncoming.timestamp), now))
-      : null;
-
-    engagementScore = calculateEngagementScore(
-      ctxSummary?.engagement_score ?? null,
-      daysSinceLastIncoming,
-    );
-  }
-
-  const orderList: Order[] = orders ?? [];
-
-  // `upsell_orders` é linha-por-ITEM. `dayOrders` colapsa no pedido real
-  // (cliente + dia UTC de sold_at) — ver groupOrdersByDay em _shared.
-  const dayOrders = groupOrdersByDay(orderList);
-
-  // ⚠️ ESCOPO DELIBERADO (decisão do CTO, 2026-08-13): o agrupamento por pedido
-  // alimenta SÓ o ciclo de recompra e o avg_ticket gravado — os dois números que
-  // o KPI "Receita Recorrente" usa e que estavam ×30 errados. `order_count`
-  // continua contando LINHAS de propósito: ele é entrada de `deriveSegment`
-  // (< 3 → 'novo', >= 5 → 'ouro'/'resgate'), e trocá-lo jogaria 145 dos 148
-  // clientes da Basic4u pra 'novo', esvaziando os funis de ouro/prata/resgate.
-  // Consequência aceita: para cliente com pedido multi-item,
-  // lifetime_value / order_count ≠ avg_ticket.
-  const orderCount = orderList.length;
-  const cycleDays = computeCycleDays(dayOrders, orgDefaultCycleDays);
-
-  // Last order date + recency
-  const sorted = [...orderList].sort(
-    (a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime(),
-  );
-  const lastOrder = sorted.at(-1);
-  // Carteira CSV imports seed `last_order_at` on the client without any order row
-  // (the sheet carries the purchase date but no value, and sale_value has a > 0
-  // CHECK). Fall back to that stored date when there are no orders so recency,
-  // days-since and reorder-overdue survive the nightly recompute instead of
-  // being zeroed back to null / 999.
-  const importedLastOrderAt =
-    !lastOrder && client.last_order_at ? new Date(client.last_order_at) : null;
-  const lastOrderAt = lastOrder ? new Date(lastOrder.sold_at) : importedLastOrderAt;
-  const daysSinceLastOrder = lastOrderAt
-    ? Math.round(daysBetween(lastOrderAt, now))
-    : 999;
-
-  // Ticket stats
-  const totalValue = orderList.reduce((s, o) => s + Number(o.sale_value), 0);
-  const lifetimeValue = totalValue;
-
-  // Gravado na coluna avg_ticket: total / PEDIDOS (o que a tela e o KPI mostram).
-  const avgTicket = dayOrders.length > 0 ? totalValue / dayOrders.length : 0;
-
-  // Usado só nos SCORES: total / LINHAS, a base de hoje. Mantido de propósito
-  // porque as contrapartes com que ele é comparado também são por linha —
-  // `recentAvg` (média das linhas dos últimos 90d), `lastThreeTickets` (últimas
-  // 3 linhas) e `orgAvgTicket` (média das linhas da org). Trocar só um lado da
-  // razão moveria health/segment/trend sem que nada tivesse ficado mais correto.
-  const scoringAvgTicket = orderCount > 0 ? totalValue / orderCount : 0;
-
-  // Recency period = last 90 days vs historical base
-  const cutoff90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  const recent90 = orderList.filter((o) => new Date(o.sold_at) >= cutoff90);
-  const recentCount = recent90.length;
-  const historicalCount = Math.max(1, Math.ceil((orderCount * 90) / 365)); // expected in 90d
-
-  // Last-3 tickets for declining detection
-  const lastThreeTickets = sorted.slice(-3).map((o) => Number(o.sale_value));
-
-  // Compute dimensions
-  const recencyScore = lastOrderAt
-    ? calculateRecencyScore(daysSinceLastOrder, cycleDays)
-    : 0;
-  const frequencyScore = calculateFrequencyScore(recentCount, historicalCount);
-
-  // Ticket: recent avg vs historical avg
-  const recentAvg =
-    recent90.length > 0
-      ? recent90.reduce((s, o) => s + Number(o.sale_value), 0) / recent90.length
-      : 0;
-  const ticketScore = calculateTicketScore(recentAvg, scoringAvgTicket || 1);
-
-  const dims = {
-    recency: recencyScore,
-    frequency: frequencyScore,
-    ticket: ticketScore,
-    engagement: engagementScore,
+function orgSettingsFrom(org: PortfolioInputsOrg | null): OrgSettings {
+  return {
+    orgAvgTicket: orgAvgTicketFrom(org?.approved_sum, org?.approved_count),
+    defaultCycleDays: org?.default_reorder_cycle_days ?? undefined,
+    whatsappAlertsEnabled: org?.whatsapp_alerts_enabled === true,
+    retentionAgent: org?.retention_config
+      ? { retention_config: org.retention_config as RetentionAgent["retention_config"] }
+      : null,
   };
-
-  // New clients get a neutral score
-  const healthScore =
-    orderCount < 3 ? NEW_CLIENT_SCORE : calculateHealthScore(dims);
-
-  const healthStatus = deriveHealthStatus(healthScore);
-  const segment = deriveSegment(healthScore, scoringAvgTicket, orgAvgTicket, orderCount);
-  const trend = deriveTrend(lastThreeTickets, scoringAvgTicket);
-
-  // Next expected order
-  const nextOrderExpected = lastOrderAt
-    ? new Date(lastOrderAt.getTime() + cycleDays * 24 * 60 * 60 * 1000)
-    : null;
-
-  // Churn probability
-  const pf = productFrequencies(orderList);
-  const lastOrderProducts = lastOrder ? [lastOrder.product_name] : [];
-  const signalInput = {
-    daysSinceLastOrder,
-    cycleDays,
-    lastThreeTickets,
-    historicalAvgTicket: scoringAvgTicket,
-    productFrequencies: pf,
-    lastOrderProducts,
-    daysSinceLastWhatsAppReply: daysSinceLastIncoming,
-    lastNpsScore: null as number | null,
-  };
-  const churnProbability = orderCount < 3 ? 0 : calculateChurnProbability(signalInput, healthScore);
-
-  // Update upsell_clients
-  const { error: updateError } = await supabase
-    .from("upsell_clients")
-    .update({
-      health_score: healthScore,
-      health_status: healthStatus,
-      health_updated_at: now.toISOString(),
-      segment,
-      reorder_cycle_days: cycleDays,
-      days_since_last_order: daysSinceLastOrder,
-      last_order_at: lastOrderAt?.toISOString() ?? null,
-      next_order_expected: nextOrderExpected?.toISOString() ?? null,
-      order_count: orderCount,
-      lifetime_value: lifetimeValue,
-      avg_ticket: avgTicket || null,
-      trend,
-      churn_probability: churnProbability,
-    })
-    .eq("id", client.id);
-
-  if (updateError) {
-    return { success: false, error: updateError.message };
-  }
-
-  // Snapshot for sparkline history (upsert by client+date)
-  await supabase
-    .from("client_health_snapshots")
-    .upsert(
-      {
-        client_id: client.id,
-        organization_id: client.organization_id,
-        health_score: healthScore,
-        health_status: healthStatus,
-        segment,
-        snapshot_date: now.toISOString().slice(0, 10),
-      },
-      { onConflict: "client_id,snapshot_date" },
-    );
-
-  // Detect signals (reuse signalInput computed above)
-  const signals: DetectedSignal[] = detectSignals(signalInput);
-
-  // Sync alerts: resolve stale, create new, notify if enabled
-  await syncAlerts(supabase, client, signals, now, healthScore, segment, whatsappAlertsEnabled, retentionAgent);
-
-  return { success: true };
 }
 
-// ─── Alert sync ──────────────────────────────────────────────────────────────
+// ─── Efeitos externos de um alerta CRIADO ────────────────────────────────────
+//
+// Mesma regra de antes (syncAlerts), mas só roda depois do commit do apply e só
+// para o que o apply devolveu como inserido. Ordem: cliente da página, depois
+// índice do sinal em detectSignals — o rate limit de 1 notificação/cliente/dia
+// continua pegando o primeiro crítico, como antes.
 
-async function syncAlerts(
-  supabase: ReturnType<typeof createClient>,
-  client: ClientRow,
-  signals: DetectedSignal[],
+async function notifyCloser(
+  supabase: Supabase,
+  orgId: string,
+  { client, result }: Computed,
+  alert: InsertedAlert,
+  signal: DetectedSignal,
   now: Date,
-  healthScore: number,
-  segment: string,
-  whatsappAlertsEnabled = false,
-  retentionAgent: RetentionAgent | null = null,
 ): Promise<void> {
-  // Fetch open alerts for this client
-  const { data: openAlerts } = await supabase
-    .from("client_alerts")
-    .select("id, alert_type")
-    .eq("client_id", client.id)
-    .eq("is_resolved", false);
+  try {
+    // Rate limit: 1 notificação por cliente por dia
+    const { data: rateCheck } = await supabase.rpc("check_rate_limit", {
+      p_key: `portfolio_alert:${client.id}`,
+      p_max_requests: 1,
+      p_window_seconds: 86400,
+    });
+    if (!rateCheck?.allowed) return;
 
-  const openByType = new Map<string, string>(); // type → alert id
-  for (const a of openAlerts ?? []) {
-    openByType.set(a.alert_type, a.id);
-  }
+    const { data: closer } = await supabase
+      .from("team_members")
+      .select("phone, name")
+      .eq("id", client.closer_id)
+      .maybeSingle();
+    if (!closer?.phone) return;
 
-  const activeTypes = new Set(signals.map((s) => s.type));
+    const instance = await resolveInstance(supabase, orgId, { requireConnected: true });
+    if (!instance) return;
 
-  // Resolve alerts whose signal no longer fires
-  const toResolve: string[] = [];
-  for (const [type, id] of openByType) {
-    if (!activeTypes.has(type)) {
-      toResolve.push(id);
-    }
-  }
-  if (toResolve.length > 0) {
-    await supabase
-      .from("client_alerts")
-      .update({ is_resolved: true, resolved_at: now.toISOString() })
-      .in("id", toResolve);
-  }
+    const segment = result.update.segment;
+    const msg = `⚠️ *Alerta Carteira*\n\nCliente *${client.name}* (${segment.toUpperCase()}) precisa de atenção.\n\n${signal.title}\n${signal.description ?? ""}\n\nHealth Score: ${result.update.health_score}/100`;
 
-  // Create new alerts (skip already-open ones)
-  for (const signal of signals) {
-    if (openByType.has(signal.type)) continue; // already open
-    const { error: insertError } = await supabase.from("client_alerts").insert({
-      organization_id: client.organization_id,
-      client_id: client.id,
-      alert_type: signal.type,
-      severity: signal.severity,
-      title: signal.title,
-      description: signal.description,
-      metadata: signal.metadata,
+    const sent = await sendTextViaInstance(supabase, instance, closer.phone, msg, {
+      trackSource: "portfolio_alert",
+      trackId: client.id,
     });
 
-    if (insertError) {
-      console.error(
-        `[portfolio-health] Failed to insert alert for client ${client.id}:`,
-        insertError,
+    if (sent.success) {
+      await supabase
+        .from("client_alerts")
+        .update({ notified_at: now.toISOString() })
+        .eq("id", alert.id);
+    }
+  } catch (notifErr) {
+    console.error(
+      `[portfolio-health] Failed to send WhatsApp alert for client ${client.id}:`,
+      notifErr,
+    );
+  }
+}
+
+async function fireReorderTrigger(
+  supabase: Supabase,
+  orgId: string,
+  { client, result }: Computed,
+  alert: InsertedAlert,
+  signal: DetectedSignal,
+  retentionAgent: RetentionAgent | null,
+  now: Date,
+): Promise<void> {
+  if (!client.lead_id) return;
+  try {
+    // Retention gate: config do agente de retenção antes de disparar
+    let lastDispatchAt: Date | null = null;
+    if (retentionAgent?.retention_config?.max_frequency_days) {
+      const { data: lastDispatch } = await supabase
+        .from("outbound_dispatch_log")
+        .select("dispatched_at")
+        .eq("lead_id", client.lead_id)
+        .order("dispatched_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastDispatch?.dispatched_at) lastDispatchAt = new Date(lastDispatch.dispatched_at);
+    }
+
+    const gate = shouldFireRetentionTrigger({
+      retentionAgent,
+      alertSeverity: alert.severity,
+      lastDispatchAt,
+      now,
+    });
+
+    if (!gate.fire) {
+      console.log(
+        `[portfolio-health] Retention gate suppressed recompra_atrasada for lead ${client.lead_id}: ${gate.reason}`,
       );
-      continue;
+      return;
     }
 
-    // Send WhatsApp notification to salesperson on critical alerts
-    if (whatsappAlertsEnabled && signal.severity === "critical" && client.closer_id) {
-      try {
-        // Rate limit: 1 notification per client per day
-        const { data: rateCheck } = await supabase.rpc("check_rate_limit", {
-          p_key: `portfolio_alert:${client.id}`,
-          p_max_requests: 1,
-          p_window_seconds: 86400,
-        });
+    await fireTrigger({
+      supabase,
+      organizationId: orgId,
+      triggerType: "recompra_atrasada",
+      leadId: client.lead_id,
+      context: {
+        client_id: client.id,
+        days_overdue: signal.metadata.daysOverdue,
+        cycle_days: signal.metadata.cycleDays,
+        health_score: result.update.health_score,
+        segment: result.update.segment,
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[portfolio-health] Failed to fire recompra_atrasada trigger for lead ${client.lead_id}:`,
+      err,
+    );
+  }
+}
 
-        if (rateCheck?.allowed) {
-          // Look up closer's phone
-          const { data: closer } = await supabase
-            .from("team_members")
-            .select("phone, name")
-            .eq("id", client.closer_id)
-            .maybeSingle();
+async function runAlertEffects(
+  supabase: Supabase,
+  orgId: string,
+  computed: Computed[],
+  inserted: InsertedAlert[],
+  settings: OrgSettings,
+  now: Date,
+): Promise<void> {
+  if (inserted.length === 0) return;
 
-          if (closer?.phone) {
-            const instance = await resolveInstance(supabase, client.organization_id, {
-              requireConnected: true,
-            });
+  const position = new Map(computed.map((c, i) => [c.client.id, i]));
+  const ordered = [...inserted].sort(
+    (a, b) =>
+      (position.get(a.client_id) ?? 0) - (position.get(b.client_id) ?? 0) ||
+      a.signal_index - b.signal_index,
+  );
 
-            if (instance) {
-              const msg = `⚠️ *Alerta Carteira*\n\nCliente *${client.name}* (${segment.toUpperCase()}) precisa de atenção.\n\n${signal.title}\n${signal.description ?? ""}\n\nHealth Score: ${healthScore}/100`;
+  for (const alert of ordered) {
+    const idx = position.get(alert.client_id);
+    if (idx === undefined) continue; // apply só devolve cliente do payload
+    const entry = computed[idx];
+    const signal = entry.result.signals[alert.signal_index];
+    if (!signal || signal.type !== alert.alert_type) continue;
 
-              const result = await sendTextViaInstance(
-                supabase,
-                instance,
-                closer.phone,
-                msg,
-                { trackSource: "portfolio_alert", trackId: client.id },
-              );
-
-              if (result.success) {
-                // Mark alert as notified
-                const { data: insertedAlert } = await supabase
-                  .from("client_alerts")
-                  .select("id")
-                  .eq("client_id", client.id)
-                  .eq("alert_type", signal.type)
-                  .eq("is_resolved", false)
-                  .order("created_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-
-                if (insertedAlert) {
-                  await supabase
-                    .from("client_alerts")
-                    .update({ notified_at: now.toISOString() })
-                    .eq("id", insertedAlert.id);
-                }
-              }
-            }
-          }
-        }
-      } catch (notifErr) {
-        console.error(
-          `[portfolio-health] Failed to send WhatsApp alert for client ${client.id}:`,
-          notifErr,
-        );
-      }
+    if (settings.whatsappAlertsEnabled && alert.severity === "critical" && entry.client.closer_id) {
+      await notifyCloser(supabase, orgId, entry, alert, signal, now);
     }
 
-    // Fire workflow trigger for reorder_overdue signal if lead exists
-    if (signal.type === "reorder_overdue" && client.lead_id) {
-      try {
-        // Retention gate: check copilot agent config before firing
-        let lastDispatchAt: Date | null = null;
-        if (retentionAgent?.retention_config?.max_frequency_days) {
-          const { data: lastDispatch } = await supabase
-            .from("outbound_dispatch_log")
-            .select("dispatched_at")
-            .eq("lead_id", client.lead_id)
-            .order("dispatched_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (lastDispatch?.dispatched_at) {
-            lastDispatchAt = new Date(lastDispatch.dispatched_at);
-          }
-        }
-
-        const gate = shouldFireRetentionTrigger({
-          retentionAgent,
-          alertSeverity: signal.severity,
-          lastDispatchAt,
-          now,
-        });
-
-        if (!gate.fire) {
-          console.log(
-            `[portfolio-health] Retention gate suppressed recompra_atrasada for lead ${client.lead_id}: ${gate.reason}`,
-          );
-        } else {
-          await fireTrigger({
-            supabase,
-            organizationId: client.organization_id,
-            triggerType: "recompra_atrasada",
-            leadId: client.lead_id,
-            context: {
-              client_id: client.id,
-              days_overdue: signal.metadata.daysOverdue,
-              cycle_days: signal.metadata.cycleDays,
-              health_score: healthScore,
-              segment,
-            },
-          });
-        }
-      } catch (err) {
-        console.error(
-          `[portfolio-health] Failed to fire recompra_atrasada trigger for lead ${client.lead_id}:`,
-          err,
-        );
-      }
+    if (alert.alert_type === "reorder_overdue") {
+      await fireReorderTrigger(supabase, orgId, entry, alert, signal, settings.retentionAgent, now);
     }
   }
 }
@@ -475,96 +259,78 @@ async function syncAlerts(
 // ─── Per-org processor ───────────────────────────────────────────────────────
 
 async function processOrg(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Supabase,
   orgId: string,
   now: Date,
-): Promise<{ processed: number; failed: number }> {
-  const stats = { processed: 0, failed: 0 };
+): Promise<OrgStats> {
+  const stats: OrgStats = { processed: 0, failed: 0, inputsFailed: false };
   const orgT0 = Date.now();
+  let settings: OrgSettings | null = null;
+  let after: string | null = null;
 
-  // Check if WhatsApp alert notifications are enabled for this org
-  const { data: alertFeature } = await supabase
-    .from("organization_features")
-    .select("enabled")
-    .eq("organization_id", orgId)
-    .eq("feature_key", "portfolio_alerts_whatsapp")
-    .maybeSingle();
-  const whatsappAlertsEnabled = alertFeature?.enabled === true;
-
-  // Look up active retention agent for this org (once per org)
-  let retentionAgent: RetentionAgent | null = null;
-  const { data: agentRow } = await supabase
-    .from("copilot_agents")
-    .select("retention_config")
-    .eq("organization_id", orgId)
-    .eq("is_active", true)
-    .eq("retention_enabled", true)
-    .limit(1)
-    .maybeSingle();
-
-  if (agentRow?.retention_config) {
-    retentionAgent = { retention_config: agentRow.retention_config };
-  }
-
-  // Fetch org default reorder cycle
-  const { data: orgRow } = await supabase
-    .from("organizations")
-    .select("default_reorder_cycle_days")
-    .eq("id", orgId)
-    .single();
-  const orgDefaultCycleDays: number | undefined = orgRow?.default_reorder_cycle_days ?? undefined;
-
-  // Compute org-wide avg ticket for segmentation
-  const { data: ticketData } = await supabase
-    .from("upsell_orders")
-    .select("sale_value")
-    .eq("organization_id", orgId)
-    .eq("approval_status", "approved");
-
-  const allValues = (ticketData ?? []).map((r: { sale_value: number }) => Number(r.sale_value));
-  const orgAvgTicket =
-    allValues.length > 0
-      ? allValues.reduce((s: number, v: number) => s + v, 0) / allValues.length
-      : 0;
-
-  // Process active clients in batches
-  let offset = 0;
   while (true) {
-    const { data: clients, error: clientsError } = await supabase
-      .from("upsell_clients")
-      .select("id, organization_id, lead_id, closer_id, name, last_order_at")
-      .eq("organization_id", orgId)
-      .eq("is_active", true)
-      .range(offset, offset + BATCH_SIZE - 1);
+    const { data: page, error: inputsError } = await supabase.rpc("portfolio_health_inputs", {
+      p_org_id: orgId,
+      p_after: after,
+      p_limit: PAGE_SIZE,
+    });
 
-    if (clientsError) {
-      console.error(`[calculate-portfolio-health] clients query failed for org ${orgId}:`, clientsError);
+    if (inputsError || !page) {
+      console.error(
+        `[calculate-portfolio-health] inputs failed for org ${orgId}:`,
+        inputsError ?? "empty response",
+      );
+      // Todas as leituras da org estão num statement só (timeout de 8 s da
+      // service_role): falhar aqui deixa a org — ou o resto dela — sem
+      // recálculo. Marca para o run sair como `error`, nunca `success` mudo.
+      stats.inputsFailed = true;
       break;
     }
 
-    const batch: ClientRow[] = clients ?? [];
-    if (batch.length === 0) break;
+    const { org, clients } = page as InputsPage;
+    if (settings === null) settings = orgSettingsFrom(org);
+    if (!clients || clients.length === 0) break;
 
-    const CONCURRENCY = 15;
-    for (let i = 0; i < batch.length; i += CONCURRENCY) {
-      const chunk = batch.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled, retentionAgent, orgDefaultCycleDays)),
-      );
-      for (let j = 0; j < results.length; j++) {
-        if (results[j].success) {
-          stats.processed++;
-        } else {
-          stats.failed++;
-          console.warn(
-            `[calculate-portfolio-health] client ${chunk[j].id} failed: ${results[j].error}`,
-          );
-        }
+    const computed: Computed[] = [];
+    for (const client of clients) {
+      try {
+        const result = computeClientHealth(healthInputFromRow(client), settings, now);
+        computed.push({ client, result });
+      } catch (err) {
+        stats.failed++;
+        console.warn(`[calculate-portfolio-health] client ${client.id} failed:`, err);
       }
     }
 
-    if (batch.length < BATCH_SIZE) break;
-    offset += BATCH_SIZE;
+    if (computed.length > 0) {
+      const payload: PortfolioApplyRow[] = computed.map((c) => applyRowFrom(c.client.id, c.result));
+      const { data: applied, error: applyError } = await supabase.rpc("portfolio_health_apply", {
+        p_org_id: orgId,
+        p_now: now.toISOString(),
+        p_results: payload,
+      });
+
+      if (applyError || !applied) {
+        stats.failed += computed.length;
+        console.error(
+          `[calculate-portfolio-health] apply failed for org ${orgId}:`,
+          applyError ?? "empty response",
+        );
+      } else {
+        stats.processed += computed.length;
+        await runAlertEffects(
+          supabase,
+          orgId,
+          computed,
+          (applied as ApplyResult).inserted ?? [],
+          settings,
+          now,
+        );
+      }
+    }
+
+    if (clients.length < PAGE_SIZE) break;
+    after = clients[clients.length - 1].id;
   }
 
   const orgDurationMs = Date.now() - orgT0;
@@ -650,15 +416,17 @@ Deno.serve(
     }
 
     // Process all orgs
-    const summary: Record<string, { processed: number; failed: number }> = {};
+    const summary: Record<string, OrgStats> = {};
     let totalProcessed = 0;
     let totalFailed = 0;
+    let orgsFailed = 0;
 
     for (const orgId of targetOrgIds) {
       const orgStats = await processOrg(supabase, orgId, now);
       summary[orgId] = orgStats;
       totalProcessed += orgStats.processed;
       totalFailed += orgStats.failed;
+      if (orgStats.inputsFailed) orgsFailed++;
     }
 
     const durationMs = Date.now() - t0;
@@ -666,23 +434,25 @@ Deno.serve(
     await logRuntime({
       module: "carteira",
       action: "run",
-      status: totalFailed === 0 ? "success" : "error",
+      status: totalFailed === 0 && orgsFailed === 0 ? "success" : "error",
       payloadSnapshot: {
         orgs: targetOrgIds.length,
         totalProcessed,
         totalFailed,
+        orgsFailed,
         durationMs,
       },
       errorMessage:
-        totalFailed > 0
-          ? `${totalFailed} client(s) failed health calculation`
-          : undefined,
+        [
+          totalFailed > 0 ? `${totalFailed} client(s) failed health calculation` : null,
+          orgsFailed > 0 ? `${orgsFailed} org(s) failed reading inputs` : null,
+        ].filter(Boolean).join("; ") || undefined,
       durationMs,
     });
 
     console.log(
       `[calculate-portfolio-health] done — ${targetOrgIds.length} orgs, ` +
-      `${totalProcessed} ok, ${totalFailed} failed, ${durationMs}ms`,
+      `${totalProcessed} ok, ${totalFailed} failed, ${orgsFailed} org(s) failed, ${durationMs}ms`,
     );
 
     return new Response(
@@ -691,6 +461,7 @@ Deno.serve(
         orgs: targetOrgIds.length,
         totalProcessed,
         totalFailed,
+        orgsFailed,
         durationMs,
         summary,
       }),
