@@ -174,7 +174,7 @@ index 8feeb5b50..a63f8be8c 100644
    throw new SendRetriesExhausted();
  }
 diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
-index 5ff3c7d49..f67264bde 100644
+index 5ff3c7d49..ee123229a 100644
 --- a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
 +++ b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
 @@ -1,4 +1,5 @@
@@ -192,7 +192,7 @@ index 5ff3c7d49..f67264bde 100644
  import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
  import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
  import { userMessageOf } from "@/shared/errors";
-+import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "../../lib/media-operation";
++import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
  
  /**
   * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
@@ -464,8 +464,36 @@ index 000000000..b8aaa4f8d
 +    catch { finish(new MediaOperationError("read", "failed")); }
 +  }));
 +}
+diff --git a/classic/src/modules/leads/components/deal-card/DealCard.tsx b/classic/src/modules/leads/components/deal-card/DealCard.tsx
+index 9ca0d51ed..4dbe68239 100644
+--- a/classic/src/modules/leads/components/deal-card/DealCard.tsx
++++ b/classic/src/modules/leads/components/deal-card/DealCard.tsx
+@@ -284,6 +284,7 @@ export function DealCard({
+   ajustesPedido = [],
+   onRemoverItem,
+   onEditarValor,
++  onRecarregarValor,
+   movendo,
+   comentarios = [],
+   onComentar,
+@@ -334,6 +335,7 @@ export function DealCard({
+   }>;
+   onRemoverItem?: (itemId: string) => Promise<void>;
+   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
++  onRecarregarValor?: () => Promise<void>;
+   movendo?: string | null;
+   /**
+    * ── Comentários entram por FORA de `negocio` ──────────────────────────
+@@ -817,6 +819,7 @@ export function DealCard({
+                       onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
+                       onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
+                       onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
++                      onRecarregarValor={onRecarregarValor}
+                     />
+                   )}
+                   {ajustesPedido.length > 0 && (
 diff --git a/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx b/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
-index 25de8cfb9..89e8a387d 100644
+index 25de8cfb9..9824ed105 100644
 --- a/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
 +++ b/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
 @@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
@@ -477,13 +505,33 @@ index 25de8cfb9..89e8a387d 100644
  import type { DealCardItem, ItemEditado } from "./types";
  import { contaDoNegocio } from "./conta-do-negocio";
  
-@@ -360,14 +362,19 @@ export function DealCardMoney({
+@@ -341,6 +343,7 @@ export function DealCardMoney({
+   onEditarItem,
+   onRemoverItem,
+   onEditarValor,
++  onRecarregarValor,
+   versaoDoNegocio = null,
+ }: {
+   itens: DealCardItem[];
+@@ -354,22 +357,42 @@ export function DealCardMoney({
+   /** Idem para a lixeira de cada linha. */
+   onRemoverItem?: (itemId: string) => Promise<void>;
+   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
++  onRecarregarValor?: () => Promise<void>;
+   versaoDoNegocio?: string | null;
+ }) {
+   const [editandoValor, setEditandoValor] = useState(false);
    const [rascunhoValor, setRascunhoValor] = useState("");
    const [salvandoValor, setSalvandoValor] = useState(false);
    const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
-+  const [conflitoDeValor, setConflitoDeValor] = useState(false);
++  const [conflitoDeValor, setConflitoDeValor] = useState<{ versao: string | null } | null>(null);
++  const [recarregandoValor, setRecarregandoValor] = useState(false);
++  const [erroDeRecarga, setErroDeRecarga] = useState(false);
++  const aguardandoVersaoAtual = conflitoDeValor !== null &&
++    (versaoDoNegocio === null || versaoDoNegocio === conflitoDeValor.versao);
    const salvarValor = async () => {
-     if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
+-    if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
++    if (!onEditarValor || salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()) return;
      setSalvandoValor(true);
      try {
        await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
@@ -493,17 +541,36 @@ index 25de8cfb9..89e8a387d 100644
 +    } catch (error) {
 +      if (toAppError(error).code === "conflict.stale") {
 +        setEditandoValor(false);
-+        setConflitoDeValor(true);
++        setConflitoDeValor({ versao: versaoEditada });
 +      }
 +      // Outros erros preservam o rascunho para corrigir/tentar novamente.
      } finally { setSalvandoValor(false); }
    };
++  const recarregarValor = async () => {
++    if (!onRecarregarValor || recarregandoValor) return;
++    setRecarregandoValor(true);
++    setErroDeRecarga(false);
++    try {
++      await onRecarregarValor();
++    } catch {
++      setErroDeRecarga(true);
++    } finally { setRecarregandoValor(false); }
++  };
    const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
-@@ -491,12 +498,18 @@ export function DealCardMoney({
-               <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
+   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
+   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
+@@ -488,15 +511,36 @@ export function DealCardMoney({
+               <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}
+                 value={rascunhoValor} disabled={salvandoValor} autoFocus
+                 onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
+-              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
++              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
                <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
-             </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
-+              setConflitoDeValor(false);
+-            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
++            </> : <button type="button" className="text-sm text-primary hover:underline disabled:opacity-40" disabled={aguardandoVersaoAtual || recarregandoValor} onClick={() => {
++              if (aguardandoVersaoAtual || recarregandoValor) return;
++              setConflitoDeValor(null);
++              setErroDeRecarga(false);
                setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
                setVersaoEditada(versaoDoNegocio);
                setEditandoValor(true);
@@ -511,15 +578,40 @@ index 25de8cfb9..89e8a387d 100644
            </div>
          )}
 +        {conflitoDeValor && (
-+          <p role="status" className="pt-2 text-xs text-muted-foreground">
-+            O valor mudou enquanto você editava. Confira o valor atual e abra a edição novamente.
-+          </p>
++          <div className="space-y-2 pt-2 text-xs text-muted-foreground">
++            <p role="status">
++              O valor mudou enquanto você editava. {aguardandoVersaoAtual
++                ? "Atualize os dados antes de editar novamente."
++                : "Confira o valor atual e abra a edição novamente."}
++            </p>
++            {aguardandoVersaoAtual && onRecarregarValor && (
++              <button type="button" className="text-primary hover:underline disabled:opacity-40"
++                disabled={recarregandoValor} onClick={recarregarValor}>
++                {recarregandoValor ? "Atualizando valor…" : "Atualizar valor"}
++              </button>
++            )}
++            {aguardandoVersaoAtual && erroDeRecarga && (
++              <p role="alert">Não foi possível atualizar o valor. Tente novamente.</p>
++            )}
++          </div>
 +        )}
        </div>
      </section>
    );
+diff --git a/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx b/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
+index 5b33299e9..2451762a9 100644
+--- a/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
++++ b/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
+@@ -590,6 +590,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
+         onEditarItem={dealIdParaProduto ? editarItem : undefined}
+         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
+         onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
++        onRecarregarValor={editarValorProposta.recarregarValor}
+         movendo={pendingStageKey}
+         comentarios={comentarios}
+         onComentar={podeComentar ? comentar : undefined}
 diff --git a/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts b/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
-index e11df9df7..5d77ddd5c 100644
+index e11df9df7..dcc812ebf 100644
 --- a/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
 +++ b/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
 @@ -1,7 +1,7 @@
@@ -531,22 +623,37 @@ index e11df9df7..5d77ddd5c 100644
  
  /**
   * Escrita de `deal_items` — os produtos do negócio.
-@@ -91,7 +91,14 @@ export function useEditarValorProposta(entryId: string | null) {
+@@ -82,7 +82,11 @@ function invalidarNegocio(
+ 
+ export function useEditarValorProposta(entryId: string | null) {
+   const queryClient = useQueryClient();
+-  return useMutation({
++  const recarregarValor = () => queryClient.invalidateQueries(
++    { queryKey: ["deal-card-extras", entryId] },
++    { throwOnError: true },
++  );
++  const mutation = useMutation({
+     mutationFn: async ({ valor, expectedUpdatedAt }: { valor: number; expectedUpdatedAt: string | null }) => {
+       if (!entryId) throw new Error("Card não disponível. Atualize a ficha.");
+       const { error } = await supabase.rpc("editar_valor_proposta" as never, {
+@@ -91,8 +95,16 @@ export function useEditarValorProposta(entryId: string | null) {
        if (error) throw error;
      },
      onSuccess: () => invalidarNegocio(queryClient, entryId),
 -    onError: (error: Error) => notifyError(error, { fallback: "Não foi possível salvar o valor." }),
 +    onError: async (error: Error) => {
 +      if (toAppError(error).code === "conflict.stale") {
-+        // mutateAsync só devolve o conflito ao editor depois da leitura ativa:
-+        // a próxima edição captura a versão atual, sem sobrescrever concorrência.
-+        await queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
++        // A leitura pode falhar: preserve o conflito original para o editor
++        // bloquear a versão rejeitada e oferecer uma nova tentativa de leitura.
++        try { await recarregarValor(); } catch { /* O editor continua bloqueado. */ }
 +      }
 +      notifyError(error, { fallback: "Não foi possível salvar o valor." });
 +    },
    });
++  return { ...mutation, recarregarValor };
  }
  
+ export interface ItemNovoDoNegocio {
 diff --git a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx b/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
 index f66e563bd..a2fbf3c71 100644
 --- a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx

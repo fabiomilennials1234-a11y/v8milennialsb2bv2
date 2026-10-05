@@ -41,7 +41,7 @@ import {
   POPOVER_ALTURA_MAXIMA,
 } from "./agenda-helpers";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
-import { agendaAttributionLabel } from "../../lib/agenda-attribution";
+import { agendaAttributionLabel } from "@/modules/engagement/lib/agenda-attribution";
 import type { LeadResponsiblesSummary } from "@/modules/leads";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

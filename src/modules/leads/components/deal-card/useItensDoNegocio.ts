@@ -82,7 +82,11 @@ function invalidarNegocio(
 
 export function useEditarValorProposta(entryId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({
+  const recarregarValor = () => queryClient.invalidateQueries(
+    { queryKey: ["deal-card-extras", entryId] },
+    { throwOnError: true },
+  );
+  const mutation = useMutation({
     mutationFn: async ({ valor, expectedUpdatedAt }: { valor: number; expectedUpdatedAt: string | null }) => {
       if (!entryId) throw new Error("Card não disponível. Atualize a ficha.");
       const { error } = await supabase.rpc("editar_valor_proposta" as never, {
@@ -93,13 +97,14 @@ export function useEditarValorProposta(entryId: string | null) {
     onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: async (error: Error) => {
       if (toAppError(error).code === "conflict.stale") {
-        // mutateAsync só devolve o conflito ao editor depois da leitura ativa:
-        // a próxima edição captura a versão atual, sem sobrescrever concorrência.
-        await queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+        // A leitura pode falhar: preserve o conflito original para o editor
+        // bloquear a versão rejeitada e oferecer uma nova tentativa de leitura.
+        try { await recarregarValor(); } catch { /* O editor continua bloqueado. */ }
       }
       notifyError(error, { fallback: "Não foi possível salvar o valor." });
     },
   });
+  return { ...mutation, recarregarValor };
 }
 
 export interface ItemNovoDoNegocio {

@@ -21,7 +21,7 @@ import { sendWithBoundedRecovery, SendRetriesExhausted, MAX_SEND_RETRIES, type S
 import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 import { userMessageOf } from "@/shared/errors";
-import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "../../lib/media-operation";
+import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
 
 /**
  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
