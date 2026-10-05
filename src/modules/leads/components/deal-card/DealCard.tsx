@@ -18,6 +18,7 @@ import { DealCardMoney } from "./DealCardMoney";
 import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
+import { diaDaVenda } from "./dia-da-venda";
 import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
@@ -664,11 +665,14 @@ export function DealCard({
             {negocio.reuniao && <LinhaDaReuniao reuniao={negocio.reuniao} />}
 
             <section aria-label="Produtos e Valores" className="flex flex-col gap-3">
-              {negocio.vendaHistorica && onCorrigirVendaHistorica && negocio.desfecho && (corrigindoVenda ? (
+              {negocio.estado === "ganho" && onCorrigirVendaHistorica && negocio.desfecho && (corrigindoVenda ? (
                 <CorrigirVendaHistorica
                   key={negocio.id}
                   valor={negocio.desfecho.valorVenda ?? negocio.valorDoNegocio ?? negocio.valor ?? 0}
-                  data={new Date(negocio.desfecho.quando).toLocaleDateString("en-CA")}
+                  data={diaDaVenda(negocio.desfecho.quando, negocio.timezone)}
+                  versao={negocio.pedidoAtualizadoEm}
+                  timezone={negocio.timezone}
+                  valorDosProdutos={negocio.itens.length > 0}
                   onSalvar={onCorrigirVendaHistorica}
                   onCancelar={() => setCorrigindoVenda(false)}
                 />
@@ -676,7 +680,7 @@ export function DealCard({
                 <button
                   type="button"
                   className="inline-flex h-9 items-center self-start rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setCorrigindoVenda(true)}
+                  onClick={() => { setAjustandoPedido(false); setCorrigindoVenda(true); }}
                 >
                   Corrigir data e valor da venda
                 </button>
@@ -693,7 +697,7 @@ export function DealCard({
                 <button
                   type="button"
                   className="inline-flex h-9 items-center self-start rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setAjustandoPedido(true)}
+                  onClick={() => { setCorrigindoVenda(false); setAjustandoPedido(true); }}
                 >
                   Ajustar pedido ganho
                 </button>
