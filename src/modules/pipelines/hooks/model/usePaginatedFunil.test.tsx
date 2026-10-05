@@ -12,14 +12,19 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
   useCanDo: () => ({ allowed: true, isLoading: false }),
+  useCurrentTeamMember: () => ({ data: { organization_id: "org-1" } }),
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: () => {},
 }));
-// O hook de move custom arrasta meio módulo atrás dele — o board paginado não
-// o exercita neste teste.
-vi.mock("../custom/useCustomPipelines", () => ({
-  useMoveLeadInCustomPipe: () => ({ mutateAsync: vi.fn() }),
+vi.mock("./useFunilRealtime", () => ({
+  useFunilRealtime: () => {},
+}));
+// Dublê por spread: o board paginado não exercita o move custom, mas o
+// módulo continua inteiro (export novo não quebra o teste em silêncio).
+vi.mock("../custom/useCustomPipelines", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../custom/useCustomPipelines")>()),
+  executarMoveCustom: vi.fn(),
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {

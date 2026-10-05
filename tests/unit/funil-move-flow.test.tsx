@@ -30,6 +30,7 @@ const patchEntryMetadata = vi.fn().mockResolvedValue(undefined);
 const updateConfirmacaoAsync = vi.fn().mockResolvedValue(undefined);
 const moverNegocio = vi.fn().mockResolvedValue(undefined);
 const invalidateAfterMove = vi.fn();
+const reconciliarMoveNoFunil = vi.fn();
 const upsertLeadIntoCustomPipe = vi.fn().mockResolvedValue(undefined);
 const triggerFollowUpAutomation = vi.fn().mockResolvedValue(undefined);
 const track = vi.fn();
@@ -59,6 +60,12 @@ vi.mock("@/modules/pipelines/hooks/legacy/usePipeConfirmacao", () => ({
 vi.mock("@/modules/pipelines/lib/moverNegocio", () => ({
   moverNegocio: (...a: unknown[]) => moverNegocio(...a),
   invalidateAfterMove: (...a: unknown[]) => invalidateAfterMove(...a),
+}));
+// Dublê por spread: otimismo/rollback são os REAIS (exercitados sobre o
+// QueryClient do teste); só a reconciliação vira espiã.
+vi.mock("@/modules/pipelines/lib/funil-move-cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/pipelines/lib/funil-move-cache")>()),
+  reconciliarMoveNoFunil: (...a: unknown[]) => reconciliarMoveNoFunil(...a),
 }));
 vi.mock("@/modules/pipelines/lib/stageTransition", () => ({
   upsertLeadIntoCustomPipe: (...a: unknown[]) => upsertLeadIntoCustomPipe(...a),
@@ -332,6 +339,7 @@ describe("agendar reunião MOVE o negócio (ADR-0023 d4)", () => {
     // Abrir ainda não escreveu nada — cancelar deixa o card onde estava.
     expect(moverAsync).not.toHaveBeenCalled();
     expect(invalidateAfterMove).not.toHaveBeenCalled();
+    expect(reconciliarMoveNoFunil).not.toHaveBeenCalled();
   });
 
   it("beforeSubmit leva a origem à etapa de sucesso — a transição que emite meeting_booked", async () => {
@@ -342,11 +350,11 @@ describe("agendar reunião MOVE o negócio (ADR-0023 d4)", () => {
     fireEvent.click(screen.getByRole("button", { name: /stub-before-submit/i }));
 
     await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
-    expect(moverAsync).toHaveBeenCalledWith({
+    expect(moverAsync).toHaveBeenCalledWith(expect.objectContaining({
       entryId: "e-1",
       stageId: "id-agendado",
       stageKey: "agendado",
-    });
+    }));
   });
 
   it("onSuccess NÃO escreve — só registra e recarrega, com moved_to_pipe no track", async () => {
@@ -356,7 +364,18 @@ describe("agendar reunião MOVE o negócio (ADR-0023 d4)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /stub-on-success/i }));
 
-    await waitFor(() => expect(invalidateAfterMove).toHaveBeenCalled());
+    // Recarga restrita a ESTE funil (origem → etapa de sucesso), não o
+    // prefixo de todos os boards.
+    await waitFor(() =>
+      expect(reconciliarMoveNoFunil).toHaveBeenCalledWith(expect.anything(), {
+        pipelineId: "pl-1",
+        entryId: "e-1",
+        leadId: "lead-1",
+        fromStage: "novo",
+        toStage: "agendado",
+      }),
+    );
+    expect(invalidateAfterMove).not.toHaveBeenCalled();
     expect(moverAsync).not.toHaveBeenCalled();
     expect(track).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -435,7 +454,14 @@ describe("compareceu MOVE o negócio para Orçamentos", () => {
       stageOrigem: null,
       assignedTo: "tm-9",
     });
-    expect(invalidateAfterMove).toHaveBeenCalled();
+    expect(reconciliarMoveNoFunil).toHaveBeenCalledWith(expect.anything(), {
+      pipelineId: "pl-1",
+      entryId: "e-1",
+      leadId: "lead-1",
+      fromStage: "confirmacao_no_dia",
+      toStage: "compareceu",
+    });
+    expect(invalidateAfterMove).not.toHaveBeenCalled();
   });
 
   it("nenhum INSERT de card novo — o caminho é o mover_negocio", async () => {
@@ -490,11 +516,11 @@ describe("perdido exige motivo antes do move", () => {
       loss_reason_id: "lr-1",
       loss_reason: "Sem budget",
     });
-    expect(moverAsync).toHaveBeenCalledWith({
+    expect(moverAsync).toHaveBeenCalledWith(expect.objectContaining({
       entryId: "e-1",
       stageId: "id-descartado",
       stageKey: "descartado",
-    });
+    }));
   });
 });
 
@@ -565,10 +591,79 @@ describe("meeting_booked genérico — data antes do move", () => {
     fireEvent.click(await screen.findByRole("button", { name: /stub-data-salva/i }));
 
     await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
-    expect(moverAsync).toHaveBeenCalledWith({
+    expect(moverAsync).toHaveBeenCalledWith(expect.objectContaining({
       entryId: "e-1",
       stageId: "id-reuniao",
       stageKey: "reuniao",
-    });
+    }));
+  });
+});
+
+// ── 6. Otimismo do fluxo (completarMove) + rollback ─────────────────────────
+describe("completarMove — card muda na hora; falha devolve à origem", () => {
+  const stagesLost = [
+    stage({ stage_key: "aberto" }),
+    stage({ stage_key: "descartado", stage_role: "lost" }),
+  ];
+  const entryAberto: FunilFlowEntry = { ...entryBase, stage_key: "aberto", status: "aberto" };
+  const k = (s: string) => ["pipeline-page", "pl-1", s, "org-1", "f"];
+  const countsK = ["pipeline-stage-counts", "pl-1", "org-1", "{}"];
+
+  function semear(qc: QueryClient) {
+    qc.setQueryData(k("aberto"), { pages: [[{ id: "e-1", stage_key: "aberto" }]], pageParams: [null] });
+    qc.setQueryData(k("descartado"), { pages: [[]], pageParams: [null] });
+    qc.setQueryData(countsK, { aberto: 1, descartado: 0 });
+  }
+  const ids = (qc: QueryClient, s: string) =>
+    (qc.getQueryData(k(s)) as { pages: Array<Array<{ id: string }>> }).pages.flat().map((e) => e.id);
+
+  async function confirmarPerda() {
+    fireEvent.click(screen.getByRole("button", { name: "mover-descartado" }));
+    await screen.findByRole("button", { name: /confirmar perda/i });
+    fireEvent.click(screen.getByRole("button", { name: "Sem budget" }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar perda/i }));
+  }
+
+  it("card já está no destino ENQUANTO o metadata grava (ordem das escritas intacta)", async () => {
+    let soltarPatch: () => void = () => {};
+    patchEntryMetadata.mockImplementationOnce(() => new Promise<void>((r) => (soltarPatch = r)));
+    const qc = montar(pipelineDe("custom", "meu-funil"), stagesLost, [entryAberto]);
+    semear(qc);
+
+    await confirmarPerda();
+    await waitFor(() => expect(patchEntryMetadata).toHaveBeenCalled());
+    expect(moverAsync).not.toHaveBeenCalled();
+    expect(ids(qc, "descartado")).toEqual(["e-1"]);
+    expect(ids(qc, "aberto")).toEqual([]);
+    expect(qc.getQueryData(countsK)).toEqual({ aberto: 0, descartado: 1 });
+
+    soltarPatch();
+    await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
+    // O otimismo é do fluxo — o mover não reaplica nem reverte.
+    expect(moverAsync.mock.calls[0][0].otimistaDoChamador).toBeDefined();
+  });
+
+  it("move falha → card e contagem voltam à origem", async () => {
+    moverAsync.mockRejectedValueOnce(new Error("boom"));
+    const qc = montar(pipelineDe("custom", "meu-funil"), stagesLost, [entryAberto]);
+    semear(qc);
+
+    await confirmarPerda();
+    await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ids(qc, "aberto")).toEqual(["e-1"]));
+    expect(ids(qc, "descartado")).toEqual([]);
+    expect(qc.getQueryData(countsK)).toEqual({ aberto: 1, descartado: 0 });
+  });
+
+  it("metadata falha → nada move; card volta à origem", async () => {
+    patchEntryMetadata.mockRejectedValueOnce(new Error("rls"));
+    const qc = montar(pipelineDe("custom", "meu-funil"), stagesLost, [entryAberto]);
+    semear(qc);
+
+    await confirmarPerda();
+    await waitFor(() => expect(patchEntryMetadata).toHaveBeenCalled());
+    await waitFor(() => expect(ids(qc, "aberto")).toEqual(["e-1"]));
+    expect(moverAsync).not.toHaveBeenCalled();
+    expect(ids(qc, "descartado")).toEqual([]);
   });
 });
