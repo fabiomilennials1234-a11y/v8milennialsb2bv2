@@ -46,6 +46,11 @@ import {
 } from "@/modules/communication/lib/inboxFilter";
 import type { InboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RIOFIX_ORG_ID } from "@/modules/communication/lib/negocioNoChat";
+import { useConversationSelection } from "@/modules/communication/hooks/chat/useConversationSelection";
+import { ConversationBulkToolbar } from "./ConversationBulkToolbar";
+import type { ReactNode } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -327,6 +332,22 @@ export function ConversationList({
     );
     return contacts.filter((c) => sobreviventes.has(contactKey(c)));
   }, [modoUnificado, isSocialBox, socialContacts, whatsappFiltered, contacts]);
+
+  const bulkEnabled = organizationId === RIOFIX_ORG_ID && !isSocialBox;
+  const bulkScope = JSON.stringify([organizationId, marcadas?.length ? [...marcadas].sort() : [instanceId], activeTab, searchQuery, filter, mobileFilter, isMobile, isAdmin]);
+  const bulk = useConversationSelection(bulkScope, filteredContacts, bulkEnabled && !isLoading && filterGate === "ok");
+  const selectableRow = (contact: InboxContact, row: ReactNode) => {
+    if (!bulk.selecting || !isWhatsAppContact(contact) || !contact.instance_id) return row;
+    const key = contactKey(contact);
+    return (
+      <div className="flex min-w-0 items-center gap-1">
+        <Checkbox className="ml-2 shrink-0" aria-label={`Selecionar ${contactDisplayName(contact)}`}
+          checked={bulk.selected.some(c => contactKey(c) === key)} disabled={bulk.busy}
+          onCheckedChange={() => bulk.toggle(key)} />
+        <div className="min-w-0 flex-1">{row}</div>
+      </div>
+    );
+  };
 
   // Contagens reagem ao filtro aplicado (menos a própria tab).
   const archivedCount = useMemo(
@@ -615,6 +636,12 @@ export function ConversationList({
       )}
 
       {/* ─── Lista ──────────────────────────────────────────────────────────── */}
+      {bulkEnabled && organizationId && (
+        <ConversationBulkToolbar key={bulk.revision} organizationId={organizationId} isAdmin={isAdmin}
+          archived={!isMobile && activeTab === "archived"} selecting={bulk.selecting}
+          disabled={isLoading || filterGate !== "ok"} eligible={bulk.eligible} selected={bulk.selected}
+          onSelecting={bulk.setSelecting} onSelection={bulk.setSelection} onBusy={bulk.setBusy} />
+      )}
       {/* Radix's table wrapper takes the preview's intrinsic width; block keeps long messages inside the sidebar. */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
         {isLoading || filterGate === "pending" ? (
@@ -687,7 +714,7 @@ export function ConversationList({
                   }}
                   className="pb-0.5"
                 >
-                  <ConversationListItem
+                  {selectableRow(contact, <ConversationListItem
                     contact={contact}
                     isSelected={selectedKey === contactKey(contact)}
                     onSelect={onSelectContact}
@@ -706,7 +733,7 @@ export function ConversationList({
                     stageLabel={stageLabelFor(contact)}
                     caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                     tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
-                  />
+                  />)}
                 </div>
               );
             })}
@@ -714,8 +741,9 @@ export function ConversationList({
         ) : (
           // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
           <div className={cn("flex flex-col gap-0.5 pb-2", !isMobile && "mx-2")}>
-            {filteredContacts.map((contact) =>
-              isMobile ? (
+            {filteredContacts.map((contact) => (
+              <div key={contactKey(contact)}>
+              {selectableRow(contact, isMobile ? (
                 <MobileConversationRow
                   key={contactKey(contact)}
                   contact={contact}
@@ -746,8 +774,9 @@ export function ConversationList({
                   caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                   tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                 />
-              ),
-            )}
+              ))}
+              </div>
+            ))}
           </div>
         )}
       </ScrollArea>
