@@ -34,7 +34,9 @@ beforeEach(() => {
     const url = String(input), method = init?.method ?? "GET";
     requests.push({ url, method, body: init?.body as string | undefined });
     if (url.includes("check_rate_limit")) return json({ allowed: true, remaining: 100 });
-    if (url.includes("whatsapp_instance_secrets")) return json({ instance_id: "instance", organization_id: "org" });
+    if (url.includes("/rpc/resolve_uazapi_instance")) return json([{
+      id: "instance", organization_id: "org", instance_name: "Test", provider: "uazapi", phone_number: "5511888888888", via: "token",
+    }]);
     if (url.includes("whatsapp_instances")) return json({
       id: "instance", organization_id: "org", instance_name: "Test", provider: "uazapi", phone_number: "5511888888888",
     });

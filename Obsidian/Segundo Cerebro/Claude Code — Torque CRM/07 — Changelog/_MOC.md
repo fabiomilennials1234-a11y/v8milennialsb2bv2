@@ -166,3 +166,6 @@ owner: claude-agent
 - [[2026-10-02-crons-escalonados-por-fase|Crons de prod escalonados por fase (anti-rajada)]]
 - [[2026-10-02-send-to-group-workflow-node|Nó de automação "Enviar p/ grupo" (send_to_group)]]
 - [[2026-10-05-funil-move-realtime-cirurgico|Move no /funil — realtime cirúrgico, uma invalidação, otimismo]]
+- [[2026-10-05-webhook-resolve-instance-sem-token-na-url|Webhook resolve instância por RPC, sem token na URL]]
+- [[2026-10-05-carteira-health-em-lote|calculate-portfolio-health em lote (N+1 → 2 RPCs por página)]]
+- [[2026-10-05-funil-pagina-plano-generico|Funil: get_pipeline_page com plano genérico]]

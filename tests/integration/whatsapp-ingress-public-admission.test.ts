@@ -72,7 +72,7 @@ it('public ingress authenticates, bounds body, waits for durable admission, and 
       const url = input instanceof Request ? input.url : String(input);
       calls.push(url);
       if (url.includes('/rpc/check_rate_limit')) return json({ allowed: true, remaining: 100 });
-      if (url.includes('/whatsapp_instance_secrets')) return json({ instance_id: resolvedId, organization_id: organizationId });
+      if (url.includes('/rpc/resolve_uazapi_instance')) return json([{ id: resolvedId, organization_id: organizationId, provider: 'uazapi', via: 'token' }]);
       if (url.includes('/whatsapp_instances')) return json({ id: resolvedId, organization_id: organizationId, provider: 'uazapi' });
       if (url.includes('/rpc/enqueue_whatsapp_ingress_event')) {
         if (failDatabase) return json({ code: '08006', message: 'database unavailable' }, 503);

@@ -242,7 +242,7 @@ Legenda das tabelas abaixo:
 
 | Função | Papel |
 |---|---|
-| `calculate-portfolio-health` | Health score por cliente de carteira |
+| `calculate-portfolio-health` | Health score por cliente de carteira — em lote via `portfolio_health_inputs` / `portfolio_health_apply` (2026-10-05) |
 | `suggest-retention-action` | Sugestão IA de ação de retenção |
 
 > `carteira-bulk-message` (Disparos) e `tinyerp-push-upsell-order` (TinyERP) também servem o domínio Carteira.
