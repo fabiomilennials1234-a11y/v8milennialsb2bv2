@@ -79,6 +79,10 @@ export interface NewDealValues {
 interface NewDealDialogProps {
   options: NewDealOption[];
   isCreating?: boolean;
+  /** Mantém o rascunho montado durante carga inicial e falhas de atualização. */
+  isLoading?: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   onCreate: (option: NewDealOption, values: NewDealValues) => Promise<void>;
   size?: "sm" | "md";
   /**
@@ -112,6 +116,9 @@ function parseBRLInput(raw: string): number | null {
 export const NewDealDialog = memo(function NewDealDialog({
   options,
   isCreating = false,
+  isLoading = false,
+  loadError = false,
+  onRetry,
   onCreate,
   size = "sm",
   open: openProp,
@@ -180,9 +187,13 @@ export const NewDealDialog = memo(function NewDealDialog({
    */
   const estavaAberto = useRef(false);
   useEffect(() => {
-    if (open && !estavaAberto.current) limparFormulario();
-    estavaAberto.current = open;
-  }, [open, limparFormulario]);
+    if (!open) estavaAberto.current = false;
+    else if (!estavaAberto.current && !isLoading && !loadError) {
+      limparFormulario();
+      estavaAberto.current = true;
+    }
+    // Uma falha de refetch não é uma nova abertura: preservar o que foi digitado.
+  }, [open, limparFormulario, isLoading, loadError]);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -195,10 +206,11 @@ export const NewDealDialog = memo(function NewDealDialog({
     setStageId(option.stages[0]?.id ?? "");
   };
 
-  const canSubmit = Boolean(selected && stageId) && !submitting && !isCreating;
+  const canSubmit = Boolean(selected && !selected.disabled && stageId)
+    && !submitting && !isCreating && !isLoading && !loadError;
 
   const handleSubmit = async () => {
-    if (!selected || !stageId || submitting) return;
+    if (!selected || !canSubmit) return;
     setSubmitting(true);
     try {
       await onCreate(selected, {
@@ -254,6 +266,17 @@ export const NewDealDialog = memo(function NewDealDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {loadError ? (
+          <div role="alert" className="space-y-3 text-sm">
+            <p>Não foi possível carregar os funis. Tente novamente.</p>
+            <Button variant="outline" onClick={onRetry}>Tentar novamente</Button>
+          </div>
+        ) : isLoading ? (
+          <p role="status" className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Carregando funis e permissões…
+          </p>
+        ) : (
         <div className="space-y-4">
           {/* No modo controlado o botão que abre vive fora e não sabe se sobrou
               funil — o gatilho daqui se desabilita sozinho, o de lá não pode.
@@ -414,6 +437,7 @@ export const NewDealDialog = memo(function NewDealDialog({
             </>
           )}
         </div>
+        )}
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={submitting}>
