@@ -41,7 +41,11 @@ export const POOL_DEFAULTS = {
 export const CONTROLLER = {
   /** Invocações seguidas saturadas para subir. */
   SAT_STREAK_TO_UP: 3,
-  /** Invocações seguidas ociosas para descer. */
+  /**
+   * Invocações seguidas ociosas para descer. Conta INVOCAÇÕES, não minutos: desde o
+   * gate do job 59 (migration 20271107140001) o cron não invoca com fila vazia, então
+   * o pool encolhe após 20 execuções reais ociosas. Benigno: teto = workflow_pool_max.
+   */
   IDLE_STREAK_TO_DOWN: 20,
   /** Sobe de 2 em 2, desce de 1 em 1: ficar pequeno machuca cliente, ficar grande só ocupa vaga. */
   UP_STEP: 2,
