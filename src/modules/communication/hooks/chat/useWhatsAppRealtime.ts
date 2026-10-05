@@ -27,6 +27,7 @@ import {
   type CacheDeContatos,
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
+import { mergeRealtimeUpdate } from "./shared/realtimeUpdate";
 import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
 import { pedirReconciliacaoDaLista, reconciliarAposReconexao } from "./chatReconcile";
@@ -103,7 +104,9 @@ export function useWhatsAppMessagesRealtime(
         } else if (eventType === "UPDATE") {
           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
             if (!prev) return prev;
-            return prev.map((m) => (m.id === message.id ? message : m));
+            // Merge, não troca: coluna TOAST inalterada (raw_payload) chega
+            // ausente no UPDATE — ver `mergeRealtimeUpdate`.
+            return prev.map((m) => (m.id === message.id ? mergeRealtimeUpdate(m, message) : m));
           });
         } else if (eventType === "DELETE") {
           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
