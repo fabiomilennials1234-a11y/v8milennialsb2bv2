@@ -73,6 +73,7 @@ import {
 import { chatQueryKeys } from "./shared/queryKeys";
 import { enriquecerContatos } from "./shared/enriquecerContatos";
 import { boxUsesChannelMessages } from "./inbox-box-source";
+import { useReconcileInterval } from "./useRealtimeFallback";
 import { toSocialContact, type SocialConversationRow } from "./social-conversation-row";
 import type { ChatContact, InboxBox, SocialContact } from "./types";
 
@@ -183,6 +184,7 @@ export function useConversasUnificadas(
 ): UseConversasUnificadasResult {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
+  const intervaloDaLista = useReconcileInterval("lista", organizationId);
 
   const filterArgs = serverFilter?.args ?? null;
   const limiteChip = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
@@ -301,6 +303,12 @@ export function useConversasUnificadas(
     },
     enabled: !!organizationId && idsChip.length > 0,
     staleTime: 30_000,
+    // Rede contra evento realtime perdido — antes desta trilha a lista do
+    // /chat NÃO tinha backstop nenhum: conversa nova com evento dropado só
+    // aparecia no F5. 300 s saudável (a RPC custa 11–15 s no pico), degraus
+    // 60→120→300 s em fallback. Ver `reconcilePolicy.ts`.
+    refetchInterval: intervaloDaLista,
+    refetchOnWindowFocus: true,
   });
 
   const queryOficiais = useQuery({

@@ -3,7 +3,6 @@
   "nota": "Testes vermelhos tolerados. NÃO regenerar às cegas: cada linha que sai daqui é uma correção que merece uma frase no PR. Só encolhe.",
   "total_de_testes": 12862,
   "falhando": [
-    "src/modules/communication/hooks/chat/useConversasUnificadas.test.tsx::<arquivo não coletou>",
     "tests/unit/agent-message-batch.test.ts::absorbPendingMessages processes new messages that arrive during LLM call (1 iteration)",
     "tests/unit/agent-message-batch.test.ts::absorbPendingMessages stops at MAX_ABSORB_ITERATIONS even if messages keep arriving",
     "tests/unit/auth-context.test.ts::AuthContext attachToOrgByPendingInvite dedup: called again for different token",
