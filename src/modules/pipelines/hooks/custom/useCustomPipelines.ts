@@ -1026,6 +1026,10 @@ export function useAddLeadToCustomPipe() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipeline_id] });
+      // A criação também aparece no chat e na ficha do lead, sem recarregar.
+      queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+      queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines", variables.lead_id] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }

@@ -195,10 +195,10 @@ export const NewDealDialog = memo(function NewDealDialog({
     setStageId(option.stages[0]?.id ?? "");
   };
 
-  const canSubmit = Boolean(selected && stageId) && !submitting && !isCreating;
+  const canSubmit = Boolean(selected && !selected.disabled && stageId) && !submitting && !isCreating;
 
   const handleSubmit = async () => {
-    if (!selected || !stageId || submitting) return;
+    if (!selected || selected.disabled || !stageId || submitting || isCreating) return;
     setSubmitting(true);
     try {
       await onCreate(selected, {

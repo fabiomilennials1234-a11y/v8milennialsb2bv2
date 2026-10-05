@@ -1,4 +1,7 @@
 import { useCurrentTeamMember } from "@/modules/identity";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { useLeadAllPipelines, type PipelineStatus } from "../../hooks/useLeadAllPipelines";
 import { usePipeOps } from "../../pipe-ops";
@@ -35,7 +38,8 @@ export function LeadCardNewDeal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: teamMember } = useCurrentTeamMember();
+  const memberQuery = useCurrentTeamMember();
+  const teamMember = memberQuery.data;
   const organizationId = teamMember?.organization_id ?? null;
 
   /**
@@ -46,18 +50,55 @@ export function LeadCardNewDeal({
    * `null` desabilita a query (`enabled: !!leadId`) em vez de pagá-la sempre.
    */
   const alvo = open ? leadId : null;
-  const { data: pipelines = [] } = useLeadAllPipelines(alvo);
+  const pipelinesQuery = useLeadAllPipelines(alvo);
   const { canAddToPipe } = useLeadActionGates(leadId);
-  const { usePipePropostaByLeadId } = usePipeOps();
-  const { data: proposta } = usePipePropostaByLeadId(alvo);
+  const { usePipePropostaByLeadId, useCustomPipelines } = usePipeOps();
+  const propostaQuery = usePipePropostaByLeadId(alvo);
+  // A lista custom compõe a chave de useLeadAllPipelines. Esperar ambas evita
+  // abrir com opções parciais e trocar o formulário enquanto a pessoa digita.
+  const customQuery = useCustomPipelines();
 
   const { options, isCreating, criar } = useAbrirNegocio({
     leadId,
     organizationId,
-    pipelines: pipelines as PipelineStatus[],
+    pipelines: (pipelinesQuery.data ?? []) as PipelineStatus[],
     canAdd: canAddToPipe,
-    vendaFechada: proposta?.status === "vendido",
+    vendaFechada: propostaQuery.data?.status === "vendido",
   });
+
+  if (!open) return null;
+
+  const queries = [memberQuery, pipelinesQuery, propostaQuery, customQuery];
+  const isError = queries.some((query) => query.isError);
+  const isLoading = queries.some((query) => query.isPending) || canAddToPipe.isLoading;
+
+  // O formulário inicializa funil/etapa ao abrir. Só montá-lo com os dados
+  // prontos também diferencia indisponibilidade de "nenhum funil disponível".
+  if (isError || isLoading) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg z-[60]" overlayClassName="z-[60]">
+          <DialogHeader>
+            <DialogTitle>Novo negócio</DialogTitle>
+            <DialogDescription>Escolha um funil para o novo negócio.</DialogDescription>
+          </DialogHeader>
+          {isError ? (
+            <div role="alert" className="space-y-3 text-sm">
+              <p>Não foi possível carregar os funis. Tente novamente.</p>
+              <Button variant="outline" onClick={() => void Promise.all(queries.map((query) => query.refetch()))}>
+                Tentar novamente
+              </Button>
+            </div>
+          ) : (
+            <p role="status" className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Carregando funis e permissões…
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <NewDealDialog
