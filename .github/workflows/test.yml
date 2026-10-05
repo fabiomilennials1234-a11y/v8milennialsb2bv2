@@ -130,6 +130,11 @@ jobs:
           npm run test:toth-preorders
       - name: Vitest ratchet (no newly broken tests vs baseline)
         run: npm run test:ratchet
+      # A interface clássica (`classic/`, servida à maioria das orgs) é um
+      # snapshot sem testes. Consertos portados para lá via classic.patch têm
+      # teste em tests/classic/, com `@` → classic/src. Sem ratchet: nasce verde.
+      - name: Vitest da interface clássica
+        run: npm run test:classic
       - name: Ajustes de pedidos ganhos (Postgres isolado)
         run: npm run test:won-order
       - name: Correção de data e valor de vendas (Postgres isolado)

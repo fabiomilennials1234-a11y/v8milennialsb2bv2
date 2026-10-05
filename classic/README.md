@@ -12,5 +12,7 @@ node scripts/ui-classic/snapshot.mjs --gerar-patch    # depois de editar classic
 ```
 
 - `vite.config.ts` (mantido à mão) herda o da raiz; `src/assets` é o da V5 (alias `@/assets`).
-- Fora de tsc, ESLint e Vitest — é código que já passou nesses gates na `main`.
+- Fora de tsc e ESLint — é código que já passou nesses gates na `main`.
+- Conserto portado da V5 leva teste em `tests/classic/` (cópia do teste da V5, `@` → `classic/src`):
+  `npm run test:classic` (config `vitest.classic.config.ts`, roda no CI).
 - Prova ponta a ponta da troca: `node scripts/ui-classic/e2e-troca.mjs`.

@@ -26,6 +26,9 @@ export default defineConfig({
       'node_modules',
       'dist',
       '.agent',
+      // Testes da interface CLÁSSICA: `@` precisa resolver para `classic/src`.
+      // Rodam pela config própria (`npm run test:classic`, vitest.classic.config.ts).
+      'tests/classic/**',
       // ── Quarentena ────────────────────────────────────────────────────────
       // Testes co-locados que ja falhavam antes de o CI passar a executa-los.
       // O CI rodava apenas `tests/unit/`, entao 40 arquivos de teste em `src/`
