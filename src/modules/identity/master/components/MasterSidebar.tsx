@@ -1,95 +1,28 @@
 /**
- * Navegação da área Master.
+ * Navegação da área Master — as 5 centrais da Área Dev.
  *
- * V5 (onda "mais perto do mockup", 02/10): a lateral vermelha de 18 itens
- * virou dois níveis — sete grupos (Dashboard · Organizações · Usuários ·
- * Planos · Saúde · Auditoria · Suporte) e, dentro do grupo, as sub-páginas.
- * Os destinos são EXATAMENTE os mesmos de antes, com os mesmos filtros de
- * permissão — só a forma mudou. O arquivo mantém o nome antigo para não
- * espalhar renomeação.
+ * Board "Área Dev: 18 telas → 5 centrais" (02/10): Operação · Implementação ·
+ * Organizações · Monitoramento · Testes. Nenhum dado ficou solto: cada uma das
+ * 18 telas antigas mora numa central, como página principal ou como aba.
+ * Operação vem primeiro — o dia começa pela fila de chamados.
  *
- * Os grupos são a pílula da página, como em toda tela do V5 (ativo em ouro):
- * o `MasterPageHeader` os publica no centro da barra superior. As sub-páginas
- * ficam na página, num segmentado logo abaixo do título.
+ * As centrais são a pílula da página (ativo em ouro), publicada pelo
+ * `MasterPageHeader` no centro da barra superior; as abas da central ficam na
+ * página, num segmentado logo abaixo do título.
  *
- * Outbounder vê apenas Dashboard, Organizações e Usuários.
- * Master (all=true) vê tudo.
+ * Permissão (regra PE-4): cada central tem a sua chave em
+ * `master_users.permissions` (`operacao`, `implementacao`, `organizacoes`,
+ * `monitoramento`, `testes`). As chaves antigas continuam valendo item a item
+ * — quem tinha `support` continua vendo os chamados, o outbounder continua
+ * vendo só Organizações. `all` vê tudo.
  */
 
 import { useEffect, useRef } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useMasterAuth } from "../hooks/useMasterAuth";
-
-interface NavItem {
-  label: string;
-  path: string;
-  /** Se definido, o item só aparece quando a permissão existir (ou all=true) */
-  permission?: string;
-  /**
-   * Item exige master PLENO (`permissions.all`). Usar em telas que expõem
-   * dados de TODOS os clientes — o outbounder tem linha em master_users mas
-   * é perfil restrito e não pode ver a frota inteira.
-   */
-  requiresFullMaster?: boolean;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-/**
- * Os mesmos 18 destinos da lateral antiga, agrupados. Só rótulo, sem ícone:
- * sete pílulas com ícone não cabem no centro da barra (mesma escolha de
- * Configurações).
- */
-const MASTER_GROUPS: NavGroup[] = [
-  { label: "Dashboard", items: [{ label: "Dashboard", path: "/master" }] },
-  {
-    label: "Organizações",
-    items: [
-      { label: "Organizações", path: "/master/organizations", permission: "organizations" },
-      { label: "Onboarding", path: "/master/onboarding", permission: "features" },
-      { label: "Ativos da Meta", path: "/master/meta-assets", permission: "features" },
-      { label: "Etapas Won/Lost", path: "/master/stage-roles", permission: "audit" },
-    ],
-  },
-  {
-    label: "Usuários",
-    items: [
-      { label: "Usuários", path: "/master/users", permission: "users" },
-      { label: "Usuários ativos", path: "/master/usuarios-ativos", permission: "users", requiresFullMaster: true },
-      { label: "Gestores", path: "/master/gestores", permission: "gestores" },
-    ],
-  },
-  {
-    label: "Planos",
-    items: [
-      { label: "Planos", path: "/master/plans", permission: "billing" },
-      { label: "Features", path: "/master/features", permission: "features" },
-    ],
-  },
-  {
-    label: "Saúde",
-    items: [
-      { label: "Operations", path: "/master/operations", permission: "audit" },
-      { label: "Automation health", path: "/master/automation-health", permission: "audit" },
-      { label: "WhatsApp health", path: "/master/whatsapp-health", permission: "audit" },
-      { label: "Qualidade do Oráculo", path: "/master/oraculo-feedback", permission: "audit", requiresFullMaster: true },
-      { label: "Copilot reasoning", path: "/master/copilot-reasoning", permission: "audit" },
-    ],
-  },
-  {
-    label: "Auditoria",
-    items: [
-      { label: "Logs de auditoria", path: "/master/audit-logs", permission: "audit" },
-      { label: "Copilot toggle audit", path: "/master/copilot-toggle-audit", permission: "audit" },
-    ],
-  },
-  { label: "Suporte", items: [{ label: "Suporte", path: "/master/support-tickets", permission: "support" }] },
-];
+import { MASTER_GROUPS, canSeeNavItem, type NavItem } from "../lib/master-nav";
 
 function pathCasa(atual: string, path: string) {
   return path === "/master" ? atual === "/master" || atual === "/master/" : atual === path || atual.startsWith(`${path}/`);
@@ -100,18 +33,21 @@ function useMasterNav() {
   const { pathname } = useLocation();
   const { permissions } = useMasterAuth();
 
-  const pode = (item: NavItem) => {
-    // Itens de frota inteira: só master pleno. Checado ANTES do resto, senão
-    // o outbounder passaria pelo `permission: "users"` que ele possui.
-    if (item.requiresFullMaster && !permissions.all) return false;
-    if (!item.permission) return true; // Dashboard sempre visível
-    if (permissions.all) return true; // Master full access
-    return !!(permissions as Record<string, boolean>)[item.permission];
-  };
+  const pode = (item: NavItem) => canSeeNavItem(item, permissions as Record<string, unknown>);
 
   const grupos = MASTER_GROUPS.map((g) => ({ ...g, items: g.items.filter(pode) })).filter((g) => g.items.length > 0);
   const ativo = grupos.find((g) => g.items.some((i) => pathCasa(pathname, i.path))) ?? grupos[0];
   return { grupos, ativo, pathname };
+}
+
+/**
+ * `/master` abre a primeira central que este master pode ver — Operação para
+ * o master pleno, Organizações para o outbounder.
+ */
+export function MasterIndexRedirect() {
+  const { grupos } = useMasterNav();
+  const destino = grupos[0]?.items[0]?.path ?? "/master/panorama";
+  return <Navigate to={destino} replace />;
 }
 
 /**

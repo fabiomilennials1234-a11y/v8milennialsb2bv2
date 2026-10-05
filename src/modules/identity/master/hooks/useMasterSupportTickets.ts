@@ -221,3 +221,86 @@ export function useCreateStaffComment() {
     },
   });
 }
+
+/**
+ * O que o kanban da Operação precisa saber do diagnóstico de cada Chamado —
+ * só os campos que decidem coluna e cartão, nunca o prompt (que pode ter 60 KB).
+ */
+export type TicketDiagnosisDigest = Pick<
+  Tables<"support_ticket_diagnoses">,
+  | "ticket_id"
+  | "kind"
+  | "complexity"
+  | "customer_reply"
+  | "estimated_cost_usd"
+  | "actual_cost_usd"
+  | "executed_at"
+  | "execution_outcome"
+>;
+
+export function useMasterDiagnosisDigests(ticketIds: readonly string[]) {
+  const { isMaster } = useMasterAuth();
+  // Ordenado: a mesma fila em outra ordem não vira outra query.
+  const ids = [...ticketIds].sort();
+
+  return useQuery({
+    queryKey: ["master-ticket-diagnosis", "digests", ids],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("support_ticket_diagnoses")
+        .select(
+          "ticket_id, kind, complexity, customer_reply, estimated_cost_usd, actual_cost_usd, executed_at, execution_outcome",
+        )
+        .in("ticket_id", ids);
+      if (error) throw error;
+      return new Map((data as TicketDiagnosisDigest[]).map((d) => [d.ticket_id, d]));
+    },
+    enabled: isMaster && ids.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Os movimentos do kanban da Operação. Cada um escreve o FATO que a coluna lê
+ * (ver `lib/operacao-kanban.ts`); o trigger do banco tem a última palavra.
+ */
+export function useMoveOperacaoTicket() {
+  const queryClient = useQueryClient();
+  const { masterUser } = useMasterAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      ticketId,
+      move,
+    }: {
+      ticketId: string;
+      move: "pegar" | "enviar_resposta" | "retomar";
+    }) => {
+      if (move === "enviar_resposta") {
+        // OP-9: resposta pública + Resolvido numa transação (migration 20271105000000).
+        const { data, error } = await supabase.rpc("master_ticket_send_reply", { p_ticket_id: ticketId });
+        if (error) throw error;
+        return data as Tables<"support_tickets">;
+      }
+
+      const patch =
+        move === "pegar"
+          ? { status: "em_andamento" as const, assigned_master_user_id: masterUser?.id ?? null }
+          : { status: "em_andamento" as const };
+      if (move === "pegar" && !patch.assigned_master_user_id) throw new Error("usuario master nao carregado");
+
+      const { data, error } = await supabase
+        .from("support_tickets")
+        .update(patch)
+        .eq("id", ticketId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Tables<"support_tickets">;
+    },
+    onSettled: (_d, _e, { ticketId }) => {
+      queryClient.invalidateQueries({ queryKey: [QUEUE_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["support-ticket-comments", ticketId] });
+    },
+  });
+}

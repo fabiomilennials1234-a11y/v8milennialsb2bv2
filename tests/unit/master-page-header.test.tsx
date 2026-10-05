@@ -34,7 +34,8 @@ const raiz = resolve(__dirname, "../..");
 const fonteApp = readFileSync(resolve(raiz, "src/App.tsx"), "utf-8");
 
 // Insights é master, mas tem chrome próprio e fica fora do MasterLayout.
-const paginas = [...fonteApp.matchAll(/import\("@\/modules\/identity\/master\/pages\/(\w+)"\)/g)]
+// `centrais/` entra: as 5 centrais da Área Dev moram numa subpasta.
+const paginas = [...fonteApp.matchAll(/import\("@\/modules\/identity\/master\/pages\/((?:centrais\/)?\w+)"\)/g)]
   .map((m) => m[1])
   .filter((nome) => nome !== "MasterInsights");
 
@@ -82,21 +83,22 @@ describe("MasterPageHeader", () => {
   it("seleciona o grupo da rota na pílula e a página no segmentado", () => {
     montar("/master/usuarios-ativos");
     const grupos = screen.getByRole("tablist", { name: "Seções do Master" });
-    expect(within(grupos).getByRole("tab", { name: "Usuários" }).getAttribute("aria-selected")).toBe("true");
+    // Usuários ativos é aba da central Organizações (board das 5 centrais).
+    expect(within(grupos).getByRole("tab", { name: "Organizações" }).getAttribute("aria-selected")).toBe("true");
 
-    const paginasDoGrupo = screen.getByRole("navigation", { name: "Páginas de Usuários" });
+    const paginasDoGrupo = screen.getByRole("navigation", { name: "Páginas de Organizações" });
     expect(within(paginasDoGrupo).getByRole("link", { name: "Usuários ativos" }).getAttribute("aria-current")).toBe(
       "page",
     );
   });
 
   it("põe a faixa vermelha depois do título", () => {
-    montar("/master");
+    montar("/master/operacao");
     const titulo = screen.getByRole("heading", { level: 1 });
     const faixa = screen.getByRole("note");
     expect(faixa.textContent).toMatch(/vale para todas as organizações/);
     expect(titulo.compareDocumentPosition(faixa) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Grupo de uma página só não ganha segmentado.
+    // Central de uma página só (Operação) não ganha segmentado.
     expect(screen.queryByRole("navigation", { name: /Páginas de/ })).toBeNull();
   });
 });

@@ -22946,6 +22946,79 @@ export type Database = {
         Args: { p_end: string; p_org_id: string; p_start: string }
         Returns: Json
       }
+      master_advance_implementation: {
+        Args: { p_org_id: string; p_to_stage: string }
+        Returns: Json
+      }
+      master_list_implementations: {
+        Args: never
+        Returns: {
+          call_participants: string | null
+          call_scheduled_at: string | null
+          completed_at: string | null
+          gates: Json
+          org_created_at: string
+          org_name: string
+          organization_id: string
+          owner_master_user_id: string | null
+          owner_name: string | null
+          stage: string
+          stage_entered_at: string
+          subscription_plan: string | null
+        }[]
+      }
+      master_copilot_eval_summary: {
+        Args: { p_days?: number }
+        Returns: {
+          agent_id: string
+          agent_name: string | null
+          avg_conciseness: number | null
+          avg_goal_align: number | null
+          avg_overall: number | null
+          avg_relevance: number | null
+          avg_tone: number | null
+          below_6: number
+          evaluations: number
+          last_evaluated_at: string
+          org_name: string | null
+          organization_id: string
+          previous_avg_overall: number | null
+          previous_evaluations: number
+        }[]
+      }
+      master_org_health_signals: {
+        Args: never
+        Returns: {
+          active_users_7d: number
+          events_7d: number
+          last_login_at: string | null
+          members_active: number
+          open_tickets: number
+          organization_id: string
+          quota_max_ratio: number | null
+          quota_max_resource: string | null
+          reopen_alert_tickets: number
+          whatsapp_connected: number
+          whatsapp_instances: number
+        }[]
+      }
+      master_list_staff: {
+        Args: never
+        Returns: { master_user_id: string; name: string }[]
+      }
+      master_update_implementation: {
+        Args: {
+          p_call_participants: string | null
+          p_call_scheduled_at: string | null
+          p_org_id: string
+          p_owner_master_user_id: string | null
+        }
+        Returns: Json
+      }
+      master_ticket_send_reply: {
+        Args: { p_ticket_id: string }
+        Returns: Database["public"]["Tables"]["support_tickets"]["Row"]
+      }
       master_org_user_activity: {
         Args: { p_window_minutes?: number }
         Returns: {
