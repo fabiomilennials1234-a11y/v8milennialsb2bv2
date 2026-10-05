@@ -209,6 +209,7 @@ export interface ItemEditado {
 }
 
 export interface DealCardData {
+  timezone?: string;
   pedidoAtualizadoEm?: string | null;
   /** Venda anterior ao CRM: `id` é o `deals.id`, não uma entrada de funil. */
   vendaHistorica?: boolean;

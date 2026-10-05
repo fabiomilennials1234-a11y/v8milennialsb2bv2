@@ -209,6 +209,8 @@ export interface ItemEditado {
 }
 
 export interface DealCardData {
+  timezone?: string;
+  vendaHistorica?: boolean;
   pedidoAtualizadoEm?: string | null;
   /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
   id: string;

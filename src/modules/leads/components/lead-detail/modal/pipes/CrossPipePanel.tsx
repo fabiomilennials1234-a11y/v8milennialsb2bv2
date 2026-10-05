@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useDealSheetOpcional } from "../../../deal-detail/deal-sheet-context";
+import { Button } from "@/components/ui/button";
 import { Layers } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -88,6 +90,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 }: CrossPipePanelProps) {
   const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useRemoveLeadFromCustomPipe, MergedMeetingEditor } = usePipeOps();
   const { hasFeature } = useOrgFeatures();
+  const painelNegocio = useDealSheetOpcional();
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
   // Metadados do negócio (valor, tempo parado, funil-alvo) — mesma fonte que a
   // coluna "Negócios" da lista, então as duas telas contam a mesma coisa.
@@ -384,6 +387,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       {historicalSales.length > 0 && <ul aria-label="Vendas históricas" className="flex flex-col gap-2">
         {historicalSales.map(sale => <li key={sale.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
           <span>{sale.title}</span><span className="font-medium text-success">Ganho · {formatBRL(sale.value)}</span>
+          {painelNegocio && <Button variant="outline" size="sm" onClick={() => painelNegocio.openDeal(sale.id, leadId)}>Abrir venda</Button>}
         </li>)}
       </ul>}
 

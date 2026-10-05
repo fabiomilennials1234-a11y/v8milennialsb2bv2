@@ -116,7 +116,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
   );
   const corrigirVenda = useCorrigirVendaHistorica(
-    data?.vendaHistorica ? data.id : null, organizacaoId,
+    data?.vendaHistorica ? data.id : dealId, organizacaoId, data?.pedidoAtualizadoEm ?? null,
   );
   const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
   const editarValorProposta = useEditarValorProposta(entryId);
@@ -581,7 +581,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
            clique. Era esta linha que sumia o botão em 19,2% dos cards. */
         onAdicionarProduto={adicionarProduto}
         onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
-        onCorrigirVendaHistorica={data.vendaHistorica && organizacaoId ? corrigirVenda.mutateAsync : undefined}
+        onCorrigirVendaHistorica={data.estado === "ganho" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirVenda.mutateAsync : undefined}
         ajustesPedido={ajustePedido.historico}
         /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
            e a lixeira são de item já lançado, e não há item sem negócio. */

@@ -17,6 +17,9 @@ import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
+import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
+import { diaDaVenda } from "./dia-da-venda";
+import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
@@ -281,6 +284,7 @@ export function DealCard({
   onAdicionarProduto,
   onEditarItem,
   onAjustarPedido,
+  onCorrigirVendaHistorica,
   ajustesPedido = [],
   onRemoverItem,
   onEditarValor,
@@ -325,6 +329,7 @@ export function DealCard({
    */
   onEditarItem?: (edicao: ItemEditado) => Promise<void>;
   onAjustarPedido?: (ajuste: AjustePedidoGanho) => Promise<void>;
+  onCorrigirVendaHistorica?: (correcao: CorrecaoVendaHistorica) => Promise<void>;
   ajustesPedido?: Array<{
     id: string;
     reason: string;
@@ -445,6 +450,8 @@ export function DealCard({
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
+  const [corrigindoVenda, setCorrigindoVenda] = useState(false);
+  useEffect(() => setCorrigindoVenda(false), [negocio.id]);
   const [ajustandoPedido, setAjustandoPedido] = useState(false);
   useEffect(() => setAjustandoPedido(false), [negocio.id, negocio.estado]);
   const estagnado =
@@ -789,7 +796,27 @@ export function DealCard({
               />
               {abaDinheiro === "produtos" ? (
                 <div className="space-y-3">
-                  {negocio.estado === "ganho" && onAjustarPedido && (ajustandoPedido ? (
+                  {negocio.estado === "ganho" && onCorrigirVendaHistorica && negocio.desfecho && (corrigindoVenda ? (
+                <CorrigirVendaHistorica
+                  key={negocio.id}
+                  valor={negocio.desfecho.valorVenda ?? negocio.valorDoNegocio ?? negocio.valor ?? 0}
+                  data={diaDaVenda(negocio.desfecho.quando, negocio.timezone)}
+                  versao={negocio.pedidoAtualizadoEm}
+                  timezone={negocio.timezone}
+                  valorDosProdutos={negocio.itens.length > 0}
+                  onSalvar={onCorrigirVendaHistorica}
+                  onCancelar={() => setCorrigindoVenda(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center self-start rounded-full border border-input bg-card px-4 text-sm font-semibold shadow-relevo transition-[border-color,transform] hover:-translate-y-px hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => { setAjustandoPedido(false); setCorrigindoVenda(true); }}
+                >
+                  Corrigir data e valor da venda
+                </button>
+              ))}
+              {negocio.estado === "ganho" && onAjustarPedido && (ajustandoPedido ? (
                     <AjustarPedidoGanho
                       key={negocio.id}
                       itens={negocio.itens}
@@ -801,12 +828,12 @@ export function DealCard({
                     <button
                       type="button"
                       className="rounded-md border border-primary/40 px-3 py-2 text-sm text-primary hover:bg-primary/10"
-                      onClick={() => setAjustandoPedido(true)}
+                      onClick={() => { setCorrigindoVenda(false); setAjustandoPedido(true); }}
                     >
                       Ajustar pedido ganho
                     </button>
                   ))}
-                  {!ajustandoPedido && (
+                  {!ajustandoPedido && !corrigindoVenda && (
                     <DealCardMoney
                       key={negocio.id}
                       itens={negocio.itens}

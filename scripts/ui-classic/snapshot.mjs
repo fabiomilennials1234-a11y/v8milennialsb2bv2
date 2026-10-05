@@ -17,7 +17,7 @@
  * `--gerar-patch`, commitar os dois. Ver docs/ui-v5/interface-por-organizacao.md.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,7 +71,7 @@ if (args.includes("--gerar-patch")) {
   // e basta trocar o prefixo da pristina pelo de `classic/`.
   const PRISTINA = ".tmp/ui-classic-pristina";
   rmSync(join(RAIZ, PRISTINA), { recursive: true, force: true });
-  execFileSync("mkdir", ["-p", join(RAIZ, PRISTINA)]);
+  mkdirSync(join(RAIZ, PRISTINA), { recursive: true });
   // Mesmo commit do snapshot, não o ref de agora: o patch é só a NOSSA mudança.
   execFileSync("tar", ["-x", "-C", join(RAIZ, PRISTINA)], {
     input: execFileSync("git", ["archive", "--format=tar", refDoSnapshot, ...DO_REF], { cwd: RAIZ, maxBuffer: 1 << 30 }),
