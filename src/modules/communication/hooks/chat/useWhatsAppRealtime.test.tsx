@@ -286,3 +286,82 @@ describe("useWhatsAppMessagesRealtime — a thread aberta pertence a uma caixa",
     expect(thread(qc, INST)).toHaveLength(1);
   });
 });
+
+describe("useWhatsAppMessagesRealtime — UPDATE funde, não substitui", () => {
+  // O Realtime (wal2json v2 + REPLICA IDENTITY DEFAULT) não manda coluna TOAST
+  // inalterada: num UPDATE de `status`, o `raw_payload` em toast chega AUSENTE.
+  // Substituir a linha apagava menu/botões/pix da bolha a cada status.
+  const TELEFONE = "5548999990001";
+  const RAW = { content: { sections: [{ title: "Planos" }], buttonText: "Ver" } };
+  const linha = {
+    id: "m-1",
+    message_id: "wamid-1",
+    phone_number: TELEFONE,
+    instance_id: INST,
+    direction: "outgoing",
+    status: "sent",
+    content: "Escolha um plano",
+    timestamp: "2026-10-05T15:00:00Z",
+    pinned_at: "2026-10-05T15:01:00Z" as string | null,
+    raw_payload: RAW as unknown,
+    uazapi_menu_title: "Planos",
+  };
+
+  function setupThread() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(chatQueryKeys.messages(ORG, TELEFONE, INST), [linha]);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useWhatsAppMessagesRealtime(TELEFONE, INST), { wrapper });
+    return queryClient;
+  }
+
+  const mensagem = (qc: QueryClient) =>
+    ((qc.getQueryData(chatQueryKeys.messages(ORG, TELEFONE, INST)) ?? []) as Array<
+      Record<string, unknown>
+    >)[0];
+
+  // Formato real: o registro do UPDATE traz as colunas não-TOAST, SEM a chave
+  // `raw_payload`, e nunca as projeções `uazapi_*` do SELECT.
+  const semToast = Object.fromEntries(
+    Object.entries(linha).filter(([k]) => k !== "raw_payload" && k !== "uazapi_menu_title"),
+  );
+  const updateDeStatus = (extra: Record<string, unknown> = {}) => ({
+    eventType: "UPDATE",
+    new: { ...semToast, status: "delivered", ...extra },
+    old: { id: linha.id },
+  });
+
+  it("UPDATE de status sem raw_payload mantém o raw_payload e as projeções", () => {
+    const qc = setupThread();
+    expect("raw_payload" in updateDeStatus().new).toBe(false);
+
+    capturedOnEvent?.(updateDeStatus());
+
+    const m = mensagem(qc);
+    expect(m.status).toBe("delivered");
+    expect(m.raw_payload).toEqual(RAW);
+    expect(m.uazapi_menu_title).toBe("Planos");
+  });
+
+  it("controle positivo: campo que muda de verdade é aplicado, inclusive null explícito", () => {
+    const qc = setupThread();
+    const novoRaw = { content: { sections: [], buttonText: "Outro" } };
+
+    capturedOnEvent?.(updateDeStatus({ status: "read", pinned_at: null, raw_payload: novoRaw }));
+
+    const m = mensagem(qc);
+    expect(m.status).toBe("read");
+    expect(m.pinned_at).toBeNull();
+    expect(m.raw_payload).toEqual(novoRaw);
+  });
+
+  it("chave presente com undefined não apaga o valor do cache", () => {
+    const qc = setupThread();
+
+    capturedOnEvent?.(updateDeStatus({ raw_payload: undefined }));
+
+    expect(mensagem(qc).raw_payload).toEqual(RAW);
+  });
+});

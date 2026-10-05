@@ -1,0 +1,30 @@
+-- 20271107140005_drop_idx_whatsapp_conversations_instance.sql
+--
+-- ⚠ VERSÃO PROVISÓRIA. Renumerar contra o ledger de prod (schema_migrations)
+--   na hora de aplicar.
+--
+-- ── POR QUÊ (medido em prod, 2026-10-05) ───────────────────────────────────
+-- idx_whatsapp_conversations_instance (instance_id), 16 kB, é prefixo exato do
+-- UNIQUE whatsapp_conversations_instance_id_phone_number_key (instance_id,
+-- phone_number), 48 kB. Teve 7 scans entre 15:55 e 16:08 UTC: o planner o
+-- prefere por ser menor, e o UNIQUE atende o mesmo predicado (e a FK de
+-- instance_id) numa tabela que cabe em poucas páginas. Redundância pura.
+-- Origem: baseline 20260101000000:32444.
+--
+-- ── COMO APLICAR ───────────────────────────────────────────────────────────
+-- DROP INDEX CONCURRENTLY NÃO RODA EM TRANSAÇÃO ("regular DROP INDEX commands
+-- can be performed within a transaction block, but DROP INDEX CONCURRENTLY
+-- cannot" — https://www.postgresql.org/docs/17/sql-dropindex.html).
+-- Aplicar por psql em autocommit no pooler em modo session (porta 5432):
+--   SET lock_timeout = '3s';
+--   \i este arquivo
+-- NÃO por `apply_migration` do MCP nem `supabase db push` (ambos embrulham em
+-- transação e falham). Se o timeout estourar no meio, o índice pode ficar
+-- INVALID: confira `pg_index.indisvalid` e rode o DROP de novo.
+-- Depois, registrar a versão no ledger à mão.
+--
+-- ── REVERSÃO EXATA (pg_get_indexdef em prod, 2026-10-05) ───────────────────
+-- CREATE INDEX CONCURRENTLY idx_whatsapp_conversations_instance ON public.whatsapp_conversations USING btree (instance_id);
+-- Arquivo: supabase/migrations/rollback/20271107140005_drop_idx_whatsapp_conversations_instance.sql
+
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_whatsapp_conversations_instance;

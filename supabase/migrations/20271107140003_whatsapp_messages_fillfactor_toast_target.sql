@@ -1,0 +1,50 @@
+-- 20271107140003_whatsapp_messages_fillfactor_toast_target.sql
+--
+-- ⚠ VERSÃO PROVISÓRIA. Renumerar contra o ledger de prod (schema_migrations)
+--   na hora de aplicar — colisão de versão é o normal neste repo.
+--
+-- ── POR QUÊ (medido em prod, 2026-10-05, após o OOM das 15:55 UTC) ──────────
+-- 25% dos UPDATEs de `status` em whatsapp_messages saem do HOT (26 de 104,
+-- todos `n_tup_newpage_upd`): a página está cheia (fillfactor 100), não há
+-- índice em `status`. Cada um desses regrava os 21 índices (2.972 MB) e gera
+-- ~3,5 kB de WAL. Tupla recente (lógica) média 2,3 kB, p50 1,35 kB (2.945 linhas/2 h).
+--   fillfactor = 85        → páginas NOVAS reservam 15% para a versão nova da
+--                            linha cair na mesma página (HOT). Páginas
+--                            existentes não mudam.
+--   toast_tuple_target=1024 → quando o TOAST dispara, reduz a tupla até 1 kB
+--                            (em vez de 2 kB): raw_payload comprimido que hoje
+--                            fica inline vai para o toast.
+--   LIMITE (código-fonte PG17, heapam.c:2361/3922): o GATILHO do TOAST é fixo em
+--   TOAST_TUPLE_THRESHOLD (~2 kB); toast_tuple_target só muda o ALVO depois de
+--   disparado. Tuplas entre 1 kB e 2 kB (82% das recentes) ficam inline como
+--   estão. O ganho de HOT vem do fillfactor; o toast_tuple_target encolhe só as
+--   ~14% acima de 2 kB. Provado em tests/integration/whatsapp-messages-hot.test.mjs.
+--   POR QUE 85 E NÃO 90 (decisão do CTO, 2026-10-05). Fluxo calibrado na
+--   distribuição de largura de prod (sem C1 reproduz 28% newpage; prod ao vivo
+--   24,7% = 1600/6466): 90/1024 → 12,3% newpage (reprova o critério ≥10% do
+--   protocolo); 85/1024 → 3,2% e heap 6% MENOR que com 90 (260 × 276 páginas,
+--   311 sem C1): menos UPDATE fora da página = menos cópia de linha. Com tupla
+--   de ~1,36 kB (p50), 90 empacota igual a 100 (5/página) e não abre folga.
+--   Ver .specs/perf/whatsapp-messages-indexes/README.md.
+--
+-- ── LOCK (fonte: PostgreSQL 17, ALTER TABLE, "SET ( storage_parameter )") ───
+-- "SHARE UPDATE EXCLUSIVE lock will be taken for fillfactor, toast and
+-- autovacuum storage parameters" — https://www.postgresql.org/docs/17/sql-altertable.html
+-- Não bloqueia SELECT/INSERT/UPDATE/DELETE; conflita com autovacuum/ANALYZE/
+-- CREATE INDEX CONCURRENTLY na mesma tabela. Só catálogo: sem rewrite (a doc:
+-- "the table contents will not be modified immediately by this command").
+--
+-- ── COMO APLICAR ───────────────────────────────────────────────────────────
+-- Roda em transação (diferente das irmãs DROP INDEX CONCURRENTLY), mas aplique
+-- junto delas: psql autocommit no pooler em modo session (porta 5432), com
+--   SET lock_timeout = '3s';
+-- Se estourar o timeout (autovacuum segurando o lock), repita. NÃO por
+-- `apply_migration` do MCP nem `supabase db push`.
+--
+-- ── REVERSÃO EXATA ─────────────────────────────────────────────────────────
+-- ALTER TABLE public.whatsapp_messages RESET (fillfactor, toast_tuple_target);
+-- (prod hoje: reloptions = {autovacuum_vacuum_scale_factor=0.10,
+--  autovacuum_analyze_scale_factor=0.10}; o RESET preserva essas duas.)
+-- Arquivo: supabase/migrations/rollback/20271107140003_whatsapp_messages_fillfactor_toast_target.sql
+
+ALTER TABLE public.whatsapp_messages SET (fillfactor = 85, toast_tuple_target = 1024);
