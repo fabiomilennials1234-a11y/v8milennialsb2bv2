@@ -325,6 +325,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
     return {
       id: negocioBase.id,
+      vendaHistorica: negocioBase.historicalSale === true,
       titulo: negocioBase.title,
       estado:
         negocioBase.outcome === "won"
