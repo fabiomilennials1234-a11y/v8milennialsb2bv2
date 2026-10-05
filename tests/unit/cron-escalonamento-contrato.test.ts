@@ -25,6 +25,7 @@ import {
   disparosNaSemana,
   expandirCampo,
   frequenciaSemanal,
+  lerAgendadosDepois,
   lerReescalonamento,
 } from '../../scripts/cron/carga-por-minuto.mjs';
 
@@ -176,13 +177,7 @@ describe('migration de reescalonamento de fase', () => {
  * conhece job criado depois. Cada `cron.schedule('nome', 'agenda', ...)` de
  * migration mais nova entra (ou substitui o homônimo) na carga medida.
  */
-const AGENDADOS_DEPOIS = readdirSync(MIGRATIONS)
-  .filter((f) => f.endsWith('.sql') && ARQUIVO !== undefined && f > ARQUIVO)
-  .flatMap((f) =>
-    [...readFileSync(path.join(MIGRATIONS, f), 'utf8').matchAll(
-      /cron\.schedule\(\s*'([^']+)'\s*,\s*'([^']+)'/g,
-    )].map(([, jobname, schedule]) => ({ arquivo: f, jobname, schedule })),
-  );
+const AGENDADOS_DEPOIS = lerAgendadosDepois(MIGRATIONS, ARQUIVO);
 
 describe('jobs agendados por migrations novas', () => {
   const comNovos = [
@@ -204,7 +199,14 @@ describe('jobs agendados por migrations novas', () => {
       const job = depois.find((j) => j.jobname === nome);
       for (const t of disparosNaSemana(job!.schedule)) pesados.add(t);
     }
+    // Job por-minuto (`* * * * *`) não tem fase a escolher: colide com toda purga
+    // por definição, e é por isso que fica fora da carga medida (cargaSemanal).
+    // Hoje o único é cron-dispatch-minute (20271107140002), que roda as 19
+    // subtarefas em UMA conexão e substitui 19 jobs (≈1.020 → 60 conexões/h);
+    // tests/unit/cron-dispatch-minute-contrato.test.ts mede o efeito dele. Para
+    // todo job com fase, o check segue integral.
     for (const novo of AGENDADOS_DEPOIS) {
+      if (analisarAgenda(novo.schedule).porMinuto) continue;
       for (const t of disparosNaSemana(novo.schedule)) {
         expect(pesados.has(t), `${novo.jobname} (${novo.arquivo}) colide no minuto ${t}`).toBe(false);
       }

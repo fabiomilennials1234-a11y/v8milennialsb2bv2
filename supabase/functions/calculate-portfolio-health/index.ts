@@ -129,7 +129,10 @@ async function notifyCloser(
       p_max_requests: 1,
       p_window_seconds: 86400,
     });
-    if (!rateCheck?.allowed) return;
+    // check_rate_limit é RETURNS TABLE: o PostgREST devolve ARRAY de linhas.
+    // Ler `.allowed` direto do array dava sempre undefined → alerta nunca saía.
+    const allowance = Array.isArray(rateCheck) ? rateCheck[0] : rateCheck;
+    if (allowance?.allowed !== true) return;
 
     const { data: closer } = await supabase
       .from("team_members")

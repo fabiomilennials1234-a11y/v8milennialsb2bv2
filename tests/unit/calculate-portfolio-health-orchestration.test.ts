@@ -202,7 +202,9 @@ async function run(opts: RunOpts) {
       if (name === "check_rate_limit") {
         const allowed = !rateKeys.has(params.p_key);
         rateKeys.add(params.p_key);
-        return { data: { allowed }, error: null };
+        // Forma REAL do PostgREST: check_rate_limit é RETURNS TABLE → array de linhas.
+        // Dublê com objeto solto escondia o bug (alerta do vendedor nunca saía).
+        return { data: [{ allowed, remaining: 0, reset_at: "2026-10-06T00:00:00Z" }], error: null };
       }
       return { data: null, error: { message: `rpc ${name} não dublada` } };
     },
