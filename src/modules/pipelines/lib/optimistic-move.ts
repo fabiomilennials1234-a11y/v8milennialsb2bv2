@@ -1,18 +1,21 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 /**
- * Optimistic drag-and-drop para os boards paginados (`usePaginatedPipeline`).
+ * Optimistic drag-and-drop para os boards paginados — o legado
+ * (`usePaginatedPipeline`, chaveado por slug) e a página unificada
+ * (`usePaginatedFunil`, chaveada por `pipeline_id`).
  *
  * O board NÃO é uma query só: cada etapa é um `useInfiniteQuery` com chave
- * `["pipeline-page", slug, stageKey, orgId, filtersKey]` e data no formato
+ * `["pipeline-page", boardKey, stageKey, orgId, filtersKey]` e data no formato
  * `{ pages: Entry[][], pageParams }`. As contagens das colunas vivem em
- * `["pipeline-stage-counts", slug, orgId, filtersKey]` como `Record<stage,num>`.
+ * `["pipeline-stage-counts", boardKey, …]` como `Record<stage,num>`.
+ * `boardKey` é o 2º elemento da chave: o slug no legado, o uuid no `/funil`.
  *
  * Antes deste helper o move só refletia na tela quando o eco do Realtime
  * (debounce 2s) invalidava o board — o card "voltava" e congelava ~2-3s. Aqui
  * movemos o card no cache na hora e devolvemos um snapshot para rollback no erro.
  *
- * Casa por prefixo de chave (`["pipeline-page", slug]`), então TODAS as
+ * Casa por prefixo de chave (`["pipeline-page", boardKey]`), então TODAS as
  * variantes de filtro da etapa são ajustadas — a reconciliação no `onSettled`
  * corrige qualquer divergência de filtro que o otimismo tenha deixado passar.
  */
@@ -22,6 +25,8 @@ type CacheEntry = [QueryKey, unknown];
 export interface OptimisticMoveSnapshot {
   pages: CacheEntry[];
   counts: CacheEntry[];
+  /** Etapa de onde o card saiu (`null` quando não estava em cache). */
+  fromStage: string | null;
 }
 
 interface InfiniteData {
@@ -35,11 +40,11 @@ function isInfinite(data: unknown): data is InfiniteData {
 
 export function optimisticMovePipelineEntry(
   qc: QueryClient,
-  opts: { slug: string; id: string; toStage: string }
+  opts: { boardKey: string; id: string; toStage: string }
 ): OptimisticMoveSnapshot {
-  const { slug, id, toStage } = opts;
-  const pageKey: QueryKey = ["pipeline-page", slug];
-  const countsKey: QueryKey = ["pipeline-stage-counts", slug];
+  const { boardKey, id, toStage } = opts;
+  const pageKey: QueryKey = ["pipeline-page", boardKey];
+  const countsKey: QueryKey = ["pipeline-stage-counts", boardKey];
 
   const pageCaches = qc.getQueriesData({ queryKey: pageKey });
   const countCaches = qc.getQueriesData({ queryKey: countsKey });
@@ -48,6 +53,7 @@ export function optimisticMovePipelineEntry(
   const snapshot: OptimisticMoveSnapshot = {
     pages: pageCaches.map(([k, d]) => [k, d] as CacheEntry),
     counts: countCaches.map(([k, d]) => [k, d] as CacheEntry),
+    fromStage: null,
   };
 
   // 1) Remove o card de todas as páginas onde aparece; captura o card + origem.
@@ -73,6 +79,7 @@ export function optimisticMovePipelineEntry(
 
   // Card não estava em cache (coluna nunca carregada): reconciliação resolve.
   if (!moved) return snapshot;
+  snapshot.fromStage = fromStage;
 
   const movedNew = { ...(moved as Record<string, unknown>), stage_key: toStage, status: toStage };
 
