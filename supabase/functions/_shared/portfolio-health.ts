@@ -299,3 +299,262 @@ export function detectSignals(input: SignalInput): DetectedSignal[] {
 
   return signals;
 }
+
+// ─── Score de um cliente (extraído de calculate-portfolio-health) ────────────
+//
+// Corpo antigo de `processClient` (index.ts:113-245), sem I/O: a edge function
+// lê as entradas em lote via `portfolio_health_inputs`, chama isto em memória
+// e grava em lote via `portfolio_health_apply`. Nenhuma regra mudou na
+// extração — tests/unit/portfolio-health-compute.test.ts compara com uma cópia
+// congelada do corpo antigo.
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+const NEW_CLIENT_SCORE = 70; // < 3 linhas de pedido → score neutro
+const ENGAGEMENT_DEFAULT = 50; // sem lead → neutro
+
+export type HealthOrder = {
+  id?: string;
+  sale_value: number | string;
+  sold_at: string;
+  product_name: string;
+};
+
+export type ClientHealthInput = {
+  leadId: string | null;
+  /** `upsell_clients.last_order_at` — semeado por import de carteira sem linha de pedido */
+  lastOrderAtStored: string | null;
+  /** linhas APROVADAS, já ordenadas por `sold_at, id` */
+  orders: HealthOrder[];
+  /** `conversation_context_summary.engagement_score` do lead */
+  ctxEngagement: number | null;
+  /** `timestamp` da última mensagem `incoming` do lead */
+  lastIncomingAt: string | null;
+};
+
+export type OrgHealthContext = {
+  /** média por LINHA aprovada da org — ver orgAvgTicketFrom */
+  orgAvgTicket: number;
+  defaultCycleDays?: number;
+};
+
+/** As colunas de saúde de `upsell_clients` (menos `health_updated_at`, que é do apply). */
+export type ClientHealthUpdate = {
+  health_score: number;
+  health_status: HealthStatus;
+  segment: Segment;
+  reorder_cycle_days: number;
+  days_since_last_order: number;
+  last_order_at: string | null;
+  next_order_expected: string | null;
+  order_count: number;
+  lifetime_value: number;
+  avg_ticket: number | null;
+  trend: Trend;
+  churn_probability: number;
+};
+
+export type ClientHealthResult = {
+  update: ClientHealthUpdate;
+  snapshot: { health_score: number; health_status: HealthStatus; segment: Segment };
+  signals: DetectedSignal[];
+};
+
+/** Ticket médio da org por linha aprovada: soma / contagem (0 sem pedido). */
+export function orgAvgTicketFrom(
+  approvedSum: number | string | null | undefined,
+  approvedCount: number | null | undefined,
+): number {
+  const n = Number(approvedCount ?? 0);
+  return n > 0 ? Number(approvedSum ?? 0) / n : 0;
+}
+
+function daysBetween(a: Date, b: Date): number {
+  return Math.abs(b.getTime() - a.getTime()) / DAY_MS;
+}
+
+function productFrequencies(orders: HealthOrder[]): ProductFrequency[] {
+  if (orders.length === 0) return [];
+  const counts: Record<string, number> = {};
+  for (const o of orders) {
+    counts[o.product_name] = (counts[o.product_name] ?? 0) + 1;
+  }
+  return Object.entries(counts).map(([productName, count]) => ({
+    productName,
+    appearsInPct: Math.round((count / orders.length) * 100),
+  }));
+}
+
+export function computeClientHealth(
+  input: ClientHealthInput,
+  org: OrgHealthContext,
+  now: Date,
+): ClientHealthResult {
+  let engagementScore = ENGAGEMENT_DEFAULT;
+  let daysSinceLastIncoming: number | null = null;
+
+  if (input.leadId) {
+    daysSinceLastIncoming = input.lastIncomingAt
+      ? Math.round(daysBetween(new Date(input.lastIncomingAt), now))
+      : null;
+    engagementScore = calculateEngagementScore(input.ctxEngagement, daysSinceLastIncoming);
+  }
+
+  const orderList = input.orders;
+
+  // `upsell_orders` é linha-por-ITEM. `dayOrders` colapsa no pedido real
+  // (cliente + dia UTC de sold_at) — ver groupOrdersByDay acima.
+  const dayOrders = groupOrdersByDay(orderList);
+
+  // ⚠️ ESCOPO DELIBERADO (decisão do CTO, 2026-08-13): o agrupamento por pedido
+  // alimenta SÓ o ciclo de recompra e o avg_ticket gravado. `order_count`
+  // continua contando LINHAS de propósito: é entrada de `deriveSegment`
+  // (< 3 → 'novo', >= 5 → 'ouro'/'resgate'), e trocá-lo jogaria 145 dos 148
+  // clientes da Basic4u pra 'novo'. Consequência aceita: para cliente com
+  // pedido multi-item, lifetime_value / order_count ≠ avg_ticket.
+  const orderCount = orderList.length;
+  const cycleDays = computeCycleDays(dayOrders, org.defaultCycleDays);
+
+  const sorted = [...orderList].sort(
+    (a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime(),
+  );
+  const lastOrder = sorted.at(-1);
+  // Import de carteira por CSV semeia `last_order_at` sem linha de pedido (a
+  // planilha traz a data mas não o valor, e sale_value tem CHECK > 0). Sem
+  // pedido, cai na data gravada para recência e atraso sobreviverem ao recálculo.
+  const importedLastOrderAt =
+    !lastOrder && input.lastOrderAtStored ? new Date(input.lastOrderAtStored) : null;
+  const lastOrderAt = lastOrder ? new Date(lastOrder.sold_at) : importedLastOrderAt;
+  const daysSinceLastOrder = lastOrderAt ? Math.round(daysBetween(lastOrderAt, now)) : 999;
+
+  const totalValue = orderList.reduce((s, o) => s + Number(o.sale_value), 0);
+
+  // Gravado em avg_ticket: total / PEDIDOS (o que a tela e o KPI mostram).
+  const avgTicket = dayOrders.length > 0 ? totalValue / dayOrders.length : 0;
+
+  // Só nos SCORES: total / LINHAS — as contrapartes comparadas (recentAvg,
+  // lastThreeTickets, orgAvgTicket) também são por linha.
+  const scoringAvgTicket = orderCount > 0 ? totalValue / orderCount : 0;
+
+  const cutoff90 = new Date(now.getTime() - 90 * DAY_MS);
+  const recent90 = orderList.filter((o) => new Date(o.sold_at) >= cutoff90);
+  const historicalCount = Math.max(1, Math.ceil((orderCount * 90) / 365)); // esperado em 90d
+
+  const lastThreeTickets = sorted.slice(-3).map((o) => Number(o.sale_value));
+
+  const recencyScore = lastOrderAt ? calculateRecencyScore(daysSinceLastOrder, cycleDays) : 0;
+  const frequencyScore = calculateFrequencyScore(recent90.length, historicalCount);
+  const recentAvg =
+    recent90.length > 0
+      ? recent90.reduce((s, o) => s + Number(o.sale_value), 0) / recent90.length
+      : 0;
+  const ticketScore = calculateTicketScore(recentAvg, scoringAvgTicket || 1);
+
+  const healthScore =
+    orderCount < 3
+      ? NEW_CLIENT_SCORE
+      : calculateHealthScore({
+          recency: recencyScore,
+          frequency: frequencyScore,
+          ticket: ticketScore,
+          engagement: engagementScore,
+        });
+
+  const healthStatus = deriveHealthStatus(healthScore);
+  const segment = deriveSegment(healthScore, scoringAvgTicket, org.orgAvgTicket, orderCount);
+  const trend = deriveTrend(lastThreeTickets, scoringAvgTicket);
+
+  const nextOrderExpected = lastOrderAt
+    ? new Date(lastOrderAt.getTime() + cycleDays * DAY_MS)
+    : null;
+
+  const signalInput: SignalInput = {
+    daysSinceLastOrder,
+    cycleDays,
+    lastThreeTickets,
+    historicalAvgTicket: scoringAvgTicket,
+    productFrequencies: productFrequencies(orderList),
+    lastOrderProducts: lastOrder ? [lastOrder.product_name] : [],
+    daysSinceLastWhatsAppReply: daysSinceLastIncoming,
+    lastNpsScore: null,
+  };
+  const churnProbability =
+    orderCount < 3 ? 0 : calculateChurnProbability(signalInput, healthScore);
+
+  return {
+    update: {
+      health_score: healthScore,
+      health_status: healthStatus,
+      segment,
+      reorder_cycle_days: cycleDays,
+      days_since_last_order: daysSinceLastOrder,
+      last_order_at: lastOrderAt?.toISOString() ?? null,
+      next_order_expected: nextOrderExpected?.toISOString() ?? null,
+      order_count: orderCount,
+      lifetime_value: totalValue,
+      avg_ticket: avgTicket || null,
+      trend,
+      churn_probability: churnProbability,
+    },
+    snapshot: { health_score: healthScore, health_status: healthStatus, segment },
+    signals: detectSignals(signalInput),
+  };
+}
+
+// ─── Contrato com as RPCs portfolio_health_inputs / portfolio_health_apply ────
+
+/** Um cliente como `portfolio_health_inputs` devolve. */
+export type PortfolioInputsClient = {
+  id: string;
+  lead_id: string | null;
+  closer_id: string | null;
+  name: string;
+  last_order_at: string | null;
+  orders: HealthOrder[];
+  ctx_engagement: number | null;
+  last_incoming_at: string | null;
+};
+
+/** Campos da org — só na 1ª página (`p_after` nulo). */
+export type PortfolioInputsOrg = {
+  default_reorder_cycle_days: number | null;
+  approved_sum: number | string | null;
+  approved_count: number | null;
+  whatsapp_alerts_enabled: boolean;
+  retention_config: Record<string, unknown> | null;
+};
+
+/** Uma linha do `p_results` de `portfolio_health_apply`. */
+export type PortfolioApplyRow = ClientHealthUpdate & {
+  client_id: string;
+  signals: {
+    alert_type: SignalType;
+    severity: DetectedSignal["severity"];
+    title: string;
+    description: string;
+    metadata: Record<string, unknown>;
+  }[];
+};
+
+export function healthInputFromRow(row: PortfolioInputsClient): ClientHealthInput {
+  return {
+    leadId: row.lead_id,
+    lastOrderAtStored: row.last_order_at,
+    orders: row.orders ?? [],
+    ctxEngagement: row.ctx_engagement ?? null,
+    lastIncomingAt: row.last_incoming_at ?? null,
+  };
+}
+
+export function applyRowFrom(clientId: string, result: ClientHealthResult): PortfolioApplyRow {
+  return {
+    client_id: clientId,
+    ...result.update,
+    signals: result.signals.map((s) => ({
+      alert_type: s.type,
+      severity: s.severity,
+      title: s.title,
+      description: s.description,
+      metadata: s.metadata,
+    })),
+  };
+}
