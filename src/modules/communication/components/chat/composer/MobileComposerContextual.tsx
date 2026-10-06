@@ -1,4 +1,5 @@
 import { ReplyPreview } from "../ReplyContext";
+import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 /**
  * MobileComposerContextual — WhatsApp-style contextual composer for mobile.
@@ -121,6 +122,7 @@ export function MobileComposerContextual({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reply = useChatReply();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
 
   const isSending = sendMessage.isPending || sendMedia.isPending;
@@ -439,6 +441,7 @@ export function MobileComposerContextual({
                   </p>
                 )}
                 <Textarea
+                  ref={captionRef}
                   value={attachmentCaption}
                   onChange={(e) => setAttachmentCaption(e.target.value)}
                   placeholder="Adicionar legenda (opcional)..."
@@ -446,6 +449,7 @@ export function MobileComposerContextual({
                   rows={1}
                   className="min-h-[36px] max-h-24 resize-none py-2"
                 />
+                <ComposerEmojiPicker inputRef={captionRef} onChange={setAttachmentCaption} disabled={isSending} />
                 <Button
                   onClick={handleSendAttachment}
                   disabled={isSending}
@@ -485,6 +489,12 @@ export function MobileComposerContextual({
         </Button>
 
         {/* Text input — textarea p/ suportar quebra de linha + slash popover */}
+        <ComposerEmojiPicker
+          key={conversationKey}
+          inputRef={inputRef}
+          onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
+          disabled={isSending}
+        />
         <div className="relative flex-1">
           {showSlashPopover && templates && (
             <SlashCommandPopover
