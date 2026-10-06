@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { transcribeChatAudio } from '../../supabase/functions/_shared/whatsapp-transcription';
+import { transcribeChatAudio, TRANSCRIPTION_BUDGET_MS, TRANSCRIPTION_LEASE_MS } from '../../supabase/functions/_shared/whatsapp-transcription';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { WhatsAppProvider } from '../../supabase/functions/_shared/whatsapp-client';
 
@@ -11,7 +11,7 @@ const storageUrl = (org: string) => `https://example.supabase.co/storage/v1/obje
 type Options = {
   missing?: boolean; denied?: boolean; cached?: boolean; busy?: boolean; type?: string;
   mediaUrl?: string | null; transcript?: string | null; storageError?: boolean; blobSize?: number;
-  providerDownload?: 'ok' | 'not_found' | 'error';
+  providerDownload?: 'ok' | 'not_found' | 'error'; infoSize?: number; slowMs?: number; budgetMs?: number;
 };
 
 function fixture(options: Options = {}) {
@@ -25,7 +25,8 @@ function fixture(options: Options = {}) {
   const user = { from: vi.fn(() => read), rpc: vi.fn(async () => ({ data: !options.denied, error: null })) };
   const blob = { size: options.blobSize ?? 4, type: 'audio/ogg', arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer };
   const download = vi.fn(async () => options.storageError ? { data: null, error: new Error('Object not found') } : { data: blob, error: null });
-  const storageFrom = vi.fn(() => ({ download }));
+  const info = vi.fn(async () => options.storageError ? { data: null, error: new Error('Object not found') } : { data: { size: options.infoSize ?? 4, contentType: 'audio/ogg' }, error: null });
+  const storageFrom = vi.fn(() => ({ download, info }));
   const admin = { from: vi.fn().mockReturnValueOnce(claim).mockReturnValueOnce(saved).mockReturnValue(release), storage: { from: storageFrom } };
   const downloadMedia = vi.fn(async () => {
     if (options.providerDownload === 'not_found') throw { status: 404, message: 'Message not found' };
@@ -34,11 +35,15 @@ function fixture(options: Options = {}) {
   });
   const uazapiTranscribe = vi.fn();
   const provider = { provider: 'uazapi', downloadMedia, transcribeAudio: uazapiTranscribe };
-  const transcribe = vi.fn(async () => 'transcript' in options ? options.transcript : 'olá, tudo bem?');
-  const log = vi.fn(async () => {});
+  const transcribe = vi.fn(async (_bytes: Uint8Array, _mime: string, _budgetMs: number) => {
+    if (options.slowMs) await new Promise((r) => setTimeout(r, options.slowMs));
+    return 'transcript' in options ? options.transcript : 'olá, tudo bem?';
+  });
+  const log = vi.fn(async (_entry: Record<string, unknown>) => {});
   const run = () => transcribeChatAudio(user as unknown as SupabaseClient, admin as unknown as SupabaseClient,
-    provider as unknown as WhatsAppProvider, ORG, 'instance', id, { transcribe, log });
-  return { run, read, claim, saved, admin, download, storageFrom, downloadMedia, uazapiTranscribe, transcribe, log };
+    provider as unknown as WhatsAppProvider, ORG, 'instance', id,
+    { transcribe, log: log as never, ...(options.budgetMs ? { budgetMs: options.budgetMs } : {}) });
+  return { run, read, claim, saved, admin, download, info, storageFrom, downloadMedia, uazapiTranscribe, transcribe, log };
 }
 
 describe('on-demand transcription', () => {
@@ -48,7 +53,7 @@ describe('on-demand transcription', () => {
     expect(f.read.eq).toHaveBeenCalledWith('organization_id', ORG); expect(f.read.eq).toHaveBeenCalledWith('instance_id', 'instance');
     expect(f.storageFrom).toHaveBeenCalledWith('media');
     expect(f.download).toHaveBeenCalledWith(`whatsapp-media/${ORG}/instance/audio.ogg`);
-    expect(f.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), 'audio/ogg');
+    expect(f.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), 'audio/ogg', expect.any(Number));
     expect(f.downloadMedia).not.toHaveBeenCalled();
     expect(f.uazapiTranscribe).not.toHaveBeenCalled();
     expect(f.saved.update).toHaveBeenCalledWith(expect.objectContaining({ transcription_text: 'olá, tudo bem?', transcription_provider: 'gemini-2.5-flash', transcription_created_at: expect.any(String) }));
@@ -67,10 +72,53 @@ describe('on-demand transcription', () => {
     expect(f.download).not.toHaveBeenCalled();
     expect(f.downloadMedia).toHaveBeenCalledWith('provider-id');
   });
-  it('rejects path traversal in the Storage path', async () => {
-    const f = fixture({ mediaUrl: `https://example.supabase.co/storage/v1/object/public/media/whatsapp-media/${ORG}/../${OTHER_ORG}/a.ogg` });
+  const BASE = 'https://example.supabase.co/storage/v1/object/public/media/whatsapp-media';
+  it.each([
+    ['encoded slash traversal', `${BASE}/${ORG}/..%2F..%2Fwhatsapp-media%2F${OTHER_ORG}%2Fx.ogg`],
+    ['encoded slash, lowercase', `${BASE}/${ORG}/..%2f${OTHER_ORG}%2fx.ogg`],
+    ['double-encoded dots', `${BASE}/${ORG}/%252e%252e/%252e%252e/whatsapp-media/${OTHER_ORG}/x.ogg`],
+    ['encoded dots resolved by URL into another org', `${BASE}/${ORG}/%2e%2e/${OTHER_ORG}/x.ogg`],
+    ['encoded dots resolved away from any org', `${BASE}/${ORG}/%2e%2e/%2e%2e/%2e%2e/x/y.ogg`],
+    ['encoded backslash', `${BASE}/${ORG}/..%5C..%5C${OTHER_ORG}%5Cx.ogg`],
+    ['raw backslash', `${BASE}/${ORG}/..\\..\\${OTHER_ORG}\\x.ogg`],
+    ['org segment encoded', `${BASE}/${ORG.replace('4', '%34')}/instance/x.ogg`],
+  ])('never reads Storage for a crafted path (%s)', async (_label, mediaUrl) => {
+    const f = fixture({ mediaUrl });
     await f.run();
     expect(f.download).not.toHaveBeenCalled();
+    expect(f.info).not.toHaveBeenCalled();
+    expect(f.downloadMedia).toHaveBeenCalledWith('provider-id');
+  });
+  it('accepts the legitimate Storage path shape used in prod', async () => {
+    const f = fixture({ mediaUrl: `${BASE}/${ORG}/${OTHER_ORG}/audio_1791201598543_1791201598543.mp3` });
+    await f.run();
+    expect(f.download).toHaveBeenCalledWith(`whatsapp-media/${ORG}/${OTHER_ORG}/audio_1791201598543_1791201598543.mp3`);
+  });
+  it('checks the object size before downloading it', async () => {
+    const f = fixture({ infoSize: 15 * 1024 * 1024 });
+    await expect(f.run()).rejects.toMatchObject({ status: 413, message: 'Este áudio é grande demais para transcrever (limite de 14 MB).' });
+    expect(f.info).toHaveBeenCalledWith(`whatsapp-media/${ORG}/instance/audio.ogg`);
+    expect(f.download).not.toHaveBeenCalled();
+    expect(f.log.mock.calls[0][0]).toMatchObject({ errorMessage: 'too_large' });
+  });
+});
+
+describe('time budget', () => {
+  it('runtime_logs: a slow transcription fails inside the budget, is logged and releases the claim', async () => {
+    const f = fixture({ slowMs: 1_000, budgetMs: 20 });
+    await expect(f.run()).rejects.toMatchObject({ status: 504, message: 'Não conseguimos transcrever este áudio. Tente novamente em instantes.' });
+    expect(f.log.mock.calls[0][0]).toMatchObject({ errorMessage: 'timeout', entityId: id });
+    expect(f.saved.update).not.toHaveBeenCalledWith(expect.objectContaining({ transcription_text: expect.anything() }));
+    expect(f.admin.from).toHaveBeenCalledTimes(2);
+  });
+  it('passes the remaining budget to the transcriber and keeps the lease above it', async () => {
+    const f = fixture();
+    await f.run();
+    const budget = f.transcribe.mock.calls[0][2] as number;
+    expect(budget).toBeGreaterThan(0);
+    expect(budget).toBeLessThanOrEqual(TRANSCRIPTION_BUDGET_MS);
+    expect(TRANSCRIPTION_LEASE_MS).toBeGreaterThan(TRANSCRIPTION_BUDGET_MS + 60_000);
+    expect(TRANSCRIPTION_BUDGET_MS).toBeLessThan(150_000);
   });
 });
 
@@ -80,7 +128,7 @@ describe('fallback to provider download', () => {
     expect(await f.run()).toMatchObject({ text: 'olá, tudo bem?', cached: false });
     expect(f.download).not.toHaveBeenCalled();
     expect(f.downloadMedia).toHaveBeenCalledWith('provider-id');
-    expect(f.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), 'audio/ogg; codecs=opus');
+    expect(f.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), 'audio/ogg; codecs=opus', expect.any(Number));
   });
   it('fallback: Storage miss falls back to provider.downloadMedia', async () => {
     const f = fixture({ storageError: true });
@@ -103,7 +151,7 @@ describe('failures are recorded in runtime_logs', () => {
     [{ transcript: '[O lead enviou um áudio de voz]' }, 'empty_transcript', GENERIC],
     [{ mediaUrl: null, providerDownload: 'error' as const }, 'download_failed', GENERIC],
     [{ mediaUrl: null, providerDownload: 'not_found' as const }, 'source_not_found', 'Este áudio não está mais disponível para transcrição.'],
-    [{ blobSize: 21 * 1024 * 1024 }, 'too_large', 'Este áudio é grande demais para transcrever (limite de 20 MB).'],
+    [{ blobSize: 15 * 1024 * 1024 }, 'too_large', 'Este áudio é grande demais para transcrever (limite de 14 MB).'],
   ])('runtime_logs: %o → %s, nothing saved, lease released, no PII', async (options, reason, message) => {
     const f = fixture(options as Options);
     await expect(f.run()).rejects.toMatchObject({ message });

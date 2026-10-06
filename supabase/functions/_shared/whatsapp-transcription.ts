@@ -25,40 +25,69 @@ export class TranscriptionError extends Error {
  * reason code only — no phone, no URL, no transcript, no upstream detail.
  */
 export const TRANSCRIPTION_PROVIDER = 'gemini-2.5-flash';
-export const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+// 14 MB of audio is ~19 MB of base64: under the ~20 MB inline-request limit of Gemini.
+export const MAX_AUDIO_BYTES = 14 * 1024 * 1024;
+// Whole request (download + transcription) must end, and log, before the edge
+// wall clock (~150 s) kills the isolate without running `finally`.
+export const TRANSCRIPTION_BUDGET_MS = 110_000;
+// Lease outlives the budget by a wide margin, so a second click can never take
+// over (and pay for) a request that is still running.
+export const TRANSCRIPTION_LEASE_MS = 240_000;
 const GENERIC_FAILURE = 'Não conseguimos transcrever este áudio. Tente novamente em instantes.';
 const SOURCE_GONE = 'Este áudio não está mais disponível para transcrição.';
-const TOO_LARGE = 'Este áudio é grande demais para transcrever (limite de 20 MB).';
+const TOO_LARGE = 'Este áudio é grande demais para transcrever (limite de 14 MB).';
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const STORAGE_MARKER = '/storage/v1/object/public/media/';
 const MAX_TRANSCRIPT_CHARS = 100_000;
 // Placeholders produced by the Copilot media pipeline must never be saved as a transcript.
 const PLACEHOLDER = /^\[O lead enviou/i;
 
-type FailureReason = 'source_not_found' | 'download_failed' | 'empty_transcript' | 'too_large' | 'claim_failed' | 'persist_failed' | 'unexpected';
+type FailureReason = 'source_not_found' | 'download_failed' | 'empty_transcript' | 'too_large' | 'timeout' | 'claim_failed' | 'persist_failed' | 'unexpected';
 
 class TranscriptionFailure extends Error {
   constructor(public reason: FailureReason, public status: number, public publicMessage: string) { super(reason); }
 }
 
 export interface TranscriptionDeps {
-  transcribe: (bytes: Uint8Array, mimeType: string) => Promise<string | null>;
+  transcribe: (bytes: Uint8Array, mimeType: string, budgetMs: number) => Promise<string | null>;
   log: typeof logRuntime;
+  budgetMs?: number;
 }
 
-const defaultDeps: TranscriptionDeps = { transcribe: transcribeAudio, log: logRuntime };
+const defaultDeps: TranscriptionDeps = {
+  transcribe: (bytes, mimeType, budgetMs) => transcribeAudio(bytes, mimeType, { budgetMs }),
+  log: logRuntime,
+};
 
-/** Path inside the `media` bucket, or null when the URL is not ours or not this org's. */
+/**
+ * Path inside the `media` bucket, or null when the URL is not ours or not this
+ * org's. Nothing is decoded: every segment must already be plain
+ * `[A-Za-z0-9._-]`, so an encoded `/`, `\`, `.` or `%` can never be turned into
+ * a traversal by Storage. The org check runs on the final (URL-normalized) path.
+ */
 export function ownStoragePath(mediaUrl: unknown, organizationId: string): string | null {
   if (typeof mediaUrl !== 'string') return null;
   let pathname: string;
   try { pathname = new URL(mediaUrl).pathname; } catch { return null; }
   const at = pathname.indexOf(STORAGE_MARKER);
   if (at < 0) return null;
-  let segments: string[];
-  try { segments = pathname.slice(at + STORAGE_MARKER.length).split('/').map(decodeURIComponent); } catch { return null; }
-  if (segments.length < 3 || segments.some((s) => !s || s === '.' || s === '..' || s.includes('\\'))) return null;
-  if (segments[1].toLowerCase() !== organizationId.toLowerCase()) return null;
+  const segments = pathname.slice(at + STORAGE_MARKER.length).split('/');
+  if (segments.length < 3 || segments.some((s) => !SAFE_SEGMENT.test(s) || s === '.' || s === '..')) return null;
+  if (segments[1] !== organizationId.toLowerCase()) return null;
   return segments.join('/');
+}
+
+class TimeoutFailure extends TranscriptionFailure {
+  constructor() { super('timeout', 504, GENERIC_FAILURE); }
+}
+
+/** Rejects once `deadline` passes, so the failure is logged while the isolate is still alive. */
+function withDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TimeoutFailure()), Math.max(0, deadline - Date.now()));
+  });
+  return Promise.race([work, expiry]).finally(() => clearTimeout(timer));
 }
 
 function mimeFromPath(path: string): string {
@@ -68,8 +97,17 @@ function mimeFromPath(path: string): string {
 
 const tooLarge = () => new TranscriptionFailure('too_large', 413, TOO_LARGE);
 
+type StorageInfo = (path: string) => Promise<{ data: { size?: number | null } | null; error: unknown }>;
+
 async function fromStorage(admin: SupabaseClient, path: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  const { data, error } = await admin.storage.from('media').download(path);
+  const bucket = admin.storage.from('media');
+  // Size from metadata first, so an oversized object is never pulled into memory.
+  const info = (bucket as unknown as { info?: StorageInfo }).info;
+  if (typeof info === 'function') {
+    const { data: meta } = await info.call(bucket, path);
+    if (typeof meta?.size === 'number' && meta.size > MAX_AUDIO_BYTES) throw tooLarge();
+  }
+  const { data, error } = await bucket.download(path);
   if (error || !data) return null;
   if (data.size > MAX_AUDIO_BYTES) throw tooLarge();
   const bytes = new Uint8Array(await data.arrayBuffer());
@@ -112,7 +150,7 @@ export async function transcribeChatAudio(user: SupabaseClient, admin: SupabaseC
     text: message.transcription_text, provider: message.transcription_provider, createdAt: message.transcription_created_at, cached: true,
   };
   const now = new Date().toISOString();
-  const expired = new Date(Date.now() - 120_000).toISOString();
+  const expired = new Date(Date.now() - TRANSCRIPTION_LEASE_MS).toISOString();
   const { data: claim, error: claimError } = await admin.from('whatsapp_messages').update({ transcription_requested_at: now })
     .eq('id', rowId).eq('organization_id', organizationId).eq('instance_id', instanceId).is('deleted_at', null)
     .is('transcription_text', null).or(`transcription_requested_at.is.null,transcription_requested_at.lt.${expired}`).select('id').maybeSingle();
@@ -127,9 +165,14 @@ export async function transcribeChatAudio(user: SupabaseClient, admin: SupabaseC
   }
   if (!claim) throw new TranscriptionError(409, 'Transcrição já solicitada. Aguarde e tente novamente.');
   try {
-    const storagePath = ownStoragePath(message.media_url, organizationId);
-    const audio = (storagePath ? await fromStorage(admin, storagePath) : null) ?? await fromProvider(provider, message.message_id);
-    const raw = await deps.transcribe(audio.bytes, audio.mime);
+    const deadline = Date.now() + (deps.budgetMs ?? TRANSCRIPTION_BUDGET_MS);
+    const raw = await withDeadline((async () => {
+      const storagePath = ownStoragePath(message.media_url, organizationId);
+      const audio = (storagePath ? await fromStorage(admin, storagePath) : null) ?? await fromProvider(provider, message.message_id);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new TimeoutFailure();
+      return deps.transcribe(audio.bytes, audio.mime, remaining);
+    })(), deadline);
     const text = typeof raw === 'string' ? raw.trim() : '';
     if (!text || PLACEHOLDER.test(text) || text.length > MAX_TRANSCRIPT_CHARS) throw new TranscriptionFailure('empty_transcript', 502, GENERIC_FAILURE);
     const createdAt = new Date().toISOString();
