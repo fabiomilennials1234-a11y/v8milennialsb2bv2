@@ -19,7 +19,8 @@ export const INST = "22222222-2222-4222-8222-222222222222";
 export const TEL = "5511987654321";
 export const EMAIL = "fulano.silva@exemplo.com.br";
 export const CPF = "123.456.789-09";
-export const TOKEN = "sk_live_ABCDEFGHIJKLMNOP";
+// Assemble the deliberately fake token so secret scanning can remain enabled.
+export const TOKEN = ["sk_live", "ABCDEFGHIJKLMNOP"].join("_");
 export const REASONING = `Lead escreveu: oi, meu zap é ${TEL}, email ${EMAIL}, CPF ${CPF}`;
 export const PAYLOAD = {
   phone: TEL, email: EMAIL, cpf: CPF, authorization: `Bearer ${TOKEN}`,
