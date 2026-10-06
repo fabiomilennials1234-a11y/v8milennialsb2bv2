@@ -49,13 +49,21 @@
  * conta como velha e é refeita.
  *
  * ── ENTREGAS (recuperação no SUBSCRIBED) ──────────────────────────────────
- * Cada instância de `useRealtimeSubscription` abre o PRÓPRIO canal, com join
- * independente: evento que chega enquanto o canal de uma instância ainda está
- * "joining" vai para as irmãs e se perde para ela. O agendador guarda, por
- * canal lógico (tabela + filtro), a sequência da última entrega a QUALQUER
- * instância (`recordRealtimeDelivery`). Quem fica SUBSCRIBED pela primeira vez
- * compara com o instante em que começou a entrar (`lastRealtimeDelivery`).
- * Vive e morre com o resto do estado: sem hook montado, sem registro.
+ * O agendador guarda, por canal lógico (tabela + filtro), a sequência da
+ * última entrega a QUALQUER instância (`recordRealtimeDelivery`). Quem fica
+ * SUBSCRIBED pela primeira vez compara com o instante em que começou a entrar
+ * (`lastRealtimeDelivery`): se outro canal físico com a mesma tabela + filtro
+ * recebeu evento nesse vão, este perdeu. Com o canal compartilhado por chave
+ * (`realtimeChannelRegistry`), instâncias de `useRealtimeSubscription` com a
+ * mesma tabela + filtro estão no MESMO canal físico — quem entra num canal
+ * ainda "joining" entra com todos, e ninguém recebe nada antes do SUBSCRIBED:
+ * a comparação dá 0. Ela fica como guarda para canais físicos distintos na
+ * mesma chave lógica (configuração de canal diferente).
+ *
+ * Uma entrega = UM registro, com UMA sequência: o canal compartilhado entrega
+ * o MESMO objeto de evento a N instâncias, e as N recebem a mesma sequência
+ * (a do instante em que o evento chegou à aba). Vive e morre com o resto do
+ * estado: sem hook montado, sem registro.
  *
  * ── O QUE NÃO MUDA ────────────────────────────────────────────────────────
  * Nada aqui toca o transporte (`useRealtimeChannel`), o filtro de org nem a
@@ -155,8 +163,8 @@ interface ClientScheduler {
   /** Pedidos esperando o fetch em voo de cada query terminar. */
   readonly waitingFetch: Map<Query, Set<Entry>>;
   readonly waitingVisible: Set<Entry>;
-  /** Sequência da última entrega de evento, por canal lógico (tabela + filtro). */
-  readonly delivered: Map<string, number>;
+  /** Última entrega de evento, por canal lógico (tabela + filtro): o objeto e a sequência dele. */
+  readonly delivered: Map<string, { readonly event: object; readonly seq: number }>;
   onVisibility: (() => void) | null;
   /** Hooks montados que dependem deste agendador. */
   holders: number;
@@ -289,18 +297,31 @@ export function invalidateOnceSettled(client: QueryClient, queryKey: QueryKey, w
 }
 
 /**
- * Registra que um evento do canal lógico `channelKey` (tabela + filtro) foi
- * entregue a alguma instância agora. Só anota — não invalida nada. Sem
- * agendador vivo (nenhum hook montado) não há quem vá perguntar: não anota.
+ * Registra que `event`, do canal lógico `channelKey` (tabela + filtro), foi
+ * entregue a uma instância agora, e devolve a sequência DO EVENTO — use-a
+ * como `eventSeq` do pedido. Só anota; não invalida nada.
+ *
+ * O canal compartilhado entrega o mesmo objeto, em sequência síncrona, a
+ * cada instância: a 2ª..N-ésima entrega do mesmo objeto devolve a sequência
+ * da 1ª e não gera registro novo. Fetch que começou depois da 1ª entrega já
+ * vê o commit (o evento só sai do banco depois dele).
+ *
+ * Sem agendador vivo (nenhum hook montado) não há quem vá perguntar: não
+ * anota, só numera.
  */
-export function recordRealtimeDelivery(client: QueryClient, channelKey: string): void {
+export function recordRealtimeDelivery(client: QueryClient, channelKey: string, event: object): number {
   const scheduler = schedulers.get(client);
-  if (scheduler) scheduler.delivered.set(channelKey, nextRealtimeSeq());
+  if (!scheduler) return nextRealtimeSeq();
+  const last = scheduler.delivered.get(channelKey);
+  if (last?.event === event) return last.seq;
+  const seq = nextRealtimeSeq();
+  scheduler.delivered.set(channelKey, { event, seq });
+  return seq;
 }
 
 /** Sequência da última entrega em `channelKey` (0 = nenhuma desde que o agendador nasceu). */
 export function lastRealtimeDelivery(client: QueryClient, channelKey: string): number {
-  return schedulers.get(client)?.delivered.get(channelKey) ?? 0;
+  return schedulers.get(client)?.delivered.get(channelKey)?.seq ?? 0;
 }
 
 function clearTimer(entry: Entry): void {

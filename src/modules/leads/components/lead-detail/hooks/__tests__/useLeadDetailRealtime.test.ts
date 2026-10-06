@@ -3,7 +3,9 @@
  *
  * Contract:
  *   - When `isOpen` is false or `leadId` is null → no subscription registered.
- *   - When the modal stays open for >500ms → subscribes to the 6 relevant tables.
+ *   - When the modal stays open for >500ms → subscribes to the 3 published tables.
+ *   - lead_history / lead_comments / lead_tags are NOT subscribed: they are outside
+ *     the `supabase_realtime` publication (never emitted; perf S0 2026-10-06).
  *   - Each table uses the right filter (lead_id=eq.X for most;
  *     organization_id=eq.X for `pipe_proposta_items` which has no lead_id).
  *   - postgres_changes event → invalidates the right TanStack query keys.
@@ -62,7 +64,7 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
     renderHook(() => useLeadDetailRealtime("lead-1", false, "org-1"), {
       wrapper: createWrapper(),
     });
-    // All 6 channels are registered but their `enabled` must be false.
+    // All 3 channels are registered but their `enabled` must be false.
     expect(channelCalls.length).toBeGreaterThan(0);
     for (const c of channelCalls) {
       expect(c.enabled).toBe(false);
@@ -99,10 +101,10 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
 
     rerender({ open: true });
     const after = channelCalls.filter((c) => c.enabled);
-    expect(after.length).toBeGreaterThanOrEqual(6);
+    expect(after.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("subscribes to the 6 expected tables with the right filters", async () => {
+  it("subscribes only to the 3 published tables with the right filters", async () => {
     renderHook(() => useLeadDetailRealtime("lead-1", true, "org-1"), {
       wrapper: createWrapper(),
     });
@@ -115,9 +117,13 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
     const byTable = (t: string) => enabledCalls.find((c) => c.table === t);
 
     expect(byTable("leads")?.filter).toBe("id=eq.lead-1");
-    expect(byTable("lead_history")?.filter).toBe("lead_id=eq.lead-1");
-    expect(byTable("lead_comments")?.filter).toBe("lead_id=eq.lead-1");
-    expect(byTable("lead_tags")?.filter).toBe("lead_id=eq.lead-1");
+    // Fora da publication: assinar só custava um join que falha.
+    expect(byTable("lead_history")).toBeUndefined();
+    expect(byTable("lead_comments")).toBeUndefined();
+    expect(byTable("lead_tags")).toBeUndefined();
+    expect(new Set(enabledCalls.map((c) => c.table))).toEqual(
+      new Set(["leads", "pipeline_entries", "pipe_proposta_items"]),
+    );
     expect(byTable("pipeline_entries")?.filter).toBe("lead_id=eq.lead-1");
     // pipe_proposta_items has no organization_id column (nor lead_id) —
     // subscribing with an org filter throws "invalid column for filter
@@ -126,7 +132,7 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
     expect(byTable("pipe_proposta_items")?.filter).toBeUndefined();
   });
 
-  it("invalidates the lead_history query keys when a lead_history event fires", async () => {
+  it("invalidates the lead detail keys when a leads event fires", async () => {
     renderHook(() => useLeadDetailRealtime("lead-1", true, "org-1"), {
       wrapper: createWrapper(),
     });
@@ -135,14 +141,14 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
       vi.advanceTimersByTime(550);
     });
 
-    const historyCall = channelCalls
+    const leadCall = channelCalls
       .filter((c) => c.enabled)
-      .find((c) => c.table === "lead_history");
-    expect(historyCall).toBeTruthy();
+      .find((c) => c.table === "leads");
+    expect(leadCall).toBeTruthy();
 
     invalidateSpy.mockClear();
     act(() => {
-      historyCall!.onEvent({ eventType: "INSERT", new: { lead_id: "lead-1" } });
+      leadCall!.onEvent({ eventType: "UPDATE", new: { id: "lead-1" } });
     });
 
     // Invalidation is debounced 150ms to coalesce bulk updates.
@@ -153,11 +159,10 @@ describe("useLeadDetailRealtime — gated multi-table subscription (#306)", () =
     const calledKeys = invalidateSpy.mock.calls.map(
       (c) => (c[0] as { queryKey: unknown[] }).queryKey,
     );
-    // Hook should invalidate both common naming conventions for backwards compat.
     expect(calledKeys).toEqual(
       expect.arrayContaining([
-        ["lead-timeline", "lead-1"],
-        ["lead_history", "lead-1"],
+        ["lead-detail", "lead-1"],
+        ["lead-visibility", "lead-1"],
       ]),
     );
   });

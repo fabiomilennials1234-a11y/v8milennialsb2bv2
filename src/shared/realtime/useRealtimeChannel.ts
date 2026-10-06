@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import {
-  setChannelState,
-  incrementFailures,
-  resetFailures,
-  openCircuitBreaker,
-} from "@/lib/realtimeStatusStore";
+  acquireRealtimeChannel,
+  type ChannelHandle,
+  type ChannelTransition,
+} from "./realtimeChannelRegistry";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,16 +21,34 @@ export interface DiagnosticEvent {
   error?: string;
 }
 
+/**
+ * Uma transição do canal vista por ESTA instância, entregue na hora (sem
+ * esperar render) e na ordem exata em relação aos eventos.
+ */
+export interface ChannelStateChange {
+  state: Exclude<ChannelState, "idle">;
+  /** Falhas seguidas do canal; zera no SUBSCRIBED. `joining` com falhas = voltando de queda. */
+  failureCount: number;
+  /**
+   * Primeira transição depois de entrar no canal (montagem, troca de chave,
+   * religar): o estado em que esta instância ENCONTROU o canal compartilhado —
+   * `joined` se outra instância já o tinha aberto.
+   */
+  initial: boolean;
+}
+
 export interface UseRealtimeChannelOptions {
   table: string;
   filter?: string;
   onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
+  /** Lido por ref: trocar a função a cada render não reabre o canal. */
+  onStateChange?: (change: ChannelStateChange) => void;
   circuitBreaker?: {
     threshold?: number;   // default: 5
     cooldownMs?: number;  // default: 120_000
   };
   enabled?: boolean;      // default: true
-  statusKey?: string;     // stable key for realtimeStatusStore (defaults to channel name)
+  statusKey?: string;     // stable key for realtimeStatusStore (default: `rt_{table}_{filter}`, shared)
 }
 
 export interface UseRealtimeChannelResult {
@@ -45,12 +61,21 @@ export interface UseRealtimeChannelResult {
 const DEFAULT_THRESHOLD = 5;
 const DEFAULT_COOLDOWN_MS = 120_000;
 const MAX_DIAGNOSTICS = 50;
-const MAX_BACKOFF_MS = 30_000;
-const BASE_BACKOFF_MS = 1_000;
-const DEDUP_WINDOW_MS = 1_000;
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Assina `postgres_changes` de uma tabela (com filtro opcional).
+ *
+ * O canal é COMPARTILHADO por (tabela, filtro, evento) dentro da aba — ver
+ * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
+ * servidor; cada hook recebe todos os eventos e espelha o estado do canal
+ * (`state`, `diagnostics`). O último a desmontar fecha o canal.
+ *
+ * `state` é o do RENDER: entrar num canal já `joined` vindo de outro `joined`
+ * (troca de chave) não muda o valor e não re-renderiza. Quem precisa de cada
+ * transição — inclusive a de entrada — usa `onStateChange`.
+ */
 export function useRealtimeChannel(
   options: UseRealtimeChannelOptions
 ): UseRealtimeChannelResult {
@@ -62,207 +87,88 @@ export function useRealtimeChannel(
   const [state, setState] = useState<ChannelState>("idle");
   const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
 
-  const failureCountRef = useRef(0);
-  const channelNameRef = useRef("");
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
-
-  // reconnectEpoch — increment to force re-subscribe via useEffect dependency
-  const [reconnectEpoch, setReconnectEpoch] = useState(0);
+  const onStateChangeRef = useRef(options.onStateChange);
+  onStateChangeRef.current = options.onStateChange;
 
   // Track state in ref for event listeners (avoids stale closure)
   const stateRef = useRef<ChannelState>(state);
   stateRef.current = state;
 
-  // Track circuit open state
-  const circuitOpenRef = useRef(false);
+  const handleRef = useRef<ChannelHandle | null>(null);
 
-  // Stable key for status store (falls back to channel name)
-  const statusKeyRef = useRef(statusKey);
-
-  // Timer refs for cleanup
-  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dedupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dedupPendingRef = useRef(false);
-
-  const pushDiagnostic = useCallback(
-    (newState: ChannelState, opts?: { error?: string; type?: DiagnosticEvent["type"] }) => {
+  const applyTransition = useCallback(
+    (t: ChannelTransition) => {
       const oldState = stateRef.current;
       setDiagnostics((prev) => {
         const entry: DiagnosticEvent = {
           timestamp: Date.now(),
-          channelName: channelNameRef.current,
+          channelName: t.channelName,
           table,
           oldState,
-          newState,
-          failureCount: failureCountRef.current,
-          type: opts?.type ?? "transition",
-          ...(opts?.error && { error: opts.error }),
+          newState: t.state,
+          failureCount: t.failureCount,
+          type: t.type,
+          ...(t.error && { error: t.error }),
         };
         const next = [...prev, entry];
         return next.length > MAX_DIAGNOSTICS ? next.slice(-MAX_DIAGNOSTICS) : next;
       });
+      stateRef.current = t.state;
+      setState(t.state);
     },
     [table]
   );
-
-  // ─── Backoff calculator ───────────────────────────────────────────────────
-
-  const getBackoffDelay = useCallback((failures: number): number => {
-    return Math.min(BASE_BACKOFF_MS * Math.pow(2, failures - 1), MAX_BACKOFF_MS);
-  }, []);
-
-  // ─── Trigger reconnect (deduped) ─────────────────────────────────────────
-
-  const triggerReconnect = useCallback(() => {
-    if (dedupPendingRef.current) return;
-    dedupPendingRef.current = true;
-
-    if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
-    dedupTimerRef.current = setTimeout(() => {
-      dedupPendingRef.current = false;
-      dedupTimerRef.current = null;
-      setReconnectEpoch((e) => e + 1);
-    }, DEDUP_WINDOW_MS);
-  }, []);
-
-  // ─── Schedule backoff reconnect ───────────────────────────────────────────
-
-  const scheduleBackoff = useCallback(
-    (failures: number) => {
-      if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
-      const delay = getBackoffDelay(failures);
-      backoffTimerRef.current = setTimeout(() => {
-        backoffTimerRef.current = null;
-        setReconnectEpoch((e) => e + 1);
-      }, delay);
-    },
-    [getBackoffDelay]
-  );
-
-  // ─── Schedule cooldown probe ──────────────────────────────────────────────
-
-  const scheduleCooldownProbe = useCallback(() => {
-    if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
-    cooldownTimerRef.current = setTimeout(() => {
-      cooldownTimerRef.current = null;
-      // Attempt probe reconnect
-      setReconnectEpoch((e) => e + 1);
-    }, cooldownMs);
-  }, [cooldownMs]);
 
   // ─── Main subscribe effect ────────────────────────────────────────────────
 
   useEffect(() => {
     if (!enabled) {
+      stateRef.current = "idle";
       setState("idle");
       return;
     }
 
-    // Multiple consumers and StrictMode can subscribe within one millisecond.
-    // Supabase reuses channels by name; each setup needs a distinct identity.
-    const channelName = `rt_${table}_${filter ?? "all"}_${crypto.randomUUID()}`;
-    channelNameRef.current = channelName;
-    statusKeyRef.current = statusKey;
-    const storeKey = statusKey ?? channelName;
-
-    setChannelState(storeKey, "joining", undefined);
-    pushDiagnostic("joining");
-    stateRef.current = "joining";
-    setState("joining");
-
-    const pgChangesConfig: Record<string, string> = {
-      event: "*",
-      schema: "public",
-      table,
-    };
-
-    if (filter) {
-      pgChangesConfig.filter = filter;
-    }
-
-    const channel = supabase
-      .channel(channelName)
-      .on("postgres_changes", pgChangesConfig as any, (payload: any) => {
-        onEventRef.current(payload);
-      })
-      .subscribe((status: string, err?: Error) => {
-        const sk = statusKeyRef.current ?? channelNameRef.current;
-
-        if (status === "SUBSCRIBED") {
-          const wasPolling = stateRef.current === "polling";
-          failureCountRef.current = 0;
-          circuitOpenRef.current = false;
-
-          resetFailures(sk);
-          setChannelState(sk, "joined", undefined);
-
-          if (wasPolling) {
-            pushDiagnostic("joined", { type: "circuit_close" });
-          } else {
-            pushDiagnostic("joined");
-          }
-          setState("joined");
-          stateRef.current = "joined";
-
-          if (backoffTimerRef.current) {
-            clearTimeout(backoffTimerRef.current);
-            backoffTimerRef.current = null;
-          }
-          if (cooldownTimerRef.current) {
-            clearTimeout(cooldownTimerRef.current);
-            cooldownTimerRef.current = null;
-          }
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          const errorMsg = err?.message ?? status;
-          failureCountRef.current += 1;
-
-          incrementFailures(sk, errorMsg);
-
-          if (circuitOpenRef.current || failureCountRef.current >= threshold) {
-            circuitOpenRef.current = true;
-            openCircuitBreaker(sk, errorMsg);
-            setChannelState(sk, "polling", errorMsg);
-            pushDiagnostic("polling", { error: errorMsg, type: "circuit_open" });
-            setState("polling");
-            stateRef.current = "polling";
-            scheduleCooldownProbe();
-          } else {
-            setChannelState(sk, "errored", errorMsg);
-            pushDiagnostic("errored", { error: errorMsg });
-            setState("errored");
-            stateRef.current = "errored";
-            scheduleBackoff(failureCountRef.current);
-          }
-        }
-      });
+    // A 1ª transição chega DENTRO do acquire (canal novo: "joining"; canal já
+    // aberto por outra instância: o estado dele) — por isso a marca é local.
+    let initial = true;
+    const handle = acquireRealtimeChannel(
+      { table, filter, event: "*", threshold, cooldownMs },
+      {
+        statusKey,
+        onEvent: (payload) => onEventRef.current(payload),
+        onTransition: (t) => {
+          applyTransition(t);
+          const first = initial;
+          initial = false;
+          onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
+        },
+      }
+    );
+    handleRef.current = handle;
 
     return () => {
-      supabase.removeChannel(channel);
+      handleRef.current = null;
+      handle.release();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, filter, enabled, threshold, cooldownMs, reconnectEpoch, statusKey]);
+  }, [table, filter, enabled, threshold, cooldownMs, statusKey, applyTransition]);
 
   // ─── Visibility + Online reconnect effect ─────────────────────────────────
 
   useEffect(() => {
     if (!enabled) return;
 
+    const unhealthy = () => stateRef.current !== "joined" && stateRef.current !== "idle";
+
     const handleVisibilityChange = () => {
-      if (
-        document.visibilityState === "visible" &&
-        stateRef.current !== "joined" &&
-        stateRef.current !== "idle"
-      ) {
-        triggerReconnect();
+      if (document.visibilityState === "visible" && unhealthy()) {
+        handleRef.current?.requestReconnect();
       }
     };
 
     const handleOnline = () => {
-      if (stateRef.current !== "joined" && stateRef.current !== "idle") {
-        triggerReconnect();
-      }
+      if (unhealthy()) handleRef.current?.requestReconnect();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -272,17 +178,7 @@ export function useRealtimeChannel(
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
     };
-  }, [enabled, triggerReconnect]);
-
-  // ─── Cleanup all timers on unmount ────────────────────────────────────────
-
-  useEffect(() => {
-    return () => {
-      if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
-      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
-      if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
-    };
-  }, []);
+  }, [enabled]);
 
   return { state, diagnostics };
 }

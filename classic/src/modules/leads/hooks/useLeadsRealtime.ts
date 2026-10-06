@@ -26,9 +26,10 @@
  *   - página da tela buscando quando o evento chega: o retrato a caminho é de
  *     antes dele — todo veredito que pularia a lista (patch, contagens, DELETE
  *     de id fora do cache) a refaz depois desse fetch;
- *   - canal desta instância entrando ou voltando de uma queda: o que as irmãs
- *     receberam nesse vão (e tudo, depois de uma queda) é recuperado no
- *     SUBSCRIBED — `catchUpOnSubscribe` de `useRealtimeSubscription`.
+ *   - o canal é compartilhado por tabela + filtro: toda instância recebe o
+ *     mesmo evento. Instância que entra com o canal caído, ou que o vê cair,
+ *     refaz seus alvos no SUBSCRIBED seguinte (1 busca por query, por mais
+ *     instâncias que haja) — `catchUpOnSubscribe` de `useRealtimeSubscription`.
  *
  * Os números: rajada de 20 eventos → 1 fetch da lista e 0 de contagem;
  * 2 min de eventos contínuos → ≤4 da lista e ≤1 por contagem a cada 60 s.
@@ -207,9 +208,9 @@ export function useLeadsRealtime({
   };
 
   // `catchUpOnSubscribe`: a página ativa desta instância só é tocada por ela
-  // (`editIdleLists` pula página ativa de outra) — evento que as irmãs
-  // receberam enquanto este canal entrava, ou que caiu numa queda, chegaria
-  // a ela só no próximo evento que pedisse refetch.
+  // (`editIdleLists` pula página ativa de outra) — evento que caiu numa queda
+  // do canal (ou que chegou a outro canal físico da mesma chave enquanto este
+  // entrava) chegaria a ela só no próximo evento que pedisse refetch.
   const schedule = {
     quietMs: LIST_QUIET_MS,
     maxWaitMs: LIST_MAX_WAIT_MS,

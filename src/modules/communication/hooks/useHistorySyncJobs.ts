@@ -1,11 +1,11 @@
 /**
- * useHistorySyncJobs — query history_sync_jobs with realtime updates.
+ * useHistorySyncJobs — query history_sync_jobs.
  *
  * Service-layer: reads directly from Supabase (RLS enforces org membership).
- * Realtime: subscribes to INSERT/UPDATE events and invalidates the query
- * so the dashboard progress bar updates without polling.
+ * Progresso: polling de 5 s enquanto houver job queued/running. Sem realtime:
+ * `history_sync_jobs` está fora da publication `supabase_realtime` — a
+ * assinatura antiga nunca emitiu evento (perf S0, 2026-10-06).
  */
-import { useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -25,30 +25,6 @@ type JobFilter = {
 export function useHistorySyncJobs(filter: JobFilter = {}) {
   const { data: teamMember } = useCurrentTeamMember();
   const orgId = teamMember?.organization_id;
-  const qc = useQueryClient();
-
-  // Realtime subscription — invalidates query on any change
-  useEffect(() => {
-    if (!orgId) return;
-    const channel = supabase
-      .channel(`history_sync_jobs:${orgId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "history_sync_jobs",
-          filter: `organization_id=eq.${orgId}`,
-        },
-        () => {
-          qc.invalidateQueries({ queryKey: ["history_sync_jobs", orgId] });
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [orgId, qc]);
 
   return useQuery({
     queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null, filter.chatJid ?? null],

@@ -7,14 +7,18 @@
  *       muda") era decidido contra a página EM CACHE com a página da tela
  *       buscando: a página a caminho é outra, e a lista ficava velha para
  *       sempre (30 min, 0 busca). Idem DELETE de id fora do cache.
- *   B — cada instância de `useLeads` tem o PRÓPRIO canal. Evento entregue às
- *       irmãs enquanto o canal de uma ainda está "joining" não chega a ela, e
- *       ninguém mais toca a página ativa dela. Na queda, o evento cai para
- *       todas. Conserto: `catchUpOnSubscribe` (recupera no SUBSCRIBED).
+ *   B — evento entregue a um canal físico enquanto outro canal da MESMA
+ *       tabela + filtro ainda está "joining" não chega ao segundo, e ninguém
+ *       mais toca a página ativa dele. Na queda, o evento cai para todas.
+ *       Conserto: `catchUpOnSubscribe` (recupera no SUBSCRIBED).
  *
- * O transporte dublado aqui imita o de verdade no que importa: o canal nasce
- * no effect, o estado é `joining` até o SUBSCRIBED (e só então recebe
- * evento), e uma queda passa por `errored` antes de voltar a `joined`.
+ * O transporte dublado aqui dá a CADA instância o próprio canal físico — o
+ * mundo de antes do canal compartilhado (#2245) e, hoje, o caso de canais
+ * físicos distintos na mesma chave lógica. O canal compartilhado de verdade
+ * (registry) está em `realtime-catchup-transporte-real`. No mais imita o de
+ * verdade: o canal nasce no effect, `joining` até o SUBSCRIBED (só então
+ * recebe evento), queda passa por `errored`, e cada transição chega na hora
+ * em `onStateChange` (a 1ª com `initial`).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
@@ -42,6 +46,7 @@ interface Sub {
   ref: { current: (p: unknown) => void };
   joined: boolean;
   tag: string;
+  /** Muda o estado do canal: render (`state`) + `onStateChange`, como o transporte. */
   setState: (s: string) => void;
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -120,16 +125,33 @@ vi.mock("@/integrations/supabase/client", () => {
 vi.mock("@/shared/realtime/useRealtimeChannel", async () => {
   const R = await import("react");
   return {
-    useRealtimeChannel: (opts: { table: string; filter?: string; onEvent: (p: unknown) => void; enabled?: boolean }) => {
+    useRealtimeChannel: (opts: {
+      table: string;
+      filter?: string;
+      onEvent: (p: unknown) => void;
+      onStateChange?: (c: { state: string; failureCount: number; initial: boolean }) => void;
+      enabled?: boolean;
+    }) => {
       const ref = R.useRef(opts.onEvent);
       ref.current = opts.onEvent;
+      const changeRef = R.useRef(opts.onStateChange);
+      changeRef.current = opts.onStateChange;
       const enabled = opts.enabled ?? true;
-      const [state, setState] = R.useState("idle");
+      const [state, setRenderState] = R.useState("idle");
       R.useEffect(() => {
         if (!enabled) {
-          setState("idle");
+          setRenderState("idle");
           return;
         }
+        let initial = true;
+        let failures = 0;
+        const setState = (s: string) => {
+          failures = s === "joined" ? 0 : s === "errored" ? failures + 1 : failures;
+          setRenderState(s);
+          const first = initial;
+          initial = false;
+          changeRef.current?.({ state: s, failureCount: failures, initial: first });
+        };
         const sub: Sub = { table: opts.table, filter: opts.filter, ref, joined: false, tag: RT.tag, setState, timer: null };
         setState("joining");
         sub.timer = setTimeout(() => {

@@ -35,7 +35,7 @@ export function useClientPortfolio(
 ) {
   const { organizationId, isReady } = useOrganization();
   useRealtimeSubscription("leads", ["client-portfolio"]);
-  useRealtimeSubscription("deals", ["client-portfolio", "leads-deals"]);
+  // `deals` não é assinada: fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06).
   useRealtimeSubscription("pipeline_entries", ["client-portfolio", "leads-deals"]);
   useRealtimeSubscription("pipeline_stages", ["client-portfolio", "leads-deals"]);
   useRealtimeSubscription("pipelines", ["client-portfolio", "leads-deals"]);

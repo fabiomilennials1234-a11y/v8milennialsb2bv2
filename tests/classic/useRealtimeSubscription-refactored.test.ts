@@ -40,7 +40,13 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { RealtimeHandlers } from "@/shared/realtime/useRealtimeSubscription";
-import { invalidateOnceSettled } from "@/shared/realtime/invalidation-scheduler";
+import {
+  invalidateOnceSettled,
+  lastRealtimeDelivery,
+  recordRealtimeDelivery,
+  retainInvalidationScheduler,
+} from "@/shared/realtime/invalidation-scheduler";
+import type { ChannelStateChange } from "@/shared/realtime/useRealtimeChannel";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -901,50 +907,51 @@ describe("useRealtimeSubscription (refactored to delegate transport)", () => {
     });
   });
   // ─── 12. Opt-in: catchUpOnSubscribe (recuperação no SUBSCRIBED) ───────────
+  // O transporte é dublado: cada `renderHook` aqui é um canal físico próprio
+  // (o caso "mesma chave lógica, canais físicos distintos"). O canal
+  // compartilhado de verdade está em `realtime-catchup-transporte-real`.
 
   describe("catchUpOnSubscribe — recuperação no SUBSCRIBED", () => {
-    // Estado que o transporte devolve a cada render (todas as instâncias).
-    let channelState = "joining";
-    const goTo = (h: { rerender: () => void }, ...states: string[]) => {
-      for (const s of states) {
-        channelState = s;
-        act(() => h.rerender());
-      }
+    type Transport = (change: ChannelStateChange) => void;
+    /** `onStateChange` que a instância recém-montada passou ao transporte. */
+    const transport = (): Transport => mockUseRealtimeChannel.mock.calls.at(-1)?.[0]?.onStateChange;
+    /** A instância entra no canal e o encontra em `state` (1ª transição, dentro do acquire). */
+    const enter = (t: Transport, state: ChannelStateChange["state"], failureCount = 0) =>
+      act(() => t({ state, failureCount, initial: true }));
+    const goTo = (t: Transport, ...states: Array<ChannelStateChange["state"]>) => {
+      for (const state of states) act(() => t({ state, failureCount: state === "joined" ? 0 : 1, initial: false }));
     };
 
-    beforeEach(() => {
-      channelState = "joining";
-      mockUseRealtimeChannel.mockImplementation(() => ({ state: channelState, diagnostics: [] }));
-    });
-
-    it("padrão (sem opt-in): irmã recebe no vão, entra, cai e volta — nenhuma invalidação (DO-1)", () => {
-      channelState = "joined";
+    it("padrão (sem opt-in): outro canal recebe no vão, entra, cai e volta — nenhuma invalidação (DO-1)", () => {
       renderHook(() => useRealtimeSubscription("leads", [["sibling"]]));
       const deliverToSibling = captureOnEvent();
-      channelState = "joining";
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"]));
+      renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"]));
+      const t = transport();
+      enter(t, "joining");
       act(() => deliverToSibling(INSERT()));
-      goTo(h, "joined", "errored", "joining", "joined", "polling", "joining", "joined");
+      goTo(t, "joined", "errored", "joining", "joined", "polling", "joining", "joined");
       act(() => vi.advanceTimersByTime(120_000));
       expect(invalidatedKeys()).not.toContain('["leads"]');
       expect(invalidatedKeys()).not.toContain('["pipeline"]');
     });
 
-    it("1º SUBSCRIBED sem entrega a ninguém no vão → 0 invalidação", () => {
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"], { catchUpOnSubscribe: true }));
-      goTo(h, "joined");
+    it("1º join sem entrega a ninguém no vão → 0 invalidação", () => {
+      renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"], { catchUpOnSubscribe: true }));
+      const t = transport();
+      enter(t, "joining");
+      goTo(t, "joined");
       act(() => vi.advanceTimersByTime(120_000));
       expect(mockInvalidateQueries).not.toHaveBeenCalled();
     });
 
-    it("irmã recebeu evento enquanto este canal entrava → agenda os alvos como um evento (alvo 0 no quietMs, seguidores no stagger)", () => {
-      channelState = "joined";
+    it("outro canal físico da mesma chave recebeu evento enquanto este entrava → agenda os alvos como um evento (alvo 0 no quietMs, seguidores no stagger)", () => {
       renderHook(() => useRealtimeSubscription("leads", [["sibling"]]));
       const deliverToSibling = captureOnEvent();
-      channelState = "joining";
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"], { catchUpOnSubscribe: true }));
+      renderHook(() => useRealtimeSubscription("leads", ["leads", "pipeline"], { catchUpOnSubscribe: true }));
+      const t = transport();
+      enter(t, "joining");
       act(() => deliverToSibling(INSERT()));
-      goTo(h, "joined");
+      goTo(t, "joined");
 
       act(() => vi.advanceTimersByTime(1_999));
       expect(invalidatedKeys()).not.toContain('["leads"]');
@@ -955,37 +962,50 @@ describe("useRealtimeSubscription (refactored to delegate transport)", () => {
       expect(invalidatedKeys()).toContain('["pipeline"]');
     });
 
-    it("entrega à irmã ANTES de este canal nascer → 0 (já estava no retrato da montagem)", () => {
-      channelState = "joined";
+    it("entrega a outro canal ANTES de este entrar → 0 (já estava no retrato da montagem)", () => {
       renderHook(() => useRealtimeSubscription("leads", [["sibling"]]));
       act(() => captureOnEvent()(INSERT()));
-      channelState = "joining";
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
-      goTo(h, "joined");
+      renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+      const t = transport();
+      enter(t, "joining");
+      goTo(t, "joined");
       act(() => vi.advanceTimersByTime(120_000));
       expect(invalidatedKeys()).not.toContain('["leads"]');
     });
 
     it("entrega em OUTRA tabela não conta", () => {
-      channelState = "joined";
       renderHook(() => useRealtimeSubscription("deals", [["sibling"]]));
       const deliverToOtherTable = captureOnEvent();
-      channelState = "joining";
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+      renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+      const t = transport();
+      enter(t, "joining");
       act(() => deliverToOtherTable(INSERT()));
-      goTo(h, "joined");
+      goTo(t, "joined");
       act(() => vi.advanceTimersByTime(120_000));
       expect(invalidatedKeys()).not.toContain('["leads"]');
     });
 
-    for (const fall of [["errored", "joining"], ["polling", "joining"], ["errored"]]) {
-      it(`cai (${fall.join(" → ")}) e volta → agenda os alvos UMA vez; joined repetido não reagenda`, () => {
-        const h = renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
-        goTo(h, "joined");
+    it("entra num canal JÁ joined (outra instância abriu) → 0, mesmo com entrega no mesmo instante", () => {
+      renderHook(() => useRealtimeSubscription("leads", [["sibling"]]));
+      const deliverToSibling = captureOnEvent();
+      renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+      const t = transport();
+      enter(t, "joined");
+      act(() => deliverToSibling(INSERT()));
+      goTo(t, "joined");
+      act(() => vi.advanceTimersByTime(120_000));
+      expect(invalidatedKeys()).not.toContain('["leads"]');
+    });
+
+    for (const [found, failures] of [["errored", 1], ["polling", 5], ["joining", 2]] as const) {
+      it(`entra num canal CAÍDO (${found}, ${failures} falha(s)) → no SUBSCRIBED agenda os alvos uma vez`, () => {
+        renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+        const t = transport();
+        enter(t, found, failures);
+        goTo(t, "joining");
         act(() => vi.advanceTimersByTime(10_000));
         expect(mockInvalidateQueries).not.toHaveBeenCalled();
-
-        goTo(h, ...fall, "joined", "joined");
+        goTo(t, "joined", "joined");
         act(() => vi.advanceTimersByTime(2_000));
         expect(invalidatedKeys()).toEqual(['["leads"]']);
         act(() => vi.advanceTimersByTime(120_000));
@@ -993,11 +1013,83 @@ describe("useRealtimeSubscription (refactored to delegate transport)", () => {
       });
     }
 
+    for (const fall of [["errored", "joining"], ["polling", "joining"], ["errored"]] as const) {
+      it(`cai (${fall.join(" → ")}) e volta → agenda os alvos UMA vez; joined repetido não reagenda`, () => {
+        renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+        const t = transport();
+        enter(t, "joining");
+        goTo(t, "joined");
+        act(() => vi.advanceTimersByTime(10_000));
+        expect(mockInvalidateQueries).not.toHaveBeenCalled();
+
+        goTo(t, ...fall, "joined", "joined");
+        act(() => vi.advanceTimersByTime(2_000));
+        expect(invalidatedKeys()).toEqual(['["leads"]']);
+        act(() => vi.advanceTimersByTime(120_000));
+        expect(invalidatedKeys()).toEqual(['["leads"]']);
+      });
+    }
+
+    it("canal compartilhado volta de queda com 3 instâncias no mesmo alvo → 1 busca (coalescida), não 3", async () => {
+      const queryFn = vi.fn(async () => [{ id: "x" }]);
+      const observer = new QueryObserver(qc, { queryKey: ["shared"], queryFn, staleTime: Infinity });
+      unsubscribers.push(observer.subscribe(() => {}));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      queryFn.mockClear();
+      const ts: Transport[] = [];
+      for (let i = 0; i < 3; i++) {
+        renderHook(() => useRealtimeSubscription("leads", [["shared"]], { catchUpOnSubscribe: true }));
+        ts.push(transport());
+        enter(ts[i], "joined");
+      }
+      // O registry notifica os 3 assinantes do canal, na mesma volta.
+      for (const state of ["errored", "joining", "joined"] as const) {
+        act(() => { for (const t of ts) t({ state, failureCount: state === "joined" ? 0 : 1, initial: false }); });
+      }
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
     it("canal desligado (enabled=false) → nada, por mais que o estado mude", () => {
-      const h = renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true, enabled: false }));
-      goTo(h, "joined", "errored", "joined");
+      renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true, enabled: false }));
+      const t = transport();
+      enter(t, "joining");
+      goTo(t, "joined", "errored", "joined");
       act(() => vi.advanceTimersByTime(120_000));
       expect(mockInvalidateQueries).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── 13. Entrega do canal compartilhado: 1 evento = 1 registro ────────────
+
+  describe("recordRealtimeDelivery — o mesmo evento entregue a N instâncias", () => {
+    it("mesmo objeto → mesma sequência e um registro só; objeto novo → sequência nova", () => {
+      const release = retainInvalidationScheduler(qc);
+      const evt = INSERT();
+      const first = recordRealtimeDelivery(qc, "leads|*", evt);
+      expect(recordRealtimeDelivery(qc, "leads|*", evt)).toBe(first);
+      expect(recordRealtimeDelivery(qc, "leads|*", evt)).toBe(first);
+      expect(lastRealtimeDelivery(qc, "leads|*")).toBe(first);
+      const next = recordRealtimeDelivery(qc, "leads|*", INSERT());
+      expect(next).toBeGreaterThan(first);
+      expect(lastRealtimeDelivery(qc, "leads|*")).toBe(next);
+      release();
+    });
+
+    it("duas instâncias recebem o MESMO payload (fan-out) → o alvo comum é refeito 1 vez", async () => {
+      const queryFn = activeQuery(["fanout"]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      renderHook(() => useRealtimeSubscription("leads", [["fanout"]]));
+      const a = captureOnEvent();
+      renderHook(() => useRealtimeSubscription("leads", [["fanout"]]));
+      const b = captureOnEvent();
+      const payload = INSERT();
+      act(() => { a(payload); b(payload); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      expect(invalidatedKeys().filter((k) => k === '["fanout"]')).toHaveLength(1);
     });
   });
 });

@@ -166,6 +166,86 @@ index 4229b6b0e..4179c443d 100644
  
    return useQuery({
      queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId, useCanonical],
+diff --git a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx b/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
+index b58bb8f1f..fb30768ad 100644
+--- a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
++++ b/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
+@@ -4,8 +4,9 @@
+  * Post-release view: a live in-progress card (which daily lot is in flight,
+  * sent/queued, next batch), pause/cancel controls, and a transparent report.
+  * Progress is REAL: `useBlastPlanProgress` reads blast_plan_recipients outcomes
+- * and a `useRealtimeSubscription` on blast_plans + blast_plan_recipients keeps
+- * it live; pause/cancel go through `useBlastPlanControl` (the service_role edge
++ * and refreshes on the hooks' 60 s polling (blast_plans/blast_plan_recipients
++ * are outside the `supabase_realtime` publication — the old subscription never
++ * emitted; perf S0); pause/cancel go through `useBlastPlanControl` (the service_role edge
+  * control plane). The batch math stays the pure `monitorSnapshot`. The plan's
+  * own row (status, lots) comes from `useBlastPlans`.
+  */
+@@ -30,7 +31,6 @@ import { Button } from "@/components/ui/button";
+ import { Progress } from "@/components/ui/progress";
+ import { cn } from "@/lib/utils";
+ import { toast } from "sonner";
+-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ import { planBlast } from "@/modules/campaigns/lib/blast-planning";
+ import {
+   useBlastPlans,
+@@ -52,10 +52,6 @@ interface StepMonitorProps {
+ }
+ 
+ export function StepMonitor({ draft, planId }: StepMonitorProps) {
+-  // Live feed: a row change on either table re-pulls the plan + its progress.
+-  useRealtimeSubscription("blast_plans", ["blast_plans", "blast_plan_recipients"]);
+-  useRealtimeSubscription("blast_plan_recipients", ["blast_plan_recipients"]);
+-
+   const { data: plans } = useBlastPlans();
+   const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
+   const { data: progress } = useBlastPlanProgress(planId);
+diff --git a/classic/src/modules/campaigns/hooks/useMassSendJobs.ts b/classic/src/modules/campaigns/hooks/useMassSendJobs.ts
+index e8ba993f8..05c4521c3 100644
+--- a/classic/src/modules/campaigns/hooks/useMassSendJobs.ts
++++ b/classic/src/modules/campaigns/hooks/useMassSendJobs.ts
+@@ -1,7 +1,10 @@
+ /**
+- * useMassSendJobs — query + realtime + control of uazapi_sender_jobs rows.
++ * useMassSendJobs — query + control of uazapi_sender_jobs rows.
++ *
++ * Sem realtime: `uazapi_sender_jobs` está fora da publication
++ * `supabase_realtime` — a assinatura antiga nunca emitiu evento (perf S0,
++ * 2026-10-06). Atualiza por invalidação das mutations.
+  */
+-import { useEffect } from "react";
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+ import { useCurrentTeamMember } from "@/modules/identity";
+@@ -12,27 +15,6 @@ export type UazapiSenderJob = Tables<"uazapi_sender_jobs">;
+ export function useMassSendJobs() {
+   const { data: teamMember } = useCurrentTeamMember();
+   const orgId = teamMember?.organization_id;
+-  const qc = useQueryClient();
+-
+-  useEffect(() => {
+-    if (!orgId) return;
+-    const ch = supabase
+-      .channel(`uazapi_sender_jobs:${orgId}`)
+-      .on(
+-        "postgres_changes",
+-        {
+-          event: "*",
+-          schema: "public",
+-          table: "uazapi_sender_jobs",
+-          filter: `organization_id=eq.${orgId}`,
+-        },
+-        () => qc.invalidateQueries({ queryKey: ["uazapi_sender_jobs", orgId] })
+-      )
+-      .subscribe();
+-    return () => {
+-      supabase.removeChannel(ch);
+-    };
+-  }, [orgId, qc]);
+ 
+   return useQuery({
+     queryKey: ["uazapi_sender_jobs", orgId],
 diff --git a/classic/src/modules/carteira/hooks/useCarteiraStages.ts b/classic/src/modules/carteira/hooks/useCarteiraStages.ts
 index 7aee76ec7..b35d7f031 100644
 --- a/classic/src/modules/carteira/hooks/useCarteiraStages.ts
@@ -564,6 +644,159 @@ index bb01d8031..5ee0295ff 100644
    });
  
    const queryOficiais = useQuery({
+diff --git a/classic/src/modules/communication/hooks/chat/usePatchedRealtime.ts b/.tmp/ui-classic-pristina/src/modules/communication/hooks/chat/usePatchedRealtime.ts
+deleted file mode 100644
+index 63adaab1a..000000000
+--- a/classic/src/modules/communication/hooks/chat/usePatchedRealtime.ts
++++ /dev/null
+@@ -1,147 +0,0 @@
+-/**
+- * usePatchedRealtime — wrapper sobre supabase realtime que aplica patches
+- * incrementais no cache do TanStack Query via setQueryData.
+- *
+- * Em vez de invalidateQueries (refetch total), aplica INSERT/UPDATE/DELETE
+- * diretamente no cache. Ganho de ~80% em bandwidth para listas grandes.
+- *
+- * C19: utility base para migração do realtime de chat.
+- */
+-import { useEffect, useRef } from "react";
+-import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+-import { supabase } from "@/integrations/supabase/client";
+-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+-
+-export interface PatchedRealtimeConfig<TRow extends { id: string }, TCache> {
+-  /** Nome da tabela Postgres. */
+-  table: string;
+-  /** Schema — padrão "public". */
+-  schema?: string;
+-  /** Filtro realtime — ex: `organization_id=eq.${orgId}`. */
+-  filter?: string;
+-  /** QueryKey do TanStack Query a ser atualizada. */
+-  queryKey: QueryKey;
+-  /**
+-   * Função identitária para deduplicação.
+-   * Retorna true se row e cacheItem representam o mesmo registro.
+-   */
+-  matcher: (row: TRow, cacheItem: TCache) => boolean;
+-  /**
+-   * Mapeia INSERT → novo cache.
+-   * Default: prepend se não existir (dedupe por matcher).
+-   */
+-  mapInsert?: (row: TRow, cache: TCache[] | undefined) => TCache[];
+-  /**
+-   * Mapeia UPDATE → novo cache.
+-   * Default: substituir in-place pelo matcher.
+-   */
+-  mapUpdate?: (row: TRow, cache: TCache[] | undefined) => TCache[];
+-  /**
+-   * Mapeia DELETE → novo cache.
+-   * Default: filtrar pelo matcher.
+-   */
+-  mapDelete?: (row: TRow, cache: TCache[] | undefined) => TCache[];
+-  /** Habilita/desabilita a subscrição — default true. */
+-  enabled?: boolean;
+-}
+-
+-export function usePatchedRealtime<TRow extends { id: string }, TCache>({
+-  table,
+-  schema = "public",
+-  filter,
+-  queryKey,
+-  matcher,
+-  mapInsert,
+-  mapUpdate,
+-  mapDelete,
+-  enabled = true,
+-}: PatchedRealtimeConfig<TRow, TCache>): void {
+-  const queryClient = useQueryClient();
+-
+-  // Refs estáveis para evitar re-subscribe em cada render
+-  const matcherRef = useRef(matcher);
+-  matcherRef.current = matcher;
+-  const mapInsertRef = useRef(mapInsert);
+-  mapInsertRef.current = mapInsert;
+-  const mapUpdateRef = useRef(mapUpdate);
+-  mapUpdateRef.current = mapUpdate;
+-  const mapDeleteRef = useRef(mapDelete);
+-  mapDeleteRef.current = mapDelete;
+-
+-  const filterStr = filter ?? "";
+-
+-  useEffect(() => {
+-    if (!enabled) return;
+-
+-    // Channel name único baseado em table + filter para evitar duplicação
+-    const channelName = `patched-realtime-${table}-${filterStr || "all"}`;
+-
+-    const pgChangesConfig: Record<string, string> = {
+-      event: "*",
+-      schema,
+-      table,
+-    };
+-    if (filterStr) {
+-      pgChangesConfig.filter = filterStr;
+-    }
+-
+-    const channel = supabase
+-      .channel(channelName)
+-      .on(
+-        "postgres_changes",
+-        pgChangesConfig as Parameters<typeof channel.on>[1],
+-        (payload: RealtimePostgresChangesPayload<TRow>) => {
+-          const { eventType } = payload;
+-
+-          if (eventType === "INSERT") {
+-            const row = payload.new as TRow;
+-            const customMap = mapInsertRef.current;
+-
+-            queryClient.setQueryData<TCache[]>(queryKey, (prev) => {
+-              if (customMap) return customMap(row, prev);
+-              // Default: prepend se não existir (dedupe por matcher)
+-              const existing = prev ?? [];
+-              const alreadyExists = existing.some((item) => matcherRef.current(row, item));
+-              if (alreadyExists) return existing;
+-              return [row as unknown as TCache, ...existing];
+-            });
+-            return;
+-          }
+-
+-          if (eventType === "UPDATE") {
+-            const row = payload.new as TRow;
+-            const customMap = mapUpdateRef.current;
+-
+-            queryClient.setQueryData<TCache[]>(queryKey, (prev) => {
+-              if (customMap) return customMap(row, prev);
+-              // Default: substituir in-place
+-              const existing = prev ?? [];
+-              return existing.map((item) =>
+-                matcherRef.current(row, item) ? (row as unknown as TCache) : item
+-              );
+-            });
+-            return;
+-          }
+-
+-          if (eventType === "DELETE") {
+-            const row = payload.old as Partial<TRow>;
+-            const customMap = mapDeleteRef.current;
+-
+-            queryClient.setQueryData<TCache[]>(queryKey, (prev) => {
+-              if (customMap) return customMap(row as TRow, prev);
+-              // Default: filtrar pelo matcher
+-              const existing = prev ?? [];
+-              return existing.filter((item) => !matcherRef.current(row as TRow, item));
+-            });
+-            return;
+-          }
+-        }
+-      )
+-      .subscribe();
+-
+-    return () => {
+-      supabase.removeChannel(channel);
+-    };
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [table, schema, filterStr, enabled, queryClient, JSON.stringify(queryKey)]);
+-}
 diff --git a/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts b/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts
 index 295f32201..44dfe5f20 100644
 --- a/classic/src/modules/communication/hooks/chat/useRealtimeFallback.ts
@@ -970,6 +1203,57 @@ index f2fec0c89..b23e27012 100644
 +    statusKey: organizationId ? whatsAppRealtimeStatusKey(organizationId) : undefined,
    });
  }
+diff --git a/classic/src/modules/communication/hooks/useHistorySyncJobs.ts b/classic/src/modules/communication/hooks/useHistorySyncJobs.ts
+index 3dd394ece..1876aa287 100644
+--- a/classic/src/modules/communication/hooks/useHistorySyncJobs.ts
++++ b/classic/src/modules/communication/hooks/useHistorySyncJobs.ts
+@@ -1,11 +1,11 @@
+ /**
+- * useHistorySyncJobs — query history_sync_jobs with realtime updates.
++ * useHistorySyncJobs — query history_sync_jobs.
+  *
+  * Service-layer: reads directly from Supabase (RLS enforces org membership).
+- * Realtime: subscribes to INSERT/UPDATE events and invalidates the query
+- * so the dashboard progress bar updates without polling.
++ * Progresso: polling de 5 s enquanto houver job queued/running. Sem realtime:
++ * `history_sync_jobs` está fora da publication `supabase_realtime` — a
++ * assinatura antiga nunca emitiu evento (perf S0, 2026-10-06).
+  */
+-import { useEffect } from "react";
+ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+ import { useCurrentTeamMember } from "@/modules/identity";
+@@ -25,30 +25,6 @@ type JobFilter = {
+ export function useHistorySyncJobs(filter: JobFilter = {}) {
+   const { data: teamMember } = useCurrentTeamMember();
+   const orgId = teamMember?.organization_id;
+-  const qc = useQueryClient();
+-
+-  // Realtime subscription — invalidates query on any change
+-  useEffect(() => {
+-    if (!orgId) return;
+-    const channel = supabase
+-      .channel(`history_sync_jobs:${orgId}`)
+-      .on(
+-        "postgres_changes",
+-        {
+-          event: "*",
+-          schema: "public",
+-          table: "history_sync_jobs",
+-          filter: `organization_id=eq.${orgId}`,
+-        },
+-        () => {
+-          qc.invalidateQueries({ queryKey: ["history_sync_jobs", orgId] });
+-        }
+-      )
+-      .subscribe();
+-    return () => {
+-      supabase.removeChannel(channel);
+-    };
+-  }, [orgId, qc]);
+ 
+   return useQuery({
+     queryKey: ["history_sync_jobs", orgId, filter.instanceId ?? null, filter.status ?? null, filter.chatJid ?? null],
 diff --git a/classic/src/modules/communication/hooks/useIncomingMessageToast.ts b/classic/src/modules/communication/hooks/useIncomingMessageToast.ts
 index df75f5544..234de550f 100644
 --- a/classic/src/modules/communication/hooks/useIncomingMessageToast.ts
@@ -997,20 +1281,35 @@ index df75f5544..234de550f 100644
  
  import { useEffect, useRef } from "react";
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
-index aacc3ed82..bfd60e8f2 100644
+index aacc3ed82..f83352526 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotPause.ts
 +++ b/classic/src/modules/copilot/hooks/useCopilotPause.ts
-@@ -47,7 +47,9 @@ export function useCopilotPause(params: {
+@@ -6,13 +6,12 @@
+  * Este hook lê o timestamp de pausa, computa se ainda está ativo,
+  * e expõe reactivate via RPC clear_human_pause.
+  *
+- * Realtime: invalida via useRealtimeSubscription em conversations.
+- * Fallback: polling a cada 30s.
++ * Atualização: polling a cada 30s. Sem realtime: `conversations` está fora da
++ * publication `supabase_realtime` (a assinatura nunca emitiu evento; perf S0).
+  */
+ 
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ 
+ export interface CopilotPauseState {
+   isPaused: boolean;
+@@ -46,9 +45,6 @@ export function useCopilotPause(params: {
+     refetchInterval: 30_000,
    });
  
-   // Realtime subscription — invalidates copilot-pause query on conversations change
+-  // Realtime subscription — invalidates copilot-pause query on conversations change
 -  useRealtimeSubscription("conversations", queryKey);
-+  // Alvo é a chave INTEIRA (aninhada): plana, invalidava `["copilot-pause"]`
-+  // de todas as conversas e depois `[conversationId]`, que não casa com nada.
-+  useRealtimeSubscription("conversations", [queryKey]);
- 
+-
    // Reactivate mutation — clears pause via RPC
    const mutation = useMutation({
+     mutationFn: async () => {
 diff --git a/classic/src/modules/copilot/hooks/useCopilotToggle.ts b/classic/src/modules/copilot/hooks/useCopilotToggle.ts
 index ecb60575d..e5d26edae 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotToggle.ts
@@ -1063,6 +1362,57 @@ index fcd19e285..d9f269c95 100644
  
    return useQuery<ActivityWithNames[]>({
      queryKey,
+diff --git a/classic/src/modules/engagement/hooks/useMeetings.ts b/classic/src/modules/engagement/hooks/useMeetings.ts
+index 88a6237c3..ad490fb05 100644
+--- a/classic/src/modules/engagement/hooks/useMeetings.ts
++++ b/classic/src/modules/engagement/hooks/useMeetings.ts
+@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+ import { useOrganization } from "@/modules/identity";
+ import { useAuth } from "@/modules/identity";
+-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ import { toast } from "sonner";
+ import { notifyError } from "@/shared/errors";
+ 
+@@ -145,12 +144,14 @@ export interface UpdateMeetingInput {
+ 
+ // ─── Queries ─────────────────────────────────────────────────────────────────
+ 
+-/** List meetings for the current org, with optional filters and realtime subscription */
++/**
++ * List meetings for the current org, with optional filters.
++ * Sem realtime: `meetings` está fora da publication `supabase_realtime` (a
++ * assinatura nunca emitiu evento; perf S0). Mutations invalidam a query.
++ */
+ export function useMeetings(filters?: MeetingFilters) {
+   const { organizationId, isReady } = useOrganization();
+ 
+-  useRealtimeSubscription("meetings", ["meetings"]);
+-
+   return useQuery({
+     queryKey: ["meetings", organizationId, filters],
+     queryFn: async () => {
+diff --git a/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts b/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts
+index 15d97831d..71e4e0747 100644
+--- a/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts
++++ b/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts
+@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+ import { useOrganization } from "./useOrganization";
+-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ import type {
+   TeamMember,
+   TeamMemberInsert,
+@@ -31,7 +30,7 @@ export type {
+  */
+ export function useTeamMembers() {
+   const { organizationId, isReady } = useOrganization();
+-  useRealtimeSubscription("team_members", ["team_members"]);
++  // Sem realtime: team_members está fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06). Mutations invalidam a query.
+ 
+   return useQuery({
+     queryKey: ["team_members", organizationId],
 diff --git a/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx b/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx
 new file mode 100644
 index 000000000..8486c88d3
@@ -1484,6 +1834,80 @@ index ae8d035d8..c3d313fd1 100644
      usaLeiDoErp,
      lead,
      negocioBase,
+diff --git a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
+index 980e2d02f..0a165192b 100644
+--- a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
++++ b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
+@@ -6,16 +6,18 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+ /**
+  * Realtime fan-out for the lead detail modal (Issue #306, PRD #284 Fase 3).
+  *
+- * Subscribes to the 6 tables that drive the modal:
++ * Subscribes to the 3 published tables that drive the modal:
+  *   - `leads`              (the lead row itself; filter by id)
+- *   - `lead_history`       (activity feed)
+- *   - `lead_comments`      (comments thread)
+- *   - `lead_tags`          (tag chips)
+  *   - `pipeline_entries`   (cross-pipe accordion)
+  *   - `pipe_proposta_items` (proposta line items — no lead_id column,
+  *                            filtered by org, narrowed client-side via
+  *                            the invalidated queries themselves)
+  *
++ * NOT subscribed: `lead_history`, `lead_comments`, `lead_tags` are outside the
++ * `supabase_realtime` publication — those channels never emitted an event and
++ * only cost a failing join each (perf S0, 2026-10-06). Their caches refresh
++ * through the mutations that write them.
++ *
+  * Gates:
+  *   - Disabled when the modal is closed or no lead is selected.
+  *   - 500ms lazy delay before enabling — avoids churn if the user is
+@@ -96,46 +98,6 @@ export function useLeadDetailRealtime(
+     },
+   });
+ 
+-  useRealtimeChannel({
+-    table: "lead_history",
+-    filter: leadIdFilter,
+-    enabled: isLive,
+-    onEvent: () => {
+-      if (!leadId) return;
+-      invalidate([
+-        ["lead-timeline", leadId],
+-        ["lead_history", leadId],
+-        ["lead-history", leadId],
+-      ]);
+-    },
+-  });
+-
+-  useRealtimeChannel({
+-    table: "lead_comments",
+-    filter: leadIdFilter,
+-    enabled: isLive,
+-    onEvent: () => {
+-      if (!leadId) return;
+-      invalidate([
+-        ["lead-comments", leadId],
+-        ["lead_comments", leadId],
+-      ]);
+-    },
+-  });
+-
+-  useRealtimeChannel({
+-    table: "lead_tags",
+-    filter: leadIdFilter,
+-    enabled: isLive,
+-    onEvent: () => {
+-      if (!leadId) return;
+-      invalidate([
+-        ["lead-tags", leadId],
+-        ["lead-detail", leadId],
+-      ]);
+-    },
+-  });
+-
+   useRealtimeChannel({
+     table: "pipeline_entries",
+     filter: leadIdFilter,
 diff --git a/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx b/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx
 index 5d78ff0e6..823994129 100644
 --- a/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx
@@ -1620,6 +2044,19 @@ index 682a48186..4e49cb8f6 100644
                </span>
              )}
  
+diff --git a/classic/src/modules/leads/hooks/useClientPortfolio.ts b/classic/src/modules/leads/hooks/useClientPortfolio.ts
+index 8011e8662..f0861b1c0 100644
+--- a/classic/src/modules/leads/hooks/useClientPortfolio.ts
++++ b/classic/src/modules/leads/hooks/useClientPortfolio.ts
+@@ -35,7 +35,7 @@ export function useClientPortfolio(
+ ) {
+   const { organizationId, isReady } = useOrganization();
+   useRealtimeSubscription("leads", ["client-portfolio"]);
+-  useRealtimeSubscription("deals", ["client-portfolio", "leads-deals"]);
++  // `deals` não é assinada: fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06).
+   useRealtimeSubscription("pipeline_entries", ["client-portfolio", "leads-deals"]);
+   useRealtimeSubscription("pipeline_stages", ["client-portfolio", "leads-deals"]);
+   useRealtimeSubscription("pipelines", ["client-portfolio", "leads-deals"]);
 diff --git a/classic/src/modules/leads/hooks/useLeads.ts b/classic/src/modules/leads/hooks/useLeads.ts
 index 6e79c168c..60705c9a9 100644
 --- a/classic/src/modules/leads/hooks/useLeads.ts
@@ -1784,10 +2221,10 @@ index 6e79c168c..60705c9a9 100644
        await queryClient.cancelQueries({ queryKey: ["lead_ai_status", leadId] });
 diff --git a/classic/src/modules/leads/hooks/useLeadsRealtime.ts b/classic/src/modules/leads/hooks/useLeadsRealtime.ts
 new file mode 100644
-index 000000000..55fffeee3
+index 000000000..3c7a9daa5
 --- /dev/null
 +++ b/classic/src/modules/leads/hooks/useLeadsRealtime.ts
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,243 @@
 +/**
 + * Realtime da lista de Leads — UM canal em `leads`, classificado por evento.
 + *
@@ -1816,9 +2253,10 @@ index 000000000..55fffeee3
 + *   - página da tela buscando quando o evento chega: o retrato a caminho é de
 + *     antes dele — todo veredito que pularia a lista (patch, contagens, DELETE
 + *     de id fora do cache) a refaz depois desse fetch;
-+ *   - canal desta instância entrando ou voltando de uma queda: o que as irmãs
-+ *     receberam nesse vão (e tudo, depois de uma queda) é recuperado no
-+ *     SUBSCRIBED — `catchUpOnSubscribe` de `useRealtimeSubscription`.
++ *   - o canal é compartilhado por tabela + filtro: toda instância recebe o
++ *     mesmo evento. Instância que entra com o canal caído, ou que o vê cair,
++ *     refaz seus alvos no SUBSCRIBED seguinte (1 busca por query, por mais
++ *     instâncias que haja) — `catchUpOnSubscribe` de `useRealtimeSubscription`.
 + *
 + * Os números: rajada de 20 eventos → 1 fetch da lista e 0 de contagem;
 + * 2 min de eventos contínuos → ≤4 da lista e ≤1 por contagem a cada 60 s.
@@ -1997,9 +2435,9 @@ index 000000000..55fffeee3
 +  };
 +
 +  // `catchUpOnSubscribe`: a página ativa desta instância só é tocada por ela
-+  // (`editIdleLists` pula página ativa de outra) — evento que as irmãs
-+  // receberam enquanto este canal entrava, ou que caiu numa queda, chegaria
-+  // a ela só no próximo evento que pedisse refetch.
++  // (`editIdleLists` pula página ativa de outra) — evento que caiu numa queda
++  // do canal (ou que chegou a outro canal físico da mesma chave enquanto este
++  // entrava) chegaria a ela só no próximo evento que pedisse refetch.
 +  const schedule = {
 +    quietMs: LIST_QUIET_MS,
 +    maxWaitMs: LIST_MAX_WAIT_MS,
@@ -4298,10 +4736,10 @@ index 000000000..8f41158f9
 +}
 diff --git a/classic/src/shared/realtime/invalidation-scheduler.ts b/classic/src/shared/realtime/invalidation-scheduler.ts
 new file mode 100644
-index 000000000..7fd1ee650
+index 000000000..08849e788
 --- /dev/null
 +++ b/classic/src/shared/realtime/invalidation-scheduler.ts
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,466 @@
 +/**
 + * Agendador de invalidações vindas do realtime — UM por QueryClient.
 + *
@@ -4353,13 +4791,21 @@ index 000000000..7fd1ee650
 + * conta como velha e é refeita.
 + *
 + * ── ENTREGAS (recuperação no SUBSCRIBED) ──────────────────────────────────
-+ * Cada instância de `useRealtimeSubscription` abre o PRÓPRIO canal, com join
-+ * independente: evento que chega enquanto o canal de uma instância ainda está
-+ * "joining" vai para as irmãs e se perde para ela. O agendador guarda, por
-+ * canal lógico (tabela + filtro), a sequência da última entrega a QUALQUER
-+ * instância (`recordRealtimeDelivery`). Quem fica SUBSCRIBED pela primeira vez
-+ * compara com o instante em que começou a entrar (`lastRealtimeDelivery`).
-+ * Vive e morre com o resto do estado: sem hook montado, sem registro.
++ * O agendador guarda, por canal lógico (tabela + filtro), a sequência da
++ * última entrega a QUALQUER instância (`recordRealtimeDelivery`). Quem fica
++ * SUBSCRIBED pela primeira vez compara com o instante em que começou a entrar
++ * (`lastRealtimeDelivery`): se outro canal físico com a mesma tabela + filtro
++ * recebeu evento nesse vão, este perdeu. Com o canal compartilhado por chave
++ * (`realtimeChannelRegistry`), instâncias de `useRealtimeSubscription` com a
++ * mesma tabela + filtro estão no MESMO canal físico — quem entra num canal
++ * ainda "joining" entra com todos, e ninguém recebe nada antes do SUBSCRIBED:
++ * a comparação dá 0. Ela fica como guarda para canais físicos distintos na
++ * mesma chave lógica (configuração de canal diferente).
++ *
++ * Uma entrega = UM registro, com UMA sequência: o canal compartilhado entrega
++ * o MESMO objeto de evento a N instâncias, e as N recebem a mesma sequência
++ * (a do instante em que o evento chegou à aba). Vive e morre com o resto do
++ * estado: sem hook montado, sem registro.
 + *
 + * ── O QUE NÃO MUDA ────────────────────────────────────────────────────────
 + * Nada aqui toca o transporte (`useRealtimeChannel`), o filtro de org nem a
@@ -4459,8 +4905,8 @@ index 000000000..7fd1ee650
 +  /** Pedidos esperando o fetch em voo de cada query terminar. */
 +  readonly waitingFetch: Map<Query, Set<Entry>>;
 +  readonly waitingVisible: Set<Entry>;
-+  /** Sequência da última entrega de evento, por canal lógico (tabela + filtro). */
-+  readonly delivered: Map<string, number>;
++  /** Última entrega de evento, por canal lógico (tabela + filtro): o objeto e a sequência dele. */
++  readonly delivered: Map<string, { readonly event: object; readonly seq: number }>;
 +  onVisibility: (() => void) | null;
 +  /** Hooks montados que dependem deste agendador. */
 +  holders: number;
@@ -4593,18 +5039,31 @@ index 000000000..7fd1ee650
 +}
 +
 +/**
-+ * Registra que um evento do canal lógico `channelKey` (tabela + filtro) foi
-+ * entregue a alguma instância agora. Só anota — não invalida nada. Sem
-+ * agendador vivo (nenhum hook montado) não há quem vá perguntar: não anota.
++ * Registra que `event`, do canal lógico `channelKey` (tabela + filtro), foi
++ * entregue a uma instância agora, e devolve a sequência DO EVENTO — use-a
++ * como `eventSeq` do pedido. Só anota; não invalida nada.
++ *
++ * O canal compartilhado entrega o mesmo objeto, em sequência síncrona, a
++ * cada instância: a 2ª..N-ésima entrega do mesmo objeto devolve a sequência
++ * da 1ª e não gera registro novo. Fetch que começou depois da 1ª entrega já
++ * vê o commit (o evento só sai do banco depois dele).
++ *
++ * Sem agendador vivo (nenhum hook montado) não há quem vá perguntar: não
++ * anota, só numera.
 + */
-+export function recordRealtimeDelivery(client: QueryClient, channelKey: string): void {
++export function recordRealtimeDelivery(client: QueryClient, channelKey: string, event: object): number {
 +  const scheduler = schedulers.get(client);
-+  if (scheduler) scheduler.delivered.set(channelKey, nextRealtimeSeq());
++  if (!scheduler) return nextRealtimeSeq();
++  const last = scheduler.delivered.get(channelKey);
++  if (last?.event === event) return last.seq;
++  const seq = nextRealtimeSeq();
++  scheduler.delivered.set(channelKey, { event, seq });
++  return seq;
 +}
 +
 +/** Sequência da última entrega em `channelKey` (0 = nenhuma desde que o agendador nasceu). */
 +export function lastRealtimeDelivery(client: QueryClient, channelKey: string): number {
-+  return schedulers.get(client)?.delivered.get(channelKey) ?? 0;
++  return schedulers.get(client)?.delivered.get(channelKey)?.seq ?? 0;
 +}
 +
 +function clearTimer(entry: Entry): void {
@@ -4747,6 +5206,684 @@ index 000000000..7fd1ee650
 +export function isRealtimeTabHidden(): boolean {
 +  return isDocumentHidden();
 +}
+diff --git a/classic/src/shared/realtime/realtimeChannelRegistry.ts b/classic/src/shared/realtime/realtimeChannelRegistry.ts
+new file mode 100644
+index 000000000..df769dace
+--- /dev/null
++++ b/classic/src/shared/realtime/realtimeChannelRegistry.ts
+@@ -0,0 +1,325 @@
++/**
++ * realtimeChannelRegistry — UMA assinatura `postgres_changes` por
++ * (tabela, filtro, evento) por aba, compartilhada por refcount.
++ *
++ * Por que existe (perf S0, 2026-10-06): cada `useRealtimeChannel` abria o seu
++ * canal (nome com randomUUID). Medido em prod: 551 assinaturas vivas para 30
++ * usuários, das quais só 286 eram pares distintos (usuário, tabela, filtro) —
++ * `pipeline_stages` 111 assinaturas para 18 pares. Cada canal é um join no
++ * Realtime (`with sub_tables…` + INSERT em `realtime.subscription`) e um
++ * `apply_rls` por evento por assinante.
++ *
++ * Contrato:
++ *   - Consumidores com a mesma chave dividem 1 canal e recebem o MESMO evento.
++ *   - O último a sair fecha o canal (síncrono: comportamento idêntico ao
++ *     anterior no unmount; StrictMode abre → fecha → abre).
++ *   - A máquina de estado (backoff exponencial, circuit breaker N falhas →
++ *     polling + sonda após cooldown, reconexão por visibilidade/online com
++ *     janela de dedup) mora no CANAL, não no consumidor: 3 consumidores não
++ *     viram 3 reconexões. Toda reabertura cancela os timers pendentes (1 canal
++ *     novo por reconexão); visibilidade/online só reabre canal errored/polling.
++ *   - `realtimeStatusStore`: cada chave de status distinta (statusKey do
++ *     consumidor, ou `rt_{tabela}_{filtro}` sem statusKey) recebe UMA
++ *     transição por transição real do canal. `joinCount` sobe 1× por join
++ *     real — é o que `chatReconcile` lê. Um consumidor que entra num canal já
++ *     vivo com uma statusKey ainda não vista registra o estado dessa chave
++ *     (equivale ao canal novo que ele abriria antes); com statusKey já vista,
++ *     nada muda no store.
++ *   - threshold/cooldown entram na chave: configurações diferentes não se
++ *     misturam (todos os chamadores de prod usam o padrão).
++ */
++import type {
++  RealtimeChannel,
++  RealtimePostgresChangesFilter,
++  RealtimePostgresChangesPayload,
++} from "@supabase/supabase-js";
++import { supabase } from "@/integrations/supabase/client";
++import {
++  incrementFailures,
++  openCircuitBreaker,
++  resetFailures,
++  setChannelState,
++} from "@/lib/realtimeStatusStore";
++
++type Row = Record<string, unknown>;
++
++export type SharedChannelState = "joining" | "joined" | "errored" | "polling";
++export type PostgresChangeEvent = "*" | "INSERT" | "UPDATE" | "DELETE";
++
++export interface ChannelSpec {
++  table: string;
++  filter?: string;
++  event?: PostgresChangeEvent;
++  threshold: number;
++  cooldownMs: number;
++}
++
++export interface ChannelTransition {
++  state: SharedChannelState;
++  channelName: string;
++  failureCount: number;
++  type: "transition" | "circuit_open" | "circuit_close";
++  error?: string;
++}
++
++export interface ChannelSubscriber {
++  statusKey?: string;
++  onEvent: (payload: RealtimePostgresChangesPayload<Row>) => void;
++  onTransition: (transition: ChannelTransition) => void;
++}
++
++export interface ChannelHandle {
++  release: () => void;
++  /** Visibilidade/online: reconecta se o canal não está saudável (dedup 1 s). */
++  requestReconnect: () => void;
++}
++
++const MAX_BACKOFF_MS = 30_000;
++const BASE_BACKOFF_MS = 1_000;
++const DEDUP_WINDOW_MS = 1_000;
++
++type TimerName = "backoffTimer" | "cooldownTimer" | "dedupTimer";
++
++interface Entry {
++  key: string;
++  table: string;
++  filter?: string;
++  event: PostgresChangeEvent;
++  threshold: number;
++  cooldownMs: number;
++  defaultStatusKey: string;
++  subscribers: Set<ChannelSubscriber>;
++  channel: RealtimeChannel | null;
++  channelName: string;
++  generation: number;
++  state: SharedChannelState;
++  lastError?: string;
++  failureCount: number;
++  circuitOpen: boolean;
++  backoffTimer: ReturnType<typeof setTimeout> | null;
++  cooldownTimer: ReturnType<typeof setTimeout> | null;
++  dedupTimer: ReturnType<typeof setTimeout> | null;
++}
++
++const entries = new Map<string, Entry>();
++
++export function realtimeChannelKey(spec: ChannelSpec): string {
++  return [spec.table, spec.filter ?? "*", spec.event ?? "*", spec.threshold, spec.cooldownMs].join("|");
++}
++
++function statusKeys(entry: Entry): Set<string> {
++  const keys = new Set<string>();
++  for (const s of entry.subscribers) keys.add(s.statusKey ?? entry.defaultStatusKey);
++  return keys;
++}
++
++function clearTimer(entry: Entry, name: TimerName) {
++  const t = entry[name];
++  if (t) clearTimeout(t);
++  entry[name] = null;
++}
++
++function notify(entry: Entry, transition: Omit<ChannelTransition, "channelName" | "failureCount">) {
++  const full: ChannelTransition = {
++    ...transition,
++    channelName: entry.channelName,
++    failureCount: entry.failureCount,
++  };
++  for (const s of [...entry.subscribers]) s.onTransition(full);
++}
++
++function dispatch(entry: Entry, payload: RealtimePostgresChangesPayload<Row>) {
++  // Um consumidor que lança não pode roubar o evento dos outros; o primeiro
++  // erro é relançado depois para não sumir (mesma propagação de antes).
++  let firstError: unknown = null;
++  for (const s of [...entry.subscribers]) {
++    try {
++      s.onEvent(payload);
++    } catch (e) {
++      firstError ??= e;
++    }
++  }
++  if (firstError) throw firstError;
++}
++
++function handleStatus(entry: Entry, status: string, err?: Error) {
++  if (status === "SUBSCRIBED") {
++    // `circuitOpen` e não `state`: a sonda já passou o estado para "joining".
++    const wasCircuitOpen = entry.circuitOpen;
++    entry.failureCount = 0;
++    entry.circuitOpen = false;
++    entry.state = "joined";
++    entry.lastError = undefined;
++    clearTimer(entry, "backoffTimer");
++    clearTimer(entry, "cooldownTimer");
++    for (const k of statusKeys(entry)) {
++      resetFailures(k);
++      setChannelState(k, "joined", undefined);
++    }
++    notify(entry, { state: "joined", type: wasCircuitOpen ? "circuit_close" : "transition" });
++    return;
++  }
++
++  if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
++
++  const errorMsg = err?.message ?? status;
++  entry.failureCount += 1;
++  entry.lastError = errorMsg;
++  const keys = statusKeys(entry);
++  for (const k of keys) incrementFailures(k, errorMsg);
++
++  if (entry.circuitOpen || entry.failureCount >= entry.threshold) {
++    entry.circuitOpen = true;
++    entry.state = "polling";
++    for (const k of keys) {
++      openCircuitBreaker(k, errorMsg);
++      setChannelState(k, "polling", errorMsg);
++    }
++    notify(entry, { state: "polling", type: "circuit_open", error: errorMsg });
++    clearTimer(entry, "cooldownTimer");
++    entry.cooldownTimer = setTimeout(() => {
++      entry.cooldownTimer = null;
++      reopen(entry);
++    }, entry.cooldownMs);
++  } else {
++    entry.state = "errored";
++    for (const k of keys) setChannelState(k, "errored", errorMsg);
++    notify(entry, { state: "errored", type: "transition", error: errorMsg });
++    clearTimer(entry, "backoffTimer");
++    const delay = Math.min(BASE_BACKOFF_MS * 2 ** (entry.failureCount - 1), MAX_BACKOFF_MS);
++    entry.backoffTimer = setTimeout(() => {
++      entry.backoffTimer = null;
++      reopen(entry);
++    }, delay);
++  }
++}
++
++function open(entry: Entry) {
++  entry.generation += 1;
++  const generation = entry.generation;
++  // Nome único por geração: supabase-js devolve o canal EXISTENTE quando o
++  // tópico se repete, e o canal recém-removido ainda pode estar saindo.
++  entry.channelName = `rt_${entry.table}_${entry.filter ?? "all"}_${crypto.randomUUID()}`;
++  entry.state = "joining";
++  for (const k of statusKeys(entry)) setChannelState(k, "joining", undefined);
++  notify(entry, { state: "joining", type: "transition" });
++
++  // O overload de `.on` amarra o literal do evento ao tipo do filtro; o
++  // evento aqui é dado de runtime (chave do canal), daí a asserção.
++  const config = {
++    event: entry.event,
++    schema: "public",
++    table: entry.table,
++    ...(entry.filter && { filter: entry.filter }),
++  } as RealtimePostgresChangesFilter<"*">;
++
++  // Callback de geração velha (CLOSED depois do removeChannel, evento em
++  // trânsito) não pode mexer no estado do canal atual.
++  const live = () => entries.get(entry.key) === entry && entry.generation === generation;
++
++  const channel = supabase.channel(entry.channelName);
++  entry.channel = channel;
++  channel
++    .on<Row>("postgres_changes", config, (payload) => {
++      if (live()) dispatch(entry, payload);
++    })
++    .subscribe((status: string, err?: Error) => {
++      if (live()) handleStatus(entry, status, err);
++    });
++}
++
++function close(entry: Entry) {
++  const ch = entry.channel;
++  entry.channel = null;
++  if (ch) supabase.removeChannel(ch);
++}
++
++function reopen(entry: Entry) {
++  if (entries.get(entry.key) !== entry) return;
++  // Uma reabertura vale por todas as pendentes: backoff, sonda e dedup de
++  // visibilidade que vencessem depois matariam este join em voo (QA e3).
++  clearTimer(entry, "backoffTimer");
++  clearTimer(entry, "cooldownTimer");
++  clearTimer(entry, "dedupTimer");
++  close(entry);
++  open(entry);
++}
++
++const isDown = (entry: Entry) => entry.state === "errored" || entry.state === "polling";
++
++export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSubscriber): ChannelHandle {
++  const key = realtimeChannelKey(spec);
++  let entry = entries.get(key);
++
++  if (!entry) {
++    entry = {
++      key,
++      table: spec.table,
++      filter: spec.filter,
++      event: spec.event ?? "*",
++      threshold: spec.threshold,
++      cooldownMs: spec.cooldownMs,
++      defaultStatusKey: `rt_${spec.table}_${spec.filter ?? "all"}`,
++      subscribers: new Set([subscriber]),
++      channel: null,
++      channelName: "",
++      generation: 0,
++      state: "joining",
++      failureCount: 0,
++      circuitOpen: false,
++      backoffTimer: null,
++      cooldownTimer: null,
++      dedupTimer: null,
++    };
++    entries.set(key, entry);
++    open(entry);
++  } else {
++    const sk = subscriber.statusKey ?? entry.defaultStatusKey;
++    const keyIsNew = !statusKeys(entry).has(sk);
++    entry.subscribers.add(subscriber);
++    const error = entry.state === "joined" ? undefined : entry.lastError;
++    if (keyIsNew) setChannelState(sk, entry.state, error);
++    subscriber.onTransition({
++      state: entry.state,
++      channelName: entry.channelName,
++      failureCount: entry.failureCount,
++      type: "transition",
++      ...(error && { error }),
++    });
++  }
++
++  const owned = entry;
++  let released = false;
++
++  return {
++    release() {
++      if (released) return;
++      released = true;
++      owned.subscribers.delete(subscriber);
++      if (owned.subscribers.size > 0 || entries.get(key) !== owned) return;
++      entries.delete(key);
++      clearTimer(owned, "backoffTimer");
++      clearTimer(owned, "cooldownTimer");
++      clearTimer(owned, "dedupTimer");
++      close(owned);
++    },
++    requestReconnect() {
++      // Só canal caído reabre. "joining" é join em voo: reabrir o mataria e
++      // custaria outro join no servidor sob carga; "joined" está saudável.
++      if (released || !isDown(owned) || owned.dedupTimer) return;
++      owned.dedupTimer = setTimeout(() => {
++        owned.dedupTimer = null;
++        if (isDown(owned)) reopen(owned);
++      }, DEDUP_WINDOW_MS);
++    },
++  };
++}
++
++/** Diagnóstico e testes: canais vivos e consumidores por chave. */
++export function realtimeChannelRegistrySnapshot(): Array<{
++  key: string;
++  subscribers: number;
++  state: SharedChannelState;
++}> {
++  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.subscribers.size, state: e.state }));
++}
+diff --git a/classic/src/shared/realtime/useRealtimeChannel.ts b/classic/src/shared/realtime/useRealtimeChannel.ts
+index 7085a68c6..f221bb5d9 100644
+--- a/classic/src/shared/realtime/useRealtimeChannel.ts
++++ b/classic/src/shared/realtime/useRealtimeChannel.ts
+@@ -1,12 +1,10 @@
+ import { useEffect, useRef, useState, useCallback } from "react";
+-import { supabase } from "@/integrations/supabase/client";
+ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+ import {
+-  setChannelState,
+-  incrementFailures,
+-  resetFailures,
+-  openCircuitBreaker,
+-} from "@/lib/realtimeStatusStore";
++  acquireRealtimeChannel,
++  type ChannelHandle,
++  type ChannelTransition,
++} from "./realtimeChannelRegistry";
+ 
+ // ─── Types ────────────────────────────────────────────────────────────────────
+ 
+@@ -23,16 +21,34 @@ export interface DiagnosticEvent {
+   error?: string;
+ }
+ 
++/**
++ * Uma transição do canal vista por ESTA instância, entregue na hora (sem
++ * esperar render) e na ordem exata em relação aos eventos.
++ */
++export interface ChannelStateChange {
++  state: Exclude<ChannelState, "idle">;
++  /** Falhas seguidas do canal; zera no SUBSCRIBED. `joining` com falhas = voltando de queda. */
++  failureCount: number;
++  /**
++   * Primeira transição depois de entrar no canal (montagem, troca de chave,
++   * religar): o estado em que esta instância ENCONTROU o canal compartilhado —
++   * `joined` se outra instância já o tinha aberto.
++   */
++  initial: boolean;
++}
++
+ export interface UseRealtimeChannelOptions {
+   table: string;
+   filter?: string;
+   onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
++  /** Lido por ref: trocar a função a cada render não reabre o canal. */
++  onStateChange?: (change: ChannelStateChange) => void;
+   circuitBreaker?: {
+     threshold?: number;   // default: 5
+     cooldownMs?: number;  // default: 120_000
+   };
+   enabled?: boolean;      // default: true
+-  statusKey?: string;     // stable key for realtimeStatusStore (defaults to channel name)
++  statusKey?: string;     // stable key for realtimeStatusStore (default: `rt_{table}_{filter}`, shared)
+ }
+ 
+ export interface UseRealtimeChannelResult {
+@@ -45,12 +61,21 @@ export interface UseRealtimeChannelResult {
+ const DEFAULT_THRESHOLD = 5;
+ const DEFAULT_COOLDOWN_MS = 120_000;
+ const MAX_DIAGNOSTICS = 50;
+-const MAX_BACKOFF_MS = 30_000;
+-const BASE_BACKOFF_MS = 1_000;
+-const DEDUP_WINDOW_MS = 1_000;
+ 
+ // ─── Hook ─────────────────────────────────────────────────────────────────────
+ 
++/**
++ * Assina `postgres_changes` de uma tabela (com filtro opcional).
++ *
++ * O canal é COMPARTILHADO por (tabela, filtro, evento) dentro da aba — ver
++ * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
++ * servidor; cada hook recebe todos os eventos e espelha o estado do canal
++ * (`state`, `diagnostics`). O último a desmontar fecha o canal.
++ *
++ * `state` é o do RENDER: entrar num canal já `joined` vindo de outro `joined`
++ * (troca de chave) não muda o valor e não re-renderiza. Quem precisa de cada
++ * transição — inclusive a de entrada — usa `onStateChange`.
++ */
+ export function useRealtimeChannel(
+   options: UseRealtimeChannelOptions
+ ): UseRealtimeChannelResult {
+@@ -62,207 +87,88 @@ export function useRealtimeChannel(
+   const [state, setState] = useState<ChannelState>("idle");
+   const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
+ 
+-  const failureCountRef = useRef(0);
+-  const channelNameRef = useRef("");
+   const onEventRef = useRef(onEvent);
+   onEventRef.current = onEvent;
+-
+-  // reconnectEpoch — increment to force re-subscribe via useEffect dependency
+-  const [reconnectEpoch, setReconnectEpoch] = useState(0);
++  const onStateChangeRef = useRef(options.onStateChange);
++  onStateChangeRef.current = options.onStateChange;
+ 
+   // Track state in ref for event listeners (avoids stale closure)
+   const stateRef = useRef<ChannelState>(state);
+   stateRef.current = state;
+ 
+-  // Track circuit open state
+-  const circuitOpenRef = useRef(false);
+-
+-  // Stable key for status store (falls back to channel name)
+-  const statusKeyRef = useRef(statusKey);
++  const handleRef = useRef<ChannelHandle | null>(null);
+ 
+-  // Timer refs for cleanup
+-  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+-  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+-  const dedupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+-  const dedupPendingRef = useRef(false);
+-
+-  const pushDiagnostic = useCallback(
+-    (newState: ChannelState, opts?: { error?: string; type?: DiagnosticEvent["type"] }) => {
++  const applyTransition = useCallback(
++    (t: ChannelTransition) => {
+       const oldState = stateRef.current;
+       setDiagnostics((prev) => {
+         const entry: DiagnosticEvent = {
+           timestamp: Date.now(),
+-          channelName: channelNameRef.current,
++          channelName: t.channelName,
+           table,
+           oldState,
+-          newState,
+-          failureCount: failureCountRef.current,
+-          type: opts?.type ?? "transition",
+-          ...(opts?.error && { error: opts.error }),
++          newState: t.state,
++          failureCount: t.failureCount,
++          type: t.type,
++          ...(t.error && { error: t.error }),
+         };
+         const next = [...prev, entry];
+         return next.length > MAX_DIAGNOSTICS ? next.slice(-MAX_DIAGNOSTICS) : next;
+       });
++      stateRef.current = t.state;
++      setState(t.state);
+     },
+     [table]
+   );
+ 
+-  // ─── Backoff calculator ───────────────────────────────────────────────────
+-
+-  const getBackoffDelay = useCallback((failures: number): number => {
+-    return Math.min(BASE_BACKOFF_MS * Math.pow(2, failures - 1), MAX_BACKOFF_MS);
+-  }, []);
+-
+-  // ─── Trigger reconnect (deduped) ─────────────────────────────────────────
+-
+-  const triggerReconnect = useCallback(() => {
+-    if (dedupPendingRef.current) return;
+-    dedupPendingRef.current = true;
+-
+-    if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
+-    dedupTimerRef.current = setTimeout(() => {
+-      dedupPendingRef.current = false;
+-      dedupTimerRef.current = null;
+-      setReconnectEpoch((e) => e + 1);
+-    }, DEDUP_WINDOW_MS);
+-  }, []);
+-
+-  // ─── Schedule backoff reconnect ───────────────────────────────────────────
+-
+-  const scheduleBackoff = useCallback(
+-    (failures: number) => {
+-      if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
+-      const delay = getBackoffDelay(failures);
+-      backoffTimerRef.current = setTimeout(() => {
+-        backoffTimerRef.current = null;
+-        setReconnectEpoch((e) => e + 1);
+-      }, delay);
+-    },
+-    [getBackoffDelay]
+-  );
+-
+-  // ─── Schedule cooldown probe ──────────────────────────────────────────────
+-
+-  const scheduleCooldownProbe = useCallback(() => {
+-    if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+-    cooldownTimerRef.current = setTimeout(() => {
+-      cooldownTimerRef.current = null;
+-      // Attempt probe reconnect
+-      setReconnectEpoch((e) => e + 1);
+-    }, cooldownMs);
+-  }, [cooldownMs]);
+-
+   // ─── Main subscribe effect ────────────────────────────────────────────────
+ 
+   useEffect(() => {
+     if (!enabled) {
++      stateRef.current = "idle";
+       setState("idle");
+       return;
+     }
+ 
+-    // Multiple consumers and StrictMode can subscribe within one millisecond.
+-    // Supabase reuses channels by name; each setup needs a distinct identity.
+-    const channelName = `rt_${table}_${filter ?? "all"}_${crypto.randomUUID()}`;
+-    channelNameRef.current = channelName;
+-    statusKeyRef.current = statusKey;
+-    const storeKey = statusKey ?? channelName;
+-
+-    setChannelState(storeKey, "joining", undefined);
+-    pushDiagnostic("joining");
+-    stateRef.current = "joining";
+-    setState("joining");
+-
+-    const pgChangesConfig: Record<string, string> = {
+-      event: "*",
+-      schema: "public",
+-      table,
+-    };
+-
+-    if (filter) {
+-      pgChangesConfig.filter = filter;
+-    }
+-
+-    const channel = supabase
+-      .channel(channelName)
+-      .on("postgres_changes", pgChangesConfig as any, (payload: any) => {
+-        onEventRef.current(payload);
+-      })
+-      .subscribe((status: string, err?: Error) => {
+-        const sk = statusKeyRef.current ?? channelNameRef.current;
+-
+-        if (status === "SUBSCRIBED") {
+-          const wasPolling = stateRef.current === "polling";
+-          failureCountRef.current = 0;
+-          circuitOpenRef.current = false;
+-
+-          resetFailures(sk);
+-          setChannelState(sk, "joined", undefined);
+-
+-          if (wasPolling) {
+-            pushDiagnostic("joined", { type: "circuit_close" });
+-          } else {
+-            pushDiagnostic("joined");
+-          }
+-          setState("joined");
+-          stateRef.current = "joined";
+-
+-          if (backoffTimerRef.current) {
+-            clearTimeout(backoffTimerRef.current);
+-            backoffTimerRef.current = null;
+-          }
+-          if (cooldownTimerRef.current) {
+-            clearTimeout(cooldownTimerRef.current);
+-            cooldownTimerRef.current = null;
+-          }
+-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+-          const errorMsg = err?.message ?? status;
+-          failureCountRef.current += 1;
+-
+-          incrementFailures(sk, errorMsg);
+-
+-          if (circuitOpenRef.current || failureCountRef.current >= threshold) {
+-            circuitOpenRef.current = true;
+-            openCircuitBreaker(sk, errorMsg);
+-            setChannelState(sk, "polling", errorMsg);
+-            pushDiagnostic("polling", { error: errorMsg, type: "circuit_open" });
+-            setState("polling");
+-            stateRef.current = "polling";
+-            scheduleCooldownProbe();
+-          } else {
+-            setChannelState(sk, "errored", errorMsg);
+-            pushDiagnostic("errored", { error: errorMsg });
+-            setState("errored");
+-            stateRef.current = "errored";
+-            scheduleBackoff(failureCountRef.current);
+-          }
+-        }
+-      });
++    // A 1ª transição chega DENTRO do acquire (canal novo: "joining"; canal já
++    // aberto por outra instância: o estado dele) — por isso a marca é local.
++    let initial = true;
++    const handle = acquireRealtimeChannel(
++      { table, filter, event: "*", threshold, cooldownMs },
++      {
++        statusKey,
++        onEvent: (payload) => onEventRef.current(payload),
++        onTransition: (t) => {
++          applyTransition(t);
++          const first = initial;
++          initial = false;
++          onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
++        },
++      }
++    );
++    handleRef.current = handle;
+ 
+     return () => {
+-      supabase.removeChannel(channel);
++      handleRef.current = null;
++      handle.release();
+     };
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [table, filter, enabled, threshold, cooldownMs, reconnectEpoch, statusKey]);
++  }, [table, filter, enabled, threshold, cooldownMs, statusKey, applyTransition]);
+ 
+   // ─── Visibility + Online reconnect effect ─────────────────────────────────
+ 
+   useEffect(() => {
+     if (!enabled) return;
+ 
++    const unhealthy = () => stateRef.current !== "joined" && stateRef.current !== "idle";
++
+     const handleVisibilityChange = () => {
+-      if (
+-        document.visibilityState === "visible" &&
+-        stateRef.current !== "joined" &&
+-        stateRef.current !== "idle"
+-      ) {
+-        triggerReconnect();
++      if (document.visibilityState === "visible" && unhealthy()) {
++        handleRef.current?.requestReconnect();
+       }
+     };
+ 
+     const handleOnline = () => {
+-      if (stateRef.current !== "joined" && stateRef.current !== "idle") {
+-        triggerReconnect();
+-      }
++      if (unhealthy()) handleRef.current?.requestReconnect();
+     };
+ 
+     document.addEventListener("visibilitychange", handleVisibilityChange);
+@@ -272,17 +178,7 @@ export function useRealtimeChannel(
+       document.removeEventListener("visibilitychange", handleVisibilityChange);
+       window.removeEventListener("online", handleOnline);
+     };
+-  }, [enabled, triggerReconnect]);
+-
+-  // ─── Cleanup all timers on unmount ────────────────────────────────────────
+-
+-  useEffect(() => {
+-    return () => {
+-      if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
+-      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+-      if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
+-    };
+-  }, []);
++  }, [enabled]);
+ 
+   return { state, diagnostics };
+ }
 diff --git a/classic/src/shared/realtime/useRealtimeChannelStatus.ts b/classic/src/shared/realtime/useRealtimeChannelStatus.ts
 index e320d9506..339917e96 100644
 --- a/classic/src/shared/realtime/useRealtimeChannelStatus.ts
@@ -4769,15 +5906,16 @@ index e320d9506..339917e96 100644
    return useRealtimeChannelStatus(channelName);
  }
 diff --git a/classic/src/shared/realtime/useRealtimeSubscription.ts b/classic/src/shared/realtime/useRealtimeSubscription.ts
-index 36b59b87c..a1cbedb16 100644
+index 36b59b87c..27fcbb52d 100644
 --- a/classic/src/shared/realtime/useRealtimeSubscription.ts
 +++ b/classic/src/shared/realtime/useRealtimeSubscription.ts
 @@ -1,15 +1,36 @@
 -import { useRef, useCallback } from "react";
-+import { useRef, useCallback, useEffect, useLayoutEffect } from "react";
++import { useRef, useCallback, useLayoutEffect } from "react";
  import { useQueryClient } from "@tanstack/react-query";
  import { useRealtimeOrgId } from "./realtime-org-context";
- import { useRealtimeChannel } from "./useRealtimeChannel";
+-import { useRealtimeChannel } from "./useRealtimeChannel";
++import { useRealtimeChannel, type ChannelStateChange } from "./useRealtimeChannel";
 +import {
 +  isRealtimeTabHidden,
 +  lastRealtimeDelivery,
@@ -4810,7 +5948,7 @@ index 36b59b87c..a1cbedb16 100644
  /**
   * Tabelas que NÃO têm coluna organization_id — usam wildcard.
   * Todas as outras são filtradas por org_id para reduzir ~80% do tráfego realtime.
-@@ -43,97 +64,285 @@ export interface RealtimeHandlers<T = any> {
+@@ -43,97 +64,303 @@ export interface RealtimeHandlers<T = any> {
     * Called on UPDATE events. Receives the updated record (flat, no joins)
     * and the current cached data. Return the new cache value.
     * When provided, avoids full invalidation for updates.
@@ -4848,31 +5986,38 @@ index 36b59b87c..a1cbedb16 100644
 +  /** Aba oculta: `"flush"` refaz como sempre (padrão); `"defer"` guarda até voltar. OPT-IN. */
 +  whenHidden?: WhenHidden;
 +  /**
-+   * Recupera o que o canal DESTA instância perdeu enquanto entrava. OPT-IN —
-+   * desligado, nada muda. Cada instância tem o próprio canal, com join
-+   * independente; evento entregue antes do SUBSCRIBED dela não chega a ela.
-+   *   - 1º SUBSCRIBED do canal (montagem, troca de org, religar): se outra
-+   *     instância recebeu evento desta tabela + filtro depois que este canal
-+   *     começou a entrar, agenda todos os alvos como um evento comum — e o
-+   *     agendador só refaz query cujo retrato é mais velho que essa entrega.
-+   *     Ninguém recebeu nada: 0 consulta;
-+   *   - SUBSCRIBED de novo depois de cair (erro, timeout, circuito aberto):
-+   *     agenda todos os alvos uma vez, sempre — o que chegou durante a queda
-+   *     pode ter caído para todas as instâncias.
++   * Recupera o que esta instância perdeu por o canal não estar vivo. OPT-IN —
++   * desligado, nada muda. O canal é COMPARTILHADO por tabela + filtro
++   * (`realtimeChannelRegistry`); o que conta é como ESTA instância o encontra
++   * ao entrar (montagem, troca de org, religar) e o que acontece depois:
++   *   - entra com ele `joined` (outra instância já o abriu): recebe tudo
++   *     daqui em diante — 0 consulta;
++   *   - entra com ele no 1º join (`joining`, sem falha): no SUBSCRIBED, se
++   *     OUTRO canal físico da mesma tabela + filtro recebeu evento no vão,
++   *     agenda todos os alvos como um evento comum (o agendador só refaz
++   *     query cujo retrato é mais velho que essa entrega). Mesmo canal físico:
++   *     ninguém recebe antes do SUBSCRIBED — 0 consulta;
++   *   - entra com ele caído (`errored`, `polling`, ou `joining` voltando de
++   *     queda), ou ele cai depois: no SUBSCRIBED seguinte agenda todos os
++   *     alvos uma vez, sempre — o que chegou na queda caiu para todas.
++   *     N instâncias no mesmo canal = N pedidos do mesmo instante; o agendador
++   *     faz no máximo 1 busca por query.
 +   * O prazo é o de um evento (`quietMs`, `maxWaitMs`, stagger, `minAgeMs`,
-+   * `whenHidden`); fetch em voo é esperado, nunca cancelado.
++   * `whenHidden`); fetch em voo é esperado, nunca cancelado. Lido na entrada
++   * no canal.
 +   */
 +  catchUpOnSubscribe?: boolean;
 +}
 +
 +/**
-+ * Onde o canal desta instância está, visto daqui. `joining` = ainda não houve
-+ * SUBSCRIBED desde que o canal (tabela + filtro) nasceu; `lost` = caiu depois
-+ * de ter entrado.
++ * Onde o canal está, visto desta instância desde que ela entrou nele.
++ * `joining` = 1º join do canal ainda sem SUBSCRIBED; `lost` = caído (já
++ * estava quando ela entrou, ou caiu depois).
 + */
 +interface SubscribeLink {
++  /** Canal lógico (tabela + filtro); `null` = sem opt-in na entrada. */
 +  channelKey: string | null;
-+  /** Sequência tirada quando o canal começou a entrar. */
++  /** Sequência tirada quando esta instância entrou no canal. */
 +  since: number;
 +  phase: "joining" | "live" | "lost";
 +}
@@ -4920,7 +6065,13 @@ index 36b59b87c..a1cbedb16 100644
 +  // Layout effect: roda antes dos effects passivos, onde as queries da mesma
 +  // tela disparam o fetch inicial — que assim já entra no frescor.
 +  useLayoutEffect(() => retainInvalidationScheduler(queryClient), [queryClient]);
-+
+ 
+-  const queryKeysRef = useRef(queryKeys);
+-  queryKeysRef.current = queryKeys;
+-  const handlersRef = useRef(handlers);
+-  handlersRef.current = handlers;
+-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+-  const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 +  const targetsRef = useRef(targets);
 +  targetsRef.current = targets;
 +  const optionsRef = useRef(options);
@@ -4946,13 +6097,7 @@ index 36b59b87c..a1cbedb16 100644
 +    st.firstAt = null;
 +    if (st.debounce) clearTimeout(st.debounce);
 +    st.debounce = null;
- 
--  const queryKeysRef = useRef(queryKeys);
--  queryKeysRef.current = queryKeys;
--  const handlersRef = useRef(handlers);
--  handlersRef.current = handlers;
--  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
--  const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++
 +    const request = { eventSeq: seq, whenHidden: opts?.whenHidden ?? "flush" } as const;
 +
 +    if (indexes.has(0) && normalized[0]) {
@@ -5013,7 +6158,9 @@ index 36b59b87c..a1cbedb16 100644
      (payload: RealtimePostgresChangesPayload<any>) => {
 -      const keys = queryKeysRef.current;
 -      const currentHandlers = handlersRef.current;
-+      recordRealtimeDelivery(queryClient, channelKeyRef.current);
++      // Uma sequência por EVENTO: as N instâncias do canal compartilhado
++      // recebem o mesmo objeto e pedem com o mesmo número.
++      const eventSeq = recordRealtimeDelivery(queryClient, channelKeyRef.current, payload);
 +      // Item nulo (chave montada antes da org existir, chamador JS) é ignorado —
 +      // nunca vira chave vazia, que casaria com o cache inteiro.
 +      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
@@ -5098,7 +6245,7 @@ index 36b59b87c..a1cbedb16 100644
 -        }
 -        debounceTimerRef.current = null;
 -      }, DEBOUNCE_MS);
-+      enqueue(requested, normalized, nextRealtimeSeq());
++      enqueue(requested, normalized, eventSeq);
      },
 -    // eslint-disable-next-line react-hooks/exhaustive-deps
 -    [queryClient]
@@ -5111,47 +6258,54 @@ index 36b59b87c..a1cbedb16 100644
 +  const enabled = options?.enabled ?? true;
 +  const channelKey = `${table}|${filter ?? "*"}`;
 +  channelKeyRef.current = channelKey;
++
++  // Recuperação no SUBSCRIBED (opt-in). Movida pelas TRANSIÇÕES do canal,
++  // entregues na hora pelo transporte — não pelo `state` do render, que não
++  // muda (nem re-renderiza) quando a troca de chave cai num canal que outra
++  // instância já tem `joined`.
++  const catchUpKeyRef = useRef<string | null>(null);
++  catchUpKeyRef.current = options?.catchUpOnSubscribe && enabled ? channelKey : null;
++  const linkRef = useRef<SubscribeLink>({ channelKey: null, since: 0, phase: "live" });
++
++  const handleStateChange = useCallback(
++    ({ state, failureCount, initial }: ChannelStateChange) => {
++      if (initial) {
++        // A entrada chega dentro do acquire, no commit cuja chave está no ref.
++        const fallen = state === "errored" || state === "polling" || (state === "joining" && failureCount > 0);
++        linkRef.current = {
++          channelKey: catchUpKeyRef.current,
++          since: nextRealtimeSeq(),
++          phase: state === "joined" ? "live" : fallen ? "lost" : "joining",
++        };
++        return;
++      }
++      const link = linkRef.current;
++      if (link.channelKey === null) return;
++      if (state !== "joined") {
++        if (link.phase === "live") link.phase = "lost";
++        return;
++      }
++      if (link.phase === "live") return;
++      const rejoined = link.phase === "lost";
++      link.phase = "live";
++      if (!optionsRef.current?.catchUpOnSubscribe) return;
++      const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, link.channelKey);
++      if (!rejoined && seq <= link.since) return;
++      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
++      if (normalized.length === 0) return;
++      enqueue(normalized.map((_, i) => i), normalized, seq);
++    },
++    [queryClient, enqueue]
++  );
  
--  useRealtimeChannel({
-+  const channelState = useRealtimeChannel({
+   useRealtimeChannel({
      table,
      filter,
      onEvent: handleRealtimeEvent,
 -    enabled: true,
--  });
++    onStateChange: handleStateChange,
 +    enabled,
-+  })?.state;
-+
-+  // Recuperação no SUBSCRIBED (opt-in). O estado vem do próprio transporte:
-+  // `joined` só depois do SUBSCRIBED; `errored`/`polling`/`joining` depois de
-+  // cair. Este effect vem depois do de `useRealtimeChannel`, no mesmo commit:
-+  // quando o canal nasce, o `since` é tirado já com ele aberto.
-+  const catchUpKey = options?.catchUpOnSubscribe && enabled ? channelKey : null;
-+  const linkRef = useRef<SubscribeLink>({ channelKey: null, since: 0, phase: "joining" });
-+  useEffect(() => {
-+    const link = linkRef.current;
-+    if (catchUpKey === null) {
-+      link.channelKey = null;
-+      return;
-+    }
-+    if (link.channelKey !== catchUpKey) {
-+      // Canal novo: o estado lido neste render ainda é o do canal anterior.
-+      linkRef.current = { channelKey: catchUpKey, since: nextRealtimeSeq(), phase: "joining" };
-+      return;
-+    }
-+    if (channelState !== "joined") {
-+      if (link.phase === "live") link.phase = "lost";
-+      return;
-+    }
-+    if (link.phase === "live") return;
-+    const rejoined = link.phase === "lost";
-+    link.phase = "live";
-+    const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, catchUpKey);
-+    if (!rejoined && seq <= link.since) return;
-+    const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
-+    if (normalized.length === 0) return;
-+    enqueue(normalized.map((_, i) => i), normalized, seq);
-+  }, [catchUpKey, channelState, queryClient, enqueue]);
+   });
  }
 diff --git a/classic/tailwind.config.ts b/classic/tailwind.config.ts
 index 32f47352a..db24ce28b 100644

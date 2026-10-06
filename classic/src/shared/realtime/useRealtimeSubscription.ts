@@ -1,7 +1,7 @@
-import { useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { useRef, useCallback, useLayoutEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRealtimeOrgId } from "./realtime-org-context";
-import { useRealtimeChannel } from "./useRealtimeChannel";
+import { useRealtimeChannel, type ChannelStateChange } from "./useRealtimeChannel";
 import {
   isRealtimeTabHidden,
   lastRealtimeDelivery,
@@ -98,31 +98,38 @@ export interface RealtimeSubscriptionOptions<T> extends RealtimeHandlers<T> {
   /** Aba oculta: `"flush"` refaz como sempre (padrão); `"defer"` guarda até voltar. OPT-IN. */
   whenHidden?: WhenHidden;
   /**
-   * Recupera o que o canal DESTA instância perdeu enquanto entrava. OPT-IN —
-   * desligado, nada muda. Cada instância tem o próprio canal, com join
-   * independente; evento entregue antes do SUBSCRIBED dela não chega a ela.
-   *   - 1º SUBSCRIBED do canal (montagem, troca de org, religar): se outra
-   *     instância recebeu evento desta tabela + filtro depois que este canal
-   *     começou a entrar, agenda todos os alvos como um evento comum — e o
-   *     agendador só refaz query cujo retrato é mais velho que essa entrega.
-   *     Ninguém recebeu nada: 0 consulta;
-   *   - SUBSCRIBED de novo depois de cair (erro, timeout, circuito aberto):
-   *     agenda todos os alvos uma vez, sempre — o que chegou durante a queda
-   *     pode ter caído para todas as instâncias.
+   * Recupera o que esta instância perdeu por o canal não estar vivo. OPT-IN —
+   * desligado, nada muda. O canal é COMPARTILHADO por tabela + filtro
+   * (`realtimeChannelRegistry`); o que conta é como ESTA instância o encontra
+   * ao entrar (montagem, troca de org, religar) e o que acontece depois:
+   *   - entra com ele `joined` (outra instância já o abriu): recebe tudo
+   *     daqui em diante — 0 consulta;
+   *   - entra com ele no 1º join (`joining`, sem falha): no SUBSCRIBED, se
+   *     OUTRO canal físico da mesma tabela + filtro recebeu evento no vão,
+   *     agenda todos os alvos como um evento comum (o agendador só refaz
+   *     query cujo retrato é mais velho que essa entrega). Mesmo canal físico:
+   *     ninguém recebe antes do SUBSCRIBED — 0 consulta;
+   *   - entra com ele caído (`errored`, `polling`, ou `joining` voltando de
+   *     queda), ou ele cai depois: no SUBSCRIBED seguinte agenda todos os
+   *     alvos uma vez, sempre — o que chegou na queda caiu para todas.
+   *     N instâncias no mesmo canal = N pedidos do mesmo instante; o agendador
+   *     faz no máximo 1 busca por query.
    * O prazo é o de um evento (`quietMs`, `maxWaitMs`, stagger, `minAgeMs`,
-   * `whenHidden`); fetch em voo é esperado, nunca cancelado.
+   * `whenHidden`); fetch em voo é esperado, nunca cancelado. Lido na entrada
+   * no canal.
    */
   catchUpOnSubscribe?: boolean;
 }
 
 /**
- * Onde o canal desta instância está, visto daqui. `joining` = ainda não houve
- * SUBSCRIBED desde que o canal (tabela + filtro) nasceu; `lost` = caiu depois
- * de ter entrado.
+ * Onde o canal está, visto desta instância desde que ela entrou nele.
+ * `joining` = 1º join do canal ainda sem SUBSCRIBED; `lost` = caído (já
+ * estava quando ela entrou, ou caiu depois).
  */
 interface SubscribeLink {
+  /** Canal lógico (tabela + filtro); `null` = sem opt-in na entrada. */
   channelKey: string | null;
-  /** Sequência tirada quando o canal começou a entrar. */
+  /** Sequência tirada quando esta instância entrou no canal. */
   since: number;
   phase: "joining" | "live" | "lost";
 }
@@ -253,7 +260,9 @@ export function useRealtimeSubscription<T = any>(
 
   const handleRealtimeEvent = useCallback(
     (payload: RealtimePostgresChangesPayload<any>) => {
-      recordRealtimeDelivery(queryClient, channelKeyRef.current);
+      // Uma sequência por EVENTO: as N instâncias do canal compartilhado
+      // recebem o mesmo objeto e pedem com o mesmo número.
+      const eventSeq = recordRealtimeDelivery(queryClient, channelKeyRef.current, payload);
       // Item nulo (chave montada antes da org existir, chamador JS) é ignorado —
       // nunca vira chave vazia, que casaria com o cache inteiro.
       const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
@@ -296,7 +305,7 @@ export function useRealtimeSubscription<T = any>(
       }
 
       // Fallback: debounced invalidation (INSERT or no handler provided)
-      enqueue(requested, normalized, nextRealtimeSeq());
+      enqueue(requested, normalized, eventSeq);
     },
     [queryClient, enqueue]
   );
@@ -308,41 +317,50 @@ export function useRealtimeSubscription<T = any>(
   const channelKey = `${table}|${filter ?? "*"}`;
   channelKeyRef.current = channelKey;
 
-  const channelState = useRealtimeChannel({
+  // Recuperação no SUBSCRIBED (opt-in). Movida pelas TRANSIÇÕES do canal,
+  // entregues na hora pelo transporte — não pelo `state` do render, que não
+  // muda (nem re-renderiza) quando a troca de chave cai num canal que outra
+  // instância já tem `joined`.
+  const catchUpKeyRef = useRef<string | null>(null);
+  catchUpKeyRef.current = options?.catchUpOnSubscribe && enabled ? channelKey : null;
+  const linkRef = useRef<SubscribeLink>({ channelKey: null, since: 0, phase: "live" });
+
+  const handleStateChange = useCallback(
+    ({ state, failureCount, initial }: ChannelStateChange) => {
+      if (initial) {
+        // A entrada chega dentro do acquire, no commit cuja chave está no ref.
+        const fallen = state === "errored" || state === "polling" || (state === "joining" && failureCount > 0);
+        linkRef.current = {
+          channelKey: catchUpKeyRef.current,
+          since: nextRealtimeSeq(),
+          phase: state === "joined" ? "live" : fallen ? "lost" : "joining",
+        };
+        return;
+      }
+      const link = linkRef.current;
+      if (link.channelKey === null) return;
+      if (state !== "joined") {
+        if (link.phase === "live") link.phase = "lost";
+        return;
+      }
+      if (link.phase === "live") return;
+      const rejoined = link.phase === "lost";
+      link.phase = "live";
+      if (!optionsRef.current?.catchUpOnSubscribe) return;
+      const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, link.channelKey);
+      if (!rejoined && seq <= link.since) return;
+      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
+      if (normalized.length === 0) return;
+      enqueue(normalized.map((_, i) => i), normalized, seq);
+    },
+    [queryClient, enqueue]
+  );
+
+  useRealtimeChannel({
     table,
     filter,
     onEvent: handleRealtimeEvent,
+    onStateChange: handleStateChange,
     enabled,
-  })?.state;
-
-  // Recuperação no SUBSCRIBED (opt-in). O estado vem do próprio transporte:
-  // `joined` só depois do SUBSCRIBED; `errored`/`polling`/`joining` depois de
-  // cair. Este effect vem depois do de `useRealtimeChannel`, no mesmo commit:
-  // quando o canal nasce, o `since` é tirado já com ele aberto.
-  const catchUpKey = options?.catchUpOnSubscribe && enabled ? channelKey : null;
-  const linkRef = useRef<SubscribeLink>({ channelKey: null, since: 0, phase: "joining" });
-  useEffect(() => {
-    const link = linkRef.current;
-    if (catchUpKey === null) {
-      link.channelKey = null;
-      return;
-    }
-    if (link.channelKey !== catchUpKey) {
-      // Canal novo: o estado lido neste render ainda é o do canal anterior.
-      linkRef.current = { channelKey: catchUpKey, since: nextRealtimeSeq(), phase: "joining" };
-      return;
-    }
-    if (channelState !== "joined") {
-      if (link.phase === "live") link.phase = "lost";
-      return;
-    }
-    if (link.phase === "live") return;
-    const rejoined = link.phase === "lost";
-    link.phase = "live";
-    const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, catchUpKey);
-    if (!rejoined && seq <= link.since) return;
-    const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
-    if (normalized.length === 0) return;
-    enqueue(normalized.map((_, i) => i), normalized, seq);
-  }, [catchUpKey, channelState, queryClient, enqueue]);
+  });
 }
