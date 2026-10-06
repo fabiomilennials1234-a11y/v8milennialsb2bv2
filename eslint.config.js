@@ -29,6 +29,35 @@ const ERROR_MESSAGE_SELECTORS = [
   `${SHADCN_DESCRIPTION} MemberExpression[property.name='message'][object.type='TSAsExpression']`,
 ].map((selector) => ({ selector, message: ERROR_MESSAGE_ADVICE }));
 
+// ── Chave composta no realtime vai ANINHADA ─────────────────────────────────
+//
+// `useRealtimeSubscription(t, ["pipeline_stages", pipelineType])` parece
+// invalidar `["pipeline_stages", pipelineType]` e não invalida: cada item da
+// lista é um alvo, e uma string é UM segmento. Invalidava `["pipeline_stages"]`
+// inteiro e, 2 s depois, `[pipelineType]`, que não casa com nada. Sete call
+// sites tinham esse formato em 2026-10-05. A forma certa é aninhada:
+// `[["pipeline_stages", pipelineType]]`.
+//
+// Raiz é string literal, constante em CAIXA ALTA (`UNREAD_KEY`), acesso a
+// membro (`keys.root`, `QUERY_KEYS.LEADS`) ou chamada (`rootOf(slug)`);
+// qualquer outra coisa depois dela é composto plano. Seguidores aceitos: os
+// mesmos literais/constantes, `QUERY_KEYS.PIPELINE` (membro em CAIXA ALTA),
+// composto aninhado e alvo com idade mínima. Chave inteira numa variável vai
+// dentro da lista (`[queryKey]`), não solta.
+//
+// Custo conhecido: lista de chaves INTEIRAS vindas de fábrica
+// (`[keys.list(org), outraChave]`) também acusa — a sintaxe não diz se a
+// chamada devolve um segmento ou a chave toda. Ponha cada chave numa variável
+// (`[listKey, outraChave]`): fica legível e passa.
+const CONST_NAME = "/^[A-Z][A-Z0-9_]*$/";
+const REALTIME_CALL = "CallExpression[callee.name='useRealtimeSubscription']";
+const REALTIME_TARGET_ADVICE =
+  "Chave composta em useRealtimeSubscription vai ANINHADA: [[\"raiz\", a, b]]. Plana ([\"raiz\", a, b]) vira um alvo por item — invalida o domínio inteiro e os outros não casam com nada. Chave inteira numa variável vai dentro da lista: [queryKey].";
+const REALTIME_TARGET_SELECTORS = [
+  `${REALTIME_CALL} > ArrayExpression:nth-child(2):has(> :matches(Literal, Identifier[name=${CONST_NAME}], MemberExpression, CallExpression):first-child) > :not(:first-child):not(Literal, TemplateLiteral[expressions.length=0], Identifier[name=${CONST_NAME}], MemberExpression[computed=false][property.name=${CONST_NAME}], ArrayExpression, ObjectExpression)`,
+  `${REALTIME_CALL} > Identifier:nth-child(2):not([name=${CONST_NAME}])`,
+].map((selector) => ({ selector, message: REALTIME_TARGET_ADVICE }));
+
 export default tseslint.config(
   {
     ignores: [
@@ -186,12 +215,12 @@ export default tseslint.config(
 
   // ADR-0038 para o que o bloco do `wa.me` (abaixo) ignora. No flat config, um
   // bloco posterior que redefine `no-restricted-syntax` SUBSTITUI a lista — por
-  // isso os seletores de erro também entram lá.
+  // isso os seletores de erro (e os do realtime) também entram lá.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/**/*.test.{ts,tsx}", "src/shared/errors/**"],
     rules: {
-      "no-restricted-syntax": ["error", ...ERROR_MESSAGE_SELECTORS],
+      "no-restricted-syntax": ["error", ...ERROR_MESSAGE_SELECTORS, ...REALTIME_TARGET_SELECTORS],
     },
   },
 
@@ -253,6 +282,7 @@ export default tseslint.config(
             "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
         },
         ...ERROR_MESSAGE_SELECTORS,
+        ...REALTIME_TARGET_SELECTORS,
       ],
     },
   },

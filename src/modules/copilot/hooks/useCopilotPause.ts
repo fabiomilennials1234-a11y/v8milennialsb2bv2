@@ -47,7 +47,9 @@ export function useCopilotPause(params: {
   });
 
   // Realtime subscription — invalidates copilot-pause query on conversations change
-  useRealtimeSubscription("conversations", queryKey);
+  // Alvo é a chave INTEIRA (aninhada): plana, invalidava `["copilot-pause"]`
+  // de todas as conversas e depois `[conversationId]`, que não casa com nada.
+  useRealtimeSubscription("conversations", [queryKey]);
 
   // Reactivate mutation — clears pause via RPC
   const mutation = useMutation({
