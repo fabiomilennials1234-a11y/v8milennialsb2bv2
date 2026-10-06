@@ -1757,13 +1757,13 @@ index 15d97831d..71e4e0747 100644
      queryKey: ["team_members", organizationId],
 diff --git a/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx b/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx
 new file mode 100644
-index 000000000..f3caead73
+index 000000000..a56f1b544
 --- /dev/null
 +++ b/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx
 @@ -0,0 +1,131 @@
 +import { useState } from "react";
 +import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
-+import type { CorrecaoVendaHistorica } from "./types";
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 +import { Button } from "@/components/ui/button";
 +import { Input } from "@/components/ui/input";
 +import { Textarea } from "@/components/ui/textarea";
@@ -1893,7 +1893,7 @@ index 000000000..f3caead73
 +  );
 +}
 diff --git a/classic/src/modules/leads/components/deal-card/DealCard.tsx b/classic/src/modules/leads/components/deal-card/DealCard.tsx
-index 9ca0d51ed..3a8068c39 100644
+index 9ca0d51ed..c9fc78892 100644
 --- a/classic/src/modules/leads/components/deal-card/DealCard.tsx
 +++ b/classic/src/modules/leads/components/deal-card/DealCard.tsx
 @@ -17,6 +17,9 @@ import { DealCardTimeline } from "./DealCardTimeline";
@@ -1902,7 +1902,7 @@ index 9ca0d51ed..3a8068c39 100644
  import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 +import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
 +import { diaDaVenda } from "./dia-da-venda";
-+import type { CorrecaoVendaHistorica } from "./types";
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
  import { contaDoNegocio } from "./conta-do-negocio";
  import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
  import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
@@ -2174,7 +2174,7 @@ index babe8ac12..7372a961d 100644
 +}
 diff --git a/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
 new file mode 100644
-index 000000000..fb0307983
+index 000000000..605417b15
 --- /dev/null
 +++ b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
 @@ -0,0 +1,82 @@
@@ -2183,8 +2183,8 @@ index 000000000..fb0307983
 +import { isMissingSchemaError } from "@/lib/rpc-errors";
 +import { toast } from "sonner";
 +
-+import type { CorrecaoVendaHistorica } from "./types";
-+export type { CorrecaoVendaHistorica } from "./types";
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
++export type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 +
 +const errors: Record<string, string> = {
 +  access_denied: "Você não tem permissão para corrigir esta venda.",

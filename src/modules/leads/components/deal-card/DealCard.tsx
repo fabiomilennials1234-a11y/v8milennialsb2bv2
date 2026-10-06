@@ -19,7 +19,7 @@ import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
 import { diaDaVenda } from "./dia-da-venda";
-import type { CorrecaoVendaHistorica } from "./types";
+import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
