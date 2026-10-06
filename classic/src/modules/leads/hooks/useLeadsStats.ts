@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { LeadsFilterParams } from "./useLeads";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { leadsKeys } from "../lib/leads-query-keys";
+import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 
 /**
  * Os três números do topo da lista de Leads, contados na ORGANIZAÇÃO inteira.
@@ -26,16 +28,20 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
  * via um mês diferente do que o resto do produto usa — o mesmo defeito de
  * fronteira que já apareceu no card do Comando.
  *
- * ── POR QUE TRÊS QUERIES E NÃO UMA ────────────────────────────────────────
- * São dois `head: true` com `count: exact`: o Postgres devolve só o número, sem
- * linha. Uma RPC agregando os dois seria uma ida ao banco em vez de duas, mas
- * exigiria migration e mais uma função `SECURITY DEFINER` com a superfície de
- * ACL que este projeto já erra com frequência. Duas contagens paralelas em
- * `staleTime` de um minuto custam menos do que essa dívida.
+ * ── POR QUE DUAS QUERIES E NÃO UMA RPC ────────────────────────────────────
+ * São duas contagens COM TETO (`select("id")` + `limit`, ver
+ * `lib/capped-count`) — até 2026-10-05 eram `count: exact`, que varre o recorte
+ * inteiro sob RLS e era o grosso do custo da tela. Uma RPC agregando as duas
+ * seria uma ida ao banco em vez de duas, mas exigiria migration e mais uma
+ * função `SECURITY DEFINER` com a superfície de ACL que este projeto já erra
+ * com frequência.
+ *
+ * Acima do teto o card não sabe o total — e não finge: `capped: true`, e quem
+ * desenha (`LeadsStatsV2`) não deriva nada por subtração de um valor cortado.
  */
 export interface LeadsStats {
-  thisMonth: number;
-  withOwner: number;
+  thisMonth: CappedCount;
+  withOwner: CappedCount;
 }
 
 /** Início do mês corrente no fuso informado, como instante UTC. */
@@ -68,17 +74,16 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible } = filters;
 
   return useQuery<LeadsStats>({
-    queryKey: [
-      "leads-stats", organizationId, timeZone,
+    queryKey: leadsKeys.stats(organizationId, timeZone, {
       searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible,
-    ],
+    }),
     queryFn: async () => {
-      if (!organizationId) return { thisMonth: 0, withOwner: 0 };
+      if (!organizationId) return { thisMonth: EMPTY_COUNT, withOwner: EMPTY_COUNT };
 
       const base = () => {
         const q = supabase
           .from("leads")
-          .select("*", { count: "exact", head: true })
+          .select("id")
           .eq("organization_id", organizationId)
           .is("deleted_at", null)
           // Mesmo guard da lista (`applyLeadsFilters`): lead sombra não aparece
@@ -101,18 +106,12 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
 
       const inicioDoMes = monthStartInTz(timeZone).toISOString();
 
-      const [mes, comDono] = await Promise.all([
-        base().gte("created_at", inicioDoMes),
-        base().not("responsible_id", "is", null),
+      const [thisMonth, withOwner] = await Promise.all([
+        runCappedCount(base().gte("created_at", inicioDoMes)),
+        runCappedCount(base().not("responsible_id", "is", null)),
       ]);
 
-      if (mes.error) throw mes.error;
-      if (comDono.error) throw comDono.error;
-
-      return {
-        thisMonth: mes.count ?? 0,
-        withOwner: comDono.count ?? 0,
-      };
+      return { thisMonth, withOwner };
     },
     enabled: isReady,
     staleTime: 60000,
