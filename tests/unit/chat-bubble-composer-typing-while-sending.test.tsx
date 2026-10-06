@@ -2,7 +2,7 @@
  * ChatBubbleComposer — digitar enquanto a mensagem anterior é enviada.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 
 const sendState = { pending: false };
 const mockSendMutateAsync = vi.fn();
@@ -24,6 +24,20 @@ describe("ChatBubbleComposer — digitar durante o envio", () => {
   beforeEach(() => {
     sendState.pending = false;
     mockSendMutateAsync.mockReset();
+  });
+
+  it("texto novo sobrevive ao resolve do envio anterior", async () => {
+    let resolve!: (v: unknown) => void;
+    const p = new Promise((r) => { resolve = r; });
+    mockSendMutateAsync.mockReturnValueOnce(p);
+    render(<ChatBubbleComposer {...PROPS} />);
+    const box = screen.getByLabelText("Mensagem");
+    fireEvent.change(box, { target: { value: "primeira" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(box).toHaveValue("");
+    fireEvent.change(box, { target: { value: "segunda" } });
+    await act(async () => { resolve({}); await p; });
+    expect(box).toHaveValue("segunda");
   });
 
   it("não desabilita a caixa de texto com o envio pendente e preserva o que se digita", () => {

@@ -17,12 +17,14 @@ function deferred<T = unknown>() {
   return { promise, resolve, reject };
 }
 
-const sendState = { pending: false };
+const sendState = { pending: false, mediaPending: false };
 const mockSendMutateAsync = vi.fn();
+const mockMediaMutateAsync = vi.fn();
+const mediaTemplate = { id: "t1", name: "Catalogo", body: "Segue", media_url: "https://x/y.pdf", media_type: "document" };
 
 vi.mock("@/modules/communication/hooks/chat/useWhatsAppSend", () => ({
   useSendWhatsAppMessage: () => ({ mutateAsync: mockSendMutateAsync, isPending: sendState.pending }),
-  useSendWhatsAppMedia: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSendWhatsAppMedia: () => ({ mutateAsync: mockMediaMutateAsync, isPending: sendState.mediaPending }),
 }));
 
 // Rascunho em memória, com a mesma forma de useConversationDraft.
@@ -41,7 +43,7 @@ vi.mock("@/modules/communication/hooks/chat/useTypingPresence", () => ({
   useTypingPresence: () => ({ typing: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock("@/modules/communication/hooks/useMessageTemplates", () => ({
-  useMessageTemplates: () => ({ data: [] }),
+  useMessageTemplates: () => ({ data: [mediaTemplate] }),
 }));
 vi.mock("@/modules/communication/hooks/useInstanceCapabilities", () => ({
   useInstanceCapabilities: () => ({ canUseUazapiActions: false }),
@@ -70,11 +72,17 @@ vi.mock("@/modules/communication/components/chat/composer/SendPixDialog", () => 
 vi.mock("@/modules/communication/components/chat/composer/SendRichContactActions", () => ({
   SendRichContactActions: () => null,
 }));
+vi.mock("@/modules/communication/components/chat/SlashCommandPopover", () => ({
+  SlashCommandPopover: ({ onSelect }: { onSelect: (t: typeof mediaTemplate) => void }) => (
+    <button type="button" onClick={() => onSelect(mediaTemplate)}>escolher-template</button>
+  ),
+}));
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() }),
 }));
 
+import { toast } from "sonner";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 
 const PROPS = {
@@ -93,7 +101,75 @@ const enter = () => fireEvent.keyDown(box(), { key: "Enter" });
 describe("ChatComposer — digitar durante o envio", () => {
   beforeEach(() => {
     sendState.pending = false;
+    sendState.mediaPending = false;
     mockSendMutateAsync.mockReset();
+    mockMediaMutateAsync.mockReset();
+    vi.mocked(toast.info).mockClear();
+  });
+
+  it("Enter com envio pendente avisa o vendedor em vez de falhar em silêncio", () => {
+    sendState.pending = true;
+    render(<ChatComposer {...PROPS} />);
+    type("segunda");
+    enter();
+    expect(toast.info).toHaveBeenCalledWith("Aguarde o envio anterior finalizar.");
+  });
+
+  it("com mídia pendente, Enter não envia texto em paralelo e o rascunho fica", () => {
+    sendState.mediaPending = true;
+    render(<ChatComposer {...PROPS} />);
+    type("segunda");
+    enter();
+    expect(mockSendMutateAsync).not.toHaveBeenCalled();
+    expect(box()).toHaveValue("segunda");
+    expect(screen.getByTitle("Aguardando envio da mensagem anterior")).toBeDisabled();
+  });
+
+  it("duplo Enter em sequência real resulta em 1 envio", () => {
+    const d = deferred();
+    mockSendMutateAsync.mockReturnValue(d.promise);
+    const { rerender } = render(<ChatComposer {...PROPS} />);
+    type("primeira");
+    enter();
+    sendState.pending = true;
+    rerender(<ChatComposer {...PROPS} />);
+    type("segunda");
+    enter();
+    expect(mockSendMutateAsync).toHaveBeenCalledTimes(1);
+    expect(box()).toHaveValue("segunda");
+  });
+
+  it("template com mídia: texto digitado durante o envio sobrevive ao resolve", async () => {
+    const d = deferred();
+    mockMediaMutateAsync.mockReturnValueOnce(d.promise);
+    render(<ChatComposer {...PROPS} />);
+    type("/cat");
+    fireEvent.click(screen.getByText("escolher-template"));
+    expect(mockMediaMutateAsync).toHaveBeenCalledTimes(1);
+    type("nova");
+    await act(async () => { d.resolve({}); await d.promise; });
+    expect(box()).toHaveValue("nova");
+  });
+
+  it("template com mídia que falha devolve o comando se o rascunho está vazio", async () => {
+    const d = deferred();
+    mockMediaMutateAsync.mockReturnValueOnce(d.promise);
+    render(<ChatComposer {...PROPS} />);
+    type("/cat");
+    fireEvent.click(screen.getByText("escolher-template"));
+    await act(async () => { d.reject(new Error("falhou")); await d.promise.catch(() => {}); });
+    expect(box()).toHaveValue("/cat");
+  });
+
+  it("template com mídia que falha não pisa no texto novo", async () => {
+    const d = deferred();
+    mockMediaMutateAsync.mockReturnValueOnce(d.promise);
+    render(<ChatComposer {...PROPS} />);
+    type("/cat");
+    fireEvent.click(screen.getByText("escolher-template"));
+    type("nova");
+    await act(async () => { d.reject(new Error("falhou")); await d.promise.catch(() => {}); });
+    expect(box()).toHaveValue("nova");
   });
 
   it("não desabilita a caixa de texto com o envio pendente", () => {
