@@ -148,6 +148,7 @@ async function runTick(seed: Seed) {
   mock.mockTable("whatsapp_messages", []);
   mock.mockTable("team_members", seed.teamMembers ?? []);
   mock.mockTable("notifications", []);
+  mock.mockRpc("fn_emit_aviso", "aviso-1");
 
   // Registra o PAYLOAD de cada update — o estado final da linha não distingue
   // "nunca marcou sent" de "marcou sent e depois sobrescreveu".
@@ -177,7 +178,13 @@ async function runTick(seed: Seed) {
     status: res.status,
     body: await res.json(),
     historico: mock.getInserted("whatsapp_messages"),
-    avisos: mock.getInserted("notifications"),
+    // Aviso é emitido pela RPC de coalescing, nunca por INSERT cru: é ela que
+    // faz uma rajada virar uma linha só.
+    insertsCrus: mock.getInserted("notifications"),
+    avisos: mock
+      .getRpcCalls()
+      .filter((c) => c.name === "fn_emit_aviso")
+      .map((c) => c.params as Record<string, unknown>),
     // 'sending' do lock fica de fora: só interessa o desfecho da linha.
     fila: updates
       .filter((u) => u.table === "scheduled_user_messages")
@@ -426,32 +433,66 @@ describe("process-scheduled-user-messages — o aviso abre a conversa", () => {
   const QUEM_AGENDOU = { id: "tm-1", user_id: "user-1", organization_id: "org-1" };
 
   it("envio com sucesso: o aviso aponta para o chat do chip que enviou, telefone só com dígitos", async () => {
-    const { avisos } = await runTick({
+    const { avisos, insertsCrus } = await runTick({
       scheduled: [{ ...AGENDADA, phone_number: "+55 (11) 99988-7766" }],
       teamMembers: [QUEM_AGENDOU],
     });
 
+    expect(insertsCrus).toHaveLength(0);
     expect(avisos).toHaveLength(1);
     expect(avisos[0]).toMatchObject({
-      user_id: "user-1",
-      type: "scheduled_message_sent",
-      link: "/chat-whatsapp?instance=inst-conectada&phone=5511999887766",
+      p_organization_id: "org-1",
+      p_user_id: "user-1",
+      p_type: "scheduled_message_sent",
+      p_link: "/chat-whatsapp?instance=inst-conectada&phone=5511999887766",
     });
   });
 
-  it("falha definitiva com chip resolvido: o aviso de falha também abre a conversa", async () => {
+  it("rajada: dez agendamentos do mesmo tick caem na MESMA chave — viram um aviso ×10, não dez", async () => {
+    const rajada = Array.from({ length: 10 }, (_, i) => ({
+      ...AGENDADA,
+      id: `sched-${i}`,
+      phone_number: `1199988770${i}`,
+    }));
+
+    const { avisos } = await runTick({ scheduled: rajada, teamMembers: [QUEM_AGENDOU] });
+
+    expect(avisos).toHaveLength(10);
+    const chaves = new Set(avisos.map((a) => a.p_group_key));
+    expect(chaves.size).toBe(1);
+    expect([...chaves][0]).toMatch(/^sched_sent:\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("falha definitiva com chip resolvido e telefone com máscara: o aviso de falha abre a conversa", async () => {
     sendText.mockResolvedValue({ success: false, error: "Invalid phone" });
 
     const { avisos } = await runTick({
-      scheduled: [{ ...AGENDADA, retry_count: 2 }],
+      scheduled: [{ ...AGENDADA, phone_number: "+55 (11) 99988-7766", retry_count: 2 }],
       teamMembers: [QUEM_AGENDOU],
     });
 
     expect(avisos).toHaveLength(1);
     expect(avisos[0]).toMatchObject({
-      type: "scheduled_message_failed",
-      link: "/chat-whatsapp?instance=inst-conectada&phone=11999887766",
+      p_type: "scheduled_message_failed",
+      p_link: "/chat-whatsapp?instance=inst-conectada&phone=5511999887766",
     });
+  });
+
+  it("falha não coalesce: cada mensagem que não saiu é um aviso próprio, com o seu lead", async () => {
+    sendText.mockResolvedValue({ success: false, error: "Invalid phone" });
+
+    const { avisos } = await runTick({
+      scheduled: [
+        { ...AGENDADA, id: "sched-a", retry_count: 2 },
+        { ...AGENDADA, id: "sched-b", retry_count: 2 },
+      ],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos.map((a) => a.p_group_key).sort()).toEqual([
+      "sched_fail:sched-a",
+      "sched_fail:sched-b",
+    ]);
   });
 
   it("falha definitiva sem chip nenhum: link nulo — não inventa conversa", async () => {
@@ -462,6 +503,6 @@ describe("process-scheduled-user-messages — o aviso abre a conversa", () => {
     });
 
     expect(avisos).toHaveLength(1);
-    expect(avisos[0]).toMatchObject({ type: "scheduled_message_failed", link: null });
+    expect(avisos[0]).toMatchObject({ p_type: "scheduled_message_failed", p_link: null });
   });
 });

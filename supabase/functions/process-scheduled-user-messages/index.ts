@@ -76,6 +76,24 @@ function linkDaConversa(
   return `/chat-whatsapp?instance=${encodeURIComponent(instance.id)}&phone=${digitos}`;
 }
 
+/** O dia de quem agendou (a Café Jurerê e o resto da base estão em BRT), não o de UTC. */
+function diaEmSaoPaulo(agora: Date = new Date()): string {
+  return agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+/**
+ * Emite pelo `fn_emit_aviso` (ADR-0035), o mesmo caminho dos outros avisos:
+ * a RPC faz o upsert por (user_id, group_key) enquanto não lido, e é isso que
+ * transforma uma rajada numa linha só. Falha ao avisar não derruba o envio,
+ * que já saiu.
+ */
+async function emitirAviso(supabase: any, params: Record<string, unknown>): Promise<void> {
+  const { error } = await supabase.rpc("fn_emit_aviso", params);
+  if (error) {
+    console.warn("[scheduled-user-messages] aviso falhou:", params.p_type, error.message);
+  }
+}
+
 Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
@@ -339,14 +357,17 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
           .single();
 
         if (member?.user_id) {
-          await supabase.from("notifications").insert({
-            organization_id: msg.organization_id,
-            user_id: member.user_id,
-            type: "scheduled_message_sent",
-            title: "Mensagem agendada enviada",
-            description: `Mensagem para ${msg.lead?.name || "lead"} enviada com sucesso`,
-            lead_id: msg.lead_id,
-            link: linkDaConversa(instance, msg.phone_number),
+          // Uma chave por dia: dez agendamentos às 09:00 engordam UM aviso
+          // (×10, um cartão, um som) em vez de dez. O link fica no último envio.
+          await emitirAviso(supabase, {
+            p_organization_id: msg.organization_id,
+            p_user_id: member.user_id,
+            p_type: "scheduled_message_sent",
+            p_group_key: `sched_sent:${diaEmSaoPaulo()}`,
+            p_title: "Mensagem agendada enviada",
+            p_description: `Mensagem para ${msg.lead?.name || "lead"} enviada com sucesso`,
+            p_link: linkDaConversa(instance, msg.phone_number),
+            p_lead_id: msg.lead_id,
           });
         }
 
@@ -374,14 +395,17 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
             .single();
 
           if (member?.user_id) {
-            await supabase.from("notifications").insert({
-              organization_id: msg.organization_id,
-              user_id: member.user_id,
-              type: "scheduled_message_failed",
-              title: "Falha no envio agendado",
-              description: `Nao foi possivel enviar para ${msg.lead?.name || "lead"}: ${errorMessage}`,
-              lead_id: msg.lead_id,
-              link: linkDaConversa(instance, msg.phone_number),
+            // Falha NÃO coalesce: cada mensagem que não saiu pede ação no seu
+            // próprio lead, então cada uma é um aviso com a sua conversa.
+            await emitirAviso(supabase, {
+              p_organization_id: msg.organization_id,
+              p_user_id: member.user_id,
+              p_type: "scheduled_message_failed",
+              p_group_key: `sched_fail:${msg.id}`,
+              p_title: "Falha no envio agendado",
+              p_description: `Nao foi possivel enviar para ${msg.lead?.name || "lead"}: ${errorMessage}`,
+              p_link: linkDaConversa(instance, msg.phone_number),
+              p_lead_id: msg.lead_id,
             });
           }
         }

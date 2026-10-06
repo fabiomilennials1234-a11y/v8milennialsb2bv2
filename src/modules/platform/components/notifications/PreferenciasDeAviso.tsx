@@ -69,8 +69,8 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[]; icone
   },
   {
     icone: CalendarCheck,
-    rotulo: "Mensagens agendadas",
-    descricao: "Quando uma mensagem que você agendou é enviada ou falha",
+    rotulo: "Mensagens agendadas (envio e falha)",
+    descricao: "Quando uma mensagem que você agendou sai ou não consegue sair. No sino, ficam em Agenda",
     tipos: ["scheduled_message_sent", "scheduled_message_failed"],
   },
   {
