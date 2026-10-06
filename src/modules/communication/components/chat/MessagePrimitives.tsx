@@ -38,6 +38,7 @@ import {
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
+import { readDocumentFileName, type DocumentFileNameFields } from "@/modules/communication/lib/documentFileName";
 import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
 import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
@@ -481,6 +482,7 @@ export function MessageBubble({
             {isDocument && message.media_url && (
               <MessageDocument
                 src={message.media_url}
+                fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
                 isOutgoing={isAiOutgoing}
               />
             )}
@@ -589,7 +591,7 @@ export function MessageBubble({
                   return <MessageVideo src={mediaUrl} />;
                 if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
                   return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
-                return <MessageDocument src={mediaUrl} isOutgoing={isAiOutgoing} />;
+                return <MessageDocument src={mediaUrl} fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined} isOutgoing={isAiOutgoing} />;
               })()
             )}
 
