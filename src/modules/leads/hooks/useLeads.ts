@@ -81,7 +81,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
-  useRealtimeSubscription("deals", ["leads", "leads-count", "leads-stats"]);
+  // `deals` não é assinada: fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06).
   useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
   useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
 

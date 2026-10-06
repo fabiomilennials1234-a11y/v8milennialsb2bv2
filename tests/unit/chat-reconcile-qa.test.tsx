@@ -3,9 +3,10 @@
  * deixou abertas no CP-v4:
  *
  *   A. SEGUNDO MONTADOR. A bolha já tem o canal "joined"; entrar no /chat monta
- *      um 2º `useRealtimeChannel` na MESMA chave de status. O SUBSCRIBED dele
- *      sobe o `joinCount` → conta como reconexão → reconcilia. Quanto isso
- *      custa em RPC por entrada no /chat?
+ *      um 2º `useRealtimeChannel` na MESMA chave (tabela, filtro). Desde o
+ *      dedup de canal (perf S0, 2026-10-06) ele DIVIDE o canal da bolha: não
+ *      abre assinatura nova, não sobe `joinCount`, não reconcilia, não derruba
+ *      o status compartilhado para "joining". Rejoin REAL segue reconciliando 1×.
  *   B. CANAL ZUMBI. "joined" e mudo (apply_rls dropando sob carga). A thread
  *      aberta precisa reconciliar sozinha em ≤ 150 s, e a volta de foco
  *      adianta — mas não refaz dentro dos 30 s de staleTime.
@@ -154,14 +155,14 @@ afterEach(() => {
 
 // ─── A. Segundo montador ────────────────────────────────────────────────────
 
-describe("A. 2º montador na mesma chave de status (bolha joined → entra no /chat)", () => {
+describe("A. 2º montador na mesma chave (bolha joined → entra no /chat)", () => {
   function preparar() {
     const org = `org-qa-a-${++seq}`;
     teamMemberMock.mockReturnValue({ data: { organization_id: org } });
     return { org, key: whatsAppRealtimeStatusKey(org) };
   }
 
-  it("RPC rápida (200 ms, resolve antes do join do 2º canal): +1 lista e +1 thread por entrada", async () => {
+  it("divide o canal da bolha: 0 canal novo, joinCount fica em 1, 0 RPC extra", async () => {
     const { key } = preparar();
     latencia.ms = 200;
     const qc = novoQc();
@@ -169,45 +170,22 @@ describe("A. 2º montador na mesma chave de status (bolha joined → entra no /c
     montarBolha(qc);
     await subscribed(0);
     expect(getChannelStatus(key).joinCount).toBe(1);
-    await avancar(60_000); // bolha estável, janela do throttle bem fechada
-
-    montarChat(qc);
-    await avancar(800); // fetch inicial da lista e da thread resolve (200 ms)
-    const listaBase = chamadas(LISTA_RPC);
-    const threadBase = chamadas(THREAD_RPC);
-    expect(listaBase).toBe(1);
-    expect(threadBase).toBe(1);
-
-    await subscribed(1); // 2º canal entra → joinCount 2 → "reconexão"
-    expect(getChannelStatus(key).joinCount).toBe(2);
-    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS);
-
-    // NÚMERO MEDIDO: 1 RPC de lista + 1 manifest extra por entrada.
-    expect(chamadas(LISTA_RPC) - listaBase).toBe(1);
-    expect(chamadas(THREAD_RPC) - threadBase).toBe(1);
-  });
-
-  it("RPC lenta (12 s, pico): reconciliação pega carona no fetch em voo → 0 extra", async () => {
-    const { key } = preparar();
-    latencia.ms = 12_000;
-    const qc = novoQc();
-
-    montarBolha(qc);
-    await subscribed(0);
     await avancar(60_000);
 
     montarChat(qc);
-    await avancar(800); // fetch inicial ainda em voo
-    await subscribed(1);
-    expect(getChannelStatus(key).joinCount).toBe(2);
-    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS + 12_000);
+    await avancar(800); // fetch inicial da lista e da thread resolve (200 ms)
+    expect(canais).toHaveLength(1);
+    expect(chamadas(LISTA_RPC)).toBe(1);
+    expect(chamadas(THREAD_RPC)).toBe(1);
 
-    // cancelRefetch:false — invalidar durante o fetch não abre outro.
+    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS);
+    expect(getChannelStatus(key).joinCount).toBe(1);
+    // Antes do dedup: +1 lista e +1 manifest por entrada no /chat.
     expect(chamadas(LISTA_RPC)).toBe(1);
     expect(chamadas(THREAD_RPC)).toBe(1);
   });
 
-  it("entra/sai/entra em 5 s: 2ª entrada colapsa na borda de saída do throttle (≤ 1 extra por 15 s)", async () => {
+  it("entra/sai/entra em 5 s: nenhuma reconciliação, nenhum canal novo", async () => {
     preparar();
     latencia.ms = 200;
     const qc = novoQc();
@@ -217,31 +195,20 @@ describe("A. 2º montador na mesma chave de status (bolha joined → entra no /c
     await avancar(60_000);
 
     const chat1 = montarChat(qc);
-    await avancar(800);
-    await subscribed(1);
-    await avancar(1_000);
-    const listaAposEntrada1 = chamadas(LISTA_RPC);
-    expect(listaAposEntrada1).toBe(2); // inicial + reconciliação
+    await avancar(1_800);
+    expect(chamadas(LISTA_RPC)).toBe(1); // só o fetch inicial
 
     chat1.unmount();
     await avancar(3_000);
     montarChat(qc); // cache fresco (staleTime 30 s): sem fetch de montagem
-    await avancar(800);
-    expect(chamadas(LISTA_RPC)).toBe(listaAposEntrada1);
-    await subscribed(2); // 3º SUBSCRIBED, dentro da janela de 15 s
-    await avancar(500);
-    expect(chamadas(LISTA_RPC)).toBe(listaAposEntrada1); // segurado pelo teto
-
-    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS);
-    // Borda de saída: exatamente 1 a mais na janela.
-    expect(chamadas(LISTA_RPC) - listaAposEntrada1).toBe(1);
+    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS + 800);
+    expect(chamadas(LISTA_RPC)).toBe(1);
+    expect(canais).toHaveLength(1);
   });
 
-  it("join lento do 2º canal derruba o status compartilhado: bolha vê 'joining' até o SUBSCRIBED", async () => {
-    // Documenta o follow-up do revisor (não é regressão desta trilha): o 2º
-    // montador grava "joining" por cima do "joined" da bolha. Se o SUBSCRIBED
-    // dele passar de 10 s, a ABA INTEIRA entra em fallback com o socket da
-    // bolha saudável.
+  it("status compartilhado não cai: a bolha segue 'joined' quando o /chat monta", async () => {
+    // Era o follow-up do revisor: o 2º canal gravava "joining" por cima do
+    // "joined" da bolha e, com SUBSCRIBED > 10 s, a aba inteira caía em fallback.
     const { key } = preparar();
     const qc = novoQc();
     montarBolha(qc);
@@ -250,7 +217,34 @@ describe("A. 2º montador na mesma chave de status (bolha joined → entra no /c
 
     montarChat(qc);
     await avancar(0);
-    expect(getChannelStatus(key).state).toBe("joining");
+    expect(getChannelStatus(key).state).toBe("joined");
+  });
+
+  it("rejoin REAL com os dois montados: 1 canal novo, joinCount +1, reconcilia 1× (lista e thread)", async () => {
+    const { key } = preparar();
+    latencia.ms = 200;
+    const qc = novoQc();
+
+    montarBolha(qc);
+    await subscribed(0);
+    await avancar(60_000);
+    montarChat(qc);
+    await avancar(800);
+    const listaBase = chamadas(LISTA_RPC);
+    const threadBase = chamadas(THREAD_RPC);
+
+    await act(async () => {
+      canais[0]?.status?.("CHANNEL_ERROR", new Error("socket caiu"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await avancar(1_000); // backoff 1 s → reabre UMA vez para os dois montadores
+    expect(canais).toHaveLength(2);
+    await subscribed(1);
+    expect(getChannelStatus(key).joinCount).toBe(2);
+    await avancar(CHAT_RECONCILE_MIN_INTERVAL_MS);
+
+    expect(chamadas(LISTA_RPC) - listaBase).toBe(1);
+    expect(chamadas(THREAD_RPC) - threadBase).toBe(1);
   });
 });
 

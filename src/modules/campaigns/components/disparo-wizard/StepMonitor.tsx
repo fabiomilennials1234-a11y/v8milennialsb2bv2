@@ -4,8 +4,9 @@
  * Post-release view: a live in-progress card (which daily lot is in flight,
  * sent/queued, next batch), pause/cancel controls, and a transparent report.
  * Progress is REAL: `useBlastPlanProgress` reads blast_plan_recipients outcomes
- * and a `useRealtimeSubscription` on blast_plans + blast_plan_recipients keeps
- * it live; pause/cancel go through `useBlastPlanControl` (the service_role edge
+ * and refreshes on the hooks' 60 s polling (blast_plans/blast_plan_recipients
+ * are outside the `supabase_realtime` publication — the old subscription never
+ * emitted; perf S0); pause/cancel go through `useBlastPlanControl` (the service_role edge
  * control plane). The batch math stays the pure `monitorSnapshot`. The plan's
  * own row (status, lots) comes from `useBlastPlans`.
  */
@@ -30,7 +31,6 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { planBlast } from "@/modules/campaigns/lib/blast-planning";
 import {
   useBlastPlans,
@@ -52,10 +52,6 @@ interface StepMonitorProps {
 }
 
 export function StepMonitor({ draft, planId }: StepMonitorProps) {
-  // Live feed: a row change on either table re-pulls the plan + its progress.
-  useRealtimeSubscription("blast_plans", ["blast_plans", "blast_plan_recipients"]);
-  useRealtimeSubscription("blast_plan_recipients", ["blast_plan_recipients"]);
-
   const { data: plans } = useBlastPlans();
   const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
   const { data: progress } = useBlastPlanProgress(planId);

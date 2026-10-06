@@ -6,13 +6,12 @@
  * Este hook lê o timestamp de pausa, computa se ainda está ativo,
  * e expõe reactivate via RPC clear_human_pause.
  *
- * Realtime: invalida via useRealtimeSubscription em conversations.
- * Fallback: polling a cada 30s.
+ * Atualização: polling a cada 30s. Sem realtime: `conversations` está fora da
+ * publication `supabase_realtime` (a assinatura nunca emitiu evento; perf S0).
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 
 export interface CopilotPauseState {
   isPaused: boolean;
@@ -45,9 +44,6 @@ export function useCopilotPause(params: {
     enabled: !!conversationId,
     refetchInterval: 30_000,
   });
-
-  // Realtime subscription — invalidates copilot-pause query on conversations change
-  useRealtimeSubscription("conversations", queryKey);
 
   // Reactivate mutation — clears pause via RPC
   const mutation = useMutation({
