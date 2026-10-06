@@ -1,3 +1,4 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { ReplyPreview } from "../ReplyContext";
 import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
@@ -159,12 +160,7 @@ export function MobileComposerContextual({
     setIsRecording(false);
     try {
       const mp3 = await convertAudioBlobToMp3(audioBlob);
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(mp3);
-      });
+      const base64 = await readMediaAsDataUrl(mp3);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -192,12 +188,7 @@ export function MobileComposerContextual({
       return;
     }
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const base64 = await readMediaAsDataUrl(file);
       // Preview antes de enviar (paridade desktop/bubble) — mis-tap no picker
       // não dispara mais o arquivo direto pro cliente.
       setPendingAttachment({ data: base64, name: file.name, mime: file.type });

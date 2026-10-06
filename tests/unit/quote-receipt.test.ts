@@ -1,27 +1,33 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuotePresentation, recordQuotePresentation, completeQuotePresentations } from '../../supabase/functions/_shared/quotes/presentation';
+import type { QuoteReceipt } from '../../supabase/functions/_shared/quotes/presentation';
+
+type TestRow = Record<string, unknown> & {
+  metadata?: { quote_delivery?: { message_ids: string[] }; quote_presentation?: QuoteReceipt };
+};
+type TestResult = { data: TestRow | TestRow[] | null | undefined; error: { message: string } | null };
 
 function database() {
   let failure: { table: string; write: boolean } | undefined;
-  const tables:Record<string,any[]>={
+  const tables:Record<string,TestRow[]>={
     copilot_quotes:[{id:'q',organization_id:'org',conversation_id:'conv',revision:1,status:'awaiting_confirmation'}],
     conversation_messages:[],
     whatsapp_messages:[{message_id:'chunk',organization_id:'org',instance_id:'instance',direction:'outgoing',status:'pending'}],
   };
-  const get=(row:any,key:string)=>key.split('->').reduce((value,part)=>value?.[part],row);
-  const contains=(row:any,expected:any):boolean=>Array.isArray(expected)?expected.every(v=>row?.includes(v)):expected&&typeof expected==='object'?Object.entries(expected).every(([k,v])=>contains(row?.[k],v)):row===expected;
+  const get=(row:unknown,key:string):unknown=>key.split('->').reduce<unknown>((value,part)=>value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined,row);
+  const contains=(row:unknown,expected:unknown):boolean=>Array.isArray(expected)?Array.isArray(row)&&expected.every(v=>row.includes(v)):expected&&typeof expected==='object'?Object.entries(expected).every(([k,v])=>contains(get(row,k),v)):row===expected;
   const db={from(table:string){
-    const filters:Array<(row:any)=>boolean>=[];let update:any,insert:any,single=false;
-    const chain:any={
+    const filters:Array<(row:TestRow)=>boolean>=[];let update:TestRow|undefined,insert:TestRow|undefined,single=false;
+    const chain={
       select:()=>chain,order:()=>chain,limit:()=>chain,
       single:()=>{single=true;return chain;},maybeSingle:()=>{single=true;return chain;},
-      eq:(key:string,value:any)=>{filters.push(row=>get(row,key)===value);return chain;},
-      is:(key:string,value:any)=>{filters.push(row=>(get(row,key)??null)===value);return chain;},
-      in:(key:string,values:any[])=>{filters.push(row=>values.includes(get(row,key)));return chain;},
-      contains:(key:string,value:any)=>{filters.push(row=>contains(get(row,key),value));return chain;},
-      update:(value:any)=>{update=value;return chain;},insert:(value:any)=>{insert=value;return chain;},
-      then:(resolve:any)=>Promise.resolve().then(()=>{
+      eq:(key:string,value:unknown)=>{filters.push(row=>get(row,key)===value);return chain;},
+      is:(key:string,value:unknown)=>{filters.push(row=>(get(row,key)??null)===value);return chain;},
+      in:(key:string,values:unknown[])=>{filters.push(row=>values.includes(get(row,key)));return chain;},
+      contains:(key:string,value:unknown)=>{filters.push(row=>contains(get(row,key),value));return chain;},
+      update:(value:TestRow)=>{update=value;return chain;},insert:(value:TestRow)=>{insert=value;return chain;},
+      then:(resolve:(result:TestResult)=>unknown)=>Promise.resolve().then(()=>{
         if (failure?.table === table && failure.write === !!update) return { data: null, error: { message: "injected" } };
         if(insert)tables[table].push({...insert,id:`message-${tables[table].length+1}`});
         const rows=tables[table].filter(row=>filters.every(f=>f(row)));
@@ -31,7 +37,7 @@ function database() {
       }).then(resolve),
     };return chain;
   }};
-  return {db:db as Parameters<typeof recordQuotePresentation>[0],tables, fail(table: string, write = false) { failure = { table, write }; }, recover() { failure = undefined; }};
+  return {db:db as unknown as Parameters<typeof recordQuotePresentation>[0],tables, fail(table: string, write = false) { failure = { table, write }; }, recover() { failure = undefined; }};
 }
 const summary={conversation_id:'conv',quote_id:'q',revision:1,summary:'Resumo idêntico'};
 beforeEach(()=>vi.stubGlobal('Deno',{env:{get:()=> 'true'}}));
@@ -49,26 +55,26 @@ describe('durable presentation occurrences and asynchronous receipts',()=>{
     const presentation=await createQuotePresentation(db,summary);
     await recordQuotePresentation(db,'org','instance',presentation,['chunk']);
     const row=tables.conversation_messages[0];
-    expect(row.metadata.quote_delivery.message_ids).toEqual(['chunk']);
-    expect(row.metadata.quote_presentation).toBeUndefined();
+    expect(row.metadata?.quote_delivery?.message_ids).toEqual(['chunk']);
+    expect(row.metadata?.quote_presentation).toBeUndefined();
     tables.whatsapp_messages[0].status='sent';
     await Promise.all([completeQuotePresentations(db,'org','instance',['chunk']),completeQuotePresentations(db,'org','instance',['chunk'])]);
-    const receipt=structuredClone(row.metadata.quote_presentation);
+    const receipt=structuredClone(row.metadata?.quote_presentation);
     expect(receipt).toMatchObject({quote_id:'q',revision:1,instance_id:'instance'});
-    expect(Number.isFinite(Date.parse(receipt.accepted_at))).toBe(true);
+    expect(Number.isFinite(Date.parse(receipt?.accepted_at ?? ''))).toBe(true);
     vi.setSystemTime(new Date('2026-09-23T12:03:00Z'));
     await recordQuotePresentation(db,'org','instance',presentation,['chunk']);
     await completeQuotePresentations(db,'org','instance',['chunk']);
-    expect(row.metadata.quote_presentation).toEqual(receipt);
+    expect(row.metadata?.quote_presentation).toEqual(receipt);
   });
   it('handles a provider callback arriving before chunk association',async()=>{
     const {db,tables}=database();
     const presentation=await createQuotePresentation(db,summary);
     tables.whatsapp_messages[0].status='delivered';
     await completeQuotePresentations(db,'org','instance',['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
     await recordQuotePresentation(db,'org','instance',presentation,['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeDefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeDefined();
   });
   it('ignores callback identity from a different tenant or instance',async()=>{
     const {db,tables}=database();
@@ -77,30 +83,30 @@ describe('durable presentation occurrences and asynchronous receipts',()=>{
     tables.whatsapp_messages[0].status='sent';
     await completeQuotePresentations(db,'wrong-org','instance',['chunk']);
     await completeQuotePresentations(db,'org','wrong-instance',['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
     await completeQuotePresentations(db,'org','instance',['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeDefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeDefined();
   });
   it('does not complete until every chunk is accepted',async()=>{
     const {db,tables}=database();
     tables.whatsapp_messages.push({...tables.whatsapp_messages[0],message_id:'second',status:'sent'});
     const presentation=await createQuotePresentation(db,summary);
     await recordQuotePresentation(db,'org','instance',presentation,['chunk','second']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
     tables.whatsapp_messages[0].status='delivered';
     await completeQuotePresentations(db,'org','instance',['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeDefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeDefined();
   });
   it('rejects wrong tenant and a callback for a superseded revision',async()=>{
     const {db,tables}=database();
     const presentation=await createQuotePresentation(db,summary);
     await recordQuotePresentation(db,'another-org','instance',presentation,['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_delivery).toBeUndefined();
+    expect(tables.conversation_messages[0].metadata?.quote_delivery).toBeUndefined();
     await recordQuotePresentation(db,'org','instance',presentation,['chunk']);
     tables.whatsapp_messages[0].status='sent';
     tables.copilot_quotes[0].revision=2;
     await completeQuotePresentations(db,'org','instance',['chunk']);
-    expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+    expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
   });
 });
 
@@ -115,10 +121,10 @@ describe('strict receipt completion retries database failures', () => {
       tables.whatsapp_messages[0].status = 'sent';
       fixture.fail(table, write);
       await expect(completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true })).rejects.toThrow('Quote receipt');
-      expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+      expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
       fixture.recover();
       await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
-      expect(tables.conversation_messages[0].metadata.quote_presentation).toBeDefined();
+      expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeDefined();
     });
   }
 });
@@ -132,9 +138,9 @@ it('does not backdate completion when an old chunk callback retries after newer 
   await recordQuotePresentation(db, 'org', 'instance', presentation, ['chunk', 'second']);
   tables.whatsapp_messages[0].status = 'sent';
   await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
-  expect(tables.conversation_messages[0].metadata.quote_presentation).toBeUndefined();
+  expect(tables.conversation_messages[0].metadata?.quote_presentation).toBeUndefined();
   vi.setSystemTime(new Date('2026-09-23T12:05:00Z'));
   tables.whatsapp_messages[1].status = 'sent';
   await completeQuotePresentations(db, 'org', 'instance', ['chunk'], { strict: true });
-  expect(tables.conversation_messages[0].metadata.quote_presentation.accepted_at).toBe('2026-09-23T12:05:00.000Z');
+  expect(tables.conversation_messages[0].metadata?.quote_presentation?.accepted_at).toBe('2026-09-23T12:05:00.000Z');
 });

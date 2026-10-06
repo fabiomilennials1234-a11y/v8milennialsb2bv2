@@ -5,6 +5,7 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 DO $repair$
 DECLARE
+  v_repair_reference constant text := 'loofting-20260916-bulk-move';
   v_org constant uuid := '70b8775e-7cbc-4b6f-90ba-2011002e57f7';
   v_source constant uuid := 'e4ed88c4-5483-4f42-a90b-75946276ad81';
   v_target constant uuid := '5f03e620-8658-42a9-b826-33ccd1aa074e';
@@ -15,7 +16,7 @@ DECLARE
   v_count integer;
   v_snapshot jsonb;
 BEGIN
-  IF EXISTS (SELECT 1 FROM backup.pipeline_move_repair_snapshots WHERE repair_key='loofting-20260916-bulk-move') THEN
+  IF EXISTS (SELECT 1 FROM backup.pipeline_move_repair_snapshots WHERE repair_key=v_repair_reference) THEN
     RAISE EXCEPTION 'Repair already recorded: inspect final state instead of repeating.';
   END IF;
   PERFORM id FROM public.pipeline_entries WHERE id=ANY(v_originals || v_copies) ORDER BY id FOR UPDATE;
@@ -64,7 +65,7 @@ BEGIN
     'leads',(SELECT jsonb_agg(to_jsonb(l)) FROM public.leads l WHERE l.id IN(SELECT lead_id FROM public.pipeline_entries WHERE id=ANY(v_originals))),
     'reason','Keep original deal identities; remove nine empty copies produced by bulk_add_to_pipeline.');
   INSERT INTO backup.pipeline_move_repair_snapshots(repair_key,organization_id,snapshot)
-    VALUES('loofting-20260916-bulk-move',v_org,v_snapshot);
+    VALUES(v_repair_reference,v_org,v_snapshot);
 
   -- History is append-only: preserve even the copy creation events. The
   -- snapshot explains their removed entry IDs; original routes stay intact.

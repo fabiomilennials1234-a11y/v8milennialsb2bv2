@@ -9,7 +9,7 @@ vi.mock('./shared/send-recovery',async importOriginal=>({ ...await importOrigina
 vi.mock('@/modules/identity',()=>({ useCurrentTeamMember:()=>({data:{id:'member',organization_id:'org'}}) }));
 vi.mock('@/lib/analytics',()=>({track:vi.fn()}));
 vi.mock('@/integrations/supabase/client',()=>({supabase:{
- from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{metadata:{}},error:null})})})}),
+ from:()=>({select:()=>({eq:()=>({abortSignal:()=>({maybeSingle:async()=>({data:{metadata:{}},error:null})})})})}),
  functions:{invoke:vi.fn()},
 }}));
 beforeEach(()=>vi.clearAllMocks());

@@ -1,3 +1,4 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { SendRichContactActions } from "./SendRichContactActions";
 import { ReplyPreview } from "../ReplyContext";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
@@ -316,12 +317,7 @@ export function ChatComposer({
     const asSticker = sendAsSticker && kind === "image";
     setIsPreparing(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      const base64 = await readMediaAsDataUrl(selectedFile);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -357,12 +353,7 @@ export function ChatComposer({
         toast.error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
         return;
       }
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blobToSend);
-      });
+      const base64 = await readMediaAsDataUrl(blobToSend);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,

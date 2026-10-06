@@ -2,14 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { toast } from "sonner";
-
-export interface CorrecaoVendaHistorica {
-  valor: number;
-  /** AAAA-MM-DD, no dia civil da organização. */
-  data: string;
-  motivo: string;
-  versao?: string;
-}
+import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
+export type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 
 const errors: Record<string, string> = {
   access_denied: "Você não tem permissão para corrigir esta venda.",

@@ -289,6 +289,140 @@ index e6b5a8c89..39071a847 100644
        };
      case "offline":
        return {
+diff --git a/classic/src/modules/communication/components/chat/bubble/ChatBubbleComposer.tsx b/classic/src/modules/communication/components/chat/bubble/ChatBubbleComposer.tsx
+index 53e396468..9e67d690d 100644
+--- a/classic/src/modules/communication/components/chat/bubble/ChatBubbleComposer.tsx
++++ b/classic/src/modules/communication/components/chat/bubble/ChatBubbleComposer.tsx
+@@ -1,3 +1,4 @@
++import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
+ /**
+  * ChatBubbleComposer — composer compact próprio para o Bubble (380×).
+  *
+@@ -86,7 +87,7 @@ export function ChatBubbleComposer({
+     }
+   };
+ 
+-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
++  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0];
+     if (!file) return;
+     const validationError = getAttachmentValidationError(file);
+@@ -99,20 +100,14 @@ export function ChatBubbleComposer({
+       e.target.value = "";
+       return;
+     }
+-    const reader = new FileReader();
+-    reader.onload = () => {
+-      const data = reader.result as string;
++    const input = e.target;
++    try {
++      const data = await readMediaAsDataUrl(file);
+       setAttachment({ data, name: file.name, mime: file.type });
+-    };
+-    reader.onerror = () => {
+-      toast({
+-        title: "Erro ao ler arquivo",
+-        description: "Não foi possível ler o arquivo selecionado. Tente novamente.",
+-        variant: "destructive",
+-      });
+-    };
+-    reader.readAsDataURL(file);
+-    e.target.value = ""; // permite re-selecionar mesmo arquivo
++    } catch (error) {
++      notifyError(error, { fallback: "Não foi possível ler o arquivo." });
++    }
++    input.value = ""; // permite re-selecionar mesmo arquivo
+   };
+ 
+   const handleSendAttachment = async () => {
+@@ -148,12 +143,7 @@ export function ChatBubbleComposer({
+   const handleAudioRecorded = async (blob: Blob) => {
+     setIsRecording(false);
+     try {
+-      const reader = new FileReader();
+-      const dataUrl: string = await new Promise((resolve, reject) => {
+-        reader.onload = () => resolve(reader.result as string);
+-        reader.onerror = reject;
+-        reader.readAsDataURL(blob);
+-      });
++      const dataUrl = await readMediaAsDataUrl(blob);
+       await sendMedia.mutateAsync({
+         phoneNumber,
+         instanceName,
+diff --git a/classic/src/modules/communication/components/chat/composer/ChatComposer.tsx b/classic/src/modules/communication/components/chat/composer/ChatComposer.tsx
+index 317e4bc37..0a9766f1c 100644
+--- a/classic/src/modules/communication/components/chat/composer/ChatComposer.tsx
++++ b/classic/src/modules/communication/components/chat/composer/ChatComposer.tsx
+@@ -1,3 +1,4 @@
++import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
+ import { SendRichContactActions } from "./SendRichContactActions";
+ import { ReplyPreview } from "../ReplyContext";
+ import { useChatReply } from "../../../hooks/chat/useChatReply";
+@@ -310,12 +311,7 @@ export function ChatComposer({
+     const asSticker = sendAsSticker && kind === "image";
+     setIsPreparing(true);
+     try {
+-      const base64 = await new Promise<string>((resolve, reject) => {
+-        const reader = new FileReader();
+-        reader.onload = () => resolve(reader.result as string);
+-        reader.onerror = reject;
+-        reader.readAsDataURL(selectedFile);
+-      });
++      const base64 = await readMediaAsDataUrl(selectedFile);
+       await sendMedia.mutateAsync({
+         phoneNumber,
+         instanceName,
+@@ -351,12 +347,7 @@ export function ChatComposer({
+         toast.error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
+         return;
+       }
+-      const base64 = await new Promise<string>((resolve, reject) => {
+-        const reader = new FileReader();
+-        reader.onload = () => resolve(reader.result as string);
+-        reader.onerror = reject;
+-        reader.readAsDataURL(blobToSend);
+-      });
++      const base64 = await readMediaAsDataUrl(blobToSend);
+       await sendMedia.mutateAsync({
+         phoneNumber,
+         instanceName,
+diff --git a/classic/src/modules/communication/components/chat/composer/MobileComposerContextual.tsx b/classic/src/modules/communication/components/chat/composer/MobileComposerContextual.tsx
+index 1fee64edb..4314d9e22 100644
+--- a/classic/src/modules/communication/components/chat/composer/MobileComposerContextual.tsx
++++ b/classic/src/modules/communication/components/chat/composer/MobileComposerContextual.tsx
+@@ -1,3 +1,4 @@
++import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
+ import { ReplyPreview } from "../ReplyContext";
+ import { useChatReply } from "../../../hooks/chat/useChatReply";
+ /**
+@@ -157,12 +158,7 @@ export function MobileComposerContextual({
+     setIsRecording(false);
+     try {
+       const mp3 = await convertAudioBlobToMp3(audioBlob);
+-      const base64 = await new Promise<string>((resolve, reject) => {
+-        const reader = new FileReader();
+-        reader.onload = () => resolve(reader.result as string);
+-        reader.onerror = reject;
+-        reader.readAsDataURL(mp3);
+-      });
++      const base64 = await readMediaAsDataUrl(mp3);
+       await sendMedia.mutateAsync({
+         phoneNumber,
+         instanceName,
+@@ -190,12 +186,7 @@ export function MobileComposerContextual({
+       return;
+     }
+     try {
+-      const base64 = await new Promise<string>((resolve, reject) => {
+-        const reader = new FileReader();
+-        reader.onload = () => resolve(reader.result as string);
+-        reader.onerror = reject;
+-        reader.readAsDataURL(file);
+-      });
++      const base64 = await readMediaAsDataUrl(file);
+       // Preview antes de enviar (paridade desktop/bubble) — mis-tap no picker
+       // não dispara mais o arquivo direto pro cliente.
+       setPendingAttachment({ data: base64, name: file.name, mime: file.type });
 diff --git a/classic/src/modules/communication/hooks/chat/chatReconcile.ts b/classic/src/modules/communication/hooks/chat/chatReconcile.ts
 new file mode 100644
 index 000000000..d492b2fb6
@@ -611,6 +745,47 @@ index 000000000..d0aca73e1
 +  }
 +  return merged;
 +}
+diff --git a/classic/src/modules/communication/hooks/chat/shared/send-recovery.ts b/classic/src/modules/communication/hooks/chat/shared/send-recovery.ts
+index 8feeb5b50..a63f8be8c 100644
+--- a/classic/src/modules/communication/hooks/chat/shared/send-recovery.ts
++++ b/classic/src/modules/communication/hooks/chat/shared/send-recovery.ts
+@@ -29,14 +29,21 @@ export async function sendWithBoundedRecovery(options: {
+     const status = (r?.data?.result as { status?: string } | undefined)?.status ?? r?.data?.status;
+     return !!r?.data && !r.error && !r.data.error && status !== "failed" && status !== "error";
+   };
++  const httpStatus = (r: SendResponse | undefined) =>
++    (r?.error as { context?: { status?: number } } | null)?.context?.status;
++  // These responses reject the request before delivery. Preserve the provider's
++  // actionable error and allow a new attempt after the user fixes its cause.
++  const rejected = (r: SendResponse | undefined) =>
++    [400, 401, 403, 404, 405, 413, 415, 422].includes(httpStatus(r) ?? 0);
+   if (successful(result)) return result!;
++  if (rejected(result)) return result!;
+   for (let attempt = 1; attempt <= MAX_SEND_RETRIES; attempt++) {
+     options.onRetry(attempt);
+-    const confirmed = await options.confirm().catch(() => null);
++    const confirmed = await waitForResult(options.confirm().catch(() => null), options.retryDelayMs ?? 3000);
+     if (confirmed) return confirmed;
+     // Only a pre-delivery rate-limit rejection is safe to POST again. A timeout,
+     // network error or 5xx can mean the provider already accepted the message.
+-    const status = (result?.error as { context?: { status?: number } } | null)?.context?.status;
++    const status = httpStatus(result);
+     if (status === 429 && attempt < MAX_SEND_RETRIES) {
+       await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 3000));
+       pending = launch();
+@@ -47,8 +54,11 @@ export async function sendWithBoundedRecovery(options: {
+       await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 3000));
+     }
+     if (successful(result)) return result!;
++    if (rejected(result)) return result!;
+   }
+-  const confirmed = await options.confirm().catch(() => null);
++  const confirmed = await waitForResult(options.confirm().catch(() => null), options.retryDelayMs ?? 3000);
+   if (confirmed) return confirmed;
++  // All ten attempts were rate limited, so none was accepted for delivery.
++  if (httpStatus(result) === 429) return result!;
+   throw new SendRetriesExhausted();
+ }
 diff --git a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts b/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
 index bb01d8031..5ee0295ff 100644
 --- a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
@@ -1203,6 +1378,223 @@ index f2fec0c89..b23e27012 100644
 +    statusKey: organizationId ? whatsAppRealtimeStatusKey(organizationId) : undefined,
    });
  }
+diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
+index 5ff3c7d49..ee123229a 100644
+--- a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
++++ b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
+@@ -1,4 +1,5 @@
+ import { providerSendStatus } from "@/modules/communication/lib/providerSendStatus";
++import { useRef } from "react";
+ import { useChatReply } from "./useChatReply";
+ /**
+  * useSendWhatsAppMessage + useSendWhatsAppMedia + useFailedMessages + useRetryMessage
+@@ -16,10 +17,11 @@ import {
+   friendlyWhatsAppSendError,
+   whatsAppSendErrorMessage,
+ } from "@/modules/communication/lib/edgeFunctionError";
+-import { sendWithBoundedRecovery, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
++import { sendWithBoundedRecovery, SendRetriesExhausted, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
+ import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
+ import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
+ import { userMessageOf } from "@/shared/errors";
++import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
+ 
+ /**
+  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
+@@ -53,11 +55,13 @@ async function isSzChatInstanceCached(instanceId: string | null | undefined): Pr
+   if (!instanceId) return false;
+   const cached = szChatCache.get(instanceId);
+   if (cached !== undefined) return cached;
+-  const { data } = await supabase
++  const { data, error } = await withMediaDeadline("connection", signal => supabase
+     .from("whatsapp_instances")
+     .select("metadata")
+     .eq("id", instanceId)
+-    .maybeSingle();
++    .abortSignal(signal)
++    .maybeSingle());
++  if (error) throw new MediaOperationError("connection", "failed");
+   const result = (data?.metadata as Record<string, unknown>)?.channel === "sz_chat";
+   szChatCache.set(instanceId, result);
+   return result;
+@@ -175,16 +179,21 @@ async function uploadMediaToStorage(
+   // URL pra enviar), então um path não-enumerável impede acesso por adivinhação.
+   const filePath = `whatsapp-media/${organizationId}/${crypto.randomUUID()}/${uniqueFileName}`;
+ 
+-  const { error } = await supabase.storage
+-    .from("media")
+-    .upload(filePath, blob, {
+-      contentType: mimeType,
+-      upsert: true,
++  // storage-js upload() has no AbortSignal. Sign with the current user's RLS,
++  // then PUT with a cancellable transport. A late signing response cannot send.
++  await withMediaDeadline("upload", async signal => {
++    const { data, error } = await supabase.storage.from("media").createSignedUploadUrl(filePath);
++    signal.throwIfAborted();
++    if (error || !data?.signedUrl) {
++      const status = Number((error as { statusCode?: string } | null)?.statusCode);
++      throw new MediaOperationError("upload", status === 401 ? "unauthorized" : status === 403 ? "forbidden" : "failed");
++    }
++    const response = await fetch(data.signedUrl, {
++      method: "PUT", body: blob, signal,
++      headers: { "Content-Type": mimeType, "cache-control": "max-age=3600", "x-upsert": "false" },
+     });
+-
+-  if (error) {
+-    throw new Error(`Erro ao fazer upload: ${error.message}`);
+-  }
++    if (!response.ok) throw new MediaOperationError("upload", response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : "failed");
++  }, MEDIA_UPLOAD_TIMEOUT_MS);
+ 
+   const { data: urlData } = supabase.storage
+     .from("media")
+@@ -409,6 +418,14 @@ export function useSendWhatsAppMedia() {
+   const reply = useChatReply();
+   const queryClient = useQueryClient();
+   const { data: teamMember } = useCurrentTeamMember();
++  // Keep the current attachment after failure, but a second click must only
++  // reconcile an ambiguous send; uploading again would generate a new URL and
++  // bypass the recovery controller's duplicate protection.
++  const unconfirmed = useRef<{
++    media: string; phone: string; instance: string | null | undefined;
++    org: string; caption: string; quote: string | undefined;
++    confirm: () => Promise<SendResponse | null>;
++  } | null>(null);
+ 
+   return useMutation({
+     retry: false, // one recovery controller owns the ten-attempt budget
+@@ -443,6 +460,16 @@ export function useSendWhatsAppMedia() {
+ 
+       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
+       if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
++      const previous = unconfirmed.current;
++      if (previous && previous.org === teamMember.organization_id && previous.media === media
++        && previous.phone === formattedNumber && previous.instance === instanceId
++        && previous.caption === (caption ?? "") && previous.quote === replyContext?.messageId) {
++        const confirmed = await withMediaDeadline("connection", () => previous.confirm(), 3_000).catch(() => null);
++        if (!confirmed?.data) throw new SendRetriesExhausted();
++        unconfirmed.current = null;
++        const result = confirmed.data.result as { message_id?: string } | undefined;
++        return { ...confirmed.data, _localMessage: { messageId: result?.message_id } };
++      }
+       let mediaUrl = media;
+ 
+       if (media.startsWith("data:")) {
+@@ -455,11 +482,17 @@ export function useSendWhatsAppMedia() {
+       }
+ 
+       const isSzChat = await isSzChatInstanceCached(instanceId);
++      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl);
+ 
+       let data: Record<string, unknown>;
+       let error: unknown;
+ 
+       if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
++      if (!isSzChat && !instanceId) throw new Error("Instância WhatsApp não identificada. Recarregue a página.");
++      unconfirmed.current = {
++        media, phone: formattedNumber, instance: instanceId, org: teamMember.organization_id,
++        caption: caption ?? "", quote: replyContext?.messageId, confirm: recovery.confirm,
++      };
+       if (isSzChat) {
+         const result = await invokeWithTimeout("sz-chat-send", {
+           action: "send_message",
+@@ -468,7 +501,10 @@ export function useSendWhatsAppMedia() {
+           message: caption || "",
+           message_type: "media",
+           media_url: mediaUrl,
+-        }, 60_000, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl));
++        }, 60_000, recovery);
++        // A returned result is success or a definite HTTP rejection. Only
++        // exhausted ambiguous sends throw and retain the confirmation guard.
++        unconfirmed.current = null;
+         data = result.data;
+         error = result.error;
+ 
+@@ -503,8 +539,9 @@ export function useSendWhatsAppMedia() {
+             payload: proxyPayload,
+           },
+           60_000, // media needs more time (upload + Uazapi)
+-          recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl),
++          recovery,
+         );
++        unconfirmed.current = null;
+         data = result.data;
+         error = result.error;
+ 
+@@ -525,6 +562,7 @@ export function useSendWhatsAppMedia() {
+         }
+       }
+ 
++      unconfirmed.current = null;
+       const d = data as Record<string, any>;
+       const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
+ 
+@@ -595,6 +633,10 @@ export function useSendWhatsAppMedia() {
+     onSuccess: (data, variables, context) => {
+       if (variables.replyContext) reply?.clear(variables.replyContext.messageId);
+       // Mesma promoção do envio de texto — ver comentário lá.
++      queryClient.setQueryData<FailedMessage[]>(
++        ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
++        (prev = []) => prev.filter(m => m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId),
++      );
+       const realMessageId = readProviderMessageId(data);
+       if (context?.optimisticId) {
+         queryClient.setQueryData<WhatsAppMessage[]>(
+@@ -614,7 +656,7 @@ export function useSendWhatsAppMedia() {
+       }
+       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
+       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
+-        ...prev.filter(m => m.id !== context?.optimisticId),
++        ...prev.filter(m => m.id !== context?.optimisticId && (m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId)),
+         {
+           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
+           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
+diff --git a/classic/src/modules/communication/hooks/useDeadSessions.ts b/classic/src/modules/communication/hooks/useDeadSessions.ts
+index fe48ebb46..6aba9c95e 100644
+--- a/classic/src/modules/communication/hooks/useDeadSessions.ts
++++ b/classic/src/modules/communication/hooks/useDeadSessions.ts
+@@ -9,7 +9,7 @@
+  */
+ import { useQuery } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+-import { useCurrentTeamMember } from "@/modules/identity";
++import { useCurrentTeamMember, useMasterAuth } from "@/modules/identity";
+ export type DeadSession = {
+   id: string;
+   instance_name: string;
+@@ -20,21 +20,29 @@ export type DeadSession = {
+ 
+ export function useDeadSessions() {
+   const { data: teamMember } = useCurrentTeamMember();
++  const { isMaster } = useMasterAuth();
+   const organizationId = teamMember?.organization_id;
+ 
+   return useQuery({
+-    queryKey: ["whatsapp_dead_sessions", organizationId],
++    queryKey: ["whatsapp_dead_sessions", organizationId, teamMember?.id, teamMember?.role, isMaster],
+     queryFn: async () => {
+       if (!organizationId) return [] as DeadSession[];
+ 
+       const { data, error } = await supabase
+         .from("whatsapp_instances")
+-        .select("id, instance_name, phone_number, session_dead_since, session_dead_reason")
++        .select("id, instance_name, phone_number, session_dead_since, session_dead_reason, owner_team_member_id, whatsapp_instance_allowed_members(team_member_id)")
+         .eq("organization_id", organizationId)
+         .not("session_dead_since", "is", null);
+ 
+       if (error) throw error;
+-      return (data ?? []) as unknown as DeadSession[];
++      return (data ?? []).filter(instance => {
++        // Ownership is authoritative. Shared sessions notify their configured
++        // members; only unassigned sessions fall back to org administrators.
++        if (instance.owner_team_member_id) return instance.owner_team_member_id === teamMember?.id;
++        const members = instance.whatsapp_instance_allowed_members;
++        if (members.length) return members.some(member => member.team_member_id === teamMember?.id);
++        return teamMember?.role === "admin" || isMaster;
++      }) as unknown as DeadSession[];
+     },
+     enabled: !!organizationId,
+     refetchInterval: 30_000,
 diff --git a/classic/src/modules/communication/hooks/useHistorySyncJobs.ts b/classic/src/modules/communication/hooks/useHistorySyncJobs.ts
 index 3dd394ece..1876aa287 100644
 --- a/classic/src/modules/communication/hooks/useHistorySyncJobs.ts
@@ -1280,6 +1672,80 @@ index df75f5544..234de550f 100644
   */
  
  import { useEffect, useRef } from "react";
+diff --git a/classic/src/modules/communication/lib/media-operation.ts b/classic/src/modules/communication/lib/media-operation.ts
+new file mode 100644
+index 000000000..b8aaa4f8d
+--- /dev/null
++++ b/classic/src/modules/communication/lib/media-operation.ts
+@@ -0,0 +1,68 @@
++import { recordClientError } from "@/core/observability/client-error-buffer";
++
++export type MediaPhase = "read" | "upload" | "connection";
++export const MEDIA_READ_TIMEOUT_MS = 15_000;
++export const MEDIA_UPLOAD_TIMEOUT_MS = 60_000;
++
++/** Only phase/reason reach diagnostics: never filename, phone, URL or token. */
++export class MediaOperationError extends Error {
++  constructor(readonly phase: MediaPhase, readonly reason: "timeout" | "aborted" | "failed" | "unauthorized" | "forbidden") {
++    const message = reason === "unauthorized"
++      ? "Sua sessão expirou. Entre novamente para enviar o arquivo."
++      : reason === "forbidden"
++        ? "Você não tem permissão para enviar arquivos nesta organização. Peça ao administrador para revisar seu acesso."
++        : phase === "read"
++      ? "Não foi possível ler o arquivo. Salve uma cópia no computador e tente novamente."
++      : phase === "upload"
++        ? "O arquivo não terminou de carregar. Ele continua anexado; tente novamente."
++        : "Não foi possível verificar a conexão do WhatsApp. Tente novamente.";
++    super(message);
++    this.name = `MediaOperation:${phase}:${reason}`;
++  }
++}
++
++export async function withMediaDeadline<T>(
++  phase: MediaPhase,
++  work: (signal: AbortSignal) => PromiseLike<T>,
++  timeoutMs = MEDIA_READ_TIMEOUT_MS,
++): Promise<T> {
++  const controller = new AbortController();
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  try {
++    return await Promise.race([
++      Promise.resolve().then(() => work(controller.signal)),
++      new Promise<never>((_, reject) => {
++        timer = setTimeout(() => {
++          reject(new MediaOperationError(phase, "timeout"));
++          controller.abort();
++        }, timeoutMs);
++      }),
++    ]);
++  } catch (cause) {
++    const error = cause instanceof MediaOperationError ? cause : new MediaOperationError(phase, "failed");
++    recordClientError(error, "handled");
++    throw error;
++  } finally {
++    if (timer !== undefined) clearTimeout(timer);
++  }
++}
++
++export function readMediaAsDataUrl(file: Blob): Promise<string> {
++  return withMediaDeadline("read", signal => new Promise<string>((resolve, reject) => {
++    const reader = new FileReader();
++    const abort = () => reader.abort();
++    const finish = (error?: MediaOperationError) => {
++      signal.removeEventListener("abort", abort);
++      reader.onload = reader.onerror = reader.onabort = null;
++      if (error) reject(error);
++      else if (typeof reader.result === "string") resolve(reader.result);
++      else reject(new MediaOperationError("read", "failed"));
++    };
++    reader.onload = () => finish();
++    reader.onerror = () => finish(new MediaOperationError("read", "failed"));
++    reader.onabort = () => finish(new MediaOperationError("read", "aborted"));
++    signal.addEventListener("abort", abort, { once: true });
++    try { reader.readAsDataURL(file); }
++    catch { finish(new MediaOperationError("read", "failed")); }
++  }));
++}
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
 index aacc3ed82..f83352526 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotPause.ts
@@ -1415,13 +1881,13 @@ index 15d97831d..71e4e0747 100644
      queryKey: ["team_members", organizationId],
 diff --git a/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx b/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx
 new file mode 100644
-index 000000000..8486c88d3
+index 000000000..a56f1b544
 --- /dev/null
 +++ b/classic/src/modules/leads/components/deal-card/CorrigirVendaHistorica.tsx
 @@ -0,0 +1,131 @@
 +import { useState } from "react";
 +import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
-+import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 +import { Button } from "@/components/ui/button";
 +import { Input } from "@/components/ui/input";
 +import { Textarea } from "@/components/ui/textarea";
@@ -1551,7 +2017,7 @@ index 000000000..8486c88d3
 +  );
 +}
 diff --git a/classic/src/modules/leads/components/deal-card/DealCard.tsx b/classic/src/modules/leads/components/deal-card/DealCard.tsx
-index 9ca0d51ed..25642d5df 100644
+index 9ca0d51ed..c9fc78892 100644
 --- a/classic/src/modules/leads/components/deal-card/DealCard.tsx
 +++ b/classic/src/modules/leads/components/deal-card/DealCard.tsx
 @@ -17,6 +17,9 @@ import { DealCardTimeline } from "./DealCardTimeline";
@@ -1560,11 +2026,11 @@ index 9ca0d51ed..25642d5df 100644
  import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 +import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
 +import { diaDaVenda } from "./dia-da-venda";
-+import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
  import { contaDoNegocio } from "./conta-do-negocio";
  import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
  import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
-@@ -281,6 +284,7 @@ export function DealCard({
+@@ -281,9 +284,11 @@ export function DealCard({
    onAdicionarProduto,
    onEditarItem,
    onAjustarPedido,
@@ -1572,7 +2038,11 @@ index 9ca0d51ed..25642d5df 100644
    ajustesPedido = [],
    onRemoverItem,
    onEditarValor,
-@@ -325,6 +329,7 @@ export function DealCard({
++  onRecarregarValor,
+   movendo,
+   comentarios = [],
+   onComentar,
+@@ -325,6 +330,7 @@ export function DealCard({
     */
    onEditarItem?: (edicao: ItemEditado) => Promise<void>;
    onAjustarPedido?: (ajuste: AjustePedidoGanho) => Promise<void>;
@@ -1580,7 +2050,15 @@ index 9ca0d51ed..25642d5df 100644
    ajustesPedido?: Array<{
      id: string;
      reason: string;
-@@ -445,6 +450,8 @@ export function DealCard({
+@@ -334,6 +340,7 @@ export function DealCard({
+   }>;
+   onRemoverItem?: (itemId: string) => Promise<void>;
+   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
++  onRecarregarValor?: () => Promise<void>;
+   movendo?: string | null;
+   /**
+    * ── Comentários entram por FORA de `negocio` ──────────────────────────
+@@ -445,6 +452,8 @@ export function DealCard({
    }, [negocio.id]);
  
    const aberto = negocio.estado === "aberto";
@@ -1589,7 +2067,7 @@ index 9ca0d51ed..25642d5df 100644
    const [ajustandoPedido, setAjustandoPedido] = useState(false);
    useEffect(() => setAjustandoPedido(false), [negocio.id, negocio.estado]);
    const estagnado =
-@@ -789,7 +796,27 @@ export function DealCard({
+@@ -789,7 +798,27 @@ export function DealCard({
                />
                {abaDinheiro === "produtos" ? (
                  <div className="space-y-3">
@@ -1618,7 +2096,7 @@ index 9ca0d51ed..25642d5df 100644
                      <AjustarPedidoGanho
                        key={negocio.id}
                        itens={negocio.itens}
-@@ -801,12 +828,12 @@ export function DealCard({
+@@ -801,12 +830,12 @@ export function DealCard({
                      <button
                        type="button"
                        className="rounded-md border border-primary/40 px-3 py-2 text-sm text-primary hover:bg-primary/10"
@@ -1633,8 +2111,122 @@ index 9ca0d51ed..25642d5df 100644
                      <DealCardMoney
                        key={negocio.id}
                        itens={negocio.itens}
+@@ -817,6 +846,7 @@ export function DealCard({
+                       onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
+                       onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
+                       onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
++                      onRecarregarValor={onRecarregarValor}
+                     />
+                   )}
+                   {ajustesPedido.length > 0 && (
+diff --git a/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx b/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
+index 25de8cfb9..9824ed105 100644
+--- a/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
++++ b/classic/src/modules/leads/components/deal-card/DealCardMoney.tsx
+@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
+ import { Check, Package, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
+ import { cn } from "@/lib/utils";
+ import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
++// Import puro: o card também roda na preview pública, sem client nem hooks de dados.
++import { toAppError } from "@/shared/errors/to-app-error";
+ import type { DealCardItem, ItemEditado } from "./types";
+ import { contaDoNegocio } from "./conta-do-negocio";
+ 
+@@ -341,6 +343,7 @@ export function DealCardMoney({
+   onEditarItem,
+   onRemoverItem,
+   onEditarValor,
++  onRecarregarValor,
+   versaoDoNegocio = null,
+ }: {
+   itens: DealCardItem[];
+@@ -354,22 +357,42 @@ export function DealCardMoney({
+   /** Idem para a lixeira de cada linha. */
+   onRemoverItem?: (itemId: string) => Promise<void>;
+   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
++  onRecarregarValor?: () => Promise<void>;
+   versaoDoNegocio?: string | null;
+ }) {
+   const [editandoValor, setEditandoValor] = useState(false);
+   const [rascunhoValor, setRascunhoValor] = useState("");
+   const [salvandoValor, setSalvandoValor] = useState(false);
+   const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
++  const [conflitoDeValor, setConflitoDeValor] = useState<{ versao: string | null } | null>(null);
++  const [recarregandoValor, setRecarregandoValor] = useState(false);
++  const [erroDeRecarga, setErroDeRecarga] = useState(false);
++  const aguardandoVersaoAtual = conflitoDeValor !== null &&
++    (versaoDoNegocio === null || versaoDoNegocio === conflitoDeValor.versao);
+   const salvarValor = async () => {
+-    if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
++    if (!onEditarValor || salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()) return;
+     setSalvandoValor(true);
+     try {
+       await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
+       setEditandoValor(false);
+-    } catch {
+-      // O chamador informa o erro; preservar a edição para corrigir/tentar novamente.
++    } catch (error) {
++      if (toAppError(error).code === "conflict.stale") {
++        setEditandoValor(false);
++        setConflitoDeValor({ versao: versaoEditada });
++      }
++      // Outros erros preservam o rascunho para corrigir/tentar novamente.
+     } finally { setSalvandoValor(false); }
+   };
++  const recarregarValor = async () => {
++    if (!onRecarregarValor || recarregandoValor) return;
++    setRecarregandoValor(true);
++    setErroDeRecarga(false);
++    try {
++      await onRecarregarValor();
++    } catch {
++      setErroDeRecarga(true);
++    } finally { setRecarregandoValor(false); }
++  };
+   const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
+   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
+   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
+@@ -488,15 +511,36 @@ export function DealCardMoney({
+               <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}
+                 value={rascunhoValor} disabled={salvandoValor} autoFocus
+                 onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
+-              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
++              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
+               <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
+-            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
++            </> : <button type="button" className="text-sm text-primary hover:underline disabled:opacity-40" disabled={aguardandoVersaoAtual || recarregandoValor} onClick={() => {
++              if (aguardandoVersaoAtual || recarregandoValor) return;
++              setConflitoDeValor(null);
++              setErroDeRecarga(false);
+               setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
+               setVersaoEditada(versaoDoNegocio);
+               setEditandoValor(true);
+             }}>{valorDoNegocio == null ? "Definir valor" : "Editar valor"}</button>}
+           </div>
+         )}
++        {conflitoDeValor && (
++          <div className="space-y-2 pt-2 text-xs text-muted-foreground">
++            <p role="status">
++              O valor mudou enquanto você editava. {aguardandoVersaoAtual
++                ? "Atualize os dados antes de editar novamente."
++                : "Confira o valor atual e abra a edição novamente."}
++            </p>
++            {aguardandoVersaoAtual && onRecarregarValor && (
++              <button type="button" className="text-primary hover:underline disabled:opacity-40"
++                disabled={recarregandoValor} onClick={recarregarValor}>
++                {recarregandoValor ? "Atualizando valor…" : "Atualizar valor"}
++              </button>
++            )}
++            {aguardandoVersaoAtual && erroDeRecarga && (
++              <p role="alert">Não foi possível atualizar o valor. Tente novamente.</p>
++            )}
++          </div>
++        )}
+       </div>
+     </section>
+   );
 diff --git a/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx b/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
-index 5b33299e9..152481f2e 100644
+index 5b33299e9..3f4bca032 100644
 --- a/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
 +++ b/classic/src/modules/leads/components/deal-card/DealCardPanel.tsx
 @@ -39,6 +39,7 @@ import { DealCardChecklists } from "./DealCardChecklists";
@@ -1655,7 +2247,7 @@ index 5b33299e9..152481f2e 100644
    const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
    const editarValorProposta = useEditarValorProposta(entryId);
  
-@@ -584,6 +588,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
+@@ -584,12 +588,14 @@ export const DealCardPanel = memo(function DealCardPanel() {
             clique. Era esta linha que sumia o botão em 19,2% dos cards. */
          onAdicionarProduto={adicionarProduto}
          onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
@@ -1663,6 +2255,13 @@ index 5b33299e9..152481f2e 100644
          ajustesPedido={ajustePedido.historico}
          /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
             e a lixeira são de item já lançado, e não há item sem negócio. */
+         onEditarItem={dealIdParaProduto ? editarItem : undefined}
+         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
+         onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
++        onRecarregarValor={editarValorProposta.recarregarValor}
+         movendo={pendingStageKey}
+         comentarios={comentarios}
+         onComentar={podeComentar ? comentar : undefined}
 diff --git a/classic/src/modules/leads/components/deal-card/dia-da-venda.ts b/classic/src/modules/leads/components/deal-card/dia-da-venda.ts
 new file mode 100644
 index 000000000..e4f039c68
@@ -1673,7 +2272,7 @@ index 000000000..e4f039c68
 +export const diaDaVenda = (iso: string, timezone = "America/Sao_Paulo") =>
 +  new Date(iso).toLocaleDateString("en-CA", { timeZone: timezone });
 diff --git a/classic/src/modules/leads/components/deal-card/types.ts b/classic/src/modules/leads/components/deal-card/types.ts
-index babe8ac12..854bd2139 100644
+index babe8ac12..7372a961d 100644
 --- a/classic/src/modules/leads/components/deal-card/types.ts
 +++ b/classic/src/modules/leads/components/deal-card/types.ts
 @@ -209,6 +209,8 @@ export interface ItemEditado {
@@ -1685,16 +2284,10 @@ index babe8ac12..854bd2139 100644
    pedidoAtualizadoEm?: string | null;
    /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
    id: string;
-diff --git a/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
-new file mode 100644
-index 000000000..1faab9e45
---- /dev/null
-+++ b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
-@@ -0,0 +1,87 @@
-+import { useMutation, useQueryClient } from "@tanstack/react-query";
-+import { supabase } from "@/integrations/supabase/client";
-+import { isMissingSchemaError } from "@/lib/rpc-errors";
-+import { toast } from "sonner";
+@@ -352,3 +354,11 @@ export interface DealCardData {
+  * é como as duas listas de abas saem de sincronia.
+  */
+ export type DealCardAba = "negocio" | "atividades" | "negocios" | "checklists";
 +
 +export interface CorrecaoVendaHistorica {
 +  valor: number;
@@ -1703,6 +2296,19 @@ index 000000000..1faab9e45
 +  motivo: string;
 +  versao?: string;
 +}
+diff --git a/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
+new file mode 100644
+index 000000000..605417b15
+--- /dev/null
++++ b/classic/src/modules/leads/components/deal-card/useCorrigirVendaHistorica.ts
+@@ -0,0 +1,82 @@
++import { useMutation, useQueryClient } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import { isMissingSchemaError } from "@/lib/rpc-errors";
++import { toast } from "sonner";
++
++import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
++export type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 +
 +const errors: Record<string, string> = {
 +  access_denied: "Você não tem permissão para corrigir esta venda.",
@@ -1834,6 +2440,50 @@ index ae8d035d8..c3d313fd1 100644
      usaLeiDoErp,
      lead,
      negocioBase,
+diff --git a/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts b/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
+index e11df9df7..dcc812ebf 100644
+--- a/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
++++ b/classic/src/modules/leads/components/deal-card/useItensDoNegocio.ts
+@@ -1,7 +1,7 @@
+ import { useMutation, useQueryClient } from "@tanstack/react-query";
+ 
+ import { supabase } from "@/integrations/supabase/client";
+-import { notifyError } from "@/shared/errors";
++import { notifyError, toAppError } from "@/shared/errors";
+ 
+ /**
+  * Escrita de `deal_items` — os produtos do negócio.
+@@ -82,7 +82,11 @@ function invalidarNegocio(
+ 
+ export function useEditarValorProposta(entryId: string | null) {
+   const queryClient = useQueryClient();
+-  return useMutation({
++  const recarregarValor = () => queryClient.invalidateQueries(
++    { queryKey: ["deal-card-extras", entryId] },
++    { throwOnError: true },
++  );
++  const mutation = useMutation({
+     mutationFn: async ({ valor, expectedUpdatedAt }: { valor: number; expectedUpdatedAt: string | null }) => {
+       if (!entryId) throw new Error("Card não disponível. Atualize a ficha.");
+       const { error } = await supabase.rpc("editar_valor_proposta" as never, {
+@@ -91,8 +95,16 @@ export function useEditarValorProposta(entryId: string | null) {
+       if (error) throw error;
+     },
+     onSuccess: () => invalidarNegocio(queryClient, entryId),
+-    onError: (error: Error) => notifyError(error, { fallback: "Não foi possível salvar o valor." }),
++    onError: async (error: Error) => {
++      if (toAppError(error).code === "conflict.stale") {
++        // A leitura pode falhar: preserve o conflito original para o editor
++        // bloquear a versão rejeitada e oferecer uma nova tentativa de leitura.
++        try { await recarregarValor(); } catch { /* O editor continua bloqueado. */ }
++      }
++      notifyError(error, { fallback: "Não foi possível salvar o valor." });
++    },
+   });
++  return { ...mutation, recarregarValor };
+ }
+ 
+ export interface ItemNovoDoNegocio {
 diff --git a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
 index 980e2d02f..0a165192b 100644
 --- a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
@@ -2044,6 +2694,20 @@ index 682a48186..4e49cb8f6 100644
                </span>
              )}
  
+diff --git a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx b/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
+index f66e563bd..a2fbf3c71 100644
+--- a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
++++ b/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
+@@ -111,6 +111,9 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
+         </button>
+       </PopoverTrigger>
+       <PopoverContent
++        data-lead-card-checklist-popover
++        onClick={(event) => event.stopPropagation()}
++        onPointerDown={(event) => event.stopPropagation()}
+         side="top"
+         align="start"
+         sideOffset={6}
 diff --git a/classic/src/modules/leads/hooks/useClientPortfolio.ts b/classic/src/modules/leads/hooks/useClientPortfolio.ts
 index 8011e8662..f0861b1c0 100644
 --- a/classic/src/modules/leads/hooks/useClientPortfolio.ts
@@ -4453,6 +5117,126 @@ index 64976bc8c..4d1ab20b5 100644
        {featureFlags.chatBubble && <ChatBubble />}
  
        <QuickBlastProgressPanel />
+diff --git a/classic/src/modules/platform/hooks/useSavedViews.ts b/classic/src/modules/platform/hooks/useSavedViews.ts
+index 82fb19bff..081a21cfb 100644
+--- a/classic/src/modules/platform/hooks/useSavedViews.ts
++++ b/classic/src/modules/platform/hooks/useSavedViews.ts
+@@ -1,6 +1,6 @@
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+-import { useOrganization } from "@/modules/identity";
++import { useAuth, useOrganization } from "@/modules/identity";
+ import type {
+   SavedView,
+   SavedViewEntityType,
+@@ -17,13 +17,16 @@ import type {
+  */
+ export function useSavedViews(entityType: SavedViewEntityType) {
+   const { organizationId } = useOrganization();
++  const { user } = useAuth();
+ 
+   return useQuery({
+-    queryKey: ["saved_views", organizationId, entityType],
++    queryKey: ["saved_views", organizationId, user?.id, entityType],
+     queryFn: async () => {
+       const { data, error } = await supabase
+         .from("saved_views" as any)
+         .select("*")
++        .setHeader("x-torque-saved-views-org", organizationId!)
++        .eq("organization_id", organizationId!)
+         .eq("entity_type", entityType)
+         .order("is_system", { ascending: false })
+         .order("position", { ascending: true })
+@@ -31,30 +34,35 @@ export function useSavedViews(entityType: SavedViewEntityType) {
+       if (error) throw error;
+       return (data || []) as unknown as SavedView[];
+     },
+-    enabled: !!organizationId && !!entityType,
++    enabled: !!organizationId && !!user && !!entityType,
+   });
+ }
+ 
+ export function useCreateSavedView() {
+   const queryClient = useQueryClient();
+   const { organizationId } = useOrganization();
++  const { user } = useAuth();
+ 
+   return useMutation({
+     mutationFn: async (input: SavedViewInsert) => {
++      if (!user) throw new Error("Entre de novo para salvar a view.");
++      if (!organizationId) throw new Error("Selecione uma organização para salvar a view.");
+       const { data, error } = await supabase
+         .from("saved_views" as any)
+         .insert({
+           ...input,
+           organization_id: organizationId,
++          owner_id: user.id,
+         } as any)
++        .setHeader("x-torque-saved-views-org", organizationId)
+         .select()
+         .single();
+       if (error) throw error;
+       return data as unknown as SavedView;
+     },
+-    onSuccess: (_data, variables) => {
++    onSuccess: (view) => {
+       queryClient.invalidateQueries({
+-        queryKey: ["saved_views", organizationId, variables.entity_type],
++        queryKey: ["saved_views", view.organization_id],
+       });
+     },
+   });
+@@ -70,18 +78,21 @@ export function useUpdateSavedView() {
+       entityType,
+       ...updates
+     }: SavedViewUpdate & { id: string; entityType: SavedViewEntityType }) => {
++      if (!organizationId) throw new Error("Selecione uma organização para editar a view.");
+       const { data, error } = await supabase
+         .from("saved_views" as any)
+         .update(updates as any)
++        .setHeader("x-torque-saved-views-org", organizationId)
+         .eq("id", id)
++        .eq("organization_id", organizationId)
+         .select()
+         .single();
+       if (error) throw error;
+       return data as unknown as SavedView;
+     },
+-    onSuccess: (_data, variables) => {
++    onSuccess: (view) => {
+       queryClient.invalidateQueries({
+-        queryKey: ["saved_views", organizationId, variables.entityType],
++        queryKey: ["saved_views", view.organization_id],
+       });
+     },
+   });
+@@ -92,18 +103,21 @@ export function useDeleteSavedView() {
+   const { organizationId } = useOrganization();
+ 
+   return useMutation({
+-    // `entityType` não entra no delete — existe no shape só pro onSuccess
+-    // invalidar a queryKey certa via `variables`.
++    // Mantém entityType no contrato dos chamadores; a invalidação cobre a org.
+     mutationFn: async ({ id }: { id: string; entityType: SavedViewEntityType }) => {
++      if (!organizationId) throw new Error("Selecione uma organização para excluir a view.");
+       const { error } = await supabase
+         .from("saved_views" as any)
+         .delete()
+-        .eq("id", id);
++        .setHeader("x-torque-saved-views-org", organizationId)
++        .eq("id", id)
++        .eq("organization_id", organizationId);
+       if (error) throw error;
++      return organizationId;
+     },
+-    onSuccess: (_data, variables) => {
++    onSuccess: (deletedOrganizationId) => {
+       queryClient.invalidateQueries({
+-        queryKey: ["saved_views", organizationId, variables.entityType],
++        queryKey: ["saved_views", deletedOrganizationId],
+       });
+     },
+   });
 diff --git a/classic/src/modules/platform/pages/Configuracoes.tsx b/classic/src/modules/platform/pages/Configuracoes.tsx
 index 5b3df4c08..8744049ce 100644
 --- a/classic/src/modules/platform/pages/Configuracoes.tsx

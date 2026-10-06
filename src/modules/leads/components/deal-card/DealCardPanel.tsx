@@ -588,6 +588,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         onEditarItem={dealIdParaProduto ? editarItem : undefined}
         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
         onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
+        onRecarregarValor={editarValorProposta.recarregarValor}
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}

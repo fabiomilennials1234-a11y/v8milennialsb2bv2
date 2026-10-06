@@ -111,6 +111,9 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
         </button>
       </PopoverTrigger>
       <PopoverContent
+        data-lead-card-checklist-popover
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
         side="top"
         align="start"
         sideOffset={6}

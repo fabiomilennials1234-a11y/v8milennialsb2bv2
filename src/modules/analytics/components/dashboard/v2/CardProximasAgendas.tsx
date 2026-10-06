@@ -10,6 +10,7 @@ import {
   type ComandoAgendaEvent,
 } from "@/modules/analytics/hooks/useComandoAgenda";
 import { ComandoCard } from "./ComandoCard";
+import { agendaAttributionLabel } from "@/modules/engagement";
 
 /** Os próximos cinco compromissos — pedido do CTO em 2026-09-04. */
 const MOSTRAR = 5;
@@ -166,7 +167,7 @@ export function CardProximasAgendas() {
                     {[
                       e.lead_name ? `${e.lead_name}${e.lead_company ? ` · ${e.lead_company}` : ""}` : e.description?.trim(),
                       // Só o admin: para o vendedor a agenda inteira já é dele.
-                      isAdmin ? (e.owner_name ? `com ${e.owner_name.split(" ")[0]}` : "sem responsável") : null,
+                      isAdmin ? `${agendaAttributionLabel(e.source)}: ${e.creator_name ?? "Não informado"}` : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}

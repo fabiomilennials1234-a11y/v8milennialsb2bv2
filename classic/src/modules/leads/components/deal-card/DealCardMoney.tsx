@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Check, Package, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
+// Import puro: o card também roda na preview pública, sem client nem hooks de dados.
+import { toAppError } from "@/shared/errors/to-app-error";
 import type { DealCardItem, ItemEditado } from "./types";
 import { contaDoNegocio } from "./conta-do-negocio";
 
@@ -341,6 +343,7 @@ export function DealCardMoney({
   onEditarItem,
   onRemoverItem,
   onEditarValor,
+  onRecarregarValor,
   versaoDoNegocio = null,
 }: {
   itens: DealCardItem[];
@@ -354,21 +357,41 @@ export function DealCardMoney({
   /** Idem para a lixeira de cada linha. */
   onRemoverItem?: (itemId: string) => Promise<void>;
   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
+  onRecarregarValor?: () => Promise<void>;
   versaoDoNegocio?: string | null;
 }) {
   const [editandoValor, setEditandoValor] = useState(false);
   const [rascunhoValor, setRascunhoValor] = useState("");
   const [salvandoValor, setSalvandoValor] = useState(false);
   const [versaoEditada, setVersaoEditada] = useState<string | null>(null);
+  const [conflitoDeValor, setConflitoDeValor] = useState<{ versao: string | null } | null>(null);
+  const [recarregandoValor, setRecarregandoValor] = useState(false);
+  const [erroDeRecarga, setErroDeRecarga] = useState(false);
+  const aguardandoVersaoAtual = conflitoDeValor !== null &&
+    (versaoDoNegocio === null || versaoDoNegocio === conflitoDeValor.versao);
   const salvarValor = async () => {
-    if (!onEditarValor || salvandoValor || !rascunhoValor.trim()) return;
+    if (!onEditarValor || salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()) return;
     setSalvandoValor(true);
     try {
       await onEditarValor(parseCurrencyInput(rascunhoValor), versaoEditada);
       setEditandoValor(false);
-    } catch {
-      // O chamador informa o erro; preservar a edição para corrigir/tentar novamente.
+    } catch (error) {
+      if (toAppError(error).code === "conflict.stale") {
+        setEditandoValor(false);
+        setConflitoDeValor({ versao: versaoEditada });
+      }
+      // Outros erros preservam o rascunho para corrigir/tentar novamente.
     } finally { setSalvandoValor(false); }
+  };
+  const recarregarValor = async () => {
+    if (!onRecarregarValor || recarregandoValor) return;
+    setRecarregandoValor(true);
+    setErroDeRecarga(false);
+    try {
+      await onRecarregarValor();
+    } catch {
+      setErroDeRecarga(true);
+    } finally { setRecarregandoValor(false); }
   };
   const { temItens, temValor, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
@@ -488,13 +511,34 @@ export function DealCardMoney({
               <input aria-label="Valor da proposta" inputMode="numeric" className={cn(ENTRADA, "max-w-40")}
                 value={rascunhoValor} disabled={salvandoValor} autoFocus
                 onChange={(e) => setRascunhoValor(maskCurrencyInput(e.target.value))} />
-              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
+              <button type="button" className="text-sm text-primary disabled:opacity-40" disabled={salvandoValor || aguardandoVersaoAtual || recarregandoValor || !rascunhoValor.trim()} onClick={salvarValor}>Salvar valor</button>
               <button type="button" className="text-sm text-muted-foreground" disabled={salvandoValor} onClick={() => setEditandoValor(false)}>Cancelar</button>
-            </> : <button type="button" className="text-sm text-primary hover:underline" onClick={() => {
+            </> : <button type="button" className="text-sm text-primary hover:underline disabled:opacity-40" disabled={aguardandoVersaoAtual || recarregandoValor} onClick={() => {
+              if (aguardandoVersaoAtual || recarregandoValor) return;
+              setConflitoDeValor(null);
+              setErroDeRecarga(false);
               setRascunhoValor(maskCurrencyInput(String(Math.round(total * 100))));
               setVersaoEditada(versaoDoNegocio);
               setEditandoValor(true);
             }}>{valorDoNegocio == null ? "Definir valor" : "Editar valor"}</button>}
+          </div>
+        )}
+        {conflitoDeValor && (
+          <div className="space-y-2 pt-2 text-xs text-muted-foreground">
+            <p role="status">
+              O valor mudou enquanto você editava. {aguardandoVersaoAtual
+                ? "Atualize os dados antes de editar novamente."
+                : "Confira o valor atual e abra a edição novamente."}
+            </p>
+            {aguardandoVersaoAtual && onRecarregarValor && (
+              <button type="button" className="text-primary hover:underline disabled:opacity-40"
+                disabled={recarregandoValor} onClick={recarregarValor}>
+                {recarregandoValor ? "Atualizando valor…" : "Atualizar valor"}
+              </button>
+            )}
+            {aguardandoVersaoAtual && erroDeRecarga && (
+              <p role="alert">Não foi possível atualizar o valor. Tente novamente.</p>
+            )}
           </div>
         )}
       </div>

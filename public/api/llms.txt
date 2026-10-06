@@ -185,19 +185,21 @@ Resposta (exemplo): `{"data":[{"id":"9f1c…","name":"João"}],"next_cursor":nul
 Nota: 422 missing_search_criteria sem phone nem email — busca sem alvo seria varredura. Para a base inteira use GET /api/v1/leads.
 
 ## GET /api/v1/deals
-Lista Negócios com filtros e cursor. Use updated_since para sincronizar só o que mudou. Escopo: deal:read.
+Lista Negócios com filtros e cursor. Data de criação do Negócio: use created_from/created_to, independentemente da criação do lead. Use updated_since para sincronizar só o que mudou. Escopo: deal:read.
 
 Parâmetros:
 - `pipeline` (string): Slug ou id de qualquer funil da organização. Ex: "vendas".
 - `stage` (string): Etapa.
 - `owner_id` (string): Responsável.
 - `status` (string): open | won | lost | all.
+- `created_from` (string): ISO 8601. Data de criação do Negócio >= este instante (inclusivo), não a criação do lead.
+- `created_to` (string): ISO 8601. Data de criação do Negócio <= este instante (inclusivo).
 - `updated_since` (string): ISO 8601. Traz o que teve atividade depois — INCLUSIVE quem só mudou de etapa.
 - `cursor` (string): Devolva o next_cursor da página anterior.
 
-Resposta (exemplo): `{"data":[{"id":"d1…","title":"Reposição","pipeline":"vendas","stage":"proposta_enviada","source":"api"}],"next_cursor":null,"has_more":false}`
+Resposta (exemplo): `{"data":[{"id":"d1…","title":"Reposição","pipeline":"vendas","stage":"proposta_enviada","source":"api","created_at":"2026-09-01T12:00:00Z","last_activity_at":"2026-09-03T15:00:00Z"}],"next_cursor":null,"has_more":false}`
 
-Nota: 422 invalid_updated_since para data ilegível. Nunca devolve a base inteira nesse caso.
+Nota: `created_at` é a criação do Negócio. Exemplo: `?created_from=2026-09-01T00:00:00Z&created_to=2026-09-30T23:59:59.999Z`; converta datas locais para ISO 8601 com fuso. A ordenação continua `last_activity_at desc, id desc`: pagine com `next_cursor`. Datas inválidas retornam 422 `invalid_created_from`/`invalid_created_to`; intervalo invertido retorna `invalid_created_range`. `updated_since` inválido retorna `invalid_updated_since`.
 
 ## POST /api/v1/deals
 Abre um Negócio para um Lead que JÁ existe. Escopo: deal:write.

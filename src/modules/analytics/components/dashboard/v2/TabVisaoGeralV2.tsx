@@ -9,10 +9,7 @@ import {
   type CommandPeriod,
   type PeriodRange,
 } from "@/modules/analytics/hooks/useCommandMetrics";
-import { useFunnelHealth } from "@/modules/analytics/hooks/useFunnelHealth";
 import { useTeamResponseTime } from "@/modules/analytics/hooks/useTeamResponseTime";
-import { MILENNIALS_ORG_ID } from "@/modules/analytics/lib/org-overrides";
-import { useCurrentTeamMember } from "@/modules/identity";
 import { ClusterGauge } from "./ClusterGauge";
 import { GaugeEmptyState } from "./GaugeEmptyState";
 import { KpiCardCompact, type KpiDelta } from "./KpiCardCompact";
@@ -86,17 +83,13 @@ function businessDaysLeft(month: number, year: number, referenceDay?: number): n
   return Math.max(count, 1);
 }
 
-function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin, onAskOraculo, section, filterMemberId }: TabVisaoGeralV2Props) {
+function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, onAskOraculo, section, filterMemberId }: TabVisaoGeralV2Props) {
   const show = (id: TabVisaoGeralV2Props["section"]) => !section || section === id;
   // KPIs respeitam o filtro automático (membro vê o seu, admin vê total)
   const { data: metrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end }, filterMemberId);
-  // Funil é sempre total da org
-  const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
-  // Override Milennials: reuniões marcadas do funil seguem a coorte correta da
-  // aba Saúde (get_funnel_health) em vez do get_dashboard_metrics inflado.
-  const { data: currentTeamMember } = useCurrentTeamMember();
-  const isMilennials = currentTeamMember?.organization_id === MILENNIALS_ORG_ID;
-  const { data: funnelHealth } = useFunnelHealth({ start: range.start, end: range.end });
+  // Mesmo período e pessoa dos KPIs. O Estúdio compartilhado passa null
+  // (equipe); a análise de coorte continua na Saúde (ADR-0013).
+  const totalMetrics = metrics;
   // Período anterior pros deltas (mesmo filtro dos KPIs)
   const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd }, filterMemberId);
   const response = useTeamResponseTime({ start: range.start, end: range.end }, show("kpis"));
@@ -183,7 +176,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
     m && p && p.taxaConversao > 0 ? m.taxaConversao - p.taxaConversao : null;
 
   const funnelConvPrev =
-    isAdmin && p && p.totalLeads > 0 ? (p.novosClientes / p.totalLeads) * 100 : null;
+    p && p.totalLeads > 0 ? (p.funnelVendas / p.totalLeads) * 100 : null;
   const funnelConvCur =
     totalMetrics && totalMetrics.totalLeads > 0
       ? (totalMetrics.funnelVendas / totalMetrics.totalLeads) * 100
@@ -248,9 +241,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       </div>
       <div className={kpiCol}>
         <KpiCardCompact
-          label="Reuniões" icon={CalendarCheck} tone="info" value={m?.reunioesMarcadas ?? 0} format="int"
+          label="Reuniões marcadas" icon={CalendarCheck} tone="info" value={m?.reunioesMarcadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.reunioesMarcadas, p.reunioesMarcadas) : undefined}
-          caption={`${p?.reunioesMarcadas ?? 0} ${range.prevLabel}`}
+          caption={`${p?.reunioesMarcadas ?? 0} ${range.prevLabel} · ${filterMemberId ? "Pessoa selecionada" : "Equipe"}`}
           quickActionLabel="Abrir agenda →" quickActionTo="/agenda" delay={0.18}
         />
       </div>
@@ -330,9 +323,10 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin
       {show("funil") && (
       <div className={cn("col-span-2 md:col-span-4", cartao)}>
         <TrapezoidFunnel
+          scopeLabel={filterMemberId ? "Pessoa selecionada" : "Equipe"}
           stages={[
             { label: "Leads", value: totalMetrics?.totalLeads ?? 0 },
-            { label: "Reuniões", value: isMilennials ? (funnelHealth?.stages.reuniao ?? 0) : (totalMetrics?.funnelReunioesMarcadas ?? 0) },
+            { label: "Reuniões marcadas", value: totalMetrics?.reunioesMarcadas ?? 0 },
             { label: "Propostas", value: totalMetrics?.funnelPropostas ?? 0 },
             { label: "Vendas", value: totalMetrics?.funnelVendas ?? 0 },
           ]}

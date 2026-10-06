@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 import type {
   SavedView,
   SavedViewEntityType,
@@ -17,13 +17,16 @@ import type {
  */
 export function useSavedViews(entityType: SavedViewEntityType) {
   const { organizationId } = useOrganization();
+  const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["saved_views", organizationId, entityType],
+    queryKey: ["saved_views", organizationId, user?.id, entityType],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("saved_views" as any)
         .select("*")
+        .setHeader("x-torque-saved-views-org", organizationId!)
+        .eq("organization_id", organizationId!)
         .eq("entity_type", entityType)
         .order("is_system", { ascending: false })
         .order("position", { ascending: true })
@@ -31,30 +34,35 @@ export function useSavedViews(entityType: SavedViewEntityType) {
       if (error) throw error;
       return (data || []) as unknown as SavedView[];
     },
-    enabled: !!organizationId && !!entityType,
+    enabled: !!organizationId && !!user && !!entityType,
   });
 }
 
 export function useCreateSavedView() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (input: SavedViewInsert) => {
+      if (!user) throw new Error("Entre de novo para salvar a view.");
+      if (!organizationId) throw new Error("Selecione uma organização para salvar a view.");
       const { data, error } = await supabase
         .from("saved_views" as any)
         .insert({
           ...input,
           organization_id: organizationId,
+          owner_id: user.id,
         } as any)
+        .setHeader("x-torque-saved-views-org", organizationId)
         .select()
         .single();
       if (error) throw error;
       return data as unknown as SavedView;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (view) => {
       queryClient.invalidateQueries({
-        queryKey: ["saved_views", organizationId, variables.entity_type],
+        queryKey: ["saved_views", view.organization_id],
       });
     },
   });
@@ -70,18 +78,21 @@ export function useUpdateSavedView() {
       entityType,
       ...updates
     }: SavedViewUpdate & { id: string; entityType: SavedViewEntityType }) => {
+      if (!organizationId) throw new Error("Selecione uma organização para editar a view.");
       const { data, error } = await supabase
         .from("saved_views" as any)
         .update(updates as any)
+        .setHeader("x-torque-saved-views-org", organizationId)
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
       if (error) throw error;
       return data as unknown as SavedView;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (view) => {
       queryClient.invalidateQueries({
-        queryKey: ["saved_views", organizationId, variables.entityType],
+        queryKey: ["saved_views", view.organization_id],
       });
     },
   });
@@ -92,18 +103,21 @@ export function useDeleteSavedView() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    // `entityType` não entra no delete — existe no shape só pro onSuccess
-    // invalidar a queryKey certa via `variables`.
+    // Mantém entityType no contrato dos chamadores; a invalidação cobre a org.
     mutationFn: async ({ id }: { id: string; entityType: SavedViewEntityType }) => {
+      if (!organizationId) throw new Error("Selecione uma organização para excluir a view.");
       const { error } = await supabase
         .from("saved_views" as any)
         .delete()
-        .eq("id", id);
+        .setHeader("x-torque-saved-views-org", organizationId)
+        .eq("id", id)
+        .eq("organization_id", organizationId);
       if (error) throw error;
+      return organizationId;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (deletedOrganizationId) => {
       queryClient.invalidateQueries({
-        queryKey: ["saved_views", organizationId, variables.entityType],
+        queryKey: ["saved_views", deletedOrganizationId],
       });
     },
   });

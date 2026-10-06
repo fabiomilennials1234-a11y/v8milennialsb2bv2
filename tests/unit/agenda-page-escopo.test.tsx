@@ -60,6 +60,10 @@ vi.mock("@/modules/identity", () => ({
 
 const agendaEvents: AgendaEvent[] = [];
 
+vi.mock("@/modules/leads/hooks/useLeadResponsibles", () => ({
+  useLeadResponsibles: () => ({ data: null, isLoading: false, isError: false }),
+}));
+
 vi.mock("@/modules/engagement/hooks/useAgendaEvents", () => ({
   useAgendaEvents: () => ({
     data: agendaEvents,

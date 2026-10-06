@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { notifyError } from "@/shared/errors";
+import { notifyError, toAppError } from "@/shared/errors";
 
 /**
  * Escrita de `deal_items` — os produtos do negócio.
@@ -82,7 +82,11 @@ function invalidarNegocio(
 
 export function useEditarValorProposta(entryId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({
+  const recarregarValor = () => queryClient.invalidateQueries(
+    { queryKey: ["deal-card-extras", entryId] },
+    { throwOnError: true },
+  );
+  const mutation = useMutation({
     mutationFn: async ({ valor, expectedUpdatedAt }: { valor: number; expectedUpdatedAt: string | null }) => {
       if (!entryId) throw new Error("Card não disponível. Atualize a ficha.");
       const { error } = await supabase.rpc("editar_valor_proposta" as never, {
@@ -91,8 +95,16 @@ export function useEditarValorProposta(entryId: string | null) {
       if (error) throw error;
     },
     onSuccess: () => invalidarNegocio(queryClient, entryId),
-    onError: (error: Error) => notifyError(error, { fallback: "Não foi possível salvar o valor." }),
+    onError: async (error: Error) => {
+      if (toAppError(error).code === "conflict.stale") {
+        // A leitura pode falhar: preserve o conflito original para o editor
+        // bloquear a versão rejeitada e oferecer uma nova tentativa de leitura.
+        try { await recarregarValor(); } catch { /* O editor continua bloqueado. */ }
+      }
+      notifyError(error, { fallback: "Não foi possível salvar o valor." });
+    },
   });
+  return { ...mutation, recarregarValor };
 }
 
 export interface ItemNovoDoNegocio {

@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sendWithBoundedRecovery } from './send-recovery';
 afterEach(() => vi.useRealTimers());
+it('terminates when both provider and confirmation reads never settle', async () => {
+  vi.useFakeTimers();
+  const send = vi.fn(() => new Promise<never>(() => {}));
+  const confirm = vi.fn(() => new Promise<never>(() => {}));
+  const outcome = sendWithBoundedRecovery({ send, confirm, onRetry: vi.fn(), timeoutMs: 10, retryDelayMs: 1 }).catch(error => error);
+  await vi.runAllTimersAsync();
+  expect((await outcome).retryAttempts).toBe(10);
+  expect(send).toHaveBeenCalledOnce();
+});
 describe('bounded message recovery', () => {
   it('stops at ten send attempts, without an eleventh send', async () => {
     vi.useFakeTimers();
@@ -8,9 +17,17 @@ describe('bounded message recovery', () => {
     const onRetry=vi.fn();
     const outcome=sendWithBoundedRecovery({send,confirm:async()=>null,onRetry,timeoutMs:100,retryDelayMs:1}).catch(e=>e);
     await vi.runAllTimersAsync();
-    expect((await outcome).message).toBe('Falha no envio');
+    expect((await outcome).error).toMatchObject({ context: { status: 429 } });
     expect(send).toHaveBeenCalledTimes(10); // initial send is part of the budget
     expect(onRetry.mock.calls.map(c=>c[0])).toEqual([1,2,3,4,5,6,7,8,9,10]);
+  });
+  it.each([400, 401, 403, 413, 422])('preserves definite rejection %s without automatic replay or confirmation polling', async status => {
+    const response = { data: null, error: { context: { status } } };
+    const send = vi.fn().mockResolvedValue(response);
+    const confirm = vi.fn();
+    expect(await sendWithBoundedRecovery({ send, confirm, onRetry: vi.fn(), timeoutMs: 100 })).toEqual(response);
+    expect(send).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
   });
   it('keeps a slow accepted send in flight instead of duplicating it', async () => {
     vi.useFakeTimers();

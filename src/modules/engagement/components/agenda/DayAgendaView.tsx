@@ -20,6 +20,7 @@ import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import type { UnifiedEvent } from "./agenda-helpers";
 import { SOURCE_LABELS, getMonthGrid, outcomeOf } from "./agenda-helpers";
+import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 interface DayAgendaViewProps {
   /** Currently selected day (also drives which month the mini-calendar shows). */
@@ -59,7 +60,7 @@ function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
     return SOURCE_LABELS[event.source] ?? event.source;
   })();
 
-  if (showOwner && event.creatorName) return `${event.creatorName} · ${detalhe}`;
+  if (showOwner && event.creatorName) return `${agendaAttributionLabel(event.source)}: ${event.creatorName} · ${detalhe}`;
   return detalhe;
 }
 

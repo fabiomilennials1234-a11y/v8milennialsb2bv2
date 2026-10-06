@@ -605,7 +605,7 @@ function truncate(value: string, max: number): string {
  * termina colada em letra, dígito ou hífen: segmento de uuid/hex
  * ("…-0123456789ab", "12345678-1234-…") não é telefone.
  */
-const DIGIT_RUN_RE = /(?<![\w-])\d(?:[\s().\/-]{0,2}\d)+(?![\w-])/g;
+const DIGIT_RUN_RE = /(?<![\w-])\d(?:[\s()./-]{0,2}\d)+(?![\w-])/g;
 /** Data/hora ISO ("2026-10-05", "2026-10-05 15") não é PII — passa intacta. */
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2})?$/;
 
@@ -807,4 +807,3 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
     });
   }
 }
-
