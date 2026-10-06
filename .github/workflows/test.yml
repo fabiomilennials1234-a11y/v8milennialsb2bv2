@@ -92,7 +92,7 @@ jobs:
       - name: TSC ratchet (no new type errors vs baseline)
         run: npm run typecheck:ratchet
       - name: SQL regressions (proposal, idempotency, commissions and lead tags)
-        run: node --test tests/integration/p0-crm-fixes.test.mjs tests/integration/lead-tags-point-lookup.test.mjs tests/integration/scheduled-messages-optional-lead.test.mjs tests/integration/whatsapp-notification-isolation.test.mjs tests/integration/bulk-pipeline-move.test.mjs tests/integration/gestor-organization-overview.test.mjs tests/integration/lead-origin-catalog.test.mjs tests/integration/saved-views-multi-org.test.mjs tests/integration/support-first-response.test.mjs
+        run: node --test tests/integration/p0-crm-fixes.test.mjs tests/integration/lead-tags-point-lookup.test.mjs tests/integration/scheduled-messages-optional-lead.test.mjs tests/integration/whatsapp-notification-isolation.test.mjs tests/integration/bulk-pipeline-move.test.mjs tests/integration/gestor-organization-overview.test.mjs tests/integration/lead-origin-catalog.test.mjs tests/integration/pipeline-page-plan-cache-mode.test.mjs tests/integration/portfolio-health-rpc.test.mjs tests/integration/runtime-logs-retencao.test.mjs tests/integration/cron-dispatch-minute.test.mjs tests/integration/whatsapp-messages-hot.test.mjs tests/integration/channel-messages-restrict-owner.test.mjs tests/integration/leads-rls-initplan-equivalence.test.mjs tests/integration/saved-views-multi-org.test.mjs tests/integration/support-first-response.test.mjs
       - name: Build (prod)
         run: npm run build
         env:
@@ -130,8 +130,15 @@ jobs:
           npm run test:toth-preorders
       - name: Vitest ratchet (no newly broken tests vs baseline)
         run: npm run test:ratchet
+      # A interface clássica (`classic/`, servida à maioria das orgs) é um
+      # snapshot sem testes. Consertos portados para lá via classic.patch têm
+      # teste em tests/classic/, com `@` → classic/src. Sem ratchet: nasce verde.
+      - name: Vitest da interface clássica
+        run: npm run test:classic
       - name: Ajustes de pedidos ganhos (Postgres isolado)
         run: npm run test:won-order
+      - name: Correção de data e valor de vendas (Postgres isolado)
+        run: npm run test:sale-correction
       # Os thresholds de coverage em vitest.config.ts SERIAM o portão de
       # regressão — mas hoje não são: `vitest run --coverage` sai != 0 por
       # teste vermelho antes de chegar a avaliar cobertura, e são 137 dos 178

@@ -25,6 +25,7 @@ export interface CorrecaoVendaHistorica {
   /** AAAA-MM-DD, no dia civil da organização. */
   data: string;
   motivo: string;
+  versao?: string;
 }
 
 /**
@@ -216,6 +217,7 @@ export interface ItemEditado {
 }
 
 export interface DealCardData {
+  timezone?: string;
   pedidoAtualizadoEm?: string | null;
   /** Venda anterior ao CRM: `id` é o `deals.id`, não uma entrada de funil. */
   vendaHistorica?: boolean;

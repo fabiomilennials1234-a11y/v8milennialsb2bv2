@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   isError: false,
   refetch: vi.fn(),
   panelMounts: 0,
+  gate: { allowed: true, isLoading: false, reason: "Sem permissão para adicionar a funis" },
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
@@ -41,6 +42,12 @@ vi.mock("@/modules/leads", () => {
       return <div data-testid="deal-card-panel" data-mount={mountId} />;
     },
     LeadCardPanel: () => null,
+    LeadNewDealDialog: ({ leadId, onOpenChange }: { leadId: string; onOpenChange: (open: boolean) => void }) => (
+      <div role="dialog" aria-label="Novo negócio">
+        <span>{leadId}</span><button onClick={() => onOpenChange(false)}>Cancelar</button>
+      </div>
+    ),
+    useLeadActionGates: () => ({ canAddToPipe: state.gate }),
     useDealSheet: () => ({ openDeal: state.openDeal }),
   };
 });
@@ -71,6 +78,8 @@ beforeEach(() => {
   state.isError = false;
   state.refetch.mockReset();
   state.panelMounts = 0;
+  state.gate.allowed = true;
+  state.gate.isLoading = false;
   state.negocios = [
     {
       id: "entry-1", leadId: "lead", titulo: "Ricardo POSSEBON", estado: "aberto",
@@ -105,6 +114,7 @@ describe("Negócios no painel do chat", () => {
     expect(screen.queryByText("Negócios")).not.toBeInTheDocument();
     expect(screen.queryByText("Ricardo POSSEBON")).not.toBeInTheDocument();
     expect(screen.queryByTestId("deal-card-panel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adicionar negócio" })).not.toBeInTheDocument();
     expect(screen.getByText("funis")).toBeInTheDocument();
   });
 
@@ -132,5 +142,41 @@ describe("Negócios no painel do chat", () => {
     const originalMount = screen.getByTestId("deal-card-panel").getAttribute("data-mount");
     mudarLead("outro-lead");
     expect(screen.getByTestId("deal-card-panel").getAttribute("data-mount")).not.toBe(originalMount);
+  });
+
+  it("oferece criação mesmo sem negócio e só monta o formulário ao clicar", () => {
+    state.negocios = [];
+    renderPainel();
+    expect(screen.getByText("Lead sem negócio")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar negócio" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("lead");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it.each(["negada", "carregando"])("bloqueia a criação com permissão %s", (status) => {
+    state.gate.allowed = status !== "negada";
+    state.gate.isLoading = status === "carregando";
+    renderPainel();
+    expect(screen.getByRole("button", { name: "Adicionar negócio" })).toBeDisabled();
+  });
+
+  it("fecha a criação antiga ao trocar de lead e usa o novo alvo na próxima abertura", () => {
+    const { mudarLead } = renderPainel();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar negócio" }));
+    mudarLead("outro-lead");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar negócio" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("outro-lead");
+  });
+
+  it("descarta o formulário ao mudar de organização", () => {
+    const { mudarLead } = renderPainel();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar negócio" }));
+    state.org = "outra-org";
+    mudarLead("lead");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adicionar negócio" })).not.toBeInTheDocument();
   });
 });

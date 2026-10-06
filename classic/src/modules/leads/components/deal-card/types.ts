@@ -209,6 +209,8 @@ export interface ItemEditado {
 }
 
 export interface DealCardData {
+  timezone?: string;
+  vendaHistorica?: boolean;
   pedidoAtualizadoEm?: string | null;
   /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
   id: string;
@@ -352,3 +354,11 @@ export interface DealCardData {
  * é como as duas listas de abas saem de sincronia.
  */
 export type DealCardAba = "negocio" | "atividades" | "negocios" | "checklists";
+
+export interface CorrecaoVendaHistorica {
+  valor: number;
+  /** AAAA-MM-DD, no dia civil da organização. */
+  data: string;
+  motivo: string;
+  versao?: string;
+}

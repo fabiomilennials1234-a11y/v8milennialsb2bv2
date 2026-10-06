@@ -4,13 +4,13 @@ import { useCurrentTeamMember } from '@/modules/identity';
 import { fetchConversationMessages, isPersistedMessage, MESSAGE_PAGE_SIZE } from '@/modules/communication/lib/whatsappMessagesQuery';
 import { compareMessages, mergeConcurrentMessages, mergeMessagePages, reconcileConversation, type ThreadSnapshot } from '@/modules/communication/lib/whatsappReconciliation';
 import { chatQueryKeys } from './shared/queryKeys';
-import { useWhatsAppRealtimeFallback, FALLBACK_POLL_INTERVAL_MS, JOINED_BACKSTOP_POLL_INTERVAL_MS } from './useRealtimeFallback';
+import { useReconcileInterval } from './useRealtimeFallback';
 
 export function useWhatsAppMessages(phoneNumber: string | null, instanceId: string | null) {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
-  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
+  const refetchInterval = useReconcileInterval('thread', organizationId);
   const key = chatQueryKeys.messages(organizationId, phoneNumber, instanceId);
   const snapshotKey = ['whatsapp_thread_snapshot', ...key];
   const pageKey = ['whatsapp_thread_pagination', ...key];
@@ -37,7 +37,15 @@ export function useWhatsAppMessages(phoneNumber: string | null, instanceId: stri
       return mergeConcurrentMessages(before, result.messages, live);
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
-    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : JOINED_BACKSTOP_POLL_INTERVAL_MS,
+    // Rede final contra evento realtime perdido: 120 s saudável, degraus de
+    // 30→60→120 s em fallback (reconcilePolicy.ts). A latência baixa vem de
+    // reconexão e foco (chatReconcile.ts), não do polling.
+    refetchInterval,
+    // Volta de foco reconcilia; staleTime 30 s impede que trocar de aba dez
+    // vezes vire dez RPCs. Cada refetch é 1 `whatsapp_thread_manifest`, com
+    // atalho `unchanged` por fingerprint.
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
   const older = useMutation({
     mutationFn: async () => {

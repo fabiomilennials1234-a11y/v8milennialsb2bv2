@@ -96,6 +96,16 @@ describe("NewDealDialog — campos por funil", () => {
 });
 
 describe("NewDealDialog — submit", () => {
+  it("bloqueia envio se a permissão for retirada com o formulário aberto", () => {
+    const onCreate = vi.fn();
+    const { rerender } = render(<NewDealDialog open options={[QUALIFICACAO]} onCreate={onCreate} />);
+    expect(screen.getByTestId("new-deal-submit")).toBeEnabled();
+    rerender(<NewDealDialog open options={[{ ...QUALIFICACAO, disabled: true }]} onCreate={onCreate} />);
+    expect(screen.getByTestId("new-deal-submit")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
   it("entrega funil, etapa, dono e observação ao criar", async () => {
     const onCreate = open([QUALIFICACAO]);
     fireEvent.change(screen.getByTestId("new-deal-notes"), {

@@ -1,6 +1,7 @@
 -- Chamados a93206ea / 8e1c496e: dono obrigatório e acesso na org selecionada.
--- Gerada com `supabase migration new saved_views_owner_multi_org` em 05/10/2026;
--- só este arquivo novo foi renumerado após o teto do repo (20271106000010).
+-- Reservada pela CLI em 06/10/2026 e renumerada após o teto verificado
+-- da main e de produção (20271107170000). A versão inédita 20271106000020
+-- colidiu com corrigir_venda_ganha na main; nenhuma migration aplicada mudou.
 -- Escopo: saved_views apenas. Não aplicar a migration ampla de 39 tabelas
 -- como dependência deste conserto. Compatível com clientes clássicos antigos.
 

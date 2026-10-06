@@ -1,23 +1,37 @@
 /**
- * Página de gerenciamento de organizações pelo Master
+ * Organizações — a central de clientes da Área Dev (board das 5 centrais,
+ * regras OR-1…OR-7).
+ *
+ * A lista mostra o que decide a conversa com o cliente: saúde, usuários,
+ * último login, plano. Clicar abre a FICHA (plano, uso, usuários, features,
+ * vendas, chamados) — o que antes estava espalhado em Dashboard, Usuários,
+ * Planos, Features e /insights. `?org=<id>` abre a ficha direto (links da
+ * Implementação).
  */
 
-import { useState } from "react";
-import { format } from "date-fns";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Plus,
   Search,
   MoreVertical,
   CreditCard,
-  Users,
   Trash2,
   Eye,
   Power,
   PowerOff,
   Copy,
   Check,
+  AlertTriangle,
+  Building2,
+  Gauge,
+  UserX,
 } from "lucide-react";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +81,17 @@ import { OrgSuspensionDialog } from "../components/OrgSuspensionDialog";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
 import { MasterPageHeader } from "../components/MasterPageHeader";
+import { OrgFicha } from "../components/org/OrgFicha";
+import { useOrgHealthSignals } from "../hooks/useOrgFicha";
+import { healthBand, orgHealth, RISK_NO_LOGIN_DAYS, type OrgHealth } from "../lib/org-health";
+
+type Recorte = "todas" | "risco" | "limite";
+
+const BAND_CHIP = {
+  good: "bg-success/10 text-success-strong",
+  warn: "bg-warning/15 text-warning-strong",
+  bad: "bg-destructive/10 text-destructive",
+} as const;
 
 export default function MasterOrganizations() {
   const { isOutbounder } = useMasterAuth();
@@ -77,6 +102,18 @@ export default function MasterOrganizations() {
   const [suspensionMode, setSuspensionMode] = useState<"suspend" | "reactivate">("suspend");
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [recorte, setRecorte] = useState<Recorte>("todas");
+  const [params, setParams] = useSearchParams();
+  const fichaId = params.get("org");
+  const abrirFicha = (id: string | null) =>
+    setParams(
+      (p) => {
+        if (id) p.set("org", id);
+        else p.delete("org");
+        return p;
+      },
+      { replace: true },
+    );
 
   // Form states
   const [newOrgName, setNewOrgName] = useState("");
@@ -85,6 +122,12 @@ export default function MasterOrganizations() {
   const [newOrgFunnel, setNewOrgFunnel] = useState<FunnelTemplateKey | "none">("none");
 
   const { data: organizations, isLoading } = useMasterOrganizations();
+  const { data: signals } = useOrgHealthSignals();
+  const saude = useMemo(() => {
+    const m = new Map<string, OrgHealth>();
+    signals?.forEach((sig, id) => m.set(id, orgHealth(sig)));
+    return m;
+  }, [signals]);
   const createOrg = useMasterCreateOrganization();
   const deleteOrg = useMasterDeleteOrganization();
   const setSuspension = useMasterSetOrgSuspension();
@@ -94,12 +137,32 @@ export default function MasterOrganizations() {
     ? organizations?.filter((org) => org.org_type === "outbound")
     : organizations;
 
-  const filteredOrgs = baseOrgs?.filter(
-    (org) =>
-      org.name.toLowerCase().includes(search.toLowerCase()) ||
-      org.slug.toLowerCase().includes(search.toLowerCase()) ||
-      org.id.toLowerCase().includes(search.toLowerCase())
-  );
+  // Org encerrada não entra na conta de risco: não há o que salvar.
+  const vivas = (baseOrgs ?? []).filter((o) => !["cancelled", "expired"].includes(o.subscription_status));
+  const emRisco = vivas.filter((o) => saude.get(o.id)?.atRisk);
+  const pertoDoLimite = vivas.filter((o) => saude.get(o.id)?.quotaWarning);
+  const semLogin = vivas.filter((o) => {
+    const h = saude.get(o.id);
+    return !!h && (h.daysSinceLogin === null || h.daysSinceLogin >= RISK_NO_LOGIN_DAYS);
+  });
+  const notaMedia = vivas.length
+    ? Math.round(vivas.reduce((acc, o) => acc + (saude.get(o.id)?.score ?? 0), 0) / vivas.length)
+    : 0;
+
+  const recortadas = recorte === "risco" ? emRisco : recorte === "limite" ? pertoDoLimite : baseOrgs;
+
+  const filteredOrgs = recortadas
+    ?.filter(
+      (org) =>
+        org.name.toLowerCase().includes(search.toLowerCase()) ||
+        org.slug.toLowerCase().includes(search.toLowerCase()) ||
+        org.id.toLowerCase().includes(search.toLowerCase())
+    )
+    // Num recorte, a pior nota primeiro — é por onde o dia começa.
+    .sort((a, b) => (recorte === "todas" ? 0 : (saude.get(a.id)?.score ?? 0) - (saude.get(b.id)?.score ?? 0)));
+
+  const fichaOrg = (baseOrgs ?? []).find((o) => o.id === fichaId) ?? null;
+  const sinaisCarregando = isLoading || !signals;
 
   const handleCreate = async () => {
     if (!newOrgName || !newOrgSlug) return;
@@ -162,7 +225,7 @@ export default function MasterOrganizations() {
         subtitle={
           isOutbounder
             ? "Gerencie as organizações de outbound"
-            : "Gerencie todas as organizações do sistema"
+            : "Plano, uso, usuários e saúde de cada cliente. Clique numa org para abrir a ficha."
         }
         actions={
           <Button onClick={() => setCreateOpen(true)}>
@@ -172,8 +235,60 @@ export default function MasterOrganizations() {
         }
       />
 
+      <KpiRow cols={4}>
+        <KpiTile
+          label="Orgs ativas"
+          value={vivas.length}
+          icon={Building2}
+          tone="info"
+          loading={isLoading}
+          note={`${(baseOrgs ?? []).length} no total`}
+        />
+        <KpiTile
+          label="Em risco"
+          value={emRisco.length}
+          icon={AlertTriangle}
+          tone={emRisco.length > 0 ? "bad" : "good"}
+          note={`nota < 45 ou ${RISK_NO_LOGIN_DAYS} dias sem login`}
+          loading={sinaisCarregando}
+        />
+        <KpiTile
+          label={`Sem login há ${RISK_NO_LOGIN_DAYS}+ dias`}
+          value={semLogin.length}
+          icon={UserX}
+          tone={semLogin.length > 0 ? "warn" : "good"}
+          note="alerta de churn"
+          loading={sinaisCarregando}
+        />
+        <KpiTile label="Nota média" value={notaMedia} icon={Gauge} tone="gold" note="de 100, orgs ativas" loading={sinaisCarregando} />
+      </KpiRow>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <nav aria-label="Recorte" className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide">
+          {(
+            [
+              ["todas", "Todas"],
+              ["risco", `Em risco · ${emRisco.length}`],
+              ["limite", `Perto do limite · ${pertoDoLimite.length}`],
+            ] as [Recorte, string][]
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={recorte === k}
+              onClick={() => setRecorte(k)}
+              className={cn(
+                "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                recorte === k ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
       {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative w-full max-w-md sm:w-auto sm:flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Buscar por nome ou slug..."
@@ -181,6 +296,7 @@ export default function MasterOrganizations() {
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
         />
+      </div>
       </div>
 
       {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão. No
@@ -200,7 +316,9 @@ export default function MasterOrganizations() {
                 <TableHead className="max-sm:hidden">Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="max-md:hidden">Plano</TableHead>
-                <TableHead className="max-lg:hidden">Criada em</TableHead>
+                <TableHead>Saúde</TableHead>
+                <TableHead className="max-lg:hidden">Usuários</TableHead>
+                <TableHead className="max-lg:hidden">Último login</TableHead>
                 <TableHead className="w-[100px] max-sm:w-14">
                   <span className="max-sm:sr-only">Ações</span>
                 </TableHead>
@@ -208,7 +326,7 @@ export default function MasterOrganizations() {
             </TableHeader>
             <TableBody>
               {filteredOrgs.map((org) => (
-                  <TableRow key={org.id}>
+                  <TableRow key={org.id} className="cursor-pointer" onClick={() => abrirFicha(org.id)}>
                     <TableCell className="max-md:w-full max-md:max-w-0">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{org.name}</p>
@@ -230,10 +348,16 @@ export default function MasterOrganizations() {
                     <TableCell className="max-md:hidden">
                       <span className="capitalize">{org.subscription_plan || "free"}</span>
                     </TableCell>
-                    <TableCell className="max-lg:hidden">
-                      {format(new Date(org.created_at), "dd/MM/yyyy", { locale: ptBR })}
-                    </TableCell>
                     <TableCell>
+                      <HealthChip health={saude.get(org.id)} />
+                    </TableCell>
+                    <TableCell className="max-lg:hidden tabular-nums">
+                      <UsersCell signals={signals?.get(org.id)} />
+                    </TableCell>
+                    <TableCell className="max-lg:hidden text-sm text-muted-foreground">
+                      <LastLoginCell at={signals?.get(org.id)?.last_login_at ?? null} known={!!signals?.get(org.id)} />
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" aria-label={`Ações de ${org.name}`}>
@@ -253,13 +377,9 @@ export default function MasterOrganizations() {
                             {copiedId === org.id ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                             Copiar ID
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => abrirFicha(org.id)}>
                             <Eye className="w-4 h-4 mr-2" />
-                            Ver detalhes
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Users className="w-4 h-4 mr-2" />
-                            Ver membros
+                            Abrir ficha
                           </DropdownMenuItem>
                           {!isOutbounder && (
                             <>
@@ -411,6 +531,12 @@ export default function MasterOrganizations() {
         </DialogContent>
       </Dialog>
 
+      <Sheet open={!!fichaOrg} onOpenChange={(v) => !v && abrirFicha(null)}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl" onOpenAutoFocus={(e) => e.preventDefault()}>
+          {fichaOrg && <OrgFicha key={fichaOrg.id} org={fichaOrg} health={saude.get(fichaOrg.id) ?? null} />}
+        </SheetContent>
+      </Sheet>
+
       {/* Billing Override Modal */}
       <BillingOverrideModal
         open={billingOverrideOpen}
@@ -441,4 +567,40 @@ export default function MasterOrganizations() {
       />
     </div>
   );
+}
+
+function HealthChip({ health }: { health: OrgHealth | undefined }) {
+  if (!health) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5" title={health.riskReasons.join(" · ") || "sem alerta"}>
+      <span
+        className={cn(
+          "inline-flex min-w-9 justify-center rounded-full px-2 py-0.5 text-xs font-bold tabular-nums",
+          BAND_CHIP[healthBand(health.score)],
+        )}
+      >
+        {health.score}
+      </span>
+      {health.atRisk && <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-label="em risco" />}
+      {health.quotaWarning && (
+        <span className="text-[10px] font-bold uppercase tracking-wide text-warning-strong">limite</span>
+      )}
+    </span>
+  );
+}
+
+function UsersCell({ signals }: { signals: { active_users_7d: number; members_active: number } | undefined }) {
+  if (!signals) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span title="Entraram nos últimos 7 dias / membros ativos">
+      {signals.active_users_7d}
+      <span className="text-muted-foreground"> de {signals.members_active}</span>
+    </span>
+  );
+}
+
+function LastLoginCell({ at, known }: { at: string | null; known: boolean }) {
+  if (!known) return <>—</>;
+  if (!at) return <>nunca</>;
+  return <>{formatDistanceToNow(new Date(at), { addSuffix: true, locale: ptBR })}</>;
 }

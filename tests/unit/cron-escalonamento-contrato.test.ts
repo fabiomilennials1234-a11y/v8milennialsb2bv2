@@ -25,6 +25,7 @@ import {
   disparosNaSemana,
   expandirCampo,
   frequenciaSemanal,
+  lerAgendadosDepois,
   lerReescalonamento,
 } from '../../scripts/cron/carga-por-minuto.mjs';
 
@@ -165,6 +166,49 @@ describe('migration de reescalonamento de fase', () => {
       for (const t of disparosNaSemana(job!.schedule)) {
         expect(ocupado.get(t), `${nome} colide no minuto ${t}`).toBeUndefined();
         ocupado.set(t, nome);
+      }
+    }
+  });
+});
+
+/**
+ * Jobs AGENDADOS por migrations posteriores ao reescalonamento. Sem isto o
+ * contrato fica verde por ausência: o snapshot de prod é de 2026-10-02 e não
+ * conhece job criado depois. Cada `cron.schedule('nome', 'agenda', ...)` de
+ * migration mais nova entra (ou substitui o homônimo) na carga medida.
+ */
+const AGENDADOS_DEPOIS = lerAgendadosDepois(MIGRATIONS, ARQUIVO);
+
+describe('jobs agendados por migrations novas', () => {
+  const comNovos = [
+    ...depois.filter((j) => !AGENDADOS_DEPOIS.some((n) => n.jobname === j.jobname)),
+    ...AGENDADOS_DEPOIS.map(({ jobname, schedule }) => ({ jobid: 0, jobname, schedule, avgSeconds: null })),
+  ] as Job[];
+
+  it('o parser enxerga os agendamentos (controle contra verde por ausência)', () => {
+    expect(AGENDADOS_DEPOIS.map((j) => j.jobname)).toContain('purge-system-alerts-resolvidos');
+  });
+
+  it(`pico de disparos não-por-minuto continua no máximo ${TETO}`, () => {
+    expect(pico(cargaSemanal(comNovos))).toBeLessThanOrEqual(TETO);
+  });
+
+  it('job novo não divide minuto com purga pesada recorrente', () => {
+    const pesados = new Set<number>();
+    for (const nome of PESADAS_RECORRENTES) {
+      const job = depois.find((j) => j.jobname === nome);
+      for (const t of disparosNaSemana(job!.schedule)) pesados.add(t);
+    }
+    // Job por-minuto (`* * * * *`) não tem fase a escolher: colide com toda purga
+    // por definição, e é por isso que fica fora da carga medida (cargaSemanal).
+    // Hoje o único é cron-dispatch-minute (20271107140002), que roda as 19
+    // subtarefas em UMA conexão e substitui 19 jobs (≈1.020 → 60 conexões/h);
+    // tests/unit/cron-dispatch-minute-contrato.test.ts mede o efeito dele. Para
+    // todo job com fase, o check segue integral.
+    for (const novo of AGENDADOS_DEPOIS) {
+      if (analisarAgenda(novo.schedule).porMinuto) continue;
+      for (const t of disparosNaSemana(novo.schedule)) {
+        expect(pesados.has(t), `${novo.jobname} (${novo.arquivo}) colide no minuto ${t}`).toBe(false);
       }
     }
   });

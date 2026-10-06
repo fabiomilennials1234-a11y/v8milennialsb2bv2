@@ -65,5 +65,9 @@ Prova local de ponta a ponta (build dual contra o Supabase mockado, servida com 
 ## Custo enquanto a clássica existir
 
 - A clássica é **congelada**: funcionalidade nova entra só na V5; na clássica, só conserto crítico (via patch).
+- Conserto crítico na clássica = portar o diff de `src/` para `classic/src/` (`git apply --directory=classic`),
+  rodar `node scripts/ui-classic/snapshot.mjs --gerar-patch` e copiar o teste para `tests/classic/`
+  (`npm run test:classic`, `@` → `classic/src`). Primeiro uso: 2026-10-05 — funil (#2235), reconciliação do
+  chat (#2238) e merge do UPDATE do Realtime.
 - O banco precisa continuar servindo a clássica: nada de remover coluna/view que ela lê.
 - Desligar a clássica = apagar `classic/`, `scripts/ui-classic/`, o mapa do nginx e a guarda.

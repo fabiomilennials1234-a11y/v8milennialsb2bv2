@@ -54,7 +54,14 @@ before(async () => {
   await db.exec(`CREATE FUNCTION test_immutable_sale() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'sale ledger is immutable'; END $$;
     CREATE TRIGGER immutable_sale BEFORE UPDATE OR DELETE ON sale_events FOR EACH ROW EXECUTE FUNCTION test_immutable_sale();`);
   await db.exec(sqlFile("supabase/migrations/20271106000010_corrigir_venda_historica.sql"));
+  await db.exec(sqlFile("supabase/migrations/20271106000020_corrigir_venda_ganha.sql"));
 });
+test("a porta unificada também corrige vendas históricas", async () => {
+  const at = await version(deals[1]);
+  await db.query("select corrigir_venda_ganha($1,$2,$3,$4,$5)", [deals[1],at,180,"2025-02-18","Correção pela interface clássica"]);
+  assert.equal((await live()).find(s => s.deal_id === deals[1]).v,180);
+});
+
 after(async () => {
   await db?.close();
 });
@@ -62,7 +69,7 @@ after(async () => {
 let deals;
 beforeEach(async () => {
   await db.exec(`RESET ROLE;
-    TRUNCATE historical_sale_corrections,historical_sale_batches,sale_events,upsell_orders,upsell_clients,deals,leads,team_members,organizations,auth.users CASCADE;
+    TRUNCATE deal_sale_corrections,historical_sale_corrections,historical_sale_batches,sale_events,upsell_orders,upsell_clients,deals,leads,team_members,organizations,auth.users CASCADE;
     INSERT INTO auth.users VALUES ('${id(1)}'),('${id(2)}'),('${id(3)}');
     INSERT INTO organizations(id) VALUES ('${id(10)}'),('${id(20)}');
     INSERT INTO team_members(id,user_id,organization_id,role) VALUES

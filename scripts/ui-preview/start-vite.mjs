@@ -41,7 +41,10 @@ if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
 
 console.log(`ui-preview: vite --mode uipreview on http://localhost:${APP_PORT}  →  Supabase ${MOCK_URL}`);
 const config = resolve(ROOT, "scripts/ui-preview/vite.config.mjs"); // vite.config.ts + HMR off
-const child = spawn("npx", ["vite", "--config", config, "--mode", "uipreview", "--port", String(APP_PORT), "--strictPort", "--host", "localhost"], {
+// O bin JS do vite pelo próprio node: `spawn("npx")` sem shell dá ENOENT no
+// Windows (npx lá é npx.cmd), e shell: true reabriria a porta para aspas.
+const viteBin = resolve(ROOT, "node_modules/vite/bin/vite.js");
+const child = spawn(process.execPath, [viteBin, "--config", config, "--mode", "uipreview", "--port", String(APP_PORT), "--strictPort", "--host", "localhost"], {
   cwd: ROOT,
   env,
   stdio: "inherit",

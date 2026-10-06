@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type {
   TeamMember,
   TeamMemberInsert,
@@ -31,7 +30,7 @@ export type {
  */
 export function useTeamMembers() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("team_members", ["team_members"]);
+  // Sem realtime: team_members está fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06). Mutations invalidam a query.
 
   return useQuery({
     queryKey: ["team_members", organizationId],

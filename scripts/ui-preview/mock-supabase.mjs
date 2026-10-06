@@ -24,6 +24,8 @@ import { parseSelect, buildFilters, applyOrder, projectRow } from "./lib/postgre
 import { handleRealtimeUpgrade } from "./lib/realtime.mjs";
 import { MOCK_HOST, MOCK_PORT, buildSession, buildUser } from "./lib/session.mjs";
 import { buildFixtures, fixtureNow } from "./fixtures/seed.mjs";
+import { extendMasterFleet } from "./fixtures/master-fleet.mjs";
+import { loadProdSnapshot } from "./fixtures/prod-snapshot.mjs";
 import { rpcHandlers } from "./fixtures/rpc.mjs";
 import { functionHandlers } from "./fixtures/functions.mjs";
 
@@ -43,6 +45,10 @@ const schema = loadSchema(resolve(ROOT, "src/integrations/supabase/types.ts"));
 let fx;
 function reset() {
   fx = buildFixtures({ master: MASTER, now: fixtureNow() });
+  // A frota das 5 centrais (Área Dev) só existe para o master.
+  // `UI_PREVIEW_PROD_SNAPSHOT=<json>` troca a frota inventada por um snapshot só-leitura de prod.
+  if (MASTER && process.env.UI_PREVIEW_PROD_SNAPSHOT) loadProdSnapshot(fx, process.env.UI_PREVIEW_PROD_SNAPSHOT);
+  else if (MASTER) extendMasterFleet(fx);
   // Pad every fixture row with all real columns (types.ts) so `row.x === null`
   // checks and `.map` on NOT NULL arrays behave like production.
   for (const [table, rows] of Object.entries(fx.db)) {
@@ -241,7 +247,9 @@ async function handleRpc(req, res, fn, url) {
     args = (await readBody(req)) ?? {};
   }
   // Só handler próprio: `/rpc/constructor` não pode cair em Object.prototype.
-  const handler = Object.hasOwn(rpcHandlers, fn) ? rpcHandlers[fn] : undefined;
+  const handler = fx.rpcMaster && Object.hasOwn(fx.rpcMaster, fn)
+    ? fx.rpcMaster[fn]
+    : Object.hasOwn(rpcHandlers, fn) ? rpcHandlers[fn] : undefined;
   let result;
   let miss = false;
   if (handler) {

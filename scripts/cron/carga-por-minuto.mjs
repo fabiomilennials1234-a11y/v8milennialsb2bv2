@@ -18,7 +18,8 @@
 //     supabase/migrations/<arquivo>.sql
 // Imprime a tabela antes/depois por job e a carga por minuto (0..59).
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MINUTOS_NA_SEMANA = 7 * 24 * 60;
@@ -138,6 +139,24 @@ export function lerReescalonamento(sql) {
   }
   if (pares.size === 0) throw new Error('Nenhuma tupla de reescalonamento encontrada');
   return pares;
+}
+
+/**
+ * Jobs agendados por migrations POSTERIORES a `arquivoBase` (ordem lexical =
+ * ordem de versão): cada `cron.schedule('nome', 'agenda', ...)` vira
+ * { arquivo, jobname, schedule }. O snapshot de prod não conhece job criado
+ * depois dele; sem isto os contratos de carga ficam verdes por ausência.
+ * `cron.alter_job` não é lido — mudança de agenda por alter_job precisa ser
+ * declarada à mão no contrato que depende dela.
+ */
+export function lerAgendadosDepois(dirMigrations, arquivoBase) {
+  return readdirSync(dirMigrations)
+    .filter((f) => f.endsWith('.sql') && arquivoBase !== undefined && f > arquivoBase)
+    .flatMap((f) =>
+      [...readFileSync(path.join(dirMigrations, f), 'utf8').matchAll(
+        /cron\.schedule\(\s*'([^']+)'\s*,\s*'([^']+)'/g,
+      )].map(([, jobname, schedule]) => ({ arquivo: f, jobname, schedule })),
+    );
 }
 
 /** Aplica o reescalonamento sobre o snapshot, sem mutar a entrada. */

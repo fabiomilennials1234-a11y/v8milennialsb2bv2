@@ -658,6 +658,26 @@ describe("useAddLeadToCustomPipe", () => {
     expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_criar", expect.any(Object));
     expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
+
+  it("atualiza negócios do chat e funis do lead após criar", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const keys = [
+      ["leads-deals", "org-t", ["l1"]],
+      ["leads-deals", "org-t", "chat-resumo", "l1"],
+      ["lead_all_pipelines", "l1", "org-t", "p1"],
+      ["pipeline_entries", "org-t", "p1"],
+    ];
+    for (const key of keys) client.setQueryData(key, []);
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: "entry-nova", error: null } as never);
+    const { result } = renderHook(() => useAddLeadToCustomPipe(), {
+      wrapper: ({ children }) => React.createElement(QueryClientProvider, { client }, children),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ pipeline_id: "p1", lead_id: "l1", stage_id: "s1" });
+    });
+    for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    client.clear();
+  });
 });
 
 describe("useMoveLeadInCustomPipe", () => {

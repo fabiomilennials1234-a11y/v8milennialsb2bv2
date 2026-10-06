@@ -280,6 +280,8 @@ export { useDealSheet } from "./components/deal-detail/deal-sheet-context";
 // multiplicar a violação por quatro em vez de fechá-la.
 export { DealCardPanel } from "./components/deal-card/DealCardPanel";
 export { LeadCardPanel } from "./components/lead-card/LeadCardPanel";
+// Mesma criação no card do lead e no painel do chat; consultas só ao abrir.
+export { LeadCardNewDeal as LeadNewDealDialog } from "./components/lead-card/LeadCardNewDeal";
 // Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
 export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
 export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";

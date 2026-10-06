@@ -13,7 +13,7 @@
  * novo no mesmo índice, e sem `sortContactsByRecency` a conversa que acabou de
  * receber mensagem não sobe — o "chat não atualiza" que o cliente relata.
  */
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
@@ -27,8 +27,12 @@ import {
   type CacheDeContatos,
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
+import { mergeRealtimeUpdate } from "./shared/realtimeUpdate";
 import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
+import { pedirReconciliacaoDaLista, reconciliarAposReconexao } from "./chatReconcile";
+import { getChannelStatus, subscribeChannelStatus } from "@/lib/realtimeStatusStore";
+import { whatsAppRealtimeStatusKey } from "@/shared/realtime/useRealtimeChannelStatus";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
@@ -100,7 +104,9 @@ export function useWhatsAppMessagesRealtime(
         } else if (eventType === "UPDATE") {
           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
             if (!prev) return prev;
-            return prev.map((m) => (m.id === message.id ? message : m));
+            // Merge, não troca: coluna TOAST inalterada (raw_payload) chega
+            // ausente no UPDATE — ver `mergeRealtimeUpdate`.
+            return prev.map((m) => (m.id === message.id ? mergeRealtimeUpdate(m, message) : m));
           });
         } else if (eventType === "DELETE") {
           queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
@@ -166,7 +172,11 @@ export function useWhatsAppMessagesRealtime(
           );
 
           if (existingIdx === -1) {
-            queryClient.invalidateQueries({ queryKey: query.queryKey });
+            // Contato fora do cache: só a RPC monta a conversa nova. Pelo teto
+            // de `chatReconcile.ts` — evento isolado reage na hora, rajada
+            // (campanha respondida) colapsa em 1 refetch por janela em vez de
+            // 1 RPC de lista por mensagem.
+            pedirReconciliacaoDaLista(queryClient, query.queryKey);
             continue;
           }
 
@@ -220,11 +230,32 @@ export function useWhatsAppMessagesRealtime(
     [organizationId, queryClient],
   );
 
+  // ── Reconexão → reconciliação ─────────────────────────────────────────────
+  //
+  // O postgres_changes não reenvia o que foi emitido durante a queda. Quando o
+  // canal volta a "joined" (o `joinCount` do store sobe), thread e lista são
+  // reconciliadas pelo teto de `chatReconcile.ts`. Assinatura IMPERATIVA no
+  // store, não `useSyncExternalStore`: este hook mora no ChatBubbleProvider,
+  // e re-renderizar o provider a cada transição de status re-renderizaria a
+  // árvore inteira. O 1º join e o mesmo join visto pelos dois montadores
+  // (bolha e /chat) são descartados lá dentro.
+  useEffect(() => {
+    if (!organizationId) return;
+    const statusKey = whatsAppRealtimeStatusKey(organizationId);
+    let ultimo = getChannelStatus(statusKey).joinCount;
+    return subscribeChannelStatus(statusKey, () => {
+      const { joinCount } = getChannelStatus(statusKey);
+      if (joinCount === ultimo) return;
+      ultimo = joinCount;
+      reconciliarAposReconexao(queryClient, organizationId, joinCount);
+    });
+  }, [organizationId, queryClient]);
+
   useRealtimeChannel({
     table: "whatsapp_messages",
     filter: organizationId ? `organization_id=eq.${organizationId}` : undefined,
     onEvent,
     enabled: !!organizationId,
-    statusKey: organizationId ? `whatsapp-messages-patched-${organizationId}` : undefined,
+    statusKey: organizationId ? whatsAppRealtimeStatusKey(organizationId) : undefined,
   });
 }

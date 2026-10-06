@@ -30,6 +30,15 @@ export interface MasterPermissions {
   /** Gestor de Portfólio — CRUD de gestores + binding de orgs (ADR-0021 §8). */
   gestores?: boolean;
   outbound_only?: boolean;
+  /**
+   * As 5 centrais da Área Dev (regra PE-4). Cada uma abre a central inteira;
+   * as chaves acima continuam abrindo item a item. Ver `MASTER_GROUPS`.
+   */
+  operacao?: boolean;
+  implementacao?: boolean;
+  organizacoes?: boolean;
+  monitoramento?: boolean;
+  testes?: boolean;
 }
 
 /**

@@ -6,15 +6,17 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 /**
  * Realtime fan-out for the lead detail modal (Issue #306, PRD #284 Fase 3).
  *
- * Subscribes to the 6 tables that drive the modal:
+ * Subscribes to the 3 published tables that drive the modal:
  *   - `leads`              (the lead row itself; filter by id)
- *   - `lead_history`       (activity feed)
- *   - `lead_comments`      (comments thread)
- *   - `lead_tags`          (tag chips)
  *   - `pipeline_entries`   (cross-pipe accordion)
  *   - `pipe_proposta_items` (proposta line items — no lead_id column,
  *                            filtered by org, narrowed client-side via
  *                            the invalidated queries themselves)
+ *
+ * NOT subscribed: `lead_history`, `lead_comments`, `lead_tags` are outside the
+ * `supabase_realtime` publication — those channels never emitted an event and
+ * only cost a failing join each (perf S0, 2026-10-06). Their caches refresh
+ * through the mutations that write them.
  *
  * Gates:
  *   - Disabled when the modal is closed or no lead is selected.
@@ -92,46 +94,6 @@ export function useLeadDetailRealtime(
       invalidate([
         ["lead-detail", leadId],
         ["lead-visibility", leadId],
-      ]);
-    },
-  });
-
-  useRealtimeChannel({
-    table: "lead_history",
-    filter: leadIdFilter,
-    enabled: isLive,
-    onEvent: () => {
-      if (!leadId) return;
-      invalidate([
-        ["lead-timeline", leadId],
-        ["lead_history", leadId],
-        ["lead-history", leadId],
-      ]);
-    },
-  });
-
-  useRealtimeChannel({
-    table: "lead_comments",
-    filter: leadIdFilter,
-    enabled: isLive,
-    onEvent: () => {
-      if (!leadId) return;
-      invalidate([
-        ["lead-comments", leadId],
-        ["lead_comments", leadId],
-      ]);
-    },
-  });
-
-  useRealtimeChannel({
-    table: "lead_tags",
-    filter: leadIdFilter,
-    enabled: isLive,
-    onEvent: () => {
-      if (!leadId) return;
-      invalidate([
-        ["lead-tags", leadId],
-        ["lead-detail", leadId],
       ]);
     },
   });

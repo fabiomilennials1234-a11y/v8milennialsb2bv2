@@ -108,7 +108,12 @@ const MasterPaymentLinks = lazy(() => lazyRetry(() => import("@/modules/identity
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
-const MasterSupportTickets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterSupportTickets")));
+// Área Dev — as 5 centrais (board "18 telas → 5 centrais"). As páginas antigas
+// continuam nas rotas de sempre, agora como abas das centrais.
+const OperacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/OperacaoCentral")));
+const ImplementacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/ImplementacaoCentral")));
+const MonitoramentoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/MonitoramentoCentral")));
+const TestesCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/TestesCentral")));
 const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
 const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
 const MasterOraculoFeedback = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOraculoFeedback")));
@@ -123,6 +128,7 @@ const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/mas
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
 import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
+import { MasterIndexRedirect } from "@/modules/identity/master/components/MasterSidebar";
 
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";
@@ -813,7 +819,12 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<MasterDashboard />} />
+        <Route index element={<MasterIndexRedirect />} />
+        <Route path="operacao" element={<OperacaoCentral />} />
+        <Route path="implementacao" element={<ImplementacaoCentral />} />
+        <Route path="monitoramento" element={<MonitoramentoCentral />} />
+        <Route path="testes" element={<TestesCentral />} />
+        <Route path="panorama" element={<MasterDashboard />} />
         <Route path="organizations" element={<MasterOrganizations />} />
         <Route path="users" element={<MasterUsers />} />
         <Route path="plans" element={<MasterPlans />} />
@@ -829,7 +840,8 @@ function AppRoutes() {
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />
         <Route path="meta-assets" element={<MasterMetaAssets />} />
-        <Route path="support-tickets" element={<MasterSupportTickets />} />
+        {/* A lista de Suporte virou o kanban da Operação; o link do e-mail ao staff ainda aponta para cá. */}
+        <Route path="support-tickets" element={<Navigate to="/master/operacao" replace />} />
         <Route path="stage-roles" element={<MasterStageRoleReview />} />
         <Route path="usuarios-ativos" element={<MasterUsuariosAtivos />} />
       </Route>

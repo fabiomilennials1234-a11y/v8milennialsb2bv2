@@ -58,7 +58,7 @@ function papelDaEtapa(role: unknown): DealCardStage["papel"] {
 
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
   const { usaLeiDoErp } = useOrgUsaLeiDoErp();
-  const { organizationId, teamMemberId, role } = useOrganization();
+  const { organizationId, teamMemberId, role, timezone } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
 
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
@@ -186,13 +186,14 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
        * `deal_items`, que guarda os produtos do negócio desde a Wave 1, nunca
        * teve um leitor.
        */
-      const dealId = typeof entryRes.data?.deal_id === "string" ? entryRes.data.deal_id : null;
+      const dealId = negocioBase!.historicalSale ? negocioBase!.id : typeof entryRes.data?.deal_id === "string" ? entryRes.data.deal_id : null;
       const [negocioRes, itensRes, reunioesRes] = dealId
         ? await Promise.all([
             supabase
               .from("deals")
-              .select("id, value, currency, probability, expected_close_date, closed_at, won, loss_reason, created_at, updated_at")
+              .select("id, value, currency, probability, expected_close_date, closed_at, outcome_at, won, loss_reason, created_at, updated_at")
               .eq("id", dealId)
+              .eq("organization_id", organizationId!)
               .maybeSingle(),
             supabase
               .from("deal_items")
@@ -325,6 +326,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
     return {
       id: negocioBase.id,
+      vendaHistorica: negocioBase.historicalSale === true,
+      timezone: timezone ?? "America/Sao_Paulo",
       titulo: negocioBase.title,
       estado:
         negocioBase.outcome === "won"
@@ -461,7 +464,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         negocioBase.outcome === "open"
           ? null
           : {
-              quando: negocioBase.stageChangedAt ?? "",
+              quando: typeof extras.data?.negocio?.outcome_at === "string" ? extras.data.negocio.outcome_at : typeof extras.data?.negocio?.closed_at === "string" ? extras.data.negocio.closed_at : negocioBase.stageChangedAt ?? "",
               valorVenda: negocioBase.outcome === "won" ? negocioBase.value : null,
               motivo: typeof metadata.loss_reason === "string" ? metadata.loss_reason : null,
             },
@@ -539,6 +542,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       })),
     };
   }, [
+    timezone,
     usaLeiDoErp,
     lead,
     negocioBase,

@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
 
@@ -145,11 +144,13 @@ export interface UpdateMeetingInput {
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
-/** List meetings for the current org, with optional filters and realtime subscription */
+/**
+ * List meetings for the current org, with optional filters.
+ * Sem realtime: `meetings` está fora da publication `supabase_realtime` (a
+ * assinatura nunca emitiu evento; perf S0). Mutations invalidam a query.
+ */
 export function useMeetings(filters?: MeetingFilters) {
   const { organizationId, isReady } = useOrganization();
-
-  useRealtimeSubscription("meetings", ["meetings"]);
 
   return useQuery({
     queryKey: ["meetings", organizationId, filters],

@@ -6,6 +6,7 @@
   "scripts": {
     "test:won-order": "node --test tests/integration/won-order-adjustment.test.mjs",
     "test:historical-correction": "node --test tests/integration/historical-sale-correction.test.mjs",
+    "test:sale-correction": "node --test tests/integration/won-sale-correction.test.mjs tests/integration/historical-sale-correction.test.mjs",
     "test:toth-drafts": "node --test tests/integration/toth-order-drafts.test.mjs",
     "test:toth-preorders": "node --test tests/integration/toth-preorder-operations.test.mjs",
     "predev": "node scripts/assert-dev-not-prod.mjs",
@@ -36,6 +37,7 @@
     "test:run": "vitest run",
     "test:unit": "vitest run tests/unit/ src/ --reporter=verbose",
     "test:ratchet": "node scripts/test-ratchet.cjs",
+    "test:classic": "vitest run --config vitest.classic.config.ts",
     "test:baseline": "node scripts/test-ratchet.cjs --write",
     "test:integration": "vitest run tests/integration/ --reporter=verbose --no-file-parallelism",
     "test:e2e": "playwright test",

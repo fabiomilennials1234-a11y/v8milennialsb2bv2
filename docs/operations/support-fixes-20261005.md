@@ -2,11 +2,13 @@
 
 **Estado:** base da implementação no commit `1633bd40f`, com testes específicos e build dual aprovados. Validar também os ajustes posteriores antes de publicar o commit final. Nenhuma migration ou publicação deste pacote foi aplicada em produção. Executar somente após pedido explícito do CTO. Os ajustes de aliases importam os mesmos módulos, sem mudança funcional.
 
+A migration de filtros foi renumerada de `20271106000020` para `20271108000000` durante a integração: a versão antiga não havia sido aplicada e colidia com `corrigir_venda_ganha` da main. A nova versão sucede o teto verificado `20271107170000`. A migration `20271106000030` permanece independente.
+
 ## Publicação autorizada
 
 1. Registrar a autorização, o commit final, o digest da imagem anterior e o da nova imagem. Conferir o histórico de migrations do ambiente e salvar as definições atuais dos quatro policies de `saved_views`, default de `owner_id`, função `stamp_support_ticket_first_response()` e sua ACL. Se divergirem do estado descrito abaixo, revisar o rollback antes de aplicar.
-2. Aplicar **somente** `20271106000020_saved_views_owner_multi_org.sql` antes do front. O default `auth.uid()` também atende clientes antigos que omitem o dono. Não incluir migrations pendentes fora deste pacote por meio de um push geral.
-3. Aplicar `20271106000030_support_first_response_origin.sql` quando autorizado; é independente do front e da migration 20. Não recalcular datas históricas.
+2. Aplicar **somente** `20271108000000_saved_views_owner_multi_org.sql` antes do front. O default `auth.uid()` também atende clientes antigos que omitem o dono. Não incluir migrations pendentes fora deste pacote por meio de um push geral.
+3. Aplicar `20271106000030_support_first_response_origin.sql` quando autorizado; é independente do front e da migration de filtros salvos. Não recalcular datas históricas.
 4. Publicar o artefato dual: V5, clássica e assets das duas versões. Preservar `classic/SNAPSHOT.json.ref = f9a29504b79a4ccd7fba5914c704601f547eba24` e o patch regenerado. Não alterar flags de organizações nem a seleção por cookie.
 5. Executar a validação abaixo nas duas interfaces, com contas e registros de teste autorizados. Registrar resultado, horário e versão. Responder aos clientes sobre disponibilidade somente depois dessa validação; implementação local não significa correção publicada.
 
@@ -24,7 +26,7 @@
 
 Reverter o front publicando a **imagem dual anterior pelo digest registrado**, sem alterar flags. As duas migrations são compatíveis com o front anterior e podem permanecer; reverter banco somente se necessário e autorizado. Não apagar nem editar migrations já aplicadas ou linhas do histórico. Criar **novas migrations de rollback**, registrar revisão/aplicação e executar cada bloco abaixo como uma transação. Não restaurar dados, filtros ou datas de resposta.
 
-### Reverter a migration 20
+### Reverter a migration 20271108000000
 
 Estado anterior verificado: `owner_id` sem default; os quatro policies eram permissivos para `PUBLIC`, com organização única via `get_user_organization_id()`. UPDATE não tinha `WITH CHECK` explícito. `master_select_all_saved_views` permanece intacta. O rollback volta a limitar filtros à organização única e remove a compatibilidade do default para clientes antigos.
 
