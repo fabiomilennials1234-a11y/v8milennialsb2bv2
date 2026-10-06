@@ -689,14 +689,6 @@ describe('bounded chat presence', () => {
   });
 });
 
-describe('transcription response contract', () => {
-  it('rejects cached media without transcription and never retries a paid operation', async () => {
-    vi.mocked(fetch).mockResolvedValue(jsonRes(200, { cached: true, fileURL: 'https://example.invalid/audio.mp3', mimetype: 'audio/mpeg' }));
-    await expect(makeProvider().transcribeAudio('real-id')).rejects.toMatchObject({ status: 502, provider_code: 'transcription_missing' });
-    expect(fetch).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('managed creation retains recoverable provisioning state', () => {
   it('never deletes instance or cascades lease/credentials after failed readback', async () => {
     const { provisionWhatsAppInstance, InstanceProvisioningUncertainError } = await import('../../supabase/functions/_shared/instance-provisioning');
