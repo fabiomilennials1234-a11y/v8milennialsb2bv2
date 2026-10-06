@@ -98,13 +98,9 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
-        // Upsell still lives in its own table (no sync trigger yet)
-        supabase
-          .from("upsell")
-          .select("id, status")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
+        // Sem leitura de `upsell`: a tabela legada não existe em prod (404
+        // PGRST205 em toda chamada) e, com o throw estrito abaixo, derrubava
+        // os funis do lead inteiros (Chamados 6bdadd97 / f055fbd8).
         // O nome que a ORG usa (SCRUM-641): pipelines.name de funil de sistema
         // é o seed congelado; a canônica é pipeline_display_config.
         supabase
@@ -123,7 +119,6 @@ export function useLeadAllPipelines(leadId: string | null) {
         { data: dynamicStages },
         { data: allPipelines },
         { data: customStagesAll },
-        { data: pipeUpsell },
         { data: displayConfigs },
       ] = responses;
 
@@ -233,16 +228,18 @@ export function useLeadAllPipelines(leadId: string | null) {
         }
       }
 
-      // Upsell (still legacy — no sync trigger yet)
+      // Linha sintética "Carteira" (legado): emitida como sempre saiu em prod —
+      // sem negócio e sem etapa — para não mudar os consumidores. Não consulta
+      // nada: a tabela `upsell` não existe. Aposentá-la é follow-up à parte.
       results.push({
         type: "standard",
         pipeType: "upsell",
         label: "Carteira",
         color: "#3b82f6",
-        pipelineDbId: null, // upsell é tabela legacy própria — não adicionável via pipeline_entries
-        pipeId: pipeUpsell?.id || null,
-        currentStage: pipeUpsell?.status || null,
-        currentStageLabel: getStages("upsell").find((s) => s.id === pipeUpsell?.status)?.label || null,
+        pipelineDbId: null, // não adicionável via pipeline_entries
+        pipeId: null,
+        currentStage: null,
+        currentStageLabel: null,
         stages: getStages("upsell"),
       });
 
