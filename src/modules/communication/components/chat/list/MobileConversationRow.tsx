@@ -22,6 +22,7 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 import { ChannelBadge } from "../ChannelBadge";
 import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -52,7 +53,8 @@ export function MobileConversationRow({
   waitingHumanLeadIds,
   caixa,
 }: MobileConversationRowProps) {
-  const name = contactDisplayName(contact);
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  const name = contactDisplayName(contact, nomeDoLeadPrimeiro);
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
   const hasUnread = contact.unread_count > 0 && !isSelected;

@@ -39,6 +39,33 @@ export interface FontesDoNomeDaConversa {
 export interface OpcoesDoNomeDaConversa {
   /** Flag por org `chat_nome_do_whatsapp`. Ausente = comportamento de sempre. */
   nomeDoWhatsappPrimeiro?: boolean;
+  /**
+   * Flag por org `chat_nome_do_lead`: o `leads.name` manda, em lista, topo e
+   * painel (ver `nomeComLeadPrimeiro`). Vence `nomeDoWhatsappPrimeiro` se as
+   * duas vierem. Ausente = comportamento de sempre.
+   */
+  nomeDoLeadPrimeiro?: boolean;
+}
+
+/**
+ * A regra da flag `chat_nome_do_lead` (decisão do CTO, 06/10/2026), UMA só para
+ * lista, cabeçalho e painel lateral: `leads.name` → nome salvo → perfil do
+ * WhatsApp → identificador/telefone.
+ *
+ * Só `leads.name`, como está gravado: nada é montado a partir de campos
+ * separados. Lead sem nome (vazio ou só espaços) ou ausente cai na ordem que a
+ * lista já tinha. Quem chama é responsável por NÃO usar isto em grupo nem em
+ * canal que não seja WhatsApp.
+ */
+export function nomeComLeadPrimeiro(fontes: FontesDoNomeDaConversa): string {
+  const nome =
+    fontes.nomeDoLead?.trim() ||
+    fontes.savedContactName?.trim() ||
+    fontes.pushName?.trim();
+  if (nome) return nome;
+  return (
+    rotuloDeIdentificadorOculto(fontes.telefone) ?? (fontes.telefone || "").trim()
+  );
 }
 
 export function nomeDaConversa(
@@ -46,6 +73,7 @@ export function nomeDaConversa(
   opcoes: OpcoesDoNomeDaConversa = {},
 ): string {
   const { pushName, nomeDoLead } = fontes;
+  if (opcoes.nomeDoLeadPrimeiro) return nomeComLeadPrimeiro(fontes);
   if (fontes.savedContactName?.trim()) return fontes.savedContactName.trim();
   // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
   // canal, o cabeçalho passava a se chamar `210028246085780`. Só a queda muda —
