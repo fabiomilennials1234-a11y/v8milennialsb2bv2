@@ -70,10 +70,17 @@ export function useCopilotToggleRealtime() {
 
           // Invalidate keys legadas que podem estar mostrando o estado antigo
           // (LeadDetailSheet lê lead-detail; Kanban lê pipe_*).
+          //
+          // `["leads"]` saiu (2026-10-05): nenhum consumidor de `useLeads` lê
+          // `ai_disabled` (os 8 call sites e os componentes que recebem as
+          // linhas leem a IA de `lead-detail`/`lead_ai_status`). Invalidar
+          // `["leads"]` aqui refazia lista + 6 contagens da tela de Leads a cada
+          // toggle — e `phone_ai_preferences` teve 1.015 updates contra 178 de
+          // `leads` desde o restart de prod. Quando o toggle grava em `leads`,
+          // o próprio canal de `leads` entrega o UPDATE.
           queryClient.invalidateQueries({ queryKey: ["lead_ai_status"] });
           queryClient.invalidateQueries({ queryKey: ["lead-ai-status"] });
           queryClient.invalidateQueries({ queryKey: ["lead-detail"] });
-          queryClient.invalidateQueries({ queryKey: ["leads"] });
           queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
         },
       )
