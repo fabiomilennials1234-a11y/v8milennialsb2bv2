@@ -44,12 +44,13 @@ function builderFake() {
       chamadas.push({ metodo, args });
       return b;
     };
-  for (const m of ["select", "eq", "is", "or", "gte", "lte", "lt", "not", "in"]) {
+  for (const m of ["select", "eq", "is", "or", "gte", "lte", "lt", "not", "in", "limit"]) {
     b[m] = registra(m);
   }
-  // O hook faz `await` no builder: resolvemos com uma contagem qualquer.
+  // O hook faz `await` no builder (contagem com teto: lê ids até o limite).
+  // Resolvemos com sete linhas quaisquer.
   (b as { then: unknown }).then = (resolve: (v: unknown) => unknown) =>
-    resolve({ count: 7, error: null });
+    resolve({ data: Array.from({ length: 7 }, (_, i) => ({ id: `l-${i}` })), error: null });
   return b;
 }
 
@@ -135,6 +136,15 @@ describe("useLeadsStats — o card conta o que a lista mostra", () => {
     expect(feitas("or").some((c) => c.includes("name.ilike"))).toBe(false);
     // `rating` saiu da interface em 2026-09-03 — não entra em recorte nenhum.
     expect(feitas("gte").filter((c) => c.includes("rating")).length).toBe(0);
+  });
+
+  it("conta com teto (`select(id)` + `limit`), nunca com `count: exact`", async () => {
+    const { result } = montar({});
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(feitas("select").every((c) => c === '"id"')).toBe(true);
+    expect(feitas("limit")).toEqual(["1000", "1000"]);
+    expect(result.current.data).toEqual({ thisMonth: { value: 7, capped: false }, withOwner: { value: 7, capped: false } });
   });
 
   it('origem "all" é ausência de filtro, não um valor', async () => {

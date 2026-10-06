@@ -124,6 +124,16 @@ describe("useLeadsCount", () => {
     expect(mockFrom).toHaveBeenCalledWith("leads");
   });
 
+  it("conta com teto: lê ids até o limite e devolve { value, capped } — sem count exact", async () => {
+    const chain = createChainMock([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    mockFrom.mockReturnValue(chain);
+    const { result } = renderHook(() => useLeadsCount(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ value: 3, capped: false });
+    expect(chain.select).toHaveBeenCalledWith("id");
+    expect(chain.limit).toHaveBeenCalledWith(1000);
+  });
+
   it("applies search filter to count", async () => {
     const { result } = renderHook(() => useLeadsCount({ searchQuery: "test" }), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
