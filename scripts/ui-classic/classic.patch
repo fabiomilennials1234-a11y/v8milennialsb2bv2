@@ -752,6 +752,63 @@ index 295f32201..44dfe5f20 100644
      mode = "connecting";
    else mode = "offline";
  
+diff --git a/classic/src/modules/communication/hooks/chat/useSocialMessages.ts b/classic/src/modules/communication/hooks/chat/useSocialMessages.ts
+index 2a2323686..18969e621 100644
+--- a/classic/src/modules/communication/hooks/chat/useSocialMessages.ts
++++ b/classic/src/modules/communication/hooks/chat/useSocialMessages.ts
+@@ -2,28 +2,41 @@
+  * useSocialMessages — mensagens de uma conversa social (Instagram).
+  *
+  * SEM RPC: lê `channel_messages` direto, sob a RLS que já existe
+- * (`channel_messages_org_access` + `master_all_channel_messages`). A LISTA
+- * precisa de RPC porque faz `DISTINCT ON` e junta read-state; a THREAD é um
++ * (`channel_messages_select_by_owner` + `master_all_channel_messages`, com a
++ * RESTRICTIVE `channel_messages_instance_read_access` por cima). A LISTA precisa
++ * de RPC porque faz `DISTINCT ON` e junta read-state; a THREAD é um
+  * `select ... where` que a policy já recorta.
+  *
++ * O GATE (desde `20271107160000_channel_messages_restrict_to_owner.sql`) é UMA
++ * policy de SELECT, `channel_messages_select_by_owner`, com a semântica de
++ * `whatsapp_messages`:
++ *   - org SEM `chat_restrict_to_owner` → toda a org (`get_my_organization_ids()`,
++ *     inclusive gestor de portfólio);
++ *   - org restrita → só o escopo do responsável, via `can_see_chat_scope`
++ *     (master, admin, `leads.view_all` explícito, responsável pelo lead,
++ *     `leads.view_unassigned` para lead sem dono).
++ * Antes dela havia também `channel_messages_org_access` (só org), PERMISSIVE: o
++ * OR das duas tornava o recorte por responsável decorativo. Foi removida.
++ *
+  * ⚠️ O GATE DESTA THREAD É O MESMO DA LISTA — e isso é uma DEPENDÊNCIA, não uma
+- * coincidência. `channel_messages_org_access` usava `get_user_organization_id()`
++ * coincidência. A policy de org antiga usava `get_user_organization_id()`
+  * (singular, legado: `LIMIT 1` na org mais ANTIGA do usuário) enquanto a RPC da
+  * lista usa `get_my_organization_ids() + is_master_user()`. Para usuário
+  * multi-org operando fora da org mais antiga, a lista devolvia as conversas e
+  * esta thread devolvia ZERO LINHAS — a conversa aparecia na lista e abria EM
+  * BRANCO, sem erro (sucesso com zero linhas é indistinguível de conversa vazia).
+- * `20270816110000_channel_messages_multi_org_read.sql` alinha a policy no mesmo
+- * recorte da lista, e é por isso que o `select` direto aqui está correto.
++ * `20270816110000_channel_messages_multi_org_read.sql` alinhou a policy no mesmo
++ * recorte da lista; hoje lista (`get_social_conversation_list`, que já aplica
++ * `can_see_chat_scope`) e thread recortam igual, inclusive em org restrita.
+  *
+- * ⚠️ ESTE HOOK NÃO FUNCIONA SEM AQUELA MIGRATION. Ambiente onde ela não entrou
+- * reproduz o sintoma acima para todo usuário multi-org — e só para ele, que é o
+- * que torna isto invisível em teste feito com conta de uma org só.
++ * ⚠️ Mexer na policy sem mexer na RPC da lista (ou vice-versa) reabre o sintoma
++ * acima — e só para o recorte que divergiu, o que torna isto invisível em teste
++ * feito com conta de uma org só ou de org não restrita.
+  *
+  * A mesma policy é o gate de `apply_rls()` no Realtime: consertá-la na policy,
+- * e não transformando esta thread em RPC, é o que também desmuta
+- * `useSocialRealtime` e `useIncomingMessageToast` para esse usuário. Uma RPC
+- * aqui teria consertado a tela e deixado os dois cegos.
++ * e não transformando esta thread em RPC, é o que também mantém
++ * `useSocialRealtime` e `useIncomingMessageToast` no mesmo recorte. Uma RPC
++ * aqui teria consertado a tela e deixado os dois fora de sincronia.
+  *
+  * O recorte é `(organization_id, messaging_channel_id, contact_external_id)`.
+  * `contact_external_id` é o INTERLOCUTOR, independente de direção — e é por isso
 diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts
 index 30d81769d..df9ef18dd 100644
 --- a/classic/src/modules/communication/hooks/chat/useWhatsAppContacts.ts
@@ -913,6 +970,32 @@ index f2fec0c89..b23e27012 100644
 +    statusKey: organizationId ? whatsAppRealtimeStatusKey(organizationId) : undefined,
    });
  }
+diff --git a/classic/src/modules/communication/hooks/useIncomingMessageToast.ts b/classic/src/modules/communication/hooks/useIncomingMessageToast.ts
+index df75f5544..234de550f 100644
+--- a/classic/src/modules/communication/hooks/useIncomingMessageToast.ts
++++ b/classic/src/modules/communication/hooks/useIncomingMessageToast.ts
+@@ -39,10 +39,17 @@
+  *     `channel = 'instagram'` faz o aviso ESPERAR o inbox em vez de anunciar
+  *     conversa que nenhuma tela abre. Opt-in explícito, uma linha.
+  *
+- * ⚠️ DEPENDE DA POLICY. O Realtime avalia `channel_messages_org_access` em
+- * `apply_rls()`; enquanto ela usava `get_user_organization_id()` (singular),
+- * usuário multi-org não recebia evento nenhum e este aviso ficava mudo para ele
+- * sem sintoma. Alinhado em `20270816110000_channel_messages_multi_org_read.sql`.
++ * ⚠️ DEPENDE DA POLICY. O Realtime avalia a RLS de SELECT em `apply_rls()`:
++ * hoje `channel_messages_select_by_owner` (org sem `chat_restrict_to_owner`:
++ * toda a org; org restrita: só o escopo do responsável via `can_see_chat_scope`,
++ * igual `whatsapp_messages`). Em org restrita, portanto, o aviso toca só para
++ * quem pode abrir aquela conversa — membro comum não é avisado de lead alheio,
++ * e gestor de portfólio (não é `team_member`) não é avisado. Histórico: a
++ * policy de org antiga (`channel_messages_org_access`, removida em
++ * `20271107160000_channel_messages_restrict_to_owner.sql`) usava
++ * `get_user_organization_id()` (singular) e deixava usuário multi-org sem evento
++ * nenhum, mudo e sem sintoma; alinhado em
++ * `20270816110000_channel_messages_multi_org_read.sql`.
+  */
+ 
+ import { useEffect, useRef } from "react";
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
 index aacc3ed82..bfd60e8f2 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotPause.ts
