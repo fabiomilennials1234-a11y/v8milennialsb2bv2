@@ -71,6 +71,13 @@ export default tseslint.config(
       // no checkout acrescenta **2.979 warnings** ao ratchet, atribuídos a quem
       // por acaso tem a branch aberta.
       ".worktrees/",
+      // Cloudflare: .prod-dist/ e .assets/ são cópias da build (`npm run
+      // cf:extract` / `cf:prepare`), o .wrangler/ é cache do wrangler e o
+      // worker-configuration.d.ts sai do `wrangler types`.
+      "cloudflare/.prod-dist/**",
+      "cloudflare/.assets/**",
+      "cloudflare/.wrangler/**",
+      "cloudflare/worker-configuration.d.ts",
     ],
   },
   {

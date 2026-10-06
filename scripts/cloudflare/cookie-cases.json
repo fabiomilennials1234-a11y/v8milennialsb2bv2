@@ -1,0 +1,19 @@
+{
+  "$comment": "Variantes do cookie torque_ui num header Cookie só. `prod` = o que o nginx de produção escolhe, medido em 2026-10-06 com curl -H 'Cookie: …' https://torquecrm.com.br/ | shasum contra index.html (v5) e index.classic.html (classic). `worker` = o que o Worker escolhe. Diferem só onde há `div`. Fonte única: tests/unit/cloudflare/routing.test.ts e scripts/cloudflare/parity.mjs leem daqui.",
+  "cases": [
+    { "cookie": null, "prod": "classic", "worker": "classic" },
+    { "cookie": "torque_ui=v5", "prod": "v5", "worker": "v5" },
+    { "cookie": "TORQUE_UI=v5", "prod": "v5", "worker": "v5" },
+    { "cookie": "torque_ui=V5", "prod": "v5", "worker": "v5" },
+    { "cookie": "torque_ui=\"v5\"", "prod": "classic", "worker": "classic" },
+    { "cookie": "torque_ui=classic; torque_ui=v5", "prod": "classic", "worker": "classic" },
+    { "cookie": "torque_ui=v5; torque_ui=classic", "prod": "v5", "worker": "v5" },
+    { "cookie": "torque_ui=classic", "prod": "classic", "worker": "classic" },
+    { "cookie": "xtorque_ui=v5", "prod": "classic", "worker": "classic" },
+    { "cookie": "a=1,torque_ui=v5", "prod": "classic", "worker": "v5", "div": "Div12" },
+    { "cookie": "torque_ui = v5", "prod": "v5", "worker": "v5" },
+    { "cookie": "sb-auth=x; torque_ui=v5", "prod": "v5", "worker": "v5" },
+    { "cookie": "sb-auth=x;torque_ui=v5", "prod": "v5", "worker": "v5" },
+    { "cookie": "torque_ui=v5 ; sb-auth=x", "prod": "classic", "worker": "classic" }
+  ]
+}

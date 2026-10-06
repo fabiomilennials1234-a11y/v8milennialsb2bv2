@@ -423,3 +423,25 @@ medida; 1,4M/mês não garantido. Rollback usa ação `rollback` do mesmo script
 restaura uma vez a URL Edge do backup sob pré-condição/readback exatos e mantém
 fila/worker drenando. Risco de perda antes do commit persiste. Detalhes e
 evidência: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Front estático na Cloudflare — fase `workers.dev`, 2026-10-06
+
+**Produção sem mudança:** `torquecrm.com.br` segue no nginx do EasyPanel; DNS
+intocado. `cloudflare/` é inerte até alguém rodar `cf:deploy` com a conta do
+CTO. Contrato do Worker `torque-front` (`cloudflare/wrangler.jsonc`):
+- `/assets/*` sai direto do servidor de assets; todo o resto passa pelo Worker
+  (`run_worker_first`). `routing.ts` replica a precedência do nginx
+  (`Dockerfile:117-180`); cookie `torque_ui` escolhe V5 ou clássica.
+- Headers: fonte única `cloudflare/headers.json`, espelho do `Dockerfile`;
+  `tests/unit/cloudflare/headers-drift.test.ts` quebra se divergirem. Mudou
+  header no nginx → muda o JSON no mesmo PR.
+- `/api/v1/*` → edge function `api` (`API_UPSTREAM`), repassa `X-API-Key` sem
+  tocar, 1 MiB / 30 s, recusa `..`. CORS das edge functions não aceita a origem
+  `workers.dev` (esperado no teste).
+- Log do Worker: método, caminho, rota, status, ms. Caminho por negar por
+  padrão (`routing.ts` `logPath`); `invocation_logs: false`,
+  `redact_query_string: true`.
+- Divergências intencionais Div1–Div12: `docs/DEPLOY_CLOUDFLARE.md`.
+
+Gates abertos: smoke g–k no `workers.dev` (login do CTO); corte de DNS só com
+checklist a–o + ADR (decide o item j).

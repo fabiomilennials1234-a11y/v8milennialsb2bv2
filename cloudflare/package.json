@@ -1,0 +1,18 @@
+{
+  "name": "torque-front-cloudflare",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Hospedagem do front (SPA dual V5 + clássica) em Cloudflare Workers + Static Assets. Pacote isolado: wrangler exige node >= 22 e não pode entrar no build node:20 do Dockerfile. Ver docs/DEPLOY_CLOUDFLARE.md.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "WRANGLER_SEND_METRICS=false wrangler dev --port 8787",
+    "deploy": "WRANGLER_SEND_METRICS=false wrangler deploy",
+    "types": "WRANGLER_SEND_METRICS=false wrangler types"
+  },
+  "devDependencies": {
+    "wrangler": "4.147.0"
+  }
+}
