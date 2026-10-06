@@ -18,6 +18,32 @@ describe("assetReferences — o grafo que a extração percorre", () => {
     ]);
   });
 
+  it("nome vindo do HTML/JS nunca escapa de assets/ (CodeQL: network data written to file)", () => {
+    // O extract grava em path.join(out, "assets", name). Texto hostil num chunk
+    // só pode render um nome de UM segmento, sem separador nem `%`.
+    const hostile = [
+      "../../../../etc/passwd-AbCdEf12.js",
+      "..\\..\\Windows\\evil-AbCdEf12.js",
+      "%2e%2e%2f%2e%2e%2fevil-AbCdEf12.js",
+      "..%2F..%2Fevil-AbCdEf12.js",
+      "/abs/path/evil-AbCdEf12.js",
+      "C:\\abs\\evil-AbCdEf12.js",
+      "file:///etc/evil-AbCdEf12.js",
+      "..-AbCdEf12.js",
+    ].join(" ");
+    const names = [...assetReferences(hostile)];
+    expect(names.length).toBeGreaterThan(0);
+    const out = path.resolve("/tmp/cf-extract-saida");
+    const assetsDir = path.join(out, "assets");
+    for (const name of names) {
+      expect(name, name).toMatch(/^[A-Za-z0-9_.~-]+$/);
+      expect(name).not.toMatch(/^\.{1,2}$/);
+      const file = path.resolve(path.join(out, `assets/${name}`));
+      expect(path.dirname(file), name).toBe(assetsDir);
+    }
+    expect(names).toEqual(expect.arrayContaining(["passwd-AbCdEf12.js", "evil-AbCdEf12.js", "..-AbCdEf12.js"]));
+  });
+
   it("ignora nome sem hash do Vite", () => {
     expect([...assetReferences('import x from "./main.js"; fetch("/sw.js"); "lamejs.min.js"')]).toEqual([]);
   });

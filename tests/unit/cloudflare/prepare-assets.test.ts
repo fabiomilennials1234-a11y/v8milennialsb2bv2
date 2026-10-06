@@ -1,11 +1,12 @@
 // @vitest-environment node
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import config from "../../../cloudflare/headers.json";
-import { PrepareError, prepareAssets, scanContent } from "../../../scripts/cloudflare/prepare-assets.mjs";
+import { PrepareError, prepareAssets, readRegularFile, scanContent } from "../../../scripts/cloudflare/prepare-assets.mjs";
 
 /**
  * Caixa de areia: TODO caminho que estes testes passam ao prepareAssets fica em
@@ -115,6 +116,108 @@ describe("caminho feliz", () => {
     fs.writeFileSync(path.join(out, "assets/velho-12345678.js"), "stale");
     run();
     expect(fs.existsSync(path.join(out, "assets/velho-12345678.js"))).toBe(false);
+  });
+});
+
+describe("sem corrida entre varrer e gravar (CodeQL: file system race)", () => {
+  const sha = (buffer: Buffer | string) => createHash("sha256").update(buffer).digest("hex");
+
+  it("o que vai para a saída é o buffer varrido, mesmo se a origem mudar depois da varredura", () => {
+    dualBuild();
+    const original = 'console.log("limpo");';
+    write("assets/app-AbCdEf12.js", original);
+    const swapped = 'const k="sb_secret_TrocadoDepoisDaVarredura123";';
+
+    const result = prepareAssets({
+      from,
+      out,
+      headersConfig: config,
+      allowedRoot: cfRoot,
+      hooks: {
+        // A origem muda entre a varredura e a gravação: segredo num arquivo,
+        // link simbólico no lugar de outro.
+        afterScan: () => {
+          fs.writeFileSync(path.join(from, "assets/app-AbCdEf12.js"), swapped);
+          fs.rmSync(path.join(from, "lp/v1/index.html"));
+          fs.symlinkSync(os.homedir(), path.join(from, "lp/v1/index.html"));
+        },
+      },
+    });
+
+    const published = fs.readFileSync(path.join(out, "assets/app-AbCdEf12.js"));
+    expect(sha(published)).toBe(sha(original));
+    expect(published.toString()).not.toContain("sb_secret_");
+    expect(fs.lstatSync(path.join(out, "lp/v1/index.html")).isFile()).toBe(true);
+    expect(fs.readFileSync(path.join(out, "lp/v1/index.html"), "utf8")).toBe("<html>lp</html>");
+    expect(result.files).toBeGreaterThan(0);
+  });
+
+  it("readRegularFile: abre sem seguir link, tipo e tamanho pelo próprio descritor", () => {
+    dualBuild();
+    const file = path.join(from, "index.html");
+    const read = readRegularFile(file);
+    expect(read.kind).toBe("file");
+    expect(sha(read.buffer)).toBe(sha("<html>V5</html>"));
+
+    const link = path.join(from, "link.html");
+    fs.symlinkSync(file, link);
+    expect(readRegularFile(link)).toEqual({ kind: "symlink" });
+
+    expect(readRegularFile(path.join(from, "assets"))).toEqual({ kind: "not-file" });
+
+    const big = path.join(from, "big.bin");
+    fs.writeFileSync(big, "");
+    fs.truncateSync(big, 25 * 1024 * 1024 + 1);
+    expect(readRegularFile(big)).toEqual({ kind: "too-big", size: 25 * 1024 * 1024 + 1 });
+  });
+
+  it.skipIf(process.platform === "win32")("FIFO na build é recusado sem travar (O_NONBLOCK + lstat)", () => {
+    dualBuild();
+    execFileSync("mkfifo", [path.join(from, "assets", "pipe-12345678.js")]);
+    // Abrir FIFO bloqueia a thread inteira, e o timeout do vitest não dispara
+    // com a thread presa. Roda num processo filho com prazo: travar vira falha.
+    const moduleUrl = new URL("../../../scripts/cloudflare/prepare-assets.mjs", import.meta.url).href;
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `const { prepareAssets } = await import(process.env.MOD);
+         try {
+           prepareAssets({ from: process.env.FROM, out: process.env.OUT, allowedRoot: process.env.ROOT });
+           console.log(JSON.stringify({ refused: false }));
+         } catch (error) {
+           console.log(JSON.stringify({ refused: true, message: error.message }));
+         }`,
+      ],
+      { env: { ...process.env, MOD: moduleUrl, FROM: from, OUT: out, ROOT: cfRoot }, encoding: "utf8", timeout: 5000 },
+    );
+    expect(child.error?.message ?? null, "o prepare travou no FIFO").toBeNull();
+    expect(child.signal).toBeNull();
+    const result = JSON.parse(child.stdout.trim());
+    expect(result.refused).toBe(true);
+    expect(result.message).toMatch(/pipe-12345678\.js: tipo de arquivo inesperado/);
+    expect(fs.existsSync(out)).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("readRegularFile num FIFO volta na hora como not-file (arquivo trocado por FIFO depois do lstat)", () => {
+    const fifo = path.join(tmp, "pipe");
+    execFileSync("mkfifo", [fifo]);
+    // Também em processo filho com prazo: sem O_NONBLOCK isto prenderia a thread.
+    const moduleUrl = new URL("../../../scripts/cloudflare/prepare-assets.mjs", import.meta.url).href;
+    const child = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", "const { readRegularFile } = await import(process.env.MOD); console.log(JSON.stringify(readRegularFile(process.env.FIFO)));"],
+      { env: { ...process.env, MOD: moduleUrl, FIFO: fifo }, encoding: "utf8", timeout: 5000 },
+    );
+    expect(child.error?.message ?? null, "readRegularFile travou no FIFO").toBeNull();
+    expect(JSON.parse(child.stdout.trim())).toEqual({ kind: "not-file" });
+  });
+
+  it("link simbólico para arquivo também é recusado", () => {
+    dualBuild();
+    fs.symlinkSync(path.join(from, "index.html"), path.join(from, "assets", "alias-12345678.js"));
+    expectRefusal(/link simbólico/);
   });
 });
 

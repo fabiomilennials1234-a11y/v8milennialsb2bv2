@@ -19,12 +19,18 @@
  *      (PEM ou PGP), `sb_secret_`, JWT com `"role":"service_role"`, token com
  *      prefixo conhecido (Sentry, Stripe, GitHub, OpenAI, Anthropic), source map
  *      com outro nome ou embutido (sourceMappingURL=data:).
- *   3. Copia a árvore para cloudflare/.assets/ (limpa antes — só aceita destino
- *      oculto dentro de cloudflare/), sem os `*.map` —
- *      como o Dockerfile faz com a imagem do nginx.
+ *   3. Grava em cloudflare/.assets/ (limpa antes — só aceita destino oculto
+ *      dentro de cloudflare/) EXATAMENTE os bytes que a varredura leu, sem os
+ *      `*.map` — como o Dockerfile faz com a imagem do nginx.
  *   4. Gera `_headers` (uma regra só, /assets/*) a partir de cloudflare/headers.json
  *      e `.assetsignore`.
- *   5. Confere a saída: nenhum .map, build dual presente.
+ *   5. Confere a saída: nenhum .map, cada arquivo com o hash do que foi varrido.
+ *
+ * Sem corrida entre varrer e publicar: cada arquivo é aberto UMA vez
+ * (O_NOFOLLOW — link simbólico não é seguido nem no último instante), o tipo e o
+ * tamanho vêm do `fstat` do próprio descritor, e o buffer lido é o que é varrido
+ * e o que é gravado. Trocar um arquivo da origem depois da varredura não muda o
+ * que sobe. Custo: a build inteira passa pela memória (~35 MiB hoje).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -119,10 +125,49 @@ export function scanContent(relPath, buffer) {
   return problems;
 }
 
-/** Varre a origem inteira. Devolve os arquivos (relativos, com /) e os problemas. */
+/**
+ * Abre `abs` uma vez, sem seguir link simbólico e sem bloquear (FIFO aberto só
+ * para leitura esperaria um escritor para sempre; com O_NONBLOCK volta na hora
+ * e o `fstat` o recusa), e lê o conteúdo pelo próprio descritor. O tipo e o tamanho saem do `fstat` desse descritor, não de um
+ * `stat` anterior: o que é conferido é o que é lido.
+ * Devolve `{ kind: "file", buffer }`, `{ kind: "symlink" }`,
+ * `{ kind: "not-file" }` ou `{ kind: "too-big", size }`.
+ */
+export function readRegularFile(abs) {
+  let fd;
+  try {
+    fd = fs.openSync(abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  } catch (error) {
+    if (error?.code === "ELOOP") return { kind: "symlink" };
+    throw error;
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) return { kind: "not-file" };
+    if (stat.size > MAX_FILE_BYTES) return { kind: "too-big", size: stat.size };
+    // Lê no máximo `stat.size`: se o arquivo crescer enquanto isso, o excedente
+    // não entra — nem na varredura, nem na saída.
+    const buffer = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const read = fs.readSync(fd, buffer, offset, buffer.length - offset, offset);
+      if (read === 0) break;
+      offset += read;
+    }
+    return { kind: "file", buffer: buffer.subarray(0, offset) };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * Varre a origem inteira. Devolve `entries` (caminho relativo com / + o buffer
+ * lido, que é o que vai ser gravado), `files` (só os caminhos) e os problemas.
+ */
 export function scanSource(root) {
-  const files = [];
+  const entries = [];
   const problems = [];
+  const rootReal = fs.realpathSync(root);
 
   const walk = (dir, rel) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -152,24 +197,42 @@ export function scanSource(root) {
       }
 
       if (stat.isDirectory()) {
+        // Pasta trocada por link depois do lstat: o caminho real sairia da origem.
+        if (!isInside(fs.realpathSync(abs), rootReal)) {
+          problems.push(`${relPath}: link simbólico`);
+          continue;
+        }
         walk(abs, relPath);
         continue;
       }
+
+      // Checagem barata antes de abrir (FIFO, socket, dispositivo). A que vale é
+      // o `fstat` do descritor, em readRegularFile.
       if (!stat.isFile()) {
         problems.push(`${relPath}: tipo de arquivo inesperado`);
         continue;
       }
-      if (stat.size > MAX_FILE_BYTES) {
-        problems.push(`${relPath}: ${stat.size} bytes, acima do limite de 25 MiB`);
+
+      const read = readRegularFile(abs);
+      if (read.kind === "symlink") {
+        problems.push(`${relPath}: link simbólico`);
         continue;
       }
-      problems.push(...scanContent(relPath, fs.readFileSync(abs)));
-      files.push(relPath);
+      if (read.kind === "not-file") {
+        problems.push(`${relPath}: tipo de arquivo inesperado`);
+        continue;
+      }
+      if (read.kind === "too-big") {
+        problems.push(`${relPath}: ${read.size} bytes, acima do limite de 25 MiB`);
+        continue;
+      }
+      problems.push(...scanContent(relPath, read.buffer));
+      entries.push({ rel: relPath, buffer: read.buffer });
     }
   };
 
   walk(root, "");
-  return { files, problems };
+  return { entries, files: entries.map((entry) => entry.rel), problems };
 }
 
 /**
@@ -211,10 +274,12 @@ function isInside(child, parent) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-const fileSha = (file) => sha256(fs.readFileSync(file));
-
-/** `allowedRoot` só existe para os testes: a CLI sempre exige destino oculto em cloudflare/. */
-export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHeadersConfig(), allowedRoot }) {
+/**
+ * `allowedRoot` e `hooks` só existem para os testes: a CLI sempre exige destino
+ * oculto em cloudflare/, e `hooks.afterScan` simula a origem mudando entre a
+ * varredura e a gravação.
+ */
+export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHeadersConfig(), allowedRoot, hooks = {} }) {
   if (!from) throw new PrepareError(["--from é obrigatório (diretório da build dual)"]);
   const source = path.resolve(from);
   let target;
@@ -236,25 +301,27 @@ export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHea
     throw new PrepareError(missing.map((name) => `${name} ausente: não é a build dual (npm run build:dual)`));
   }
 
-  const { files, problems } = scanSource(source);
-  if (files.length > MAX_FILES) problems.push(`${files.length} arquivos, acima do limite de ${MAX_FILES}`);
+  const { entries, problems } = scanSource(source);
+  if (entries.length > MAX_FILES) problems.push(`${entries.length} arquivos, acima do limite de ${MAX_FILES}`);
   if (problems.length > 0) throw new PrepareError(problems);
 
   const headersFile = renderHeadersFile(headersConfig);
+  hooks.afterScan?.();
 
+  // Grava os buffers varridos — nunca relê a origem.
   fs.rmSync(target, { recursive: true, force: true });
   let mapsRemoved = 0;
-  fs.cpSync(source, target, {
-    recursive: true,
-    filter: (src) => {
-      if (path.basename(src) === ".DS_Store") return false;
-      if (src.endsWith(".map") && fs.statSync(src).isFile()) {
-        mapsRemoved += 1;
-        return false;
-      }
-      return true;
-    },
-  });
+  const written = new Map();
+  for (const { rel, buffer } of entries) {
+    if (rel.endsWith(".map")) {
+      mapsRemoved += 1;
+      continue;
+    }
+    const file = path.join(target, ...rel.split("/"));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, buffer, { flag: "wx" });
+    written.set(rel, sha256(buffer));
+  }
   fs.writeFileSync(path.join(target, "_headers"), headersFile);
   fs.writeFileSync(path.join(target, ".assetsignore"), renderAssetsIgnore());
 
@@ -276,9 +343,9 @@ export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHea
   };
   walkOut(target);
   if (leftovers.length > 0) throw new PrepareError(leftovers.map((f) => `${f}: source map sobrou na saída`));
-  for (const name of REQUIRED_FILES) {
-    if (fileSha(path.join(source, name)) !== fileSha(path.join(target, name))) {
-      throw new PrepareError([`${name}: cópia diverge da origem`]);
+  for (const [rel, expected] of written) {
+    if (sha256(fs.readFileSync(path.join(target, ...rel.split("/")))) !== expected) {
+      throw new PrepareError([`${rel}: gravado diverge do que foi varrido`]);
     }
   }
 
