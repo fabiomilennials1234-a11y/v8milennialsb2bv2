@@ -136,6 +136,10 @@ $function$;
 -- list every team_member id of that org — more than team_members' own policy
 -- (get_my_organization_ids) shows. Do NOT restrict to active orgs instead:
 -- leads in my org can carry an SDR from another org (1,594 in prod).
+--
+-- Accepted residual (review 2026-10-06): a user active in org B and inactive in
+-- org A still gets the ids of A's members who are sdr/closer of B's leads —
+-- uuids only, no PII, and only people already working leads in B.
 CREATE FUNCTION public.rls_my_same_org_team_member_ids()
 RETURNS uuid[]
 LANGUAGE sql
