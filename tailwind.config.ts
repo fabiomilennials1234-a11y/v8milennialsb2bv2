@@ -14,7 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'Inter', '"Noto Color Emoji"', 'system-ui', 'sans-serif'],
+        // Noto also contains spaces and digits. Prefer a text fallback when
+        // remote fonts are unavailable so ordinary text keeps normal metrics.
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '"Noto Color Emoji"', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",

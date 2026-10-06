@@ -575,7 +575,6 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Plus Jakarta Sans', 'Inter', 'Noto Color Emoji', system-ui, sans-serif;
     min-height: 100vh;
     /* PWA safe-area: respeita home indicator (iPhone) e barras de navegação */
     padding-bottom: env(safe-area-inset-bottom);
