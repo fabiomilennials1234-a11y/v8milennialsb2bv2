@@ -219,6 +219,54 @@ describe("useRankingData — canonical ranking overlay", () => {
     expect(result.current.data!.meetingsRanking[0].id).toBe("s1");
   });
 
+  it("names a canonical seller whose metric_type is meetings (identity from the meetings row, goal stays 0)", async () => {
+    // Org where every member is metric_type='meetings': salesRanking is empty, so
+    // the identity must come from meetingsRanking. The meetings goal (15) is a
+    // meeting goal and must NOT become a sales goal.
+    const ranking = {
+      salesRanking: [],
+      meetingsRanking: [
+        { id: "s1", name: "Sara", value: 0, meetings: 12, meetingsBooked: 20, goal: 15, goalProgress: 80, position: 1, role: "member", metric_type: "meetings", job_title: "SDR" },
+      ],
+    };
+    const canonical = {
+      ...CANONICAL_RANKING,
+      ranking: [
+        { member_id: "s1", revenue: 34398, sale_count: 8, rank: 1, revenue_share: 90 },
+        { member_id: "ghost", revenue: 350, sale_count: 1, rank: 2, revenue_share: 10 },
+      ],
+    };
+    rpcMock.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === "get_ranking_data"
+          ? { data: ranking, error: null }
+          : name === "get_ranking"
+          ? { data: canonical, error: null }
+          : { data: null, error: null },
+      ),
+    );
+
+    const { result } = renderHook(() => useRankingData(6, 2026), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const sales = result.current.data!.salesRanking;
+    expect(sales[0]).toMatchObject({
+      id: "s1",
+      name: "Sara",
+      job_title: "SDR",
+      identitySource: "meetings",
+      goal: 0,
+      goalProgress: 0,
+      value: 34398,
+      conversions: 8,
+      position: 1,
+    });
+    // Member absent from both lists keeps name null.
+    expect(sales[1]).toMatchObject({ id: "ghost", name: null, identitySource: "none", value: 350, position: 2 });
+    // Sales rows still report their own source.
+    expect(result.current.data!.meetingsRanking).toHaveLength(1);
+  });
+
   it("keeps the legacy podium when the canonical migration is not applied", async () => {
     rpcMock.mockImplementation((name: string) =>
       Promise.resolve(

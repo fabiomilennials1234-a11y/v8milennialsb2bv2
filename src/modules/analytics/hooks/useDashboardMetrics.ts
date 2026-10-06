@@ -188,6 +188,19 @@ interface SalesRankingEntry {
   role: string;
   /** Additive canonical dimension: share of period revenue ∈ [0,100]. */
   revenueShare?: number;
+  /**
+   * Where name/job_title/role came from in the canonical overlay: the legacy sales
+   * row, the meetings row (member with metric_type='meetings'), or nowhere.
+   */
+  identitySource?: "sales" | "meetings" | "none";
+}
+
+/** Identity-only view of a meetings ranking row (goal there is a MEETING goal). */
+interface RankingIdentity {
+  id: string;
+  name: string | null;
+  job_title: string | null;
+  role: string;
 }
 
 /**
@@ -201,6 +214,7 @@ interface SalesRankingEntry {
  */
 async function overlayCanonicalRanking(
   legacy: SalesRankingEntry[],
+  meetings: RankingIdentity[],
   organizationId: string,
   period: CanonicalPeriodArgs,
 ): Promise<SalesRankingEntry[]> {
@@ -225,25 +239,31 @@ async function overlayCanonicalRanking(
   if (!r || !Array.isArray(r.ranking)) return legacy;
 
   const legacyById = new Map(legacy.map((m) => [m.id, m]));
+  const meetingsById = new Map(meetings.map((m) => [m.id, m]));
 
   return r.ranking
     .slice()
     .sort((a, b) => a.rank - b.rank)
     .map((entry): SalesRankingEntry => {
       const base = legacyById.get(entry.member_id);
+      // Members with metric_type='meetings' are absent from salesRanking; take their
+      // identity from the meetings row. Goal is sales-row only (a meetings goal is
+      // not a sales goal).
+      const identity = base ?? meetingsById.get(entry.member_id);
       const goal = base?.goal ?? 0;
       return {
         id: entry.member_id,
-        name: base?.name ?? null,
-        job_title: base?.job_title ?? null,
+        name: identity?.name ?? null,
+        job_title: identity?.job_title ?? null,
         metric_type: base?.metric_type ?? "sales",
         value: entry.revenue,
         conversions: entry.sale_count,
         goal,
         goalProgress: goal > 0 ? Math.round((entry.revenue / goal) * 100) : 0,
         position: entry.rank,
-        role: base?.role ?? "",
+        role: identity?.role ?? "",
         revenueShare: entry.revenue_share,
+        identitySource: base ? "sales" : identity ? "meetings" : "none",
       };
     });
 }
@@ -587,14 +607,21 @@ export function useRankingData(
       // contagem e posição vêm do caderno sale_events com atribuição por chave ÚNICA
       // (sale_responsible_id) — mata R5 (soma-por-membro == total) e R3 (funil custom
       // rankeia igual). Nome/cargo/meta são enriquecidos a partir da linha legada
-      // (mesmo id): a chave canônica é subconjunto da OR-chain legada, então todo
-      // membro canônico existe na base legada. Metas seguem legadas (fora do #997).
+      // (mesmo id). Nem todo membro canônico está em salesRanking: quem tem
+      // metric_type='meetings' só aparece em meetingsRanking, então a identidade
+      // (nome/cargo/role) cai para essa lista. Meta só da linha de vendas (a de
+      // reunião é meta de reunião). Metas seguem legadas (fora do #997).
       // meetingsRanking permanece 100% legado — get_ranking é só venda por decisão
       // de escopo (#997); ranking de reunião é fatia posterior.
       // Degrada: RPC ausente (migration pendente) → mantém o pódio legado intacto.
       // Gate (U3): flag OFF/loading → pódio legado, get_ranking nunca é chamado.
       const salesRanking = useCanonical
-        ? await overlayCanonicalRanking(legacySalesRanking, organizationId, periodArgs)
+        ? await overlayCanonicalRanking(
+            legacySalesRanking,
+            ((raw as { meetingsRanking?: RankingIdentity[] } | null)?.meetingsRanking ?? []),
+            organizationId,
+            periodArgs,
+          )
         : legacySalesRanking;
 
       return {
