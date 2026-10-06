@@ -3,7 +3,8 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useCreateSavedView, useSavedViews } from "@/modules/platform/hooks/useSavedViews";
+import { useCreateSavedView, useDeleteSavedView, useSavedViews, useUpdateSavedView } from "@/modules/platform/hooks/useSavedViews";
+import { supabase } from "@/integrations/supabase/client";
 
 const state = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -47,6 +48,7 @@ describe("views salvas — sessão e organização no contrato HTTP", () => {
     await act(async () => { await result.current.mutateAsync(input); });
     const [url, init] = state.fetch.mock.calls[0];
     expect(String(url)).toContain("/rest/v1/saved_views");
+    expect(new Headers(init.headers).get("x-torque-saved-views-org")).toBe(state.org);
     expect(JSON.parse(String(init.body))).toMatchObject({ ...input, owner_id: state.user, organization_id: state.org });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["saved_views", state.org] });
   });
@@ -69,6 +71,7 @@ describe("views salvas — sessão e organização no contrato HTTP", () => {
     let pending!: Promise<unknown>;
     act(() => { pending = result.current.mutateAsync(input); });
     await waitFor(() => expect(state.fetch).toHaveBeenCalledTimes(1));
+    expect(new Headers(state.fetch.mock.calls[0][1].headers).get("x-torque-saved-views-org")).toBe(originalOrg);
     state.org = "33333333-3333-3333-3333-333333333333";
     rerender();
     await act(async () => {
@@ -77,6 +80,7 @@ describe("views salvas — sessão e organização no contrato HTTP", () => {
     });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["saved_views", originalOrg] });
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["saved_views", state.org] });
+    expect(new Headers(state.fetch.mock.calls[0][1].headers).get("x-torque-saved-views-org")).toBe(originalOrg);
   });
 
   it("filtra organização no GET e faz nova leitura ao trocar a organização", async () => {
@@ -86,10 +90,54 @@ describe("views salvas — sessão e organização no contrato HTTP", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const first = new URL(String(state.fetch.mock.calls[0][0]));
     expect(first.searchParams.get("organization_id")).toBe(`eq.${state.org}`);
+    expect(new Headers(state.fetch.mock.calls[0][1].headers).get("x-torque-saved-views-org")).toBe(state.org);
     expect(first.searchParams.get("entity_type")).toBe("eq.leads");
     state.org = "33333333-3333-3333-3333-333333333333";
     rerender();
     await waitFor(() => expect(state.fetch).toHaveBeenCalledTimes(2));
     expect(new URL(String(state.fetch.mock.calls[1][0])).searchParams.get("organization_id")).toBe(`eq.${state.org}`);
+    expect(new Headers(state.fetch.mock.calls[1][1].headers).get("x-torque-saved-views-org")).toBe(state.org);
+  });
+
+  it.each(["update", "delete"] as const)("%s mantém header, filtro e invalidação na org da operação após troca", async operation => {
+    const originalOrg = state.org;
+    let respond!: (response: Response) => void;
+    state.fetch.mockImplementation(() => new Promise<Response>(resolve => { respond = resolve; }));
+    const { client, wrapper } = setup();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { result, rerender } = renderHook(() => ({ update: useUpdateSavedView(), delete: useDeleteSavedView() }), { wrapper });
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = operation === "update"
+        ? result.current.update.mutateAsync({ id: "view-1", entityType: "leads", name: "Atualizada" })
+        : result.current.delete.mutateAsync({ id: "view-1", entityType: "leads" });
+    });
+    await waitFor(() => expect(state.fetch).toHaveBeenCalledTimes(1));
+    const [url, init] = state.fetch.mock.calls[0];
+    expect(init.method).toBe(operation === "update" ? "PATCH" : "DELETE");
+    expect(new URL(String(url)).searchParams.get("organization_id")).toBe(`eq.${originalOrg}`);
+    expect(new URL(String(url)).searchParams.get("id")).toBe("eq.view-1");
+    expect(new Headers(init.headers).get("x-torque-saved-views-org")).toBe(originalOrg);
+    state.org = "33333333-3333-3333-3333-333333333333";
+    rerender();
+    await act(async () => {
+      respond(operation === "update"
+        ? new Response(JSON.stringify({ id: "view-1", organization_id: originalOrg }), { status: 200 })
+        : new Response(null, { status: 204 }));
+      await pending;
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["saved_views", originalOrg] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["saved_views", state.org] });
+    expect(new Headers(init.headers).get("x-torque-saved-views-org")).toBe(originalOrg);
+  });
+
+  it("header de filtros salvos não vaza para outro builder no cliente compartilhado", async () => {
+    state.fetch.mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useSavedViews("leads"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await supabase.from("leads").select("id").limit(1);
+    expect(new Headers(state.fetch.mock.calls[0][1].headers).get("x-torque-saved-views-org")).toBe(state.org);
+    expect(new Headers(state.fetch.mock.calls[1][1].headers).has("x-torque-saved-views-org")).toBe(false);
   });
 });

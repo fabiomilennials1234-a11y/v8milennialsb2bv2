@@ -25,6 +25,7 @@ export function useSavedViews(entityType: SavedViewEntityType) {
       const { data, error } = await supabase
         .from("saved_views" as any)
         .select("*")
+        .setHeader("x-torque-saved-views-org", organizationId!)
         .eq("organization_id", organizationId!)
         .eq("entity_type", entityType)
         .order("is_system", { ascending: false })
@@ -53,6 +54,7 @@ export function useCreateSavedView() {
           organization_id: organizationId,
           owner_id: user.id,
         } as any)
+        .setHeader("x-torque-saved-views-org", organizationId)
         .select()
         .single();
       if (error) throw error;
@@ -80,6 +82,7 @@ export function useUpdateSavedView() {
       const { data, error } = await supabase
         .from("saved_views" as any)
         .update(updates as any)
+        .setHeader("x-torque-saved-views-org", organizationId)
         .eq("id", id)
         .eq("organization_id", organizationId)
         .select()
@@ -106,6 +109,7 @@ export function useDeleteSavedView() {
       const { error } = await supabase
         .from("saved_views" as any)
         .delete()
+        .setHeader("x-torque-saved-views-org", organizationId)
         .eq("id", id)
         .eq("organization_id", organizationId);
       if (error) throw error;

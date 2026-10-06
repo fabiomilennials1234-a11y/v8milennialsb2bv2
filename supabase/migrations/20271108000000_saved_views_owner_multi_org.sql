@@ -4,6 +4,8 @@
 -- colidiu com corrigir_venda_ganha na main; nenhuma migration aplicada mudou.
 -- Escopo: saved_views apenas. Não aplicar a migration ampla de 39 tabelas
 -- como dependência deste conserto. Compatível com clientes clássicos antigos.
+-- Header por request escolhe contexto, nunca autorização: vínculo e dono
+-- continuam obrigatórios. Sem header, preserva a org única dos clientes antigos.
 
 ALTER TABLE public.saved_views ALTER COLUMN owner_id SET DEFAULT auth.uid();
 
@@ -12,6 +14,10 @@ CREATE POLICY saved_views_select ON public.saved_views
   FOR SELECT TO authenticated
   USING (
     organization_id IN (SELECT public.get_my_organization_ids())
+    AND organization_id = (SELECT COALESCE(
+      NULLIF(NULLIF(current_setting('request.headers', true), '')::jsonb ->> 'x-torque-saved-views-org', '')::uuid,
+      public.get_user_organization_id()
+    ))
     AND (owner_id = (SELECT auth.uid()) OR is_shared = true)
   );
 
@@ -20,6 +26,10 @@ CREATE POLICY saved_views_insert ON public.saved_views
   FOR INSERT TO authenticated
   WITH CHECK (
     organization_id IN (SELECT public.get_my_organization_ids())
+    AND organization_id = (SELECT COALESCE(
+      NULLIF(NULLIF(current_setting('request.headers', true), '')::jsonb ->> 'x-torque-saved-views-org', '')::uuid,
+      public.get_user_organization_id()
+    ))
     AND owner_id = (SELECT auth.uid())
   );
 
@@ -28,10 +38,18 @@ CREATE POLICY saved_views_update ON public.saved_views
   FOR UPDATE TO authenticated
   USING (
     organization_id IN (SELECT public.get_my_organization_ids())
+    AND organization_id = (SELECT COALESCE(
+      NULLIF(NULLIF(current_setting('request.headers', true), '')::jsonb ->> 'x-torque-saved-views-org', '')::uuid,
+      public.get_user_organization_id()
+    ))
     AND owner_id = (SELECT auth.uid())
   )
   WITH CHECK (
     organization_id IN (SELECT public.get_my_organization_ids())
+    AND organization_id = (SELECT COALESCE(
+      NULLIF(NULLIF(current_setting('request.headers', true), '')::jsonb ->> 'x-torque-saved-views-org', '')::uuid,
+      public.get_user_organization_id()
+    ))
     AND owner_id = (SELECT auth.uid())
   );
 
@@ -40,6 +58,10 @@ CREATE POLICY saved_views_delete ON public.saved_views
   FOR DELETE TO authenticated
   USING (
     organization_id IN (SELECT public.get_my_organization_ids())
+    AND organization_id = (SELECT COALESCE(
+      NULLIF(NULLIF(current_setting('request.headers', true), '')::jsonb ->> 'x-torque-saved-views-org', '')::uuid,
+      public.get_user_organization_id()
+    ))
     AND owner_id = (SELECT auth.uid())
     AND is_system = false
   );
