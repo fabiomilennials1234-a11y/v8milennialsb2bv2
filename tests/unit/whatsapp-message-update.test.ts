@@ -148,9 +148,15 @@ describe("receipt HTTP contract", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // Chamado 6ebb4b73: an operator read (own-number ReadReceipt, IsFromMe=true) used to be a
+  // silent no-op. It now syncs Torque unread state through a service_role RPC, but must still
+  // never rewrite incoming status nor seal outgoing quotes.
   it("operator reads do not rewrite incoming status or seal outgoing quotes", async () => {
+    fetchMock.mockImplementation(async () => json(3));
     await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: true });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(methodAt(0)).toBe("POST");
+    expect(urlAt(0).pathname).toBe("/rest/v1/rpc/apply_external_conversation_read");
     expect(completeQuotePresentations).not.toHaveBeenCalled();
   });
 
@@ -321,7 +327,10 @@ describe("durable target availability", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each([{ status: "pending" }, { status: "read", fromMe: true }, { edited: false }, { deleted: false }])(
+  // `{status:"read", fromMe:true}` left this list (Chamado 6ebb4b73): it now syncs unread
+  // state; see "external read sync". Own-number non-read receipts remain durable no-ops.
+  it.each([{ status: "pending" }, { status: "delivered", fromMe: true }, { status: "sent", fromMe: true },
+    { edited: false }, { deleted: false }])(
     "preserves recognized durable no-ops: %j", async operation => {
       await applyMessageUpdate(db, instance, { id: "message-a", ...operation }, { requireTarget: true });
       expect(fetchMock).not.toHaveBeenCalled();
@@ -487,5 +496,65 @@ describe("reaction assignment semantics", () => {
     await applyMessageUpdate(db, instance, { ids: ["message-a", "message-b"], status: "delivered" }, { requireTarget: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(bodyAt(1)).toEqual({ status: "delivered" });
+  });
+});
+
+describe("external read sync (own-number ReadReceipt, Chamado 6ebb4b73)", () => {
+  const RPC_PATH = "/rest/v1/rpc/apply_external_conversation_read";
+  const rpcCalls = () => fetchMock.mock.calls.map((_, index) => index)
+    .filter(index => urlAt(index).pathname === RPC_PATH);
+  const ownRead = (Type: string, extra: Record<string, unknown> = {}) => normalizeMessageUpdatePayload({
+    type: "ReadReceipt", EventType: "messages_update", owner: "5511888888888",
+    event: { Type, IsFromMe: true, IsGroup: false, MessageIDs: ["message-a", "message-b"],
+      chatid: "5511777777777@s.whatsapp.net", ...extra },
+  });
+
+  it.each(["Read", "Played"])("%s with IsFromMe=true marks the conversation read via the scoped RPC only", async Type => {
+    fetchMock.mockImplementation(async () => json(8));
+    await applyMessageUpdate(db, instance, ownRead(Type));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(methodAt(0)).toBe("POST");
+    expect(urlAt(0).pathname).toBe(RPC_PATH);
+    expect(bodyAt(0)).toEqual({
+      p_org: "org-a", p_instance: "instance-a",
+      p_message_ids: ["message-a", "5511888888888:message-a", "message-b", "5511888888888:message-b"],
+    });
+    expect(fetchMock.mock.calls.some(([, init]) => init.method === "PATCH")).toBe(false);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+    expect(logRuntime).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Delivered own receipt", { Type: "Delivered" }],
+    ["group read (IsGroup)", { Type: "Read", IsGroup: true }],
+    ["group read (chat jid)", { Type: "Read", IsGroup: undefined, chatid: "1203630@g.us" }],
+  ])("%s calls nothing", async (_label, extra) => {
+    const { Type, ...rest } = extra as Record<string, unknown> & { Type: string };
+    await applyMessageUpdate(db, instance, ownRead(Type, rest));
+    await applyMessageUpdate(db, instance, ownRead(Type, rest), { requireTarget: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("does not throw under requireTarget when no message matches (unknown read is a no-op)", async () => {
+    fetchMock.mockImplementation(async () => json(0));
+    await expect(applyMessageUpdate(db, instance, ownRead("Read"), { requireTarget: true })).resolves.toBeUndefined();
+    expect(rpcCalls()).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("propagates an RPC failure so the event follows retry/DLQ", async () => {
+    fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
+    await expect(applyMessageUpdate(db, instance, ownRead("Read"))).rejects.toThrow("External read sync failed");
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("leaves contact receipts (fromMe=false) on the outgoing status path", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH" ? [{ id: "row-a" }] : []));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: false });
+    expect(rpcCalls()).toHaveLength(0);
+    expect(methodAt(0)).toBe("PATCH");
+    expect(urlAt(0).searchParams.get("direction")).toBe("eq.outgoing");
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
   });
 });

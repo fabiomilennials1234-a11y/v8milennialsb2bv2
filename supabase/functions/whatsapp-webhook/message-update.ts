@@ -63,6 +63,11 @@ export function isPureReceiptUpdate(data: Update): boolean {
     && data.reaction === undefined && data.reactions === undefined;
 }
 
+function isGroupUpdate(data: Update): boolean {
+  return data.IsGroup === true || data.isGroup === true
+    || (typeof data.chatid === "string" && data.chatid.endsWith("@g.us"));
+}
+
 /** An atomic SQL predicate prevents late receipts from overwriting later states. */
 export function receiptPredecessors(status: string): string[] {
   switch (status) {
@@ -170,6 +175,15 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     scopedTargets = targets ?? [];
   }
   if (ids.length === 0) return outcome;
+  if (receipt === "read" && data.fromMe === true && !isGroupUpdate(data)) {
+    // Own-number read (WhatsApp Web/phone): the conversation becomes read in Torque for the
+    // whole org team, up to the read message. Status and quotes stay untouched: this is not
+    // a delivery receipt. Unknown ids are a no-op inside the RPC, so no requireTarget throw.
+    const { error } = await db.rpc("apply_external_conversation_read", {
+      p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
+    });
+    if (error) throw new Error("External read sync failed");
+  }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
     if (predecessors.length) {
