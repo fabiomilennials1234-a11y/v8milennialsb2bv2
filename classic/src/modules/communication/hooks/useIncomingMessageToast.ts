@@ -39,10 +39,17 @@
  *     `channel = 'instagram'` faz o aviso ESPERAR o inbox em vez de anunciar
  *     conversa que nenhuma tela abre. Opt-in explícito, uma linha.
  *
- * ⚠️ DEPENDE DA POLICY. O Realtime avalia `channel_messages_org_access` em
- * `apply_rls()`; enquanto ela usava `get_user_organization_id()` (singular),
- * usuário multi-org não recebia evento nenhum e este aviso ficava mudo para ele
- * sem sintoma. Alinhado em `20270816110000_channel_messages_multi_org_read.sql`.
+ * ⚠️ DEPENDE DA POLICY. O Realtime avalia a RLS de SELECT em `apply_rls()`:
+ * hoje `channel_messages_select_by_owner` (org sem `chat_restrict_to_owner`:
+ * toda a org; org restrita: só o escopo do responsável via `can_see_chat_scope`,
+ * igual `whatsapp_messages`). Em org restrita, portanto, o aviso toca só para
+ * quem pode abrir aquela conversa — membro comum não é avisado de lead alheio,
+ * e gestor de portfólio (não é `team_member`) não é avisado. Histórico: a
+ * policy de org antiga (`channel_messages_org_access`, removida em
+ * `20271107160000_channel_messages_restrict_to_owner.sql`) usava
+ * `get_user_organization_id()` (singular) e deixava usuário multi-org sem evento
+ * nenhum, mudo e sem sintoma; alinhado em
+ * `20270816110000_channel_messages_multi_org_read.sql`.
  */
 
 import { useEffect, useRef } from "react";
