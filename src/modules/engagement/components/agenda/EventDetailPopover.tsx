@@ -41,6 +41,8 @@ import {
   POPOVER_ALTURA_MAXIMA,
 } from "./agenda-helpers";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
+import { agendaAttributionLabel } from "@/modules/engagement/lib/agenda-attribution";
+import type { LeadResponsiblesSummary } from "@/modules/leads";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,9 @@ interface PopoverState {
 
 interface EventDetailPopoverProps {
   state: PopoverState;
+  leadResponsibles?: LeadResponsiblesSummary | null;
+  leadResponsiblesLoading?: boolean;
+  leadResponsiblesError?: boolean;
   onClose: () => void;
   onDeleteMeeting: (eventId: string) => Promise<void>;
   onDeleteGoogleEvent: (event: UnifiedEvent) => Promise<void>;
@@ -106,6 +111,9 @@ export function EventDetailPopover(props: EventDetailPopoverProps) {
 
 function EventDetailPopoverContent({
   state,
+  leadResponsibles,
+  leadResponsiblesLoading,
+  leadResponsiblesError,
   onClose,
   onDeleteMeeting,
   onDeleteGoogleEvent,
@@ -386,11 +394,25 @@ function EventDetailPopoverContent({
           </div>
         </div>
 
-        {/* Creator / owner */}
+        {/* A autoria da reunião não muda com a atribuição comercial do lead. */}
         {event.creatorName && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <User className="w-3.5 h-3.5 shrink-0" />
-            <span>{event.creatorName}</span>
+            <span>{agendaAttributionLabel(event.source)}: {event.creatorName}</span>
+          </div>
+        )}
+        {event.leadId && (
+          <div className="space-y-1 text-xs text-muted-foreground" aria-live="polite">
+            {leadResponsiblesLoading ? (
+              <p>Carregando responsáveis do lead…</p>
+            ) : leadResponsiblesError || !leadResponsibles ? (
+              <p>Responsáveis do lead indisponíveis.</p>
+            ) : (
+              <>
+                <p>Pré-venda atual: {leadResponsibles.preSaleName ?? "Sem responsável"}</p>
+                <p>Venda atual: {leadResponsibles.saleName ?? "Sem responsável"}</p>
+              </>
+            )}
           </div>
         )}
 

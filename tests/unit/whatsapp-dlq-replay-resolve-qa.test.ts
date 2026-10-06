@@ -8,7 +8,7 @@ let rows: Array<Record<string, unknown>>;
 let handler: (r: Request) => Promise<Response>;
 const json = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'Content-Type': 'application/json' } });
 beforeAll(async () => {
-  vi.stubGlobal('Deno', { env: { get: (k: string) => env[k], toObject: () => env }, serve: (h: any) => { handler = h; } });
+  vi.stubGlobal('Deno', { env: { get: (k: string) => env[k], toObject: () => env }, serve: (h: typeof handler) => { handler = h; } });
   await import('../../supabase/functions/whatsapp-dlq-replay/index.ts');
 });
 afterAll(() => vi.unstubAllGlobals());

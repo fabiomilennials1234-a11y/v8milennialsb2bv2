@@ -14,6 +14,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
 import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
+import { camposDeOrigemDaCampanha } from "./campos-de-origem-da-campanha";
 import type {
   LeadCardData,
   LeadCardDeal,
@@ -359,6 +360,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
         ],
       },
+      ...camposDeOrigemDaCampanha(l),
       ...(orgVazios.length > 0
         ? [{ titulo: "Campos a preencher", campos: orgVazios }]
         : []),

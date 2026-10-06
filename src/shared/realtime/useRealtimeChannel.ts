@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { reportError, toAppError } from "@/shared/errors";
 import {
   acquireRealtimeChannel,
   type ChannelHandle,
@@ -21,10 +22,31 @@ export interface DiagnosticEvent {
   error?: string;
 }
 
+/**
+ * Uma transição do canal vista por ESTA instância, entregue na hora (sem
+ * esperar render) e na ordem exata em relação aos eventos.
+ */
+export interface ChannelStateChange {
+  state: Exclude<ChannelState, "idle">;
+  /** Falhas seguidas do canal; zera no SUBSCRIBED. `joining` com falhas = voltando de queda. */
+  failureCount: number;
+  /**
+   * Primeira transição depois de entrar no canal (montagem, troca de chave,
+   * religar): o estado em que esta instância ENCONTROU o canal compartilhado —
+   * `joined` se outra instância já o tinha aberto.
+   */
+  initial: boolean;
+}
+
 export interface UseRealtimeChannelOptions {
   table: string;
   filter?: string;
   onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
+  /**
+   * Lido por ref: trocar a função a cada render não reabre o canal. Se lançar,
+   * o erro é relatado e o canal segue (os outros assinantes e a reconexão).
+   */
+  onStateChange?: (change: ChannelStateChange) => void;
   circuitBreaker?: {
     threshold?: number;   // default: 5
     cooldownMs?: number;  // default: 120_000
@@ -53,6 +75,10 @@ const MAX_DIAGNOSTICS = 50;
  * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
  * servidor; cada hook recebe todos os eventos e espelha o estado do canal
  * (`state`, `diagnostics`). O último a desmontar fecha o canal.
+ *
+ * `state` é o do RENDER: entrar num canal já `joined` vindo de outro `joined`
+ * (troca de chave) não muda o valor e não re-renderiza. Quem precisa de cada
+ * transição — inclusive a de entrada — usa `onStateChange`.
  */
 export function useRealtimeChannel(
   options: UseRealtimeChannelOptions
@@ -67,6 +93,8 @@ export function useRealtimeChannel(
 
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  const onStateChangeRef = useRef(options.onStateChange);
+  onStateChangeRef.current = options.onStateChange;
 
   // Track state in ref for event listeners (avoids stale closure)
   const stateRef = useRef<ChannelState>(state);
@@ -106,12 +134,28 @@ export function useRealtimeChannel(
       return;
     }
 
+    // A 1ª transição chega DENTRO do acquire (canal novo: "joining"; canal já
+    // aberto por outra instância: o estado dele) — por isso a marca é local.
+    let initial = true;
     const handle = acquireRealtimeChannel(
       { table, filter, event: "*", threshold, cooldownMs },
       {
         statusKey,
         onEvent: (payload) => onEventRef.current(payload),
-        onTransition: applyTransition,
+        onTransition: (t) => {
+          applyTransition(t);
+          const first = initial;
+          initial = false;
+          // Roda dentro do laço que notifica TODOS os assinantes do canal, e o
+          // registry só arma o backoff/sonda depois dele: um consumidor que
+          // lança aqui deixaria o canal compartilhado caído para sempre, para
+          // todos. Isolado e relatado (ADR-0038), não relançado.
+          try {
+            onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
+          } catch (error) {
+            reportError(toAppError(error), { source: "realtime", feature: "onStateChange", table });
+          }
+        },
       }
     );
     handleRef.current = handle;

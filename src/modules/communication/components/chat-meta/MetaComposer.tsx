@@ -9,6 +9,7 @@ import { isWithin24hWindow } from "@/modules/communication/hooks/chat-meta/types
 import { useCurrentTeamMember } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyError } from "@/shared/errors";
+import { ComposerEmojiPicker } from "../chat/composer/ComposerEmojiPicker";
 
 interface Props {
   conversationId: string;
@@ -22,6 +23,7 @@ const CHAT_MEDIA_BUCKET = "media";
 export function MetaComposer({ conversationId, lastInboundAt }: Props) {
   const [text, setText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { mutateAsync, isPending } = useMetaSend();
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
@@ -81,7 +83,9 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
         >
           <ImageIcon className="h-4 w-4" />
         </Button>
+        <ComposerEmojiPicker key={conversationId} inputRef={inputRef} onChange={setText} disabled={!canSend || isPending} />
         <Textarea
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

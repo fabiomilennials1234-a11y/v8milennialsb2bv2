@@ -354,3 +354,11 @@ export interface DealCardData {
  * é como as duas listas de abas saem de sincronia.
  */
 export type DealCardAba = "negocio" | "atividades" | "negocios" | "checklists";
+
+export interface CorrecaoVendaHistorica {
+  valor: number;
+  /** AAAA-MM-DD, no dia civil da organização. */
+  data: string;
+  motivo: string;
+  versao?: string;
+}

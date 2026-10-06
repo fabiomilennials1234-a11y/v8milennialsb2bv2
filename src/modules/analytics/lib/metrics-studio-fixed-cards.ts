@@ -68,7 +68,7 @@ export const FIXED_CARDS: Record<string, FixedCardEntry> = {
   "meta-mensal": { label: "Meta do mês", descricao: "Meta e realizado do mês corrente", tamanhoPadrao: { w: 320, h: 488 }, render: MetaMensalCard },
   "indicadores-operacao": { label: "Indicadores da operação", descricao: "Período selecionado; follow-ups atrasados agora", tamanhoPadrao: { w: 984, h: 280 }, semMoldura: true, render: IndicadoresCard },
   "receita-acumulada": { label: "Receita acumulada", descricao: "Comparação com o período anterior", tamanhoPadrao: { w: 648, h: 488 }, render: ReceitaAcumuladaCard },
-  "funil-conversao": { label: "Funil de conversão", descricao: "Da entrada do lead à venda no período", tamanhoPadrao: { w: 320, h: 400 }, render: FunilCard },
+  "funil-conversao": { label: "Atividade do período", descricao: "Leads, reuniões marcadas, propostas e vendas; proporções entre volumes do período", tamanhoPadrao: { w: 320, h: 400 }, render: FunilCard },
   "briefing-oraculo": { label: "Oráculo", descricao: "Leitura da operação e conversa com a IA", tamanhoPadrao: { w: 320, h: 400 }, render: BriefingCard },
   "operacao-ao-vivo": { label: "Operação ao vivo", descricao: "Atividades recentes, independentemente do período", tamanhoPadrao: { w: 312, h: 400 }, render: OperacaoCard },
   "atividade-equipe": { label: "Atividade da equipe", descricao: "Atividade no período selecionado", tamanhoPadrao: { w: 640, h: 400 }, render: AtividadeEquipeCard, requiresPerformance: true },

@@ -10,25 +10,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
+type RequestHandler = (req: Request) => Promise<Response>;
+interface MockDeno {
+  env: {
+    get(key: string): string | undefined;
+    set(key: string, value: string): void;
+    toObject(): Record<string, string>;
+  };
+  serve(handler: RequestHandler): { finished: Promise<void> };
+}
+
 const hoist = vi.hoisted(() => {
   const envStore: Record<string, string> = {};
-  const capture = { handler: null as null | ((req: Request) => Promise<Response>) };
-  (globalThis as any).Deno = {
+  const capture = { handler: null as null | RequestHandler };
+  (globalThis as typeof globalThis & { Deno: MockDeno }).Deno = {
     env: {
       get: (k: string) => envStore[k] ?? undefined,
       set: (k: string, v: string) => { envStore[k] = v; },
       toObject: () => ({ ...envStore }),
     },
-    serve: (h: any) => { capture.handler = h; return { finished: Promise.resolve() }; },
+    serve: (h: RequestHandler) => { capture.handler = h; return { finished: Promise.resolve() }; },
   };
   return { capture, probe: vi.fn() };
 });
 
-let activeSb: any = null;
+let activeSb: ReturnType<typeof createMockSupabase>["sb"] | null = null;
 vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({ createClient: () => activeSb }));
-vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({ withErrorBoundary: (_n: string, h: any) => h }));
+vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({ withErrorBoundary: (_n: string, h: RequestHandler) => h }));
 vi.mock("../../supabase/functions/_shared/cors.ts", () => ({ getCorsHeaders: () => ({}) }));
-vi.mock("../../supabase/functions/_shared/security-headers.ts", () => ({ withSecurityHeaders: (h: any) => h }));
+vi.mock("../../supabase/functions/_shared/security-headers.ts", () => ({ withSecurityHeaders: (h: Record<string, string>) => h }));
 vi.mock("../../supabase/functions/_shared/auth.ts", () => ({ timingSafeCompare: (a: string, b: string) => a === b }));
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({ logRuntime: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../supabase/functions/_shared/uazapi-inbound-window.ts", () => ({ countUazapiInboundWindow: hoist.probe }));
@@ -36,16 +46,16 @@ vi.mock("../../supabase/functions/_shared/uazapi-inbound-window.ts", () => ({ co
 import "../../supabase/functions/whatsapp-health-monitor/index";
 
 const CRON = "test-cron-secret";
-const env = (globalThis as any).Deno.env;
+const env = (globalThis as typeof globalThis & { Deno: MockDeno }).Deno.env;
 
 function instance(id: string) {
   return { id, organization_id: "org-1", instance_name: `Caixa ${id}`, provider: "uazapi", status: "connected", session_dead_since: null };
 }
 
-function setup(instances: unknown[], secrets: unknown[], opts: { secretsError?: boolean } = {}) {
+function setup(instances: Array<Record<string, unknown>>, secrets: Array<Record<string, unknown>>, opts: { secretsError?: boolean } = {}) {
   const mock = createMockSupabase();
-  mock.mockTable("whatsapp_instances", instances as any);
-  mock.mockTable("whatsapp_instance_secrets", secrets as any);
+  mock.mockTable("whatsapp_instances", instances);
+  mock.mockTable("whatsapp_instance_secrets", secrets);
   mock.mockTable("whatsapp_messages", []);
   mock.mockTable("whatsapp_health_checks", []);
   if (opts.secretsError) mock.mockSelectError("whatsapp_instance_secrets", { code: "XX000", message: "boom" });
@@ -56,7 +66,7 @@ function setup(instances: unknown[], secrets: unknown[], opts: { secretsError?: 
   return { ...mock, fromCalls };
 }
 
-async function invoke(): Promise<any> {
+async function invoke(): Promise<Record<string, unknown>> {
   const res = await hoist.capture.handler!(new Request("https://edge/whatsapp-health-monitor", {
     method: "POST", headers: { "x-cron-secret": CRON },
   }));

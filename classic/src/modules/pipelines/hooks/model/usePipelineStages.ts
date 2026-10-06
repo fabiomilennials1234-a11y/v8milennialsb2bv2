@@ -112,7 +112,8 @@ export function usePipelineStages(pipelineType: PipelineType) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
-  useRealtimeSubscription("pipeline_stages", ["pipeline_stages", pipelineType]);
+  // Alvo composto aninhado: só as etapas deste funil (prefixo da chave abaixo).
+  useRealtimeSubscription("pipeline_stages", [["pipeline_stages", pipelineType]]);
 
   return useQuery({
     queryKey: ["pipeline_stages", pipelineType, organizationId],

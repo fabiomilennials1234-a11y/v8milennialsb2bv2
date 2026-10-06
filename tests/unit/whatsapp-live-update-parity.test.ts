@@ -42,6 +42,21 @@ it('rejects a one-byte change to a trusted baseline before patching', () => {
     .toThrow('Live bundle drift: whatsapp-webhook/index.ts');
 });
 
+it('keeps the published v119 quote helper byte-for-byte while the current helper evolves', async () => {
+  const frozen = await readFile(new URL('../../scripts/fixtures/quote-presentation-v119.ts.txt', import.meta.url));
+  expect(() => assertContentHash('_shared/quotes/presentation.ts', frozen,
+    '4647c2691a1989e5a2a98ab814d84751e1a1672971c80165f98a543117231f7d')).not.toThrow();
+});
+
+it('preserves every published manifest value when labelling its digests as sha256', async () => {
+  const source = await readFile(new URL('../../docs/operations/whatsapp-live-update-parity-2026-09-24.json', import.meta.url), 'utf8');
+  const manifest = JSON.parse(source, (_key, value: unknown) =>
+    typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value) ? value.slice(7) : value);
+  // Digest of the complete original manifest, before adding algorithm labels.
+  expect(createHash('sha256').update(JSON.stringify(manifest)).digest('hex'))
+    .toBe('843a8a8149b765b083f06a0156f8f45aadf38a4bc02b8601d550c5671dd883c0');
+});
+
 describe.skipIf(!process.env.TORQUE_LIVE_BUNDLE_TEST_DIR && !existsSync(live))('live bundle', () => {
   const input = process.env.TORQUE_LIVE_BUNDLE_TEST_DIR ?? live;
   it('preserves every original file except index and quotes, adding only canonical message-update', async () => {

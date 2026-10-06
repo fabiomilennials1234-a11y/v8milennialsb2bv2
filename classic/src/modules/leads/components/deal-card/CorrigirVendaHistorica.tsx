@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatBRL, maskCurrencyInput, parseCurrencyInput } from "@/lib/format";
-import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
+import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

@@ -9,7 +9,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     functions: { invoke: (...args: unknown[]) => invoke(...args) },
     from: () => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { metadata: {} } }) }) }),
+      select: () => ({ eq: () => ({ abortSignal: () => ({ maybeSingle: async () => ({ data: { metadata: {} } }) }) }) }),
       upsert: (...args: unknown[]) => upsert(...args),
     }),
   },

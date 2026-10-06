@@ -1,3 +1,4 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { SendRichContactActions } from "./SendRichContactActions";
 import { ReplyPreview } from "../ReplyContext";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
@@ -47,6 +48,7 @@ import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
 import { ChatQuickActions } from "./ChatQuickActions";
+import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
 import { QUICK_ACTION_BUTTON } from "./quick-action-button";
 import { SendMenuDialog } from "./SendMenuDialog";
 import { useQueryClient } from "@tanstack/react-query";
@@ -163,6 +165,7 @@ export function ChatComposer({
   // Refs
   const reply = useChatReply();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const captionRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -314,12 +317,7 @@ export function ChatComposer({
     const asSticker = sendAsSticker && kind === "image";
     setIsPreparing(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      const base64 = await readMediaAsDataUrl(selectedFile);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -355,12 +353,7 @@ export function ChatComposer({
         toast.error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
         return;
       }
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blobToSend);
-      });
+      const base64 = await readMediaAsDataUrl(blobToSend);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -486,11 +479,15 @@ export function ChatComposer({
                     </p>
                   )}
                   {!sendAsSticker && (
-                    <Input
-                      placeholder="Adicionar legenda (opcional)..."
-                      value={caption}
-                      onChange={(e) => setCaption(e.target.value)}
-                    />
+                    <div className="flex items-center gap-1">
+                      <ComposerEmojiPicker inputRef={captionRef} onChange={setCaption} disabled={sendMedia.isPending || isPreparing} />
+                      <Input
+                        ref={captionRef}
+                        placeholder="Adicionar legenda (opcional)..."
+                        value={caption}
+                        onChange={(e) => setCaption(e.target.value)}
+                      />
+                    </div>
                   )}
                   <div className="flex gap-2">
                     <Button
@@ -574,6 +571,13 @@ export function ChatComposer({
 
             {/* Andar 2 — ferramentas · enviar. */}
             <div className="flex items-center gap-1 px-1 pb-1">
+              <ComposerEmojiPicker
+                key={conversationKey}
+                inputRef={inputRef}
+                onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
+                disabled={sendMessage.isPending || sendMedia.isPending}
+                className={QUICK_ACTION_BUTTON}
+              />
               <ChatQuickActions
                 onAudio={() => {
                   if (sendMedia.isPending) {

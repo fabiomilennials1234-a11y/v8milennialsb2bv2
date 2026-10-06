@@ -115,6 +115,26 @@ describe("LeadCardChecklistPopover", () => {
       is_completed: true,
     });
   });
+
+  it("conclui dentro do popover sem abrir nem arrastar o card pai", () => {
+    const abrir = vi.fn();
+    const arrastar = vi.fn();
+    renderWithClient(
+      <div data-testid="card-root" onClick={abrir} onPointerDown={arrastar}>
+        <LeadCardChecklistPopover leadId="lead-1" completed={1} total={2} />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Checklists: 1 de 2/ }));
+    const checkbox = screen.getAllByRole("checkbox")[0];
+    expect(screen.getByTestId("card-root").contains(checkbox)).toBe(false);
+    fireEvent.pointerDown(checkbox);
+    fireEvent.click(checkbox);
+    expect(toggleMutate).toHaveBeenCalledWith({ id: "it-1", checklist_id: "cl-1", is_completed: true });
+    expect(abrir).not.toHaveBeenCalled();
+    expect(arrastar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("card-root"));
+    expect(abrir).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("LeadCardChecklistPopover — aplicar checklist da operação", () => {

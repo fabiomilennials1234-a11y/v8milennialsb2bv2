@@ -63,7 +63,7 @@ function TeamGoalsGaugesBase({ gauges, expectedPercent }: TeamGoalsGaugesProps) 
           className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
           title="As metas seguem mensais mesmo com período personalizado selecionado."
         >
-          mês
+          Equipe · metas do mês
         </span>
         <Link to="/gestao-metas" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
           Ajustar →

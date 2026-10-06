@@ -19,7 +19,7 @@ import { NomeDoNegocio } from "./NomeDoNegocio";
 import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho";
 import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
 import { diaDaVenda } from "./dia-da-venda";
-import type { CorrecaoVendaHistorica } from "./useCorrigirVendaHistorica";
+import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
@@ -250,6 +250,7 @@ export function DealCard({
   ajustesPedido = [],
   onRemoverItem,
   onEditarValor,
+  onRecarregarValor,
   movendo,
   comentarios = [],
   onComentar,
@@ -301,6 +302,7 @@ export function DealCard({
   }>;
   onRemoverItem?: (itemId: string) => Promise<void>;
   onEditarValor?: (valor: number, versao: string | null) => Promise<void>;
+  onRecarregarValor?: () => Promise<void>;
   movendo?: string | null;
   /**
    * ── Comentários entram por FORA de `negocio` ──────────────────────────
@@ -713,6 +715,7 @@ export function DealCard({
                   onEditarItem={negocio.estado === "ganho" ? undefined : onEditarItem}
                   onRemoverItem={negocio.estado === "ganho" ? undefined : onRemoverItem}
                   onEditarValor={negocio.estado === "aberto" ? onEditarValor : undefined}
+                  onRecarregarValor={onRecarregarValor}
                 />
               )}
               {ajustesPedido.length > 0 && (

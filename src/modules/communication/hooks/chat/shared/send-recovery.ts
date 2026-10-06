@@ -29,14 +29,21 @@ export async function sendWithBoundedRecovery(options: {
     const status = (r?.data?.result as { status?: string } | undefined)?.status ?? r?.data?.status;
     return !!r?.data && !r.error && !r.data.error && status !== "failed" && status !== "error";
   };
+  const httpStatus = (r: SendResponse | undefined) =>
+    (r?.error as { context?: { status?: number } } | null)?.context?.status;
+  // These responses reject the request before delivery. Preserve the provider's
+  // actionable error and allow a new attempt after the user fixes its cause.
+  const rejected = (r: SendResponse | undefined) =>
+    [400, 401, 403, 404, 405, 413, 415, 422].includes(httpStatus(r) ?? 0);
   if (successful(result)) return result!;
+  if (rejected(result)) return result!;
   for (let attempt = 1; attempt <= MAX_SEND_RETRIES; attempt++) {
     options.onRetry(attempt);
-    const confirmed = await options.confirm().catch(() => null);
+    const confirmed = await waitForResult(options.confirm().catch(() => null), options.retryDelayMs ?? 3000);
     if (confirmed) return confirmed;
     // Only a pre-delivery rate-limit rejection is safe to POST again. A timeout,
     // network error or 5xx can mean the provider already accepted the message.
-    const status = (result?.error as { context?: { status?: number } } | null)?.context?.status;
+    const status = httpStatus(result);
     if (status === 429 && attempt < MAX_SEND_RETRIES) {
       await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 3000));
       pending = launch();
@@ -47,8 +54,11 @@ export async function sendWithBoundedRecovery(options: {
       await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 3000));
     }
     if (successful(result)) return result!;
+    if (rejected(result)) return result!;
   }
-  const confirmed = await options.confirm().catch(() => null);
+  const confirmed = await waitForResult(options.confirm().catch(() => null), options.retryDelayMs ?? 3000);
   if (confirmed) return confirmed;
+  // All ten attempts were rate limited, so none was accepted for delivery.
+  if (httpStatus(result) === 429) return result!;
   throw new SendRetriesExhausted();
 }

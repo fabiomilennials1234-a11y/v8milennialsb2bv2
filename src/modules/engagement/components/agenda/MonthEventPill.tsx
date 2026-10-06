@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Check, X } from "lucide-react";
 import type { UnifiedEvent } from "./agenda-helpers";
 import { initialsOf, isFinishedEvent, outcomeOf } from "./agenda-helpers";
+import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 interface MonthEventPillProps {
   event: UnifiedEvent;
@@ -46,7 +47,7 @@ export function MonthEventPill({
       }}
       title={[
         `${hora} · ${event.title}`,
-        event.creatorName ? `Responsável: ${event.creatorName}` : null,
+        event.creatorName ? `${agendaAttributionLabel(event.source)}: ${event.creatorName}` : null,
         resultado === "compareceu"
           ? "Compareceu"
           : resultado === "nao_compareceu"

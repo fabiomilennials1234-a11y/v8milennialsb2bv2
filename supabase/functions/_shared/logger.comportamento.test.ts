@@ -42,8 +42,9 @@ function install(opts: {
   const realFetch = globalThis.fetch;
   const realInfo = console.info, realWarn = console.warn, realError = console.error;
   const realRandom = Math.random;
-  // deno-lint-ignore no-explicit-any
-  const g = globalThis as any;
+  const g = globalThis as typeof globalThis & {
+    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): unknown };
+  };
   const hadEdge = "EdgeRuntime" in g, realEdge = g.EdgeRuntime;
   const h: H = {
     posts: [], info: [], warn: [], error: [], waitUntil: [],
@@ -74,14 +75,10 @@ function install(opts: {
     h.posts.push(rows);
     return await respond(rows);
   }) as typeof fetch;
-  // deno-lint-ignore no-explicit-any
-  const fmt = (a: any[]) => a.map((x) => (typeof x === "string" ? x : Deno.inspect(x, { depth: 10 }))).join(" ");
-  // deno-lint-ignore no-explicit-any
-  console.info = (...a: any[]) => h.info.push(fmt(a));
-  // deno-lint-ignore no-explicit-any
-  console.warn = (...a: any[]) => h.warn.push(fmt(a));
-  // deno-lint-ignore no-explicit-any
-  console.error = (...a: any[]) => h.error.push(fmt(a));
+  const fmt = (a: unknown[]) => a.map((x) => (typeof x === "string" ? x : Deno.inspect(x, { depth: 10 }))).join(" ");
+  console.info = (...a: unknown[]) => h.info.push(fmt(a));
+  console.warn = (...a: unknown[]) => h.warn.push(fmt(a));
+  console.error = (...a: unknown[]) => h.error.push(fmt(a));
   if (opts.random) Math.random = opts.random;
   if (opts.edge) g.EdgeRuntime = { waitUntil: (p: Promise<unknown>) => h.waitUntil.push(p) };
   return h;
@@ -308,10 +305,8 @@ Deno.test("assinatura — nunca lança: sem env, params inválidos, payload circ
     assertEquals(h.posts.length, 0);
   });
   await run({}, async () => {
-    // deno-lint-ignore no-explicit-any
-    await logRuntime(undefined as any);
-    // deno-lint-ignore no-explicit-any
-    await logRuntime(null as any);
+    await logRuntime(undefined as unknown as Parameters<typeof logRuntime>[0]);
+    await logRuntime(null as unknown as Parameters<typeof logRuntime>[0]);
     const circ: Row = { a: 1 };
     circ.self = circ;
     await logRuntime({ module: "general", action: "circ", status: "success", payloadSnapshot: circ });

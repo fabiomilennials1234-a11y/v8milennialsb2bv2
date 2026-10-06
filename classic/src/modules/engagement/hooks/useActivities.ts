@@ -59,7 +59,8 @@ export function useActivities(filters?: ActivityFilters) {
     filters?.limit,
   ];
 
-  useRealtimeSubscription("activities", ["activities", organizationId ?? ""]);
+  // Alvo composto aninhado: as atividades desta org (prefixo da chave acima).
+  useRealtimeSubscription("activities", [["activities", organizationId]]);
 
   return useQuery<ActivityWithNames[]>({
     queryKey,

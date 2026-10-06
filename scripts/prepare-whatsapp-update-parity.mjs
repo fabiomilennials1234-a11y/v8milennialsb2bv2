@@ -79,7 +79,7 @@ export async function prepareBundle(inputPath, outputPath) {
     // after that release without silently changing a reproducible live patch.
     const path = name === 'whatsapp-webhook/message-update.ts'
       ? join(projectRoot, 'scripts/fixtures/whatsapp-message-update-v119.ts')
-      : join(projectRoot, 'supabase/functions', name);
+      : join(projectRoot, 'scripts/fixtures/quote-presentation-v119.ts.txt');
     const data = await readFile(path);
     if (sha(data) !== hash) throw new Error(`Canonical source drift: ${name}`);
     content.set(name, data);

@@ -13,6 +13,8 @@
  */
 
 // ── Hooks: lead CRUD + listing ─────────────────────────────────────────────
+export { useLeadResponsibles, type LeadResponsiblesSummary } from "./hooks/useLeadResponsibles";
+
 export {
   useLeads,
   useLeadsCount,
