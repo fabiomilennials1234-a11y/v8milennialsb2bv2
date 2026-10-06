@@ -30,7 +30,7 @@ type Call = { url: string; method: string; body: string };
 let calls: Call[];
 let rpcImpl: (body: { p_instance_ref: string | null; p_token: string | null }) => unknown[];
 let poisonCount: number | 'error';
-let makeHandler: any;
+let makeHandler: typeof import('../../supabase/functions/whatsapp-webhook/handler.ts').createWhatsAppWebhookHandler;
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
