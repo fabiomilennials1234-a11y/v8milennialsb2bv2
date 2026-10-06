@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Reproduce unavailable Google Fonts without network or authentication. -->
+    <meta http-equiv="Content-Security-Policy" content="style-src 'self' 'unsafe-inline'; font-src 'self'" />
+    <title>Chat — tipografia sem fontes remotas</title>
+    <link rel="stylesheet" href="/src/index.css" />
+    <style>
+      body { padding: 24px; }
+      main { max-width: 800px; margin: auto; }
+      section { padding: 20px; margin: 16px 0; border: 1px solid #444; border-radius: 20px; background: #191919; }
+      .samples { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      [data-sample], [data-reference] { font-size: 14px; font-weight: 400; white-space: pre; width: max-content; }
+      [data-reference] { font-family: system-ui, sans-serif; }
+      .message { max-width: 430px; margin-left: auto; }
+      .message p { white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+      time { display: block; text-align: right; font-size: 10px; color: #999; }
+      textarea { width: 100%; border: 1px solid #888; border-radius: 12px; background: transparent; padding: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Formatação do chat</h1>
+      <section>
+        <h2>Cliente Exemplo</h2>
+        <div class="samples">
+          <span data-sample="name">Cliente Exemplo</span><span data-reference="name">Cliente Exemplo</span>
+          <span data-sample="space">a a</span><span data-reference="space">a a</span>
+          <span data-sample="time">13:05</span><span data-reference="time">13:05</span>
+          <span data-sample="date">01/10/2026</span><span data-reference="date">01/10/2026</span>
+          <span data-sample="amount">R$ 825,00</span><span data-reference="amount">R$ 825,00</span>
+          <span data-sample="utility" class="font-sans">Prazo de 10 - 15 dias úteis</span><span data-reference="utility">Prazo de 10 - 15 dias úteis</span>
+        </div>
+      </section>
+      <section class="message">
+        <p>Seu pedido foi efetuado no dia 01/10, logo após a confirmação do pagamento.</p>
+        <time>12:47</time>
+      </section>
+      <section class="message">
+        <p>Na sua proposta nós sinalizamos que o prazo era de 10 - 15 dias úteis.
+Avisaremos assim que o pedido for enviado. 🙂 🫩</p>
+        <time>13:05</time>
+      </section>
+      <textarea aria-label="Mensagem" rows="3">Olá! Seu pedido está em andamento.</textarea>
+      <span data-emoji style="font-family: 'Noto Color Emoji'; font-size: 32px">🙂 🫩</span>
+    </main>
+  </body>
+</html>
