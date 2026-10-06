@@ -6,6 +6,7 @@
  */
 
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
+import { nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
 
 export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
 
@@ -334,8 +335,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string | 
  * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
  * na lista.
  */
-export function contactLabel(c: InboxContact): string {
+export function contactLabel(
+  c: InboxContact,
+  opcoes?: { nomeDoLeadPrimeiro?: boolean },
+): string {
   if (c.channel === "whatsapp") {
+    // Flag `chat_nome_do_lead`: `leads.name` primeiro, a mesma regra do topo e
+    // do painel. Grupo fica com a regra de sempre.
+    if (opcoes?.nomeDoLeadPrimeiro && !c.is_group) {
+      return (
+        nomeComLeadPrimeiro({
+          pushName: c.push_name,
+          savedContactName: c.saved_contact_name,
+          nomeDoLead: c.lead_name,
+          telefone: c.phone_number,
+        }) || "Contato"
+      );
+    }
     const nome = c.saved_contact_name?.trim() || (c.push_name || c.lead_name || "").trim();
     if (nome) return nome;
     // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um

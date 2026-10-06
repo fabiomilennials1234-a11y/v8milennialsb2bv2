@@ -116,3 +116,43 @@ describe("contactLabel — Instagram segue como estava", () => {
     expect(contactLabel(ig({ lead_name: "Marcelo Montemezzo" }))).toBe("Marcelo Montemezzo");
   });
 });
+
+describe("contactLabel — flag chat_nome_do_lead", () => {
+  const COM = { nomeDoLeadPrimeiro: true };
+
+  it("o nome do lead ganha do nome salvo e do perfil", () => {
+    expect(
+      contactLabel(
+        whatsapp({ lead_name: "0001-EMPRESA FICTICIA LTDA", push_name: "Ana", saved_contact_name: "Ana Agenda" }),
+        COM,
+      ),
+    ).toBe("0001-EMPRESA FICTICIA LTDA");
+  });
+
+  it("sem lead: salvo, perfil, telefone", () => {
+    expect(contactLabel(whatsapp({ push_name: "Ana", saved_contact_name: "Ana Agenda" }), COM)).toBe("Ana Agenda");
+    expect(contactLabel(whatsapp({ push_name: "Ana" }), COM)).toBe("Ana");
+    expect(contactLabel(whatsapp({}), COM)).toBe("5548999998888");
+  });
+
+  it("lead só com espaços cai no resto; LID vira rótulo", () => {
+    expect(contactLabel(whatsapp({ lead_name: "  ", push_name: "Ana" }), COM)).toBe("Ana");
+    expect(contactLabel(whatsapp({ phone_number: "210028246085780" }), COM)).toBe("Contato sem número · 085780");
+  });
+
+  it("grupo fica com a regra de sempre", () => {
+    expect(
+      contactLabel(whatsapp({ is_group: true, lead_name: "Lead", push_name: "Grupo X" }), COM),
+    ).toBe("Grupo X");
+  });
+
+  it("canal não-WhatsApp fica com a regra de sempre", () => {
+    expect(contactLabel(social({ display_name: "Nome IG", lead_name: "Lead" }), COM)).toBe("Nome IG");
+  });
+
+  it("sem a opção, a ordem antiga (salvo, perfil, lead)", () => {
+    const c = whatsapp({ lead_name: "Lead", push_name: "Ana" });
+    expect(contactLabel(c)).toBe("Ana");
+    expect(contactLabel(c, { nomeDoLeadPrimeiro: false })).toBe("Ana");
+  });
+});

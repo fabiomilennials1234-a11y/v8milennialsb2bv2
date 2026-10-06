@@ -260,6 +260,69 @@ index 7aee76ec7..b35d7f031 100644
  
    return useQuery({
      queryKey: ["pipeline_stages", family, organizationId],
+diff --git a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
+index 03a54f8e6..d61b00594 100644
+--- a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
++++ b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
+@@ -31,7 +31,8 @@ import { Loader2, WifiOff, UserPlus } from "lucide-react";
+ import { toast } from "sonner";
+ import { normalizePhone } from "@/lib/normalizePhone";
+ import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
+-import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
++import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
++import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
+ import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
+ import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
+ import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
+@@ -211,6 +212,8 @@ function ChatView({
+    * que segurar a thread inteira num skeleton esperando a flag.
+    */
+   const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
++  // `chat_nome_do_lead`: o `leads.name` manda no topo, na lista e no painel.
++  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+ 
+   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
+   // daqui é o único ponto que sabe qual lead está aberto.
+@@ -307,7 +310,11 @@ function ChatView({
+       savedContactName: selectedContact?.saved_contact_name,
+       telefone: phoneNumber ?? null,
+     },
+-    { nomeDoWhatsappPrimeiro },
++    {
++      nomeDoWhatsappPrimeiro,
++      // Grupo fica com a regra de sempre.
++      nomeDoLeadPrimeiro: nomeDoLeadPrimeiro && !selectedContact?.is_group,
++    },
+   );
+ 
+   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
+@@ -784,6 +791,9 @@ export function ChatShellWithContext() {
+    * argumento) e a lista refaz a busca — uma vez, no load.
+    */
+   const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
++  // `chat_nome_do_lead`: o painel lateral resolve o `leads.name` por conta própria;
++  // aqui só vai a queda (salvo → perfil → telefone) para quando não há lead.
++  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+ 
+   // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
+   // estado persistido — empurrar essas dimensões pro servidor sumiria com
+@@ -1501,6 +1511,16 @@ export function ChatShellWithContext() {
+                 leadId={selectedContact?.lead_id ?? undefined}
+                 phoneNumber={telefoneSelecionado ?? undefined}
+                 pushName={selectedContact?.push_name ?? null}
++                nomeDaConversa={
++                  nomeDoLeadPrimeiro && selectedContact && !selectedContact.is_group
++                    ? nomeComLeadPrimeiro({
++                        pushName: selectedContact.push_name ?? null,
++                        savedContactName: selectedContact.saved_contact_name,
++                        nomeDoLead: null,
++                        telefone: telefoneSelecionado ?? null,
++                      })
++                    : undefined
++                }
+               />
+             )
+           ) : undefined
 diff --git a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx b/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
 index e6b5a8c89..39071a847 100644
 --- a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
@@ -423,6 +486,136 @@ index 1fee64edb..4314d9e22 100644
        // Preview antes de enviar (paridade desktop/bubble) — mis-tap no picker
        // não dispara mais o arquivo direto pro cliente.
        setPendingAttachment({ data: base64, name: file.name, mime: file.type });
+diff --git a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
+index bae373207..1a0369f84 100644
+--- a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
++++ b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
+@@ -21,11 +21,17 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+ import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
+ import { ContextPanelTabAI } from "./ContextPanelTabAI";
+ import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
++import { nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
+ 
+ export interface ContextPanelProps {
+   leadId?: string;
+   phoneNumber?: string;
+   pushName?: string | null;
++  /**
++   * O nome que o cabeçalho da conversa já resolveu (flag `chat_nome_do_lead`).
++   * Ausente = comportamento de sempre.
++   */
++  nomeDaConversa?: string | null;
+   onClose?: () => void;
+   /**
+    * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
+@@ -75,6 +81,7 @@ export function ContextPanel({
+   leadId,
+   phoneNumber,
+   pushName,
++  nomeDaConversa,
+   placeholder,
+   identitySlot,
+ }: ContextPanelProps) {
+@@ -123,7 +130,12 @@ export function ContextPanel({
+   // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
+   // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
+   const displayName =
+-    lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
++    nomeDoPainelDeContexto({
++      leadName: lead?.name,
++      nomeDaConversa,
++      pushName,
++      telefoneExibicao: telefoneParaExibicao(phoneNumber),
++    });
+   const initials = displayName.slice(0, 2).toUpperCase();
+   const score =
+     typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
+diff --git a/classic/src/modules/communication/components/chat/list/ConversationList.tsx b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
+index c95456994..0ffb073de 100644
+--- a/classic/src/modules/communication/components/chat/list/ConversationList.tsx
++++ b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
+@@ -27,6 +27,7 @@ import {
+   type InboxContact,
+ } from "@/modules/communication/hooks/chat/types";
+ import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
++import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+ import { SeletorDeCaixas } from "./SeletorDeCaixas";
+ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+ import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
+@@ -191,6 +192,7 @@ export function ConversationList({
+ }: ConversationListProps) {
+   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+   const { isMobile } = useViewport();
++  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
+ 
+   // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
+@@ -272,8 +274,8 @@ export function ConversationList({
+     if (universo.length === 0) return universo;
+     const q = searchQuery.trim().toLowerCase();
+     if (!q) return universo;
+-    return universo.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
+-  }, [isSocialBox, modoUnificado, contacts, searchQuery]);
++    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro).toLowerCase().includes(q));
++  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro]);
+ 
+   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
+   const whatsappFiltered = useMemo(() => {
+diff --git a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx b/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
+index 1d479a533..6468bd9ac 100644
+--- a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
++++ b/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
+@@ -49,6 +49,7 @@ import {
+ import { ChannelBadge } from "../ChannelBadge";
+ import { instanceColor } from "../bubble/utils/instanceColor";
+ import { getAvatarGradient } from "./avatarGradient";
++import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+ 
+ // ─── Helpers ──────────────────────────────────────────────────────────────────
+@@ -58,8 +59,8 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+  * nomear conversa de cada canal — este export continua existindo porque a lista
+  * e a linha do mobile já o importam por este nome.
+  */
+-export function contactDisplayName(c: InboxContact): string {
+-  return contactLabel(c);
++export function contactDisplayName(c: InboxContact, nomeDoLeadPrimeiro?: boolean): string {
++  return contactLabel(c, { nomeDoLeadPrimeiro });
+ }
+ 
+ export function formatContactTime(timestamp: string): string {
+@@ -300,7 +301,8 @@ export function ConversationListItem({
+   caixa,
+   tambemEm,
+ }: ConversationListItemProps) {
+-  const displayName = contactDisplayName(contact);
++  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
++  const displayName = contactDisplayName(contact, nomeDoLeadPrimeiro);
+   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
+   const key = contactKey(contact);
+   // Ações de conversa (arquivar/excluir/etiquetar) vivem em
+diff --git a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx b/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
+index 72a92dbad..e105658d1 100644
+--- a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
++++ b/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
+@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
+ import { contactKey, isWhatsAppContact, type InboxContact } from "@/modules/communication/hooks/chat/types";
+ import { ChannelBadge } from "../ChannelBadge";
+ import { contactDisplayName, formatContactTime } from "./ConversationListItem";
++import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+ 
+ // ─── Props ───────────────────────────────────────────────────────────────────
+ 
+@@ -33,7 +34,8 @@ export function MobileConversationRow({
+   stageName,
+   stageColor,
+ }: MobileConversationRowProps) {
+-  const name = contactDisplayName(contact);
++  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
++  const name = contactDisplayName(contact, nomeDoLeadPrimeiro);
+   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
+   const hasUnread = contact.unread_count > 0 && !isSelected;
+   const key = contactKey(contact);
 diff --git a/classic/src/modules/communication/hooks/chat/chatReconcile.ts b/classic/src/modules/communication/hooks/chat/chatReconcile.ts
 new file mode 100644
 index 000000000..d492b2fb6
@@ -786,6 +979,43 @@ index 8feeb5b50..a63f8be8c 100644
 +  if (httpStatus(result) === 429) return result!;
    throw new SendRetriesExhausted();
  }
+diff --git a/classic/src/modules/communication/hooks/chat/types.ts b/classic/src/modules/communication/hooks/chat/types.ts
+index eccb97e9e..c31a59f7a 100644
+--- a/classic/src/modules/communication/hooks/chat/types.ts
++++ b/classic/src/modules/communication/hooks/chat/types.ts
+@@ -6,6 +6,7 @@
+  */
+ 
+ import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
++import { nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
+ 
+ export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
+ 
+@@ -334,8 +335,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string |
+  * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
+  * na lista.
+  */
+-export function contactLabel(c: InboxContact): string {
++export function contactLabel(
++  c: InboxContact,
++  opcoes?: { nomeDoLeadPrimeiro?: boolean },
++): string {
+   if (c.channel === "whatsapp") {
++    // Flag `chat_nome_do_lead`: `leads.name` primeiro, a mesma regra do topo e
++    // do painel. Grupo fica com a regra de sempre.
++    if (opcoes?.nomeDoLeadPrimeiro && !c.is_group) {
++      return (
++        nomeComLeadPrimeiro({
++          pushName: c.push_name,
++          savedContactName: c.saved_contact_name,
++          nomeDoLead: c.lead_name,
++          telefone: c.phone_number,
++        }) || "Contato"
++      );
++    }
+     const nome = c.saved_contact_name?.trim() || (c.push_name || c.lead_name || "").trim();
+     if (nome) return nome;
+     // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um
 diff --git a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts b/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
 index bb01d8031..5ee0295ff 100644
 --- a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
@@ -819,6 +1049,24 @@ index bb01d8031..5ee0295ff 100644
    });
  
    const queryOficiais = useQuery({
+diff --git a/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts b/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts
+new file mode 100644
+index 000000000..228e1f4b4
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts
+@@ -0,0 +1,12 @@
++import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
++
++/**
++ * Flag por org `chat_nome_do_lead`: o nome da conversa é o `leads.name` na
++ * lista, no cabeçalho e no painel lateral (ver `nomeComLeadPrimeiro`).
++ *
++ * Fail-closed enquanto a flag carrega: a primeira frame usa a regra de sempre e
++ * troca quando a flag chega. É o ÚNICO lugar do código que conhece a chave.
++ */
++export function useNomeDoLeadPrimeiro(): boolean {
++  return useFeatureFlag("chat_nome_do_lead").enabled === true;
++}
 diff --git a/classic/src/modules/communication/hooks/chat/usePatchedRealtime.ts b/.tmp/ui-classic-pristina/src/modules/communication/hooks/chat/usePatchedRealtime.ts
 deleted file mode 100644
 index 63adaab1a..000000000
@@ -1745,6 +1993,78 @@ index 000000000..b8aaa4f8d
 +    try { reader.readAsDataURL(file); }
 +    catch { finish(new MediaOperationError("read", "failed")); }
 +  }));
++}
+diff --git a/classic/src/modules/communication/lib/nomeDaConversa.ts b/classic/src/modules/communication/lib/nomeDaConversa.ts
+index 3512f30c7..396846dea 100644
+--- a/classic/src/modules/communication/lib/nomeDaConversa.ts
++++ b/classic/src/modules/communication/lib/nomeDaConversa.ts
+@@ -39,6 +39,33 @@ export interface FontesDoNomeDaConversa {
+ export interface OpcoesDoNomeDaConversa {
+   /** Flag por org `chat_nome_do_whatsapp`. Ausente = comportamento de sempre. */
+   nomeDoWhatsappPrimeiro?: boolean;
++  /**
++   * Flag por org `chat_nome_do_lead`: o `leads.name` manda, em lista, topo e
++   * painel (ver `nomeComLeadPrimeiro`). Vence `nomeDoWhatsappPrimeiro` se as
++   * duas vierem. Ausente = comportamento de sempre.
++   */
++  nomeDoLeadPrimeiro?: boolean;
++}
++
++/**
++ * A regra da flag `chat_nome_do_lead` (decisão do CTO, 06/10/2026), UMA só para
++ * lista, cabeçalho e painel lateral: `leads.name` → nome salvo → perfil do
++ * WhatsApp → identificador/telefone.
++ *
++ * Só `leads.name`, como está gravado: nada é montado a partir de campos
++ * separados. Lead sem nome (vazio ou só espaços) ou ausente cai na ordem que a
++ * lista já tinha. Quem chama é responsável por NÃO usar isto em grupo nem em
++ * canal que não seja WhatsApp.
++ */
++export function nomeComLeadPrimeiro(fontes: FontesDoNomeDaConversa): string {
++  const nome =
++    fontes.nomeDoLead?.trim() ||
++    fontes.savedContactName?.trim() ||
++    fontes.pushName?.trim();
++  if (nome) return nome;
++  return (
++    rotuloDeIdentificadorOculto(fontes.telefone) ?? (fontes.telefone || "").trim()
++  );
+ }
+ 
+ export function nomeDaConversa(
+@@ -46,6 +73,7 @@ export function nomeDaConversa(
+   opcoes: OpcoesDoNomeDaConversa = {},
+ ): string {
+   const { pushName, nomeDoLead } = fontes;
++  if (opcoes.nomeDoLeadPrimeiro) return nomeComLeadPrimeiro(fontes);
+   if (fontes.savedContactName?.trim()) return fontes.savedContactName.trim();
+   // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
+   // canal, o cabeçalho passava a se chamar `210028246085780`. Só a queda muda —
+@@ -60,3 +88,25 @@ export function nomeDaConversa(
+ 
+   return nomeDoLead ?? pushName ?? telefone ?? "";
+ }
++
++/**
++ * O nome que o painel lateral exibe. O `leads.name` do lead que o painel
++ * resolveu manda (com trim: lead só com espaços não conta); depois o nome que
++ * o cabeçalho já resolveu (`nomeDaConversa`, só com a flag `chat_nome_do_lead`),
++ * o perfil, o telefone já formatado e, por fim, "Contato". Sem a flag
++ * `nomeDaConversa` é `undefined` e a cadeia é a de sempre.
++ */
++export function nomeDoPainelDeContexto(fontes: {
++  leadName?: string | null;
++  nomeDaConversa?: string | null;
++  pushName?: string | null;
++  telefoneExibicao?: string | null;
++}): string {
++  return (
++    fontes.leadName?.trim() ||
++    fontes.nomeDaConversa ||
++    fontes.pushName ||
++    fontes.telefoneExibicao ||
++    "Contato"
++  );
 +}
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
 index aacc3ed82..f83352526 100644

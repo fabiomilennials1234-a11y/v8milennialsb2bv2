@@ -21,11 +21,17 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
+import { nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
 
 export interface ContextPanelProps {
   leadId?: string;
   phoneNumber?: string;
   pushName?: string | null;
+  /**
+   * O nome que o cabeçalho da conversa já resolveu (flag `chat_nome_do_lead`).
+   * Ausente = comportamento de sempre.
+   */
+  nomeDaConversa?: string | null;
   onClose?: () => void;
   /**
    * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
@@ -75,6 +81,7 @@ export function ContextPanel({
   leadId,
   phoneNumber,
   pushName,
+  nomeDaConversa,
   placeholder,
   identitySlot,
 }: ContextPanelProps) {
@@ -123,7 +130,12 @@ export function ContextPanel({
   // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
   // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
   const displayName =
-    lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
+    nomeDoPainelDeContexto({
+      leadName: lead?.name,
+      nomeDaConversa,
+      pushName,
+      telefoneExibicao: telefoneParaExibicao(phoneNumber),
+    });
   const initials = displayName.slice(0, 2).toUpperCase();
   const score =
     typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;

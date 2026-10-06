@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { useConversationBatch } from "../../../hooks/chat/useConversationBatch";
 import { contactKey, contactLabel } from "../../../hooks/chat/types";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import type { BatchContact, ConversationBatchAction } from "../../../lib/conversationBatch";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 
 export function ConversationBulkToolbar({ organizationId, isAdmin, archived, selecting, disabled, eligible, selected, onSelecting, onSelection, onBusy }: Props) {
   const batch = useConversationBatch(organizationId, isAdmin);
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   // Freeze the reviewed set; incoming messages cannot silently change the confirmation.
   const [deleting, setDeleting] = useState<BatchContact[] | null>(null);
   const busy = batch.isPending;
@@ -82,7 +84,7 @@ export function ConversationBulkToolbar({ organizationId, isAdmin, archived, sel
               As conversas irão para a lixeira por 30 dias, antes da exclusão definitiva. Os leads serão mantidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-40 overflow-auto text-sm">{deleting?.map(c => <li key={contactKey(c)}>{contactLabel(c)}</li>)}</ul>
+          <ul className="max-h-40 overflow-auto text-sm">{deleting?.map(c => <li key={contactKey(c)}>{contactLabel(c, { nomeDoLeadPrimeiro })}</li>)}</ul>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction disabled={!isAdmin || busy || disabled} className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
