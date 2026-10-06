@@ -81,7 +81,8 @@ describe('on-demand transcription', () => {
     ['encoded dots resolved away from any org', `${BASE}/${ORG}/%2e%2e/%2e%2e/%2e%2e/x/y.ogg`],
     ['encoded backslash', `${BASE}/${ORG}/..%5C..%5C${OTHER_ORG}%5Cx.ogg`],
     ['raw backslash', `${BASE}/${ORG}/..\\..\\${OTHER_ORG}\\x.ogg`],
-    ['org segment encoded', `${BASE}/${ORG.replace('4', '%34')}/instance/x.ogg`],
+    // ORG with its leading '4' percent-encoded as %34 (written literally, not generated).
+    ['org segment encoded', `${BASE}/%34922638c-4909-494e-ba10-12282ec0b161/instance/x.ogg`],
   ])('never reads Storage for a crafted path (%s)', async (_label, mediaUrl) => {
     const f = fixture({ mediaUrl });
     await f.run();
