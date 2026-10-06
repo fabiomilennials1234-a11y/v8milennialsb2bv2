@@ -195,15 +195,22 @@ export function ChatComposer({
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleSend = useCallback(async () => {
-    if (!message.trim() || !instanceName) return;
+    // Um envio por vez: a ordem no WhatsApp importa e a recuperação de envio
+    // existe para não reenviar às cegas — nada de fila nem de envio paralelo.
+    if (sendMessage.isPending) return;
+    const text = message.trim();
+    if (!text || !instanceName) return;
+    // Limpa antes do await: o vendedor já pode digitar a próxima mensagem sem
+    // que o resolve apague o texto novo. Se o envio falha, o hook guarda a
+    // mensagem em whatsapp_failed_messages (bolha de reenvio) — o texto não se perde.
+    setMessage("");
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
-        message: message.trim(),
+        message: text,
         instanceName,
         instanceId,
       });
-      setMessage("");
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar mensagem." });
     }
@@ -564,7 +571,6 @@ export function ChatComposer({
               }}
               onBlur={presence.stop}
               onKeyDown={handleKeyDown}
-              disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
               className="block w-full min-h-[52px] max-h-[140px] resize-none border-0 bg-transparent px-3.5 pb-1 pt-3 text-sm leading-5 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
@@ -575,7 +581,6 @@ export function ChatComposer({
                 key={conversationKey}
                 inputRef={inputRef}
                 onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
-                disabled={sendMessage.isPending || sendMedia.isPending}
                 className={QUICK_ACTION_BUTTON}
               />
               <ChatQuickActions
@@ -646,7 +651,8 @@ export function ChatComposer({
                 size="icon"
                 onClick={handleSend}
                 disabled={!message.trim() || sendMessage.isPending}
-                aria-label="Enviar mensagem"
+                aria-label={sendMessage.isPending ? "Aguardando envio da mensagem anterior" : "Enviar mensagem"}
+                title={sendMessage.isPending ? "Aguardando envio da mensagem anterior" : undefined}
                 className="h-[38px] w-[38px] shrink-0 rounded-full"
               >
                 {sendMessage.isPending ? (
