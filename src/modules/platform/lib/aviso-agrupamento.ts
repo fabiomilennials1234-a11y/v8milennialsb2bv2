@@ -27,6 +27,8 @@ const POR_TIPO: Record<string, Exclude<Familia, "tudo">> = {
   meeting_soon: "agenda",
   follow_up_due: "agenda",
   follow_up_overdue: "agenda",
+  scheduled_message_sent: "agenda",
+  scheduled_message_failed: "agenda",
   workflow_alert: "sistema",
   cron_drift: "sistema",
 };

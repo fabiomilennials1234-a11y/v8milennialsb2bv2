@@ -62,6 +62,20 @@ async function sendTextViaSzChat(
   return { success: true };
 }
 
+/**
+ * O chat abre pela dupla chip + telefone (mesmo formato do aviso de
+ * `lead_message`). Sem chip resolvido ou sem dígitos não há conversa para
+ * abrir — nulo, em vez de um link que leva a lugar nenhum.
+ */
+function linkDaConversa(
+  instance: { id?: string | null } | null,
+  phoneNumber: string | null | undefined,
+): string | null {
+  const digitos = (phoneNumber ?? "").replace(/\D/g, "");
+  if (!instance?.id || !digitos) return null;
+  return `/chat-whatsapp?instance=${encodeURIComponent(instance.id)}&phone=${digitos}`;
+}
+
 Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
@@ -131,13 +145,16 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
       if (lockErr) { failed++; continue; }
       if (!locked?.length) continue;
 
+      // Fora do try: o aviso de falha definitiva (no catch) aponta para o chip
+      // que chegou a ser resolvido, quando houver.
+      let instance: any = null;
+
       try {
         // Resolve instance — may be SZ.Chat (handled separately) or WA provider.
         //
         // Etapa B: quando flag user_write_instance_strict ON e msg.lead_id
         // presente, força resolução pelo vínculo do responsável. SZ.Chat
         // continua sendo decidido após a row ser carregada.
-        let instance: any = null;
         let isSzChat = false;
 
         if (msg.lead_id) {
@@ -329,6 +346,7 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
             title: "Mensagem agendada enviada",
             description: `Mensagem para ${msg.lead?.name || "lead"} enviada com sucesso`,
             lead_id: msg.lead_id,
+            link: linkDaConversa(instance, msg.phone_number),
           });
         }
 
@@ -363,6 +381,7 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
               title: "Falha no envio agendado",
               description: `Nao foi possivel enviar para ${msg.lead?.name || "lead"}: ${errorMessage}`,
               lead_id: msg.lead_id,
+              link: linkDaConversa(instance, msg.phone_number),
             });
           }
         }

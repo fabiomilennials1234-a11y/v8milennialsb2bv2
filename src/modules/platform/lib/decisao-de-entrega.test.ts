@@ -120,6 +120,14 @@ describe("decisão de entrega", () => {
     expect(decidirEntrega(aviso("follow_up_overdue"), "INSERT", contexto()).cartao).toBe(false);
   });
 
+  it("mensagem agendada que saiu ou falhou vira cartão — quem agendou precisa saber na hora", () => {
+    const enviada = decidirEntrega(aviso("scheduled_message_sent"), "INSERT", contexto());
+    const falhou = decidirEntrega(aviso("scheduled_message_failed"), "INSERT", contexto());
+
+    expect(enviada).toMatchObject({ cartao: true, som: "mensagem" });
+    expect(falhou).toMatchObject({ cartao: true, som: "erro" });
+  });
+
   it("tipo silenciado nas preferências não toca, mas ainda pode aparecer", () => {
     const preferencias = resolverPreferencias({
       overrides: { workflow_alert: { som: false } },

@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   Bell,
   Calendar,
+  CalendarCheck,
+  CalendarX,
   CheckCircle,
   ChevronRight,
   Clock,
@@ -52,12 +54,20 @@ const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", fundo: "bg-destructive/10" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", fundo: "bg-destructive/10" },
   transfer_to_human: { icone: UserPlus, classe: "text-destructive", fundo: "bg-destructive/10" },
+  scheduled_message_sent: { icone: CalendarCheck, classe: "text-success-strong", fundo: "bg-success/10" },
+  scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", fundo: "bg-destructive/10" },
 };
 
 const PADRAO = { icone: Bell, classe: "text-muted-foreground", fundo: "bg-muted/50" };
 
 /** Os tipos que valem pintar o badge de vermelho — o resto conta, mas não grita. */
-const URGENTES = new Set(["workflow_alert", "cron_drift", "lead_message", "transfer_to_human"]);
+const URGENTES = new Set([
+  "workflow_alert",
+  "cron_drift",
+  "lead_message",
+  "transfer_to_human",
+  "scheduled_message_failed",
+]);
 
 export interface AlertsDropdownProps {
   /** Texto ao lado do sino. Faz parte do gatilho: clicar na palavra abre. */

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   BellRing,
+  CalendarCheck,
   CalendarClock,
   MessageSquare,
   Moon,
@@ -65,6 +66,12 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[]; icone
     rotulo: "Agenda",
     descricao: "Reunião marcada, reunião em uma hora, follow-up do dia",
     tipos: ["meeting_booked", "meeting_soon", "follow_up_due", "follow_up_overdue"],
+  },
+  {
+    icone: CalendarCheck,
+    rotulo: "Mensagens agendadas",
+    descricao: "Quando uma mensagem que você agendou é enviada ou falha",
+    tipos: ["scheduled_message_sent", "scheduled_message_failed"],
   },
   {
     icone: Workflow,

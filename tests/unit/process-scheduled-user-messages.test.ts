@@ -138,6 +138,7 @@ const AGENDADA = {
 interface Seed {
   scheduled: Record<string, unknown>[];
   instances?: Record<string, unknown>[];
+  teamMembers?: Record<string, unknown>[];
 }
 
 async function runTick(seed: Seed) {
@@ -145,7 +146,7 @@ async function runTick(seed: Seed) {
   mock.mockTable("scheduled_user_messages", seed.scheduled);
   mock.mockTable("whatsapp_instances", seed.instances ?? [CHIP_CONECTADO]);
   mock.mockTable("whatsapp_messages", []);
-  mock.mockTable("team_members", []);
+  mock.mockTable("team_members", seed.teamMembers ?? []);
   mock.mockTable("notifications", []);
 
   // Registra o PAYLOAD de cada update — o estado final da linha não distingue
@@ -176,6 +177,7 @@ async function runTick(seed: Seed) {
     status: res.status,
     body: await res.json(),
     historico: mock.getInserted("whatsapp_messages"),
+    avisos: mock.getInserted("notifications"),
     // 'sending' do lock fica de fora: só interessa o desfecho da linha.
     fila: updates
       .filter((u) => u.table === "scheduled_user_messages")
@@ -415,5 +417,51 @@ describe("process-scheduled-user-messages — autoria da mensagem", () => {
       status: "sent",
       content: "Bom dia! Fechamos o pedido?",
     });
+  });
+});
+
+// ─── Aviso a quem agendou leva à conversa ─────────────────────────────────
+
+describe("process-scheduled-user-messages — o aviso abre a conversa", () => {
+  const QUEM_AGENDOU = { id: "tm-1", user_id: "user-1", organization_id: "org-1" };
+
+  it("envio com sucesso: o aviso aponta para o chat do chip que enviou, telefone só com dígitos", async () => {
+    const { avisos } = await runTick({
+      scheduled: [{ ...AGENDADA, phone_number: "+55 (11) 99988-7766" }],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatchObject({
+      user_id: "user-1",
+      type: "scheduled_message_sent",
+      link: "/chat-whatsapp?instance=inst-conectada&phone=5511999887766",
+    });
+  });
+
+  it("falha definitiva com chip resolvido: o aviso de falha também abre a conversa", async () => {
+    sendText.mockResolvedValue({ success: false, error: "Invalid phone" });
+
+    const { avisos } = await runTick({
+      scheduled: [{ ...AGENDADA, retry_count: 2 }],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatchObject({
+      type: "scheduled_message_failed",
+      link: "/chat-whatsapp?instance=inst-conectada&phone=11999887766",
+    });
+  });
+
+  it("falha definitiva sem chip nenhum: link nulo — não inventa conversa", async () => {
+    const { avisos } = await runTick({
+      scheduled: [{ ...AGENDADA, retry_count: 2 }],
+      instances: [],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatchObject({ type: "scheduled_message_failed", link: null });
   });
 });
