@@ -16,7 +16,8 @@
  *   - A máquina de estado (backoff exponencial, circuit breaker N falhas →
  *     polling + sonda após cooldown, reconexão por visibilidade/online com
  *     janela de dedup) mora no CANAL, não no consumidor: 3 consumidores não
- *     viram 3 reconexões.
+ *     viram 3 reconexões. Toda reabertura cancela os timers pendentes (1 canal
+ *     novo por reconexão); visibilidade/online só reabre canal errored/polling.
  *   - `realtimeStatusStore`: cada chave de status distinta (statusKey do
  *     consumidor, ou `rt_{tabela}_{filtro}` sem statusKey) recebe UMA
  *     transição por transição real do canal. `joinCount` sobe 1× por join
@@ -143,7 +144,8 @@ function dispatch(entry: Entry, payload: RealtimePostgresChangesPayload<Row>) {
 
 function handleStatus(entry: Entry, status: string, err?: Error) {
   if (status === "SUBSCRIBED") {
-    const wasPolling = entry.state === "polling";
+    // `circuitOpen` e não `state`: a sonda já passou o estado para "joining".
+    const wasCircuitOpen = entry.circuitOpen;
     entry.failureCount = 0;
     entry.circuitOpen = false;
     entry.state = "joined";
@@ -154,7 +156,7 @@ function handleStatus(entry: Entry, status: string, err?: Error) {
       resetFailures(k);
       setChannelState(k, "joined", undefined);
     }
-    notify(entry, { state: "joined", type: wasPolling ? "circuit_close" : "transition" });
+    notify(entry, { state: "joined", type: wasCircuitOpen ? "circuit_close" : "transition" });
     return;
   }
 
@@ -234,9 +236,16 @@ function close(entry: Entry) {
 
 function reopen(entry: Entry) {
   if (entries.get(entry.key) !== entry) return;
+  // Uma reabertura vale por todas as pendentes: backoff, sonda e dedup de
+  // visibilidade que vencessem depois matariam este join em voo (QA e3).
+  clearTimer(entry, "backoffTimer");
+  clearTimer(entry, "cooldownTimer");
+  clearTimer(entry, "dedupTimer");
   close(entry);
   open(entry);
 }
+
+const isDown = (entry: Entry) => entry.state === "errored" || entry.state === "polling";
 
 export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSubscriber): ChannelHandle {
   const key = realtimeChannelKey(spec);
@@ -295,10 +304,12 @@ export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSub
       close(owned);
     },
     requestReconnect() {
-      if (released || owned.state === "joined" || owned.dedupTimer) return;
+      // Só canal caído reabre. "joining" é join em voo: reabrir o mataria e
+      // custaria outro join no servidor sob carga; "joined" está saudável.
+      if (released || !isDown(owned) || owned.dedupTimer) return;
       owned.dedupTimer = setTimeout(() => {
         owned.dedupTimer = null;
-        if (owned.state !== "joined") reopen(owned);
+        if (isDown(owned)) reopen(owned);
       }, DEDUP_WINDOW_MS);
     },
   };
