@@ -15,8 +15,6 @@ import {
   History,
   CircleDashed,
   Tag,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,6 +29,8 @@ import {
 } from "../components/leads/LeadListRow";
 import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
 import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
+import { LeadsPageSegments } from "../components/leads/LeadsPageSegments";
+import { EMPTY_COUNT, cappedPagination, formatCappedCount, formatShownTotal } from "../lib/capped-count";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -239,59 +239,6 @@ function formatDayInTz(value: string | Date, timeZone?: string | null): string {
   }
 }
 
-/**
- * Páginas em segmentado (mockup V5): ‹ 1 2 3 … 48 ›. Mostra a primeira, a
- * última e a vizinhança da atual — 48 botões não cabem e não ajudam.
- */
-function PageSegments({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
-  const pages = new Set([0, totalPages - 1, page - 1, page, page + 1].filter((p) => p >= 0 && p < totalPages));
-  const sorted = [...pages].sort((a, b) => a - b);
-  const items: (number | "gap")[] = [];
-  sorted.forEach((p, i) => {
-    if (i > 0 && p - sorted[i - 1] > 1) items.push("gap");
-    items.push(p);
-  });
-  const seg = "inline-grid h-7 min-w-7 place-items-center rounded-full px-2 text-xs font-bold tabular-nums transition-colors";
-  return (
-    <nav aria-label="Paginação" className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
-      <button
-        type="button"
-        className={cn(seg, "text-muted-foreground hover:text-foreground disabled:opacity-40")}
-        onClick={() => onChange(Math.max(0, page - 1))}
-        disabled={page === 0}
-        aria-label="Anterior"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" />
-      </button>
-      {items.map((it, i) =>
-        it === "gap" ? (
-          <span key={`gap-${i}`} className={cn(seg, "text-muted-foreground")} aria-hidden>…</span>
-        ) : (
-          <button
-            key={it}
-            type="button"
-            onClick={() => onChange(it)}
-            aria-current={it === page ? "page" : undefined}
-            aria-label={`Página ${it + 1}`}
-            className={cn(seg, it === page ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground")}
-          >
-            {it + 1}
-          </button>
-        ),
-      )}
-      <button
-        type="button"
-        className={cn(seg, "text-muted-foreground hover:text-foreground disabled:opacity-40")}
-        onClick={() => onChange(Math.min(totalPages - 1, page + 1))}
-        disabled={page >= totalPages - 1}
-        aria-label="Próxima"
-      >
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
-    </nav>
-  );
-}
-
 function LeadsInner() {
   const { openLead } = useLeadSheet();
   const { openDeal } = useDealSheet();
@@ -426,8 +373,9 @@ function LeadsInner() {
   const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
-  const tabCounts: Record<string, number | undefined> = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
-  const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
+  const tabCounts = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
+  // Paginação sobre contagem COM TETO — ver `cappedPagination`.
+  const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
@@ -554,6 +502,17 @@ function LeadsInner() {
     setPage(0);
   }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
+  // Com a contagem no teto, "Próxima" vale enquanto a página vem cheia — então
+  // num recorte de exatamente N×50 leads a página seguinte chega vazia (e um
+  // lead apagado pode esvaziar a última). Página vazia depois da primeira não
+  // é estado útil: volta uma.
+  const leadsLoaded = leadsQuery.isSuccess && !leadsQuery.isFetching;
+  useEffect(() => {
+    if (!portfolioActive && page > 0 && leadsLoaded && loadedLeads.length === 0) {
+      setPage((p) => Math.max(0, p - 1));
+    }
+  }, [portfolioActive, page, leadsLoaded, loadedLeads.length]);
+
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
    *
@@ -579,9 +538,9 @@ function LeadsInner() {
   const [searchFocused, setSearchFocused] = useState(false);
 
   const stats = useMemo(() => ({
-    total: totalLeads ?? leads.length,
-    thisMonth: orgStats?.thisMonth ?? 0,
-    withSDR: orgStats?.withOwner ?? 0,
+    total: totalLeads ?? { value: leads.length, capped: false },
+    thisMonth: orgStats?.thisMonth ?? EMPTY_COUNT,
+    withSDR: orgStats?.withOwner ?? EMPTY_COUNT,
   }), [totalLeads, leads.length, orgStats]);
 
   const handleOpenDialog = (lead?: any) => {
@@ -807,7 +766,7 @@ function LeadsInner() {
                 <TabsTrigger key={option.value} value={option.value}>
                   {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
                   <span className="text-[11px] font-bold tabular-nums opacity-70">
-                    {tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}
+                    {formatCappedCount(tabCounts[option.value])}
                   </span>
                 </TabsTrigger>
               ))}
@@ -850,7 +809,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Total de Leads</p>
-          <p className="text-xl font-bold">{stats.total}</p>
+          <p className="text-xl font-bold">{formatCappedCount(stats.total)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -859,7 +818,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Este Mês</p>
-          <p className="text-xl font-bold text-primary">{stats.thisMonth}</p>
+          <p className="text-xl font-bold text-primary">{formatCappedCount(stats.thisMonth)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -868,7 +827,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Com Responsável</p>
-          <p className="text-xl font-bold text-success">{stats.withSDR}</p>
+          <p className="text-xl font-bold text-success">{formatCappedCount(stats.withSDR)}</p>
         </motion.div>
       </div>
       )}
@@ -1199,9 +1158,11 @@ function LeadsInner() {
         {!isLoading && leads.length > 0 && totalLeads !== undefined && (
           <div className={cn("flex flex-wrap items-center justify-between gap-3 py-3", !isMobile && "border-t border-border px-4")}>
             <span className="text-[13px] tabular-nums text-muted-foreground">
-              Mostrando {(page * LEADS_PAGE_SIZE + 1).toLocaleString("pt-BR")}–{(page * LEADS_PAGE_SIZE + leads.length).toLocaleString("pt-BR")} de {totalLeads.toLocaleString("pt-BR")}
+              {formatShownTotal(totalLeads, page, LEADS_PAGE_SIZE, leads.length)}
             </span>
-            {totalPages > 1 && <PageSegments page={page} totalPages={totalPages} onChange={setPage} />}
+            {(page > 0 || hasNextPage) && (
+              <LeadsPageSegments page={page} lastPage={lastPage} hasNext={hasNextPage} onChange={setPage} />
+            )}
           </div>
         )}
       </div>

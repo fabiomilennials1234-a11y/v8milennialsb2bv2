@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Users, CalendarDays, UserCheck, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatCappedCount, LEADS_COUNT_CAP, type CappedCount } from "../../lib/capped-count";
 
 /**
  * Faixa de números da tela de Leads — versão "Depois".
@@ -19,11 +20,19 @@ import { cn } from "@/lib/utils";
  *
  * O card de rating saiu junto com o filtro de rating da página (main de
  * 2026-09); os três que ficam seguem `useLeadsStats` + `useLeadsCount`.
+ *
+ * ── CONTAGEM COM TETO (2026-10-05) ────────────────────────────────────────
+ * Os números chegam como `CappedCount` (ver `lib/capped-count`): acima de
+ * 1.000 o valor é PISO, não total. Regra desta faixa: nada é derivado por
+ * subtração ou divisão de um valor com teto.
+ *   - total no teto → "1.000+", sem percentual nem barra nos outros cards;
+ *   - "sem dono" com total no teto e "com responsável" exato → é pelo menos
+ *     `1.000 − com`, e diz "N+"; com os dois no teto, não se conta.
  */
 export interface LeadsStatsV2Props {
-  total: number;
-  thisMonth: number;
-  withOwner: number;
+  total: CappedCount;
+  thisMonth: CappedCount;
+  withOwner: CappedCount;
   isLoading?: boolean;
   /** Filtros que os cards controlam. Sem handler, o card é só leitura. */
   filters?: {
@@ -35,7 +44,8 @@ export interface LeadsStatsV2Props {
 interface Tile {
   key: string;
   label: string;
-  value: number;
+  /** Já formatado: "1.000+" no teto. */
+  value: string;
   icon: ComponentType<{ className?: string }>;
   /** Proporção 0–1 em relação ao total; `undefined` = sem barra. */
   share?: number;
@@ -54,35 +64,45 @@ function share(part: number, total: number): number | undefined {
 
 const EASE = [0.2, 0, 0, 1] as const;
 
+/** "Sem dono" no rodapé do card: exato, piso ("N+") ou incontável — nunca subtração de piso. */
+function semDonoContext(total: CappedCount, withOwner: CappedCount): string {
+  if (!total.capped) {
+    return total.value ? `${nf.format(Math.max(0, total.value - withOwner.value))} sem dono` : "nenhum sem dono";
+  }
+  if (withOwner.capped) return "sem dono: recorte grande demais para contar";
+  return `${nf.format(Math.max(0, LEADS_COUNT_CAP - withOwner.value))}+ sem dono`;
+}
+
 export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }: LeadsStatsV2Props) {
   const reduce = useReducedMotion();
-  const semDono = Math.max(0, total - withOwner);
+  // Percentual e barra só com total EXATO e não vazio.
+  const totalExato = !total.capped && total.value > 0 ? total.value : 0;
 
   const tiles: Tile[] = [
     {
       key: "total",
       label: "Total de leads",
-      value: total,
+      value: formatCappedCount(total),
       icon: Users,
-      context: "na organização, com os filtros atuais",
+      context: total.capped ? `${nf.format(total.value)} ou mais, com os filtros atuais` : "na organização, com os filtros atuais",
     },
     {
       key: "mes",
       label: "Este mês",
-      value: thisMonth,
+      value: formatCappedCount(thisMonth),
       icon: CalendarDays,
-      share: share(thisMonth, total),
-      context: total ? `${pf.format(thisMonth / total)} do total entraram este mês` : "entraram este mês",
+      share: totalExato ? share(thisMonth.value, totalExato) : undefined,
+      context: totalExato ? `${pf.format(thisMonth.value / totalExato)} do total entraram este mês` : "entraram este mês",
       accent: "primary",
       filter: filters?.thisMonth && { ...filters.thisMonth, hint: "Filtrar por criados este mês" },
     },
     {
       key: "dono",
       label: "Com responsável",
-      value: withOwner,
+      value: formatCappedCount(withOwner),
       icon: UserCheck,
-      share: share(withOwner, total),
-      context: total ? `${nf.format(semDono)} sem dono` : "nenhum sem dono",
+      share: totalExato ? share(withOwner.value, totalExato) : undefined,
+      context: semDonoContext(total, withOwner),
       accent: "success",
       filter: filters?.unassigned && { ...filters.unassigned, hint: "Mostrar só os sem dono" },
     },
@@ -141,7 +161,7 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
               <Skeleton className="h-8 w-20 rounded-md" />
             ) : (
               <span className="text-[28px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-foreground">
-                {nf.format(t.value)}
+                {t.value}
               </span>
             )}
 

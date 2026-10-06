@@ -229,6 +229,9 @@ export async function fetchCommandMetrics(args: {
   return mapMetrics(data);
 }
 
+/** Agendamento realtime do Comando: ver `useRealtimeSubscription`. */
+const COMMAND_REALTIME = { whenHidden: "defer", maxWaitMs: 30_000 } as const;
+
 /**
  * Métricas da Central de Comando com período arbitrário (hoje/semana/mês/trimestre).
  * Mesma RPC `get_dashboard_metrics` do useDashboardMetrics — esse hook NÃO substitui
@@ -256,8 +259,12 @@ export function useCommandMetrics(
   // NÃO pipe_propostas/pipe_confirmacao — essas são VIEWS compat e não emitem
   // postgres_changes (a assinatura era no-op silencioso). Mesmo padrão de
   // useDashboardMetrics; pipeline_entries cobre todos os stages dos pipes.
-  useRealtimeSubscription("pipeline_entries", ["command-metrics"]);
-  useRealtimeSubscription("leads", ["command-metrics"]);
+  //
+  // Opt-in do agendador (2026-10-05): aba oculta guarda e refaz uma vez ao
+  // voltar; rajada contínua refaz no máximo a cada 30 s. Consumidores (Comando
+  // e TV) só desenham números — nada depende de atualizar com a aba oculta.
+  useRealtimeSubscription("pipeline_entries", ["command-metrics"], COMMAND_REALTIME);
+  useRealtimeSubscription("leads", ["command-metrics"], COMMAND_REALTIME);
 
   return useQuery({
     queryKey: ["command-metrics", startStr, endStr, effectiveFilter, organizationId, timezone],

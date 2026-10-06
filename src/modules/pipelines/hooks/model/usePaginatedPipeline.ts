@@ -236,11 +236,9 @@ export function usePaginatedPipeline(
     return () => clearTimeout(debounceRef.current);
   }, [filters.search]);
 
-  useRealtimeSubscription("pipeline_entries", [
-    "pipeline-page",
-    slug,
-    organizationId,
-  ]);
+  // Alvo composto aninhado. A org NÃO entra: a chave real (useStageSlot) é
+  // `["pipeline-page", slug, stageKey, org, filtros]` — org na posição 3.
+  useRealtimeSubscription("pipeline_entries", [["pipeline-page", slug]]);
 
   // Single source of truth for every server-side filter dimension. Computed
   // once and shared by the counts query + all stage queries so the column

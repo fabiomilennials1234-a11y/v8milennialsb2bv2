@@ -19,7 +19,7 @@ export function useRegisterHistoricalSales(leadId: string) {
     },
     onSuccess: async () => {
       await Promise.all([
-        "leads", "leads-count", "lead_by_id", "lead-detail", "lead-card-metrics", "leads-deals", "leads-reorder-cycle", "leads-carteira-metrics",
+        "leads", "lead_by_id", "lead-detail", "lead-card-metrics", "leads-deals", "leads-reorder-cycle", "leads-carteira-metrics",
         "upsell-clients", "upsell-orders", "upsell_clients", "upsell_orders", "carteira_orders", "portfolio-clients", "portfolio-kpis",
         "portfolio-trends", "lead-timeline", "leads-sales-metrics", "metrics-studio",
       ].map(key => queryClient.invalidateQueries({ queryKey: [key] })));

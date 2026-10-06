@@ -216,7 +216,9 @@ export function useCopilotToggleMutation() {
         queryClient.invalidateQueries({ queryKey: ["lead-ai-status", vars.leadId] });
         queryClient.invalidateQueries({ queryKey: ["lead-detail", vars.leadId] });
       }
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      // `["leads"]` saiu (2026-10-05), mesma prova do `useCopilotToggleRealtime`:
+      // nenhum consumidor de `useLeads` lê `ai_disabled`, e o prefixo hoje
+      // refaz lista + 4 contagens + 2 cards da tela de Leads a cada toggle.
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
