@@ -377,8 +377,6 @@ export class UazapiProvider implements WhatsAppProvider {
     await this.client.setPresence({ number, presence, delay: 10_000 });
   }
 
-  transcribeAudio(messageId: string): Promise<string> { return this.client.transcribeAudio(messageId); }
-
   async downloadMedia(
     messageId: string
   ): Promise<{ base64: string; mimetype: string }> {

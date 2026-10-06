@@ -116,6 +116,54 @@ describe("transcribeAudio", () => {
     expect(result).toBeNull();
   });
 
+  it("sends the Gemini key in the x-goog-api-key header, never in the URL", async () => {
+    envStub.GEMINI_API_KEY = "test-gemini-key";
+    mockFetch
+      .mockResolvedValueOnce(okResponse(""))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }) });
+    await transcribeAudio(fakeAudio, "audio/ogg");
+    const [geminiUrl, geminiInit] = mockFetch.mock.calls[1];
+    expect(geminiUrl).not.toContain("test-gemini-key");
+    expect(geminiUrl).not.toContain("key=");
+    expect(geminiInit.headers["x-goog-api-key"]).toBe("test-gemini-key");
+  });
+
+  it("never writes an API key to the logs on a network error", async () => {
+    envStub.GEMINI_API_KEY = "test-gemini-key";
+    const logged: string[] = [];
+    const capture = (...args: unknown[]) => { logged.push(args.map(String).join(" ")); };
+    const err = vi.spyOn(console, "error").mockImplementation(capture);
+    const warn = vi.spyOn(console, "warn").mockImplementation(capture);
+    mockFetch.mockRejectedValue(new TypeError(
+      "error sending request for url (https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-gemini-key): connection reset; auth Bearer test-or-key",
+    ));
+    vi.useFakeTimers();
+    const pending = transcribeAudio(fakeAudio, "audio/ogg");
+    await vi.runAllTimersAsync();
+    expect(await pending).toBeNull();
+    vi.useRealTimers();
+    err.mockRestore(); warn.mockRestore();
+    expect(logged.length).toBeGreaterThan(0);
+    for (const line of logged) {
+      expect(line).not.toContain("test-gemini-key");
+      expect(line).not.toContain("test-or-key");
+    }
+  });
+
+  it("with a time budget: one attempt per provider, no retry", async () => {
+    envStub.GEMINI_API_KEY = "test-gemini-key";
+    mockFetch.mockResolvedValue({ ok: false, status: 503, text: async () => "overloaded" });
+    const result = await transcribeAudio(fakeAudio, "audio/ogg", { budgetMs: 60_000 });
+    expect(result).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("with an exhausted budget: makes no request at all", async () => {
+    const result = await transcribeAudio(fakeAudio, "audio/ogg", { budgetMs: 0 });
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("sends Authorization header with OpenRouter API key", async () => {
     mockFetch.mockResolvedValueOnce(okResponse("test"));
     await transcribeAudio(fakeAudio, "audio/ogg");

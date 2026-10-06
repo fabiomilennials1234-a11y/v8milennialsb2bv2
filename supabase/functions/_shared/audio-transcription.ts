@@ -60,29 +60,57 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Optional wall-clock budget. Without it (Copilot path) behaviour is unchanged:
+ * up to 3 attempts per provider, 30 s each. With it (on-demand chat
+ * transcription, bounded by the edge wall clock): ONE attempt per provider,
+ * each capped by what is left of the budget, no request once it is spent.
+ */
+export interface MediaBudget {
+  deadline: number;
+}
+
+/** Remove anything that could be a credential from a string bound for logs. */
+function redact(text: string): string {
+  let out = text.replace(/([?&](?:key|api_key|apikey|token)=)[^&\s)"']+/gi, "$1[redacted]")
+    .replace(/(Bearer\s+)[^\s"']+/gi, "$1[redacted]");
+  for (const name of ["OPENROUTER_API_KEY", "GEMINI_API_KEY"]) {
+    const secret = Deno.env.get(name);
+    if (secret && secret.length >= 6) out = out.split(secret).join("[redacted]");
+  }
+  return out;
+}
+
+/**
  * POST JSON com retry em erros transitórios (429/503). Retorna o JSON parseado
- * ou null (nunca lança). Loga status/erro pra diagnóstico.
+ * ou null (nunca lança). Loga status/erro pra diagnóstico — sempre redigido.
  */
 async function postJsonWithRetry(
   url: string,
   init: RequestInit,
   tag: string,
+  budget?: MediaBudget,
 ): Promise<any | null> {
-  for (let attempt = 1; attempt <= MAX_LLM_ATTEMPTS; attempt++) {
+  const maxAttempts = budget ? 1 : MAX_LLM_ATTEMPTS;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const timeoutMs = budget ? Math.min(LLM_TIMEOUT_MS, budget.deadline - Date.now()) : LLM_TIMEOUT_MS;
+    if (timeoutMs <= 0) {
+      console.error(`[media-understanding] ${tag} skipped: time budget exhausted`);
+      return null;
+    }
     try {
-      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(LLM_TIMEOUT_MS) });
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       if (res.ok) return await res.json();
 
       const retriable = RETRY_STATUSES.has(res.status);
-      if (!retriable || attempt === MAX_LLM_ATTEMPTS) {
+      if (!retriable || attempt === maxAttempts) {
         const body = await res.text().catch(() => "");
-        console.error(`[media-understanding] ${tag} HTTP ${res.status}: ${body.slice(0, 200)}`);
+        console.error(`[media-understanding] ${tag} HTTP ${res.status}: ${redact(body.slice(0, 200))}`);
         return null;
       }
       console.warn(`[media-understanding] ${tag} transient ${res.status} (attempt ${attempt})`);
     } catch (err) {
-      if (attempt === MAX_LLM_ATTEMPTS) {
-        console.error(`[media-understanding] ${tag} failed: ${(err as Error).message}`);
+      if (attempt === maxAttempts) {
+        console.error(`[media-understanding] ${tag} failed: ${redact(String((err as Error)?.message ?? err))}`);
         return null;
       }
     }
@@ -100,6 +128,7 @@ async function callOpenRouterWithMedia(
   mimeType: string,
   prompt: string,
   kind: MediaKind,
+  budget?: MediaBudget,
 ): Promise<string | null> {
   const apiKey = Deno.env.get("OPENROUTER_API_KEY");
   if (!apiKey) {
@@ -142,6 +171,7 @@ async function callOpenRouterWithMedia(
       body: JSON.stringify(requestBody),
     },
     `openrouter:${kind}`,
+    budget,
   );
 
   return data?.choices?.[0]?.message?.content?.trim() || null;
@@ -156,15 +186,18 @@ async function callGeminiWithMedia(
   mimeType: string,
   prompt: string,
   kind: MediaKind,
+  budget?: MediaBudget,
 ): Promise<string | null> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) return null;
 
+  // Key in a header, never in the URL: Deno puts the full URL in network-error
+  // messages, which would carry the key into the logs.
   const data = await postJsonWithRetry(
-    `${GEMINI_API_URL}/models/${GEMINI_MEDIA_MODEL}:generateContent?key=${apiKey}`,
+    `${GEMINI_API_URL}/models/${GEMINI_MEDIA_MODEL}:generateContent`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [
           {
@@ -179,6 +212,7 @@ async function callGeminiWithMedia(
       }),
     },
     `gemini:${kind}`,
+    budget,
   );
 
   const parts = data?.candidates?.[0]?.content?.parts;
@@ -195,26 +229,34 @@ async function understandMedia(
   mimeType: string,
   prompt: string,
   kind: MediaKind,
+  budget?: MediaBudget,
 ): Promise<string | null> {
-  const viaOpenRouter = await callOpenRouterWithMedia(base64Data, mimeType, prompt, kind);
+  const viaOpenRouter = await callOpenRouterWithMedia(base64Data, mimeType, prompt, kind, budget);
   if (viaOpenRouter) return viaOpenRouter;
 
-  const viaGemini = await callGeminiWithMedia(base64Data, mimeType, prompt, kind);
+  const viaGemini = await callGeminiWithMedia(base64Data, mimeType, prompt, kind, budget);
   if (viaGemini) {
     console.log(`[media-understanding] OpenRouter empty/failed for ${kind} → Gemini fallback OK`);
   }
   return viaGemini;
 }
 
+/**
+ * `opts.budgetMs`: total wall-clock budget (see MediaBudget). Omit it to keep
+ * the retrying behaviour the Copilot relies on.
+ */
 export async function transcribeAudio(
   audioBytes: Uint8Array,
   mimeType: string,
+  opts?: { budgetMs?: number },
 ): Promise<string | null> {
+  const budget = opts?.budgetMs !== undefined ? { deadline: Date.now() + Math.max(0, opts.budgetMs) } : undefined;
   return understandMedia(
     toBase64(audioBytes),
     mimeType,
     "Transcreva este áudio em português. Retorne APENAS o texto falado, sem formatação, sem aspas, sem explicações.",
     "audio",
+    budget,
   );
 }
 
