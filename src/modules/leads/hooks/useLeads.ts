@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { useCanDo } from "@/modules/identity";
@@ -11,6 +10,9 @@ import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platfo
 import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
 import type { LeadRelacao } from "../lib/lead-relacao-situacao";
+import { leadsKeys } from "../lib/leads-query-keys";
+import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
+import { useLeadsRealtime } from "./useLeadsRealtime";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -79,18 +81,26 @@ function applyLeadsFilters(
 export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
   const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
+  const enabled = isReady && options.enabled !== false;
+  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
+  const queryKey = leadsKeys.list(organizationId, page, filters, sort);
 
-  useRealtimeSubscription("leads", ["leads"]);
-  // `deals` não é assinada: fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06).
-  useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
-  useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
+  // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
+  // Sem org resolvida não há canal (sem org não há filtro de org). Com a lista
+  // desligada (aba Clientes) o canal fica: as contagens das abas e os cards
+  // continuam na tela; só o alvo da lista sai.
+  useLeadsRealtime({
+    organizationId,
+    listKey: queryKey,
+    pageSize: LEADS_PAGE_SIZE,
+    sort,
+    mode: usaCadastroErpCafeJurere ? "cafe" : usaLeiDoErp ? "erp" : "relacao",
+    enabled: isReady && !!organizationId,
+    listEnabled: enabled,
+  });
 
   return useQuery({
-    // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
-    // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
-    // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
-    // chave continuar legivel no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
+    queryKey,
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -114,7 +124,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+      query = applyLeadsFilters(query, organizationId, filters);
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -122,50 +132,56 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
       const { data, error } = await applyLeadListSort(query, sort).range(from, to);
 
       if (error) throw error;
-      // Campo calculado ainda não está nos tipos gerados. Consulta estreita
-      // tipada separadamente conserva os tipos dos joins da lista.
+
+      // A Relação da página:
+      //   - lei da Relação: `relacao_negocios` é COLUNA (gravada por trigger) e
+      //     já vem no `*` — nenhuma consulta extra;
+      //   - lei do ERP: a coluna não vale; a página deriva do ERP (`undefined`);
+      //   - Café Jurerê: a gaveta é CALCULADA na leitura e não vem no `*` —
+      //     consulta estreita só para os ids da página.
+      // A coluna ainda não está nos tipos gerados; por isso o cast estreito.
+      if (!usaCadastroErpCafeJurere) {
+        return data.map((lead) => ({
+          ...lead,
+          relacao_negocios: usaLeiDoErp ? undefined : (lead as { relacao_negocios?: LeadRelacao }).relacao_negocios,
+        }));
+      }
       const relacoes = new Map<string, LeadRelacao>();
-      if ((!usaLeiDoErp || usaCadastroErpCafeJurere) && data.length > 0) {
+      if (data.length > 0) {
         const { data: rows, error: relationError } = await supabase
           .from("leads")
-          .select(usaCadastroErpCafeJurere ? "id, classificacao_cafe_jurere" : "id, relacao_negocios")
+          .select("id, classificacao_cafe_jurere")
           .eq("organization_id", organizationId)
           .in("id", data.map((lead) => lead.id))
-          .returns<Array<{ id: string; relacao_negocios?: LeadRelacao; classificacao_cafe_jurere?: LeadRelacao }>>();
+          .returns<Array<{ id: string; classificacao_cafe_jurere?: LeadRelacao }>>();
         if (relationError) throw relationError;
         for (const row of rows ?? []) {
-          const relacao = usaCadastroErpCafeJurere ? row.classificacao_cafe_jurere : row.relacao_negocios;
-          if (relacao) relacoes.set(row.id, relacao);
+          if (row.classificacao_cafe_jurere) relacoes.set(row.id, row.classificacao_cafe_jurere);
         }
       }
       return data.map((lead) => ({ ...lead, relacao_negocios: relacoes.get(lead.id) }));
     },
-    enabled: isReady && options.enabled !== false,
+    enabled,
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
 /**
- * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
+ * Quantos leads casam com o recorte (para paginação e abas) — COM OS MESMOS
+ * FILTROS da lista, e com TETO: acima de `LEADS_COUNT_CAP` devolve
+ * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
   const { organizationId, isReady } = useOrganization();
+  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
 
-  return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
+  return useQuery<CappedCount>({
+    queryKey: leadsKeys.count(organizationId, recorte),
     queryFn: async () => {
-      if (!organizationId) return 0;
-
-      let query = supabase
-        .from("leads")
-        .select("*", { count: "exact", head: true });
-
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
-
-      const { count, error } = await query;
-      if (error) throw error;
-      return count ?? 0;
+      if (!organizationId) return EMPTY_COUNT;
+      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte);
+      return runCappedCount(query);
     },
     enabled: isReady,
     staleTime: 60000, // 1 minuto
@@ -652,9 +668,12 @@ export function useToggleLeadAI() {
     },
     // Atualização otimista para feedback imediato
     onMutate: async ({ leadId, disabled }) => {
-      // Cancelar queries em andamento para evitar sobrescrever a atualização otimista
+      // Cancelar queries em andamento para evitar sobrescrever a atualização otimista.
+      // `["leads"]` não entra (2026-10-05): nenhum consumidor de `useLeads` lê
+      // `ai_disabled` (a IA da tela vem de `lead-detail`/`lead_ai_status`), e
+      // o prefixo hoje cobre lista + contagens + cards — cancelar ali jogava
+      // fora a contagem em voo a cada toggle, sem nada a proteger.
       await queryClient.cancelQueries({ queryKey: ["lead-detail", leadId] });
-      await queryClient.cancelQueries({ queryKey: ["leads"] });
       await queryClient.cancelQueries({ queryKey: ["pipeline_entries"] });
       await queryClient.cancelQueries({ queryKey: ["lead_by_phone"] });
       await queryClient.cancelQueries({ queryKey: ["lead_ai_status", leadId] });

@@ -170,3 +170,4 @@ owner: claude-agent
 - [[2026-10-05-carteira-health-em-lote|calculate-portfolio-health em lote (N+1 → 2 RPCs por página)]]
 - [[2026-10-05-funil-pagina-plano-generico|Funil: get_pipeline_page com plano genérico]]
 - [[2026-10-05-runtime-logs-lote-amostragem|runtime_logs em lote, amostragem de sucesso e retenção]]
+- [[2026-10-05-leads-realtime-agendador|Leads — agendador de invalidações realtime e contagem com teto]]

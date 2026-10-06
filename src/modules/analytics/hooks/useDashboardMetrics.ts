@@ -256,6 +256,9 @@ interface ConversionRate {
   sales: number;
 }
 
+/** Agendamento realtime dos números agregados: ver `useRealtimeSubscription`. */
+const ANALYTICS_REALTIME = { whenHidden: "defer", maxWaitMs: 30_000 } as const;
+
 /**
  * @param filterMemberId — override the auto-filter logic:
  *   - undefined (default): auto — non-admins filter by their own id, admins get total
@@ -292,8 +295,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
   // entrar em logical replication: Realtime não resolve as colunas e gera
   // churn de "invalid column for filter organization_id" + estoura o pool de
   // auth-check do serviço. pipeline_entries cobre todos os stages dos pipes.
-  useRealtimeSubscription("pipeline_entries", ["dashboard-metrics"]);
-  useRealtimeSubscription("leads", ["dashboard-metrics"]);
+  //
+  // Opt-in do agendador (2026-10-05): aba oculta guarda e refaz uma vez ao
+  // voltar; rajada contínua refaz no máximo a cada 30 s. Nenhum consumidor
+  // depende de atualizar com a aba oculta (sem título, som ou notificação).
+  useRealtimeSubscription("pipeline_entries", ["dashboard-metrics"], ANALYTICS_REALTIME);
+  useRealtimeSubscription("leads", ["dashboard-metrics"], ANALYTICS_REALTIME);
 
   return useQuery({
     queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId, useCanonical],

@@ -15,9 +15,15 @@
  * e menor. Ninguém abre chamado para "22 em vez de 311".
  *
  * Por isso as asserções abaixo são sobre a FORMA DA CONSULTA, não só sobre o
- * valor: contagem `head` no servidor, escopo da org, e **nenhum** recorte de
- * página (`in`/`limit`/`range`). Um teste que só conferisse o número passaria
- * com a versão de página, bastando devolver 25 leads no mock.
+ * valor: contagem no servidor, escopo da org, e **nenhum** recorte de página
+ * (`in`/`range`/`order`). Um teste que só conferisse o número passaria com a
+ * versão de página, bastando devolver 25 leads no mock.
+ *
+ * ── TETO (2026-10-05) ─────────────────────────────────────────────────────
+ * A contagem deixou de ser `count: exact` (varre o recorte inteiro sob RLS — o
+ * grosso dos 60% do tempo do banco que a tela de Leads consumia). Agora lê ids
+ * até `LEADS_COUNT_CAP` (1.000): abaixo disso é exata; no teto devolve
+ * `capped: true` e a tela diz "1.000+". O único `limit` permitido é o teto.
  *
  * ── FUSO ──────────────────────────────────────────────────────────────────
  * "Deste mês" é cortado no fuso da ORG, não no do navegador. A versão anterior
@@ -54,9 +60,9 @@ vi.mock("@/integrations/supabase/client", () => {
     "in", "order", "limit", "range", "neq", "filter",
   ];
 
-  /** O último operador da cadeia é o que distingue os dois cards. */
+  /** O último operador antes do teto (`limit`) é o que distingue os dois cards. */
   const contagemDe = (ops: Array<[string, ...unknown[]]>): number => {
-    const ultima = ops[ops.length - 1];
+    const ultima = ops.filter((o) => o[0] !== "limit").at(-1);
     if (!ultima) return 0;
     if (ultima[0] === "gte" && ultima[1] === "created_at") return contagens.mes;
     if (ultima[0] === "not" && ultima[1] === "responsible_id") return contagens.comDono;
@@ -73,9 +79,13 @@ vi.mock("@/integrations/supabase/client", () => {
         return b;
       };
     }
-    // O hook faz `await` direto no builder — `then` é o que resolve.
-    b.then = (resolve: (v: unknown) => unknown) =>
-      Promise.resolve({ count: contagemDe(ops), data: null, error: null }).then(resolve);
+    // O hook faz `await` direto no builder — `then` é o que resolve. O
+    // "servidor" devolve no máximo `limit` linhas, como o PostgREST.
+    b.then = (resolve: (v: unknown) => unknown) => {
+      const limite = ops.find((o) => o[0] === "limit")?.[1] as number | undefined;
+      const n = Math.min(contagemDe(ops), limite ?? Number.POSITIVE_INFINITY);
+      return Promise.resolve({ data: Array.from({ length: n }, (_, i) => ({ id: `l-${i}` })), error: null }).then(resolve);
+    };
     return b;
   };
 
@@ -89,6 +99,9 @@ function wrapper() {
   return ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: qc }, children);
 }
+
+/** Os operadores de RECORTE (o teto, `limit`, fica de fora). */
+const recorte = (c: { ops: Array<[string, ...unknown[]]> }) => c.ops.filter((o) => o[0] !== "limit");
 
 /** Operadores de uma consulta, achatados em `metodo|arg|arg` para conferência. */
 const assinatura = (c: { ops: Array<[string, ...unknown[]]> }) =>
@@ -115,36 +128,49 @@ afterEach(() => {
 
 describe("os cards do topo contam a organização, não a página", () => {
   it("devolve o número da org mesmo acima do que cabe numa página de 25", async () => {
-    // 2.987 é o tamanho medido da org que expôs o defeito. Se o hook voltasse
-    // a contar a página, nenhum destes números seria alcançável.
+    // Se o hook voltasse a contar a página, nenhum destes números seria
+    // alcançável.
+    contagens.mes = 312;
+    contagens.comDono = 154;
+
+    const data = await medir();
+
+    expect(data).toEqual({ thisMonth: { value: 312, capped: false }, withOwner: { value: 154, capped: false } });
+  });
+
+  it("acima do teto não inventa total: diz que passou de 1.000", async () => {
+    // 2.987 é o tamanho medido da org que expôs o defeito da página.
     contagens.mes = 2987;
     contagens.comDono = 1544;
 
     const data = await medir();
 
-    expect(data).toEqual({ thisMonth: 2987, withOwner: 1544 });
+    expect(data).toEqual({ thisMonth: { value: 1000, capped: true }, withOwner: { value: 1000, capped: true } });
   });
 
-  it("pede CONTAGEM ao Postgres, não linhas — `head` com `count: exact`", async () => {
+  it("conta no servidor COM TETO — `select(id)` + `limit(1000)`, nunca `count: exact`", async () => {
     await medir();
 
     expect(consultas).toHaveLength(2);
     for (const c of consultas) {
       expect(c.tabela).toBe("leads");
-      expect(c.ops[0]).toEqual(["select", "*", { count: "exact", head: true }]);
+      expect(c.ops[0]).toEqual(["select", "id"]);
+      expect(c.ops.at(-1)).toEqual(["limit", 1000]);
+      expect(JSON.stringify(c.ops)).not.toContain("exact");
     }
   });
 
   it("nenhuma das consultas recorta uma página de leads", async () => {
     // A prova direta de que o número não é o da página: sem `in(id, …)`, sem
-    // `limit`, sem `range`. É esta asserção que reprova a volta do `useMemo`.
+    // `range`, sem `order`. O único `limit` é o teto da contagem.
     await medir();
 
     for (const c of consultas) {
       const metodos = c.ops.map((o) => o[0]);
       expect(metodos).not.toContain("in");
-      expect(metodos).not.toContain("limit");
       expect(metodos).not.toContain("range");
+      expect(metodos).not.toContain("order");
+      expect(c.ops.filter((o) => o[0] === "limit")).toEqual([["limit", 1000]]);
     }
   });
 
@@ -162,7 +188,7 @@ describe("os cards do topo contam a organização, não a página", () => {
   it("cada card mede um recorte diferente do mesmo universo", async () => {
     await medir();
 
-    const finais = consultas.map((c) => assinatura(c)[c.ops.length - 1]);
+    const finais = consultas.map((c) => assinatura({ ops: recorte(c) }).at(-1));
     expect(finais).toContain("not|responsible_id|is|null");
     expect(finais.some((f) => f.startsWith("gte|created_at"))).toBe(true);
   });
@@ -172,7 +198,7 @@ describe("os cards do topo contam a organização, não a página", () => {
 
     const data = await medir();
 
-    expect(data).toEqual({ thisMonth: 0, withOwner: 0 });
+    expect(data).toEqual({ thisMonth: { value: 0, capped: false }, withOwner: { value: 0, capped: false } });
     expect(consultas).toHaveLength(0);
   });
 });
@@ -181,10 +207,10 @@ describe('"deste mês" é cortado no fuso da organização', () => {
   /** Instante do corte usado pela consulta do card "deste mês". */
   const corteDoMes = () => {
     const mes = consultas.find((c) => {
-      const ultima = c.ops[c.ops.length - 1];
+      const ultima = recorte(c).at(-1);
       return ultima?.[0] === "gte" && ultima?.[1] === "created_at";
     });
-    return String(mes!.ops[mes!.ops.length - 1][2]);
+    return String(recorte(mes!).at(-1)![2]);
   };
 
   it("1º de agosto às 02:00 UTC ainda é julho em São Paulo — e o card sabe", async () => {
@@ -275,7 +301,7 @@ describe("o card concorda com a lista embaixo dele", () => {
     await medir({ createdFrom: "2026-08-10T03:00:00.000Z" });
 
     const mes = consultas.find((c) => {
-      const ultima = c.ops[c.ops.length - 1];
+      const ultima = recorte(c).at(-1);
       return ultima?.[0] === "gte" && ultima?.[1] === "created_at" && ultima?.[2] !== "2026-08-10T03:00:00.000Z";
     });
     const sig = assinatura(mes!);

@@ -108,6 +108,64 @@ index 2898149d1..c500d8e38 100644
      reconnectCount:
        state === "reconnecting" ? prev.reconnectCount + 1 : prev.reconnectCount,
      lastReason: reason ?? prev.lastReason,
+diff --git a/classic/src/modules/analytics/hooks/useCommandMetrics.ts b/classic/src/modules/analytics/hooks/useCommandMetrics.ts
+index 3a2f2bccd..e823f5b8d 100644
+--- a/classic/src/modules/analytics/hooks/useCommandMetrics.ts
++++ b/classic/src/modules/analytics/hooks/useCommandMetrics.ts
+@@ -229,6 +229,9 @@ export async function fetchCommandMetrics(args: {
+   return mapMetrics(data);
+ }
+ 
++/** Agendamento realtime do Comando: ver `useRealtimeSubscription`. */
++const COMMAND_REALTIME = { whenHidden: "defer", maxWaitMs: 30_000 } as const;
++
+ /**
+  * Métricas da Central de Comando com período arbitrário (hoje/semana/mês/trimestre).
+  * Mesma RPC `get_dashboard_metrics` do useDashboardMetrics — esse hook NÃO substitui
+@@ -256,8 +259,12 @@ export function useCommandMetrics(
+   // NÃO pipe_propostas/pipe_confirmacao — essas são VIEWS compat e não emitem
+   // postgres_changes (a assinatura era no-op silencioso). Mesmo padrão de
+   // useDashboardMetrics; pipeline_entries cobre todos os stages dos pipes.
+-  useRealtimeSubscription("pipeline_entries", ["command-metrics"]);
+-  useRealtimeSubscription("leads", ["command-metrics"]);
++  //
++  // Opt-in do agendador (2026-10-05): aba oculta guarda e refaz uma vez ao
++  // voltar; rajada contínua refaz no máximo a cada 30 s. Consumidores (Comando
++  // e TV) só desenham números — nada depende de atualizar com a aba oculta.
++  useRealtimeSubscription("pipeline_entries", ["command-metrics"], COMMAND_REALTIME);
++  useRealtimeSubscription("leads", ["command-metrics"], COMMAND_REALTIME);
+ 
+   return useQuery({
+     queryKey: ["command-metrics", startStr, endStr, effectiveFilter, organizationId, timezone],
+diff --git a/classic/src/modules/analytics/hooks/useDashboardMetrics.ts b/classic/src/modules/analytics/hooks/useDashboardMetrics.ts
+index 4229b6b0e..4179c443d 100644
+--- a/classic/src/modules/analytics/hooks/useDashboardMetrics.ts
++++ b/classic/src/modules/analytics/hooks/useDashboardMetrics.ts
+@@ -256,6 +256,9 @@ interface ConversionRate {
+   sales: number;
+ }
+ 
++/** Agendamento realtime dos números agregados: ver `useRealtimeSubscription`. */
++const ANALYTICS_REALTIME = { whenHidden: "defer", maxWaitMs: 30_000 } as const;
++
+ /**
+  * @param filterMemberId — override the auto-filter logic:
+  *   - undefined (default): auto — non-admins filter by their own id, admins get total
+@@ -292,8 +295,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
+   // entrar em logical replication: Realtime não resolve as colunas e gera
+   // churn de "invalid column for filter organization_id" + estoura o pool de
+   // auth-check do serviço. pipeline_entries cobre todos os stages dos pipes.
+-  useRealtimeSubscription("pipeline_entries", ["dashboard-metrics"]);
+-  useRealtimeSubscription("leads", ["dashboard-metrics"]);
++  //
++  // Opt-in do agendador (2026-10-05): aba oculta guarda e refaz uma vez ao
++  // voltar; rajada contínua refaz no máximo a cada 30 s. Nenhum consumidor
++  // depende de atualizar com a aba oculta (sem título, som ou notificação).
++  useRealtimeSubscription("pipeline_entries", ["dashboard-metrics"], ANALYTICS_REALTIME);
++  useRealtimeSubscription("leads", ["dashboard-metrics"], ANALYTICS_REALTIME);
+ 
+   return useQuery({
+     queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId, useCanonical],
 diff --git a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx b/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
 index b58bb8f1f..fb30768ad 100644
 --- a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
@@ -188,6 +246,20 @@ index e8ba993f8..05c4521c3 100644
  
    return useQuery({
      queryKey: ["uazapi_sender_jobs", orgId],
+diff --git a/classic/src/modules/carteira/hooks/useCarteiraStages.ts b/classic/src/modules/carteira/hooks/useCarteiraStages.ts
+index 7aee76ec7..b35d7f031 100644
+--- a/classic/src/modules/carteira/hooks/useCarteiraStages.ts
++++ b/classic/src/modules/carteira/hooks/useCarteiraStages.ts
+@@ -101,7 +101,8 @@ export function useCarteiraStages(family: CarteiraStageFamily) {
+   const { data: teamMember } = useCurrentTeamMember();
+   const organizationId = teamMember?.organization_id;
+ 
+-  useRealtimeSubscription("pipeline_stages", ["pipeline_stages", family]);
++  // Alvo composto aninhado: só as etapas desta família (prefixo da chave abaixo).
++  useRealtimeSubscription("pipeline_stages", [["pipeline_stages", family]]);
+ 
+   return useQuery({
+     queryKey: ["pipeline_stages", family, organizationId],
 diff --git a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx b/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
 index e6b5a8c89..39071a847 100644
 --- a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
@@ -1704,6 +1776,58 @@ index aacc3ed82..f83352526 100644
    // Reactivate mutation — clears pause via RPC
    const mutation = useMutation({
      mutationFn: async () => {
+diff --git a/classic/src/modules/copilot/hooks/useCopilotToggle.ts b/classic/src/modules/copilot/hooks/useCopilotToggle.ts
+index ecb60575d..e5d26edae 100644
+--- a/classic/src/modules/copilot/hooks/useCopilotToggle.ts
++++ b/classic/src/modules/copilot/hooks/useCopilotToggle.ts
+@@ -216,7 +216,9 @@ export function useCopilotToggleMutation() {
+         queryClient.invalidateQueries({ queryKey: ["lead-ai-status", vars.leadId] });
+         queryClient.invalidateQueries({ queryKey: ["lead-detail", vars.leadId] });
+       }
+-      queryClient.invalidateQueries({ queryKey: ["leads"] });
++      // `["leads"]` saiu (2026-10-05), mesma prova do `useCopilotToggleRealtime`:
++      // nenhum consumidor de `useLeads` lê `ai_disabled`, e o prefixo hoje
++      // refaz lista + 4 contagens + 2 cards da tela de Leads a cada toggle.
+       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+     },
+   });
+diff --git a/classic/src/modules/copilot/hooks/useCopilotToggleRealtime.ts b/classic/src/modules/copilot/hooks/useCopilotToggleRealtime.ts
+index 6147d6087..dacb1859c 100644
+--- a/classic/src/modules/copilot/hooks/useCopilotToggleRealtime.ts
++++ b/classic/src/modules/copilot/hooks/useCopilotToggleRealtime.ts
+@@ -70,10 +70,17 @@ export function useCopilotToggleRealtime() {
+ 
+           // Invalidate keys legadas que podem estar mostrando o estado antigo
+           // (LeadDetailSheet lê lead-detail; Kanban lê pipe_*).
++          //
++          // `["leads"]` saiu (2026-10-05): nenhum consumidor de `useLeads` lê
++          // `ai_disabled` (os 8 call sites e os componentes que recebem as
++          // linhas leem a IA de `lead-detail`/`lead_ai_status`). Invalidar
++          // `["leads"]` aqui refazia lista + 6 contagens da tela de Leads a cada
++          // toggle — e `phone_ai_preferences` teve 1.015 updates contra 178 de
++          // `leads` desde o restart de prod. Quando o toggle grava em `leads`,
++          // o próprio canal de `leads` entrega o UPDATE.
+           queryClient.invalidateQueries({ queryKey: ["lead_ai_status"] });
+           queryClient.invalidateQueries({ queryKey: ["lead-ai-status"] });
+           queryClient.invalidateQueries({ queryKey: ["lead-detail"] });
+-          queryClient.invalidateQueries({ queryKey: ["leads"] });
+           queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+         },
+       )
+diff --git a/classic/src/modules/engagement/hooks/useActivities.ts b/classic/src/modules/engagement/hooks/useActivities.ts
+index fcd19e285..d9f269c95 100644
+--- a/classic/src/modules/engagement/hooks/useActivities.ts
++++ b/classic/src/modules/engagement/hooks/useActivities.ts
+@@ -59,7 +59,8 @@ export function useActivities(filters?: ActivityFilters) {
+     filters?.limit,
+   ];
+ 
+-  useRealtimeSubscription("activities", ["activities", organizationId ?? ""]);
++  // Alvo composto aninhado: as atividades desta org (prefixo da chave acima).
++  useRealtimeSubscription("activities", [["activities", organizationId]]);
+ 
+   return useQuery<ActivityWithNames[]>({
+     queryKey,
 diff --git a/classic/src/modules/engagement/hooks/useMeetings.ts b/classic/src/modules/engagement/hooks/useMeetings.ts
 index 88a6237c3..ad490fb05 100644
 --- a/classic/src/modules/engagement/hooks/useMeetings.ts
@@ -2461,6 +2585,115 @@ index 5d78ff0e6..823994129 100644
          </li>)}
        </ul>}
  
+diff --git a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx b/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
+index 682a48186..4e49cb8f6 100644
+--- a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
++++ b/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
+@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
+ import { Users, CalendarDays, UserCheck, X } from "lucide-react";
+ import { Skeleton } from "@/components/ui/skeleton";
+ import { cn } from "@/lib/utils";
++import { formatCappedCount, LEADS_COUNT_CAP, type CappedCount } from "../../lib/capped-count";
+ 
+ /**
+  * Faixa de números da tela de Leads — versão "Depois".
+@@ -19,11 +20,19 @@ import { cn } from "@/lib/utils";
+  *
+  * O card de rating saiu junto com o filtro de rating da página (main de
+  * 2026-09); os três que ficam seguem `useLeadsStats` + `useLeadsCount`.
++ *
++ * ── CONTAGEM COM TETO (2026-10-05) ────────────────────────────────────────
++ * Os números chegam como `CappedCount` (ver `lib/capped-count`): acima de
++ * 1.000 o valor é PISO, não total. Regra desta faixa: nada é derivado por
++ * subtração ou divisão de um valor com teto.
++ *   - total no teto → "1.000+", sem percentual nem barra nos outros cards;
++ *   - "sem dono" com total no teto e "com responsável" exato → é pelo menos
++ *     `1.000 − com`, e diz "N+"; com os dois no teto, não se conta.
+  */
+ export interface LeadsStatsV2Props {
+-  total: number;
+-  thisMonth: number;
+-  withOwner: number;
++  total: CappedCount;
++  thisMonth: CappedCount;
++  withOwner: CappedCount;
+   isLoading?: boolean;
+   /** Filtros que os cards controlam. Sem handler, o card é só leitura. */
+   filters?: {
+@@ -35,7 +44,8 @@ export interface LeadsStatsV2Props {
+ interface Tile {
+   key: string;
+   label: string;
+-  value: number;
++  /** Já formatado: "1.000+" no teto. */
++  value: string;
+   icon: ComponentType<{ className?: string }>;
+   /** Proporção 0–1 em relação ao total; `undefined` = sem barra. */
+   share?: number;
+@@ -54,35 +64,45 @@ function share(part: number, total: number): number | undefined {
+ 
+ const EASE = [0.2, 0, 0, 1] as const;
+ 
++/** "Sem dono" no rodapé do card: exato, piso ("N+") ou incontável — nunca subtração de piso. */
++function semDonoContext(total: CappedCount, withOwner: CappedCount): string {
++  if (!total.capped) {
++    return total.value ? `${nf.format(Math.max(0, total.value - withOwner.value))} sem dono` : "nenhum sem dono";
++  }
++  if (withOwner.capped) return "sem dono: recorte grande demais para contar";
++  return `${nf.format(Math.max(0, LEADS_COUNT_CAP - withOwner.value))}+ sem dono`;
++}
++
+ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }: LeadsStatsV2Props) {
+   const reduce = useReducedMotion();
+-  const semDono = Math.max(0, total - withOwner);
++  // Percentual e barra só com total EXATO e não vazio.
++  const totalExato = !total.capped && total.value > 0 ? total.value : 0;
+ 
+   const tiles: Tile[] = [
+     {
+       key: "total",
+       label: "Total de leads",
+-      value: total,
++      value: formatCappedCount(total),
+       icon: Users,
+-      context: "na organização, com os filtros atuais",
++      context: total.capped ? `${nf.format(total.value)} ou mais, com os filtros atuais` : "na organização, com os filtros atuais",
+     },
+     {
+       key: "mes",
+       label: "Este mês",
+-      value: thisMonth,
++      value: formatCappedCount(thisMonth),
+       icon: CalendarDays,
+-      share: share(thisMonth, total),
+-      context: total ? `${pf.format(thisMonth / total)} do total entraram este mês` : "entraram este mês",
++      share: totalExato ? share(thisMonth.value, totalExato) : undefined,
++      context: totalExato ? `${pf.format(thisMonth.value / totalExato)} do total entraram este mês` : "entraram este mês",
+       accent: "primary",
+       filter: filters?.thisMonth && { ...filters.thisMonth, hint: "Filtrar por criados este mês" },
+     },
+     {
+       key: "dono",
+       label: "Com responsável",
+-      value: withOwner,
++      value: formatCappedCount(withOwner),
+       icon: UserCheck,
+-      share: share(withOwner, total),
+-      context: total ? `${nf.format(semDono)} sem dono` : "nenhum sem dono",
++      share: totalExato ? share(withOwner.value, totalExato) : undefined,
++      context: semDonoContext(total, withOwner),
+       accent: "success",
+       filter: filters?.unassigned && { ...filters.unassigned, hint: "Mostrar só os sem dono" },
+     },
+@@ -141,7 +161,7 @@ export function LeadsStatsV2({ total, thisMonth, withOwner, isLoading, filters }
+               <Skeleton className="h-8 w-20 rounded-md" />
+             ) : (
+               <span className="text-[28px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-foreground">
+-                {nf.format(t.value)}
++                {t.value}
+               </span>
+             )}
+ 
 diff --git a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx b/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
 index f66e563bd..a2fbf3c71 100644
 --- a/classic/src/modules/leads/components/leads/card/LeadCardChecklistPopover.tsx
@@ -2489,18 +2722,1143 @@ index 8011e8662..f0861b1c0 100644
    useRealtimeSubscription("pipeline_stages", ["client-portfolio", "leads-deals"]);
    useRealtimeSubscription("pipelines", ["client-portfolio", "leads-deals"]);
 diff --git a/classic/src/modules/leads/hooks/useLeads.ts b/classic/src/modules/leads/hooks/useLeads.ts
-index 6e79c168c..faa45e703 100644
+index 6e79c168c..60705c9a9 100644
 --- a/classic/src/modules/leads/hooks/useLeads.ts
 +++ b/classic/src/modules/leads/hooks/useLeads.ts
-@@ -81,7 +81,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+@@ -1,7 +1,6 @@
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { supabase } from "@/integrations/supabase/client";
+ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+-import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
+ import { useOrganization } from "@/modules/identity";
+ import { track } from "@/lib/analytics";
+ import { useCanDo } from "@/modules/identity";
+@@ -11,6 +10,9 @@ import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platfo
+ import { applyLeadListFilters } from "../lib/lead-list-filters";
+ import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
+ import type { LeadRelacao } from "../lib/lead-relacao-situacao";
++import { leadsKeys } from "../lib/leads-query-keys";
++import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
++import { useLeadsRealtime } from "./useLeadsRealtime";
+ 
+ export type Lead = Tables<"leads">;
+ export type LeadInsert = TablesInsert<"leads">;
+@@ -79,18 +81,26 @@ function applyLeadsFilters(
+ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
+   const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
    const { organizationId, isReady } = useOrganization();
- 
-   useRealtimeSubscription("leads", ["leads"]);
+-
+-  useRealtimeSubscription("leads", ["leads"]);
 -  useRealtimeSubscription("deals", ["leads", "leads-count", "leads-stats"]);
-+  // `deals` não é assinada: fora da publication `supabase_realtime` (nunca emitiu evento; perf S0 2026-10-06).
-   useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
-   useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
+-  useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
+-  useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
++  const enabled = isReady && options.enabled !== false;
++  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
++  const queryKey = leadsKeys.list(organizationId, page, filters, sort);
++
++  // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
++  // Sem org resolvida não há canal (sem org não há filtro de org). Com a lista
++  // desligada (aba Clientes) o canal fica: as contagens das abas e os cards
++  // continuam na tela; só o alvo da lista sai.
++  useLeadsRealtime({
++    organizationId,
++    listKey: queryKey,
++    pageSize: LEADS_PAGE_SIZE,
++    sort,
++    mode: usaCadastroErpCafeJurere ? "cafe" : usaLeiDoErp ? "erp" : "relacao",
++    enabled: isReady && !!organizationId,
++    listEnabled: enabled,
++  });
  
+   return useQuery({
+-    // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
+-    // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
+-    // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
+-    // chave continuar legivel no devtools.
+-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
++    queryKey,
+     queryFn: async () => {
+       if (!organizationId) {
+         console.warn("[useLeads] No organization_id available - returning empty array");
+@@ -114,7 +124,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+           )
+         `);
+ 
+-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
++      query = applyLeadsFilters(query, organizationId, filters);
+ 
+       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
+       // paginação por OFFSET repete linha entre páginas dentro de um empate,
+@@ -122,50 +132,56 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+       const { data, error } = await applyLeadListSort(query, sort).range(from, to);
+ 
+       if (error) throw error;
+-      // Campo calculado ainda não está nos tipos gerados. Consulta estreita
+-      // tipada separadamente conserva os tipos dos joins da lista.
++
++      // A Relação da página:
++      //   - lei da Relação: `relacao_negocios` é COLUNA (gravada por trigger) e
++      //     já vem no `*` — nenhuma consulta extra;
++      //   - lei do ERP: a coluna não vale; a página deriva do ERP (`undefined`);
++      //   - Café Jurerê: a gaveta é CALCULADA na leitura e não vem no `*` —
++      //     consulta estreita só para os ids da página.
++      // A coluna ainda não está nos tipos gerados; por isso o cast estreito.
++      if (!usaCadastroErpCafeJurere) {
++        return data.map((lead) => ({
++          ...lead,
++          relacao_negocios: usaLeiDoErp ? undefined : (lead as { relacao_negocios?: LeadRelacao }).relacao_negocios,
++        }));
++      }
+       const relacoes = new Map<string, LeadRelacao>();
+-      if ((!usaLeiDoErp || usaCadastroErpCafeJurere) && data.length > 0) {
++      if (data.length > 0) {
+         const { data: rows, error: relationError } = await supabase
+           .from("leads")
+-          .select(usaCadastroErpCafeJurere ? "id, classificacao_cafe_jurere" : "id, relacao_negocios")
++          .select("id, classificacao_cafe_jurere")
+           .eq("organization_id", organizationId)
+           .in("id", data.map((lead) => lead.id))
+-          .returns<Array<{ id: string; relacao_negocios?: LeadRelacao; classificacao_cafe_jurere?: LeadRelacao }>>();
++          .returns<Array<{ id: string; classificacao_cafe_jurere?: LeadRelacao }>>();
+         if (relationError) throw relationError;
+         for (const row of rows ?? []) {
+-          const relacao = usaCadastroErpCafeJurere ? row.classificacao_cafe_jurere : row.relacao_negocios;
+-          if (relacao) relacoes.set(row.id, relacao);
++          if (row.classificacao_cafe_jurere) relacoes.set(row.id, row.classificacao_cafe_jurere);
+         }
+       }
+       return data.map((lead) => ({ ...lead, relacao_negocios: relacoes.get(lead.id) }));
+     },
+-    enabled: isReady && options.enabled !== false,
++    enabled,
+     staleTime: 5 * 60 * 1000, // 5 minutos
+   });
+ }
+ 
+ /**
+- * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
++ * Quantos leads casam com o recorte (para paginação e abas) — COM OS MESMOS
++ * FILTROS da lista, e com TETO: acima de `LEADS_COUNT_CAP` devolve
++ * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
+  */
+ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
+   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
+   const { organizationId, isReady } = useOrganization();
++  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
+ 
+-  return useQuery({
+-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
++  return useQuery<CappedCount>({
++    queryKey: leadsKeys.count(organizationId, recorte),
+     queryFn: async () => {
+-      if (!organizationId) return 0;
+-
+-      let query = supabase
+-        .from("leads")
+-        .select("*", { count: "exact", head: true });
+-
+-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+-
+-      const { count, error } = await query;
+-      if (error) throw error;
+-      return count ?? 0;
++      if (!organizationId) return EMPTY_COUNT;
++      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte);
++      return runCappedCount(query);
+     },
+     enabled: isReady,
+     staleTime: 60000, // 1 minuto
+@@ -649,9 +665,12 @@ export function useToggleLeadAI() {
+     },
+     // Atualização otimista para feedback imediato
+     onMutate: async ({ leadId, disabled }) => {
+-      // Cancelar queries em andamento para evitar sobrescrever a atualização otimista
++      // Cancelar queries em andamento para evitar sobrescrever a atualização otimista.
++      // `["leads"]` não entra (2026-10-05): nenhum consumidor de `useLeads` lê
++      // `ai_disabled` (a IA da tela vem de `lead-detail`/`lead_ai_status`), e
++      // o prefixo hoje cobre lista + contagens + cards — cancelar ali jogava
++      // fora a contagem em voo a cada toggle, sem nada a proteger.
+       await queryClient.cancelQueries({ queryKey: ["lead-detail", leadId] });
+-      await queryClient.cancelQueries({ queryKey: ["leads"] });
+       await queryClient.cancelQueries({ queryKey: ["pipeline_entries"] });
+       await queryClient.cancelQueries({ queryKey: ["lead_by_phone"] });
+       await queryClient.cancelQueries({ queryKey: ["lead_ai_status", leadId] });
+diff --git a/classic/src/modules/leads/hooks/useLeadsRealtime.ts b/classic/src/modules/leads/hooks/useLeadsRealtime.ts
+new file mode 100644
+index 000000000..3c7a9daa5
+--- /dev/null
++++ b/classic/src/modules/leads/hooks/useLeadsRealtime.ts
+@@ -0,0 +1,243 @@
++/**
++ * Realtime da lista de Leads — UM canal em `leads`, classificado por evento.
++ *
++ * ── ANTES ─────────────────────────────────────────────────────────────────
++ * `useLeads` assinava quatro tabelas. Três delas (`deals`, `pipeline_entries`,
++ * `sale_events`) invalidavam lista + contagens + cards em todo evento — e
++ * `deals` nem está na publicação `supabase_realtime` de prod. Somado ao
++ * debounce de 2 s sem teto e sem regra de aba oculta, uma aba de Leads aberta
++ * num escritório movimentado ia ao banco a cada poucos segundos, e cada ida
++ * eram sete consultas (lista + 6 `count: exact`).
++ *
++ * ── AGORA ─────────────────────────────────────────────────────────────────
++ *   - `leads` é a única fonte. A Relação chega por UPDATE em `leads`
++ *     (`relacao_negocios` é gravada por trigger quando negócio/entrada/venda
++ *     mudam), então `sale_events` e `pipeline_entries` saíram;
++ *   - exceção: no piloto da Café Jurerê a gaveta é `classificacao_cafe_jurere`,
++ *     CALCULADA na leitura a partir das entradas de funil — lá
++ *     `pipeline_entries` continua assinada (e só lá);
++ *   - cada evento passa por `classifyLeadEvent`: patch local, só contagens,
++ *     ou tudo (ver `lib/lead-realtime-relevance`);
++ *   - a lista espera 30 s de silêncio, com teto de 30 s sob rajada; as
++ *     contagens e os cards só refazem com 60 s de idade; aba oculta guarda
++ *     tudo e dispara uma vez ao voltar;
++ *   - lista desligada (aba Clientes da página) não desliga o canal: as
++ *     contagens das abas continuam na tela e continuam recebendo o evento;
++ *   - página da tela buscando quando o evento chega: o retrato a caminho é de
++ *     antes dele — todo veredito que pularia a lista (patch, contagens, DELETE
++ *     de id fora do cache) a refaz depois desse fetch;
++ *   - o canal é compartilhado por tabela + filtro: toda instância recebe o
++ *     mesmo evento. Instância que entra com o canal caído, ou que o vê cair,
++ *     refaz seus alvos no SUBSCRIBED seguinte (1 busca por query, por mais
++ *     instâncias que haja) — `catchUpOnSubscribe` de `useRealtimeSubscription`.
++ *
++ * Os números: rajada de 20 eventos → 1 fetch da lista e 0 de contagem;
++ * 2 min de eventos contínuos → ≤4 da lista e ≤1 por contagem a cada 60 s.
++ * Medido em `tests/unit/leads-realtime-harness.test.tsx`.
++ */
++import { useQueryClient, type Query, type QueryKey } from "@tanstack/react-query";
++import { useRealtimeSubscription, type RealtimeEventDecision } from "@/shared/realtime/useRealtimeSubscription";
++import { invalidateOnceSettled } from "@/shared/realtime/invalidation-scheduler";
++import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
++import {
++  applyLeadChanges,
++  classifyLeadEvent,
++  removeLead,
++  type LeadRelacaoMode,
++} from "../lib/lead-realtime-relevance";
++import { leadsKeys } from "../lib/leads-query-keys";
++import type { LeadListSort } from "../lib/lead-list-sort";
++
++/** A lista: espera o silêncio, mas nunca mais que isso sob rajada. */
++const LIST_QUIET_MS = 30_000;
++const LIST_MAX_WAIT_MS = 30_000;
++/** Contagens e cards: no máximo uma busca por minuto. */
++const COUNTS_MIN_AGE_MS = 60_000;
++
++export interface UseLeadsRealtimeParams {
++  organizationId: string | null | undefined;
++  /** A chave EXATA da página que esta instância mostra. */
++  listKey: QueryKey;
++  pageSize: number;
++  sort: LeadListSort;
++  mode: LeadRelacaoMode;
++  /** Canal aberto (org resolvida). Contagens e cards dependem só disto. */
++  enabled: boolean;
++  /** A lista está ligada? Desligada, ela sai dos alvos — o canal fica. */
++  listEnabled: boolean;
++}
++
++type Row = Record<string, unknown> & { id?: unknown };
++
++export function useLeadsRealtime({
++  organizationId,
++  listKey,
++  pageSize,
++  sort,
++  mode,
++  enabled,
++  listEnabled,
++}: UseLeadsRealtimeParams) {
++  const queryClient = useQueryClient();
++  const listsPrefix = leadsKeys.lists(organizationId);
++  const countsTarget = { queryKey: leadsKeys.counts(organizationId), minAgeMs: COUNTS_MIN_AGE_MS };
++  const statsTarget = { queryKey: leadsKeys.allStats(organizationId), minAgeMs: COUNTS_MIN_AGE_MS };
++
++  /** Páginas sem observer HABILITADO — inclui a lista desligada da aba Clientes. */
++  const idleLists = (): Query[] =>
++    queryClient.getQueryCache().findAll({ queryKey: listsPrefix, predicate: (q) => !q.isActive() });
++
++  /**
++   * Página ociosa com fetch em voo: o retrato dela é de antes deste evento e,
++   * ao chegar, sobrescreve o cache e zera qualquer marca de velha. O
++   * agendador espera esse fetch terminar e só então a marca.
++   */
++  const settleIdleInFlight = (idle: Query[]) => {
++    for (const q of idle) {
++      if (q.state.fetchStatus !== "idle") invalidateOnceSettled(queryClient, q.queryKey);
++    }
++  };
++
++  /**
++   * Páginas em cache que ninguém está olhando: ficam marcadas como velhas (sem
++   * ir ao banco) para que voltar a elas busque de novo — o que a invalidação
++   * ampla de antes garantia de graça.
++   */
++  const markIdleListsStale = () => {
++    const idle = idleLists();
++    settleIdleInFlight(idle);
++    const quiet = new Set(idle.filter((q) => q.state.fetchStatus === "idle"));
++    if (quiet.size === 0) return;
++    void queryClient.invalidateQueries({ queryKey: listsPrefix, refetchType: "none", predicate: (q) => quiet.has(q) });
++  };
++
++  /**
++   * Edição local (patch, remoção) página a página — nunca `setQueriesData` às
++   * cegas: todo `setQueryData` é um `success` que zera a marca de velha e
++   * renova a idade, mesmo quando devolve as mesmas linhas.
++   *
++   * Por página em cache:
++   *   - ativa de OUTRA instância (picker, PriorityLeads): não mexe. O dono
++   *     recebe este mesmo evento e o classifica contra a página dele — se ela
++   *     já viesse editada daqui, ele concluiria "nada mudou" e não pediria o
++   *     refetch de que o fetch em voo dela precisa. Toda página ativa tem
++   *     dono: a única chave de lista é a de `useLeads`, que liga a query e
++   *     este hook com a mesma chave e o mesmo `enabled`;
++   *   - buscando: não mexe — o retrato a caminho é de antes do evento e
++   *     sobrescreveria a edição. O refetch depois dele vem do chamador (a
++   *     própria, pelo agendador) ou de `settleIdleInFlight` (as ociosas);
++   *   - sem o lead: `edit` devolve as mesmas linhas e nada é despachado;
++   *   - parada, com o lead: edita mantendo a idade (`updatedAt`) e, se estava
++   *     marcada como velha, marca de novo — voltar a ela ainda busca.
++   */
++  const editIdleLists = (edit: (rows: Row[]) => Row[]) => {
++    const cache = queryClient.getQueryCache();
++    const own = cache.find({ queryKey: listKey, exact: true });
++    for (const q of cache.findAll({ queryKey: listsPrefix })) {
++      if (q !== own && q.isActive()) continue;
++      if (q.state.fetchStatus !== "idle") continue;
++      const rows = q.state.data;
++      if (!Array.isArray(rows)) continue;
++      const next = edit(rows as Row[]);
++      if (next === rows) continue;
++      const { dataUpdatedAt, isInvalidated } = q.state;
++      queryClient.setQueryData(q.queryKey, next, { updatedAt: dataUpdatedAt });
++      if (isInvalidated) {
++        void queryClient.invalidateQueries({ queryKey: q.queryKey, exact: true, refetchType: "none" });
++      }
++    }
++  };
++
++  /**
++   * A página da tela está buscando agora? O retrato a caminho foi tirado ANTES
++   * deste commit: quando chegar, sobrescreve o cache sem o evento.
++   */
++  const ownListInFlight = () => {
++    const fetchStatus = queryClient.getQueryState(listKey)?.fetchStatus;
++    return fetchStatus !== undefined && fetchStatus !== "idle";
++  };
++
++  // Lido pelo transporte no momento do evento (via ref): sempre a página e a
++  // ordem atuais, sem precisar de memo.
++  const onEvent = (payload: RealtimePostgresChangesPayload<Row>): RealtimeEventDecision => {
++    const verdict = classifyLeadEvent(payload, {
++      organizationId,
++      rows: queryClient.getQueryData<Row[]>(listKey),
++      pageSize,
++      sort,
++      mode,
++      isCached: (id) =>
++        queryClient
++          .getQueriesData<Row[]>({ queryKey: listsPrefix })
++          .some(([, rows]) => Array.isArray(rows) && rows.some((row) => row.id === id)),
++    });
++
++    switch (verdict.kind) {
++      case "ignore":
++        // DELETE de id fora de todo cache: com a página da tela buscando, o
++        // retrato a caminho pode trazer justamente esse lead.
++        return payload.eventType === "DELETE" && ownListInFlight() ? { invalidate: [listKey] } : "skip";
++      case "patch": {
++        // Mudança fora de recorte: não muda pertença nem ordem em página
++        // nenhuma — as paradas que têm a linha recebem o patch.
++        editIdleLists((rows) => applyLeadChanges(rows, verdict.id, verdict.changes));
++        settleIdleInFlight(idleLists());
++        // A página da tela buscando agora tirou o retrato ANTES deste commit e
++        // não recebeu o patch: a linha fica no valor antigo até o refetch,
++        // pedido aqui e feito depois que esse fetch chegar, no prazo da lista
++        // (até 30 s de silêncio). Trade-off aceito: patchar só para o fetch em
++        // voo desfazer faria a linha piscar novo → antigo → novo.
++        return ownListInFlight() ? { invalidate: [listKey] } : "skip";
++      }
++      case "counts":
++        markIdleListsStale();
++        // "Depois da última linha" foi decidido contra a página em cache. Com
++        // ela buscando, a página a caminho é outra (e o lead pode estar nela):
++        // a decisão não vale para ela — refaz depois desse fetch.
++        return ownListInFlight()
++          ? { invalidate: [listKey, countsTarget, statsTarget] }
++          : { invalidate: [countsTarget, statsTarget] };
++      case "remove":
++        editIdleLists((rows) => removeLead(rows, verdict.id));
++        markIdleListsStale();
++        return "invalidate";
++      case "refetch":
++        markIdleListsStale();
++        return "invalidate";
++    }
++  };
++
++  // `catchUpOnSubscribe`: a página ativa desta instância só é tocada por ela
++  // (`editIdleLists` pula página ativa de outra) — evento que caiu numa queda
++  // do canal (ou que chegou a outro canal físico da mesma chave enquanto este
++  // entrava) chegaria a ela só no próximo evento que pedisse refetch.
++  const schedule = {
++    quietMs: LIST_QUIET_MS,
++    maxWaitMs: LIST_MAX_WAIT_MS,
++    whenHidden: "defer",
++    catchUpOnSubscribe: true,
++  } as const;
++
++  // Lista primeiro; contagens e cards 2 s depois (stagger) e só com 60 s de
++  // idade. Lista desligada sai do alvo — o canal fica pelas contagens.
++  useRealtimeSubscription(
++    "leads",
++    listEnabled ? [listKey, countsTarget, statsTarget] : [countsTarget, statsTarget],
++    { ...schedule, onEvent, enabled },
++  );
++  // Só a Café Jurerê: a gaveta dela é calculada a partir das entradas de funil.
++  // Entrada mudou → a gaveta pode ter mudado em qualquer página: refaz a da
++  // tela e marca as ociosas, como um `refetch` de `leads`.
++  useRealtimeSubscription(
++    "pipeline_entries",
++    listEnabled ? [listKey, countsTarget, statsTarget] : [countsTarget, statsTarget],
++    {
++      ...schedule,
++      onEvent: () => {
++        markIdleListsStale();
++        return "invalidate";
++      },
++      enabled: enabled && mode === "cafe",
++    },
++  );
++}
+diff --git a/classic/src/modules/leads/hooks/useLeadsStats.ts b/classic/src/modules/leads/hooks/useLeadsStats.ts
+index adffa6e42..a809d9d84 100644
+--- a/classic/src/modules/leads/hooks/useLeadsStats.ts
++++ b/classic/src/modules/leads/hooks/useLeadsStats.ts
+@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
+ import { useOrganization } from "@/modules/identity";
+ import type { LeadsFilterParams } from "./useLeads";
+ import { applyLeadListFilters } from "../lib/lead-list-filters";
++import { leadsKeys } from "../lib/leads-query-keys";
++import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
+ 
+ /**
+  * Os três números do topo da lista de Leads, contados na ORGANIZAÇÃO inteira.
+@@ -26,16 +28,20 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
+  * via um mês diferente do que o resto do produto usa — o mesmo defeito de
+  * fronteira que já apareceu no card do Comando.
+  *
+- * ── POR QUE TRÊS QUERIES E NÃO UMA ────────────────────────────────────────
+- * São dois `head: true` com `count: exact`: o Postgres devolve só o número, sem
+- * linha. Uma RPC agregando os dois seria uma ida ao banco em vez de duas, mas
+- * exigiria migration e mais uma função `SECURITY DEFINER` com a superfície de
+- * ACL que este projeto já erra com frequência. Duas contagens paralelas em
+- * `staleTime` de um minuto custam menos do que essa dívida.
++ * ── POR QUE DUAS QUERIES E NÃO UMA RPC ────────────────────────────────────
++ * São duas contagens COM TETO (`select("id")` + `limit`, ver
++ * `lib/capped-count`) — até 2026-10-05 eram `count: exact`, que varre o recorte
++ * inteiro sob RLS e era o grosso do custo da tela. Uma RPC agregando as duas
++ * seria uma ida ao banco em vez de duas, mas exigiria migration e mais uma
++ * função `SECURITY DEFINER` com a superfície de ACL que este projeto já erra
++ * com frequência.
++ *
++ * Acima do teto o card não sabe o total — e não finge: `capped: true`, e quem
++ * desenha (`LeadsStatsV2`) não deriva nada por subtração de um valor cortado.
+  */
+ export interface LeadsStats {
+-  thisMonth: number;
+-  withOwner: number;
++  thisMonth: CappedCount;
++  withOwner: CappedCount;
+ }
+ 
+ /** Início do mês corrente no fuso informado, como instante UTC. */
+@@ -68,17 +74,16 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
+   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible } = filters;
+ 
+   return useQuery<LeadsStats>({
+-    queryKey: [
+-      "leads-stats", organizationId, timeZone,
++    queryKey: leadsKeys.stats(organizationId, timeZone, {
+       searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible,
+-    ],
++    }),
+     queryFn: async () => {
+-      if (!organizationId) return { thisMonth: 0, withOwner: 0 };
++      if (!organizationId) return { thisMonth: EMPTY_COUNT, withOwner: EMPTY_COUNT };
+ 
+       const base = () => {
+         const q = supabase
+           .from("leads")
+-          .select("*", { count: "exact", head: true })
++          .select("id")
+           .eq("organization_id", organizationId)
+           .is("deleted_at", null)
+           // Mesmo guard da lista (`applyLeadsFilters`): lead sombra não aparece
+@@ -101,18 +106,12 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
+ 
+       const inicioDoMes = monthStartInTz(timeZone).toISOString();
+ 
+-      const [mes, comDono] = await Promise.all([
+-        base().gte("created_at", inicioDoMes),
+-        base().not("responsible_id", "is", null),
++      const [thisMonth, withOwner] = await Promise.all([
++        runCappedCount(base().gte("created_at", inicioDoMes)),
++        runCappedCount(base().not("responsible_id", "is", null)),
+       ]);
+ 
+-      if (mes.error) throw mes.error;
+-      if (comDono.error) throw comDono.error;
+-
+-      return {
+-        thisMonth: mes.count ?? 0,
+-        withOwner: comDono.count ?? 0,
+-      };
++      return { thisMonth, withOwner };
+     },
+     enabled: isReady,
+     staleTime: 60000,
+diff --git a/classic/src/modules/leads/hooks/useRegisterHistoricalSales.ts b/classic/src/modules/leads/hooks/useRegisterHistoricalSales.ts
+index 983a5d070..231244d08 100644
+--- a/classic/src/modules/leads/hooks/useRegisterHistoricalSales.ts
++++ b/classic/src/modules/leads/hooks/useRegisterHistoricalSales.ts
+@@ -19,7 +19,7 @@ export function useRegisterHistoricalSales(leadId: string) {
+     },
+     onSuccess: async () => {
+       await Promise.all([
+-        "leads", "leads-count", "lead_by_id", "lead-detail", "lead-card-metrics", "leads-deals", "leads-reorder-cycle", "leads-carteira-metrics",
++        "leads", "lead_by_id", "lead-detail", "lead-card-metrics", "leads-deals", "leads-reorder-cycle", "leads-carteira-metrics",
+         "upsell-clients", "upsell-orders", "upsell_clients", "upsell_orders", "carteira_orders", "portfolio-clients", "portfolio-kpis",
+         "portfolio-trends", "lead-timeline", "leads-sales-metrics", "metrics-studio",
+       ].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+diff --git a/classic/src/modules/leads/lib/capped-count.ts b/classic/src/modules/leads/lib/capped-count.ts
+new file mode 100644
+index 000000000..8bead654d
+--- /dev/null
++++ b/classic/src/modules/leads/lib/capped-count.ts
+@@ -0,0 +1,118 @@
++/**
++ * Contagem de leads com TETO — no lugar de `count: "exact"`.
++ *
++ * ── POR QUÊ ───────────────────────────────────────────────────────────────
++ * `count: exact` faz o Postgres percorrer o recorte INTEIRO, avaliando a RLS
++ * de leads linha a linha, só para devolver um número. A tela pedia seis desses
++ * por aba aberta (total, quatro abas, dois cards — o total coincide com a aba
++ * ativa). Em 2026-10-05 isso era o grosso dos 60% do tempo do banco que a tela
++ * de Leads consumia, e o `statement_timeout` de 8 s + `retry: 1` fazia a
++ * contagem que estoura rodar duas vezes.
++ *
++ * Com teto, o banco para na milésima linha que casa. Abaixo do teto o número é
++ * exato; no teto a tela diz "1.000+" — que é o que ela precisa dizer: a aba
++ * com 12.686 leads e a com 1.001 pedem a mesma decisão de quem olha.
++ *
++ * Descartado: `count: "estimated"` (número do planejador; com RLS e `ilike` é
++ * ficção, e abaixo do limiar o PostgREST roda o exato do mesmo jeito).
++ *
++ * ── PRÉ-CONDIÇÃO ──────────────────────────────────────────────────────────
++ * O `max-rows` do PostgREST de prod precisa ser ≥ `LEADS_COUNT_CAP`. Se fosse
++ * 500, um recorte de 2.000 devolveria 500 linhas e a tela diria "500" —
++ * exato e errado. Evidência no repo de que é 1.000:
++ * `supabase/functions/toth-sync-cobrancas/index.ts` (`.limit(3000)` devolvia
++ * 1.000) e `src/modules/communication/lib/whatsappMessagesQuery.ts`
++ * (`max_rows` de prod = 1000). Subir o teto exige subir o `max-rows` junto.
++ *
++ * O teto sobe quando a RLS de leads reescrita entrar (trilha separada): o
++ * custo por linha cai e 1.000 deixa de ser o ponto certo.
++ */
++
++/** Uma constante só. Ver "PRÉ-CONDIÇÃO" acima antes de mudar. */
++export const LEADS_COUNT_CAP = 1000;
++
++export interface CappedCount {
++  /** Linhas contadas, no máximo `LEADS_COUNT_CAP`. */
++  value: number;
++  /** `true` = há pelo menos `LEADS_COUNT_CAP`; `value` é piso, não total. */
++  capped: boolean;
++}
++
++export const EMPTY_COUNT: CappedCount = { value: 0, capped: false };
++
++export function countFromRows(rows: number): CappedCount {
++  return rows >= LEADS_COUNT_CAP
++    ? { value: LEADS_COUNT_CAP, capped: true }
++    : { value: Math.max(0, rows), capped: false };
++}
++
++/** Fatia do builder postgrest que a contagem usa. */
++interface LimitableQuery {
++  limit(count: number): PromiseLike<{ data: unknown[] | null; error: unknown }>;
++}
++
++/**
++ * Executa a contagem com teto num builder já com `select("id")` e filtros.
++ * Sem `order`: a contagem não depende de ordem, e ordenar obrigaria o banco a
++ * ler o recorte inteiro antes de cortar — exatamente o que o teto evita.
++ */
++export async function runCappedCount(query: unknown): Promise<CappedCount> {
++  const { data, error } = await (query as LimitableQuery).limit(LEADS_COUNT_CAP);
++  if (error) throw error;
++  return countFromRows(data?.length ?? 0);
++}
++
++const nf = new Intl.NumberFormat("pt-BR");
++
++/** "1.000+" no teto, o número exato abaixo, "—" sem dado. */
++export function formatCappedCount(count: CappedCount | undefined): string {
++  if (!count) return "—";
++  return count.capped ? `${nf.format(count.value)}+` : nf.format(count.value);
++}
++
++/**
++ * O total que a tela pode afirmar, dada a página que está mostrando.
++ *
++ * Passado o teto usa o que a navegação já provou: página cheia diz "1.250+"
++ * (há pelo menos isso); página incompleta é o fim do recorte, e o total vira
++ * exato.
++ */
++export function knownTotalLabel(count: CappedCount, page: number, pageSize: number, shown: number): string {
++  if (!count.capped) return nf.format(count.value);
++  const to = page * pageSize + shown;
++  if (shown < pageSize && to >= count.value) return nf.format(to);
++  return `${nf.format(Math.max(count.value, to))}+`;
++}
++
++/** Rodapé da lista: "Mostrando 1–50 de 1.000+". */
++export function formatShownTotal(count: CappedCount, page: number, pageSize: number, shown: number): string {
++  const from = page * pageSize + 1;
++  const to = page * pageSize + shown;
++  return `Mostrando ${nf.format(from)}–${nf.format(to)} de ${knownTotalLabel(count, page, pageSize, shown)}`;
++}
++
++export interface CappedPagination {
++  /** Índice da última página com total EXATO; `null` no teto (fim ainda desconhecido). */
++  lastPage: number | null;
++  /** Há página depois desta? No teto, "esta página veio cheia". */
++  hasNext: boolean;
++}
++
++/**
++ * Paginação sobre contagem com teto. Total exato: há última página. No teto
++ * não há — segue-se enquanto a página vem cheia, e a navegação além da 20ª
++ * página continua possível.
++ */
++export function cappedPagination(
++  count: CappedCount | undefined,
++  page: number,
++  pageSize: number,
++  shown: number,
++): CappedPagination {
++  if (!count) return { lastPage: null, hasNext: false };
++  if (!count.capped) {
++    const lastPage = Math.max(0, Math.ceil(count.value / pageSize) - 1);
++    return { lastPage, hasNext: page < lastPage };
++  }
++  return { lastPage: null, hasNext: shown === pageSize };
++}
+diff --git a/classic/src/modules/leads/lib/lead-realtime-relevance.ts b/classic/src/modules/leads/lib/lead-realtime-relevance.ts
+new file mode 100644
+index 000000000..8f404b8a1
+--- /dev/null
++++ b/classic/src/modules/leads/lib/lead-realtime-relevance.ts
+@@ -0,0 +1,291 @@
++/**
++ * O que um evento realtime de `leads` muda NA TELA — classificador puro.
++ *
++ * ── POR QUE EXISTE ────────────────────────────────────────────────────────
++ * Antes, todo evento da org (e de deals, pipeline_entries, sale_events) fazia
++ * a lista + seis contagens irem ao banco. A maioria dos eventos não muda nada
++ * que esteja na tela: a nota de um lead da página 40, o `ai_disabled` que o
++ * Copilot acabou de virar, o `updated_at` de um lead fora do recorte.
++ *
++ * Veredito, do mais barato ao mais caro:
++ *   - `ignore`  — nada a fazer (id desconhecido num DELETE; outra org; nada
++ *                 mudou de fato);
++ *   - `patch`   — lead NA TELA, só colunas fora de recorte mudaram: aplica no
++ *                 cache, zero consulta;
++ *   - `counts`  — lead FORA da tela e provadamente depois da última linha da
++ *                 página: a página não muda; as contagens talvez;
++ *   - `remove`  — DELETE de lead que está em cache: tira e refaz;
++ *   - `refetch` — qualquer outro caso.
++ *
++ * Todo "pula" tem prova. Na dúvida, refaz — o erro caro aqui é o silencioso.
++ *
++ * ── O QUE O REALTIME ENTREGA (e o que não) ────────────────────────────────
++ * - `leads` tem REPLICA IDENTITY default: `old` traz só a PK. A comparação é
++ *   contra a linha EM CACHE, não contra `old`.
++ * - timestamptz chega como texto do Postgres ("2026-10-05 12:00:00.123+00"),
++ *   não no ISO do PostgREST ("…T12:00:00.123+00:00"): o realtime-js não
++ *   converte (transformers.js, `timestamptz` → noop). Comparar texto acusaria
++ *   mudança em toda linha; gravar o texto cru quebra `new Date()` no Safari.
++ *   Compara-se o instante, e grava-se normalizado.
++ * - valor TOASTado que não mudou pode vir nulo. Por isso não-nulo → nulo
++ *   nunca é patch: refaz.
++ * - DELETE não é filtrável por org no servidor. Só age sobre id que já está no
++ *   cache desta org.
++ *
++ * ── FORA DE ESCOPO, DE PROPÓSITO ──────────────────────────────────────────
++ * Avaliar o filtro no cliente para esconder/mostrar linha duplicaria a
++ * semântica do banco (`ilike`, RLS, campos calculados). Descartado.
++ */
++import type { LeadListSort } from "./lead-list-sort";
++
++/**
++ * Colunas que decidem QUEM está na lista, EM QUE ORDEM, ou o que vem embutido
++ * por join. Mudou uma delas → a linha pode sair, entrar ou mudar de lugar, ou
++ * o nome embutido ficou velho: refaz.
++ *
++ * Travado por teste (`tests/unit/lead-realtime-relevance.test.ts`) com um
++ * builder espião sobre `applyLeadListFilters` e `applyLeadListSort`: filtro
++ * novo cuja coluna não esteja aqui reprova o teste.
++ */
++export const LEAD_MEMBERSHIP_COLUMNS: ReadonlySet<string> = new Set([
++  // Tenancy, sombra e lixeira (guardas da lista e dos cards).
++  "id",
++  "organization_id",
++  "is_shadow",
++  "deleted_at",
++  // Ordem e janela de criação.
++  "created_at",
++  "name",
++  // Busca.
++  "company",
++  "email",
++  "phone",
++  "normalized_phone",
++  "erp_code",
++  // Filtros.
++  "origin",
++  "uf",
++  "qualification_tier",
++  "classificacao",
++  "relacao_negocios",
++  "cafe_jurere_erp_elegivel",
++  // Dono / atribuição — e as FKs dos joins embutidos na lista.
++  "responsible_id",
++  "pre_sale_responsible_id",
++  "sale_responsible_id",
++  "sdr_id",
++  "closer_id",
++]);
++
++/**
++ * Campos CALCULADOS do PostgREST usados como filtro, e as colunas de `leads`
++ * de que dependem. O que vem de outras tabelas (negócios, entradas de funil)
++ * não passa por aqui: chega por outra assinatura.
++ */
++export const LEAD_COMPUTED_FIELD_INPUTS: Readonly<Record<string, readonly string[]>> = {
++  visivel_lista_cafe_jurere: ["organization_id", "erp_code", "cafe_jurere_erp_elegivel"],
++  classificacao_cafe_jurere: ["organization_id", "erp_code", "id"],
++};
++
++/** Embutidos pela consulta da lista — o realtime não os traz e o patch não os toca. */
++const JOINED_FIELDS = new Set(["responsible", "sdr", "closer", "pre_sale_responsible", "sale_responsible", "lead_tags"]);
++
++/**
++ * De onde vem a coluna "Relação" da página:
++ *   - `relacao` — `leads.relacao_negocios` (gravada por trigger): é recorte;
++ *   - `erp` — a página não usa a relação (fica `undefined`);
++ *   - `cafe` — a página mostra `classificacao_cafe_jurere` no mesmo campo.
++ * Nos dois últimos o valor em cache NÃO é a coluna; comparar acusaria mudança
++ * falsa, e gravar trocaria o que a tela mostra.
++ */
++export type LeadRelacaoMode = "relacao" | "erp" | "cafe";
++
++export interface LeadEventContext {
++  organizationId: string | null | undefined;
++  /** A página que ESTA tela está mostrando (cache da chave ativa). */
++  rows: ReadonlyArray<Record<string, unknown>> | undefined;
++  pageSize: number;
++  sort: LeadListSort;
++  mode: LeadRelacaoMode;
++  /** O id está em alguma página em cache desta org? (decide o DELETE) */
++  isCached: (id: string) => boolean;
++}
++
++export type LeadEventVerdict =
++  | { kind: "ignore" }
++  | { kind: "patch"; id: string; changes: Record<string, unknown> }
++  | { kind: "counts" }
++  | { kind: "remove"; id: string }
++  | { kind: "refetch" };
++
++interface LeadRealtimePayload {
++  eventType: "INSERT" | "UPDATE" | "DELETE" | string;
++  new?: Record<string, unknown> | null;
++  old?: Record<string, unknown> | null;
++  errors?: unknown;
++}
++
++const IGNORE: LeadEventVerdict = { kind: "ignore" };
++const REFETCH: LeadEventVerdict = { kind: "refetch" };
++
++export function classifyLeadEvent(payload: LeadRealtimePayload, ctx: LeadEventContext): LeadEventVerdict {
++  if (payload.eventType === "DELETE") {
++    const id = payload.old?.id;
++    if (typeof id !== "string" || !ctx.isCached(id)) return IGNORE;
++    return { kind: "remove", id };
++  }
++  if (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE") return REFETCH;
++
++  const incoming = payload.new;
++  const id = incoming?.id;
++  if (!incoming || typeof id !== "string") return REFETCH;
++  // O servidor já filtra INSERT/UPDATE por org. Linha de outra org nunca vira
++  // patch — defesa em profundidade no único caminho que escreve no cache.
++  if (incoming.organization_id != null && incoming.organization_id !== ctx.organizationId) return IGNORE;
++  if (hasErrors(payload.errors)) return REFETCH;
++
++  const cached = ctx.rows?.find((row) => row.id === id);
++  if (cached) {
++    if (payload.eventType === "INSERT") return REFETCH;
++    return diffOnScreen(cached, incoming, ctx.mode);
++  }
++  return positionOffScreen(incoming, ctx);
++}
++
++function hasErrors(errors: unknown): boolean {
++  if (errors == null) return false;
++  return Array.isArray(errors) ? errors.length > 0 : true;
++}
++
++function diffOnScreen(
++  cached: Record<string, unknown>,
++  incoming: Record<string, unknown>,
++  mode: LeadRelacaoMode,
++): LeadEventVerdict {
++  const changes: Record<string, unknown> = {};
++  for (const [column, value] of Object.entries(incoming)) {
++    if (JOINED_FIELDS.has(column)) continue;
++    if (column === "relacao_negocios" && mode !== "relacao") continue;
++
++    const before = cached[column];
++    if (sameLeadValue(before, value)) continue;
++    if (LEAD_MEMBERSHIP_COLUMNS.has(column)) return REFETCH;
++    if (before != null && value == null) return REFETCH;
++    if (before != null && value != null && kindOf(before) !== kindOf(value)) return REFETCH;
++    changes[column] = typeof value === "string" ? normalizePgTimestamp(value) : value;
++  }
++  if (Object.keys(changes).length === 0) return IGNORE;
++  return { kind: "patch", id: String(incoming.id), changes };
++}
++
++function kindOf(value: unknown): string {
++  if (Array.isArray(value)) return "array";
++  return typeof value;
++}
++
++/**
++ * Lead fora da tela: a página só fica intacta se ele está ESTRITAMENTE depois
++ * da última linha — então nem entrar, nem sair, nem mudar de lugar mexe nela.
++ * Só ordem por data: ordem por nome depende da collation do Postgres, que o
++ * JS não reproduz.
++ */
++function positionOffScreen(incoming: Record<string, unknown>, ctx: LeadEventContext): LeadEventVerdict {
++  const rows = ctx.rows;
++  if (ctx.sort.key !== "created_at") return REFETCH;
++  if (!rows || rows.length < ctx.pageSize || rows.length === 0) return REFETCH;
++
++  const last = instantMs(rows[rows.length - 1].created_at);
++  const event = instantMs(incoming.created_at);
++  if (last === null || event === null) return REFETCH;
++  // Empate no milissegundo: o desempate real é no µs e depois por id — refaz.
++  const after = ctx.sort.direction === "desc" ? event < last : event > last;
++  return after ? { kind: "counts" } : REFETCH;
++}
++
++// ── Timestamps ─────────────────────────────────────────────────────────────
++
++const PG_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}(?::?\d{2})?)?$/;
++
++function normalizeOffset(tz: string | undefined): string {
++  if (!tz) return "";
++  if (tz === "Z") return "+00:00";
++  const sign = tz[0];
++  const digits = tz.slice(1).replace(":", "");
++  return `${sign}${digits.slice(0, 2)}:${(digits.slice(2) || "00").padEnd(2, "0")}`;
++}
++
++/**
++ * Texto de timestamp do Postgres → o formato do PostgREST, sem perder o µs
++ * (o `updated_at` do lock otimista compara por igualdade no banco). Qualquer
++ * outra string volta intacta.
++ */
++export function normalizePgTimestamp(value: string): string {
++  const m = PG_TIMESTAMP.exec(value);
++  if (!m) return value;
++  const [, date, time, fraction = "", tz] = m;
++  return `${date}T${time}${fraction}${normalizeOffset(tz)}`;
++}
++
++/** Instante com precisão de µs, como texto comparável; `null` se não é timestamp com fuso. */
++function instantKey(value: string): string | null {
++  const m = PG_TIMESTAMP.exec(value);
++  if (!m || !m[4]) return null;
++  const [, date, time, fraction = "", tz] = m;
++  const seconds = Date.parse(`${date}T${time}${normalizeOffset(tz)}`);
++  if (Number.isNaN(seconds)) return null;
++  return `${seconds}.${fraction.slice(1).padEnd(9, "0")}`;
++}
++
++function instantMs(value: unknown): number | null {
++  if (typeof value !== "string") return null;
++  const ms = Date.parse(normalizePgTimestamp(value));
++  return Number.isNaN(ms) ? null : ms;
++}
++
++// ── Igualdade por significado ──────────────────────────────────────────────
++
++/** Mesmo valor para a tela? Instante por instante; jsonb por conteúdo. */
++export function sameLeadValue(a: unknown, b: unknown): boolean {
++  if (a === b) return true;
++  if (a == null || b == null) return a == null && b == null;
++  if (typeof a === "string" && typeof b === "string") {
++    const ka = instantKey(a);
++    const kb = instantKey(b);
++    return ka !== null && ka === kb;
++  }
++  if (typeof a === "object" && typeof b === "object") return deepEqual(a, b);
++  return false;
++}
++
++function deepEqual(a: unknown, b: unknown): boolean {
++  if (a === b) return true;
++  if (a == null || b == null || typeof a !== "object" || typeof b !== "object") return false;
++  if (Array.isArray(a) !== Array.isArray(b)) return false;
++  if (Array.isArray(a)) {
++    const bb = b as unknown[];
++    return a.length === bb.length && a.every((v, i) => deepEqual(v, bb[i]));
++  }
++  const ao = a as Record<string, unknown>;
++  const bo = b as Record<string, unknown>;
++  const ak = Object.keys(ao);
++  if (ak.length !== Object.keys(bo).length) return false;
++  return ak.every((k) => Object.prototype.hasOwnProperty.call(bo, k) && deepEqual(ao[k], bo[k]));
++}
++
++// ── Aplicação no cache ─────────────────────────────────────────────────────
++
++/** Aplica as colunas mudadas na linha `id`; joins e relação ficam como estão. */
++export function applyLeadChanges<R extends { id?: unknown }>(
++  rows: R[],
++  id: string,
++  changes: Record<string, unknown>,
++): R[] {
++  if (!rows.some((row) => row.id === id)) return rows;
++  return rows.map((row) => (row.id === id ? { ...row, ...changes } : row));
++}
++
++/** Tira a linha `id` (DELETE de lead que estava na tela). */
++export function removeLead<R extends { id?: unknown }>(rows: R[], id: string): R[] {
++  if (!rows.some((row) => row.id === id)) return rows;
++  return rows.filter((row) => row.id !== id);
++}
+diff --git a/classic/src/modules/leads/lib/leads-query-keys.ts b/classic/src/modules/leads/lib/leads-query-keys.ts
+new file mode 100644
+index 000000000..3fb8a464f
+--- /dev/null
++++ b/classic/src/modules/leads/lib/leads-query-keys.ts
+@@ -0,0 +1,69 @@
++/**
++ * Chaves de cache da tela de Leads — aninhadas sob `["leads", …]`.
++ *
++ * Antes eram três raízes (`leads`, `leads-count`, `leads-stats`). Duas
++ * consequências que este arquivo desfaz:
++ *   - mutação que invalidava `["leads"]` não atualizava contagem nem card —
++ *     criar um lead deixava "Leads 123" na aba até o staleTime vencer;
++ *   - o realtime não tinha como dizer "a lista agora, a contagem quando ela
++ *     tiver um minuto": eram chaves sem parentesco.
++ *
++ * Hoje `["leads"]` cobre tudo (mutações), `["leads","list",org]` só as páginas,
++ * `["leads","count",org]` só as contagens, `["leads","stats",org]` só os cards.
++ *
++ * Módulo PURO. Os parâmetros são declarados aqui (e não importados de
++ * `hooks/useLeads`) para não criar ciclo lib → hooks.
++ */
++import type { LeadListSort } from "./lead-list-sort";
++
++export interface LeadsKeyFilters {
++  searchQuery?: string;
++  filterOrigin?: string;
++  filterQualification?: string;
++  filterClassificacao?: string;
++  usaLeiDoErp?: boolean;
++  usaCadastroErpCafeJurere?: boolean;
++  filterUf?: string;
++  createdFrom?: string;
++  createdTo?: string;
++  filterAssignment?: "all" | "unassigned";
++  filterResponsible?: string;
++}
++
++type Org = string | null | undefined;
++
++export const leadsKeys = {
++  all: ["leads"] as const,
++
++  lists: (org: Org) => ["leads", "list", org] as const,
++  /**
++   * Ordem e recorte entram na chave junto com filtros e página. Sem sort.*, o
++   * cache devolve a página da ordem antiga; sem filterAssignment, mistura
++   * "todos" com "sem responsável". Espalhados (e não como objeto) para a chave
++   * continuar legível no devtools.
++   */
++  list: (org: Org, page: number, f: LeadsKeyFilters, sort: LeadListSort) =>
++    [
++      "leads", "list", org, page,
++      f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
++      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
++      sort.key, sort.direction,
++    ] as const,
++
++  counts: (org: Org) => ["leads", "count", org] as const,
++  /** Sem ordem: contagem não depende dela, e incluí-la refaria o total a cada clique no cabeçalho. */
++  count: (org: Org, f: LeadsKeyFilters) =>
++    [
++      "leads", "count", org,
++      f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
++      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
++    ] as const,
++
++  allStats: (org: Org) => ["leads", "stats", org] as const,
++  stats: (org: Org, timeZone: string, f: Omit<LeadsKeyFilters, "filterAssignment">) =>
++    [
++      "leads", "stats", org, timeZone,
++      f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
++      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterResponsible,
++    ] as const,
++};
+diff --git a/classic/src/modules/leads/pages/Leads.tsx b/classic/src/modules/leads/pages/Leads.tsx
+index 224c7e9d4..5ecdb03a8 100644
+--- a/classic/src/modules/leads/pages/Leads.tsx
++++ b/classic/src/modules/leads/pages/Leads.tsx
+@@ -27,6 +27,7 @@ import {
+ } from "../components/leads/LeadListRow";
+ import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
+ import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
++import { EMPTY_COUNT, cappedPagination, formatCappedCount, knownTotalLabel } from "../lib/capped-count";
+ import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+ import { mergeDataMetrics } from "../lib/data-metrics";
+ import {
+@@ -360,8 +361,14 @@ function LeadsInner() {
+   const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
+   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
+   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
+-  const tabCounts: Record<string, number | undefined> = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
+-  const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
++  const tabCounts = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
++  /**
++   * Paginação sobre contagem COM TETO (`lib/capped-count`, 2026-10-05). Total
++   * exato: "página X de Y", como antes. No teto não há última página — segue-se
++   * enquanto a página vem cheia, e a navegação além da 20ª página continua.
++   */
++  const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
++  const totalPages = lastPage === null ? null : lastPage + 1;
+   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
+   const createLead = useCreateLead();
+   const updateLead = useUpdateLead();
+@@ -488,6 +495,17 @@ function LeadsInner() {
+     setPage(0);
+   }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
+ 
++  // Com a contagem no teto, "Próxima" vale enquanto a página vem cheia — então
++  // num recorte de exatamente N×50 leads a página seguinte chega vazia (e um
++  // lead apagado pode esvaziar a última). Página vazia depois da primeira não
++  // é estado útil: volta uma.
++  const leadsLoaded = leadsQuery.isSuccess && !leadsQuery.isFetching;
++  useEffect(() => {
++    if (!portfolioActive && page > 0 && leadsLoaded && loadedLeads.length === 0) {
++      setPage((p) => Math.max(0, p - 1));
++    }
++  }, [portfolioActive, page, leadsLoaded, loadedLeads.length]);
++
+   /**
+    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
+    *
+@@ -513,9 +531,9 @@ function LeadsInner() {
+   const [searchFocused, setSearchFocused] = useState(false);
+ 
+   const stats = useMemo(() => ({
+-    total: totalLeads ?? leads.length,
+-    thisMonth: orgStats?.thisMonth ?? 0,
+-    withSDR: orgStats?.withOwner ?? 0,
++    total: totalLeads ?? { value: leads.length, capped: false },
++    thisMonth: orgStats?.thisMonth ?? EMPTY_COUNT,
++    withSDR: orgStats?.withOwner ?? EMPTY_COUNT,
+   }), [totalLeads, leads.length, orgStats]);
+ 
+   const handleOpenDialog = (lead?: any) => {
+@@ -754,7 +772,7 @@ function LeadsInner() {
+             onClick={() => setFilterClassificacao(option.value)}
+             className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
+             {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
+-            <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
++            <span className="ml-2 text-xs tabular-nums opacity-80">{formatCappedCount(tabCounts[option.value])}</span>
+           </button>
+         ))}
+       </div>
+@@ -793,7 +811,7 @@ function LeadsInner() {
+           className="stat-card"
+         >
+           <p className="stat-card-label">Total de Leads</p>
+-          <p className="text-xl font-bold">{stats.total}</p>
++          <p className="text-xl font-bold">{formatCappedCount(stats.total)}</p>
+         </motion.div>
+         <motion.div
+           initial={{ opacity: 0, y: 10 }}
+@@ -802,7 +820,7 @@ function LeadsInner() {
+           className="stat-card"
+         >
+           <p className="stat-card-label">Este Mês</p>
+-          <p className="text-xl font-bold text-primary">{stats.thisMonth}</p>
++          <p className="text-xl font-bold text-primary">{formatCappedCount(stats.thisMonth)}</p>
+         </motion.div>
+         <motion.div
+           initial={{ opacity: 0, y: 10 }}
+@@ -811,7 +829,7 @@ function LeadsInner() {
+           className="stat-card"
+         >
+           <p className="stat-card-label">Com Responsável</p>
+-          <p className="text-xl font-bold text-success">{stats.withSDR}</p>
++          <p className="text-xl font-bold text-success">{formatCappedCount(stats.withSDR)}</p>
+         </motion.div>
+       </div>
+       )}
+@@ -912,8 +930,8 @@ function LeadsInner() {
+             )}
+             aria-hidden={searchFocused}
+           >
+-            {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
+-            {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
++            {formatCappedCount(totalLeads)} {!totalLeads.capped && totalLeads.value === 1 ? "lead" : "leads"}
++            {totalPages === null ? ` · página ${page + 1}` : totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
+           </span>
+         )}
+       </div>
+@@ -1127,10 +1145,10 @@ function LeadsInner() {
+         )}
+ 
+         {/* Paginação */}
+-        {totalPages > 1 && (
++        {totalLeads !== undefined && (page > 0 || hasNextPage) && (
+           <div className="flex items-center justify-between px-4 py-3 border-t">
+             <span className="text-sm text-muted-foreground">
+-              Página {page + 1} de {totalPages} ({totalLeads} leads)
++              Página {page + 1}{totalPages !== null && ` de ${totalPages}`} ({knownTotalLabel(totalLeads, page, LEADS_PAGE_SIZE, leads.length)} leads)
+             </span>
+             <div className="flex items-center gap-2">
+               <Button
+@@ -1144,8 +1162,8 @@ function LeadsInner() {
+               <Button
+                 variant="outline"
+                 size="sm"
+-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+-                disabled={page >= totalPages - 1}
++                onClick={() => setPage(p => (lastPage === null ? p + 1 : Math.min(lastPage, p + 1)))}
++                disabled={!hasNextPage}
+               >
+                 Próxima
+               </Button>
 diff --git a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx b/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
 index 29a8f6333..4e12316b6 100644
 --- a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
@@ -2732,10 +4090,28 @@ index e89899884..8f005cb28 100644
      staleTime: 60_000,
    });
 diff --git a/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts b/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
-index 553c6b025..17eb7e9ba 100644
+index 553c6b025..321c07129 100644
 --- a/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
 +++ b/classic/src/modules/pipelines/hooks/custom/useCustomPipelines.ts
-@@ -1030,6 +1030,72 @@ export function useAddLeadToCustomPipe() {
+@@ -315,10 +315,15 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
+   // virou view e view não emite postgres_changes (aliás, nunca esteve na
+   // publication: a subscription antiga era um no-op medido). Assinar a fonte
+   // cobre import-leads, mutations no UI, triggers do banco etc.
+-  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? "", organizationId ?? ""]);
++  //
++  // Alvo = a MESMA chave da query, aninhada. Plana, invalidava
++  // `["custom_pipe_entries"]` de todos os funis e depois `[pipelineId]` e
++  // `[org]`, que não casam com nada.
++  const entriesKey = ["custom_pipe_entries", pipelineId, organizationId] as const;
++  useRealtimeSubscription("pipeline_entries", [entriesKey]);
+ 
+   return useQuery({
+-    queryKey: ["custom_pipe_entries", pipelineId, organizationId],
++    queryKey: entriesKey,
+     queryFn: async () => {
+       if (!pipelineId || !organizationId) return [];
+ 
+@@ -1030,6 +1035,72 @@ export function useAddLeadToCustomPipe() {
    });
  }
  
@@ -2808,7 +4184,7 @@ index 553c6b025..17eb7e9ba 100644
  /** Mover lead entre etapas (drag-and-drop) */
  export function useMoveLeadInCustomPipe() {
    const queryClient = useQueryClient();
-@@ -1037,15 +1103,7 @@ export function useMoveLeadInCustomPipe() {
+@@ -1037,15 +1108,7 @@ export function useMoveLeadInCustomPipe() {
    const { data: teamMember } = useCurrentTeamMember();
  
    return useMutation({
@@ -2825,7 +4201,7 @@ index 553c6b025..17eb7e9ba 100644
        if (!teamMember?.organization_id) {
          throw new Error("Organização não encontrada");
        }
-@@ -1054,50 +1112,7 @@ export function useMoveLeadInCustomPipe() {
+@@ -1054,50 +1117,7 @@ export function useMoveLeadInCustomPipe() {
            ? "Permissões ainda carregando — tente novamente"
            : "Sem permissão para mover registros no pipe");
        }
@@ -3227,6 +4603,55 @@ index c8ab5e11b..ef60ec701 100644
      },
    });
  }
+diff --git a/classic/src/modules/pipelines/hooks/model/usePaginatedPipeline.ts b/classic/src/modules/pipelines/hooks/model/usePaginatedPipeline.ts
+index 2fdc549e0..e422a6d8d 100644
+--- a/classic/src/modules/pipelines/hooks/model/usePaginatedPipeline.ts
++++ b/classic/src/modules/pipelines/hooks/model/usePaginatedPipeline.ts
+@@ -236,11 +236,9 @@ export function usePaginatedPipeline(
+     return () => clearTimeout(debounceRef.current);
+   }, [filters.search]);
+ 
+-  useRealtimeSubscription("pipeline_entries", [
+-    "pipeline-page",
+-    slug,
+-    organizationId,
+-  ]);
++  // Alvo composto aninhado. A org NÃO entra: a chave real (useStageSlot) é
++  // `["pipeline-page", slug, stageKey, org, filtros]` — org na posição 3.
++  useRealtimeSubscription("pipeline_entries", [["pipeline-page", slug]]);
+ 
+   // Single source of truth for every server-side filter dimension. Computed
+   // once and shared by the counts query + all stage queries so the column
+diff --git a/classic/src/modules/pipelines/hooks/model/usePipelineEntries.ts b/classic/src/modules/pipelines/hooks/model/usePipelineEntries.ts
+index b654a848a..55d66b9f3 100644
+--- a/classic/src/modules/pipelines/hooks/model/usePipelineEntries.ts
++++ b/classic/src/modules/pipelines/hooks/model/usePipelineEntries.ts
+@@ -232,7 +232,10 @@ export function usePipelineEntries(slug: PipelineType) {
+   const { organizationId, isReady } = useOrganization();
+   const { data: pipelineId } = usePipelineId(slug);
+ 
+-  useRealtimeSubscription("pipeline_entries", ["pipeline_entries", slug, organizationId], realtimeHandlers);
++  // Alvo composto ANINHADO: este funil desta org. Plano (`["pipeline_entries",
++  // slug, org]`) invalidava `["pipeline_entries"]` inteiro e depois `[slug]` e
++  // `[org]`, que não casam com chave nenhuma.
++  useRealtimeSubscription("pipeline_entries", [["pipeline_entries", slug, organizationId]], realtimeHandlers);
+ 
+   return useQuery({
+     queryKey: ["pipeline_entries", slug, organizationId, pipelineId],
+diff --git a/classic/src/modules/pipelines/hooks/model/usePipelineStages.ts b/classic/src/modules/pipelines/hooks/model/usePipelineStages.ts
+index 19a8b0d8b..765d7777b 100644
+--- a/classic/src/modules/pipelines/hooks/model/usePipelineStages.ts
++++ b/classic/src/modules/pipelines/hooks/model/usePipelineStages.ts
+@@ -112,7 +112,8 @@ export function usePipelineStages(pipelineType: PipelineType) {
+   const { data: teamMember } = useCurrentTeamMember();
+   const organizationId = teamMember?.organization_id;
+ 
+-  useRealtimeSubscription("pipeline_stages", ["pipeline_stages", pipelineType]);
++  // Alvo composto aninhado: só as etapas deste funil (prefixo da chave abaixo).
++  useRealtimeSubscription("pipeline_stages", [["pipeline_stages", pipelineType]]);
+ 
+   return useQuery({
+     queryKey: ["pipeline_stages", pipelineType, organizationId],
 diff --git a/classic/src/modules/pipelines/lib/funil-move-cache.ts b/classic/src/modules/pipelines/lib/funil-move-cache.ts
 new file mode 100644
 index 000000000..f7bab77e6
@@ -4089,6 +5514,478 @@ index 000000000..8f41158f9
 +    isSaving: mutation.isPending,
 +  };
 +}
+diff --git a/classic/src/shared/realtime/invalidation-scheduler.ts b/classic/src/shared/realtime/invalidation-scheduler.ts
+new file mode 100644
+index 000000000..08849e788
+--- /dev/null
++++ b/classic/src/shared/realtime/invalidation-scheduler.ts
+@@ -0,0 +1,466 @@
++/**
++ * Agendador de invalidações vindas do realtime — UM por QueryClient.
++ *
++ * ── O PROBLEMA ────────────────────────────────────────────────────────────
++ * Em 2026-10-05 a tela de Leads respondia por 60% do tempo do banco de prod.
++ * Três causas, todas no cliente:
++ *   1. cada instância de `useRealtimeSubscription` invalidava por conta própria:
++ *      N abas/hooks no mesmo alvo = N refetches do mesmo evento;
++ *   2. `invalidateQueries` cancelava o fetch em voo e recomeçava
++ *      (`cancelRefetch: true` é o padrão do TanStack) — sob rajada, a mesma
++ *      consulta pesada era abortada e reiniciada em série;
++ *   3. não havia como dizer "esta contagem pode esperar um minuto".
++ *
++ * ── O QUE ESTE MÓDULO FAZ ─────────────────────────────────────────────────
++ * O hook continua dono do QUANDO (debounce + stagger, exatamente como antes).
++ * Este módulo decide o SE, no instante do disparo, alvo a alvo:
++ *
++ *   - **frescor por query**: todo fetch ganha, ao COMEÇAR, um número de
++ *     sequência (ouvido no QueryCache); o número só vira frescor quando o
++ *     RESULTADO desse fetch chega (`success`). Um pedido de invalidação
++ *     carrega a sequência do evento que o motivou: query cujo resultado em
++ *     cache veio de um fetch que começou DEPOIS do evento já reflete o evento
++ *     e não é refeita. É isto que coalesce duas instâncias no mesmo alvo, e
++ *     também absorve o refetch que uma mutação acabou de fazer.
++ *     Não contam: `fetchNextPage`/`fetchPreviousPage` (só buscam a página
++ *     nova — as do cache ficam com o retrato antigo), fetch que falhou ou foi
++ *     cancelado com `revert` (o cache voltou ao que era) e `setQueryData`
++ *     (não é retrato do banco);
++ *   - **fetch em voo**: se a query está buscando, refazer agora seria cancelar
++ *     (padrão) ou deduplicar contra um resultado que pode ser velho
++ *     (`cancelRefetch: false`). O pedido espera o QueryCache avisar que o
++ *     fetch terminou e decide de novo NA HORA — sem relógio de re-tentativa;
++ *   - **opt-in `minAgeMs`** (por alvo): query mais nova que isso espera
++ *     completar a idade — e então refaz UMA vez. Throttle, não descarte: a
++ *     contagem fica no máximo `minAgeMs` atrasada, nunca para sempre;
++ *   - **opt-in `whenHidden: "defer"`**: com a aba oculta o pedido fica
++ *     guardado; um único listener de `visibilitychange` (vivo só enquanto há
++ *     pedido guardado) dispara tudo ao voltar. O padrão é `"flush"`, que é o
++ *     comportamento de sempre: aba oculta também refaz.
++ *
++ * Toda invalidação sai com `refetchType: "active"` e `cancelRefetch: false`.
++ *
++ * ── CICLO DE VIDA ─────────────────────────────────────────────────────────
++ * O agendador ouve o QueryCache enquanto alguém precisa dele: há hook montado
++ * (`retainInvalidationScheduler`) OU pedido pendente. Sem nenhum dos dois, a
++ * inscrição no cache sai e o estado vai junto — desmontar a última tela com
++ * realtime não deixa listener, timer nem `visibilitychange` para trás.
++ * Frescor perdido nesse meio-tempo é o caso conservador: query sem registro
++ * conta como velha e é refeita.
++ *
++ * ── ENTREGAS (recuperação no SUBSCRIBED) ──────────────────────────────────
++ * O agendador guarda, por canal lógico (tabela + filtro), a sequência da
++ * última entrega a QUALQUER instância (`recordRealtimeDelivery`). Quem fica
++ * SUBSCRIBED pela primeira vez compara com o instante em que começou a entrar
++ * (`lastRealtimeDelivery`): se outro canal físico com a mesma tabela + filtro
++ * recebeu evento nesse vão, este perdeu. Com o canal compartilhado por chave
++ * (`realtimeChannelRegistry`), instâncias de `useRealtimeSubscription` com a
++ * mesma tabela + filtro estão no MESMO canal físico — quem entra num canal
++ * ainda "joining" entra com todos, e ninguém recebe nada antes do SUBSCRIBED:
++ * a comparação dá 0. Ela fica como guarda para canais físicos distintos na
++ * mesma chave lógica (configuração de canal diferente).
++ *
++ * Uma entrega = UM registro, com UMA sequência: o canal compartilhado entrega
++ * o MESMO objeto de evento a N instâncias, e as N recebem a mesma sequência
++ * (a do instante em que o evento chegou à aba). Vive e morre com o resto do
++ * estado: sem hook montado, sem registro.
++ *
++ * ── O QUE NÃO MUDA ────────────────────────────────────────────────────────
++ * Nada aqui toca o transporte (`useRealtimeChannel`), o filtro de org nem a
++ * lista de tabelas sem `organization_id`. Este módulo só vê o cache.
++ *
++ * Sem import de VALOR de `@tanstack/react-query`: dezenas de testes do repo
++ * dublam o pacote por lista de exports, e um `hashKey` importado aqui
++ * quebraria todos eles em silêncio. O hash é o mesmo algoritmo do TanStack
++ * (JSON com chaves de objeto ordenadas).
++ */
++import type { Query, QueryCacheNotifyEvent, QueryClient, QueryKey } from "@tanstack/react-query";
++
++/**
++ * Um alvo de invalidação.
++ *   - `"leads"` ≡ `["leads"]` — a forma legada; uma string é UM segmento.
++ *   - `["pipeline_entries", slug, org]` — prefixo composto.
++ *   - `{ queryKey, minAgeMs }` — prefixo com idade mínima (opt-in).
++ */
++export type InvalidationTarget =
++  | string
++  | QueryKey
++  | { readonly queryKey: QueryKey; readonly minAgeMs?: number };
++
++export type WhenHidden = "flush" | "defer";
++
++export interface NormalizedTarget {
++  readonly queryKey: QueryKey;
++  readonly minAgeMs: number;
++  readonly hash: string;
++}
++
++/** Mesmo algoritmo de `hashKey` do TanStack: objetos com chaves ordenadas. */
++export function hashTargetKey(queryKey: QueryKey): string {
++  return JSON.stringify(queryKey, (_, val) =>
++    val && typeof val === "object" && !Array.isArray(val)
++      ? Object.keys(val)
++          .sort()
++          .reduce<Record<string, unknown>>((acc, k) => {
++            acc[k] = (val as Record<string, unknown>)[k];
++            return acc;
++          }, {})
++      : val,
++  );
++}
++
++export function normalizeTarget(target: InvalidationTarget): NormalizedTarget {
++  if (typeof target === "string") {
++    const queryKey = [target] as const;
++    return { queryKey, minAgeMs: 0, hash: hashTargetKey(queryKey) };
++  }
++  if (Array.isArray(target)) {
++    return { queryKey: target, minAgeMs: 0, hash: hashTargetKey(target) };
++  }
++  const { queryKey, minAgeMs = 0 } = target as { queryKey: QueryKey; minAgeMs?: number };
++  return { queryKey, minAgeMs: Math.max(0, minAgeMs), hash: hashTargetKey(queryKey) };
++}
++
++/**
++ * Relógio lógico compartilhado por eventos e fetches. Sequência, e não
++ * `Date.now()`: um fetch e um evento no mesmo milissegundo seriam empate, e
++ * empate aqui decide se uma mudança aparece ou some.
++ *
++ * O registro do início do fetch é SÍNCRONO com o dispatch do TanStack (o
++ * `QueryCache.notify` chama os listeners dentro do `batch`, sem agendar), então
++ * nenhum evento do realtime cabe entre o fetch sair e o número ser tirado.
++ */
++let sequence = 0;
++export function nextRealtimeSeq(): number {
++  sequence += 1;
++  return sequence;
++}
++
++export interface InvalidationRequest {
++  /** Sequência do evento mais recente que motivou o pedido. */
++  readonly eventSeq: number;
++  readonly whenHidden: WhenHidden;
++}
++
++interface Entry {
++  readonly queryKey: QueryKey;
++  readonly hash: string;
++  minAgeMs: number;
++  pendingSeq: number;
++  flushWhenHidden: boolean;
++  timer: ReturnType<typeof setTimeout> | null;
++  /** Queries com fetch em voo que este pedido espera terminar. */
++  readonly waitingOn: Set<Query>;
++}
++
++interface ClientScheduler {
++  readonly client: QueryClient;
++  readonly entries: Map<string, Entry>;
++  /** Sequência do INÍCIO do fetch cujo resultado está no cache (ou da invalidação de query inativa). */
++  readonly freshSince: WeakMap<Query, number>;
++  /** Sequência do início do fetch em voo — vira frescor só no `success`. */
++  readonly fetchStart: WeakMap<Query, number>;
++  /** Pedidos esperando o fetch em voo de cada query terminar. */
++  readonly waitingFetch: Map<Query, Set<Entry>>;
++  readonly waitingVisible: Set<Entry>;
++  /** Última entrega de evento, por canal lógico (tabela + filtro): o objeto e a sequência dele. */
++  readonly delivered: Map<string, { readonly event: object; readonly seq: number }>;
++  onVisibility: (() => void) | null;
++  /** Hooks montados que dependem deste agendador. */
++  holders: number;
++  readonly unsubscribe: () => void;
++}
++
++const schedulers = new WeakMap<QueryClient, ClientScheduler>();
++
++function isDocumentHidden(): boolean {
++  return typeof document !== "undefined" && document.visibilityState === "hidden";
++}
++
++/**
++ * Prende o agendador do client enquanto o chamador estiver montado; devolve a
++ * soltura. `useRealtimeSubscription` chama num layout effect — antes de
++ * qualquer effect passivo, onde as queries da mesma tela disparam o fetch
++ * inicial —, para que esses fetches já fiquem registrados.
++ */
++export function retainInvalidationScheduler(client: QueryClient): () => void {
++  const scheduler = getScheduler(client);
++  scheduler.holders += 1;
++  let released = false;
++  return () => {
++    if (released) return;
++    released = true;
++    scheduler.holders -= 1;
++    disposeIfIdle(scheduler);
++  };
++}
++
++function getScheduler(client: QueryClient): ClientScheduler {
++  const existing = schedulers.get(client);
++  if (existing) return existing;
++
++  const freshSince = new WeakMap<Query, number>();
++  const fetchStart = new WeakMap<Query, number>();
++  const waitingFetch = new Map<Query, Set<Entry>>();
++
++  const onCacheEvent = (event: QueryCacheNotifyEvent) => {
++    const { query } = event;
++    if (event.type === "removed") {
++      fetchStart.delete(query);
++      wake(scheduler, query);
++      return;
++    }
++    if (event.type !== "updated") return;
++    const { action } = event;
++    if (action.type === "fetch") {
++      // `fetchNextPage`/`fetchPreviousPage` só buscam a página nova: as que já
++      // estão no cache continuam com o retrato antigo.
++      if (action.meta?.fetchMore) fetchStart.delete(query);
++      else fetchStart.set(query, nextRealtimeSeq());
++      return;
++    }
++    if (action.type === "success" && !action.manual) {
++      const start = fetchStart.get(query);
++      if (start !== undefined && start > (freshSince.get(query) ?? 0)) freshSince.set(query, start);
++    }
++    // Terminou — com resultado, erro, cancelamento com revert ou reset. Sem
++    // `success` não-manual antes, nada virou frescor.
++    if (query.state.fetchStatus === "idle") {
++      fetchStart.delete(query);
++      wake(scheduler, query);
++    }
++  };
++
++  const scheduler: ClientScheduler = {
++    client,
++    entries: new Map(),
++    freshSince,
++    fetchStart,
++    waitingFetch,
++    waitingVisible: new Set(),
++    delivered: new Map(),
++    onVisibility: null,
++    holders: 0,
++    unsubscribe: client.getQueryCache().subscribe(onCacheEvent),
++  };
++  schedulers.set(client, scheduler);
++  return scheduler;
++}
++
++function disposeIfIdle(scheduler: ClientScheduler): void {
++  if (scheduler.holders > 0 || scheduler.entries.size > 0) return;
++  scheduler.unsubscribe();
++  detach(scheduler);
++  if (schedulers.get(scheduler.client) === scheduler) schedulers.delete(scheduler.client);
++}
++
++/**
++ * Pede a invalidação de um alvo. Idempotente por evento: pedir duas vezes pelo
++ * mesmo evento (duas instâncias, dois canais) invalida uma.
++ */
++export function requestInvalidation(
++  client: QueryClient,
++  target: NormalizedTarget,
++  request: InvalidationRequest,
++): void {
++  const scheduler = getScheduler(client);
++  let entry = scheduler.entries.get(target.hash);
++  if (!entry) {
++    entry = {
++      queryKey: target.queryKey,
++      hash: target.hash,
++      minAgeMs: target.minAgeMs,
++      pendingSeq: 0,
++      flushWhenHidden: false,
++      timer: null,
++      waitingOn: new Set(),
++    };
++    scheduler.entries.set(target.hash, entry);
++  } else {
++    // Pedidos diferentes no mesmo alvo: vence o mais ansioso. Quem não fez
++    // opt-in nunca fica mais lento por causa de quem fez.
++    entry.minAgeMs = Math.min(entry.minAgeMs, target.minAgeMs);
++  }
++  entry.pendingSeq = Math.max(entry.pendingSeq, request.eventSeq);
++  if (request.whenHidden === "flush") entry.flushWhenHidden = true;
++  attempt(scheduler, entry);
++}
++
++/**
++ * Invalida a chave EXATA levando em conta o fetch em voo, sem debounce — para
++ * quem já decidiu que ela está velha. Ociosa: marcada já (ativa refaz,
++ * inativa só busca ao voltar). Buscando: o retrato dela é de antes de agora e
++ * o sucesso do TanStack zeraria a marca; espera terminar e só então decide.
++ */
++export function invalidateOnceSettled(client: QueryClient, queryKey: QueryKey, whenHidden: WhenHidden = "flush"): void {
++  requestInvalidation(client, normalizeTarget(queryKey), { eventSeq: nextRealtimeSeq(), whenHidden });
++}
++
++/**
++ * Registra que `event`, do canal lógico `channelKey` (tabela + filtro), foi
++ * entregue a uma instância agora, e devolve a sequência DO EVENTO — use-a
++ * como `eventSeq` do pedido. Só anota; não invalida nada.
++ *
++ * O canal compartilhado entrega o mesmo objeto, em sequência síncrona, a
++ * cada instância: a 2ª..N-ésima entrega do mesmo objeto devolve a sequência
++ * da 1ª e não gera registro novo. Fetch que começou depois da 1ª entrega já
++ * vê o commit (o evento só sai do banco depois dele).
++ *
++ * Sem agendador vivo (nenhum hook montado) não há quem vá perguntar: não
++ * anota, só numera.
++ */
++export function recordRealtimeDelivery(client: QueryClient, channelKey: string, event: object): number {
++  const scheduler = schedulers.get(client);
++  if (!scheduler) return nextRealtimeSeq();
++  const last = scheduler.delivered.get(channelKey);
++  if (last?.event === event) return last.seq;
++  const seq = nextRealtimeSeq();
++  scheduler.delivered.set(channelKey, { event, seq });
++  return seq;
++}
++
++/** Sequência da última entrega em `channelKey` (0 = nenhuma desde que o agendador nasceu). */
++export function lastRealtimeDelivery(client: QueryClient, channelKey: string): number {
++  return schedulers.get(client)?.delivered.get(channelKey)?.seq ?? 0;
++}
++
++function clearTimer(entry: Entry): void {
++  if (entry.timer) clearTimeout(entry.timer);
++  entry.timer = null;
++}
++
++function settle(scheduler: ClientScheduler, entry: Entry): void {
++  clearTimer(entry);
++  unwaitFetch(scheduler, entry);
++  scheduler.entries.delete(entry.hash);
++  unwatchVisibility(scheduler, entry);
++  disposeIfIdle(scheduler);
++}
++
++function attempt(scheduler: ClientScheduler, entry: Entry): void {
++  clearTimer(entry);
++  unwaitFetch(scheduler, entry);
++
++  const { client, freshSince } = scheduler;
++  const queries = client.getQueryCache().findAll({ queryKey: entry.queryKey });
++  // Só o que ainda NÃO viu o evento. Resultado de fetch que começou depois dele já está certo.
++  const stale = queries.filter((q) => (freshSince.get(q) ?? 0) <= entry.pendingSeq);
++  if (stale.length === 0) {
++    settle(scheduler, entry);
++    return;
++  }
++
++  if (!entry.flushWhenHidden && isDocumentHidden()) {
++    watchVisibility(scheduler, entry);
++    return;
++  }
++  unwatchVisibility(scheduler, entry);
++
++  const now = Date.now();
++  const ready: Query[] = [];
++  const inFlight: Query[] = [];
++  let wait = Number.POSITIVE_INFINITY;
++  for (const q of stale) {
++    // `paused` (offline) também: o fetch pausado retoma com o retrato de antes.
++    if (q.state.fetchStatus !== "idle") {
++      inFlight.push(q);
++      continue;
++    }
++    const updatedAt = q.state.dataUpdatedAt;
++    if (entry.minAgeMs > 0 && updatedAt > 0 && now - updatedAt < entry.minAgeMs) {
++      wait = Math.min(wait, updatedAt + entry.minAgeMs - now);
++      continue;
++    }
++    ready.push(q);
++  }
++
++  if (ready.length > 0) {
++    const batch = new Set(ready);
++    // Inativa não busca agora (só fica inválida e busca ao montar): o pedido
++    // já a serve, e ela não pode ser re-invalidada por este mesmo evento.
++    // Ativa só conta como servida quando o fetch que isto dispara CHEGAR.
++    const seq = nextRealtimeSeq();
++    for (const q of ready) if (!q.isActive()) freshSince.set(q, seq);
++    void client.invalidateQueries(
++      { queryKey: entry.queryKey, refetchType: "active", predicate: (q) => batch.has(q) },
++      { cancelRefetch: false },
++    );
++  }
++
++  for (const q of inFlight) waitFetch(scheduler, entry, q);
++  if (wait !== Number.POSITIVE_INFINITY) {
++    entry.timer = setTimeout(() => {
++      entry.timer = null;
++      attempt(scheduler, entry);
++    }, Math.max(0, wait));
++  }
++  if (inFlight.length === 0 && wait === Number.POSITIVE_INFINITY) settle(scheduler, entry);
++}
++
++function waitFetch(scheduler: ClientScheduler, entry: Entry, query: Query): void {
++  let waiting = scheduler.waitingFetch.get(query);
++  if (!waiting) {
++    waiting = new Set();
++    scheduler.waitingFetch.set(query, waiting);
++  }
++  waiting.add(entry);
++  entry.waitingOn.add(query);
++}
++
++function unwaitFetch(scheduler: ClientScheduler, entry: Entry): void {
++  for (const query of entry.waitingOn) {
++    const waiting = scheduler.waitingFetch.get(query);
++    if (!waiting) continue;
++    waiting.delete(entry);
++    if (waiting.size === 0) scheduler.waitingFetch.delete(query);
++  }
++  entry.waitingOn.clear();
++}
++
++/** O fetch em voo de `query` terminou: quem esperava por ele decide de novo. */
++function wake(scheduler: ClientScheduler, query: Query): void {
++  const waiting = scheduler.waitingFetch.get(query);
++  if (!waiting) return;
++  scheduler.waitingFetch.delete(query);
++  for (const entry of waiting) {
++    entry.waitingOn.delete(query);
++    // Fora do dispatch do TanStack: refazer aqui dentro reentraria no fetch
++    // que acabou de terminar, antes de ele fechar o próprio ciclo.
++    clearTimer(entry);
++    entry.timer = setTimeout(() => {
++      entry.timer = null;
++      attempt(scheduler, entry);
++    }, 0);
++  }
++}
++
++function watchVisibility(scheduler: ClientScheduler, entry: Entry): void {
++  scheduler.waitingVisible.add(entry);
++  if (scheduler.onVisibility || typeof document === "undefined") return;
++  const onVisibility = () => {
++    if (isDocumentHidden()) return;
++    const waiting = [...scheduler.waitingVisible];
++    scheduler.waitingVisible.clear();
++    detach(scheduler);
++    for (const e of waiting) attempt(scheduler, e);
++  };
++  scheduler.onVisibility = onVisibility;
++  document.addEventListener("visibilitychange", onVisibility);
++}
++
++function unwatchVisibility(scheduler: ClientScheduler, entry: Entry): void {
++  if (!scheduler.waitingVisible.delete(entry)) return;
++  if (scheduler.waitingVisible.size === 0) detach(scheduler);
++}
++
++function detach(scheduler: ClientScheduler): void {
++  if (scheduler.onVisibility && typeof document !== "undefined") {
++    document.removeEventListener("visibilitychange", scheduler.onVisibility);
++  }
++  scheduler.onVisibility = null;
++}
++
++/** A aba está oculta agora? Exposto para o hook decidir o atalho do "defer". */
++export function isRealtimeTabHidden(): boolean {
++  return isDocumentHidden();
++}
 diff --git a/classic/src/shared/realtime/realtimeChannelRegistry.ts b/classic/src/shared/realtime/realtimeChannelRegistry.ts
 new file mode 100644
 index 000000000..df769dace
@@ -4421,13 +6318,14 @@ index 000000000..df769dace
 +  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.subscribers.size, state: e.state }));
 +}
 diff --git a/classic/src/shared/realtime/useRealtimeChannel.ts b/classic/src/shared/realtime/useRealtimeChannel.ts
-index 7085a68c6..d24f2851d 100644
+index 7085a68c6..3c8259caf 100644
 --- a/classic/src/shared/realtime/useRealtimeChannel.ts
 +++ b/classic/src/shared/realtime/useRealtimeChannel.ts
-@@ -1,12 +1,10 @@
+@@ -1,12 +1,11 @@
  import { useEffect, useRef, useState, useCallback } from "react";
 -import { supabase } from "@/integrations/supabase/client";
  import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
++import { reportError, toAppError } from "@/shared/errors";
  import {
 -  setChannelState,
 -  incrementFailures,
@@ -4441,7 +6339,37 @@ index 7085a68c6..d24f2851d 100644
  
  // ─── Types ────────────────────────────────────────────────────────────────────
  
-@@ -32,7 +30,7 @@ export interface UseRealtimeChannelOptions {
+@@ -23,16 +22,37 @@ export interface DiagnosticEvent {
+   error?: string;
+ }
+ 
++/**
++ * Uma transição do canal vista por ESTA instância, entregue na hora (sem
++ * esperar render) e na ordem exata em relação aos eventos.
++ */
++export interface ChannelStateChange {
++  state: Exclude<ChannelState, "idle">;
++  /** Falhas seguidas do canal; zera no SUBSCRIBED. `joining` com falhas = voltando de queda. */
++  failureCount: number;
++  /**
++   * Primeira transição depois de entrar no canal (montagem, troca de chave,
++   * religar): o estado em que esta instância ENCONTROU o canal compartilhado —
++   * `joined` se outra instância já o tinha aberto.
++   */
++  initial: boolean;
++}
++
+ export interface UseRealtimeChannelOptions {
+   table: string;
+   filter?: string;
+   onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
++  /**
++   * Lido por ref: trocar a função a cada render não reabre o canal. Se lançar,
++   * o erro é relatado e o canal segue (os outros assinantes e a reconexão).
++   */
++  onStateChange?: (change: ChannelStateChange) => void;
+   circuitBreaker?: {
+     threshold?: number;   // default: 5
      cooldownMs?: number;  // default: 120_000
    };
    enabled?: boolean;      // default: true
@@ -4450,7 +6378,7 @@ index 7085a68c6..d24f2851d 100644
  }
  
  export interface UseRealtimeChannelResult {
-@@ -45,12 +43,17 @@ export interface UseRealtimeChannelResult {
+@@ -45,12 +65,21 @@ export interface UseRealtimeChannelResult {
  const DEFAULT_THRESHOLD = 5;
  const DEFAULT_COOLDOWN_MS = 120_000;
  const MAX_DIAGNOSTICS = 50;
@@ -4467,11 +6395,15 @@ index 7085a68c6..d24f2851d 100644
 + * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
 + * servidor; cada hook recebe todos os eventos e espelha o estado do canal
 + * (`state`, `diagnostics`). O último a desmontar fecha o canal.
++ *
++ * `state` é o do RENDER: entrar num canal já `joined` vindo de outro `joined`
++ * (troca de chave) não muda o valor e não re-renderiza. Quem precisa de cada
++ * transição — inclusive a de entrada — usa `onStateChange`.
 + */
  export function useRealtimeChannel(
    options: UseRealtimeChannelOptions
  ): UseRealtimeChannelResult {
-@@ -62,207 +65,78 @@ export function useRealtimeChannel(
+@@ -62,207 +91,96 @@ export function useRealtimeChannel(
    const [state, setState] = useState<ChannelState>("idle");
    const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
  
@@ -4479,10 +6411,12 @@ index 7085a68c6..d24f2851d 100644
 -  const channelNameRef = useRef("");
    const onEventRef = useRef(onEvent);
    onEventRef.current = onEvent;
- 
+-
 -  // reconnectEpoch — increment to force re-subscribe via useEffect dependency
 -  const [reconnectEpoch, setReconnectEpoch] = useState(0);
--
++  const onStateChangeRef = useRef(options.onStateChange);
++  onStateChangeRef.current = options.onStateChange;
+ 
    // Track state in ref for event listeners (avoids stale closure)
    const stateRef = useRef<ChannelState>(state);
    stateRef.current = state;
@@ -4658,15 +6592,30 @@ index 7085a68c6..d24f2851d 100644
 -            setState("errored");
 -            stateRef.current = "errored";
 -            scheduleBackoff(failureCountRef.current);
--          }
--        }
--      });
++    // A 1ª transição chega DENTRO do acquire (canal novo: "joining"; canal já
++    // aberto por outra instância: o estado dele) — por isso a marca é local.
++    let initial = true;
 +    const handle = acquireRealtimeChannel(
 +      { table, filter, event: "*", threshold, cooldownMs },
 +      {
 +        statusKey,
 +        onEvent: (payload) => onEventRef.current(payload),
-+        onTransition: applyTransition,
++        onTransition: (t) => {
++          applyTransition(t);
++          const first = initial;
++          initial = false;
++          // Roda dentro do laço que notifica TODOS os assinantes do canal, e o
++          // registry só arma o backoff/sonda depois dele: um consumidor que
++          // lança aqui deixaria o canal compartilhado caído para sempre, para
++          // todos. Isolado e relatado (ADR-0038), não relançado.
++          try {
++            onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
++          } catch (error) {
++            reportError(toAppError(error), { source: "realtime", feature: "onStateChange", table });
+           }
+-        }
+-      });
++        },
 +      }
 +    );
 +    handleRef.current = handle;
@@ -4707,7 +6656,7 @@ index 7085a68c6..d24f2851d 100644
      };
  
      document.addEventListener("visibilitychange", handleVisibilityChange);
-@@ -272,17 +146,7 @@ export function useRealtimeChannel(
+@@ -272,17 +190,7 @@ export function useRealtimeChannel(
        document.removeEventListener("visibilitychange", handleVisibilityChange);
        window.removeEventListener("online", handleOnline);
      };
@@ -4746,6 +6695,420 @@ index e320d9506..339917e96 100644
 -  const channelName = organizationId ? `whatsapp-messages-patched-${organizationId}` : null;
 +  const channelName = organizationId ? whatsAppRealtimeStatusKey(organizationId) : null;
    return useRealtimeChannelStatus(channelName);
+ }
+diff --git a/classic/src/shared/realtime/useRealtimeSubscription.ts b/classic/src/shared/realtime/useRealtimeSubscription.ts
+index 36b59b87c..7b9de99d3 100644
+--- a/classic/src/shared/realtime/useRealtimeSubscription.ts
++++ b/classic/src/shared/realtime/useRealtimeSubscription.ts
+@@ -1,15 +1,36 @@
+-import { useRef, useCallback } from "react";
++import { useRef, useCallback, useLayoutEffect } from "react";
+ import { useQueryClient } from "@tanstack/react-query";
+ import { useRealtimeOrgId } from "./realtime-org-context";
+-import { useRealtimeChannel } from "./useRealtimeChannel";
++import { useRealtimeChannel, type ChannelStateChange } from "./useRealtimeChannel";
++import {
++  isRealtimeTabHidden,
++  lastRealtimeDelivery,
++  nextRealtimeSeq,
++  normalizeTarget,
++  recordRealtimeDelivery,
++  requestInvalidation,
++  retainInvalidationScheduler,
++  type InvalidationTarget,
++  type NormalizedTarget,
++  type WhenHidden,
++} from "./invalidation-scheduler";
+ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+ 
++export type { InvalidationTarget, WhenHidden } from "./invalidation-scheduler";
++
+ /**
+  * Debounce de 2 segundos para evitar cascade de invalidações
+  * quando múltiplas mudanças chegam em sequência (ex: bulk update de leads)
+  */
+ const DEBOUNCE_MS = 2000;
+ 
++/**
++ * Atraso dos alvos depois do primeiro (`targets[1..]`). Fixo em 2 s, como
++ * sempre foi — `useSocialRealtime` documenta e depende disso (lista primeiro,
++ * thread depois).
++ */
++const STAGGER_MS = 2000;
++
+ /**
+  * Tabelas que NÃO têm coluna organization_id — usam wildcard.
+  * Todas as outras são filtradas por org_id para reduzir ~80% do tráfego realtime.
+@@ -43,97 +64,315 @@ export interface RealtimeHandlers<T = any> {
+    * Called on UPDATE events. Receives the updated record (flat, no joins)
+    * and the current cached data. Return the new cache value.
+    * When provided, avoids full invalidation for updates.
++   * Aplicado ao prefixo do PRIMEIRO alvo.
+    */
+   onUpdate?: (updatedRecord: T, oldData: T[]) => T[];
+   /**
+    * Called on DELETE events. Receives the old record and current cached data.
+    * Return the new cache value.
++   * Aplicado ao prefixo do PRIMEIRO alvo.
+    */
+   onDelete?: (deletedRecord: T, oldData: T[]) => T[];
+ }
+ 
++/**
++ * O que fazer com um evento, decidido por quem conhece a tela:
++ *   - `"skip"`: nada a invalidar (o chamador pode ter feito patch no cache);
++ *   - `"invalidate"`: todos os alvos, como um evento comum;
++ *   - `{ invalidate: [...] }`: só estes alvos (comparados por chave).
++ */
++export type RealtimeEventDecision =
++  | "skip"
++  | "invalidate"
++  | { readonly invalidate: readonly InvalidationTarget[] };
++
++export interface RealtimeSubscriptionOptions<T> extends RealtimeHandlers<T> {
++  /** Classificador do evento. Quando presente, `onUpdate`/`onDelete` são ignorados. */
++  onEvent?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => RealtimeEventDecision;
++  /** `false` não abre canal. Padrão: `true`. */
++  enabled?: boolean;
++  /** Silêncio exigido antes de disparar (debounce). Padrão: 2 000 ms. */
++  quietMs?: number;
++  /** Teto da espera sob rajada contínua. Padrão: sem teto (debounce puro). OPT-IN. */
++  maxWaitMs?: number;
++  /** Aba oculta: `"flush"` refaz como sempre (padrão); `"defer"` guarda até voltar. OPT-IN. */
++  whenHidden?: WhenHidden;
++  /**
++   * Recupera o que esta instância perdeu por o canal não estar vivo. OPT-IN —
++   * desligado, nada muda. O canal é COMPARTILHADO por tabela + filtro
++   * (`realtimeChannelRegistry`); o que conta é como ESTA instância o encontra
++   * ao entrar (montagem, troca de org, religar) e o que acontece depois:
++   *   - entra com ele `joined` (outra instância já o abriu): recebe tudo
++   *     daqui em diante — 0 consulta;
++   *   - entra com ele no 1º join (`joining`, sem falha) e o join dá certo: no
++   *     SUBSCRIBED, se OUTRO canal físico da mesma tabela + filtro recebeu
++   *     evento no vão, agenda todos os alvos como um evento comum (o agendador
++   *     só refaz query cujo retrato é mais velho que essa entrega). Mesmo
++   *     canal físico: ninguém recebe antes do SUBSCRIBED — 0 consulta;
++   *   - entra com ele caído (`errored`, `polling`, ou `joining` voltando de
++   *     queda), ou ele cai depois — inclusive o 1º join que falha antes do
++   *     SUBSCRIBED: no SUBSCRIBED seguinte agenda todos os alvos uma vez,
++   *     sempre — o que chegou na queda caiu para todas.
++   *     N instâncias no mesmo canal = N pedidos do mesmo instante; o agendador
++   *     faz no máximo 1 busca por query.
++   * O prazo é o de um evento (`quietMs`, `maxWaitMs`, stagger, `minAgeMs`,
++   * `whenHidden`); fetch em voo é esperado, nunca cancelado. Lido na entrada
++   * no canal.
++   */
++  catchUpOnSubscribe?: boolean;
++}
++
++/**
++ * Onde o canal está, visto desta instância desde que ela entrou nele.
++ * `joining` = 1º join do canal ainda sem SUBSCRIBED e sem falha; `lost` =
++ * caído (já estava quando ela entrou, ou caiu depois — inclusive no 1º join).
++ */
++interface SubscribeLink {
++  /** Canal lógico (tabela + filtro); `null` = sem opt-in na entrada. */
++  channelKey: string | null;
++  /** Sequência tirada quando esta instância entrou no canal. */
++  since: number;
++  phase: "joining" | "live" | "lost";
++}
++
++interface PendingState {
++  /** Índices de alvo pedidos desde o último disparo. */
++  indexes: Set<number>;
++  targets: NormalizedTarget[];
++  seq: number;
++  firstAt: number | null;
++  debounce: ReturnType<typeof setTimeout> | null;
++  stagger: ReturnType<typeof setTimeout> | null;
++  staggerTargets: Map<string, NormalizedTarget>;
++  staggerSeq: number;
++}
++
++/**
++ * Invalida queries quando a tabela muda no Postgres (realtime), com o filtro de
++ * org no servidor.
++ *
++ * `targets` — cada item é UM alvo de invalidação (prefixo de queryKey):
++ *   - `["leads", "pipeline"]` → dois alvos, `["leads"]` e `["pipeline"]` (legado);
++ *   - `[["pipeline_entries", slug, org]]` → um alvo composto;
++ *   - `[{ queryKey, minAgeMs }]` → alvo com idade mínima (opt-in).
++ *
++ * Composto PLANO (`["pipeline_entries", slug, org]`) não é composto: vira três
++ * alvos de um segmento — o primeiro invalida o domínio inteiro e os outros não
++ * casam com nada. A regra `no-restricted-syntax` do `eslint.config.js` barra.
++ *
++ * Tempo (sem opt-in, igual a sempre): o primeiro alvo dispara 2 s depois do
++ * último evento; os demais, 2 s depois do primeiro. O SE de cada disparo é do
++ * `invalidation-scheduler` (coalescência entre instâncias, fetch em voo: o
++ * disparo que encontra o alvo buscando espera o fim desse fetch, não um novo
++ * `quietMs`).
++ */
+ export function useRealtimeSubscription<T = any>(
+   table: string,
+-  queryKeys: string[],
+-  handlers?: RealtimeHandlers<T>
++  targets: readonly InvalidationTarget[],
++  options?: RealtimeSubscriptionOptions<T>
+ ) {
+   const queryClient = useQueryClient();
+   const organizationId = useRealtimeOrgId();
++  // Layout effect: roda antes dos effects passivos, onde as queries da mesma
++  // tela disparam o fetch inicial — que assim já entra no frescor.
++  useLayoutEffect(() => retainInvalidationScheduler(queryClient), [queryClient]);
+ 
+-  const queryKeysRef = useRef(queryKeys);
+-  queryKeysRef.current = queryKeys;
+-  const handlersRef = useRef(handlers);
+-  handlersRef.current = handlers;
+-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+-  const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++  const targetsRef = useRef(targets);
++  targetsRef.current = targets;
++  const optionsRef = useRef(options);
++  optionsRef.current = options;
++  const pendingRef = useRef<PendingState>({
++    indexes: new Set(),
++    targets: [],
++    seq: 0,
++    firstAt: null,
++    debounce: null,
++    stagger: null,
++    staggerTargets: new Map(),
++    staggerSeq: 0,
++  });
++
++  const flush = useCallback(() => {
++    const st = pendingRef.current;
++    const opts = optionsRef.current;
++    const indexes = st.indexes;
++    const normalized = st.targets;
++    const seq = st.seq;
++    st.indexes = new Set();
++    st.firstAt = null;
++    if (st.debounce) clearTimeout(st.debounce);
++    st.debounce = null;
++
++    const request = { eventSeq: seq, whenHidden: opts?.whenHidden ?? "flush" } as const;
++
++    if (indexes.has(0) && normalized[0]) {
++      requestInvalidation(queryClient, normalized[0], request);
++    }
++
++    const followers = [...indexes].filter((i) => i > 0 && normalized[i]);
++    if (followers.length === 0) return;
++    // Como sempre: um disparo novo substitui o stagger pendente — sem perder
++    // os alvos que ele levaria.
++    if (st.stagger) clearTimeout(st.stagger);
++    for (const i of followers) st.staggerTargets.set(normalized[i].hash, normalized[i]);
++    st.staggerSeq = Math.max(st.staggerSeq, seq);
++    st.stagger = setTimeout(() => {
++      const due = [...st.staggerTargets.values()];
++      const dueSeq = st.staggerSeq;
++      st.staggerTargets = new Map();
++      st.staggerSeq = 0;
++      st.stagger = null;
++      for (const target of due) {
++        requestInvalidation(queryClient, target, { ...request, eventSeq: dueSeq });
++      }
++    }, STAGGER_MS);
++  }, [queryClient]);
++
++  /** Agenda os alvos `requested` como um evento de sequência `seq`. */
++  const enqueue = useCallback(
++    (requested: readonly number[], normalized: NormalizedTarget[], seq: number) => {
++      const opts = optionsRef.current;
++      const st = pendingRef.current;
++      for (const i of requested) st.indexes.add(i);
++      st.targets = normalized;
++      st.seq = Math.max(st.seq, seq);
++      const now = Date.now();
++      if (st.firstAt === null) st.firstAt = now;
++      if (st.debounce) clearTimeout(st.debounce);
++
++      // Aba oculta com "defer": esperar o silêncio não serve a ninguém — o
++      // agendador guarda o pedido até a aba voltar, e aí dispara já.
++      if (opts?.whenHidden === "defer" && isRealtimeTabHidden()) {
++        flush();
++        return;
++      }
++
++      const quiet = opts?.quietMs ?? DEBOUNCE_MS;
++      const delay =
++        opts?.maxWaitMs === undefined
++          ? quiet
++          : Math.max(0, Math.min(quiet, st.firstAt + opts.maxWaitMs - now));
++      st.debounce = setTimeout(flush, delay);
++    },
++    [flush]
++  );
++
++  const channelKeyRef = useRef("");
+ 
+   const handleRealtimeEvent = useCallback(
+     (payload: RealtimePostgresChangesPayload<any>) => {
+-      const keys = queryKeysRef.current;
+-      const currentHandlers = handlersRef.current;
++      // Uma sequência por EVENTO: as N instâncias do canal compartilhado
++      // recebem o mesmo objeto e pedem com o mesmo número.
++      const eventSeq = recordRealtimeDelivery(queryClient, channelKeyRef.current, payload);
++      // Item nulo (chave montada antes da org existir, chamador JS) é ignorado —
++      // nunca vira chave vazia, que casaria com o cache inteiro.
++      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
++      if (normalized.length === 0) return;
++      const opts = optionsRef.current;
+       const eventType = payload.eventType;
+ 
+-      // Surgical update: UPDATE with handler
+-      if (eventType === "UPDATE" && currentHandlers?.onUpdate && keys.length > 0) {
+-        const updatedRecord = payload.new;
+-        queryClient.setQueriesData(
+-          { queryKey: [keys[0]] },
+-          (oldData: any) => {
++      let requested: number[];
++      if (opts?.onEvent) {
++        const decision = opts.onEvent(payload);
++        if (decision === "skip") return;
++        if (decision === "invalidate") {
++          requested = normalized.map((_, i) => i);
++        } else {
++          const wanted = new Set(decision.invalidate.map((t) => normalizeTarget(t).hash));
++          requested = normalized.flatMap((t, i) => (wanted.has(t.hash) ? [i] : []));
++          if (requested.length === 0) return;
++        }
++      } else {
++        // Surgical update: UPDATE with handler
++        if (eventType === "UPDATE" && opts?.onUpdate) {
++          const onUpdate = opts.onUpdate;
++          queryClient.setQueriesData({ queryKey: normalized[0].queryKey }, (oldData: any) => {
+             if (!Array.isArray(oldData)) return oldData;
+-            return currentHandlers.onUpdate!(updatedRecord as T, oldData);
+-          }
+-        );
+-        return;
+-      }
++            return onUpdate(payload.new as T, oldData);
++          });
++          return;
++        }
+ 
+-      // Surgical delete: DELETE with handler
+-      if (eventType === "DELETE" && currentHandlers?.onDelete && keys.length > 0) {
+-        const deletedRecord = payload.old;
+-        queryClient.setQueriesData(
+-          { queryKey: [keys[0]] },
+-          (oldData: any) => {
++        // Surgical delete: DELETE with handler
++        if (eventType === "DELETE" && opts?.onDelete) {
++          const onDelete = opts.onDelete;
++          queryClient.setQueriesData({ queryKey: normalized[0].queryKey }, (oldData: any) => {
+             if (!Array.isArray(oldData)) return oldData;
+-            return currentHandlers.onDelete!(deletedRecord as T, oldData);
+-          }
+-        );
+-        return;
++            return onDelete(payload.old as T, oldData);
++          });
++          return;
++        }
++        requested = normalized.map((_, i) => i);
+       }
+ 
+       // Fallback: debounced invalidation (INSERT or no handler provided)
+-      if (debounceTimerRef.current) {
+-        clearTimeout(debounceTimerRef.current);
+-      }
+-      debounceTimerRef.current = setTimeout(() => {
+-        if (keys.length > 0) {
+-          queryClient.invalidateQueries({ queryKey: [keys[0]], refetchType: "active" });
+-
+-          if (keys.length > 1) {
+-            if (staggerTimerRef.current) {
+-              clearTimeout(staggerTimerRef.current);
+-            }
+-            staggerTimerRef.current = setTimeout(() => {
+-              keys.slice(1).forEach((key) => {
+-                queryClient.invalidateQueries({ queryKey: [key], refetchType: "active" });
+-              });
+-              staggerTimerRef.current = null;
+-            }, DEBOUNCE_MS);
+-          }
+-        }
+-        debounceTimerRef.current = null;
+-      }, DEBOUNCE_MS);
++      enqueue(requested, normalized, eventSeq);
+     },
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-    [queryClient]
++    [queryClient, enqueue]
+   );
+ 
+   // Compute filter — org-based for most tables, none for TABLES_WITHOUT_ORG_ID
+   const canFilter = !TABLES_WITHOUT_ORG_ID.has(table) && !!organizationId;
+   const filter = canFilter ? `organization_id=eq.${organizationId}` : undefined;
++  const enabled = options?.enabled ?? true;
++  const channelKey = `${table}|${filter ?? "*"}`;
++  channelKeyRef.current = channelKey;
++
++  // Recuperação no SUBSCRIBED (opt-in). Movida pelas TRANSIÇÕES do canal,
++  // entregues na hora pelo transporte — não pelo `state` do render, que não
++  // muda (nem re-renderiza) quando a troca de chave cai num canal que outra
++  // instância já tem `joined`.
++  const catchUpKeyRef = useRef<string | null>(null);
++  catchUpKeyRef.current = options?.catchUpOnSubscribe && enabled ? channelKey : null;
++  const linkRef = useRef<SubscribeLink>({ channelKey: null, since: 0, phase: "live" });
++
++  const handleStateChange = useCallback(
++    ({ state, failureCount, initial }: ChannelStateChange) => {
++      if (initial) {
++        // A entrada chega dentro do acquire, no commit cuja chave está no ref.
++        const fallen = state === "errored" || state === "polling" || (state === "joining" && failureCount > 0);
++        linkRef.current = {
++          channelKey: catchUpKeyRef.current,
++          since: nextRealtimeSeq(),
++          phase: state === "joined" ? "live" : fallen ? "lost" : "joining",
++        };
++        return;
++      }
++      const link = linkRef.current;
++      if (link.channelKey === null) return;
++      if (state !== "joined") {
++        // Queda é `lost` em QUALQUER fase — inclusive no 1º join: o que entrou
++        // no banco no vão não chegou a canal nenhum. `joining` só derruba quem
++        // estava `live`; no 1º join ou já `lost`, é o join em voo.
++        if (link.phase === "live" || state === "errored" || state === "polling") link.phase = "lost";
++        return;
++      }
++      if (link.phase === "live") return;
++      const rejoined = link.phase === "lost";
++      link.phase = "live";
++      if (!optionsRef.current?.catchUpOnSubscribe) return;
++      // 1º join que deu certo: só refaz se OUTRO canal físico da mesma chave
++      // lógica recebeu evento no vão. Hoje não dispara em prod: o registry põe
++      // toda instância desta chave no MESMO canal físico, e ninguém recebe
++      // antes do SUBSCRIBED. É guarda para canal físico distinto na mesma
++      // tabela + filtro — este hook repassar ao registry algo que entre na
++      // chave dele (evento, circuito), ou transporte que não compartilhe.
++      // Travada em `useRealtimeSubscription-refactored` ("outro canal físico
++      // da mesma chave…").
++      const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, link.channelKey);
++      if (!rejoined && seq <= link.since) return;
++      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
++      if (normalized.length === 0) return;
++      enqueue(normalized.map((_, i) => i), normalized, seq);
++    },
++    [queryClient, enqueue]
++  );
+ 
+   useRealtimeChannel({
+     table,
+     filter,
+     onEvent: handleRealtimeEvent,
+-    enabled: true,
++    onStateChange: handleStateChange,
++    enabled,
+   });
  }
 diff --git a/classic/tailwind.config.ts b/classic/tailwind.config.ts
 index 32f47352a..db24ce28b 100644

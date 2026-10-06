@@ -27,6 +27,7 @@ import {
 } from "../components/leads/LeadListRow";
 import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
 import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
+import { EMPTY_COUNT, cappedPagination, formatCappedCount, knownTotalLabel } from "../lib/capped-count";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -360,8 +361,14 @@ function LeadsInner() {
   const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
-  const tabCounts: Record<string, number | undefined> = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
-  const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
+  const tabCounts = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
+  /**
+   * Paginação sobre contagem COM TETO (`lib/capped-count`, 2026-10-05). Total
+   * exato: "página X de Y", como antes. No teto não há última página — segue-se
+   * enquanto a página vem cheia, e a navegação além da 20ª página continua.
+   */
+  const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
+  const totalPages = lastPage === null ? null : lastPage + 1;
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
@@ -488,6 +495,17 @@ function LeadsInner() {
     setPage(0);
   }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
+  // Com a contagem no teto, "Próxima" vale enquanto a página vem cheia — então
+  // num recorte de exatamente N×50 leads a página seguinte chega vazia (e um
+  // lead apagado pode esvaziar a última). Página vazia depois da primeira não
+  // é estado útil: volta uma.
+  const leadsLoaded = leadsQuery.isSuccess && !leadsQuery.isFetching;
+  useEffect(() => {
+    if (!portfolioActive && page > 0 && leadsLoaded && loadedLeads.length === 0) {
+      setPage((p) => Math.max(0, p - 1));
+    }
+  }, [portfolioActive, page, leadsLoaded, loadedLeads.length]);
+
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
    *
@@ -513,9 +531,9 @@ function LeadsInner() {
   const [searchFocused, setSearchFocused] = useState(false);
 
   const stats = useMemo(() => ({
-    total: totalLeads ?? leads.length,
-    thisMonth: orgStats?.thisMonth ?? 0,
-    withSDR: orgStats?.withOwner ?? 0,
+    total: totalLeads ?? { value: leads.length, capped: false },
+    thisMonth: orgStats?.thisMonth ?? EMPTY_COUNT,
+    withSDR: orgStats?.withOwner ?? EMPTY_COUNT,
   }), [totalLeads, leads.length, orgStats]);
 
   const handleOpenDialog = (lead?: any) => {
@@ -754,7 +772,7 @@ function LeadsInner() {
             onClick={() => setFilterClassificacao(option.value)}
             className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
             {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
-            <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
+            <span className="ml-2 text-xs tabular-nums opacity-80">{formatCappedCount(tabCounts[option.value])}</span>
           </button>
         ))}
       </div>
@@ -793,7 +811,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Total de Leads</p>
-          <p className="text-xl font-bold">{stats.total}</p>
+          <p className="text-xl font-bold">{formatCappedCount(stats.total)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -802,7 +820,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Este Mês</p>
-          <p className="text-xl font-bold text-primary">{stats.thisMonth}</p>
+          <p className="text-xl font-bold text-primary">{formatCappedCount(stats.thisMonth)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -811,7 +829,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Com Responsável</p>
-          <p className="text-xl font-bold text-success">{stats.withSDR}</p>
+          <p className="text-xl font-bold text-success">{formatCappedCount(stats.withSDR)}</p>
         </motion.div>
       </div>
       )}
@@ -912,8 +930,8 @@ function LeadsInner() {
             )}
             aria-hidden={searchFocused}
           >
-            {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
-            {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
+            {formatCappedCount(totalLeads)} {!totalLeads.capped && totalLeads.value === 1 ? "lead" : "leads"}
+            {totalPages === null ? ` · página ${page + 1}` : totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
           </span>
         )}
       </div>
@@ -1127,10 +1145,10 @@ function LeadsInner() {
         )}
 
         {/* Paginação */}
-        {totalPages > 1 && (
+        {totalLeads !== undefined && (page > 0 || hasNextPage) && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <span className="text-sm text-muted-foreground">
-              Página {page + 1} de {totalPages} ({totalLeads} leads)
+              Página {page + 1}{totalPages !== null && ` de ${totalPages}`} ({knownTotalLabel(totalLeads, page, LEADS_PAGE_SIZE, leads.length)} leads)
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -1144,8 +1162,8 @@ function LeadsInner() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
+                onClick={() => setPage(p => (lastPage === null ? p + 1 : Math.min(lastPage, p + 1)))}
+                disabled={!hasNextPage}
               >
                 Próxima
               </Button>

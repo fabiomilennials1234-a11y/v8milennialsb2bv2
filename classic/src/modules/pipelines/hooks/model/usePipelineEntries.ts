@@ -232,7 +232,10 @@ export function usePipelineEntries(slug: PipelineType) {
   const { organizationId, isReady } = useOrganization();
   const { data: pipelineId } = usePipelineId(slug);
 
-  useRealtimeSubscription("pipeline_entries", ["pipeline_entries", slug, organizationId], realtimeHandlers);
+  // Alvo composto ANINHADO: este funil desta org. Plano (`["pipeline_entries",
+  // slug, org]`) invalidava `["pipeline_entries"]` inteiro e depois `[slug]` e
+  // `[org]`, que não casam com chave nenhuma.
+  useRealtimeSubscription("pipeline_entries", [["pipeline_entries", slug, organizationId]], realtimeHandlers);
 
   return useQuery({
     queryKey: ["pipeline_entries", slug, organizationId, pipelineId],

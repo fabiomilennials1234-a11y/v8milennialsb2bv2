@@ -101,7 +101,8 @@ export function useCarteiraStages(family: CarteiraStageFamily) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
-  useRealtimeSubscription("pipeline_stages", ["pipeline_stages", family]);
+  // Alvo composto aninhado: só as etapas desta família (prefixo da chave abaixo).
+  useRealtimeSubscription("pipeline_stages", [["pipeline_stages", family]]);
 
   return useQuery({
     queryKey: ["pipeline_stages", family, organizationId],

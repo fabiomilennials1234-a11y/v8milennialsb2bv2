@@ -22,7 +22,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 type Cb = (...args: unknown[]) => void;
@@ -229,10 +229,22 @@ describe("a/b — /chat + bolha dividem o canal de whatsapp_messages", () => {
 // ─── c ───────────────────────────────────────────────────────────────────────
 
 describe("c — funil com 2 assinantes de pipeline_entries", () => {
-  it("mover card atualiza os dois; desmontar um não para o outro", () => {
+  it("mover card atualiza os dois; desmontar um não para o outro", async () => {
     const org = uniq("org");
     const PIPE = uniq("pipe");
     const qc = novoQc();
+    // A lista na tela. `useRealtimeSubscription` pede a invalidação ao
+    // agendador, que só refaz query que existe e não viu o evento — sem query
+    // `["pipeline_entries"]` em cache não haveria o que invalidar.
+    const lista$ = new QueryObserver(qc, { queryKey: ["pipeline_entries"], queryFn: async () => [], staleTime: Infinity });
+    const soltaLista$ = lista$.subscribe(() => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const avancarComFetch = (ms: number) =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
     const spy = vi.spyOn(qc, "invalidateQueries");
     const board = renderHook(() => useFunilRealtime(PIPE), { wrapper: comQc(qc, org) });
     const lista = renderHook(() => useRealtimeSubscription("pipeline_entries", ["pipeline_entries"]), {
@@ -245,7 +257,7 @@ describe("c — funil com 2 assinantes de pipeline_entries", () => {
 
     const keys = () => spy.mock.calls.map(([f]) => keyOf(f));
     emit(ch, { eventType: "UPDATE", new: { id: uniq("e"), pipeline_id: PIPE, stage_key: "s2" }, old: {} });
-    avancar(2_000);
+    await avancarComFetch(2_000);
     expect(keys()).toContain(JSON.stringify(["pipeline-page", PIPE, "s2"]));
     expect(keys()).toContain(JSON.stringify(["pipeline-stage-counts", PIPE]));
     expect(keys()).toContain(JSON.stringify(["pipeline_entries"]));
@@ -254,11 +266,12 @@ describe("c — funil com 2 assinantes de pipeline_entries", () => {
     expect(liveOf("pipeline_entries")).toEqual([ch]);
     spy.mockClear();
     emit(ch, { eventType: "UPDATE", new: { id: uniq("e"), pipeline_id: PIPE, stage_key: "s3" }, old: {} });
-    avancar(2_000);
+    await avancarComFetch(2_000);
     expect(keys()).toContain(JSON.stringify(["pipeline_entries"]));
     expect(keys()).not.toContain(JSON.stringify(["pipeline-page", PIPE, "s3"]));
 
     lista.unmount();
+    soltaLista$();
     expect(liveOf("pipeline_entries")).toHaveLength(0);
   });
 });

@@ -315,10 +315,15 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
   // virou view e view não emite postgres_changes (aliás, nunca esteve na
   // publication: a subscription antiga era um no-op medido). Assinar a fonte
   // cobre import-leads, mutations no UI, triggers do banco etc.
-  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? "", organizationId ?? ""]);
+  //
+  // Alvo = a MESMA chave da query, aninhada. Plana, invalidava
+  // `["custom_pipe_entries"]` de todos os funis e depois `[pipelineId]` e
+  // `[org]`, que não casam com nada.
+  const entriesKey = ["custom_pipe_entries", pipelineId, organizationId] as const;
+  useRealtimeSubscription("pipeline_entries", [entriesKey]);
 
   return useQuery({
-    queryKey: ["custom_pipe_entries", pipelineId, organizationId],
+    queryKey: entriesKey,
     queryFn: async () => {
       if (!pipelineId || !organizationId) return [];
 

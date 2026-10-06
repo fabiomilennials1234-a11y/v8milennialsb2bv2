@@ -68,6 +68,10 @@ Prova local de ponta a ponta (build dual contra o Supabase mockado, servida com 
 - Conserto crítico na clássica = portar o diff de `src/` para `classic/src/` (`git apply --directory=classic`),
   rodar `node scripts/ui-classic/snapshot.mjs --gerar-patch` e copiar o teste para `tests/classic/`
   (`npm run test:classic`, `@` → `classic/src`). Primeiro uso: 2026-10-05 — funil (#2235), reconciliação do
-  chat (#2238) e merge do UPDATE do Realtime.
+  chat (#2238) e merge do UPDATE do Realtime. Segundo uso, no mesmo dia: Leads — agendador de invalidações
+  realtime e contagem com teto (o grosso dos 60% do banco); `Leads.tsx` e `LeadsStatsV2.tsx` adaptados ao
+  visual pré-V5, o resto copiado byte a byte.
+- Prova de que o patch fecha: extrair a pristina do `ref` do `SNAPSHOT.json` (mesma poda do script), rodar
+  `git apply --check` e aplicar `classic.patch`, e `diff -r` contra `classic/` — tem de sair vazio.
 - O banco precisa continuar servindo a clássica: nada de remover coluna/view que ela lê.
 - Desligar a clássica = apagar `classic/`, `scripts/ui-classic/`, o mapa do nginx e a guarda.
