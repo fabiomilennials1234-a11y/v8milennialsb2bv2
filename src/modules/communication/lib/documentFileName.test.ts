@@ -83,6 +83,23 @@ describe("readDocumentFileName", () => {
     ).toBe("A.pdf");
   });
 
+  it("remove controle bidi: 'fatura\\u202Efdp.exe' não pode se disfarçar de PDF", () => {
+    expect(readDocumentFileName({ media_file_name: "fatura‮fdp.exe" })).toBe("faturafdp.exe");
+    expect(
+      readDocumentFileName({ raw_payload: { content: { fileName: "⁦a‎b‏‪c⁩.pdf" } } }),
+    ).toBe("abc.pdf");
+  });
+
+  it("remove caracteres de controle ASCII", () => {
+    expect(readDocumentFileName({ media_file_name: "nota\u0000\u0007\u001F\u007F.pdf" })).toBe("nota.pdf");
+  });
+
+  it("nome feito só de controle bidi vira vazio e cai no próximo", () => {
+    expect(
+      readDocumentFileName({ media_file_name: "‮‏", raw_payload: { content: { fileName: "B.pdf" } } }),
+    ).toBe("B.pdf");
+  });
+
   it("sem nada devolve null", () => {
     expect(readDocumentFileName({})).toBeNull();
     expect(readDocumentFileName({ media_url: null, raw_payload: null, media_file_name: null })).toBeNull();

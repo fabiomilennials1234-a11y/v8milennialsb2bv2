@@ -28,9 +28,15 @@ const GENERIC_UPLOAD_BASE = /^(document|image|video|audio|sticker|file)_\d{13}$/
 const HAS_EXTENSION = /\.[a-z0-9]{1,10}$/i;
 const HEX_HASH_BASENAME = /^[0-9a-f]{32,}(\.[a-z0-9]{1,10})?$/i;
 
+// Controle ASCII + controle de direção bidi (U+200E, U+200F, U+202A–U+202E,
+// U+2066–U+2069). Sem isso `fatura<U+202E>fdp.exe` aparece como `faturaexe.pdf`.
+// Mesmo conjunto de `whatsapp_messages_clean_file_name` no banco.
+// eslint-disable-next-line no-control-regex
+const UNSAFE_CHARS = /[\u0000-\u001F\u007F‎‏‪-‮⁦-⁩]/g;
+
 function clean(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const trimmed = value.replace(UNSAFE_CHARS, "").trim();
   if (!trimmed || isOpaqueName(trimmed)) return null;
   return trimmed.slice(0, MAX_LENGTH);
 }

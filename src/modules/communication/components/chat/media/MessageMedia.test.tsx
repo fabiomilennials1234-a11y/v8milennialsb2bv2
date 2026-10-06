@@ -17,6 +17,12 @@ describe("MessageDocument", () => {
     expect(screen.getByRole("link").getAttribute("href")).toBe(HASH_URL);
   });
 
+  it("o nome exibido é texto puro: nunca vira HTML", () => {
+    render(<MessageDocument src={HASH_URL} fileName={'<img src=x onerror="alert(1)">.pdf'} isOutgoing={false} />);
+    expect(screen.getByText('<img src=x onerror="alert(1)">.pdf')).toBeTruthy();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
   it("sem nome mostra 'Documento', não o hash da URL", () => {
     render(<MessageDocument src={HASH_URL} isOutgoing={false} />);
     expect(screen.getByText("Documento")).toBeTruthy();

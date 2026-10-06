@@ -7,27 +7,31 @@
 -- `raw_payload` com 14 dias. Ler só o payload faria o nome sumir em duas
 -- semanas; por isso o nome ganha coluna própria, gravada no INSERT.
 --
--- ORDEM DE DEPLOY: esta migration vai para prod ANTES do frontend que projeta
--- `media_file_name` (sem a coluna o PostgREST devolve 400 e a thread do chat
--- fica vazia em todas as orgs).
+-- SÓ DDL, de propósito. `whatsapp_messages` tem ~3 M linhas / ~2 GB de heap e
+-- nenhum índice em `message_type`: um backfill aqui dentro faria seq scan da
+-- tabela inteira SEGURANDO o ACCESS EXCLUSIVE do ADD COLUMN até o COMMIT —
+-- todo INSERT de webhook e todo SELECT do chat ficariam na fila. O backfill
+-- é o script de operador `scripts/backfill-media-file-name.sql`, rodado à
+-- parte, fora do pico, em lotes.
 --
--- Custo:
---   * ADD COLUMN nullable sem default = só catálogo, sem rewrite da tabela.
---   * Backfill: só documentos que ainda têm payload (~14 dias; ~4,8 k linhas em
---     2026-10-06, todas as orgs). Medido antes — abaixo do limiar de ~50 k que
---     pediria lotes. Os triggers de UPDATE de `whatsapp_messages` são
---     `UPDATE OF status, lead_id, instance_id` e `UPDATE OF phone_number`: um
---     SET em `media_file_name` não dispara nenhum (nem webhook). Por isso NÃO
---     se mexe em `session_replication_role`.
+-- ORDEM DE DEPLOY:
+--   1) esta migration (rápida: só catálogo);
+--   2) scripts/backfill-media-file-name.sql, fora do pico;
+--   3) KM;
+--   4) merge/deploy do frontend (ele faz SELECT de `media_file_name`; sem a
+--      coluna o PostgREST devolve 400 e a thread do chat fica vazia em todas
+--      as orgs).
 --
--- Idempotente: IF NOT EXISTS / CREATE OR REPLACE / DROP TRIGGER IF EXISTS, e o
--- backfill só toca linhas com `media_file_name IS NULL`.
+-- Idempotente: IF NOT EXISTS / CREATE OR REPLACE / DROP TRIGGER IF EXISTS.
 -- Rollback: supabase/migrations/rollback/20271108000100_whatsapp_messages_media_file_name.sql
 
 BEGIN;
 
-SET LOCAL lock_timeout = '5s';
+-- Curto: se houver fila no lock da tabela, falha rápido em vez de enfileirar
+-- o tráfego do chat atrás do ALTER. Basta rodar de novo.
+SET LOCAL lock_timeout = '3s';
 
+-- Nullable, sem default: só catálogo, sem rewrite.
 ALTER TABLE public.whatsapp_messages
   ADD COLUMN IF NOT EXISTS media_file_name text;
 
@@ -35,7 +39,30 @@ COMMENT ON COLUMN public.whatsapp_messages.media_file_name IS
   'Nome original do arquivo de um documento, copiado do raw_payload no INSERT '
   '(sobrevive à retenção de 14 dias do raw_payload). NULL = desconhecido.';
 
--- Expressão única, usada pelo trigger e pelo backfill.
+-- Limpa um candidato a nome: tira caracteres de controle ASCII e os de
+-- controle de direção bidi (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) —
+-- sem isso `fatura<U+202E>fdp.exe` aparece como `faturaexe.pdf`. Vazio vira NULL.
+CREATE OR REPLACE FUNCTION public.whatsapp_messages_clean_file_name(p_name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = ''
+AS $$
+  SELECT nullif(
+    btrim(
+      regexp_replace(
+        p_name,
+        '[\x01-\x1F\x7F‎‏‪-‮⁦-⁩]',
+        '',
+        'g'
+      )
+    ),
+    ''
+  );
+$$;
+
+-- Expressão única, usada pelo trigger e pelo script de backfill.
 CREATE OR REPLACE FUNCTION public.whatsapp_messages_extract_media_file_name(p_payload jsonb)
 RETURNS text
 LANGUAGE sql
@@ -44,15 +71,10 @@ PARALLEL SAFE
 SET search_path = ''
 AS $$
   SELECT left(
-    nullif(
-      btrim(
-        coalesce(
-          nullif(btrim(p_payload->'content'->>'fileName'), ''),
-          nullif(btrim(p_payload->'content'->>'title'), ''),
-          nullif(btrim(p_payload->'document'->>'filename'), '')
-        )
-      ),
-      ''
+    coalesce(
+      public.whatsapp_messages_clean_file_name(p_payload->'content'->>'fileName'),
+      public.whatsapp_messages_clean_file_name(p_payload->'content'->>'title'),
+      public.whatsapp_messages_clean_file_name(p_payload->'document'->>'filename')
     ),
     255
   );
@@ -70,9 +92,10 @@ BEGIN
 END;
 $$;
 
--- Só funções de trigger/infra: ninguém chama por RPC.
-REVOKE ALL ON FUNCTION public.whatsapp_messages_set_media_file_name() FROM PUBLIC, anon, authenticated;
+-- Funções de trigger/infra: ninguém chama por RPC.
+REVOKE ALL ON FUNCTION public.whatsapp_messages_clean_file_name(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.whatsapp_messages_extract_media_file_name(jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.whatsapp_messages_set_media_file_name() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS trg_whatsapp_messages_set_media_file_name ON public.whatsapp_messages;
 CREATE TRIGGER trg_whatsapp_messages_set_media_file_name
@@ -84,14 +107,5 @@ CREATE TRIGGER trg_whatsapp_messages_set_media_file_name
     AND NEW.message_type = 'document'
   )
   EXECUTE FUNCTION public.whatsapp_messages_set_media_file_name();
-
--- Backfill: só o que ainda tem payload. Os documentos mais antigos que 14 dias
--- já perderam o nome — o frontend mostra "Documento" para eles.
-UPDATE public.whatsapp_messages
-   SET media_file_name = public.whatsapp_messages_extract_media_file_name(raw_payload)
- WHERE message_type = 'document'
-   AND media_file_name IS NULL
-   AND raw_payload IS NOT NULL
-   AND public.whatsapp_messages_extract_media_file_name(raw_payload) IS NOT NULL;
 
 COMMIT;
