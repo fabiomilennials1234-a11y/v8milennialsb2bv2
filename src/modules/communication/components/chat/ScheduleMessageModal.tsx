@@ -11,12 +11,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { LeadNewDealDialog, useLeadActionGates } from "@/modules/leads";
 import { useCreateScheduledMessage, useUpdateScheduledMessage } from "@/modules/communication/hooks/useScheduledMessages";
 
 interface ScheduleMessageModalProps {
@@ -64,7 +66,16 @@ export function ScheduleMessageModal({
   const [mediaFile, setMediaFile] = useState<File | null>(initialMediaFile ?? null);
   const [date, setDate] = useState<Date | undefined>(editingScheduledAt);
   const [time, setTime] = useState(editingScheduledAt ? format(editingScheduledAt, "HH:mm") : "09:00");
+  const [abrirNegocio, setAbrirNegocio] = useState(false);
+  // Verdadeiro entre o agendamento gravado e o fechamento do diálogo de negócio.
+  const [abrindoNegocio, setAbrindoNegocio] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // `LeadCard` passa `leadId={lead.leadId || ""}`: string vazia = sem lead.
+  const temLead = !!leadId;
+  const podeOferecerNegocio = !editingId && temLead;
+  const { canAddToPipe } = useLeadActionGates(temLead ? leadId : null);
+  const negocioBloqueado = !canAddToPipe.isLoading && !canAddToPipe.allowed;
 
   const createMutation = useCreateScheduledMessage();
   const updateMutation = useUpdateScheduledMessage();
@@ -93,27 +104,47 @@ export function ScheduleMessageModal({
   const handleSubmit = async () => {
     if (!scheduledDateTime || !isValid) return;
 
-    if (editingId) {
-      await updateMutation.mutateAsync({
-        id: editingId,
-        messageContent: message.trim() || undefined,
-        scheduledAt: scheduledDateTime,
-      });
-    } else {
-      await createMutation.mutateAsync({
-        leadId,
-        phoneNumber,
-        messageContent: message.trim() || undefined,
-        mediaFile: mediaFile || undefined,
-        scheduledAt: scheduledDateTime,
-        instanceId,
-      });
+    try {
+      if (editingId) {
+        await updateMutation.mutateAsync({
+          id: editingId,
+          messageContent: message.trim() || undefined,
+          scheduledAt: scheduledDateTime,
+        });
+      } else {
+        await createMutation.mutateAsync({
+          leadId,
+          phoneNumber,
+          messageContent: message.trim() || undefined,
+          mediaFile: mediaFile || undefined,
+          scheduledAt: scheduledDateTime,
+          instanceId,
+        });
+      }
+    } catch {
+      // Falha no agendamento: o hook já avisa; o modal fica aberto e o negócio
+      // não é oferecido.
+      return;
     }
 
     setMessage("");
     setMediaFile(null);
     setDate(undefined);
     setTime("09:00");
+
+    if (podeOferecerNegocio && abrirNegocio && !negocioBloqueado) {
+      // Os pais (ex.: LeadCard) desmontam este modal ao receber onOpenChange(false),
+      // e o diálogo de negócio é filho dele. Só fechamos depois que ele fechar.
+      setAbrindoNegocio(true);
+      return;
+    }
+    onOpenChange(false);
+  };
+
+  const handleNegocioOpenChange = (next: boolean) => {
+    if (next) return;
+    setAbrindoNegocio(false);
+    setAbrirNegocio(false);
     onOpenChange(false);
   };
 
@@ -139,7 +170,8 @@ export function ScheduleMessageModal({
   const MediaIcon = mediaFile ? MEDIA_ICON_MAP[getMediaType(mediaFile)] || FileText : FileText;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open && !abrindoNegocio} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           {/* O mesmo formulário serve para criar e para editar. O título dizia
@@ -283,6 +315,26 @@ export function ScheduleMessageModal({
               Escolha uma data e hora para agendar.
             </p>
           )}
+
+          {podeOferecerNegocio && (
+            <div
+              className="flex items-center gap-2"
+              title={negocioBloqueado ? canAddToPipe.reason : undefined}
+            >
+              <Checkbox
+                id="schedule-open-deal"
+                checked={abrirNegocio}
+                onCheckedChange={(v) => setAbrirNegocio(v === true)}
+                disabled={negocioBloqueado}
+              />
+              <label
+                htmlFor="schedule-open-deal"
+                className={negocioBloqueado ? "text-sm text-muted-foreground" : "text-sm cursor-pointer"}
+              >
+                Abrir negócio ao agendar
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -298,5 +350,9 @@ export function ScheduleMessageModal({
         </div>
       </DialogContent>
     </Dialog>
+    {abrindoNegocio && (
+      <LeadNewDealDialog leadId={leadId} open onOpenChange={handleNegocioOpenChange} />
+    )}
+    </>
   );
 }
