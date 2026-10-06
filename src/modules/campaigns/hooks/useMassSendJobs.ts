@@ -1,7 +1,10 @@
 /**
- * useMassSendJobs — query + realtime + control of uazapi_sender_jobs rows.
+ * useMassSendJobs — query + control of uazapi_sender_jobs rows.
+ *
+ * Sem realtime: `uazapi_sender_jobs` está fora da publication
+ * `supabase_realtime` — a assinatura antiga nunca emitiu evento (perf S0,
+ * 2026-10-06). Atualiza por invalidação das mutations.
  */
-import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -12,27 +15,6 @@ export type UazapiSenderJob = Tables<"uazapi_sender_jobs">;
 export function useMassSendJobs() {
   const { data: teamMember } = useCurrentTeamMember();
   const orgId = teamMember?.organization_id;
-  const qc = useQueryClient();
-
-  useEffect(() => {
-    if (!orgId) return;
-    const ch = supabase
-      .channel(`uazapi_sender_jobs:${orgId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "uazapi_sender_jobs",
-          filter: `organization_id=eq.${orgId}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["uazapi_sender_jobs", orgId] })
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [orgId, qc]);
 
   return useQuery({
     queryKey: ["uazapi_sender_jobs", orgId],
