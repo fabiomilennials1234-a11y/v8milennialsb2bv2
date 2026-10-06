@@ -59,12 +59,13 @@ const TMS = [
   ['tC', 90, 'A', 'member', true], ['t11a', 11, 'A', 'member', false], ['t11b', 11, 'B', 'member', true],
   ['t12d', 12, 'D', 'member', true, '2020-01-01'], ['t12b', 12, 'B', 'member', true, '2024-01-01'],
   ['t13', 13, 'X', 'member', true], ['tZ', 91, 'Z', 'member', true], ['tB', 92, 'B', 'member', true],
+  ['t15', 15, 'A', 'member', false],
 ];
 const ACTORS = {
   U1_master: 1, U2_gestor_of_A: 2, U3_admin_A: 3, U4_global_admin_member_A: 4, U5_view_all_override: 5,
   U6_view_all_org_default: 6, U7_view_unassigned: 7, U8_view_subordinates: 8, U9_restricted_responsible: 9,
   U10_restricted_not_responsible: 10, U11_inactive_A_active_B: 11, U12_multi_org_primary_view_all: 12,
-  U13_blocked_org_only: 13, U14_no_team_member: 14,
+  U13_blocked_org_only: 13, U14_no_team_member: 14, U15_inactive_only_A: 15,
 };
 
 function fixtures() {
@@ -213,12 +214,39 @@ test('leads RLS initplan rewrite keeps every role on exactly the same rows', asy
       assert.deepEqual(r, { a: false, b: false });
     });
 
+    await t.test('rls_my_same_org_team_member_ids lists nobody for a deactivated or blocked-only member', async () => {
+      const call = async (u) => {
+        await db.exec(`${claims(u)}; SET ROLE authenticated;`);
+        const r = (await db.query('SELECT rls_my_same_org_team_member_ids() AS ids')).rows[0].ids;
+        await db.exec('RESET ROLE');
+        return r;
+      };
+      assert.deepEqual(await call(ACTORS.U15_inactive_only_A), [], 'inactive-only member');
+      assert.deepEqual(await call(ACTORS.U13_blocked_org_only), [], 'blocked-org-only member');
+      // every id returned to an active member is the sdr/closer of a lead that member's orgs hold
+      const ids8 = await call(ACTORS.U8_view_subordinates);
+      assert.ok(ids8.length > 0);
+      const orphan = (await db.query(`SELECT count(*)::int AS n FROM unnest($1::uuid[]) i WHERE NOT EXISTS (
+        SELECT 1 FROM leads l WHERE l.deleted_at IS NULL AND l.organization_id = '${ORG.A}' AND (l.sdr_id = i OR l.closer_id = i))`, [ids8])).rows[0].n;
+      assert.equal(orphan, 0);
+      // control: the unrestricted body (no EXISTS on leads) DOES leak the org to the deactivated member
+      await db.exec(`BEGIN; CREATE OR REPLACE FUNCTION public.rls_my_same_org_team_member_ids() RETURNS uuid[]
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $f$
+        SELECT ARRAY(SELECT r.id FROM public.team_members r WHERE r.organization_id IN (
+          SELECT u.organization_id FROM public.team_members u WHERE u.user_id = auth.uid()) ORDER BY r.id) $f$;`);
+      const leaked = await call(ACTORS.U15_inactive_only_A);
+      await db.exec('ROLLBACK');
+      assert.ok(leaked.length > 0, 'control: unrestricted helper must leak, otherwise this test proves nothing');
+      assert.deepEqual(await call(ACTORS.U15_inactive_only_A), [], 'restored after rollback');
+    });
+
     await t.test('positive controls: a one-term mutation is caught', async () => {
       const q = after[POLICY_NAMES[0]].qual;
       const mutations = {
         'pre_sale uses active-only ids': q.replace('pre_sale_responsible_id = ANY (( SELECT rls_my_team_member_ids(false)', 'pre_sale_responsible_id = ANY (( SELECT rls_my_team_member_ids(true)'),
         'gestor branch dropped': q.replace(/\(organization_id IN \( SELECT get_my_gestor_organization_ids\(\) AS get_my_gestor_organization_ids\)\) OR /, ''),
         'one-arg view_all dropped': q.replace(/\( SELECT has_feature_permission\('leads.view_all'::text\) AS has_feature_permission\) OR /, ''),
+        'subordinates set replaced by own ids': q.replaceAll('rls_my_same_org_team_member_ids()', 'rls_my_team_member_ids(false)'),
         'pipe gate inverted': q.replace('(cardinality(', '(NOT (cardinality(').replace('> 0) AND rls_lead_in_my_pipes', '> 0)) AND rls_lead_in_my_pipes'),
       };
       for (const [label, m] of Object.entries(mutations)) {

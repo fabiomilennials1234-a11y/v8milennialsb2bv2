@@ -60,7 +60,9 @@
 --         → sdr IS NULL AND closer IS NULL AND (SELECT user_has_org_permission(...))
 --       OR is_responsible_in_same_org(sdr, closer) AND user_has_org_permission('see_subordinates_cards')
 --         → (SELECT user_has_org_permission(...)) AND (sdr = ANY(S) OR closer = ANY(S)),
---           S = rls_my_same_org_team_member_ids()
+--           S = rls_my_same_org_team_member_ids() (limited to sdr/closer of
+--           visible-org leads: same policy result, no id listing for
+--           deactivated/blocked members — see the helper)
 --       OR has_feature_permission('leads.view_all')            (1 arg)
 --         → (SELECT has_feature_permission('leads.view_all'))
 --     is_user_responsible_in_any_pipe(id)
@@ -119,8 +121,21 @@ AS $function$
   )
 $function$;
 
--- Every team_member id that shares an organization with ANY of my team_member
--- rows (active or not) — the set is_responsible_in_same_org(sdr, closer) tests.
+-- Team member ids that share an organization with ANY of my team_member rows
+-- (active or not — the set is_responsible_in_same_org(sdr, closer) tests),
+-- RESTRICTED to ids that are sdr_id/closer_id of a non-deleted lead in an org
+-- of get_my_organization_ids().
+--
+-- Why the restriction keeps the policy result identical: the policy only
+-- evaluates this set for a row that already passed `deleted_at IS NULL AND
+-- organization_id IN (get_my_organization_ids())`; if that row's sdr/closer is
+-- in the unrestricted set, the row itself satisfies the EXISTS below.
+--
+-- Why it exists: this is a DEFINER function callable by authenticated. Without
+-- the restriction a deactivated member (or a member of a blocked org) could
+-- list every team_member id of that org — more than team_members' own policy
+-- (get_my_organization_ids) shows. Do NOT restrict to active orgs instead:
+-- leads in my org can carry an SDR from another org (1,594 in prod).
 CREATE FUNCTION public.rls_my_same_org_team_member_ids()
 RETURNS uuid[]
 LANGUAGE sql
@@ -136,6 +151,13 @@ AS $function$
       FROM public.team_members tm_user
       WHERE tm_user.user_id = auth.uid()
     )
+      AND EXISTS (
+        SELECT 1
+        FROM public.leads l
+        WHERE l.deleted_at IS NULL
+          AND l.organization_id IN (SELECT public.get_my_organization_ids())
+          AND (l.sdr_id = tm_resp.id OR l.closer_id = tm_resp.id)
+      )
     ORDER BY tm_resp.id
   )
 $function$;
@@ -210,7 +232,7 @@ GRANT EXECUTE ON FUNCTION public.rls_lead_in_my_pipes(uuid, uuid[]) TO authentic
 COMMENT ON FUNCTION public.rls_my_team_member_ids(boolean) IS
   'RLS helper (leads). Caller''s team_member ids; false = all rows (mirrors is_user_responsible), true = active only. Use as (SELECT …) InitPlan.';
 COMMENT ON FUNCTION public.rls_my_same_org_team_member_ids() IS
-  'RLS helper (leads). Team member ids sharing an org with any of the caller''s team_member rows (mirrors is_responsible_in_same_org). Use as (SELECT …) InitPlan.';
+  'RLS helper (leads). Team member ids sharing an org with any of the caller''s team_member rows (mirrors is_responsible_in_same_org), limited to sdr/closer of non-deleted leads in get_my_organization_ids(). Use as (SELECT …) InitPlan.';
 COMMENT ON FUNCTION public.rls_my_orgs_with_feature(text) IS
   'RLS helper (leads). Orgs in get_my_organization_ids() where has_feature_permission(key, org). Use as (SELECT …) InitPlan.';
 COMMENT ON FUNCTION public.rls_lead_in_my_pipes(uuid, uuid[]) IS

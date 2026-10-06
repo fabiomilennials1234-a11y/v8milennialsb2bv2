@@ -9,6 +9,7 @@
 -- (unchanged by the forward migration; compare after rollback):
 --   can_see_lead_by_permissions(uuid,uuid)     4f36e5d394a307215d69451155fb03b7
 --   get_my_gestor_organization_ids()           a342535bf36d39ce5dba59fd8441e122
+--   get_my_member_organization_ids()           2335cc678384684526a34e384bfc7d26
 --   get_my_organization_ids()                  72fb9e49c1956386ac3eca3d96325a5a
 --   get_user_organization_id()                 833c3f54359e0ef60924b9e333fe78f6
 --   has_feature_permission(text,uuid)          7e2cfbc44d0eac9e31919783c735898c
