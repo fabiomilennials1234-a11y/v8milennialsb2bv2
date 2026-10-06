@@ -194,20 +194,36 @@ export function ChatComposer({
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
+  // Texto e mídia não correm em paralelo: a ordem no WhatsApp importa.
+  const isBusy = sendMessage.isPending || sendMedia.isPending || isPreparing;
+  // Rascunho mais recente, para o restore pós-falha não depender de closure velha.
+  const messageRef = useRef(message);
+  messageRef.current = message;
+
   const handleSend = useCallback(async () => {
-    if (!message.trim() || !instanceName) return;
+    // Um envio por vez: a ordem no WhatsApp importa e a recuperação de envio
+    // existe para não reenviar às cegas — nada de fila nem de envio paralelo.
+    if (isBusy) {
+      toast.info("Aguarde o envio anterior finalizar.");
+      return;
+    }
+    const text = message.trim();
+    if (!text || !instanceName) return;
+    // Limpa antes do await: o vendedor já pode digitar a próxima mensagem sem
+    // que o resolve apague o texto novo. Se o envio falha, o hook guarda a
+    // mensagem em whatsapp_failed_messages (bolha de reenvio) — o texto não se perde.
+    setMessage("");
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
-        message: message.trim(),
+        message: text,
         instanceName,
         instanceId,
       });
-      setMessage("");
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar mensagem." });
     }
-  }, [message, instanceName, phoneNumber, instanceId, sendMessage, setMessage]);
+  }, [message, isBusy, instanceName, phoneNumber, instanceId, sendMessage, setMessage]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -230,6 +246,15 @@ export function ChatComposer({
     // Texto não é editável inline p/ mídia, então selecionar = enviar.
     if (template.media_url && template.media_type !== "text") {
       if (!instanceName) return;
+      if (isBusy) {
+        toast.info("Aguarde o envio anterior finalizar.");
+        return;
+      }
+      // Limpa o comando "/…" ANTES do await: o que o vendedor digitar durante o
+      // envio não pode ser apagado pelo resolve. Se a mídia falha, devolve o
+      // comando só se o rascunho ainda estiver vazio (não pisa no texto novo).
+      const command = message;
+      setMessage("");
       try {
         await sendMedia.mutateAsync({
           phoneNumber,
@@ -240,9 +265,9 @@ export function ChatComposer({
           caption: template.media_type === "audio" ? undefined : (resolved || undefined),
           leadId: leadId ?? null,
         });
-        setMessage("");
         toast.success("Template enviado!");
       } catch (err) {
+        if (messageRef.current === "") setMessage(command);
         notifyError(err, { fallback: "Não foi possível enviar template." });
       }
       return;
@@ -250,7 +275,7 @@ export function ChatComposer({
 
     // Template de texto → preenche input para revisão antes de enviar.
     setMessage(resolved);
-  }, [leadForTemplates, selectedContact, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+  }, [leadForTemplates, selectedContact, message, isBusy, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash popover captura Enter para selecionar template
@@ -564,7 +589,6 @@ export function ChatComposer({
               }}
               onBlur={presence.stop}
               onKeyDown={handleKeyDown}
-              disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
               className="block w-full min-h-[52px] max-h-[140px] resize-none border-0 bg-transparent px-3.5 pb-1 pt-3 text-sm leading-5 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
@@ -575,7 +599,6 @@ export function ChatComposer({
                 key={conversationKey}
                 inputRef={inputRef}
                 onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
-                disabled={sendMessage.isPending || sendMedia.isPending}
                 className={QUICK_ACTION_BUTTON}
               />
               <ChatQuickActions
@@ -645,8 +668,9 @@ export function ChatComposer({
                 variant="ink"
                 size="icon"
                 onClick={handleSend}
-                disabled={!message.trim() || sendMessage.isPending}
-                aria-label="Enviar mensagem"
+                disabled={!message.trim() || isBusy}
+                aria-label={isBusy ? "Aguardando envio da mensagem anterior" : "Enviar mensagem"}
+                title={isBusy ? "Aguardando envio da mensagem anterior" : undefined}
                 className="h-[38px] w-[38px] shrink-0 rounded-full"
               >
                 {sendMessage.isPending ? (
