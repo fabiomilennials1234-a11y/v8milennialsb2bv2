@@ -487,10 +487,16 @@ index 1fee64edb..4314d9e22 100644
        // não dispara mais o arquivo direto pro cliente.
        setPendingAttachment({ data: base64, name: file.name, mime: file.type });
 diff --git a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
-index bae373207..95e64a74e 100644
+index bae373207..1a0369f84 100644
 --- a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
 +++ b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
-@@ -26,6 +26,11 @@ export interface ContextPanelProps {
+@@ -21,11 +21,17 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+ import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
+ import { ContextPanelTabAI } from "./ContextPanelTabAI";
+ import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
++import { nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
+ 
+ export interface ContextPanelProps {
    leadId?: string;
    phoneNumber?: string;
    pushName?: string | null;
@@ -502,7 +508,7 @@ index bae373207..95e64a74e 100644
    onClose?: () => void;
    /**
     * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
-@@ -75,6 +80,7 @@ export function ContextPanel({
+@@ -75,6 +81,7 @@ export function ContextPanel({
    leadId,
    phoneNumber,
    pushName,
@@ -510,12 +516,17 @@ index bae373207..95e64a74e 100644
    placeholder,
    identitySlot,
  }: ContextPanelProps) {
-@@ -123,7 +129,7 @@ export function ContextPanel({
+@@ -123,7 +130,12 @@ export function ContextPanel({
    // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
    // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
    const displayName =
 -    lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
-+    lead?.name || nomeDaConversa || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
++    nomeDoPainelDeContexto({
++      leadName: lead?.name,
++      nomeDaConversa,
++      pushName,
++      telefoneExibicao: telefoneParaExibicao(phoneNumber),
++    });
    const initials = displayName.slice(0, 2).toUpperCase();
    const score =
      typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
@@ -1040,7 +1051,7 @@ index bb01d8031..5ee0295ff 100644
    const queryOficiais = useQuery({
 diff --git a/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts b/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts
 new file mode 100644
-index 000000000..be49217cc
+index 000000000..228e1f4b4
 --- /dev/null
 +++ b/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts
 @@ -0,0 +1,12 @@
@@ -1054,7 +1065,7 @@ index 000000000..be49217cc
 + * troca quando a flag chega. É o ÚNICO lugar do código que conhece a chave.
 + */
 +export function useNomeDoLeadPrimeiro(): boolean {
-+  return useFeatureFlag("chat_nome_do_lead").enabled;
++  return useFeatureFlag("chat_nome_do_lead").enabled === true;
 +}
 diff --git a/classic/src/modules/communication/hooks/chat/usePatchedRealtime.ts b/.tmp/ui-classic-pristina/src/modules/communication/hooks/chat/usePatchedRealtime.ts
 deleted file mode 100644
@@ -1984,7 +1995,7 @@ index 000000000..b8aaa4f8d
 +  }));
 +}
 diff --git a/classic/src/modules/communication/lib/nomeDaConversa.ts b/classic/src/modules/communication/lib/nomeDaConversa.ts
-index 3512f30c7..1c117a550 100644
+index 3512f30c7..396846dea 100644
 --- a/classic/src/modules/communication/lib/nomeDaConversa.ts
 +++ b/classic/src/modules/communication/lib/nomeDaConversa.ts
 @@ -39,6 +39,33 @@ export interface FontesDoNomeDaConversa {
@@ -2029,6 +2040,32 @@ index 3512f30c7..1c117a550 100644
    if (fontes.savedContactName?.trim()) return fontes.savedContactName.trim();
    // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
    // canal, o cabeçalho passava a se chamar `210028246085780`. Só a queda muda —
+@@ -60,3 +88,25 @@ export function nomeDaConversa(
+ 
+   return nomeDoLead ?? pushName ?? telefone ?? "";
+ }
++
++/**
++ * O nome que o painel lateral exibe. O `leads.name` do lead que o painel
++ * resolveu manda (com trim: lead só com espaços não conta); depois o nome que
++ * o cabeçalho já resolveu (`nomeDaConversa`, só com a flag `chat_nome_do_lead`),
++ * o perfil, o telefone já formatado e, por fim, "Contato". Sem a flag
++ * `nomeDaConversa` é `undefined` e a cadeia é a de sempre.
++ */
++export function nomeDoPainelDeContexto(fontes: {
++  leadName?: string | null;
++  nomeDaConversa?: string | null;
++  pushName?: string | null;
++  telefoneExibicao?: string | null;
++}): string {
++  return (
++    fontes.leadName?.trim() ||
++    fontes.nomeDaConversa ||
++    fontes.pushName ||
++    fontes.telefoneExibicao ||
++    "Contato"
++  );
++}
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
 index aacc3ed82..f83352526 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotPause.ts

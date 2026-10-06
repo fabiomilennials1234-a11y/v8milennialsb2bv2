@@ -3,11 +3,10 @@
  * MESMA conversa tem o mesmo nome na lista, no cabeçalho e no painel lateral.
  * A mesma tabela de casos alimenta os três consumidores. Nomes fictícios.
  */
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { contactLabel, type ChatContact } from "@/modules/communication/hooks/chat/types";
-import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
+import { nomeDaConversa, nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
 
 const base: ChatContact = {
   channel: "whatsapp",
@@ -27,8 +26,15 @@ const base: ChatContact = {
   is_group: false,
 };
 
-// Espelha o que o painel lateral faz: `lead?.name || nomeDaConversa || ...`.
-const painel = (c: ChatContact, topo: string) => c.lead_name?.trim() || topo;
+// O painel usa a MESMA função pura que o `ContextPanel` chama (o painel
+// resolve o lead sozinho; aqui o lead é o `lead_name` do contato).
+const painel = (c: ChatContact, topo: string) =>
+  nomeDoPainelDeContexto({
+    leadName: c.lead_name,
+    nomeDaConversa: topo,
+    pushName: c.push_name,
+    telefoneExibicao: c.phone_number,
+  });
 
 const casos: Array<[string, Partial<ChatContact>, string]> = [
   ["lead vence salvo e perfil", { lead_name: "0001-EMPRESA FICTICIA LTDA", push_name: "Ana", saved_contact_name: "Ana Agenda" }, "0001-EMPRESA FICTICIA LTDA"],
@@ -58,16 +64,16 @@ describe("paridade lista × topo × painel (flag ligada)", () => {
     expect(painel(c, topo)).toBe(esperado);
   });
 
-  it("o painel lê a prop nova logo depois de lead.name", () => {
-    const src = readFileSync(
-      "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
-      "utf8",
-    );
-    expect(src).toContain("lead?.name || nomeDaConversa || pushName");
+  it("painel: lead só com espaços não vence o nome do cabeçalho", () => {
+    expect(
+      nomeDoPainelDeContexto({ leadName: "   ", nomeDaConversa: "Ana", pushName: "Outro" }),
+    ).toBe("Ana");
   });
 
-  it("a chave da flag mora só no hook", () => {
-    const hook = readFileSync("src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts", "utf8");
-    expect(hook).toContain('useFeatureFlag("chat_nome_do_lead")');
+  it("painel: sem a prop nova a cadeia é a de sempre", () => {
+    expect(nomeDoPainelDeContexto({ leadName: "Lead", pushName: "Ana" })).toBe("Lead");
+    expect(nomeDoPainelDeContexto({ pushName: "Ana", telefoneExibicao: "5548" })).toBe("Ana");
+    expect(nomeDoPainelDeContexto({ telefoneExibicao: "5548" })).toBe("5548");
+    expect(nomeDoPainelDeContexto({})).toBe("Contato");
   });
 });

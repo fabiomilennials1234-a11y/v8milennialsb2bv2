@@ -8,5 +8,5 @@ import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
  * troca quando a flag chega. É o ÚNICO lugar do código que conhece a chave.
  */
 export function useNomeDoLeadPrimeiro(): boolean {
-  return useFeatureFlag("chat_nome_do_lead").enabled;
+  return useFeatureFlag("chat_nome_do_lead").enabled === true;
 }

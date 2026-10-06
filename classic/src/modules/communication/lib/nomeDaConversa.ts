@@ -88,3 +88,25 @@ export function nomeDaConversa(
 
   return nomeDoLead ?? pushName ?? telefone ?? "";
 }
+
+/**
+ * O nome que o painel lateral exibe. O `leads.name` do lead que o painel
+ * resolveu manda (com trim: lead só com espaços não conta); depois o nome que
+ * o cabeçalho já resolveu (`nomeDaConversa`, só com a flag `chat_nome_do_lead`),
+ * o perfil, o telefone já formatado e, por fim, "Contato". Sem a flag
+ * `nomeDaConversa` é `undefined` e a cadeia é a de sempre.
+ */
+export function nomeDoPainelDeContexto(fontes: {
+  leadName?: string | null;
+  nomeDaConversa?: string | null;
+  pushName?: string | null;
+  telefoneExibicao?: string | null;
+}): string {
+  return (
+    fontes.leadName?.trim() ||
+    fontes.nomeDaConversa ||
+    fontes.pushName ||
+    fontes.telefoneExibicao ||
+    "Contato"
+  );
+}
