@@ -1030,6 +1030,25 @@ describe("useRealtimeSubscription (refactored to delegate transport)", () => {
       });
     }
 
+    // 1º join que falha: entrou `joining` sem falha e o canal cai ANTES do
+    // SUBSCRIBED. O que entrou no vão não chegou a canal nenhum — nenhuma
+    // entrega para comparar —, então agenda como volta de queda.
+    for (const fall of [["errored", "joining"], ["polling", "joining"], ["errored", "joining", "errored", "joining"]] as const) {
+      it(`1º join falha (joining → ${fall.join(" → ")} → joined) → agenda os alvos UMA vez, sem entrega no vão`, () => {
+        renderHook(() => useRealtimeSubscription("leads", ["leads"], { catchUpOnSubscribe: true }));
+        const t = transport();
+        enter(t, "joining");
+        goTo(t, ...fall);
+        act(() => vi.advanceTimersByTime(10_000));
+        expect(mockInvalidateQueries).not.toHaveBeenCalled();
+        goTo(t, "joined", "joined");
+        act(() => vi.advanceTimersByTime(2_000));
+        expect(invalidatedKeys()).toEqual(['["leads"]']);
+        act(() => vi.advanceTimersByTime(120_000));
+        expect(invalidatedKeys()).toEqual(['["leads"]']);
+      });
+    }
+
     it("canal compartilhado volta de queda com 3 instâncias no mesmo alvo → 1 busca (coalescida), não 3", async () => {
       const queryFn = vi.fn(async () => [{ id: "x" }]);
       const observer = new QueryObserver(qc, { queryKey: ["shared"], queryFn, staleTime: Infinity });

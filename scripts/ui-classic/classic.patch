@@ -5538,13 +5538,14 @@ index 000000000..df769dace
 +  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.subscribers.size, state: e.state }));
 +}
 diff --git a/classic/src/shared/realtime/useRealtimeChannel.ts b/classic/src/shared/realtime/useRealtimeChannel.ts
-index 7085a68c6..f221bb5d9 100644
+index 7085a68c6..3c8259caf 100644
 --- a/classic/src/shared/realtime/useRealtimeChannel.ts
 +++ b/classic/src/shared/realtime/useRealtimeChannel.ts
-@@ -1,12 +1,10 @@
+@@ -1,12 +1,11 @@
  import { useEffect, useRef, useState, useCallback } from "react";
 -import { supabase } from "@/integrations/supabase/client";
  import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
++import { reportError, toAppError } from "@/shared/errors";
  import {
 -  setChannelState,
 -  incrementFailures,
@@ -5558,7 +5559,7 @@ index 7085a68c6..f221bb5d9 100644
  
  // ─── Types ────────────────────────────────────────────────────────────────────
  
-@@ -23,16 +21,34 @@ export interface DiagnosticEvent {
+@@ -23,16 +22,37 @@ export interface DiagnosticEvent {
    error?: string;
  }
  
@@ -5582,7 +5583,10 @@ index 7085a68c6..f221bb5d9 100644
    table: string;
    filter?: string;
    onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
-+  /** Lido por ref: trocar a função a cada render não reabre o canal. */
++  /**
++   * Lido por ref: trocar a função a cada render não reabre o canal. Se lançar,
++   * o erro é relatado e o canal segue (os outros assinantes e a reconexão).
++   */
 +  onStateChange?: (change: ChannelStateChange) => void;
    circuitBreaker?: {
      threshold?: number;   // default: 5
@@ -5594,7 +5598,7 @@ index 7085a68c6..f221bb5d9 100644
  }
  
  export interface UseRealtimeChannelResult {
-@@ -45,12 +61,21 @@ export interface UseRealtimeChannelResult {
+@@ -45,12 +65,21 @@ export interface UseRealtimeChannelResult {
  const DEFAULT_THRESHOLD = 5;
  const DEFAULT_COOLDOWN_MS = 120_000;
  const MAX_DIAGNOSTICS = 50;
@@ -5619,7 +5623,7 @@ index 7085a68c6..f221bb5d9 100644
  export function useRealtimeChannel(
    options: UseRealtimeChannelOptions
  ): UseRealtimeChannelResult {
-@@ -62,207 +87,88 @@ export function useRealtimeChannel(
+@@ -62,207 +91,96 @@ export function useRealtimeChannel(
    const [state, setState] = useState<ChannelState>("idle");
    const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
  
@@ -5642,14 +5646,14 @@ index 7085a68c6..f221bb5d9 100644
 -
 -  // Stable key for status store (falls back to channel name)
 -  const statusKeyRef = useRef(statusKey);
-+  const handleRef = useRef<ChannelHandle | null>(null);
- 
+-
 -  // Timer refs for cleanup
 -  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 -  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 -  const dedupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 -  const dedupPendingRef = useRef(false);
--
++  const handleRef = useRef<ChannelHandle | null>(null);
+ 
 -  const pushDiagnostic = useCallback(
 -    (newState: ChannelState, opts?: { error?: string; type?: DiagnosticEvent["type"] }) => {
 +  const applyTransition = useCallback(
@@ -5808,9 +5812,6 @@ index 7085a68c6..f221bb5d9 100644
 -            setState("errored");
 -            stateRef.current = "errored";
 -            scheduleBackoff(failureCountRef.current);
--          }
--        }
--      });
 +    // A 1ª transição chega DENTRO do acquire (canal novo: "joining"; canal já
 +    // aberto por outra instância: o estado dele) — por isso a marca é local.
 +    let initial = true;
@@ -5823,7 +5824,17 @@ index 7085a68c6..f221bb5d9 100644
 +          applyTransition(t);
 +          const first = initial;
 +          initial = false;
-+          onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
++          // Roda dentro do laço que notifica TODOS os assinantes do canal, e o
++          // registry só arma o backoff/sonda depois dele: um consumidor que
++          // lança aqui deixaria o canal compartilhado caído para sempre, para
++          // todos. Isolado e relatado (ADR-0038), não relançado.
++          try {
++            onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
++          } catch (error) {
++            reportError(toAppError(error), { source: "realtime", feature: "onStateChange", table });
+           }
+-        }
+-      });
 +        },
 +      }
 +    );
@@ -5865,7 +5876,7 @@ index 7085a68c6..f221bb5d9 100644
      };
  
      document.addEventListener("visibilitychange", handleVisibilityChange);
-@@ -272,17 +178,7 @@ export function useRealtimeChannel(
+@@ -272,17 +190,7 @@ export function useRealtimeChannel(
        document.removeEventListener("visibilitychange", handleVisibilityChange);
        window.removeEventListener("online", handleOnline);
      };
@@ -5906,7 +5917,7 @@ index e320d9506..339917e96 100644
    return useRealtimeChannelStatus(channelName);
  }
 diff --git a/classic/src/shared/realtime/useRealtimeSubscription.ts b/classic/src/shared/realtime/useRealtimeSubscription.ts
-index 36b59b87c..27fcbb52d 100644
+index 36b59b87c..7b9de99d3 100644
 --- a/classic/src/shared/realtime/useRealtimeSubscription.ts
 +++ b/classic/src/shared/realtime/useRealtimeSubscription.ts
 @@ -1,15 +1,36 @@
@@ -5948,7 +5959,7 @@ index 36b59b87c..27fcbb52d 100644
  /**
   * Tabelas que NÃO têm coluna organization_id — usam wildcard.
   * Todas as outras são filtradas por org_id para reduzir ~80% do tráfego realtime.
-@@ -43,97 +64,303 @@ export interface RealtimeHandlers<T = any> {
+@@ -43,97 +64,315 @@ export interface RealtimeHandlers<T = any> {
     * Called on UPDATE events. Receives the updated record (flat, no joins)
     * and the current cached data. Return the new cache value.
     * When provided, avoids full invalidation for updates.
@@ -5992,14 +6003,15 @@ index 36b59b87c..27fcbb52d 100644
 +   * ao entrar (montagem, troca de org, religar) e o que acontece depois:
 +   *   - entra com ele `joined` (outra instância já o abriu): recebe tudo
 +   *     daqui em diante — 0 consulta;
-+   *   - entra com ele no 1º join (`joining`, sem falha): no SUBSCRIBED, se
-+   *     OUTRO canal físico da mesma tabela + filtro recebeu evento no vão,
-+   *     agenda todos os alvos como um evento comum (o agendador só refaz
-+   *     query cujo retrato é mais velho que essa entrega). Mesmo canal físico:
-+   *     ninguém recebe antes do SUBSCRIBED — 0 consulta;
++   *   - entra com ele no 1º join (`joining`, sem falha) e o join dá certo: no
++   *     SUBSCRIBED, se OUTRO canal físico da mesma tabela + filtro recebeu
++   *     evento no vão, agenda todos os alvos como um evento comum (o agendador
++   *     só refaz query cujo retrato é mais velho que essa entrega). Mesmo
++   *     canal físico: ninguém recebe antes do SUBSCRIBED — 0 consulta;
 +   *   - entra com ele caído (`errored`, `polling`, ou `joining` voltando de
-+   *     queda), ou ele cai depois: no SUBSCRIBED seguinte agenda todos os
-+   *     alvos uma vez, sempre — o que chegou na queda caiu para todas.
++   *     queda), ou ele cai depois — inclusive o 1º join que falha antes do
++   *     SUBSCRIBED: no SUBSCRIBED seguinte agenda todos os alvos uma vez,
++   *     sempre — o que chegou na queda caiu para todas.
 +   *     N instâncias no mesmo canal = N pedidos do mesmo instante; o agendador
 +   *     faz no máximo 1 busca por query.
 +   * O prazo é o de um evento (`quietMs`, `maxWaitMs`, stagger, `minAgeMs`,
@@ -6011,8 +6023,8 @@ index 36b59b87c..27fcbb52d 100644
 +
 +/**
 + * Onde o canal está, visto desta instância desde que ela entrou nele.
-+ * `joining` = 1º join do canal ainda sem SUBSCRIBED; `lost` = caído (já
-+ * estava quando ela entrou, ou caiu depois).
++ * `joining` = 1º join do canal ainda sem SUBSCRIBED e sem falha; `lost` =
++ * caído (já estava quando ela entrou, ou caiu depois — inclusive no 1º join).
 + */
 +interface SubscribeLink {
 +  /** Canal lógico (tabela + filtro); `null` = sem opt-in na entrada. */
@@ -6282,13 +6294,24 @@ index 36b59b87c..27fcbb52d 100644
 +      const link = linkRef.current;
 +      if (link.channelKey === null) return;
 +      if (state !== "joined") {
-+        if (link.phase === "live") link.phase = "lost";
++        // Queda é `lost` em QUALQUER fase — inclusive no 1º join: o que entrou
++        // no banco no vão não chegou a canal nenhum. `joining` só derruba quem
++        // estava `live`; no 1º join ou já `lost`, é o join em voo.
++        if (link.phase === "live" || state === "errored" || state === "polling") link.phase = "lost";
 +        return;
 +      }
 +      if (link.phase === "live") return;
 +      const rejoined = link.phase === "lost";
 +      link.phase = "live";
 +      if (!optionsRef.current?.catchUpOnSubscribe) return;
++      // 1º join que deu certo: só refaz se OUTRO canal físico da mesma chave
++      // lógica recebeu evento no vão. Hoje não dispara em prod: o registry põe
++      // toda instância desta chave no MESMO canal físico, e ninguém recebe
++      // antes do SUBSCRIBED. É guarda para canal físico distinto na mesma
++      // tabela + filtro — este hook repassar ao registry algo que entre na
++      // chave dele (evento, circuito), ou transporte que não compartilhe.
++      // Travada em `useRealtimeSubscription-refactored` ("outro canal físico
++      // da mesma chave…").
 +      const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, link.channelKey);
 +      if (!rejoined && seq <= link.since) return;
 +      const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);

@@ -59,6 +59,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import { realtimeChannelRegistrySnapshot } from "@/shared/realtime/realtimeChannelRegistry";
 import { getChannelStatus } from "@/lib/realtimeStatusStore";
+import { addErrorReporter, type ErrorReport } from "@/shared/errors";
 
 let seq = 0;
 const uniq = (p: string) => `${p}-${++seq}-${Math.random().toString(36).slice(2, 8)}`;
@@ -233,6 +234,46 @@ describe("useRealtimeChannel — dedup por (tabela, filtro, evento)", () => {
     subscribed();
     expect(() => last().onEvent?.({ eventType: "INSERT" })).toThrow("consumer bug");
     expect(ok).toHaveBeenCalledTimes(1);
+  });
+
+  it("onStateChange que lança não impede os outros assinantes nem o backoff; o erro é relatado", () => {
+    // O registry notifica todos os assinantes num laço só e arma o timer de
+    // backoff DEPOIS dele: um consumidor que lança ali deixava o canal
+    // compartilhado `errored` para sempre, para todos.
+    const filter = `organization_id=eq.${uniq("org")}`;
+    const bug = new Error("state consumer bug");
+    const reports: ErrorReport[] = [];
+    const off = addErrorReporter((r) => reports.push(r));
+    try {
+      const seen: string[] = [];
+      const { result } = renderHook(() => ({
+        a: useRealtimeChannel({
+          table: "follow_ups",
+          filter,
+          onEvent: vi.fn(),
+          onStateChange: ({ state }) => {
+            if (state === "errored") throw bug;
+          },
+        }),
+        b: useRealtimeChannel({ table: "follow_ups", filter, onEvent: vi.fn(), onStateChange: ({ state }) => seen.push(state) }),
+      }));
+      subscribed();
+      failed();
+      expect(seen).toEqual(["joining", "joined", "errored"]);
+      expect(result.current.b.state).toBe("errored");
+
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(supabase.channel).toHaveBeenCalledTimes(2);
+      subscribed();
+      expect(seen.at(-1)).toBe("joined");
+      expect(result.current.a.state).toBe("joined");
+      expect(reports.filter((r) => r.error.cause === bug)).toHaveLength(1);
+      expect(reports[0].context).toMatchObject({ source: "realtime", table: "follow_ups" });
+    } finally {
+      off();
+    }
   });
 
   it("StrictMode (monta → desmonta → monta) termina com 1 canal vivo e 1 consumidor", () => {

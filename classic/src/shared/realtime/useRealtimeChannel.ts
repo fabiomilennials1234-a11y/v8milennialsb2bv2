@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { reportError, toAppError } from "@/shared/errors";
 import {
   acquireRealtimeChannel,
   type ChannelHandle,
@@ -41,7 +42,10 @@ export interface UseRealtimeChannelOptions {
   table: string;
   filter?: string;
   onEvent: (payload: RealtimePostgresChangesPayload<any>) => void;
-  /** Lido por ref: trocar a função a cada render não reabre o canal. */
+  /**
+   * Lido por ref: trocar a função a cada render não reabre o canal. Se lançar,
+   * o erro é relatado e o canal segue (os outros assinantes e a reconexão).
+   */
   onStateChange?: (change: ChannelStateChange) => void;
   circuitBreaker?: {
     threshold?: number;   // default: 5
@@ -142,7 +146,15 @@ export function useRealtimeChannel(
           applyTransition(t);
           const first = initial;
           initial = false;
-          onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
+          // Roda dentro do laço que notifica TODOS os assinantes do canal, e o
+          // registry só arma o backoff/sonda depois dele: um consumidor que
+          // lança aqui deixaria o canal compartilhado caído para sempre, para
+          // todos. Isolado e relatado (ADR-0038), não relançado.
+          try {
+            onStateChangeRef.current?.({ state: t.state, failureCount: t.failureCount, initial: first });
+          } catch (error) {
+            reportError(toAppError(error), { source: "realtime", feature: "onStateChange", table });
+          }
         },
       }
     );

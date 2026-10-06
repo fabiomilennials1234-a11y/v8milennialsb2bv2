@@ -512,3 +512,66 @@ describe("recuperação — o que caiu na queda aparece depois da volta", () => 
     expect(ms).toBeLessThanOrEqual(151_000); // sonda em 120 s + prazo da lista
   });
 });
+
+// ── 1º join que falha ───────────────────────────────────────────────────────
+// A instância que ABRE o canal entra com ele `joining` sem falha. Se esse 1º
+// join cai (CHANNEL_ERROR/TIMED_OUT antes do SUBSCRIBED), o que entrou no
+// banco nesse vão não chegou a ninguém — ela também tem de refazer no
+// SUBSCRIBED seguinte, como quem entra com o canal já caído (revisor #2244 v13:
+// antes, ficava com a lista velha para sempre).
+
+describe("1º join que falha — quem abriu o canal também recupera", () => {
+  /** A tela abre o canal; a montagem busca; o 1º join cai; um INSERT entra no vão. */
+  async function openerWhoseFirstJoinFails() {
+    RT.hold = true;
+    const A = renderHook((props: ScreenProps) => useLeadsScreen(props), { wrapper, initialProps: {} });
+    await advance(200);
+    expect(RT.chans.map((c) => c.st)).toEqual(["joining"]);
+    expect(await failChannels("leads", ["joining"])).toBe(1);
+    return A;
+  }
+
+  it("tela sozinha: INSERT perdido no 1º join que falha → aparece depois da volta, 1 busca por query", async () => {
+    const A = await openerWhoseFirstJoinFails();
+    const lost = insertTop();
+    expect(emit("leads", insertEvt(lost))).toBe(0);
+    const i0 = db.calls.length;
+    RT.hold = false;
+    const ms = await convergeMs(() => has(A.result.current.list.data, lost.id), 10 * 60_000, 1_000);
+    expect(ms).toBeLessThanOrEqual(32_000); // backoff 1 s + prazo da lista (30 s)
+    expect(matches(A.result.current.list.data)).toBe(true);
+    await advance(AGE);
+    expect(tally(callsFrom(i0))).toEqual({ list: 1, count: 4, stats: 2, relation: 0 });
+    expect(liveCount()).toBe(1);
+  });
+
+  it("1º join falha 5× → circuito aberto → sonda: INSERT perdido aparece depois da sonda", async () => {
+    const A = await openerWhoseFirstJoinFails();
+    const lost = insertTop();
+    for (let i = 0; i < 4; i++) { await advance(35_000); await failChannels("leads", ["joining"]); }
+    expect(emit("leads", insertEvt(lost))).toBe(0);
+    RT.hold = false;
+    const ms = await convergeMs(() => has(A.result.current.list.data, lost.id), 10 * 60_000, 1_000);
+    expect(ms).toBeLessThanOrEqual(151_000); // sonda em 120 s + prazo da lista
+  });
+
+  it("irmã entra durante o backoff do 1º join: as DUAS recuperam, não só a que encontrou o canal caído", async () => {
+    const A = await openerWhoseFirstJoinFails();
+    const B = mountPicker({ params: { searchQuery: "ana" } });
+    await advance(50);
+    expect(RT.created).toBe(1); // entrou no mesmo canal, ainda em backoff
+    const lost = insertTop();
+    expect(emit("leads", insertEvt(lost))).toBe(0);
+    RT.hold = false;
+    // Instante em que CADA uma passa a mostrar (antes: B em ~31 s, A nunca).
+    const shownAt: { a?: number; b?: number } = {};
+    for (const t0 = Date.now(); Date.now() - t0 < 10 * 60_000 && (shownAt.a === undefined || shownAt.b === undefined); ) {
+      if (shownAt.a === undefined && has(A.result.current.list.data, lost.id)) shownAt.a = Date.now() - t0;
+      if (shownAt.b === undefined && has(B.result.current.data, lost.id)) shownAt.b = Date.now() - t0;
+      await advance(100);
+    }
+    expect({ a: (shownAt.a ?? Infinity) <= 32_000, b: (shownAt.b ?? Infinity) <= 32_000 }).toEqual({ a: true, b: true });
+    await advance(40_000);
+    expect([has(A.result.current.list.data, lost.id), has(B.result.current.data, lost.id)]).toEqual([true, true]);
+  });
+});

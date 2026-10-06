@@ -104,14 +104,15 @@ export interface RealtimeSubscriptionOptions<T> extends RealtimeHandlers<T> {
    * ao entrar (montagem, troca de org, religar) e o que acontece depois:
    *   - entra com ele `joined` (outra instância já o abriu): recebe tudo
    *     daqui em diante — 0 consulta;
-   *   - entra com ele no 1º join (`joining`, sem falha): no SUBSCRIBED, se
-   *     OUTRO canal físico da mesma tabela + filtro recebeu evento no vão,
-   *     agenda todos os alvos como um evento comum (o agendador só refaz
-   *     query cujo retrato é mais velho que essa entrega). Mesmo canal físico:
-   *     ninguém recebe antes do SUBSCRIBED — 0 consulta;
+   *   - entra com ele no 1º join (`joining`, sem falha) e o join dá certo: no
+   *     SUBSCRIBED, se OUTRO canal físico da mesma tabela + filtro recebeu
+   *     evento no vão, agenda todos os alvos como um evento comum (o agendador
+   *     só refaz query cujo retrato é mais velho que essa entrega). Mesmo
+   *     canal físico: ninguém recebe antes do SUBSCRIBED — 0 consulta;
    *   - entra com ele caído (`errored`, `polling`, ou `joining` voltando de
-   *     queda), ou ele cai depois: no SUBSCRIBED seguinte agenda todos os
-   *     alvos uma vez, sempre — o que chegou na queda caiu para todas.
+   *     queda), ou ele cai depois — inclusive o 1º join que falha antes do
+   *     SUBSCRIBED: no SUBSCRIBED seguinte agenda todos os alvos uma vez,
+   *     sempre — o que chegou na queda caiu para todas.
    *     N instâncias no mesmo canal = N pedidos do mesmo instante; o agendador
    *     faz no máximo 1 busca por query.
    * O prazo é o de um evento (`quietMs`, `maxWaitMs`, stagger, `minAgeMs`,
@@ -123,8 +124,8 @@ export interface RealtimeSubscriptionOptions<T> extends RealtimeHandlers<T> {
 
 /**
  * Onde o canal está, visto desta instância desde que ela entrou nele.
- * `joining` = 1º join do canal ainda sem SUBSCRIBED; `lost` = caído (já
- * estava quando ela entrou, ou caiu depois).
+ * `joining` = 1º join do canal ainda sem SUBSCRIBED e sem falha; `lost` =
+ * caído (já estava quando ela entrou, ou caiu depois — inclusive no 1º join).
  */
 interface SubscribeLink {
   /** Canal lógico (tabela + filtro); `null` = sem opt-in na entrada. */
@@ -340,13 +341,24 @@ export function useRealtimeSubscription<T = any>(
       const link = linkRef.current;
       if (link.channelKey === null) return;
       if (state !== "joined") {
-        if (link.phase === "live") link.phase = "lost";
+        // Queda é `lost` em QUALQUER fase — inclusive no 1º join: o que entrou
+        // no banco no vão não chegou a canal nenhum. `joining` só derruba quem
+        // estava `live`; no 1º join ou já `lost`, é o join em voo.
+        if (link.phase === "live" || state === "errored" || state === "polling") link.phase = "lost";
         return;
       }
       if (link.phase === "live") return;
       const rejoined = link.phase === "lost";
       link.phase = "live";
       if (!optionsRef.current?.catchUpOnSubscribe) return;
+      // 1º join que deu certo: só refaz se OUTRO canal físico da mesma chave
+      // lógica recebeu evento no vão. Hoje não dispara em prod: o registry põe
+      // toda instância desta chave no MESMO canal físico, e ninguém recebe
+      // antes do SUBSCRIBED. É guarda para canal físico distinto na mesma
+      // tabela + filtro — este hook repassar ao registry algo que entre na
+      // chave dele (evento, circuito), ou transporte que não compartilhe.
+      // Travada em `useRealtimeSubscription-refactored` ("outro canal físico
+      // da mesma chave…").
       const seq = rejoined ? nextRealtimeSeq() : lastRealtimeDelivery(queryClient, link.channelKey);
       if (!rejoined && seq <= link.since) return;
       const normalized = targetsRef.current.filter((t) => t != null).map(normalizeTarget);
