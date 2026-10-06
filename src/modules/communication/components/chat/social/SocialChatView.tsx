@@ -53,6 +53,7 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
 import {
@@ -301,6 +302,7 @@ function SocialComposer({
   instanceIdDoCanal: string | null;
 }) {
   const [texto, setTexto] = useState("");
+  const textoRef = useRef<HTMLTextAreaElement>(null);
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
 
   /**
@@ -583,7 +585,14 @@ function SocialComposer({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        <ComposerEmojiPicker
+          key={contactExternalId}
+          inputRef={textoRef}
+          onChange={setTexto}
+          disabled={subindo || enviar.isPending || gravando || janela.open === false}
+        />
         <Textarea
+          ref={textoRef}
           value={texto}
           onChange={(e) => {
             setTexto(e.target.value);

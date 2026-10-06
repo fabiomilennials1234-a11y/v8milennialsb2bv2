@@ -58,6 +58,17 @@ Example of a fast iteration on one screen:
 node scripts/ui-preview/shoot.mjs wip --routes funil-vendas --themes dark --widths 1440
 ```
 
+### Chat emoji regression check
+
+With the mock and Vite running, `node scripts/ui-preview/check-chat-emojis.mjs`
+checks the real composer at 1440, 390 and 320 px: picker bounds, localized
+search, selection replacement, caret restoration and skin-tone insertion.
+Screenshots and a report are saved to `.ui-shots/emojis/`. The catalog uses
+Emojibase 17.0 (3,944 complete emojis/variants). Noto Color Emoji is served
+locally, including its OFL license in `public/licenses/`. The complete font
+is necessary on Windows because the split color fonts render blank there.
+The ~5.8 MB WOFF2 is cached on demand instead of being precached by the PWA.
+
 ### Opening the app by hand
 
 Start terminals 1 and 2, then open a browser with the session injected. A

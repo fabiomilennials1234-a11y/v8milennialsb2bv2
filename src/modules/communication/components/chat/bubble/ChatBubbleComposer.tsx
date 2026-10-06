@@ -29,6 +29,7 @@ import {
 } from "@/modules/communication/lib/attachment-media-type";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { notifyError } from "@/shared/errors";
+import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 
 interface ChatBubbleComposerProps {
   phoneNumber: string;
@@ -52,6 +53,7 @@ export function ChatBubbleComposer({
   // Anexo pendente — imagem mostra thumbnail; documento/vídeo mostram chip.
   const [attachment, setAttachment] = useState<{ data: string; name: string; mime: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   const sendMessage = useSendWhatsAppMessage();
@@ -194,6 +196,7 @@ export function ChatBubbleComposer({
               {attachment.name}
             </p>
             <Textarea
+              ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Adicione uma legenda (opcional)"
@@ -204,6 +207,7 @@ export function ChatBubbleComposer({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-3 pb-2">
+          <ComposerEmojiPicker inputRef={inputRef} onChange={setText} disabled={isSending} className="mr-auto" />
           <Button
             variant="ghost"
             size="sm"
@@ -248,7 +252,9 @@ export function ChatBubbleComposer({
         <Paperclip className="w-4 h-4" aria-hidden />
       </Button>
 
+      <ComposerEmojiPicker key={`${instanceId}:${phoneNumber}`} inputRef={inputRef} onChange={setText} disabled={isSending} className="h-9 w-9" />
       <Textarea
+        ref={inputRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}

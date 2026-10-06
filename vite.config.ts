@@ -189,7 +189,9 @@ export default defineConfig(({ mode }) => {
         // HTML fora do precache: navegação vai sempre à rede (nginx serve o
         // index.html com no-store). Precacheado, o SW antigo servia `/` de um
         // build que já não existe no servidor (chamado 39ff2cd1).
-        globIgnores: ['**/*.html'],
+        // Cache the emoji font on demand, through the runtime font cache.
+        // Do not force its download when the service worker first installs.
+        globIgnores: ['**/*.html', '**/noto-color-emoji-*'],
       },
       devOptions: {
         enabled: false, // Don't run SW in dev

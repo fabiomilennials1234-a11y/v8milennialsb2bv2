@@ -40,6 +40,18 @@ vi.mock("@/modules/communication/components/chat/media/AudioRecorder", () => ({
 import { ChatBubbleComposer } from "@/modules/communication/components/chat/bubble/ChatBubbleComposer";
 import { ATTACHMENT_ACCEPT } from "@/modules/communication/lib/attachment-media-type";
 
+it("insere emoji no rascunho e só envia após confirmar", async () => {
+  mockSendMutateAsync.mockClear();
+  render(<ChatBubbleComposer phoneNumber="5511999990000" instanceId="inst-1" instanceName="inst1" canReply leadId="lead-1" />);
+  fireEvent.click(screen.getByRole("button", { name: "Inserir emoji" }));
+  fireEvent.change(await screen.findByLabelText("Buscar emoji"), { target: { value: "pizza" } });
+  fireEvent.click(screen.getByRole("button", { name: "pizza", exact: true }));
+  expect(screen.getByLabelText("Mensagem")).toHaveValue("🍕");
+  expect(mockSendMutateAsync).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+  await waitFor(() => expect(mockSendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ message: "🍕", leadId: "lead-1" })));
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const BASE_PROPS = {

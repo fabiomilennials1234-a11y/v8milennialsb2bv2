@@ -87,7 +87,7 @@ export function MessageMetaBadges({
                   : "border-border"
               )}
             >
-              <span className="text-lg leading-none [font-family:'Apple_Color_Emoji','Segoe_UI_Emoji','Noto_Color_Emoji',sans-serif]">{r.emoji}</span>
+              <span className="text-lg leading-none [font-family:'Noto_Color_Emoji','Apple_Color_Emoji','Segoe_UI_Emoji',sans-serif]">{r.emoji}</span>
               {r.count && r.count > 1 ? (
                 <span className="text-xs font-semibold tabular-nums leading-none">{r.count}</span>
               ) : null}
