@@ -17,8 +17,11 @@ export const TETO_DE_CARTOES = 3;
 /** Mensagem e lead somem sozinhos; quem não olhou em 8 segundos vê no sino. */
 export const VIDA_PADRAO_MS = 8_000;
 
-/** Automação parada não expira: some por ação ou por dispensa explícita. */
-const FIXOS = new Set(["workflow_alert", "cron_drift"]);
+/**
+ * Não expiram: somem por ação ou por dispensa explícita. Automação parada e
+ * mensagem agendada que não saiu pedem ação — 8 segundos não bastam.
+ */
+const FIXOS = new Set(["workflow_alert", "cron_drift", "scheduled_message_failed"]);
 
 export interface Cartao {
   id: string;

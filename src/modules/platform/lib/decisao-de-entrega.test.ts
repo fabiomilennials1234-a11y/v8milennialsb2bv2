@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { decidirEntrega, type ContextoDeEntrega } from "./decisao-de-entrega";
+import { empilhar } from "./pilha-de-cartoes";
 import { resolverPreferencias } from "./preferencias-de-aviso";
 import type { Aviso } from "./aviso-stream";
 
@@ -118,6 +119,53 @@ describe("decisão de entrega", () => {
     expect(decidirEntrega(aviso("workflow_alert"), "INSERT", contexto()).cartao).toBe(true);
     expect(decidirEntrega(aviso("meeting_booked"), "INSERT", contexto()).cartao).toBe(false);
     expect(decidirEntrega(aviso("follow_up_overdue"), "INSERT", contexto()).cartao).toBe(false);
+  });
+
+  it("mensagem agendada que saiu ou falhou vira cartão — quem agendou precisa saber na hora", () => {
+    const enviada = decidirEntrega(aviso("scheduled_message_sent"), "INSERT", contexto());
+    const falhou = decidirEntrega(aviso("scheduled_message_failed"), "INSERT", contexto());
+
+    expect(enviada).toMatchObject({ cartao: true, som: "mensagem" });
+    expect(falhou).toMatchObject({ cartao: true, som: "erro" });
+  });
+
+  it("rajada de dez agendamentos às 09:00 vira UM cartão ×10 e UM som — não dez", () => {
+    // O worker emite as dez na mesma chave: a primeira nasce (INSERT), as
+    // outras engordam a mesma linha (UPDATE), alguns segundos depois cada.
+    const chave = "sched_sent:2026-08-31";
+    const ultimoSomPorChave: Record<string, number> = {};
+    let pilha: ReturnType<typeof empilhar>["pilha"] = [];
+    let sons = 0;
+
+    for (let i = 0; i < 10; i++) {
+      const agora = AGORA + i * 5_000;
+      const evento = i === 0 ? "INSERT" : "UPDATE";
+      const a = aviso("scheduled_message_sent", {
+        id: "aviso-agendada",
+        lead_id: `lead-${i}`,
+        group_key: chave,
+        event_count: i + 1,
+      });
+
+      const decisao = decidirEntrega(a, evento, contexto({ agora, ultimoSomPorChave }));
+      if (decisao.som) {
+        sons += 1;
+        ultimoSomPorChave[chave] = agora;
+      }
+      if (decisao.cartao) pilha = empilhar(pilha, a, agora, true).pilha;
+    }
+
+    expect(sons).toBe(1);
+    expect(pilha).toHaveLength(1);
+    expect(pilha[0]).toMatchObject({ tipo: "scheduled_message_sent", eventCount: 10 });
+  });
+
+  it("falha de envio agendado fica na tela até ser dispensada; o sucesso some sozinho", () => {
+    const falha = empilhar([], aviso("scheduled_message_failed", { group_key: "sched_fail:s1" }), AGORA, true);
+    const sucesso = empilhar([], aviso("scheduled_message_sent", { group_key: "sched_sent:d" }), AGORA, true);
+
+    expect(falha.pilha[0]).toMatchObject({ fixo: true, expiraEm: null });
+    expect(sucesso.pilha[0].fixo).toBe(false);
   });
 
   it("tipo silenciado nas preferências não toca, mas ainda pode aparecer", () => {
