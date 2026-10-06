@@ -38,13 +38,15 @@ vi.mock("@/modules/communication/hooks/useScheduledMessages", () => ({
   }),
 }));
 
-// API pública de leads: o diálogo de negócio vira um stub com botão "fechar".
+// Caminhos diretos em leads (evita ciclo via index.ts, dep-cruiser): o diálogo de negócio vira um stub com botão "fechar".
 const { gateRef } = vi.hoisted(() => ({
   gateRef: { current: { allowed: true, isLoading: false, reason: undefined as string | undefined } },
 }));
-vi.mock("@/modules/leads", () => ({
+vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadActionGates", () => ({
   useLeadActionGates: () => ({ canAddToPipe: gateRef.current }),
-  LeadNewDealDialog: ({ leadId, onOpenChange }: { leadId: string | null; onOpenChange: (o: boolean) => void }) => (
+}));
+vi.mock("@/modules/leads/components/lead-card/LeadCardNewDeal", () => ({
+  LeadCardNewDeal: ({ leadId, onOpenChange }: { leadId: string | null; onOpenChange: (o: boolean) => void }) => (
     <div data-testid="deal-stub" data-lead-id={leadId}>
       <button type="button" onClick={() => onOpenChange(false)}>fechar negócio</button>
     </div>

@@ -18,7 +18,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { LeadNewDealDialog, useLeadActionGates } from "@/modules/leads";
+import { LeadCardNewDeal as LeadNewDealDialog } from "@/modules/leads/components/lead-card/LeadCardNewDeal";
+import { useLeadActionGates } from "@/modules/leads/components/lead-detail/hooks/useLeadActionGates";
 import { useCreateScheduledMessage, useUpdateScheduledMessage } from "@/modules/communication/hooks/useScheduledMessages";
 
 interface ScheduleMessageModalProps {
