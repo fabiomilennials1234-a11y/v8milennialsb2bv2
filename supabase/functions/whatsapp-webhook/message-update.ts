@@ -179,10 +179,20 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     // Own-number read (WhatsApp Web/phone): the conversation becomes read in Torque for the
     // whole org team, up to the read message. Status and quotes stay untouched: this is not
     // a delivery receipt. Unknown ids are a no-op inside the RPC, so no requireTarget throw.
-    const { error } = await db.rpc("apply_external_conversation_read", {
-      p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
-    });
-    if (error) throw new Error("External read sync failed");
+    // Best-effort: it only moves unread markers, so a slow/missing RPC is logged and the
+    // webhook still answers 200 — throwing would turn every own read into a 500 retry storm.
+    let failure: string | undefined;
+    try {
+      const { error } = await db.rpc("apply_external_conversation_read", {
+        p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
+      });
+      if (error) failure = error.code || "rpc_error";
+    } catch (err) {
+      failure = err instanceof Error ? err.name : "rpc_exception";
+    }
+    if (failure) await logRuntime({ organizationId: instance.organization_id, module: "webhook",
+      action: "uazapi_external_read_failed", status: "error", errorMessage: failure,
+      payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length } });
   }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);

@@ -543,9 +543,21 @@ describe("external read sync (own-number ReadReceipt, Chamado 6ebb4b73)", () => 
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("propagates an RPC failure so the event follows retry/DLQ", async () => {
-    fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
-    await expect(applyMessageUpdate(db, instance, ownRead("Read"))).rejects.toThrow("External read sync failed");
+  // Best-effort: an RPC failure (slow DB, RPC missing after a wrong-order deploy) must not
+  // turn every own read into a webhook 500 and a provider retry storm. Log, no PII, move on.
+  it.each([
+    ["RPC error", () => fetchMock.mockResolvedValue(json({ code: "PGRST202", message: "not found" }, 404)), "PGRST202"],
+    ["network failure", () => fetchMock.mockRejectedValue(new TypeError("fetch failed")), undefined],
+  ])("logs a %s and resolves instead of failing the webhook", async (_label, arrange, code) => {
+    arrange();
+    await expect(applyMessageUpdate(db, instance, ownRead("Read"), { requireTarget: true })).resolves.toBeUndefined();
+    expect(logRuntime).toHaveBeenCalledOnce();
+    const entry = logRuntime.mock.calls[0][0] as Record<string, unknown>;
+    expect(entry).toMatchObject({ organizationId: "org-a", module: "webhook",
+      action: "uazapi_external_read_failed", status: "error",
+      payloadSnapshot: { instance_id: "instance-a", message_count: 2 } });
+    if (code) expect(entry.errorMessage).toBe(code);
+    expect(JSON.stringify(entry)).not.toMatch(/5511|message-a|message-b/);
     expect(completeQuotePresentations).not.toHaveBeenCalled();
   });
 
