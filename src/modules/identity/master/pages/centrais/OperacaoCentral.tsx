@@ -4,8 +4,9 @@
  *
  * Substitui a antiga lista de Suporte. O conteúdo do chamado (diagnóstico,
  * conversa, anexos, contexto) é o mesmo — mora na gaveta (`TicketDetail`).
- * A coluna vem do dado (`lib/operacao-kanban.ts`); arrastar pede o fato ao
- * banco e o trigger tem a última palavra.
+ * A coluna vem do dado (`lib/operacao-kanban.ts`). O master move livre
+ * (emenda ao ADR-0018): arrastar chama `master_ticket_move`, auditada; fechar,
+ * marcar resolvido e reabrir um fechado perguntam antes (`OperacaoMoveDialog`).
  */
 
 import { useMemo, useState } from "react";
@@ -58,6 +59,7 @@ import {
 import { useMasterQueueChannel } from "../../hooks/useMasterQueueChannel";
 import { useMasterSupportUnread } from "../../hooks/useMasterSupportUnread";
 import { COMPLEXITY_LABELS, KIND_LABELS, type DiagnosisComplexity, type DiagnosisKind } from "../../lib/ticket-diagnosis";
+import { OperacaoMoveDialog, type PendingMove } from "../../components/support/OperacaoMoveDialog";
 import {
   OPERACAO_COLUMNS,
   OPERACAO_COLUMN_HINTS,
@@ -66,7 +68,10 @@ import {
   columnOf,
   groupByColumn,
   isReopenAlert,
+  moveSuccessMessage,
+  noopMessage,
   type OperacaoColumn,
+  type OperacaoMove,
 } from "../../lib/operacao-kanban";
 
 const ALL = "__all__";
@@ -77,18 +82,17 @@ const COLUMNS: KanbanColumnDef<OperacaoColumn>[] = OPERACAO_COLUMNS.map((id) => 
   hint: OPERACAO_COLUMN_HINTS[id],
 }));
 
-/** O próximo passo natural de cada coluna — o botão da gaveta, para quem não arrasta. */
-const NEXT_COLUMN: Partial<Record<OperacaoColumn, OperacaoColumn>> = {
-  diagnostico: "andamento",
-  andamento: "aguardando",
-  aguardando: "andamento",
+/**
+ * O próximo passo natural de cada coluna — o botão da gaveta, para quem não
+ * arrasta. Qualquer outro destino fica no "Mover para".
+ */
+const NEXT_STEP: Partial<Record<OperacaoColumn, { to: OperacaoColumn; label: string }>> = {
+  diagnostico: { to: "andamento", label: "Pegar e começar" },
+  andamento: { to: "aguardando", label: "Marcar resolvido" },
+  aguardando: { to: "concluido", label: "Concluir" },
 };
 
-const MOVE_LABELS = {
-  pegar: "Pegar e começar",
-  enviar_resposta: "Enviar resposta ao cliente",
-  retomar: "Retomar — o cliente respondeu",
-} as const;
+const MOVE_TO_PLACEHOLDER = "__mover__";
 
 // Custo do Claude Code é em dólar; o número segue o formato daqui (US$ 1,80).
 const usd = (v: number | null | undefined) =>
@@ -103,7 +107,7 @@ interface Filters {
 }
 
 export default function OperacaoCentral() {
-  const { masterUser } = useMasterAuth();
+  const { masterUser, isMaster } = useMasterAuth();
   const { data: tickets = [], isLoading, refetch, isFetching } = useMasterSupportTickets();
   useMasterQueueChannel(); // chamado novo e "peguei" entram ao vivo
   const { byTicket: unread } = useMasterSupportUnread();
@@ -143,31 +147,54 @@ export default function OperacaoCentral() {
   const open = tickets.find((t) => t.id === openId) ?? null;
   const hasFilters = Object.values(filters).some(Boolean);
 
+  // Concluído, Aguardando confirmação e saída de Concluído perguntam antes.
+  const [pending, setPending] = useState<PendingMove | null>(null);
+
+  function commitMove(ticketId: string, m: OperacaoMove, sendReply: boolean) {
+    move.mutate(
+      { ticketId, to: m.to, sendReply },
+      {
+        onSuccess: () => {
+          setPending(null);
+          toast.success(moveSuccessMessage(m, sendReply));
+        },
+        onError: (e: unknown) => {
+          setPending(null);
+          notifyError(e, { fallback: "O banco recusou o movimento." });
+        },
+      },
+    );
+  }
+
   function doMove(ticket: MasterSupportTicket, to: OperacaoColumn) {
-    const verdict = canMove(ticket, digests.get(ticket.id) ?? null, to);
+    const digest = digests.get(ticket.id) ?? null;
+    const verdict = canMove(ticket, digest, to, isMaster);
     if (!verdict.ok) {
       toast.error(verdict.reason);
       return;
     }
-    move.mutate(
-      { ticketId: ticket.id, move: verdict.move.kind },
-      {
-        onSuccess: () =>
-          toast.success(
-            verdict.move.kind === "enviar_resposta"
-              ? "Resposta enviada. O chamado fecha sozinho em 7 dias se o cliente não reabrir."
-              : "Chamado em andamento.",
-          ),
-        onError: (e: unknown) => notifyError(e, { fallback: "O banco recusou o movimento." }),
-      },
-    );
+    const m = verdict.move;
+    if (m.noop) {
+      toast.info(noopMessage(m));
+      return;
+    }
+    if (m.confirm) {
+      setPending({
+        ticketId: ticket.id,
+        ticketTitle: ticket.title,
+        move: m,
+        reply: digest?.customer_reply?.trim() || null,
+      });
+      return;
+    }
+    commitMove(ticket.id, m, false);
   }
 
   return (
     <div className="space-y-5">
       <MasterPageHeader
         title="Operação"
-        subtitle="Todo chamado num kanban, do aberto ao concluído. A coluna vem do dado — arrastar pede o próximo passo."
+        subtitle="Todo chamado num kanban, do aberto ao concluído. Arraste para qualquer coluna: o estado muda e fica registrado."
         actions={
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RotateCw className={cn("h-4 w-4", isFetching && "animate-spin")} aria-hidden />
@@ -288,7 +315,7 @@ export default function OperacaoCentral() {
           items={grouped}
           getId={(t) => t.id}
           canDrop={(t, to) => {
-            const v = canMove(t, digests.get(t.id) ?? null, to);
+            const v = canMove(t, digests.get(t.id) ?? null, to, isMaster);
             return v.ok ? { ok: true } : v;
           }}
           onMove={doMove}
@@ -312,12 +339,20 @@ export default function OperacaoCentral() {
             <TicketDrawer
               ticket={open}
               digest={digests.get(open.id) ?? null}
+              isMaster={isMaster}
               onMove={(to) => doMove(open, to)}
               moving={move.isPending}
             />
           )}
         </SheetContent>
       </Sheet>
+
+      <OperacaoMoveDialog
+        pending={pending}
+        busy={move.isPending}
+        onCancel={() => setPending(null)}
+        onConfirm={({ sendReply }) => pending && commitMove(pending.ticketId, pending.move, sendReply)}
+      />
     </div>
   );
 }
@@ -457,11 +492,13 @@ function TicketCard({
 function TicketDrawer({
   ticket,
   digest,
+  isMaster,
   onMove,
   moving,
 }: {
   ticket: MasterSupportTicket;
   digest: TicketDiagnosisDigest | null;
+  isMaster: boolean;
   onMove: (to: OperacaoColumn) => void;
   moving: boolean;
 }) {
@@ -469,8 +506,12 @@ function TicketDrawer({
   const claim = useClaimSupportTicket();
   const triage = useTriageSupportTicket();
   const col = columnOf(ticket, digest);
-  const next = NEXT_COLUMN[col];
-  const verdict = next ? canMove(ticket, digest, next) : null;
+  const next = NEXT_STEP[col];
+  // A gaveta oferece o mesmo que o arrasto: tudo o que `canMove` aceita e que grava algo.
+  const destinations = OPERACAO_COLUMNS.filter((to) => {
+    const v = canMove(ticket, digest, to, isMaster);
+    return v.ok && !v.move.noop;
+  });
   const mine = ticket.assigned_master_user_id === masterUser?.id;
 
   return (
@@ -495,18 +536,36 @@ function TicketDrawer({
         <SheetDescription>{ticket.organization?.name ?? "Organização desconhecida"}</SheetDescription>
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {next && verdict?.ok && (
-            <Button size="sm" className="gap-1.5" disabled={moving} onClick={() => onMove(next)}>
-              {verdict.move.kind === "enviar_resposta" ? (
+          {next && destinations.includes(next.to) && (
+            <Button size="sm" className="gap-1.5" disabled={moving} onClick={() => onMove(next.to)}>
+              {next.to === "aguardando" ? (
                 <MessageSquareReply className="h-4 w-4" aria-hidden />
               ) : (
                 <ArrowRight className="h-4 w-4" aria-hidden />
               )}
-              {MOVE_LABELS[verdict.move.kind]}
+              {next.label}
             </Button>
           )}
-          {next && verdict && !verdict.ok && col !== "aguardando" && (
-            <p className="text-xs text-muted-foreground">{verdict.reason}</p>
+          {destinations.length > 0 && (
+            <Select
+              value={MOVE_TO_PLACEHOLDER}
+              disabled={moving}
+              onValueChange={(v) => v !== MOVE_TO_PLACEHOLDER && onMove(v as OperacaoColumn)}
+            >
+              <SelectTrigger className="h-8 w-[170px] text-xs" aria-label="Mover para">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={MOVE_TO_PLACEHOLDER} disabled>
+                  Mover para…
+                </SelectItem>
+                {destinations.map((to) => (
+                  <SelectItem key={to} value={to}>
+                    {OPERACAO_COLUMN_LABELS[to]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           <Select
             value={ticket.severidade ?? ALL}

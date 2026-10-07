@@ -7,6 +7,7 @@ import {
   useTriageSupportTicket,
   useClaimSupportTicket,
   useCreateStaffComment,
+  useMoveOperacaoTicket,
 } from "./useMasterSupportTickets";
 
 const masterAuthMock = vi.fn();
@@ -15,9 +16,11 @@ vi.mock("./useMasterAuth", () => ({
 }));
 
 let mock: ReturnType<typeof createMockSupabase>;
+const rpcMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...a: unknown[]) => (mock.sb as never as { from: (...x: unknown[]) => unknown }).from(...a),
+    rpc: (...a: unknown[]) => rpcMock(...a),
   },
 }));
 
@@ -33,6 +36,7 @@ const asMaster = () =>
 
 beforeEach(() => {
   masterAuthMock.mockReset();
+  rpcMock.mockReset();
   mock = createMockSupabase();
   mock.mockTable("support_tickets", []);
   mock.mockTable("support_ticket_comments", []);
@@ -262,5 +266,45 @@ describe("useCreateStaffComment", () => {
     await expect(
       result.current.mutateAsync({ ticketId: "t1", body: "  ", isInternal: false, authorUserId: "u" }),
     ).rejects.toThrow(/vazio/);
+  });
+});
+
+describe("useMoveOperacaoTicket — movimento livre do master", () => {
+  it("passa só pela RPC master_ticket_move, sem UPDATE direto", async () => {
+    asMaster();
+    rpcMock.mockResolvedValue({ data: { id: "t1", status: "fechado" }, error: null });
+    const { result } = renderHook(() => useMoveOperacaoTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync({ ticketId: "t1", to: "concluido" });
+
+    expect(rpcMock).toHaveBeenCalledWith("master_ticket_move", {
+      p_ticket_id: "t1",
+      p_to_column: "concluido",
+      p_send_reply: false,
+    });
+    expect(mock.getUpdated("support_tickets")).toHaveLength(0);
+  });
+
+  it("envia a resposta só quando pedido", async () => {
+    asMaster();
+    rpcMock.mockResolvedValue({ data: { id: "t1", status: "resolvido" }, error: null });
+    const { result } = renderHook(() => useMoveOperacaoTicket(), { wrapper: wrap(newQc()) });
+
+    await result.current.mutateAsync({ ticketId: "t1", to: "aguardando", sendReply: true });
+    expect(rpcMock).toHaveBeenCalledWith("master_ticket_move", {
+      p_ticket_id: "t1",
+      p_to_column: "aguardando",
+      p_send_reply: true,
+    });
+  });
+
+  it("a recusa do banco chega a quem arrastou", async () => {
+    asMaster();
+    rpcMock.mockResolvedValue({ data: null, error: { message: "sem resposta pronta", code: "23514" } });
+    const { result } = renderHook(() => useMoveOperacaoTicket(), { wrapper: wrap(newQc()) });
+
+    await expect(
+      result.current.mutateAsync({ ticketId: "t1", to: "aguardando", sendReply: true }),
+    ).rejects.toMatchObject({ code: "23514" });
   });
 });

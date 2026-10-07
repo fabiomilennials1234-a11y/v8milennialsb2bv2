@@ -18,6 +18,7 @@ import type {
   TicketStatus,
   TicketTipo,
 } from "@/modules/platform/lib/support-ticket-draft";
+import type { OperacaoColumn } from "../lib/operacao-kanban";
 import { useMasterAuth } from "./useMasterAuth";
 
 export type MasterSupportTicket = Tables<"support_tickets"> & {
@@ -261,40 +262,34 @@ export function useMasterDiagnosisDigests(ticketIds: readonly string[]) {
 }
 
 /**
- * Os movimentos do kanban da Operação. Cada um escreve o FATO que a coluna lê
- * (ver `lib/operacao-kanban.ts`); o trigger do banco tem a última palavra.
+ * O movimento livre do master no kanban da Operação (emenda ao ADR-0018).
+ *
+ * Uma porta só: `master_ticket_move` (migration 20271108000300). A RPC muda o
+ * estado, ajusta o relógio sem contar reabertura, atribui quem moveu quando o
+ * chamado vai para Em andamento sem dono, e grava a auditoria — tudo numa
+ * transação. Com `sendReply`, envia a resposta pronta do diagnóstico como
+ * comentário público na mesma transação (OP-9). UPDATE direto de status pelo
+ * front não é caminho: o gatilho segue recusando fechar e reabrir fechado.
  */
 export function useMoveOperacaoTicket() {
   const queryClient = useQueryClient();
-  const { masterUser } = useMasterAuth();
 
   return useMutation({
     mutationFn: async ({
       ticketId,
-      move,
+      to,
+      sendReply = false,
     }: {
       ticketId: string;
-      move: "pegar" | "enviar_resposta" | "retomar";
+      to: OperacaoColumn;
+      /** Só para `aguardando`: envia o `customer_reply` do diagnóstico ao cliente. */
+      sendReply?: boolean;
     }) => {
-      if (move === "enviar_resposta") {
-        // OP-9: resposta pública + Resolvido numa transação (migration 20271105000000).
-        const { data, error } = await supabase.rpc("master_ticket_send_reply", { p_ticket_id: ticketId });
-        if (error) throw error;
-        return data as Tables<"support_tickets">;
-      }
-
-      const patch =
-        move === "pegar"
-          ? { status: "em_andamento" as const, assigned_master_user_id: masterUser?.id ?? null }
-          : { status: "em_andamento" as const };
-      if (move === "pegar" && !patch.assigned_master_user_id) throw new Error("usuario master nao carregado");
-
-      const { data, error } = await supabase
-        .from("support_tickets")
-        .update(patch)
-        .eq("id", ticketId)
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc("master_ticket_move", {
+        p_ticket_id: ticketId,
+        p_to_column: to,
+        p_send_reply: sendReply,
+      });
       if (error) throw error;
       return data as Tables<"support_tickets">;
     },
