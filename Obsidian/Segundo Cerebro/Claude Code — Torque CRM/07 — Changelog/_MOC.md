@@ -174,3 +174,4 @@ owner: claude-agent
 - [[2026-10-05-webhook-resolve-instance-sem-token-na-url|Webhook resolve instância por RPC, sem token na URL]]
 - [[2026-10-05-whatsapp-messages-hot-indices|2026-10-05-whatsapp-messages-hot-indices]]
 - [[2026-10-06-front-cloudflare-workers-fase-teste|Front estático na Cloudflare Workers — fase de teste no workers.dev]] 🔵 wip
+- [[2026-10-07-front-cloudflare-pipeline-deploy|Front na Cloudflare — pipeline de deploy no GitHub Actions]] 🔵 wip
