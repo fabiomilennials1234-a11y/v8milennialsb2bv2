@@ -36,6 +36,7 @@ import { MessageBubble } from "@/modules/communication/components/chat/MessagePr
 import { CallMarker } from "@/modules/communication/components/chat/view/CallMarker";
 import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
 import type { ConversationCall } from "@/modules/communication/lib/conversationCallsQuery";
+import { groupSenderName } from "@/modules/communication/lib/groupSenderName";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 
 export interface TransferEvent {
@@ -443,6 +444,7 @@ export function MessageList({
           onImagePreview={onImagePreview}
           isFirstInGroup={isFirstInGroup}
           isLastInGroup={isLastInGroup}
+          senderName={groupSenderName(message, sep.show ? null : prevMsg)}
           mountTime={mountTime}
           onRetry={message.status === "failed" ? onRetry : undefined}
           instanceId={instanceId}
