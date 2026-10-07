@@ -63,6 +63,11 @@ export function isPureReceiptUpdate(data: Update): boolean {
     && data.reaction === undefined && data.reactions === undefined;
 }
 
+function isGroupUpdate(data: Update): boolean {
+  return data.IsGroup === true || data.isGroup === true
+    || (typeof data.chatid === "string" && data.chatid.endsWith("@g.us"));
+}
+
 /** An atomic SQL predicate prevents late receipts from overwriting later states. */
 export function receiptPredecessors(status: string): string[] {
   switch (status) {
@@ -170,6 +175,25 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     scopedTargets = targets ?? [];
   }
   if (ids.length === 0) return outcome;
+  if (receipt === "read" && data.fromMe === true && !isGroupUpdate(data)) {
+    // Own-number read (WhatsApp Web/phone): the conversation becomes read in Torque for the
+    // whole org team, up to the read message. Status and quotes stay untouched: this is not
+    // a delivery receipt. Unknown ids are a no-op inside the RPC, so no requireTarget throw.
+    // Best-effort: it only moves unread markers, so a slow/missing RPC is logged and the
+    // webhook still answers 200 — throwing would turn every own read into a 500 retry storm.
+    let failure: string | undefined;
+    try {
+      const { error } = await db.rpc("apply_external_conversation_read", {
+        p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
+      });
+      if (error) failure = error.code || "rpc_error";
+    } catch (err) {
+      failure = err instanceof Error ? err.name : "rpc_exception";
+    }
+    if (failure) await logRuntime({ organizationId: instance.organization_id, module: "webhook",
+      action: "uazapi_external_read_failed", status: "error", errorMessage: failure,
+      payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length } });
+  }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
     if (predecessors.length) {

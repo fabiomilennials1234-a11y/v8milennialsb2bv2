@@ -49,6 +49,7 @@ import {
 import { ChannelBadge } from "../ChannelBadge";
 import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,8 +59,8 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
  * nomear conversa de cada canal — este export continua existindo porque a lista
  * e a linha do mobile já o importam por este nome.
  */
-export function contactDisplayName(c: InboxContact): string {
-  return contactLabel(c);
+export function contactDisplayName(c: InboxContact, nomeDoLeadPrimeiro?: boolean): string {
+  return contactLabel(c, { nomeDoLeadPrimeiro });
 }
 
 export function formatContactTime(timestamp: string): string {
@@ -300,7 +301,8 @@ export function ConversationListItem({
   caixa,
   tambemEm,
 }: ConversationListItemProps) {
-  const displayName = contactDisplayName(contact);
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  const displayName = contactDisplayName(contact, nomeDoLeadPrimeiro);
   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
   const key = contactKey(contact);
   // Ações de conversa (arquivar/excluir/etiquetar) vivem em

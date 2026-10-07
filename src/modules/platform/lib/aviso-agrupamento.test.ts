@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { agruparPorTempo, contarPorFamilia, filtrarPorFamilia } from "./aviso-agrupamento";
+import {
+  agruparPorTempo,
+  contarPorFamilia,
+  familiaDoAviso,
+  filtrarPorFamilia,
+} from "./aviso-agrupamento";
 import type { Aviso } from "./aviso-stream";
 
 function aviso(tipo: string, over: Partial<Aviso> = {}): Aviso {
@@ -52,6 +57,11 @@ describe("famílias do sino", () => {
       "follow_up_overdue",
     ]);
     expect(filtrarPorFamilia(lista, "tudo")).toHaveLength(8);
+  });
+
+  it("mensagem agendada mora na Agenda, ao lado de onde foi agendada — não em Sistema", () => {
+    expect(familiaDoAviso("scheduled_message_sent")).toBe("agenda");
+    expect(familiaDoAviso("scheduled_message_failed")).toBe("agenda");
   });
 });
 

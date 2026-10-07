@@ -252,7 +252,7 @@ export function ChatBubbleComposer({
         <Paperclip className="w-4 h-4" aria-hidden />
       </Button>
 
-      <ComposerEmojiPicker key={`${instanceId}:${phoneNumber}`} inputRef={inputRef} onChange={setText} disabled={isSending} className="h-9 w-9" />
+      <ComposerEmojiPicker key={`${instanceId}:${phoneNumber}`} inputRef={inputRef} onChange={setText} className="h-9 w-9" />
       <Textarea
         ref={inputRef}
         value={text}
@@ -261,7 +261,6 @@ export function ChatBubbleComposer({
         placeholder="Mensagem"
         aria-label="Mensagem"
         rows={1}
-        disabled={isSending}
         className="
           flex-1 min-h-[36px] max-h-[120px] py-2 px-3
           resize-none border-0 bg-muted/40

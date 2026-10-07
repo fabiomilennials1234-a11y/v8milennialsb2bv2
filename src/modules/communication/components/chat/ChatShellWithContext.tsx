@@ -31,7 +31,8 @@ import { Loader2, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
-import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -223,6 +224,8 @@ function ChatView({
    * que segurar a thread inteira num skeleton esperando a flag.
    */
   const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
+  // `chat_nome_do_lead`: o `leads.name` manda no topo, na lista e no painel.
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
 
   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
   // daqui é o único ponto que sabe qual lead está aberto.
@@ -311,7 +314,11 @@ function ChatView({
       savedContactName: selectedContact?.saved_contact_name,
       telefone: phoneNumber ?? null,
     },
-    { nomeDoWhatsappPrimeiro },
+    {
+      nomeDoWhatsappPrimeiro,
+      // Grupo fica com a regra de sempre.
+      nomeDoLeadPrimeiro: nomeDoLeadPrimeiro && !selectedContact?.is_group,
+    },
   );
 
   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
@@ -775,6 +782,9 @@ export function ChatShellWithContext() {
    * argumento) e a lista refaz a busca — uma vez, no load.
    */
   const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
+  // `chat_nome_do_lead`: o painel lateral resolve o `leads.name` por conta própria;
+  // aqui só vai a queda (salvo → perfil → telefone) para quando não há lead.
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
 
   // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
   // estado persistido — empurrar essas dimensões pro servidor sumiria com
@@ -1512,6 +1522,16 @@ export function ChatShellWithContext() {
                 leadId={selectedContact?.lead_id ?? undefined}
                 phoneNumber={telefoneSelecionado ?? undefined}
                 pushName={selectedContact?.push_name ?? null}
+                nomeDaConversa={
+                  nomeDoLeadPrimeiro && selectedContact && !selectedContact.is_group
+                    ? nomeComLeadPrimeiro({
+                        pushName: selectedContact.push_name ?? null,
+                        savedContactName: selectedContact.saved_contact_name,
+                        nomeDoLead: null,
+                        telefone: telefoneSelecionado ?? null,
+                      })
+                    : undefined
+                }
               />
             )
           ) : undefined

@@ -9,11 +9,14 @@ vi.mock('../../src/modules/communication/lib/whatsappApi', () => ({ transcribeAu
 afterEach(cleanup);
 const message = { id: '11111111-1111-4111-8111-111111111111', instance_id: 'instance', organization_id: 'org' } as WhatsAppMessage;
 it.each([
-  ['whatsapp-api-proxy: A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.', 'A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.'],
-  ['private provider response', 'Não foi possível transcrever. Aguarde e tente novamente.'],
-])('displays a safe transcription error', async (error, expected) => {
+  'whatsapp-api-proxy: A UAZAPI retornou este áudio sem transcrição. Nenhum texto foi salvo.',
+  'whatsapp-api-proxy: Este áudio não está mais disponível para transcrição.',
+  'private provider response',
+])('displays one safe transcription error, never naming the vendor: %s', async (error) => {
   vi.mocked(transcribeAudio).mockRejectedValue(new Error(error));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}><AudioTranscription message={message} /></QueryClientProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Transcrever áudio' }));
-  expect((await screen.findByRole('alert')).textContent).toBe(expected);
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toBe('Não conseguimos transcrever este áudio. Tente novamente em instantes.');
+  expect(alert.textContent).not.toMatch(/uazapi/i);
 });

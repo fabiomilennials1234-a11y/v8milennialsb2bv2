@@ -53,7 +53,7 @@ interface PendingTerminal {
 
 export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   const queryClient = useQueryClient();
-  const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
+  const { data: pipelines = [], isLoading, isError, refetch } = useLeadAllPipelines(leadId);
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
   const moveEntry = useMovePipelineEntry();
   const createEntry = useCreatePipelineEntry();
@@ -183,6 +183,28 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
     return (
       <div className="flex items-center justify-center py-6">
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Falha de leitura não é "lead sem funil": sem a lista completa, não oferece
+  // adicionar (duplicaria negócio) nem mente que o lead está fora dos funis.
+  if (isError) {
+    return (
+      <div
+        role="alert"
+        data-testid="chat-funis-erro"
+        className="flex flex-col items-center gap-2 py-6 text-center"
+      >
+        <GitBranch className="h-7 w-7 text-muted-foreground/30" />
+        <p className="text-xs text-muted-foreground">Não foi possível carregar os funis</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+        >
+          Tentar de novo
+        </button>
       </div>
     );
   }

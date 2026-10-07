@@ -26,13 +26,26 @@ const TIMBRE_POR_TIPO: Record<string, Timbre> = {
   follow_up_overdue: "reuniao",
   workflow_alert: "erro",
   cron_drift: "erro",
+  scheduled_message_sent: "mensagem",
+  scheduled_message_failed: "erro",
 };
 
 /** Automação parada atravessa o horário silencioso: parada de madrugada é prejuízo de manhã. */
 const ATRAVESSA_O_SILENCIO = new Set(["workflow_alert", "cron_drift"]);
 
-/** O que exige reação em minutos — o resto conta no sino sem roubar a tela. */
-const CANAL_QUENTE = new Set(["workflow_alert", "cron_drift", "lead_message", "lead_new"]);
+/**
+ * O que exige reação em minutos — o resto conta no sino sem roubar a tela.
+ * Mensagem agendada entra: quem agendou quer saber na hora que saiu (ou que
+ * falhou e o lead ficou sem resposta), não dias depois abrindo o sino.
+ */
+const CANAL_QUENTE = new Set([
+  "workflow_alert",
+  "cron_drift",
+  "lead_message",
+  "lead_new",
+  "scheduled_message_sent",
+  "scheduled_message_failed",
+]);
 
 /**
  * Rajada: enquanto a conversa está viva, o Aviso engorda em vez de nascer de
