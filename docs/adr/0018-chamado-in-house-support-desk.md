@@ -45,3 +45,13 @@ Buying also means our customers' customers' data — lead names, phones, CNPJs, 
 - **`defect_url` is a string, deliberately.** When volume justifies a `Defeito` entity with fan-out notification (Linear's Customer Request model), that column is where the foreign key goes. Nothing about this decision blocks it.
 - **`assignee` and first-response tracking exist from v1** despite a three-person team, because three is already enough for two people to answer the same customer.
 - **Deferred on purpose, each a single migration when needed**: `priority` as an axis separate from Severidade (rejected — two urgency axes means none), per-severity notification routing (`support_notification_targets`), contractual SLA, AI deflection.
+
+## Emenda: movimento livre do master (2026-10-07)
+
+Pedido do CTO: no kanban da Operação (Área Master), o master precisa mudar a coluna de um Chamado livremente — por exemplo, marcar como concluído na hora, sem esperar os 7 dias.
+
+- **O cliente continua sem poder.** Ele só reabre um Chamado `resolvido` (→ `aberto`), e essa reabertura continua contando em `reopen_count` (o alerta de 3 reaberturas, OP-10, não muda).
+- **O master move livre, em qualquer direção, entre as 5 colunas** — e só pela RPC `master_ticket_move(ticket, coluna, send_reply)` (migration `20271108000300`), que grava cada movimento em `master_audit_logs` (`SUPPORT_TICKET_MOVE`: quem, de→para, se enviou resposta; sem PII). A RPC liga uma variável local da transação que `enforce_support_ticket_write_rules` só reconhece quando `is_master_user()` é verdadeiro. UPDATE direto de status, mesmo de um master, segue as regras de antes: não fecha na mão, e fechado continua terminal fora da RPC.
+- **Mover não conta reabertura.** O relógio é do banco: → `resolvido` reinicia `resolved_at`; → `fechado` carimba `closed_at` (e `resolved_at`, se faltava); voltar ao trabalho limpa `resolved_at` (e `closed_at`, se vinha de fechado). `closed_at` passou a ser coluna do relógio — só o banco escreve.
+- **"Aguardando confirmação" pergunta:** enviar ao cliente a resposta pronta do diagnóstico (comentário público, mesma transação) e marcar resolvido, ou só mudar o estado. **"Concluído" não avisa o cliente.**
+- **O fechamento automático em 7 dias permanece** para quem fica em Resolvido (`close_resolved_support_tickets`, intocado).

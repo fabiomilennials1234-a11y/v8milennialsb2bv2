@@ -38,6 +38,11 @@ export type TicketEvent =
  * `fechado` (terminal). É exatamente o que o trigger no banco impõe; um mapa
  * mais estrito aqui seria uma restrição que só existe na UI, e um dia alguém a
  * descobriria contornável pela API.
+ *
+ * Exceção (emenda ao ADR-0018, 2026-10-07): o kanban da Operação move livre —
+ * inclusive fechar e reabrir fechado — mas só pela RPC auditada
+ * `master_ticket_move`, que o gatilho reconhece. Este mapa descreve o UPDATE
+ * direto, que continua com as regras acima.
  */
 const WORKING: TicketStatus[] = ["aberto", "em_andamento", "aguardando_cliente", "resolvido"];
 

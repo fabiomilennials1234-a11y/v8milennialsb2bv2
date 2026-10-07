@@ -23019,6 +23019,10 @@ export type Database = {
         Args: { p_ticket_id: string }
         Returns: Database["public"]["Tables"]["support_tickets"]["Row"]
       }
+      master_ticket_move: {
+        Args: { p_ticket_id: string; p_to_column: string; p_send_reply?: boolean }
+        Returns: Database["public"]["Tables"]["support_tickets"]["Row"]
+      }
       master_org_user_activity: {
         Args: { p_window_minutes?: number }
         Returns: {
