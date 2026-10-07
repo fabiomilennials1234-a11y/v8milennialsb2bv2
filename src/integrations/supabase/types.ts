@@ -18841,6 +18841,7 @@ export type Database = {
           is_group: boolean
           lead_id: string | null
           media_expired: boolean
+          media_file_name: string | null
           media_url: string | null
           message_id: string
           message_type: string
@@ -18873,6 +18874,7 @@ export type Database = {
           is_group?: boolean
           lead_id?: string | null
           media_expired?: boolean
+          media_file_name?: string | null
           media_url?: string | null
           message_id: string
           message_type?: string
@@ -18905,6 +18907,7 @@ export type Database = {
           is_group?: boolean
           lead_id?: string | null
           media_expired?: boolean
+          media_file_name?: string | null
           media_url?: string | null
           message_id?: string
           message_type?: string

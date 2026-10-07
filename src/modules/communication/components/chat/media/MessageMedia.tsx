@@ -181,8 +181,10 @@ interface MessageDocumentProps {
   isOutgoing: boolean;
 }
 
-function getFileIcon(displayName: string) {
-  const ext = displayName.split(".").pop()?.toLowerCase();
+function getFileIcon(fileName: string | undefined, src: string) {
+  // Extensão real: do nome, ou do path da URL (sem query string) quando não há nome.
+  const source = fileName || src.split(/[?#]/)[0].split("/").pop() || "";
+  const ext = source.includes(".") ? source.split(".").pop()?.toLowerCase() : undefined;
   switch (ext) {
     case "pdf":
     case "doc":
@@ -196,8 +198,9 @@ function getFileIcon(displayName: string) {
 }
 
 export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentProps) {
-  // Tentar extrair nome do arquivo da URL se não fornecido
-  const displayName = fileName || src.split("/").pop() || "Documento";
+  // O basename da URL NÃO é nome: é um sha256 ou um link `.enc?…` do provider.
+  // O nome real vem de `readDocumentFileName` (coluna > payload > upload do CRM).
+  const displayName = fileName?.trim() || "Documento";
 
   return (
     <a
@@ -217,7 +220,7 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
           isOutgoing ? "bg-primary-foreground/20" : "bg-primary/20",
         )}
       >
-        {getFileIcon(displayName)}
+        {getFileIcon(fileName, src)}
       </div>
       <div className="flex-1 min-w-0 overflow-hidden">
         <p className="text-sm font-medium truncate">{displayName}</p>
