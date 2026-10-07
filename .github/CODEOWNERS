@@ -1,41 +1,41 @@
 # =============================================================================
 # CODEOWNERS — Torque CRM
 # =============================================================================
-# Sintaxe: <path> <owner1> <owner2> ...
-# Owners listados aqui são adicionados automaticamente como reviewers em PRs.
-# Combinar com branch protection rule em `main` exigindo "Require review from
-# Code Owners" para que aprovação seja obrigatória nesses paths.
+# Este arquivo é APLICADO: o ruleset da `main` exige PR e "Require review from
+# Code Owners". Todo path listado aqui só entra na `main` com aprovação do dono.
+# Path que não aparece aqui entra por PR sem aprovação obrigatória.
 #
-# Handles GitHub: ajustar para os usernames reais antes do merge.
-#   - @fabiomilennials1234-a11y  (Gabriel — CTO, owner repo)
-#   TODO: adicionar handle do Marcelo + outros maintainers
+# Por isso a lista é curta de propósito: só o que publica o front ou guarda o
+# token de deploy (`front-production/CLOUDFLARE_API_TOKEN`). Um workflow
+# alterado que chegasse à `main` sem revisão poderia ler esse token e publicar
+# outro site no lugar do CRM. Decisão do CTO em 2026-10-07 (opção B).
+#
+# Owner:
+#   - @fabiomilennials1234-a11y  (Gabriel — CTO, owner do repo)
+#
+# O admin do repo tem bypass do ruleset só via PR (bypass_mode "pull_request"):
+# não consegue dar push direto, mas pode mergear o próprio PR. Sem isso, PR
+# aberto pela conta do CTO em path daqui nunca seria mergeado, porque o GitHub
+# não deixa o autor aprovar o próprio PR.
 # =============================================================================
 
-# Default — qualquer arquivo sem owner específico
-*                                       @fabiomilennials1234-a11y
-
-# =============================================================================
-# Vault Obsidian — proteção máxima contra perda
-# =============================================================================
-# Qualquer mudança em vault exige aprovação do CTO.
-/Obsidian/                              @fabiomilennials1234-a11y
-/Obsidian/**/*.md                       @fabiomilennials1234-a11y
-
-# =============================================================================
-# Áreas sensíveis — segurança/multi-tenant/auth
-# =============================================================================
-/supabase/migrations/                   @fabiomilennials1234-a11y
-/supabase/functions/_shared/            @fabiomilennials1234-a11y
-/supabase/functions/_shared/permission_engine.ts  @fabiomilennials1234-a11y
-/src/lib/permissions.ts                 @fabiomilennials1234-a11y
-/src/integrations/supabase/types.ts     @fabiomilennials1234-a11y
-
-# =============================================================================
-# Config de proteção do próprio vault — meta-guarda
-# =============================================================================
+# Pipeline de CI/CD e a guarda dele próprio
+/.github/workflows/                     @fabiomilennials1234-a11y
 /.github/CODEOWNERS                     @fabiomilennials1234-a11y
-/.github/workflows/vault-sentinel.yml   @fabiomilennials1234-a11y
-/.github/workflows/vault-backup.yml     @fabiomilennials1234-a11y
-/.gitattributes                         @fabiomilennials1234-a11y
-/.gitignore                             @fabiomilennials1234-a11y
-/CLAUDE.md                              @fabiomilennials1234-a11y
+
+# Worker da Cloudflare e os scripts que preparam e publicam o front
+/cloudflare/                            @fabiomilennials1234-a11y
+/scripts/cloudflare/                    @fabiomilennials1234-a11y
+
+# Dependências que rodam dentro do build e do deploy
+/package.json                           @fabiomilennials1234-a11y
+/package-lock.json                      @fabiomilennials1234-a11y
+
+# Build do front que ainda vai para produção pelo EasyPanel (até o desligamento)
+/Dockerfile                             @fabiomilennials1234-a11y
+
+# Código que EXECUTA durante o build do CI (job front-build, que recebe o
+# SENTRY_AUTH_TOKEN): config do Vite das duas interfaces e o merge da clássica
+/vite.config.ts                         @fabiomilennials1234-a11y
+/classic/vite.config.ts                 @fabiomilennials1234-a11y
+/scripts/ui-classic/                    @fabiomilennials1234-a11y
