@@ -32,6 +32,8 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
   /** True when media was purged by the 30-day retention job. Renders "expired" state. */
   media_expired?: boolean | null;
   push_name: string | null;
+  /** Mensagem de conversa de grupo (`@g.us`). Em grupo, `push_name` é o remetente. */
+  is_group?: boolean | null;
   status: string;
   lead_id: string | null;
   timestamp: string;

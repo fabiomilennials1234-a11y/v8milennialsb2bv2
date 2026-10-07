@@ -143,6 +143,7 @@ export function MessageBubble({
   onImagePreview,
   isFirstInGroup = true,
   isLastInGroup = true,
+  senderName,
   mountTime,
   onRetry,
   instanceId,
@@ -155,6 +156,8 @@ export function MessageBubble({
   onImagePreview: (url: string) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Remetente em conversa de grupo (só na 1ª da sequência). Ver `groupSenderName`. */
+  senderName?: string | null;
   mountTime?: number;
   onRetry?: (message: FailedMessage) => void;
   /** When set + enableActions=true, reveals S1 action bar on hover */
@@ -399,6 +402,12 @@ export function MessageBubble({
               </>
             )}
           </div>
+        )}
+
+        {senderName && !isOutgoing && (
+          <p data-group-sender className="mb-1 truncate text-xs font-semibold text-muted-foreground">
+            {senderName}
+          </p>
         )}
 
         {isDeleted ? (
