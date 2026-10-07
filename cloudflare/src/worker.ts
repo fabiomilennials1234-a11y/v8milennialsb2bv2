@@ -9,7 +9,7 @@
  * senha, link de pagamento).
  */
 import { proxyApi } from "./api-proxy";
-import { CACHE, ROBOTS_HEADER, ROBOTS_VALUE, applyProfile, type Profile } from "./headers";
+import { CACHE, ROBOTS_HEADER, ROBOTS_VALUE, VERSION_HEADER, applyProfile, type Profile } from "./headers";
 import { encodePath, logPath, resolveRoute, type Route } from "./routing";
 
 function plain(status: number, text: string, extra?: Record<string, string>): Response {
@@ -121,6 +121,8 @@ export default {
 
     // Div8: a cópia em *.workers.dev não entra em buscador.
     if (url.hostname.endsWith(".workers.dev")) response.headers.set(ROBOTS_HEADER, ROBOTS_VALUE);
+    // Prova de versão para o smoke do deploy (docs/DEPLOY_CLOUDFLARE.md, "Pipeline").
+    response.headers.set(VERSION_HEADER, env.CF_VERSION_METADATA.id);
 
     log({ method: request.method, path: logPath(route, url.pathname), route, status: response.status, ms: Date.now() - startedAt });
     return response;

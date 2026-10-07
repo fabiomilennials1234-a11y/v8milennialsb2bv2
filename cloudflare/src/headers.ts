@@ -17,6 +17,13 @@ export const CACHE = config.cache;
 export const ROBOTS_HEADER = "X-Robots-Tag";
 export const ROBOTS_VALUE = "noindex, nofollow";
 
+/**
+ * Id da versão do Worker que gerou a resposta (binding `version_metadata`).
+ * É o que deixa o smoke do deploy provar QUAL versão respondeu. `/assets/*`
+ * sai do servidor de assets, sem Worker, e não leva este header.
+ */
+export const VERSION_HEADER = "X-Torque-Version";
+
 /** Cópia mutável da resposta, com o perfil e o Cache-Control impostos. */
 export function applyProfile(response: Response, profile: Profile, cacheControl: string): Response {
   const out = new Response(response.body, response);

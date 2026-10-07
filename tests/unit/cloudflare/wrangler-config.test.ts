@@ -43,6 +43,10 @@ describe("cloudflare/wrangler.jsonc", () => {
     expect(config.upload_source_maps).toBe(false);
   });
 
+  it("version_metadata: o Worker sabe o id da própria versão (X-Torque-Version, smoke do deploy)", () => {
+    expect(config.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
+  });
+
   it("nada de conta, rota ou segredo no repositório", () => {
     for (const key of ["account_id", "routes", "route", "secrets", "kv_namespaces", "d1_databases"]) {
       expect(config, key).not.toHaveProperty(key);

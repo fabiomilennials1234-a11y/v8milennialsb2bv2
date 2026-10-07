@@ -50,7 +50,12 @@ const ASSETS = {
   },
 };
 
-const ENV = { ASSETS, API_UPSTREAM: "https://jsjsmuncfkbsbzqzqhfq.supabase.co" } as unknown as Env;
+const VERSION_ID = "5f0c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f";
+const ENV = {
+  ASSETS,
+  API_UPSTREAM: "https://jsjsmuncfkbsbzqzqhfq.supabase.co",
+  CF_VERSION_METADATA: { id: VERSION_ID, tag: "86412c0", timestamp: "2026-10-07T00:00:00Z" },
+} as unknown as Env;
 
 const HOST = "https://torque-front.example.workers.dev";
 
@@ -233,6 +238,43 @@ describe("X-Robots-Tag (Div8)", () => {
     expect((await call("/.env")).headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect((await call("/", { host: "https://torquecrm.com.br" })).headers.get("x-robots-tag")).toBeNull();
     expect((await call("/", { host: "http://localhost:8787" })).headers.get("x-robots-tag")).toBeNull();
+  });
+});
+
+describe("X-Torque-Version (prova de versão do smoke do deploy)", () => {
+  it("toda resposta gerada pelo Worker leva o id da versão: página, SPA, LP, redirect, 404, 405, 500 e API", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":{"code":"unauthorized","message":"x"}}', { status: 401, headers: { "content-type": "application/json" } })));
+    const cases: [string, RequestInit?][] = [
+      ["/"],
+      ["/index.html", { headers: { cookie: "torque_ui=v5" } }],
+      ["/sw.js"],
+      ["/sobre"],
+      ["/leads"],
+      ["/lp/v1/"],
+      ["/lp/v1"],
+      ["/api/v1"],
+      ["/.env"],
+      ["/", { method: "POST" }],
+      ["/api/v1/leads"],
+    ];
+    for (const [path, init] of cases) {
+      expect((await call(path, init)).headers.get("x-torque-version"), path).toBe(VERSION_ID);
+    }
+    const broken = { ...ENV, ASSETS: { fetch: () => Promise.reject(new Error("x")) } } as unknown as Env;
+    const failed = await worker.fetch(new Request(`${HOST}/leads`) as Parameters<typeof worker.fetch>[0], broken, {} as ExecutionContext);
+    expect(failed.status).toBe(500);
+    expect(failed.headers.get("x-torque-version")).toBe(VERSION_ID);
+  });
+
+  it("também no domínio real (o smoke do corte depende dele lá)", async () => {
+    expect((await call("/", { host: "https://torquecrm.com.br" })).headers.get("x-torque-version")).toBe(VERSION_ID);
+  });
+
+  it("só o id: nem tag (sha) nem timestamp da versão saem", async () => {
+    const response = await call("/");
+    const values = [...response.headers.values()].join("\n");
+    expect(values).not.toContain("86412c0");
+    expect(values).not.toContain("2026-10-07T00:00:00Z");
   });
 });
 
