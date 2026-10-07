@@ -1,0 +1,55 @@
+// Front do Torque (SPA dual V5 + clássica) em Cloudflare Workers + Static Assets.
+// Operação: docs/DEPLOY_CLOUDFLARE.md. Roteamento e headers: src/worker.ts.
+//
+// Sem account_id, sem routes e sem segredo neste arquivo: a conta vem do
+// `wrangler login`, e enquanto não houver `routes` o Worker só responde em
+// *.workers.dev — o DNS de torquecrm.com.br não é tocado.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "torque-front",
+  "main": "src/worker.ts",
+  // Data fixa. Não pode passar da que o workerd embutido no wrangler fixado em
+  // package.json suporta (4.147.0 → workerd 1.20261001.1): acima disso o
+  // `wrangler dev` cai para outra data e a paridade local deixa de testar o
+  // runtime que vai para produção.
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "upload_source_maps": false,
+  "assets": {
+    // Gerado por `npm run cf:prepare -- --from <build>`; nunca editado à mão.
+    "directory": "./.assets",
+    "binding": "ASSETS",
+    // Caminho exato: o Worker é dono de toda a semântica de caminho (sem 307
+    // para /index.html, /sobre.html ou pastas).
+    "html_handling": "none",
+    "not_found_handling": "none",
+    // Tudo passa pelo Worker, MENOS /assets/*: os chunks com hash saem direto
+    // do servidor de assets, sem invocação (e sem custo). Um /assets/* que não
+    // existe também fica com o servidor de assets (404 com o `_headers`), não
+    // com o Worker.
+    "run_worker_first": ["/*", "!/assets/*"]
+  },
+  "vars": {
+    "API_UPSTREAM": "https://jsjsmuncfkbsbzqzqhfq.supabase.co"
+  },
+  // Id da versão que está respondendo. O Worker o devolve em `X-Torque-Version`,
+  // e o smoke do deploy (scripts/cloudflare/smoke.mjs) só aceita a versão
+  // esperada: um override de versão que a Cloudflare ignore em silêncio (ela
+  // ignora quando a versão não está na deployment) não passa por PASS.
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "observability": {
+    "enabled": true,
+    // Tira a query das URLs registradas em logs e traces da plataforma (o
+    // `wrangler tail` local, no formato pretty, ainda a mostra — ver o doc).
+    "redact_query_string": true,
+    "logs": {
+      // O log de invocação automático guarda a URL inteira (com a query) e os
+      // headers da requisição. O Worker já registra método, caminho, status e
+      // duração — e nada além disso (docs/DEPLOY_CLOUDFLARE.md, "Logs").
+      "invocation_logs": false
+    }
+  }
+}
