@@ -8,7 +8,7 @@
  *
  * A = referência (nginx de produção). B = candidato (Worker). Cada caso sai como
  *   PASS           — igual em tudo o que é comparado;
- *   EXPECTED-DIFF  — difere só onde uma divergência declarada (Div1–Div12) permite;
+ *   EXPECTED-DIFF  — difere só onde uma divergência declarada (Div1–Div13) permite;
  *   FAIL           — qualquer outra diferença, ou uma invariante de B quebrada.
  * Sai com código 1 se houver FAIL, 2 se a verificação inicial abortar.
  *
@@ -65,6 +65,7 @@ export const DIVS = {
   Div10: "erro gerado pelo proxy da API (413/502/504) em JSON no envelope da API, em vez de HTML do nginx",
   Div11: "/assets/* sem arquivo é 404 do servidor de assets (com o _headers), para qualquer extensão; prod devolve o index do SPA quando a extensão não está na regex do nginx",
   Div12: "cookie: `,` também separa pares (o workerd junta headers Cookie repetidos com `, `; o nginx lê cada um); `a=1,torque_ui=v5` num header só dá V5 (prod: clássica)",
+  Div13: "/50x.html é página da imagem do nginx, não da build: no artefato do CI ela não existe e o caminho cai no SPA",
 };
 
 const JS_TYPES = new Set(["application/javascript", "application/x-javascript", "text/javascript"]);
@@ -110,8 +111,15 @@ export const servedByAssetServer = (testPath) => new URL(testPath, "http://parit
 /**
  * Única saída de rede do script. Recusa credencial e qualquer POST que não
  * seja um dos dois tipos que o nginx rejeita antes de chegar ao Supabase.
+ *
+ * `options` (o smoke do deploy usa): `timeoutMs` por tentativa, `attempts`
+ * (GET/HEAD/OPTIONS) e `signal`, que aborta tudo — o teto de uma rodada do smoke.
+ *
+ * @param {string} base
+ * @param {{ method: string, path: string, headers?: Record<string, string>, raw?: boolean, rawHeaders?: string[], body?: Buffer }} testCase
+ * @param {{ timeoutMs?: number, attempts?: number, signal?: AbortSignal }} [options]
  */
-export async function send(base, testCase) {
+export async function send(base, testCase, { timeoutMs = 30_000, attempts = 2, signal } = {}) {
   const headers = { "user-agent": "torque-parity/1.0", ...testCase.headers };
   const rawNames = (testCase.rawHeaders ?? []).filter((_, index) => index % 2 === 0);
   for (const name of [...Object.keys(headers), ...rawNames]) {
@@ -122,7 +130,7 @@ export async function send(base, testCase) {
   const method = testCase.method;
   if (testCase.raw) {
     if (method !== "GET") throw new Error("caso raw só com GET");
-    return rawGet(base, testCase.path, ["user-agent", "torque-parity/1.0", ...(testCase.rawHeaders ?? [])]);
+    return rawGet(base, testCase.path, ["user-agent", "torque-parity/1.0", ...(testCase.rawHeaders ?? [])], { timeoutMs, signal });
   }
   if (!["GET", "HEAD", "OPTIONS", "POST"].includes(method)) throw new Error(`método recusado: ${method}`);
   if (method === "POST") {
@@ -135,20 +143,21 @@ export async function send(base, testCase) {
 
   const url = new URL(testCase.path, base).toString();
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
+      const timeout = AbortSignal.timeout(timeoutMs);
       const response = await fetch(url, {
         method,
         headers,
         body: testCase.body,
         redirect: "manual",
-        signal: AbortSignal.timeout(30_000),
+        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
       const body = method === "HEAD" ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
       return { url, status: response.status, headers: response.headers, body };
     } catch (error) {
       lastError = error;
-      if (method === "POST") break;
+      if (method === "POST" || signal?.aborted) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
@@ -159,11 +168,13 @@ export async function send(base, testCase) {
  * GET por node:http(s): só os headers dados (mais Host), nada de
  * Accept-Encoding automático, headers repetidos preservados, corpo como veio.
  */
-function rawGet(base, testPath, rawHeaders) {
+function rawGet(base, testPath, rawHeaders, { timeoutMs = 30_000, signal } = {}) {
   const url = new URL(testPath, base);
   const transport = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
-    const request = transport.request(url, { method: "GET", headers: ["host", url.host, ...rawHeaders], timeout: 30_000 }, (response) => {
+    // `timeout` do node:http é de inatividade; o teto do corpo inteiro é o `signal`.
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const request = transport.request(url, { method: "GET", headers: ["host", url.host, ...rawHeaders], timeout: timeoutMs, signal: signal ? AbortSignal.any([deadline, signal]) : deadline }, (response) => {
       const chunks = [];
       response.on("data", (chunk) => chunks.push(chunk));
       response.on("end", () => {
@@ -371,8 +382,11 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
   add({ path: "/_headers", checks: [notRaw(generatedHeaders, "_headers")] });
   add({ path: "/.assetsignore", allow: { "cache-control": "Div5" }, checks: [notRaw(generatedIgnore, ".assetsignore")] });
 
-  // 12. Página de erro do nginx, que está na build.
-  add({ path: "/50x.html" });
+  // 12. Página de erro do nginx. Ela é da IMAGEM do nginx, não da build: o
+  // cf:extract a traz (extract-prod.mjs), o artefato do CI não (Div13 — no
+  // Worker o caminho cai no SPA, 200 com o index).
+  if (fs.existsSync(path.join(assetsDir, "50x.html"))) add({ path: "/50x.html" });
+  else add({ path: "/50x.html", allow: { body: "Div13" } });
 
   // 13. Pastas fora de /lp/.
   for (const p of ["/api/", "/landing/", "/landing", "/api"]) {

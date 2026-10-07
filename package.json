@@ -31,6 +31,9 @@
     "cf:deploy": "npm --prefix cloudflare run deploy",
     "cf:parity": "node scripts/cloudflare/parity.mjs",
     "cf:typecheck": "tsc -p cloudflare/tsconfig.json --noEmit",
+    "cf:smoke": "node scripts/cloudflare/smoke.mjs",
+    "cf:ci:check-env": "node scripts/cloudflare/check-build-env.mjs",
+    "cf:ci:deploy": "node scripts/cloudflare/ci-deploy.mjs",
     "typecheck:ratchet": "node scripts/tsc-ratchet.cjs",
     "typecheck:baseline": "node scripts/tsc-ratchet.cjs --write",
     "guard:master-ghost": "node scripts/definer-master-ghost-ratchet.cjs",
@@ -178,7 +181,8 @@
     "typescript-eslint": "^8.38.0",
     "vite": "^6.4.3",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "yaml": "2.9.0"
   },
   "overrides": {
     "browserslist": "4.28.7",

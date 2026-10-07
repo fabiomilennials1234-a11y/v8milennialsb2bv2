@@ -4,9 +4,13 @@
  * `compare` aceitar uma CSP juntada, ou o `send` aceitar uma credencial, a
  * paridade deixa de provar o que diz provar.
  */
+import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import config from "../../../cloudflare/headers.json";
-import { COOKIE_CASES, SECURITY_HEADERS, compare, mediaType, send, servedByAssetServer } from "../../../scripts/cloudflare/parity.mjs";
+import { COOKIE_CASES, DIVS, SECURITY_HEADERS, buildMatrix, compare, mediaType, send, servedByAssetServer } from "../../../scripts/cloudflare/parity.mjs";
 
 type Side = { url: string; status: number; headers: Headers; body: Buffer };
 
@@ -119,5 +123,74 @@ describe("send — só leitura contra produção", () => {
     await expect(send("http://127.0.0.1:9", { method: "POST", path: "/api/v1/leads", headers: {}, body: Buffer.alloc(10) })).rejects.toThrow(
       /acima de 1 MiB/,
     );
+  });
+});
+
+describe("send — prazo e cancelamento (o smoke do deploy depende disso)", () => {
+  /** Servidor que aceita a conexão e nunca responde. */
+  async function hangingServer() {
+    const server = http.createServer(() => {});
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    return { base: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(r)) };
+  }
+
+  it("timeoutMs por requisição, sem nova tentativa quando attempts = 1 (fetch e raw)", async () => {
+    const { base, close } = await hangingServer();
+    try {
+      for (const testCase of [GET("/"), GET("/", { raw: true })]) {
+        const started = Date.now();
+        await expect(send(base, testCase, { timeoutMs: 200, attempts: 1 })).rejects.toThrow();
+        expect(Date.now() - started).toBeLessThan(2_000);
+      }
+    } finally {
+      await close();
+    }
+  });
+
+  it("signal aborta na hora, inclusive entre tentativas", async () => {
+    const { base, close } = await hangingServer();
+    try {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 150);
+      const started = Date.now();
+      await expect(send(base, GET("/"), { timeoutMs: 10_000, attempts: 3, signal: controller.signal })).rejects.toThrow();
+      expect(Date.now() - started).toBeLessThan(2_000);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("buildMatrix — Div13 (/50x.html)", () => {
+  function assetsDir(with50x: boolean) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parity-matrix-"));
+    const write = (rel: string, content = "x") => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), content);
+    };
+    for (const name of ["index.html", "index.classic.html", "_headers", ".assetsignore", "assets/index-A.js", "lp/v1/index.html"]) write(name);
+    if (with50x) write("50x.html", "<html>nginx</html>");
+    return dir;
+  }
+
+  it("com o 50x.html no artefato (cf:extract), o corpo tem de bater; sem ele (artefato do CI), Div13", () => {
+    for (const with50x of [true, false]) {
+      const dir = assetsDir(with50x);
+      try {
+        const testCase = buildMatrix({ assetsDir: dir, allAssets: false }).find((c: { path: string }) => c.path === "/50x.html");
+        expect(testCase, String(with50x)).toBeDefined();
+        expect(testCase.allow, String(with50x)).toEqual(with50x ? undefined : { body: "Div13" });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+    expect(DIVS.Div13).toMatch(/50x\.html/);
+  });
+
+  it("Div13 só cobre o corpo: status diferente continua FAIL", () => {
+    const testCase = GET("/50x.html", { allow: { body: "Div13" } });
+    expect(compare(testCase, side(200, {}, "nginx"), side(200, {}, "index"), ctx)).toMatchObject({ outcome: "EXPECTED-DIFF", divs: ["Div13"] });
+    expect(compare(testCase, side(200, {}, "nginx"), side(404, {}, "x"), ctx).outcome).toBe("FAIL");
   });
 });

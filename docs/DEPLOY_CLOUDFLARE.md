@@ -2,6 +2,8 @@
 
 Este guia serve o **mesmo front que está no ar** em `torquecrm.com.br` a partir da Cloudflare, numa URL de teste separada. O objetivo é provar que a Cloudflare entrega exatamente o que o nginx entrega hoje.
 
+A publicação de rotina é do CI: a cada push na `main`, o GitHub Actions builda e publica em degraus, com rollback automático (ver [Pipeline de deploy (CI)](#pipeline-de-deploy-ci)). Os comandos à mão de [Publicar](#publicar-quatro-comandos) continuam valendo para a fase de teste e para o ensaio local.
+
 **Produção não é afetada.** O domínio `torquecrm.com.br` continua apontando para o nginx no EasyPanel, porque nada aqui mexe em DNS. Se algo der errado, basta apagar o Worker (ver [Desfazer](#desfazer)).
 
 Este guia é o par do [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), que continua valendo para produção.
@@ -43,6 +45,320 @@ Este guia é o par do [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), que contin
    O login dá ao terminal acesso à **conta Cloudflare inteira**. Ao terminar o teste, saia (ver [Ao terminar](#ao-terminar)).
 
 ---
+
+## Pipeline de deploy (CI)
+
+Depois do corte, o `cf:extract` deixa de servir: o nginx não serve mais nada para ser copiado. Quem publica passa a ser o GitHub Actions, a cada push na `main`.
+
+- **Workflow:** `.github/workflows/deploy-front-cloudflare.yml`.
+- **Verificação de PR:** `.github/workflows/verify-front-cloudflare.yml`. Roda sem segredo nenhum e só quando o PR toca o front: `build:dual`, `cf:prepare`, `cf:typecheck`, `wrangler types --check` e `vitest tests/unit/cloudflare`.
+
+> **O merge do PR do pipeline já é o primeiro deploy real**, no `workers.dev`. Os dois secrets já existem (`front-build/SENTRY_AUTH_TOKEN` e `front-production/CLOUDFLARE_API_TOKEN`). Confira a execução pelas [checagens da primeira execução](#checagens-da-primeira-execução-o-merge).
+
+### O que acontece num push na `main`
+
+| Job | Environment | O que faz |
+|---|---|---|
+| `build` | `front-build` | 1. `cf:ci:check-env`: falha **antes** da build se faltar `VITE_*` obrigatória, ou se alguma `VITE_*` tiver cara de segredo.<br>2. `npm ci --ignore-scripts`.<br>3. `build:dual`, com os mesmos `VITE_*` e defaults do `Dockerfile` (o teste `build-env-drift` quebra se divergirem). O `SENTRY_AUTH_TOKEN` existe só neste step.<br>4. `cf:prepare -- --from dist`.<br>5. Sobe `cloudflare/.assets` como artifact por 3 dias. **Nunca** o `dist/`, que ainda tem os source maps. |
+| `deploy` | `front-production` | `node scripts/cloudflare/ci-deploy.mjs`, com o `CLOUDFLARE_API_TOKEN` só neste step. |
+
+O `ci-deploy` publica em degraus:
+
+0. **Confere que o commit ainda é o HEAD da `main`** (`git ls-remote`). Se não for (re-run de uma execução antiga, ou um push mais novo já na fila), **não publica** e sai com o código 4 (OBSOLETO); quem publica é a execução do HEAD.
+   - **Repositório público** (hoje): a consulta funciona sem credencial.
+   - **Repositório privado:** o step recebe o token do próprio job (`GITHUB_TOKEN`, só `contents: read`).
+     - O `ci-deploy` o entrega ao git como header `AUTHORIZATION`, só para `https://github.com/`, por variável de ambiente do git (`GIT_CONFIG_COUNT`/`KEY_0`/`VALUE_0`, o mesmo header do `actions/checkout`).
+     - O token nunca vai na linha de comando (visível no `ps`), nem na URL, nem no log, e o wrangler não o recebe.
+     - Funciona igual nos dois casos.
+   - O git roda fora de qualquer repositório: num diretório temporário vazio, com `GIT_CEILING_DIRECTORIES`, sem config global e sem config de sistema. Um `url.<x>.insteadOf` no `.git/config` do checkout não redireciona a consulta.
+   - Se a consulta falhar (rede, GitHub fora, token sem acesso), o deploy **para no passo 0, sem publicar**. É a falha segura.
+1. **Guarda a versão anterior**, a que está em 100 % (`wrangler deployments status --json`). Se a deployment estiver dividida entre duas versões, alguém está no meio de algo, e o CI **não publica**.
+2. **Sobe a versão nova sem tráfego:** `wrangler versions upload --tag <sha> --message "GitHub Actions run <id>"`. O id da versão sai do arquivo ND-JSON do wrangler (`WRANGLER_OUTPUT_FILE_PATH`), não do texto do terminal.
+3. **Põe a nova a 0 %:** `wrangler versions deploy <nova>@0% <anterior>@100%`.
+4. **Smoke A** na versão nova, com o header `Cloudflare-Workers-Version-Overrides: torque-front="<nova>"`. Toda resposta do Worker tem de trazer `X-Torque-Version: <nova>` (ver [Prova de versão](#prova-de-versão-x-torque-version)). Ele tenta de novo por até 2 min (propagação). Se falhar, a deployment volta para `<anterior>@100%` e o job fica vermelho. **A versão nova nunca recebe tráfego sem passar no A.**
+5. **Promove:** `wrangler versions deploy <nova>@100%`.
+6. **Aplica as configurações de domínio do `wrangler.jsonc`:** `wrangler triggers deploy` (`workers_dev` e `preview_urls`). O wrangler marca esse comando como experimental.
+7. **Smoke B**, sem override. Ele espera até `X-Torque-Version` ser a nova e só então avalia o resto, tentando por até 3 min.
+8. **Se o B falhar** (ou o passo 5 ou 6), o rollback é automático: `wrangler versions deploy <anterior>@100%`, seguido de um smoke autoconsistente da anterior, e o job fica vermelho.
+
+Não há canário percentual: a nova vai de 0 % a 100 %.
+
+**Prazos.** Todo comando do wrangler tem prazo:
+
+| Comando | Prazo |
+|---|---|
+| `versions upload` | 300 s |
+| `deployments status`, `versions deploy`, `triggers deploy` | 60 s cada |
+| `git ls-remote` | 15 s |
+
+Toda requisição do smoke tem 10 s, e cada rodada do smoke tem 60 s no total. No pior caso, com tudo estourando, o `ci-deploy` leva 1.275 s (≈ 21,3 min). A conta está no comentário do job `deploy`, e o teste `deploy-workflow` a refaz a partir das constantes do código. Por isso o step tem 24 min e o job, 30.
+
+**Job cancelado ou estourou o prazo.** O runner manda `SIGINT`/`SIGTERM` ao `ci-deploy`. O step usa `exec node`, então o sinal chega direto ao node. Se o sinal cair entre a promoção e o B verde, o `ci-deploy`:
+
+1. mata o wrangler em voo;
+2. volta a anterior a 100 %, antes do `SIGKILL` (≈ 10 s depois);
+3. sai com 130 ou 143.
+
+- **Antes de tentar o rollback**, o `ci-deploy` grava no Summary um resumo provisório: "rollback para X em andamento; se este resumo não mudar, rode o workflow com `rollback_to=X`". Um `SIGKILL` no meio do rollback não deixa o Summary vazio.
+- **Se o rollback falhar**, o Summary traz o `rollback_to` para rodar à mão.
+- **Se o B fechar PASS enquanto o rollback do sinal ainda roda**, o fluxo principal espera o rollback terminar, e o resultado é o do rollback, nunca "PROMOVIDO". O fim da execução é um só (`createFinish` é idempotente).
+
+Dois casos-limite, aceitos:
+
+- **`SIGTERM` durante o smoke A** deixa a deployment em `nova@0% anterior@100%`. É inofensivo: a nova não recebe tráfego. O próximo deploy trata, porque ele toma como anterior a versão que está em 100 %.
+- **`SIGTERM` com o `versions deploy <nova>@100%` em voo** tem uma corrida pequena. O handler mata o wrangler local, mas o pedido pode já ter chegado à Cloudflare. O rollback é enviado depois e, portanto, é aplicado depois. Mesmo assim, **confira com o smoke**:
+  ```bash
+  npm run cf:smoke -- --url <CF_SMOKE_URL> --expect-version <anterior> --allow-missing-version
+  ```
+
+**Códigos de saída do `ci-deploy`:**
+
+| Código | Significado |
+|---|---|
+| 0 | publicado (ou drill OK) |
+| 1 | falhou; se depois da promoção, já com rollback |
+| 2 | uso: argumento, token ou artefato faltando; nada publicado |
+| 3 | BLOQUEADO: desafio da zona |
+| 4 | OBSOLETO: não é o HEAD da `main` |
+| 130 / 143 | interrompido |
+
+O resumo de cada execução aparece na página da execução, no **Summary**: versões, resultado de cada etapa e as primeiras falhas do smoke.
+
+**Um deploy por vez.** O grupo `front-cloudflare-production` não cancela o que está rodando, e a fila guarda **um** pendente só: o que chega por último substitui o que estava esperando. Ver o efeito disso no rollback em [Rollbacks](#rollbacks-três-caminhos).
+
+### Prova de versão (`X-Torque-Version`)
+
+Toda resposta que o **Worker** gera leva `X-Torque-Version: <version id>`: páginas, SPA, LPs, redirects, 404, 405, 500 e a API. O id vem do binding `version_metadata` (`CF_VERSION_METADATA` no `wrangler.jsonc`). Os arquivos de `/assets/*` saem direto do servidor de assets, sem Worker, e não levam o header.
+
+**Por que existe.** Medido em 2026-10-07: um override para uma versão que não está na deployment é **ignorado em silêncio**, e a resposta vem 200 com a versão atual. Sem a prova, um commit que muda só o código do Worker passaria no A e no B contra a versão **anterior**.
+
+**O que cada smoke exige:**
+
+| Smoke | `X-Torque-Version` |
+|---|---|
+| A | = nova (`--override` implica `--expect-version`) |
+| B | = nova; repete até ser, e só então avalia |
+| Depois de um rollback, automático ou manual | = alvo **ou ausente** (`--allow-missing-version`): a versão alvo pode ser de antes do header, mas outro id nunca serve |
+
+**Primeiro deploy.** A versão publicada hoje (`20d8f008-…`) é de antes do header. Medido contra o `workers.dev` em 2026-10-07:
+
+| Smoke | Resultado |
+|---|---|
+| autoconsistente | PASS |
+| `--assets` | PASS |
+| `--expect-version 20d8f008-…` | FAIL nos dois index (`sem X-Torque-Version`), sem avaliar o resto |
+| `--expect-version 20d8f008-… --allow-missing-version` | PASS |
+
+No merge, isso vira:
+
+- o A e o B exigem a versão **nova**, que já sai deste código com o header;
+- se o A falhar só por `sem X-Torque-Version`, o override pegou a anterior (propagação), e as novas tentativas do A cobrem isso;
+- o rollback para a `20d8f008-…` passa, com o header ausente.
+
+### O smoke (`npm run cf:smoke`)
+
+```bash
+npm run cf:smoke -- --url https://torque-front.torquecrm.workers.dev                            # autoconsistente
+npm run cf:smoke -- --url https://torque-front.torquecrm.workers.dev --assets cloudflare/.assets  # contra o artefato
+```
+
+Opções: `--override <version-id>`, `--expect-version <version-id>`, `--allow-missing-version` e `--retry-for <segundos>`.
+
+- **Com `--assets`**, o host tem de servir exatamente aqueles arquivos. Este é o modo do deploy.
+- **Sem `--assets`** (autoconsistente), a referência é o próprio host: o `/` sem cookie tem de ser o `/index.classic.html` que ele serve, e assim por diante. Este é o modo do rollback, quando não há artefato local da versão.
+
+O que ele confere:
+
+- o `/` com cada variante de cookie de `cookie-cases.json`;
+- `sw.js` e `sw.classic.js`;
+- os chunks de entrada dos dois index: 200, mesmo sha256 do artefato, `Cache-Control` imutável e headers do app;
+- `<chunk>.map` dá 404;
+- `/api/v1/leads` sem `Accept-Encoding`: 401, sem gzip, envelope `{"error":{…}}`;
+- uma CSP só, e os headers de `cloudflare/headers.json`;
+- a rota do SPA (`/leads`);
+- `X-Robots-Tag` presente no `workers.dev` e ausente no domínio real;
+- `X-Torque-Version`, quando há versão esperada.
+
+O resultado sai como **PASS** (código 0), **FAIL** (1) ou **BLOQUEADO** (3):
+
+- **BLOQUEADO** significa que alguma resposta veio com `cf-mitigated: challenge`. É o desafio da zona, e o smoke não chegou ao Worker. Não é defeito da versão:
+  - no A, nada é promovido;
+  - no B, nada é desfeito, porque o A já provou a versão pelo `X-Torque-Version`; o job fica vermelho para alguém olhar.
+- **Controle negativo, medido em 2026-10-07:** contra o nginx de produção, o smoke dá FAIL exatamente nas duas divergências conhecidas, a Div12 (cookie com vírgula) e a Div9 (CSP duplicada na API).
+
+### Rollbacks: três caminhos
+
+Rollback troca só a versão do código e dos assets. Não mexe em rotas, domínio, variáveis nem secrets. Vale para qualquer uma das 100 últimas versões.
+
+1. **Automático.** Acontece no passo 8 acima, ou num `SIGINT`/`SIGTERM` entre a promoção e o B verde, sem ninguém fazer nada.
+2. **Botão no GitHub.** **Actions** → **Deploy Front (Cloudflare)** → **Run workflow**. Preencha `rollback_to` com o version id, que aparece no Summary da execução ou em `wrangler versions list`. O job `rollback` roda `versions deploy <id>@100%` e um smoke autoconsistente.
+3. **Local**, com o `wrangler login` do CTO:
+   ```bash
+   WRANGLER_SEND_METRICS=false npx --prefix cloudflare wrangler deployments list --name torque-front
+   WRANGLER_SEND_METRICS=false npx --prefix cloudflare wrangler rollback <version-id> --name torque-front
+   ```
+
+> **O rollback manual (2 e 3) dura só até o próximo push na `main`.** O push seguinte builda o HEAD e publica de novo, inclusive o defeito. Depois de um rollback manual:
+> 1. **reverta o commit culpado** (`git revert`, PR, merge);
+> 2. só então mergeie outra coisa.
+>
+> **Na fila, um substitui o outro.** O grupo de concorrência guarda um pendente só:
+> - um push novo que chega enquanto um rollback espera na fila **cancela o rollback**;
+> - um rollback disparado enquanto um deploy espera **cancela o deploy**.
+>
+> Confira no Actions que o rollback rodou de fato.
+
+**Drill de rollback.** **Run workflow** com `drill` marcado. O pipeline publica, passa no B e força o rollback automático, para exercitar o caminho que só roda quando produção quebra. O drill só é aceito enquanto `CF_SMOKE_URL` for `*.workers.dev`; o `ci-deploy` recusa no domínio real.
+
+### Segredos e variáveis
+
+Os dois environments já existem no GitHub, os dois restritos à branch `main`. Os jobs também se recusam a rodar fora da `main`.
+
+| Onde | Nome | Tipo | Valor |
+|---|---|---|---|
+| `front-build` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`, `VITE_META_APP_ID`, `VITE_META_WA_CONFIG_ID` | variável | Obrigatórias: são as que o bundle no ar usa. Sem elas, o `check-build-env` para a build. |
+| `front-build` | `VITE_CALENDAR_SERVICE_URL` | variável | Opcional. Nenhum código lê. |
+| `front-build` | `SENTRY_AUTH_TOKEN` | **secret** (já existe) | Token de **organização** (`sntrys_`, escopo `org:ci`). Ver [Sentry](#sentry-na-build). |
+| `front-production` | `CLOUDFLARE_API_TOKEN` | **secret** (já existe) | Token da conta, **Workers → Editor**, só no Worker `torque-front`. |
+| `front-production` | `CLOUDFLARE_ACCOUNT_ID` | variável | id da conta (32 hex) |
+| `front-production` | `CF_SMOKE_URL` | variável | `https://torque-front.torquecrm.workers.dev` até o corte; `https://torquecrm.com.br` depois. |
+
+As demais (`VITE_INVITE_API_URL`, `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_REPLAY_ON_ERROR_RATE`) ficam vazias, como no EasyPanel: com o convite vazio, o app cai no Supabase. Os defaults do `Dockerfile` (DSN do Sentry, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`, `VITE_CHAT_*`, `VITE_UI_SWITCH`) estão escritos no workflow. O EasyPanel não sobrescreve nenhum deles (medido em 2026-10-07).
+
+`VITE_APP_VERSION` fica **vazia** na fase de prova: a produção mostra `0.0.0`, e assim a paridade bate byte a byte. Ela passa a `sha-<sha>` num PR separado.
+
+Sem `CLOUDFLARE_API_TOKEN`, ou com `CLOUDFLARE_ACCOUNT_ID` fora do formato, o `ci-deploy` para antes de chamar o wrangler (código 2, `Nada foi publicado.`).
+
+O step do `ci-deploy` recebe também o `GITHUB_TOKEN` do próprio job (`${{ github.token }}`). Ele não é um secret cadastrado e só tem `contents: read`. Serve para o passo 0 funcionar mesmo se o repositório virar privado.
+
+### O que aparece no log
+
+O repositório é **público**: qualquer pessoa vê o log e baixa o artifact.
+
+**Aparece:**
+
+- os version ids, a tag (sha do commit), o resultado de cada etapa e as falhas do smoke;
+- do wrangler, só o que passa pela **lista de permissão** do `ci-deploy` (`filterWranglerOutput`): os blocos `[ERROR]`/`[WARNING]` e as linhas de progresso conhecidas, como `Total Upload`, `Worker Version ID`, `Deployed torque-front version … at 100%` e os bindings;
+- o resto da saída do wrangler é **contado e descartado**, com uma linha `(wrangler …: N linha(s) fora do log público)`;
+- o artifact, que é o `cloudflare/.assets`: o mesmo que o site serve, já sem source map.
+
+**Não aparece:**
+
+- **e-mail.** O `deployments status --json` traz o `author_email` de quem publicou (`cli.js:354655`); esse stdout nunca é ecoado, e só o `id@pct` vai ao log. Qualquer e-mail que sobre em outra linha vira `<email>`;
+- **a saída de `whoami`.** Num erro de autenticação, o wrangler imprime o nome da conta, as contas com ids, as permissões do token e, com token de usuário, o e-mail (`cli.js:363433-363455` e `351240-351370`). Ela é cortada inteira, do primeiro marcador até o fim;
+- **id de conta.** Qualquer id de 32 hex, como o `/accounts/<id>/` das mensagens de erro, vira `<id>`;
+- **o `GITHUB_TOKEN` do job.** Ele só existe no step do `ci-deploy` e vai só para o `git ls-remote`, por variável de ambiente do git. Não vai em argv, nem na URL, nem no ambiente do wrangler, e o stderr do git é descartado. O GitHub também mascara o token se ele aparecer em texto;
+- **segredo e ambiente.** O workflow não usa `set -x`, não despeja o ambiente e não interpola input em script. O teste `deploy-workflow` garante isso, e os testes do `ci-deploy` provam o filtro com a saída real de um erro de autenticação.
+
+Para ver a saída inteira do wrangler, rode o comando à mão, com o `wrangler login` do CTO, fora do CI.
+
+### Checagens da primeira execução (o merge)
+
+O merge do PR é a primeira execução real. Confira no log e no Summary:
+
+- [ ] **Passo 0** (HEAD da `main`): `ok`, com o sha do merge.
+- [ ] **O token por Worker basta?**
+  - `deployments status` e `versions upload` leem `/workers/services/torque-front`.
+  - `versions deploy` cria a deployment.
+  - `triggers deploy` escreve em `/workers/scripts/torque-front/subdomain`.
+  - Um 403 em qualquer um deles leva ao plano B do token: **Account** → **Workers Scripts** → **Edit**.
+- [ ] **`--tag` (sha de 40 caracteres) e `--message` aceitos?** `wrangler versions list --name torque-front` deve mostrar a tag.
+- [ ] **O override pega a versão nova?** O smoke A passa com `X-Torque-Version` = nova.
+  - Se ele falhar só por `versão <anterior> respondeu` ou `sem X-Torque-Version` até o fim das novas tentativas, o override não chegou à nova em 2 min. Nada foi promovido.
+- [ ] **O override vale para `/assets/*`?** O A pede os chunks de entrada da versão nova a 0 %.
+  - Se ele falhar **só** nos `/assets/*` com 404, o override não alcança o servidor de assets, e o A precisa deixar de exigir os chunks (decisão do arquiteto).
+  - Nada foi promovido.
+- [ ] **O B passa** com `X-Torque-Version` = nova.
+- [ ] **O drill**, rodado à mão logo depois, ainda no `workers.dev`, sai `DRILL OK`.
+- [ ] **Paridade do artefato do CI × produção, no mesmo sha:**
+  1. Espere o EasyPanel publicar o mesmo commit.
+  2. Baixe o artifact da execução.
+  3. Rode:
+     ```bash
+     npm run cf:parity -- --a https://torquecrm.com.br --b https://torque-front.torquecrm.workers.dev --assets <artifact baixado> --all-assets
+     ```
+  4. Tem de dar `FAIL 0`. O `/50x.html` sai como Div13 (é da imagem do nginx, não da build).
+  - **A paridade depende do `SENTRY_AUTH_TOKEN`.** Com ele, o plugin do Sentry injeta os debug ids (determinísticos), como no EasyPanel. Sem ele, os bundles divergem em todos os chunks, e isso não é defeito do Worker.
+  - Medido em 2026-10-07: com o build do CI de `9641c07f2` (Node 24, `npm ci --ignore-scripts`, ambiente limpo, plugin ligado) contra prod no Worker local, deu `FAIL 0` (597 casos, Div13 ×1).
+
+### Sentry na build
+
+Medido em 2026-10-07, com `@sentry/vite-plugin` 5.4.0 e `SENTRY_AUTH_TOKEN=invalido` numa build local:
+
+- o plugin registra `Invalid token (http status: 401)` em `releases new` e em `sourcemaps upload`;
+- a build **sai 0**;
+- os debug ids continuam injetados (459 arquivos com `_sentryDebugIds`).
+
+Ou seja, **upload falho não bloqueia o deploy**, e não foi preciso código para isso. Nesse caso, sobram source maps no `dist/` (227 na medição); o `cf:prepare` os tira.
+
+**Sem token nenhum**, o plugin nem entra:
+
+- a build sai sem upload e sem debug ids;
+- o bundle deixa de ser byte a byte o do EasyPanel (ver a paridade acima);
+- o `cf:prepare` tira os 461 maps;
+- o `check-build-env --sentry-token` só **avisa** (`::warning::`) e deixa a build seguir.
+
+Só um token **pessoal** (`sntryu_`) para a build.
+
+A interface clássica herda o plugin: `classic/vite.config.ts` faz `mergeConfig` da config da raiz.
+
+### Ordem do corte
+
+**Pré-condições.** Todas, **antes** de anexar o Custom Domain:
+
+- [ ] Checklist **(a)–(o)** abaixo resolvido (em [Checklist antes do corte](#checklist-antes-do-corte-fase-dns-fora-deste-guia)).
+- [ ] Os itens de corte do pipeline em produção:
+  - **C1**, a prova de versão (`X-Torque-Version`);
+  - **C2**, só o HEAD da `main` publica;
+  - **C3**, prazos e rollback no `SIGINT`/`SIGTERM`.
+  - E o **drill** rodado com `DRILL OK`.
+- [ ] **C4: ruleset na `main`** (decisão do CTO). Quem mergeia na `main` publica produção, então a `main` precisa de:
+  - **PR obrigatório** (nada de push direto);
+  - **revisão de code owner obrigatória**;
+  - `dismiss_stale_reviews_on_push`: um push depois da aprovação derruba a aprovação;
+  - `require_last_push_approval`: quem fez o último push não aprova o próprio PR;
+  - **bloqueio de force-push e de deleção** da `main`;
+  - **bypass do admin só via PR**, nunca push direto.
+- [ ] **O `CODEOWNERS` do PR #2260 na `main`.** Ele cobre:
+  - `.github/workflows/`;
+  - o próprio `CODEOWNERS`;
+  - `cloudflare/`, `scripts/cloudflare/` e `scripts/ui-classic/`;
+  - `package*.json` e `Dockerfile`;
+  - `vite.config.ts` e `classic/vite.config.ts`.
+- [ ] **Prova do ruleset:** um PR de um colaborador com `write` mexendo em `.github/workflows/` tem de ficar **bloqueado**, sem a aprovação do code owner.
+- [ ] **Agentes nunca aprovam PR.** Eles usam a mesma conta do CTO: uma aprovação de agente seria o CTO aprovando o próprio PR.
+- [ ] **Workers Paid** ativo (já assinado), item (e).
+- [ ] **TTL baixo** nos registros do domínio, dias antes, item (f).
+- [ ] **Email Obfuscation** e **Rocket Loader** desligados na zona, item (o).
+- [ ] **Bot Fight Mode** desligado, item (c).
+- [ ] **Token da Cloudflare rotacionado DEPOIS de o ruleset estar ativo:** um token novo, com o mesmo escopo, no secret `CLOUDFLARE_API_TOKEN`, e o antigo revogado.
+  - O token da fase de teste passou por terminais e chats.
+  - Rotacionar antes do ruleset deixaria a janela aberta: quem tem `write` poderia mudar um workflow sem revisão e usar o token novo.
+
+**Resíduos aceitos** (conhecidos, sem conserto previsto):
+
+- **Self-merge do admin via PR.** O bypass existe para o CTO e passa por PR, então fica registrado. Não há segunda pessoa revisando.
+- **`rollback_to` pode ser acionado por quem tem `write`.** O `workflow_dispatch` pede só `write`. O dano máximo é voltar para uma das 100 últimas versões, e o próximo push na `main` publica o HEAD de novo.
+
+**Ordem:**
+
+1. **Anexar o domínio, uma vez, fora do deploy:** **Workers & Pages** → `torque-front` → **Settings** → **Domains & Routes** → **Add** → **Custom Domain** → `torquecrm.com.br` (e `www`, item (m)).
+   - **Nunca** coloque `routes` nem `custom_domain` no `wrangler.jsonc`. O deploy só mexe em rotas e domínios que estão no config (`cli.js:160183-160300`).
+   - Em CI, sem terminal, um `custom_domain` no config sobrescreve origem e DNS sem perguntar (`cli.js:159598-159600`).
+   - O teste `wrangler-config` impede `routes` no arquivo.
+2. **Trocar a variável:** `CF_SMOKE_URL` = `https://torquecrm.com.br` no environment `front-production`.
+3. **Abrir um PR** com `workers_dev: false` no `wrangler.jsonc`, ajustando o teste `wrangler-config.test.ts`. O `triggers deploy` do pipeline desliga o `*.workers.dev` no deploy desse PR (item (d)).
+
+### Quarentena e desligamento do EasyPanel
+
+1. **Durante os 7 dias seguintes ao corte**, o EasyPanel continua de pé, como volta rápida pelo DNS (item (f)).
+2. **Passados os 7 dias**, e só então:
+   1. Desative o hook de deploy **627383107** no EasyPanel.
+   2. Pare o app no EasyPanel.
+3. **Enquanto o `Dockerfile` existir**, o teste `build-env-drift` mantém os dois builds iguais. Ao apagar o `Dockerfile`, apague também esse teste.
+
+---
+
 
 ## Publicar: quatro comandos
 
@@ -174,7 +490,7 @@ Cada requisição que passa pelo Worker gera uma linha assim:
 
 ## Desfazer
 
-Nada disto toca `torquecrm.com.br`.
+Nada disto toca `torquecrm.com.br`. Os três caminhos de rollback do pipeline (automático, botão no GitHub e local) estão em [Rollbacks: três caminhos](#rollbacks-três-caminhos).
 
 - **Voltar para a versão anterior:**
   1. Liste as versões:
@@ -220,6 +536,7 @@ O comando de paridade conhece estas diferenças e as marca como `EXPECTED-DIFF`.
 | Div10 | Erros do proxy da API (413 corpo grande, 502, 504) em JSON | Seguem o formato de erro da API, `{"error":{"code","message"}}`, em vez da página HTML do nginx. |
 | Div11 | `/assets/<algo que não existe>` dá 404 para qualquer extensão | Hoje `/assets/x.json` devolve a tela do app (200), um acidente da regra do nginx. Na Cloudflare, `/assets/*` é servido direto pelo servidor de arquivos e nunca passa pelo Worker. |
 | Div12 | No cookie, `,` também separa pares: `a=1,torque_ui=v5` num header só abre a V5 (em produção, a clássica) | A Cloudflare junta headers `Cookie` repetidos num só, separados por `, `, e o HTTP/2 manda o cookie em pedaços. Só com `;` como separador, quem tem a V5 cairia na clássica. O app nunca grava vírgula no cookie, e o RFC 6265 proíbe o servidor de gravar. |
+| Div13 | `/50x.html` abre o app (200, o index do SPA) quando o artefato é do CI | A página é da **imagem do nginx**, não da build: o `cf:extract` a traz, o `build:dual` não. Na Cloudflare ninguém a usa (o Worker gera os próprios erros). Com o artefato do `cf:extract`, o arquivo existe e a comparação é a normal. |
 
 ---
 
@@ -238,7 +555,15 @@ O comando de paridade conhece estas diferenças e as marca como `EXPECTED-DIFF`.
   - aceita no máximo 1 MiB de corpo e espera até 30 s pela resposta;
   - só pede resposta comprimida ao Supabase se o cliente pediu: quem chama sem `Accept-Encoding` (um `curl` simples) recebe JSON legível, como no nginx;
   - só fala com `…supabase.co/functions/v1/api/v1/`, e caminho com `..` disfarçado é recusado.
-- **Nenhum segredo no repositório.** A conta vem do `wrangler login`; `cloudflare/wrangler.jsonc` não tem `account_id` nem token.
+- **Nenhum segredo no repositório.** A conta vem do `wrangler login` (à mão) ou, no CI, do `CLOUDFLARE_ACCOUNT_ID` e do `CLOUDFLARE_API_TOKEN` do environment `front-production`. O `cloudflare/wrangler.jsonc` não tem `account_id` nem token.
+- **Pipeline sem segredo à mostra:**
+  - cada segredo chega a um step só: o do Sentry na build, o da Cloudflare no `ci-deploy`;
+  - as actions são fixadas por SHA;
+  - `npm ci` roda sem scripts de instalação;
+  - não há cache de pacote nos jobs com segredo;
+  - a saída do wrangler passa por uma lista de permissão antes do log público: sem e-mail, sem `whoami`, sem id de conta (ver [O que aparece no log](#o-que-aparece-no-log));
+  - o teste `deploy-workflow` garante as regras do workflow; os testes do `ci-deploy` garantem o filtro.
+- **`X-Torque-Version` só expõe o id da versão.** Nem a tag (sha) nem o timestamp do `version_metadata` saem (teste `worker.test.ts`). Conhecer o id não dá acesso a nada: o override só seleciona versões da deployment atual, e nenhuma delas tem mais privilégio que a que está no ar.
 
 ---
 
@@ -248,12 +573,9 @@ Nada disto é feito agora. É o que precisa estar resolvido antes de `torquecrm.
 
 **Deploy e custo**
 
-- [ ] **(a) Pipeline de deploy.** Hoje não existe. O `cf:extract` copia o que o nginx serve; depois do corte, o nginx não serve mais nada e o processo vira circular. Antes do corte é preciso um CI que faça:
-  1. `npm run build:dual` com os mesmos `VITE_*` do EasyPanel, mais o upload de source map para o Sentry;
-  2. `npm run cf:prepare -- --from dist`;
-  3. `wrangler deploy` com um token de API de escopo mínimo (só Workers do `torque-front`), guardado em secret do CI.
+- [x] **(a) Pipeline de deploy.** Feito em `.github/workflows/deploy-front-cloudflare.yml`: `build:dual` com os `VITE_*` e defaults do `Dockerfile` e upload de source map, `cf:prepare`, e `versions upload` + `versions deploy` em degraus com token de escopo mínimo. Ver [Pipeline de deploy (CI)](#pipeline-de-deploy-ci). Os dois secrets já existem.
 - [ ] **(e) Workers Paid (US$ 5/mês).** No plano gratuito, o Worker atende 100 mil requisições por dia e tem 10 ms de CPU por requisição. Com o domínio de verdade, toda navegação e toda chamada à API passam pelo Worker (os arquivos de `/assets/` não contam).
-- [ ] **(l) Checagens no CI:** `npm run cf:typecheck` e `WRANGLER_SEND_METRICS=false npx --prefix cloudflare wrangler types --check`.
+- [x] **(l) Checagens no CI:** `npm run cf:typecheck` e `wrangler types --check` rodam em todo PR que toca o front (`.github/workflows/verify-front-cloudflare.yml`), junto com `build:dual`, `cf:prepare` e os testes.
 
 **DNS e domínio**
 
@@ -269,7 +591,7 @@ Nada disto é feito agora. É o que precisa estar resolvido antes de `torquecrm.
 
 **Proteções da Cloudflare**
 
-- [ ] **(c) Proteções contra robô na API.** Browser Integrity Check, Bot Fight Mode e Security Level podem responder 403 ou desafio para clientes-máquina em `/api/v1/*`. Crie uma regra de exceção para esse caminho, depois re-rode a paridade e o smoke no domínio real.
+- [ ] **(c) Proteções contra robô na API.** Browser Integrity Check, Bot Fight Mode e Security Level podem responder 403 ou desafio para clientes-máquina em `/api/v1/*`. Crie uma regra de exceção para esse caminho, depois re-rode a paridade e o smoke no domínio real. **Bot Fight Mode fica desligado**: ele não aceita exceção por caminho, e desafiaria também o smoke do pipeline (BLOQUEADO).
 - [ ] **(o) Recursos que reescrevem o HTML.** **Email Obfuscation** e **Rocket Loader** injetam script e alteram o HTML. Desligue os dois na zona **antes** de rodar a paridade no domínio real.
 
 **Smoke no `workers.dev` antes do corte**
@@ -319,7 +641,12 @@ O emulador local pode diferir da Cloudflare de verdade; estes itens só se prova
 | `scripts/cloudflare/prepare-assets.mjs` | `cf:prepare`: copia, limpa, varre segredos e gera `_headers` e `.assetsignore`. |
 | `scripts/cloudflare/parity.mjs` | `cf:parity`: comparação A × B. |
 | `scripts/cloudflare/cookie-cases.json` | Variantes do cookie `torque_ui` medidas em produção (usadas pela paridade e pelos testes). |
-| `scripts/cloudflare/lib.mjs` | Utilidades comuns aos três scripts, inclusive a trava do destino. |
+| `scripts/cloudflare/lib.mjs` | Utilidades comuns aos scripts, inclusive a trava do destino. |
+| `scripts/cloudflare/smoke.mjs` | `cf:smoke`: o contrato do deploy num host só (com `--assets` ou autoconsistente, com ou sem override). |
+| `scripts/cloudflare/ci-deploy.mjs` | `cf:ci:deploy`: deploy em degraus com rollback automático, e o rollback manual (`--rollback-to`). |
+| `scripts/cloudflare/check-build-env.mjs` | `cf:ci:check-env`: `VITE_*` obrigatórias e sem segredo antes da build; `--sentry-token` confere o token do Sentry. |
+| `.github/workflows/deploy-front-cloudflare.yml` | Pipeline de produção: jobs `build`, `deploy` e `rollback`. |
+| `.github/workflows/verify-front-cloudflare.yml` | Verificação de PR, sem segredo. |
 | `tests/unit/cloudflare/` | Testes: `npx vitest run tests/unit/cloudflare`. |
 
 ### Por que o wrangler fica isolado em `cloudflare/`
