@@ -33,3 +33,9 @@
 
 # Build do front que ainda vai para produção pelo EasyPanel (até o desligamento)
 /Dockerfile                             @fabiomilennials1234-a11y
+
+# Código que EXECUTA durante o build do CI (job front-build, que recebe o
+# SENTRY_AUTH_TOKEN): config do Vite das duas interfaces e o merge da clássica
+/vite.config.ts                         @fabiomilennials1234-a11y
+/classic/vite.config.ts                 @fabiomilennials1234-a11y
+/scripts/ui-classic/                    @fabiomilennials1234-a11y
