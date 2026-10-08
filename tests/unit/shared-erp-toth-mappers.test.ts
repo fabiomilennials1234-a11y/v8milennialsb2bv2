@@ -23,11 +23,13 @@ import {
   isAuthErrorMessage,
   pickEmail,
   pickPhone,
+  pickPhones,
   deriveTituloStatus,
   mapTothClienteToCanonical,
   mapTothCobrancaToCanonical,
   TothMappingError,
 } from "../../supabase/functions/_shared/erp/toth-mappers";
+import { normalizeBrazilianPhone } from "../../supabase/functions/_shared/erp/phone";
 
 /** Forma real de um cliente do Toth. */
 const CLIENTE_REAL = {
@@ -257,6 +259,75 @@ describe("pickEmail / pickPhone — contato vem em LISTA, não em campo escalar"
   it("aguenta lista ausente e entrada sem número", () => {
     expect(pickPhone({ codigoCliente: 1 })).toBeNull();
     expect(pickPhone({ telefones: [{ prefixoArea: "48" }] })).toBeNull();
+  });
+});
+
+describe("pickPhones — todos os telefones, com o nome do contato (Chamado 82c50502)", () => {
+  /** Forma medida no GET /clientes em 08/10: as 5 chaves em todo item. */
+  const comContatos = {
+    ...CLIENTE_REAL,
+    telefones: [
+      { prefixoArea: "48", numero: "32631404", isWhatsApp: "N", nomeContato: "", idContato: 117 },
+      { prefixoArea: "17", numero: "981257650", isWhatsApp: "S", nomeContato: "  José Luiz - Compras ", idContato: 120 },
+      { prefixoArea: "17", numero: "32221100", isWhatsApp: "N", nomeContato: "José Luiz - Compras", idContato: 121 },
+      { prefixoArea: "48", numero: "00000000", isWhatsApp: "N", nomeContato: "Lixo", idContato: 122 },
+    ],
+  };
+
+  it("devolve todos os válidos com label (caixa original, aparado) e erpPhoneId = idContato", () => {
+    expect(pickPhones(comContatos)).toEqual([
+      { phone: "17981257650", label: "José Luiz - Compras", isWhatsApp: true, erpPhoneId: "120" },
+      { phone: "4832631404", label: null, isWhatsApp: false, erpPhoneId: "117" },
+      { phone: "1732221100", label: "José Luiz - Compras", isWhatsApp: false, erpPhoneId: "121" },
+    ]);
+  });
+
+  it("o primeiro é sempre o pickPhone — o telefone principal não muda", () => {
+    expect(pickPhones(comContatos)[0].phone).toBe(pickPhone(comContatos));
+    expect(pickPhones(CLIENTE_REAL)[0].phone).toBe(pickPhone(CLIENTE_REAL));
+  });
+
+  it("pickPhone inalterado: prefere WhatsApp, cai no primeiro válido", () => {
+    expect(pickPhone(comContatos)).toBe("17981257650");
+    expect(pickPhone(CLIENTE_REAL)).toBe("4832631404");
+  });
+
+  it("mesmo número em duas linhas: fica UM, com o nome da linha nomeada", () => {
+    const row = {
+      ...CLIENTE_REAL,
+      telefones: [
+        { prefixoArea: "48", numero: "999750303", isWhatsApp: "S", nomeContato: "", idContato: 1 },
+        { prefixoArea: "48", numero: "99750303", isWhatsApp: "N", nomeContato: "Maria - Financeiro", idContato: 2 },
+      ],
+    };
+    expect(pickPhones(row)).toEqual([
+      { phone: "48999750303", label: "Maria - Financeiro", isWhatsApp: true, erpPhoneId: "2" },
+    ]);
+  });
+
+  it("idContato é da LINHA: dois telefones da mesma pessoa têm ids diferentes e o mesmo label", () => {
+    const phones = pickPhones(comContatos).filter((p) => p.label === "José Luiz - Compras");
+    expect(phones.map((p) => p.erpPhoneId)).toEqual(["120", "121"]);
+  });
+
+  it("aguenta lista ausente (cai no escalar) e lista vazia", () => {
+    expect(pickPhones({ codigoCliente: 1, telefone: "48 99975-0303" })).toEqual([
+      { phone: "48999750303", label: null, isWhatsApp: null, erpPhoneId: null },
+    ]);
+    expect(pickPhones({ codigoCliente: 1, telefones: [] })).toEqual([]);
+  });
+
+  it("o canônico carrega phone (principal) e phones (todos)", () => {
+    const c = mapTothClienteToCanonical(comContatos);
+    expect(c.phone).toBe("17981257650");
+    expect(c.phones).toHaveLength(3);
+  });
+
+  it("normalizeBrazilianPhone espelha normalize_brazilian_phone do banco", () => {
+    expect(normalizeBrazilianPhone("+55 (48) 99975-0303")).toBe("48999750303");
+    expect(normalizeBrazilianPhone("554899750303")).toBe("48999750303");
+    expect(normalizeBrazilianPhone("4832631404")).toBe("48932631404");
+    expect(normalizeBrazilianPhone("")).toBeNull();
   });
 });
 

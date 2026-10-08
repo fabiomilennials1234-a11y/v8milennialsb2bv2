@@ -12,6 +12,10 @@ import {
   type ExistingClient,
 } from "../../supabase/functions/_shared/erp/sync/upsert-client";
 import type { CanonicalClient } from "../../supabase/functions/_shared/erp/types";
+import {
+  planLeadPhoneOps,
+  type ExistingLeadPhone,
+} from "../../supabase/functions/_shared/erp/sync/lead-phones-sync";
 
 const CLIENT: CanonicalClient = {
   externalId: "12345",
@@ -409,5 +413,111 @@ describe("upsertCanonicalClient — o override de documento do lead fica fora do
     expect(fonte).not.toMatch(/lead_documents|set_lead_document/);
     const { store } = storeQueRegistra();
     expect(Object.keys(store).sort()).toEqual(["createClient", "createLead", "enrich", "findByCnpj", "findByExternalId"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chamado 82c50502 — "o ERP sugere, o CRM manda"
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("upsertCanonicalClient — canonical NÃO sobrescreve o telefone (82c50502)", () => {
+  it("mantém o telefone curado no CRM mesmo em canonical", async () => {
+    const existing: ExistingClient = {
+      id: "c1", cnpj: "old", phone: "48911112222", email: "old", company: "old", name: "Old",
+    };
+    const { store, calls } = makeStore({ findByExternalId: async () => existing });
+    await upsertCanonicalClient(store, {
+      organizationId: "org1", source: "toth", client: CLIENT, syncMode: "canonical",
+    });
+    const patch = calls.enrich[0].patch;
+    expect(patch.name).toBe("Acme");
+    expect("phone" in patch).toBe(false);
+  });
+
+  it("preenche o telefone quando está vazio", async () => {
+    const existing: ExistingClient = {
+      id: "c1", cnpj: "old", phone: null, email: "old", company: "old", name: "Old",
+    };
+    const { store, calls } = makeStore({ findByExternalId: async () => existing });
+    await upsertCanonicalClient(store, {
+      organizationId: "org1", source: "toth", client: CLIENT, syncMode: "canonical",
+    });
+    expect(calls.enrich[0].patch.phone).toBe("4799990000");
+  });
+});
+
+describe("planLeadPhoneOps — telefones do ERP em lead_phones (82c50502)", () => {
+  const row = (over: Partial<ExistingLeadPhone>): ExistingLeadPhone => ({
+    lead_id: "L1", normalized_phone: null, label: null, label_locked: false,
+    source: "crm", erp_phone_id: null, deleted_at: null, ...over,
+  });
+  const erp = (phone: string, label: string | null, erpPhoneId: string | null = null) =>
+    ({ phone, label, isWhatsApp: null, erpPhoneId });
+
+  it("insere o telefone que o lead ainda não tem, com nome e id da linha", () => {
+    const ops = planLeadPhoneOps("L1", [row({ normalized_phone: "48999750303" })], [
+      erp("48999750303", null, "1"),
+      erp("4832631404", "José Luiz - Compras", "2"),
+    ]);
+    expect(ops).toContainEqual({
+      op: "insert", lead_id: "L1", phone: "4832631404", label: "José Luiz - Compras",
+      erp_phone_id: "2", is_whatsapp: null,
+    });
+  });
+
+  it("linha do ERP não travada acompanha o nome do ERP", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48955556666", source: "erp", label: "José", erp_phone_id: "7" }),
+    ], [erp("48955556666", "José Luiz - Compras", "7")]);
+    expect(ops).toEqual([
+      { op: "update", lead_id: "L1", normalized_phone: "48955556666", label: "José Luiz - Compras" },
+    ]);
+  });
+
+  it("não toca nome travado", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48955556666", source: "erp", label: "Zé do CRM", label_locked: true, erp_phone_id: "7" }),
+    ], [erp("48955556666", "José Luiz - Compras", "7")]);
+    expect(ops).toEqual([]);
+  });
+
+  it("linha do CRM só ganha o que está vazio (id da linha e nome sem nome)", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48999750303", source: "crm", label: null }),
+      row({ normalized_phone: "48955556666", source: "crm", label: "Recepção" }),
+    ], [erp("48999750303", "Maria", "1"), erp("48955556666", "Outro nome", "2")]);
+    expect(ops).toEqual([
+      { op: "update", lead_id: "L1", normalized_phone: "48999750303", erp_phone_id: "1", label: "Maria" },
+      { op: "update", lead_id: "L1", normalized_phone: "48955556666", erp_phone_id: "2" },
+    ]);
+  });
+
+  it("não ressuscita telefone apagado no CRM — nem pelo id, nem pelo número", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48955556666", erp_phone_id: "7", deleted_at: "2026-10-08T00:00:00Z" }),
+      row({ normalized_phone: "48977778888", deleted_at: "2026-10-08T00:00:00Z" }),
+    ], [erp("48955556666", "José", "7"), erp("48977778888", "Maria", "8")]);
+    expect(ops).toEqual([]);
+  });
+
+  it("nada muda → nenhuma operação (re-sincronizar é de graça)", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48955556666", source: "erp", label: "José", erp_phone_id: "7" }),
+    ], [erp("48955556666", "José", "7")]);
+    expect(ops).toEqual([]);
+  });
+
+  it("nome que sumiu no ERP não apaga o nome que já existe", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48955556666", source: "erp", label: "José", erp_phone_id: "7" }),
+    ], [erp("48955556666", null, "7")]);
+    expect(ops).toEqual([]);
+  });
+
+  it("número com 55 e sem o 9 casa com a linha gravada (mesma normalização do banco)", () => {
+    const ops = planLeadPhoneOps("L1", [
+      row({ normalized_phone: "48999750303", source: "erp", label: "José", erp_phone_id: "7" }),
+    ], [erp("554899750303", "José", "7")]);
+    expect(ops).toEqual([]);
   });
 });

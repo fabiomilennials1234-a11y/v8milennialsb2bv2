@@ -18,9 +18,11 @@
  */
 
 import { buildTothCadastro } from "./toth-cadastro.ts";
+import { normalizeBrazilianPhone } from "./phone.ts";
 import {
   CanonicalClient,
   CanonicalOrder,
+  CanonicalPhone,
   CanonicalOrderItem,
   CanonicalTitulo,
   TituloStatus,
@@ -418,6 +420,76 @@ export function pickPhone(row: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * TODOS os telefones do cliente, cada um com o nome do contato (Chamado 82c50502).
+ *
+ * Medido no `GET /clientes` em 08/10: todo item de `telefones[]` traz
+ * `{prefixoArea, numero, isWhatsApp, nomeContato, idContato}`; 56% têm
+ * `nomeContato`. Regras:
+ *
+ *  - `label = trim(nomeContato)` com a caixa original, ou null quando vazio.
+ *  - `erpPhoneId = String(idContato)` — id da LINHA, chave estável do sync.
+ *    NUNCA agrupa pessoa: a pessoa do ERP é o mesmo `nomeContato`.
+ *  - Mesmo número em duas linhas (90 clientes na Café Jurerê): fica UM, com o
+ *    nome da linha nomeada. A chave é o número normalizado como o banco faz.
+ *  - Ordem: o principal (`pickPhone`) primeiro, depois os de WhatsApp, depois o
+ *    resto, cada grupo na ordem do ERP. `pickPhones(row)[0]` é sempre igual a
+ *    `pickPhone(row)` — o comportamento do telefone principal não muda.
+ */
+export function pickPhones(row: Record<string, unknown>): CanonicalPhone[] {
+  const list = pickField(row, ["telefones"]);
+  if (!Array.isArray(list)) {
+    const single = pickPhone(row);
+    return single ? [{ phone: single, label: null, isWhatsApp: null, erpPhoneId: null }] : [];
+  }
+
+  const byNumber = new Map<string, CanonicalPhone>();
+  for (const entry of list.filter(isRecord)) {
+    const area = digitsOnly(pickField(entry, ["prefixoArea", "ddd"])) ?? "";
+    const number = digitsOnly(pickField(entry, ["numero", "telefone", "fone"]));
+    if (!number) continue;
+    const phone = sanitizePhone(`${area}${number}`);
+    if (!phone) continue;
+
+    const wa = String(pickField(entry, ["isWhatsApp", "whatsapp"]) ?? "").toUpperCase();
+    const rawId = pickField(entry, ["idContato"]);
+    const candidate: CanonicalPhone = {
+      phone,
+      label: asString(pickField(entry, ["nomeContato"]))?.trim() || null,
+      isWhatsApp: wa === "S" ? true : wa === "N" ? false : null,
+      erpPhoneId: rawId === null || rawId === undefined || rawId === "" ? null : String(rawId),
+    };
+
+    const key = normalizeBrazilianPhone(phone) ?? phone;
+    const seen = byNumber.get(key);
+    if (!seen) {
+      byNumber.set(key, candidate);
+    } else if (!seen.label && candidate.label) {
+      // A linha nomeada vence; o WhatsApp de qualquer uma das duas vale.
+      byNumber.set(key, {
+        ...candidate,
+        phone: seen.phone,
+        isWhatsApp: seen.isWhatsApp === true || candidate.isWhatsApp === true
+          ? true
+          : candidate.isWhatsApp ?? seen.isWhatsApp,
+      });
+    } else if (candidate.isWhatsApp === true && seen.isWhatsApp !== true) {
+      byNumber.set(key, { ...seen, isWhatsApp: true });
+    }
+  }
+
+  const all = [...byNumber.values()];
+  const principal = pickPhone(row);
+  const principalKey = principal ? normalizeBrazilianPhone(principal) : null;
+  const rank = (p: CanonicalPhone) =>
+    normalizeBrazilianPhone(p.phone) === principalKey ? 0 : p.isWhatsApp === true ? 1 : 2;
+  // sort é estável: dentro do mesmo grupo, a ordem do ERP é preservada.
+  return all
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+    .map(({ p }) => p);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Empresa do grupo (atendimentos[])
 // ─────────────────────────────────────────────────────────────────────────────
@@ -586,6 +658,7 @@ export function mapTothClienteToCanonical(
     company: company ?? null,
     email: pickEmail(row),
     phone: pickPhone(row),
+    phones: pickPhones(row),
 
     erpCompany: atendimento
       ? asString(pickField(atendimento, ["nomeFantasiaEmpresa", "empresa"]))

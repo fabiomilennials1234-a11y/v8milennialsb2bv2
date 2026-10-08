@@ -23,6 +23,7 @@ import {
   erpDateToTimestamp,
   leadEnrichmentColumns,
 } from "./client-enrichment.ts";
+import type { LeadPhonesSyncItem } from "./lead-phones-sync.ts";
 
 /** Linhas por statement. */
 export const DEFAULT_BATCH_SIZE = 500;
@@ -31,6 +32,13 @@ export interface BulkCreateResult {
   created: number;
   failed: number;
   errors: string[];
+  /**
+   * Leads criados com TODOS os telefones do ERP (Chamado 82c50502). O lead
+   * nasce com o principal em `leads.phone` (o gatilho espelha em
+   * `lead_phones`); o chamador leva a lista inteira, com o nome de cada
+   * contato, por `syncLeadPhonesFromErp` — a mesma porta dos já existentes.
+   */
+  leadPhones: LeadPhonesSyncItem[];
 }
 
 /**
@@ -137,7 +145,7 @@ export async function bulkCreateClients(
   const newId = params.newId ?? (() => crypto.randomUUID());
   const usedPhones = params.usedPhones ?? new Set<string>();
   const normalize = params.normalizePhone ?? ((p) => p);
-  const result: BulkCreateResult = { created: 0, failed: 0, errors: [] };
+  const result: BulkCreateResult = { created: 0, failed: 0, errors: [], leadPhones: [] };
 
   const insertBatch = async (batch: CanonicalClient[]): Promise<void> => {
     const rows = batch.map((c) => {
@@ -164,6 +172,10 @@ export async function bulkCreateClients(
     }
 
     result.created += batch.length;
+    batch.forEach((c, i) => {
+      const phones = c.phones ?? [];
+      if (phones.length > 0) result.leadPhones.push({ leadId: leadIds[i], phones });
+    });
   };
 
   /**

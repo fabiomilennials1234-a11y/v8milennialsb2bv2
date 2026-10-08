@@ -101,6 +101,42 @@ describe("bulkCreateClients", () => {
     expect(calls[1]).toMatchObject({ table: "upsell_clients", op: "insert" });
   });
 
+  it("82c50502: lead criado leva TODOS os telefones do ERP, com o nome, para lead_phones", async () => {
+    const comContatos: CanonicalClient = {
+      ...cliente("9"),
+      phone: "48999750303",
+      phones: [
+        { phone: "48999750303", label: null, isWhatsApp: true, erpPhoneId: "10" },
+        { phone: "4832631404", label: "José Luiz - Compras", isWhatsApp: false, erpPhoneId: "11" },
+      ],
+    };
+    const { admin } = fakeAdmin();
+    const r = await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [comContatos, cliente("8")],
+      newId: ids(),
+    });
+    // O principal nasce em leads.phone (o gatilho espelha); a lista inteira
+    // segue para a mesma porta de reconciliação dos já existentes.
+    expect(r.leadPhones).toEqual([{ leadId: "uuid-1", phones: comContatos.phones }]);
+  });
+
+  it("82c50502: lote que falha não manda telefone de lead desfeito", async () => {
+    const comContatos: CanonicalClient = {
+      ...cliente("9"),
+      phones: [{ phone: "4832631404", label: "José", isWhatsApp: null, erpPhoneId: "11" }],
+    };
+    const { admin } = fakeAdmin({ upsell_clients: { message: "boom" } });
+    const r = await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [comContatos],
+      newId: ids(),
+    });
+    expect(r.leadPhones).toEqual([]);
+  });
+
   it("respeita o tamanho do lote", async () => {
     const { admin, calls } = fakeAdmin();
     await bulkCreateClients(admin as never, {
@@ -265,7 +301,7 @@ describe("bulkCreateClients", () => {
       source: "toth",
       clients: [],
     });
-    expect(r).toEqual({ created: 0, failed: 0, errors: [] });
+    expect(r).toEqual({ created: 0, failed: 0, errors: [], leadPhones: [] });
     expect(calls).toHaveLength(0);
   });
 });

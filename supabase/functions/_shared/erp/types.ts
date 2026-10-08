@@ -4,6 +4,22 @@
  * ever sees canonical types.
  */
 
+/**
+ * Um telefone do cliente no ERP, com o contato a quem pertence.
+ *
+ * `erpPhoneId` é o id da LINHA de telefone no ERP (Toth `telefones[].idContato`,
+ * medido 08/10: 14.885 ids distintos para 14.885 telefones). Serve de chave
+ * estável do sync; NUNCA de agrupamento de pessoa — a pessoa é o `label`.
+ */
+export interface CanonicalPhone {
+  /** Só dígitos, já validado (`sanitizePhone`). */
+  phone: string;
+  /** Nome do contato como o ERP escreveu ("José Luiz - Compras"), ou null. */
+  label: string | null;
+  isWhatsApp: boolean | null;
+  erpPhoneId: string | null;
+}
+
 export interface CanonicalClient {
   /** ERP's immutable id (persisted as external_id). */
   externalId: string;
@@ -14,7 +30,14 @@ export interface CanonicalClient {
   name: string;
   company: string | null;
   email: string | null;
+  /** Telefone principal — o mesmo que `phones[0].phone` quando há lista. */
   phone: string | null;
+  /**
+   * TODOS os telefones do cliente, com o nome do contato quando o ERP manda
+   * (Chamado 82c50502). Opcional: adapters que só conhecem um número (Omie,
+   * Tiny) seguem compilando, e o sync de `lead_phones` simplesmente não roda.
+   */
+  phones?: CanonicalPhone[];
 
   /**
    * Enriquecimento opcional. Todo campo abaixo é `?` de propósito: adapters que

@@ -1624,6 +1624,11 @@
                   },
                   "notes": {
                     "type": "string"
+                  },
+                  "lead_phone_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Opcional. Telefone do lead com quem é este negócio (id em lead_phones). Precisa ser um telefone ativo do mesmo lead; senão 422 lead_phone_invalid."
                   }
                 }
               }
