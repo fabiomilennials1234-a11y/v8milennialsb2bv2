@@ -79,6 +79,16 @@ vi.mock("@/modules/leads/hooks/useTags", () => ({
   useCreateTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
 }));
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+// Chamado 82c50502: telefones do lead (lead_phones). Sem QueryClient aqui.
+vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
+  useLeadPhones: () => ({ data: [], isLoading: false }),
+  useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useNomearContatoDoTelefone: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDefinirTelefoneDoNegocio: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  buscarLeadIdsPorTelefoneSecundario: vi.fn(async () => []),
+  leadPhonesKey: (id: string | null) => ["lead-phones", id],
+}));
+
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));

@@ -9,6 +9,7 @@ import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
 import { LeadCardControles } from "./LeadCardControles";
 import { LeadCardEtiquetas } from "./LeadCardEtiquetas";
+import { LeadContatos } from "./LeadContatos";
 import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
@@ -50,6 +51,8 @@ export function LeadCardContainer({
   podeCriarEtiqueta = false,
   modo = "ficha",
   painelNegocios,
+  telefoneDaConversa,
+  conversaPrecisaEscolher = false,
 }: {
   leadId: string | null;
   isOpen: boolean;
@@ -84,6 +87,13 @@ export function LeadCardContainer({
    */
   modo?: "ficha" | "negocio";
   painelNegocios?: React.ReactNode;
+  /**
+   * Só no modo `negocio` (Chamado 82c50502): o telefone do NEGÓCIO. Com ele, o
+   * "Abrir conversa" vai para essa conversa, não para a do principal.
+   */
+  telefoneDaConversa?: string | null;
+  /** 2+ telefones sem escolha: o botão espera a escolha na faixa do negócio. */
+  conversaPrecisaEscolher?: boolean;
 }) {
   const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
   const renderLigar = useLeadCallAction();
@@ -340,12 +350,18 @@ export function LeadCardContainer({
           />
         ) : undefined
       }
-      onOpenChat={data.telefone?.trim() ? () => {
+      onOpenChat={conversaPrecisaEscolher ? undefined : telefoneDaConversa?.trim() ? () => {
+        // Negócio com telefone escolhido: a conversa é a DESSE contato.
+        window.location.assign(
+          `/chat-whatsapp?phone=${encodeURIComponent(telefoneDaConversa.replace(/\D/g, ""))}&lead=${encodeURIComponent(data.id)}`,
+        );
+      } : data.telefone?.trim() ? () => {
         // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
         // Navegação de documento reinicia essa resolução mesmo quando a ficha
         // foi aberta dentro do próprio chat, que guarda o link inicial em ref.
         window.location.assign(`/chat-whatsapp?lead=${encodeURIComponent(data.id)}`);
       } : undefined}
+      contatos={leadId ? <LeadContatos leadId={leadId} /> : undefined}
       onSaveNote={salvarNota}
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}

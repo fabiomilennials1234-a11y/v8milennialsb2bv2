@@ -356,6 +356,16 @@ vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadActionGates", () =>
 }));
 
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+// Chamado 82c50502: telefones do lead (lead_phones). Sem QueryClient aqui.
+vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
+  useLeadPhones: () => ({ data: [], isLoading: false }),
+  useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useNomearContatoDoTelefone: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDefinirTelefoneDoNegocio: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  buscarLeadIdsPorTelefoneSecundario: vi.fn(async () => []),
+  leadPhonesKey: (id: string | null) => ["lead-phones", id],
+}));
+
 
 // Dados do card. O card em si é o de produção — é ele que carrega o botão.
 const dadosDoCard = {
@@ -508,6 +518,8 @@ describe("Card do Lead — o botão 'Criar negócio' abre a porta única", { tim
         saleValue: null,
         meetingDate: null,
         notes: null,
+        // Chamado 82c50502: lead sem telefone em lead_phones → sem escolha.
+        leadPhoneId: null,
       }),
     );
   });

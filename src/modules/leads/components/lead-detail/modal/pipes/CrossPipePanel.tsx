@@ -268,6 +268,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   // logo depois de criar.
   const {
     options: dealOptions,
+    phones: dealPhones,
     isCreating,
     criar: handleCreateDeal,
   } = useAbrirNegocio({
@@ -348,6 +349,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
           <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
           <NewDealDialog
             options={dealOptions}
+            phones={dealPhones}
             isCreating={isCreating}
             onCreate={handleCreateDeal}
             size="md"
@@ -378,6 +380,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
         <NewDealDialog
           options={dealOptions}
+          phones={dealPhones}
           isCreating={isCreating}
           onCreate={handleCreateDeal}
         />

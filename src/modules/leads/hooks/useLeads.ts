@@ -13,6 +13,7 @@ import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 import { leadsKeys } from "../lib/leads-query-keys";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 import { useLeadsRealtime } from "./useLeadsRealtime";
+import { buscarLeadIdsPorTelefoneSecundario } from "./useLeadPhones";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -65,12 +66,13 @@ export interface LeadsFilterParams {
 function applyLeadsFilters(
   query: any,
   organizationId: string,
-  filters: Omit<LeadsFilterParams, "page">
+  filters: Omit<LeadsFilterParams, "page">,
+  secondaryPhoneLeadIds?: string[],
 ) {
   query = query
     .eq("organization_id", organizationId)
     .or("is_shadow.is.null,is_shadow.eq.false");
-  return applyLeadListFilters(query, filters);
+  return applyLeadListFilters(query, { ...filters, secondaryPhoneLeadIds });
 }
 
 /**
@@ -124,7 +126,9 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, filters);
+      // Telefone secundário (lead_phones) — Chamado 82c50502.
+      const secundarios = await buscarLeadIdsPorTelefoneSecundario(organizationId, searchQuery);
+      query = applyLeadsFilters(query, organizationId, filters, secundarios);
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -180,7 +184,8 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
     queryKey: leadsKeys.count(organizationId, recorte),
     queryFn: async () => {
       if (!organizationId) return EMPTY_COUNT;
-      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte);
+      const secundarios = await buscarLeadIdsPorTelefoneSecundario(organizationId, searchQuery);
+      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, secundarios);
       return runCappedCount(query);
     },
     enabled: isReady,

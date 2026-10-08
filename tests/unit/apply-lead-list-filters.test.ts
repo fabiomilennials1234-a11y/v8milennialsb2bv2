@@ -239,3 +239,14 @@ describe("applyLeadListFilters — atribuição", () => {
     expect(rec.iss.filter(([c]) => COLUNAS.includes(c as string))).toHaveLength(0);
   });
 });
+
+describe("applyLeadListFilters — busca por telefone secundário (Chamado 82c50502)", () => {
+  it("lead achado só pelo telefone de lead_phones entra na busca", () => {
+    const { builder, rec } = makeBuilder();
+    const id = "11111111-2222-4333-8444-555555555555";
+    applyLeadListFilters(builder, { searchQuery: "3263-1404", secondaryPhoneLeadIds: [id] });
+    expect(rec.ors).toHaveLength(1);
+    expect(rec.ors[0]).toContain("phone.ilike.%3263-1404%");
+    expect(rec.ors[0]).toContain(`id.in.(${id})`);
+  });
+});

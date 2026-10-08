@@ -35,6 +35,16 @@ vi.mock("../../lead-detail/hooks/useLeadActionGates", () => ({
   useLeadActionGates: () => ({ canAddToPipe: state.gate }),
 }));
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+// Chamado 82c50502: telefones do lead (lead_phones). Sem QueryClient aqui.
+vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
+  useLeadPhones: () => ({ data: [], isLoading: false }),
+  useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useNomearContatoDoTelefone: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDefinirTelefoneDoNegocio: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  buscarLeadIdsPorTelefoneSecundario: vi.fn(async () => []),
+  leadPhonesKey: (id: string | null) => ["lead-phones", id],
+}));
+
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -102,6 +112,7 @@ describe("Criação de negócio compartilhada pelo chat e card", () => {
     expect(state.create).toHaveBeenCalledExactlyOnceWith({
       leadId: "lead-da-conversa", pipeType: "propostas", stageId: "orcamento",
       ownerId: "tm-1", saleValue: 1250.5, meetingDate: null, notes: "Reposição",
+      leadPhoneId: null,
     });
   });
 

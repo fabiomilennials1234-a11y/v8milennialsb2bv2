@@ -31,6 +31,8 @@ import {
 } from "../lead-detail/hooks/useLeadComments";
 import { GavetaLateral } from "../lead-card/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
+import { TelefoneDoNegocioFaixa, useResolucaoDoTelefoneDoNegocio } from "./TelefoneDoNegocio";
+import { numeroDoNegocio } from "@/modules/communication/lib/telefoneDoNegocio";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
@@ -112,6 +114,10 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `20270904000000`, e o backfill da `20270908005010` já a usa.
    */
   const dealId = data?.dealId ?? null;
+  // Com qual telefone se fala sobre ESTE negócio (Chamado 82c50502): a faixa
+  // pergunta quando o lead tem 2+ e ninguém escolheu; o "Abrir conversa" do
+  // cabeçalho usa o escolhido e nunca chuta o principal.
+  const resolucaoTelefone = useResolucaoDoTelefoneDoNegocio(isOpen ? leadId : null, isOpen ? dealId : null);
   const renomearNegocio = useRenomearNegocio({ entryId, dealId, leadId, organizacaoId });
   const ajustePedido = useAjustarPedidoGanho(
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
@@ -635,8 +641,15 @@ export const DealCardPanel = memo(function DealCardPanel() {
           leadId={leadId}
           isOpen={isOpen}
           modo="negocio"
-          painelNegocios={negocio}
+          painelNegocios={
+            <div className="flex flex-col gap-3">
+              <TelefoneDoNegocioFaixa leadId={leadId} dealId={dealId} resolucao={resolucaoTelefone} />
+              {negocio}
+            </div>
+          }
           podeCriarEtiqueta={!!souAdmin}
+          telefoneDaConversa={resolucaoTelefone ? numeroDoNegocio(resolucaoTelefone) : undefined}
+          conversaPrecisaEscolher={resolucaoTelefone?.tipo === "precisaEscolher" && !!dealId}
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-14 sm:px-5">{negocio}</div>

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NewDealDialog, type NewDealOption } from "../NewDealDialog";
 
 vi.mock("@/modules/identity", () => ({
@@ -167,5 +168,61 @@ describe("NewDealDialog — submit", () => {
     await waitFor(() => expect(onCreate).toHaveBeenCalled());
     expect(screen.getByTestId("new-deal-dialog")).toBeInTheDocument();
     expect(screen.getByTestId("new-deal-notes")).toHaveValue("não posso perder isso");
+  });
+});
+
+describe("NewDealDialog — com quem é o negócio (Chamado 82c50502)", () => {
+  beforeAll(() => {
+    Element.prototype.hasPointerCapture = vi.fn();
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  const PHONES = [
+    { id: "lp-1", label: "Recepção · (48) 3263-1404" },
+    { id: "lp-2", label: "José Luiz - Compras · (17) 98125-7650" },
+  ];
+
+  function openWithPhones(phones: { id: string; label: string }[]) {
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    render(<NewDealDialog options={[QUALIFICACAO]} onCreate={onCreate} phones={phones} />);
+    fireEvent.click(screen.getByTestId("new-deal-button"));
+    return onCreate;
+  }
+
+  it("com 2+ telefones, exige a escolha: sem pré-seleção e submit bloqueado", () => {
+    const onCreate = openWithPhones(PHONES);
+    expect(screen.getByTestId("new-deal-phone")).toHaveTextContent("Escolha o contato");
+    expect(screen.getByTestId("new-deal-submit")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("escolhido o contato, envia o lead_phone_id dele", async () => {
+    const user = userEvent.setup();
+    const onCreate = openWithPhones(PHONES);
+    await user.click(screen.getByTestId("new-deal-phone"));
+    await user.click(screen.getByRole("option", { name: "José Luiz - Compras · (17) 98125-7650" }));
+    expect(screen.getByTestId("new-deal-submit")).toBeEnabled();
+    await user.click(screen.getByTestId("new-deal-submit"));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate.mock.calls[0][1]).toMatchObject({ leadPhoneId: "lp-2", stageId: "novo" });
+  });
+
+  it("com 1 telefone, não pergunta e envia esse", async () => {
+    const onCreate = openWithPhones([PHONES[0]]);
+    expect(screen.queryByTestId("new-deal-phone")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate.mock.calls[0][1].leadPhoneId).toBe("lp-1");
+  });
+
+  it("sem telefone, segue como antes (leadPhoneId null)", async () => {
+    const onCreate = openWithPhones([]);
+    expect(screen.queryByTestId("new-deal-phone")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("new-deal-submit"));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate.mock.calls[0][1].leadPhoneId).toBeNull();
   });
 });
