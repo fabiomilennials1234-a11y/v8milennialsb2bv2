@@ -133,6 +133,7 @@ export function CostSettingsDialog({
   const save = useSetCostSettings();
   const [chip, setChip] = useState("");
   const [infra, setInfra] = useState("");
+  const [folha, setFolha] = useState("");
   const [llmIn, setLlmIn] = useState("");
   const [llmOut, setLlmOut] = useState("");
   const [cambio, setCambio] = useState("");
@@ -141,6 +142,7 @@ export function CostSettingsDialog({
     if (!open || !settings) return;
     setChip(centsToMask(settings.chip_monthly_cents));
     setInfra(centsToMask(settings.infra_fixed_monthly_cents));
+    setFolha(centsToMask(settings.payroll_monthly_cents));
     setLlmIn(decimalToText(settings.llm_input_usd_per_mtok));
     setLlmOut(decimalToText(settings.llm_output_usd_per_mtok));
     setCambio(decimalToText(settings.usd_brl));
@@ -151,6 +153,7 @@ export function CostSettingsDialog({
       {
         chip_monthly_cents: maskToCents(chip),
         infra_fixed_monthly_cents: maskToCents(infra),
+        payroll_monthly_cents: maskToCents(folha),
         llm_input_usd_per_mtok: parseDecimal(llmIn),
         llm_output_usd_per_mtok: parseDecimal(llmOut),
         usd_brl: parseDecimal(cambio),
@@ -164,12 +167,20 @@ export function CostSettingsDialog({
         <DialogHeader>
           <DialogTitle>Custos da operação</DialogTitle>
           <DialogDescription>
-            Preços unitários usados no custo de cada org. Infra fixa é dividida igualmente entre as orgs ativas.
+            Preços unitários usados no custo de cada org. Infra fixa e salários são divididos igualmente entre as orgs
+            ativas.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <MoneyField id="cost-chip" label="Chip Uazapi (por mês)" value={chip} onChange={setChip} />
           <MoneyField id="cost-infra" label="Infra fixa (por mês)" value={infra} onChange={setInfra} hint="Supabase, servidor, ferramentas" />
+          <MoneyField
+            id="cost-payroll"
+            label="Salários dos colaboradores (por mês)"
+            value={folha}
+            onChange={setFolha}
+            hint="Total da folha, com encargos. Visível para todo master pleno."
+          />
           <DecimalField id="cost-llm-in" label="LLM entrada" suffix="US$ / 1M tokens" value={llmIn} onChange={setLlmIn} />
           <DecimalField id="cost-llm-out" label="LLM saída" suffix="US$ / 1M tokens" value={llmOut} onChange={setLlmOut} />
           <DecimalField id="cost-fx" label="Câmbio" suffix="R$ por US$" value={cambio} onChange={setCambio} />

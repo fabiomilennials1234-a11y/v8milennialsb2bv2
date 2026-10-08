@@ -62,6 +62,7 @@ export function useCostSettings() {
       return {
         chip_monthly_cents: num(r.chip_monthly_cents),
         infra_fixed_monthly_cents: num(r.infra_fixed_monthly_cents),
+        payroll_monthly_cents: num(r.payroll_monthly_cents),
         llm_input_usd_per_mtok: num(r.llm_input_usd_per_mtok),
         llm_output_usd_per_mtok: num(r.llm_output_usd_per_mtok),
         usd_brl: num(r.usd_brl),
@@ -99,6 +100,7 @@ export function useSetCostSettings() {
       const { error } = await rpc("master_set_cost_settings", {
         _chip_monthly_cents: s.chip_monthly_cents,
         _infra_fixed_monthly_cents: s.infra_fixed_monthly_cents,
+        _payroll_monthly_cents: s.payroll_monthly_cents,
         _llm_input_usd_per_mtok: s.llm_input_usd_per_mtok,
         _llm_output_usd_per_mtok: s.llm_output_usd_per_mtok,
         _usd_brl: s.usd_brl,

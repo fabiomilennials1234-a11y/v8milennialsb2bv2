@@ -42,6 +42,7 @@ const PRO: PlanPricing = {
 const SETTINGS: CostSettings = {
   chip_monthly_cents: 5000,
   infra_fixed_monthly_cents: 100_000,
+  payroll_monthly_cents: 0,
   llm_input_usd_per_mtok: 0.4,
   llm_output_usd_per_mtok: 1.6,
   usd_brl: 5,
@@ -92,8 +93,27 @@ describe("orgCost", () => {
     expect(c.totalCents).toBe(37_800);
   });
 
-  it("org fora de uso não absorve infra", () => {
-    expect(orgCost({ uazapi_chips: 1, llm_input_tokens_30d: 0, llm_output_tokens_30d: 0 }, SETTINGS, false, 4).infraCents).toBe(0);
+  it("org fora de uso não absorve infra nem salários", () => {
+    const c = orgCost(
+      { uazapi_chips: 1, llm_input_tokens_30d: 0, llm_output_tokens_30d: 0 },
+      { ...SETTINGS, payroll_monthly_cents: 4_000_000 },
+      false,
+      4,
+    );
+    expect(c.infraCents).toBe(0);
+    expect(c.payrollCents).toBe(0);
+  });
+
+  it("salários são rateados entre as orgs em uso, como a infra", () => {
+    const c = orgCost(
+      { uazapi_chips: 0, llm_input_tokens_30d: 0, llm_output_tokens_30d: 0 },
+      { ...SETTINGS, payroll_monthly_cents: 4_000_000 },
+      true,
+      40,
+    );
+    // R$ 40.000 ÷ 40 = R$ 1.000; infra R$ 1.000 ÷ 40 = R$ 25
+    expect(c.payrollCents).toBe(100_000);
+    expect(c.totalCents).toBe(100_000 + 2_500);
   });
 
   it("tokens sem câmbio: LLM fica null e fora do total", () => {
@@ -160,6 +180,9 @@ describe("costsConfigured", () => {
   it("tudo zerado = não configurado", () => {
     expect(costsConfigured({ ...SETTINGS, chip_monthly_cents: 0, infra_fixed_monthly_cents: 0, usd_brl: 0 })).toBe(false);
     expect(costsConfigured(SETTINGS)).toBe(true);
+    expect(
+      costsConfigured({ ...SETTINGS, chip_monthly_cents: 0, infra_fixed_monthly_cents: 0, usd_brl: 0, payroll_monthly_cents: 1 }),
+    ).toBe(true);
     expect(costsConfigured(undefined)).toBe(false);
   });
 });
