@@ -15,6 +15,7 @@ import {
   deleteMessage,
   markMessageRead,
   downloadMedia,
+  forwardMessage,
 } from "@/modules/communication/lib/whatsappApi";
 import { useCurrentTeamMember } from "@/modules/identity";
 type ActionArgs = {
@@ -84,6 +85,15 @@ export function useMarkMessageRead() {
     mutationFn: async ({ instanceId, messageId }: ActionArgs) => {
       await markMessageRead(instanceId, messageId);
     },
+    onSuccess: invalidate,
+  });
+}
+
+/** Encaminhar: a thread de destino ganha a linha nova pelo eco do webhook. */
+export function useForwardMessage() {
+  const invalidate = useInvalidateMessages();
+  return useMutation({
+    mutationFn: forwardMessage,
     onSuccess: invalidate,
   });
 }

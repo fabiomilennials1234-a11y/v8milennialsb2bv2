@@ -58,6 +58,8 @@ export type SendTextOptions = {
   delay?: number;
   replyid?: string;
   readchat?: boolean;
+  /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
+  forward?: boolean;
   trackSource?: string;
   trackId?: string;
 };
@@ -70,6 +72,8 @@ export type SendMediaOptions = {
   filename?: string;
   caption?: string;
   delay?: number;
+  /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
+  forward?: boolean;
   trackSource?: string;
   trackId?: string;
 };
