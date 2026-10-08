@@ -16,6 +16,7 @@ function fakeEnv(start = 1_000_000) {
   const log: string[] = [];
   const env: RecoveryEnv = {
     now: () => clock,
+    canReload: async () => true,
     storage: {
       getItem: (k) => store.get(k) ?? null,
       setItem: (k, v) => void store.set(k, v),
@@ -39,6 +40,21 @@ const chunkError = new TypeError(
 );
 
 describe("recoverFromStaleBuild", () => {
+  it("preserva cache e SW se o servidor estiver indisponível, inclusive no retry manual", async () => {
+    const { env, log } = fakeEnv();
+    env.canReload = async () => false;
+    expect(await recoverFromStaleBuild(env)).toBe(false);
+    expect(await recoverFromStaleBuild(env, { force: true })).toBe(false);
+    expect(log).toEqual([]);
+  });
+
+  it("recupera assim que o servidor volta sem consumir o throttle na falha", async () => {
+    const { env, log } = fakeEnv();
+    env.canReload = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    expect(await recoverFromStaleBuild(env)).toBe(false);
+    expect(await recoverFromStaleBuild(env)).toBe(true);
+    expect(log.filter((item) => item === "reload")).toHaveLength(1);
+  });
   it("(a) uma segunda falha na mesma aba, passada a janela, recupera de novo", async () => {
     const { env, log, advance } = fakeEnv();
     expect(await recoverFromStaleBuild(env)).toBe(true);

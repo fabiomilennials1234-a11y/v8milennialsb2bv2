@@ -1,3 +1,94 @@
+diff --git a/classic/src/core/stale-build-recovery.ts b/classic/src/core/stale-build-recovery.ts
+index abe343f8e..7b233248c 100644
+--- a/classic/src/core/stale-build-recovery.ts
++++ b/classic/src/core/stale-build-recovery.ts
+@@ -79,6 +79,7 @@ export function missingStylesheets(doc: Document = document): string[] {
+ export interface RecoveryEnv {
+   now: () => number;
+   storage: Pick<Storage, "getItem" | "setItem"> | null;
++  canReload: () => Promise<boolean>;
+   serviceWorker?: {
+     getRegistrations: () => Promise<ReadonlyArray<{ unregister: () => Promise<boolean> }>>;
+   };
+@@ -86,6 +87,35 @@ export interface RecoveryEnv {
+   reload: () => void;
+ }
+ 
++/** A failed origin must not destroy the cached app that can still be used. */
++export async function appServerAvailable(): Promise<boolean> {
++  for (const delay of [0, 500, 1500]) {
++    if (delay) await new Promise<void>((resolve) => setTimeout(resolve, delay));
++    const controller = new AbortController();
++    const timeout = setTimeout(() => controller.abort(), 5000);
++    try {
++      // A unique query bypasses the precache route; fetch is not a navigation.
++      const url = new URL("/", window.location.href);
++      url.searchParams.set("torque_recovery_probe", String(Date.now()));
++      const response = await fetch(url, {
++        cache: "no-store",
++        credentials: "same-origin",
++        signal: controller.signal,
++      });
++      if (response.ok) {
++        const html = await response.text();
++        if (/<div\b[^>]*\bid=["']root["']/i.test(html)
++          && /<script\b[^>]*\bsrc=["']\/assets\/[^"']+\.js["']/i.test(html)) return true;
++      }
++    } catch {
++      // Keep the SW/cache during network errors and retry a bounded number of times.
++    } finally {
++      clearTimeout(timeout);
++    }
++  }
++  return false;
++}
++
+ export function browserEnv(): RecoveryEnv {
+   let storage: RecoveryEnv["storage"] = null;
+   try {
+@@ -96,6 +126,7 @@ export function browserEnv(): RecoveryEnv {
+   return {
+     now: () => Date.now(),
+     storage,
++    canReload: appServerAvailable,
+     serviceWorker: typeof navigator !== "undefined" ? navigator.serviceWorker : undefined,
+     caches: typeof caches !== "undefined" ? caches : undefined,
+     reload: () => window.location.reload(),
+@@ -124,16 +155,30 @@ function writeLast(env: RecoveryEnv, at: number) {
+  * Desregistra o SW, apaga os caches e recarrega. Devolve `false` quando a última
+  * recuperação desta aba foi há menos de `RECOVERY_THROTTLE_MS` — o chamador
+  * então mostra a tela de "versão nova" em vez de recarregar em loop.
+- * `force` é o clique do usuário: ele já viu a tela, então recarrega sempre.
++ * `force` é o clique do usuário: ignora o throttle, mas só limpa o cache
++ * quando a origem volta a servir a aplicação.
+  */
+-export async function recoverFromStaleBuild(
+-  env: RecoveryEnv = browserEnv(),
++let browserRecovery: Promise<boolean> | undefined;
++
++export function recoverFromStaleBuild(
++  env?: RecoveryEnv,
+   { force = false }: { force?: boolean } = {},
+ ): Promise<boolean> {
++  // main, lazyRetry and the error boundary can observe the same failed chunk.
++  if (!env && browserRecovery) return browserRecovery;
++  const recovery = recover(env ?? browserEnv(), force);
++  if (env) return recovery;
++  browserRecovery = recovery.finally(() => { browserRecovery = undefined; });
++  return browserRecovery;
++}
++
++async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
+   const now = env.now();
+   const last = readLast(env);
+   if (!force && last !== null && now - last < RECOVERY_THROTTLE_MS) return false;
+-  writeLast(env, now);
++  // Even an explicit retry must keep the cached app if the origin is down.
++  if (!await env.canReload()) return false;
++  writeLast(env, env.now());
+ 
+   try {
+     const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
 diff --git a/classic/src/lib/analytics.ts b/classic/src/lib/analytics.ts
 index 9650d31ea..ccdced535 100644
 --- a/classic/src/lib/analytics.ts
@@ -5416,6 +5507,36 @@ index 000000000..f348cb821
 +  }
 +  return map;
 +}
+diff --git a/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx b/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx
+index f09ea1c75..63c04b877 100644
+--- a/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx
++++ b/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx
+@@ -1,11 +1,21 @@
++import { useEffect } from 'react';
++import { toast } from 'sonner';
+ import { useServiceWorkerUpdate } from '@/modules/platform/hooks/use-sw-update';
+ 
+ /**
+- * Registra o service worker e aplica novos builds sozinho, sem nenhum aviso na
+- * tela — o update entra no próximo momento seguro (aba escondida ou ociosa),
+- * nunca no meio de uma digitação. Render once near the app root.
++ * Lets the user finish their work before activating a pending app version.
+  */
+ export function ServiceWorkerUpdater() {
+-  useServiceWorkerUpdate();
++  const { needRefresh, updateSW } = useServiceWorkerUpdate();
++  useEffect(() => {
++    if (!needRefresh) return;
++    const id = toast('Nova versão disponível', {
++      description: 'Salve suas alterações antes de atualizar a página.',
++      duration: Infinity,
++      action: { label: 'Atualizar página', onClick: updateSW },
++      cancel: { label: 'Agora não', onClick: () => undefined },
++    });
++    return () => { toast.dismiss(id); };
++  }, [needRefresh, updateSW]);
+   return null;
+ }
 diff --git a/classic/src/modules/platform/components/layout/MainLayout.tsx b/classic/src/modules/platform/components/layout/MainLayout.tsx
 index 64976bc8c..4d1ab20b5 100644
 --- a/classic/src/modules/platform/components/layout/MainLayout.tsx
@@ -5437,6 +5558,103 @@ index 64976bc8c..4d1ab20b5 100644
        {featureFlags.chatBubble && <ChatBubble />}
  
        <QuickBlastProgressPanel />
+diff --git a/classic/src/modules/platform/hooks/use-sw-update.ts b/classic/src/modules/platform/hooks/use-sw-update.ts
+index 76afbc226..9ba4f5242 100644
+--- a/classic/src/modules/platform/hooks/use-sw-update.ts
++++ b/classic/src/modules/platform/hooks/use-sw-update.ts
+@@ -7,15 +7,6 @@ import { registerSW } from 'virtual:pwa-register';
+  */
+ const SW_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+ 
+-/**
+- * Sem popup: o update é aplicado sozinho, mas só num momento seguro para não
+- * recarregar por cima de um formulário sendo digitado. "Seguro" =
+- *   - aba escondida (usuário trocou de aba/minimizou) → reload invisível; ou
+- *   - aba visível porém ociosa por esta janela (ex.: TV dashboard/kiosk) — o
+- *     timer reinicia a cada tecla/clique, então digitação nunca é interrompida.
+- */
+-const SW_UPDATE_IDLE_APPLY_MS = 2 * 60 * 1000;
+-
+ /**
+  * Rede de segurança: se `skipWaiting` não resultar em `controllerchange`
+  * (sem waiting worker no momento, activation travada), força o reload mesmo
+@@ -31,16 +22,18 @@ interface UseServiceWorkerUpdateReturn {
+ }
+ 
+ /**
+- * Registers the PWA service worker and, quando um novo build está waiting,
+- * aplica-o sozinho no próximo momento seguro (aba escondida ou ociosa) —
+- * sem nenhum aviso na tela.
++ * Registers the PWA service worker. A pending version waits for the user's
++ * explicit update action: a hidden or idle tab can still contain unsaved work.
+  */
+ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
+   const [needRefresh, setNeedRefresh] = useState(false);
+   const updateSWRef = useRef<ReturnType<typeof registerSW>>();
+   const notifiedRef = useRef(false);
++  const updatingRef = useRef(false);
+ 
+   const updateSW = useCallback(() => {
++    if (updatingRef.current) return;
++    updatingRef.current = true;
+     // O reload do build prompt roda só `if (event.isUpdate)` no evento
+     // 'controlling', e workbox-window congela isUpdate no register() — página
+     // que começou SEM controller ativaria o SW novo sem recarregar, ficando
+@@ -65,54 +58,6 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
+     updateSWRef.current?.(true);
+   }, []);
+ 
+-  // ─── Auto-apply silencioso no próximo momento seguro ───
+-  useEffect(() => {
+-    if (!needRefresh) return;
+-
+-    let idleTimer: number | undefined;
+-    let applied = false;
+-
+-    const apply = () => {
+-      if (applied) return;
+-      applied = true;
+-      updateSW();
+-    };
+-
+-    const armIdle = () => {
+-      if (idleTimer !== undefined) window.clearTimeout(idleTimer);
+-      idleTimer = window.setTimeout(apply, SW_UPDATE_IDLE_APPLY_MS);
+-    };
+-
+-    const onVisibility = () => {
+-      // Aba escondida = janela mais segura: usuário não está olhando/digitando.
+-      if (document.visibilityState === 'hidden') apply();
+-      else armIdle();
+-    };
+-
+-    // Qualquer interação reinicia o timer ocioso — nunca recarrega no meio de
+-    // uma digitação/edição.
+-    const activityEvents: (keyof DocumentEventMap)[] = [
+-      'keydown',
+-      'pointerdown',
+-      'input',
+-    ];
+-    for (const evt of activityEvents) {
+-      document.addEventListener(evt, armIdle, { passive: true });
+-    }
+-    document.addEventListener('visibilitychange', onVisibility);
+-
+-    if (document.visibilityState === 'hidden') apply();
+-    else armIdle();
+-
+-    return () => {
+-      if (idleTimer !== undefined) window.clearTimeout(idleTimer);
+-      for (const evt of activityEvents) {
+-        document.removeEventListener(evt, armIdle);
+-      }
+-      document.removeEventListener('visibilitychange', onVisibility);
+-    };
+-  }, [needRefresh, updateSW]);
+-
+   useEffect(() => {
+     let intervalId: number | undefined;
+ 
 diff --git a/classic/src/modules/platform/hooks/useSavedViews.ts b/classic/src/modules/platform/hooks/useSavedViews.ts
 index 82fb19bff..081a21cfb 100644
 --- a/classic/src/modules/platform/hooks/useSavedViews.ts

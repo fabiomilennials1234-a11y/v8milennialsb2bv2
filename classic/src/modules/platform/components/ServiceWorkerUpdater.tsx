@@ -1,11 +1,21 @@
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 import { useServiceWorkerUpdate } from '@/modules/platform/hooks/use-sw-update';
 
 /**
- * Registra o service worker e aplica novos builds sozinho, sem nenhum aviso na
- * tela — o update entra no próximo momento seguro (aba escondida ou ociosa),
- * nunca no meio de uma digitação. Render once near the app root.
+ * Lets the user finish their work before activating a pending app version.
  */
 export function ServiceWorkerUpdater() {
-  useServiceWorkerUpdate();
+  const { needRefresh, updateSW } = useServiceWorkerUpdate();
+  useEffect(() => {
+    if (!needRefresh) return;
+    const id = toast('Nova versão disponível', {
+      description: 'Salve suas alterações antes de atualizar a página.',
+      duration: Infinity,
+      action: { label: 'Atualizar página', onClick: updateSW },
+      cancel: { label: 'Agora não', onClick: () => undefined },
+    });
+    return () => { toast.dismiss(id); };
+  }, [needRefresh, updateSW]);
   return null;
 }
