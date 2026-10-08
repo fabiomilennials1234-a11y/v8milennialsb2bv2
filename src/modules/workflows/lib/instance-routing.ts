@@ -62,6 +62,10 @@ interface PolicySpec {
   blurb: string;
   /** Se a política precisa de um recuo declarado. */
   usesFallback: boolean;
+  /** Rótulo do campo de recuo: diz QUANDO ele entra, que muda por política. */
+  fallbackLabel: string;
+  /** Frase de apoio do campo de recuo. */
+  fallbackHint: string;
 }
 
 /**
@@ -75,17 +79,25 @@ const POLICY_SPECS: Record<InstanceRoutingPolicy, PolicySpec> = {
     blurb:
       "Sai pelo número em que a conversa com o lead está viva. Sem conversa, usa o número de recuo.",
     usesFallback: true,
+    fallbackLabel: "Se não houver conversa",
+    fallbackHint:
+      "Usado quando o lead ainda não trocou nenhuma mensagem. Sem recuo declarado, o envio falha em vez de escolher um número sozinho.",
   },
   responsible: {
     label: "Instância do responsável",
     blurb:
-      "Sai pelo número vinculado ao responsável pelo lead. Sem vínculo, usa o número de recuo.",
+      "Sai pelo número do responsável pelo lead: o que ele é dono ou, sem dono, o único número a que ele tem acesso. Sem nenhum dos dois, usa o número de recuo.",
     usesFallback: true,
+    fallbackLabel: "Se o responsável não tiver número",
+    fallbackHint:
+      "Usado quando o responsável não é dono de um número nem tem acesso a exatamente um. Sem recuo declarado, o envio falha em vez de escolher um número sozinho.",
   },
   fixed: {
     label: "Número fixo",
     blurb: "Sai sempre por este número, mesmo que a conversa esteja em outro.",
     usesFallback: false,
+    fallbackLabel: "",
+    fallbackHint: "",
   },
 };
 
@@ -295,6 +307,15 @@ export function buildFallbackChange(
 /** Se a política precisa de um recuo declarado. */
 export function policyUsesFallback(policy: InstanceRoutingPolicy): boolean {
   return POLICY_SPECS[policy].usesFallback;
+}
+
+/** Rótulo e frase de apoio do campo de recuo para a política. */
+export function describeFallback(policy: InstanceRoutingPolicy): {
+  label: string;
+  hint: string;
+} {
+  const spec = POLICY_SPECS[policy];
+  return { label: spec.fallbackLabel, hint: spec.fallbackHint };
 }
 
 /**
