@@ -106,3 +106,10 @@ de setembro; não foi repetido nesta revisão.
 
 Esta revisão não aplicou a migration nem publicou em produção. A situação de
 CI e aprovação obrigatória do CODEOWNER deve ser consultada no SHA final da PR.
+
+A integração seguinte incorporou a #2269 já mergeada (`main@620cbd56f`), com
+conflito somente no patch gerado, resolvido pela regeneração das fontes
+combinadas. Passaram 106 testes V5/suporte, 38 Classic, 8 verificações SQL e
+build:dual. O typecheck completo encontrou 317 assinaturas de dívida: a única
+fora do baseline/teto é TS2345 em `savedContactNames.test.ts`, arquivo idêntico
+à main e fora deste diff. Não houve alteração dos baselines.
