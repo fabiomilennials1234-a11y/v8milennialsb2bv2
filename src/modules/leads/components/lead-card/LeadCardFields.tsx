@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useInlineEdit } from "../lead-detail/hooks/useInlineEdit";
+import { formatBrDocument } from "../../lib/document";
 import type { LeadCardField, LeadCardFieldGroup } from "./types";
 
 /**
@@ -31,6 +32,23 @@ const INPUT_TYPE: Partial<Record<NonNullable<LeadCardField["tipo"]>, string>> = 
   url: "url",
 };
 
+/**
+ * O que o hover do valor explica. CPF/CNPJ tem regra própria (Chamado
+ * 93027ffb): editar grava um override no Torque e o ERP não muda; a trava,
+ * quando há, é de permissão (`leads.edit_document`), não de sincronização.
+ */
+function dicaDoCampo(campo: LeadCardField): string | undefined {
+  if (campo.tipo === "documento") {
+    if (campo.somenteLeitura) return "Sem permissão para alterar o documento";
+    if (campo.alteradoLocalmente) {
+      return campo.valorErp ? `No ERP: ${formatBrDocument(campo.valorErp)}` : "Sem documento no ERP";
+    }
+    return campo.origemErp ? "Valor do ERP. A alteração fica no Torque; o cadastro no Toth não muda." : undefined;
+  }
+  if (campo.origemErp) return "Sincronizado do ERP. Altere o cadastro no Toth.";
+  return campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined;
+}
+
 function Linha({
   campo,
   onSave,
@@ -40,10 +58,12 @@ function Linha({
 }) {
   const [erro, setErro] = useState(false);
 
-  // `somenteLeitura` marca o campo que ainda não tem coluna em `leads` (CNPJ,
-  // site, nascimento, endereço). Ele APARECE, por decisão do CTO — sumir é o
-  // que faz ninguém preencher — mas não finge que grava.
+  // `somenteLeitura` marca o campo que ainda não tem coluna em `leads` (site,
+  // nascimento, endereço), o que vem travado do ERP e o CPF/CNPJ de quem não
+  // tem `leads.edit_document`. Ele APARECE, por decisão do CTO — sumir é o que
+  // faz ninguém preencher — mas não finge que grava.
   const editavel = !!onSave && !campo.somenteLeitura;
+  const documento = campo.tipo === "documento";
 
   const { localValue, setLocalValue, isEditing, isSaving, startEditing, commit, cancel } =
     useInlineEdit({
@@ -57,9 +77,13 @@ function Linha({
           throw e;
         }
       },
+      // CPF/CNPJ recusado (DV, já em uso) fica na linha, em vermelho, para
+      // corrigir o dígito em vez de redigitar.
+      keepOnError: documento,
     });
   const valorExibido = editavel ? localValue : campo.valor;
   const vazio = valorExibido === null || valorExibido === "";
+  const dica = dicaDoCampo(campo);
 
   return (
     <div
@@ -76,7 +100,7 @@ function Linha({
         {campo.somenteLeitura && (
           <Lock
             className="size-3 shrink-0 opacity-45"
-            aria-label={campo.origemErp ? "Sincronizado do ERP, somente leitura" : "Campo ainda sem coluna no banco"}
+            aria-label={documento ? "Sem permissão para alterar" : campo.origemErp ? "Sincronizado do ERP, somente leitura" : "Campo ainda sem coluna no banco"}
           />
         )}
       </span>
@@ -85,6 +109,7 @@ function Linha({
         <input
           autoFocus
           type={INPUT_TYPE[campo.tipo ?? "texto"] ?? "text"}
+          inputMode={documento ? "numeric" : undefined}
           value={localValue}
           disabled={isSaving}
           onChange={(e) => setLocalValue(e.target.value)}
@@ -99,26 +124,34 @@ function Linha({
           )}
         />
       ) : (
-        <button
-          type="button"
-          disabled={!editavel}
-          onClick={startEditing}
-          title={campo.origemErp ? "Sincronizado do ERP. Altere o cadastro no Toth." : campo.somenteLeitura ? "Este campo ainda não existe no banco" : undefined}
-          className={cn(
-            "flex min-w-0 items-center justify-end gap-1.5 break-words rounded text-right text-[13.5px]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            vazio ? "text-muted-foreground/45" : "font-semibold text-foreground",
-            campo.tipo === "documento" || campo.tipo === "moeda" ? "tabular-nums" : undefined,
-            editavel && "cursor-text hover:text-foreground",
-            !editavel && "cursor-default",
-            erro && "text-destructive",
+        <div className="flex min-w-0 flex-col">
+          <button
+            type="button"
+            disabled={!editavel}
+            onClick={startEditing}
+            title={dica}
+            className={cn(
+              "flex min-w-0 items-center justify-end gap-1.5 break-words rounded text-right text-[13.5px]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              vazio ? "text-muted-foreground/45" : "font-semibold text-foreground",
+              campo.tipo === "documento" || campo.tipo === "moeda" ? "tabular-nums" : undefined,
+              editavel && "cursor-text hover:text-foreground",
+              !editavel && "cursor-default",
+              erro && "text-destructive",
+            )}
+          >
+            <span className="min-w-0 break-words">
+              {vazio ? (campo.vazio ?? "—") : documento && !erro ? formatBrDocument(valorExibido) : valorExibido}
+            </span>
+            {isSaving && <Loader2 className="size-3 shrink-0 animate-spin opacity-60" />}
+          </button>
+          {/* O valor exibido não é o do ERP: diz isso na linha, sem esconder no hover. */}
+          {campo.alteradoLocalmente && (
+            <span className="self-end text-[11px] text-muted-foreground" title={dica}>
+              alterado no Torque
+            </span>
           )}
-        >
-          <span className="min-w-0 break-words">
-            {vazio ? (campo.vazio ?? "—") : valorExibido}
-          </span>
-          {isSaving && <Loader2 className="size-3 shrink-0 animate-spin opacity-60" />}
-        </button>
+        </div>
       )}
     </div>
   );

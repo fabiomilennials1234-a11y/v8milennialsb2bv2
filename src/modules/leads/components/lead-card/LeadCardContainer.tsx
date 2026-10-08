@@ -13,6 +13,8 @@ import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
+import { useSetLeadDocument } from "../../hooks/useLeadDocument";
+import { isValidBrDocument, onlyDigits } from "../../lib/document";
 import {
   useCreateLeadComment,
   useDeleteLeadComment,
@@ -87,6 +89,7 @@ export function LeadCardContainer({
   const renderLigar = useLeadCallAction();
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
+  const setDocumento = useSetLeadDocument(leadId);
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
   const criarComentario = useCreateLeadComment();
@@ -111,13 +114,23 @@ export function LeadCardContainer({
       if (!campo || campo.somenteLeitura) return;
 
       const limpo = valor.trim();
+      // CPF/CNPJ não é coluna de `leads`: vai pela RPC, que valida, confere a
+      // unicidade na org e grava a trilha. A recusa sobe para `useInlineEdit`,
+      // que a mostra (notifyError) e deixa o texto digitado na linha.
+      if (chave === "documento" && !campo.personalizado) {
+        if (limpo !== "" && !isValidBrDocument(onlyDigits(limpo))) {
+          throw new Error("CPF/CNPJ inválido");
+        }
+        await setDocumento.mutateAsync(limpo);
+        return;
+      }
       if (campo.personalizado) {
         await saveCustomField.mutateAsync({ leadId, fieldId: chave, value: limpo });
         return;
       }
       await updateLead.mutateAsync({ id: leadId, [chave]: limpo === "" ? null : limpo });
     },
-    [leadId, data, saveCustomField, updateLead],
+    [leadId, data, saveCustomField, updateLead, setDocumento],
   );
 
   const salvarNota = useCallback(

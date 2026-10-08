@@ -50,6 +50,12 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
   useToggleLeadAI: () => ({ mutate: toggleAIMutate }),
   useDeleteLead: () => ({ mutateAsync: deleteLeadAsync }),
 }));
+// CPF/CNPJ grava por RPC própria (Chamado 93027ffb); a mutação passa por
+// `useQueryClient`, e este arquivo monta sem provider.
+vi.mock("@/modules/leads/hooks/useLeadDocument", () => ({
+  useLeadDocument: () => ({ data: null }),
+  useSetLeadDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+}));
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
 }));
