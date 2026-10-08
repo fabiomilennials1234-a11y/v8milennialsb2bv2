@@ -8,15 +8,6 @@ import { registerSW } from 'virtual:pwa-register';
 const SW_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
- * Sem popup: o update é aplicado sozinho, mas só num momento seguro para não
- * recarregar por cima de um formulário sendo digitado. "Seguro" =
- *   - aba escondida (usuário trocou de aba/minimizou) → reload invisível; ou
- *   - aba visível porém ociosa por esta janela (ex.: TV dashboard/kiosk) — o
- *     timer reinicia a cada tecla/clique, então digitação nunca é interrompida.
- */
-const SW_UPDATE_IDLE_APPLY_MS = 2 * 60 * 1000;
-
-/**
  * Rede de segurança: se `skipWaiting` não resultar em `controllerchange`
  * (sem waiting worker no momento, activation travada), força o reload mesmo
  * assim para o update nunca ficar preso em waiting.
@@ -31,16 +22,19 @@ interface UseServiceWorkerUpdateReturn {
 }
 
 /**
- * Registers the PWA service worker and, quando um novo build está waiting,
- * aplica-o sozinho no próximo momento seguro (aba escondida ou ociosa) —
- * sem nenhum aviso na tela.
+ * Registers the PWA service worker. A pending version waits for the user's
+ * explicit update action: a hidden or idle tab can still contain unsaved work.
  */
 export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
   const [needRefresh, setNeedRefresh] = useState(false);
   const updateSWRef = useRef<ReturnType<typeof registerSW>>();
   const notifiedRef = useRef(false);
+  const updatingRef = useRef(false);
+  const requestedReloadRef = useRef<() => void>();
 
   const updateSW = useCallback(() => {
+    if (updatingRef.current) return;
+    updatingRef.current = true;
     // O reload do build prompt roda só `if (event.isUpdate)` no evento
     // 'controlling', e workbox-window congela isUpdate no register() — página
     // que começou SEM controller ativaria o SW novo sem recarregar, ficando
@@ -52,6 +46,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
       reloaded = true;
       window.location.reload();
     };
+    requestedReloadRef.current = reload;
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', reload, {
@@ -65,59 +60,16 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
     updateSWRef.current?.(true);
   }, []);
 
-  // ─── Auto-apply silencioso no próximo momento seguro ───
-  useEffect(() => {
-    if (!needRefresh) return;
-
-    let idleTimer: number | undefined;
-    let applied = false;
-
-    const apply = () => {
-      if (applied) return;
-      applied = true;
-      updateSW();
-    };
-
-    const armIdle = () => {
-      if (idleTimer !== undefined) window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(apply, SW_UPDATE_IDLE_APPLY_MS);
-    };
-
-    const onVisibility = () => {
-      // Aba escondida = janela mais segura: usuário não está olhando/digitando.
-      if (document.visibilityState === 'hidden') apply();
-      else armIdle();
-    };
-
-    // Qualquer interação reinicia o timer ocioso — nunca recarrega no meio de
-    // uma digitação/edição.
-    const activityEvents: (keyof DocumentEventMap)[] = [
-      'keydown',
-      'pointerdown',
-      'input',
-    ];
-    for (const evt of activityEvents) {
-      document.addEventListener(evt, armIdle, { passive: true });
-    }
-    document.addEventListener('visibilitychange', onVisibility);
-
-    if (document.visibilityState === 'hidden') apply();
-    else armIdle();
-
-    return () => {
-      if (idleTimer !== undefined) window.clearTimeout(idleTimer);
-      for (const evt of activityEvents) {
-        document.removeEventListener(evt, armIdle);
-      }
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [needRefresh, updateSW]);
-
   useEffect(() => {
     let intervalId: number | undefined;
 
     updateSWRef.current = registerSW({
       immediate: true,
+      onNeedReload() {
+        // Workbox also receives activation from other tabs. Only this tab's
+        // explicit action may reload it, sharing the native/fallback guard.
+        requestedReloadRef.current?.();
+      },
       onNeedRefresh() {
         // workbox-window classifica um update achado >60s após o register
         // como "externo" e emite installed + waiting para o MESMO SW — o build

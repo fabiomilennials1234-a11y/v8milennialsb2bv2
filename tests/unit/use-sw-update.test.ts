@@ -156,7 +156,7 @@ describe('useServiceWorkerUpdate — registration + update signal', () => {
   });
 });
 
-describe('useServiceWorkerUpdate — silent auto-apply', () => {
+describe('useServiceWorkerUpdate — explicit activation', () => {
   let capturedOnNeedRefresh: (() => void) | undefined;
   let originalLocation: Location;
 
@@ -200,7 +200,7 @@ describe('useServiceWorkerUpdate — silent auto-apply', () => {
     expect(mockUpdateSW).not.toHaveBeenCalled();
   });
 
-  it('applies once the visible tab has been idle for the idle window', () => {
+  it('does not apply after the visible tab becomes idle', () => {
     renderHook(() => useServiceWorkerUpdate());
     act(() => {
       capturedOnNeedRefresh?.();
@@ -209,10 +209,10 @@ describe('useServiceWorkerUpdate — silent auto-apply', () => {
     act(() => {
       vi.advanceTimersByTime(2 * 60_000);
     });
-    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+    expect(mockUpdateSW).not.toHaveBeenCalled();
   });
 
-  it('user interaction resets the idle timer so a typing user is never reloaded', () => {
+  it('keeps the pending version after user activity and subsequent idle time', () => {
     renderHook(() => useServiceWorkerUpdate());
     act(() => {
       capturedOnNeedRefresh?.();
@@ -228,20 +228,20 @@ describe('useServiceWorkerUpdate — silent auto-apply', () => {
     act(() => {
       vi.advanceTimersByTime(30_000); // now crosses the reset window
     });
-    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+    expect(mockUpdateSW).not.toHaveBeenCalled();
   });
 
-  it('applies immediately when the tab is hidden at signal time', () => {
+  it('does not apply when the tab is hidden at signal time', () => {
     setVisibility('hidden');
     renderHook(() => useServiceWorkerUpdate());
     act(() => {
       capturedOnNeedRefresh?.();
     });
 
-    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+    expect(mockUpdateSW).not.toHaveBeenCalled();
   });
 
-  it('applies as soon as the tab becomes hidden', () => {
+  it('does not apply when the user switches to another tab', () => {
     renderHook(() => useServiceWorkerUpdate());
     act(() => {
       capturedOnNeedRefresh?.();
@@ -252,12 +252,12 @@ describe('useServiceWorkerUpdate — silent auto-apply', () => {
       setVisibility('hidden');
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(mockUpdateSW).toHaveBeenCalledWith(true);
+    expect(mockUpdateSW).not.toHaveBeenCalled();
   });
 
-  it('applies the update at most once', () => {
+  it('applies an explicitly requested update at most once', () => {
     setVisibility('hidden');
-    renderHook(() => useServiceWorkerUpdate());
+    const { result } = renderHook(() => useServiceWorkerUpdate());
     act(() => {
       capturedOnNeedRefresh?.();
     });
@@ -265,6 +265,11 @@ describe('useServiceWorkerUpdate — silent auto-apply', () => {
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
       vi.advanceTimersByTime(5 * 60_000);
+    });
+    expect(mockUpdateSW).not.toHaveBeenCalled();
+    act(() => {
+      result.current.updateSW();
+      result.current.updateSW();
     });
     expect(mockUpdateSW).toHaveBeenCalledTimes(1);
   });

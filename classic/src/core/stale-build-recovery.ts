@@ -79,11 +79,41 @@ export function missingStylesheets(doc: Document = document): string[] {
 export interface RecoveryEnv {
   now: () => number;
   storage: Pick<Storage, "getItem" | "setItem"> | null;
+  canReload: () => Promise<boolean>;
   serviceWorker?: {
     getRegistrations: () => Promise<ReadonlyArray<{ unregister: () => Promise<boolean> }>>;
   };
   caches?: { keys: () => Promise<string[]>; delete: (key: string) => Promise<boolean> };
   reload: () => void;
+}
+
+/** A failed origin must not destroy the cached app that can still be used. */
+export async function appServerAvailable(): Promise<boolean> {
+  for (const delay of [0, 500, 1500]) {
+    if (delay) await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      // A unique query bypasses the precache route; fetch is not a navigation.
+      const url = new URL("/", window.location.href);
+      url.searchParams.set("torque_recovery_probe", String(Date.now()));
+      const response = await fetch(url, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        const html = await response.text();
+        if (/<div\b[^>]*\bid=["']root["']/i.test(html)
+          && /<script\b[^>]*\bsrc=["']\/assets\/[^"']+\.js["']/i.test(html)) return true;
+      }
+    } catch {
+      // Keep the SW/cache during network errors and retry a bounded number of times.
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  return false;
 }
 
 export function browserEnv(): RecoveryEnv {
@@ -96,6 +126,7 @@ export function browserEnv(): RecoveryEnv {
   return {
     now: () => Date.now(),
     storage,
+    canReload: appServerAvailable,
     serviceWorker: typeof navigator !== "undefined" ? navigator.serviceWorker : undefined,
     caches: typeof caches !== "undefined" ? caches : undefined,
     reload: () => window.location.reload(),
@@ -124,16 +155,30 @@ function writeLast(env: RecoveryEnv, at: number) {
  * Desregistra o SW, apaga os caches e recarrega. Devolve `false` quando a última
  * recuperação desta aba foi há menos de `RECOVERY_THROTTLE_MS` — o chamador
  * então mostra a tela de "versão nova" em vez de recarregar em loop.
- * `force` é o clique do usuário: ele já viu a tela, então recarrega sempre.
+ * `force` é o clique do usuário: ignora o throttle, mas só limpa o cache
+ * quando a origem volta a servir a aplicação.
  */
-export async function recoverFromStaleBuild(
-  env: RecoveryEnv = browserEnv(),
+let browserRecovery: Promise<boolean> | undefined;
+
+export function recoverFromStaleBuild(
+  env?: RecoveryEnv,
   { force = false }: { force?: boolean } = {},
 ): Promise<boolean> {
+  // main, lazyRetry and the error boundary can observe the same failed chunk.
+  if (!env && browserRecovery) return browserRecovery;
+  const recovery = recover(env ?? browserEnv(), force);
+  if (env) return recovery;
+  browserRecovery = recovery.finally(() => { browserRecovery = undefined; });
+  return browserRecovery;
+}
+
+async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
   const now = env.now();
   const last = readLast(env);
   if (!force && last !== null && now - last < RECOVERY_THROTTLE_MS) return false;
-  writeLast(env, now);
+  // Even an explicit retry must keep the cached app if the origin is down.
+  if (!await env.canReload()) return false;
+  writeLast(env, env.now());
 
   try {
     const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
