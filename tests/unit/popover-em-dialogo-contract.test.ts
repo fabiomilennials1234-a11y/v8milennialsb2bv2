@@ -76,6 +76,9 @@ const DENTRO_DE_DIALOGO: ReadonlyArray<{
   { arquivo: "src/modules/leads/components/deal-card/DealCardChecklists.tsx", rota: "/leads", folha: true },
   { arquivo: "src/modules/leads/components/lead-detail/modal/header/ResponsibleSlot.tsx", rota: "/leads", folha: true },
   { arquivo: "src/modules/leads/components/lead-card/LeadCardEtiquetas.tsx", rota: "/leads", folha: true },
+
+  // 2026-10-08 — corrigir "Vendido em" / "Perdido em" no cartão de ouro.
+  { arquivo: "src/modules/leads/components/deal-card/DataDoDesfecho.tsx", rota: "/leads", folha: true },
 ];
 
 /**

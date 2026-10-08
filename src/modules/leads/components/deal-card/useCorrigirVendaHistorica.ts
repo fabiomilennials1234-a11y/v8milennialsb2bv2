@@ -5,6 +5,33 @@ import { toast } from "sonner";
 import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 export type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
 
+/** Tudo que lê o negócio, a receita ou o pedido — refaz junto depois de uma correção. */
+export const CHAVES_DA_VENDA = [
+  "deal-card-extras",
+  "deal-sale-corrections",
+  "pipeline-page",
+  "custom_pipe_entries",
+  "deal-order-adjustments",
+  "leads-deals",
+  "leads-sales-metrics",
+  "carteira_orders",
+  "upsell_orders",
+  "upsell_clients",
+  "upsell-orders",
+  "upsell-clients",
+  "portfolio-clients",
+  "portfolio-kpis",
+  "portfolio-trends",
+  "sales-metrics",
+  "dashboard-metrics",
+  "product-ranking",
+  "metric-measure",
+  "metrics-studio",
+  "ranking-data",
+  "command-metrics",
+  "commission-ledger",
+] as const;
+
 const errors: Record<string, string> = {
   access_denied: "Você não tem permissão para corrigir esta venda.",
   sale_not_found: "Venda não encontrada. Atualize a ficha.",
@@ -49,33 +76,7 @@ export function useCorrigirVendaHistorica(dealId: string | null, organizationId:
     },
     onSuccess: async () => {
       toast.success("Venda corrigida: negócio, receita e pedido foram atualizados.");
-      await Promise.all(
-        [
-          "deal-card-extras",
-          "deal-sale-corrections",
-          "pipeline-page",
-          "custom_pipe_entries",
-          "deal-order-adjustments",
-          "leads-deals",
-          "leads-sales-metrics",
-          "carteira_orders",
-          "upsell_orders",
-          "upsell_clients",
-          "upsell-orders",
-          "upsell-clients",
-          "portfolio-clients",
-          "portfolio-kpis",
-          "portfolio-trends",
-          "sales-metrics",
-          "dashboard-metrics",
-          "product-ranking",
-          "metric-measure",
-          "metrics-studio",
-          "ranking-data",
-          "command-metrics",
-          "commission-ledger",
-        ].map((key) => qc.invalidateQueries({ queryKey: [key] })),
-      );
+      await Promise.all(CHAVES_DA_VENDA.map((key) => qc.invalidateQueries({ queryKey: [key] })));
     },
   });
 }
