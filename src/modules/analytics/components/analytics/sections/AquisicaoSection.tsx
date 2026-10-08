@@ -50,7 +50,7 @@ export function AquisicaoSection({ month, year }: Props) {
       />
 
       {(overviewError || financeiroError || comercialError) && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-4">
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive mb-4">
           <p className="font-medium">Erro ao carregar dados de aquisição</p>
           <p className="text-xs text-muted-foreground mt-1">Alguns widgets podem estar indisponíveis.</p>
         </div>

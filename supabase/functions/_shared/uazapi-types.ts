@@ -82,6 +82,8 @@ export type UazapiSendMediaInput = {
   delay?: number;
   replyid?: string;
   readchat?: boolean;
+  /** Marca a mensagem como encaminhada no WhatsApp. */
+  forward?: boolean;
   track_source?: string;
   track_id?: string;
   viewOnce?: boolean;

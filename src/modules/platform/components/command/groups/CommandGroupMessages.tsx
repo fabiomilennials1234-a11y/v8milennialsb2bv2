@@ -73,7 +73,7 @@ export function CommandGroupMessages({ query, onClose }: CommandGroupMessagesPro
   return (
     <CommandGroup
       heading="Mensagens"
-      className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
+      className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[.06em] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
       {isLoading && (
         <div className="flex items-center justify-center py-4">
@@ -95,7 +95,7 @@ export function CommandGroupMessages({ query, onClose }: CommandGroupMessagesPro
             value={`${itemId} ${result.phone_number} ${result.message}`}
             onSelect={() => handleSelect(result.phone_number)}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md mx-1",
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl mx-1.5",
               "cursor-default select-none",
               "aria-selected:bg-muted/60",
               "hover:bg-muted/40",

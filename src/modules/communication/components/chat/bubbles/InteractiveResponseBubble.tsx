@@ -41,10 +41,10 @@ export function InteractiveResponseBubble({
     <div
       className={cn(
         "flex items-start gap-2 rounded-md border border-border/40 px-2 py-1.5",
-        isOutgoing ? "bg-primary/5" : "bg-muted/40"
+        isOutgoing ? "bg-foreground/[0.04]" : "bg-muted/40"
       )}
     >
-      <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+      <CheckCircle2 className="h-4 w-4 opacity-70 mt-0.5 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
           {label}

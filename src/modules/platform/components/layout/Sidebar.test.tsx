@@ -1,48 +1,35 @@
-import {
-  render,
-  screen,
-  waitForElementToBeRemoved,
-  within,
-} from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { Gauge, GitBranch, Send, Settings, Trophy, Wallet, Zap } from "lucide-react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { Gauge, GitBranch, Send, Settings, Trophy, Zap } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import type { NavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import type { NavNode, PitstopGroup } from "@/modules/platform/lib/navigation-model";
 import { Sidebar } from "./Sidebar";
 
 /**
- * O que este teste cobre é a FORMA da lateral — recolher, expandir, abrir o
- * Pitstop. Quem decide visibilidade é `useNavigationModel`, testado à parte em
- * `navigation-filters.test.ts`; por isso aqui ele é dublê.
+ * A FORMA da lateral do V5: trilho de ícones de 76 px, sem rótulo e sem
+ * expandir (decisão do CTO, 02/10). Quem decide visibilidade é
+ * `useNavigationModel`, testado à parte — aqui ele é dublê.
+ *
+ * O que este arquivo trava:
+ * - toda porta tem nome acessível (ícone sem nome é adivinhação);
+ * - o grupo "Turbo" virou duas portas diretas, sem clique intermediário;
+ * - Funis leva ao funil padrão da org (o hub virou aba dentro da página);
+ * - Agenda e Pitstop navegam para páginas — não abrem mais painel;
+ * - item trancado por plano abre o upgrade em vez de navegar;
+ * - o escudo do Master só existe para master.
  */
 
 const upgradeSpy = vi.fn();
+const masterRef = { current: { isMaster: false, isOutbounder: false } };
+const settingsRef: { current: { default_pipeline_id?: string } | null } = { current: null };
 
-vi.mock("./OrgSwitcher", () => ({ OrgSwitcher: () => <div data-testid="org-switcher" /> }));
-// Mesmo motivo do dublê acima: os atalhos de master leem a sessão
-// (`useMasterAuth` → `useAuth`), e este teste não monta `AuthProvider` porque o
-// que ele cobre é a FORMA da lateral, não quem enxerga o quê.
 vi.mock("./SidebarMasterLinks", () => ({
   SidebarMasterLinks: () => <div data-testid="master-links" />,
 }));
 vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div data-testid="user-menu" /> }));
-// O dublê HONRA `rotulo` porque o real também honra
-// (`AlertsDropdown.tsx`: `{rotulo && <span>{rotulo}</span>}`).
-//
-// Ele ignorava a prop, e isso quebrou a asserção de "Notificações" no rodapé
-// no dia em que o Sidebar parou de renderizar a palavra num <span> inerte e
-// passou a entregá-la ao componente. O teste ficou vermelho na main sem que
-// nada no PRODUTO tivesse regredido: dublê mais frouxo que o real transforma
-// refatoração correta em falha.
-vi.mock("@/modules/platform/components/notifications/AlertsDropdown", () => ({
-  AlertsDropdown: ({ rotulo }: { rotulo?: string }) => (
-    <div data-testid="alerts">{rotulo}</div>
-  ),
-}));
 vi.mock("@/shared/components/UpgradeModal", () => ({
   UpgradeModal: ({ featureKey }: { featureKey: string }) => {
     upgradeSpy(featureKey);
@@ -50,19 +37,17 @@ vi.mock("@/shared/components/UpgradeModal", () => ({
   },
 }));
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
+vi.mock("@/modules/identity", () => ({
+  useMasterAuth: () => masterRef.current,
+  useOrganizationSettings: () => ({ settings: settingsRef.current }),
+}));
+vi.mock("@/modules/copilot", () => ({
+  useOraculoBriefing: () => ({ briefing: null, isLoading: false, open: vi.fn(), isOpening: false }),
+}));
 
 const modelRef: { current: NavigationModel } = { current: null as never };
 vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
   useNavigationModel: () => modelRef.current,
-}));
-
-vi.mock("@/modules/copilot", () => ({
-  useOraculoBriefing: () => ({
-    briefing: null,
-    isLoading: false,
-    open: vi.fn(),
-    isOpening: false,
-  }),
 }));
 
 const node = (label: string, path: string, icon = Gauge, children?: NavNode[]): NavNode => ({
@@ -76,27 +61,13 @@ const PRIMARY: NavNode[] = [
   node("Comando", "/dashboard"),
   node("Chat", "/chat-whatsapp", Zap),
   node("Disparos", "/disparos", Send),
-  node("Funis", "/funis", GitBranch, [
-    node("WhatsApp", "/pipe-whatsapp"),
-    node("Propostas", "/pipe-propostas"),
-  ]),
-  node("Carteira", "/upsell", Wallet),
-  node("Turbo", "/turbo", Zap, [node("Copilot", "/copilot")]),
+  node("Funis", "/funis", GitBranch, [node("Funil de Vendas", "/funil/vendas")]),
+  node("Leads", "/leads"),
+  node("Turbo", "/turbo", Zap, [node("Copilot", "/copilot"), node("Automações", "/automacoes")]),
 ];
 
 const PITSTOP: PitstopGroup[] = [
-  {
-    id: "gestao",
-    title: "Gestão",
-    hint: "Consulta semanal",
-    items: [node("Ranking", "/performance", Trophy)],
-  },
-  {
-    id: "rotas",
-    title: "Rotas",
-    hint: "O que vivia no Mais",
-    items: [node("Comissões", "/comissoes")],
-  },
+  { id: "gestao", title: "Gestão", hint: "Consulta semanal", items: [node("Ranking", "/performance", Trophy)] },
 ];
 
 function makeModel(overrides: Partial<NavigationModel> = {}): NavigationModel {
@@ -115,12 +86,19 @@ function makeModel(overrides: Partial<NavigationModel> = {}): NavigationModel {
   };
 }
 
+function Onde() {
+  return <p data-testid="onde">{useLocation().pathname}</p>;
+}
+
 function renderSidebar(model: NavigationModel = makeModel()) {
   modelRef.current = model;
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/dashboard"]}>
       <TooltipProvider>
         <Sidebar />
+        <Routes>
+          <Route path="*" element={<Onde />} />
+        </Routes>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -128,155 +106,100 @@ function renderSidebar(model: NavigationModel = makeModel()) {
 
 beforeEach(() => {
   upgradeSpy.mockClear();
-  window.localStorage.clear();
+  masterRef.current = { isMaster: false, isOutbounder: false };
+  settingsRef.current = null;
 });
 
-describe("Sidebar", () => {
-  it("mostra as seis portas e os quatro itens de rodapé", () => {
+describe("Sidebar — trilho de ícones", () => {
+  it("toda porta tem nome acessível, mesmo sem rótulo visível", () => {
     renderSidebar();
-
-    for (const label of ["Comando", "Chat", "Disparos", "Funis", "Carteira", "Turbo"]) {
-      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Telas" });
+    for (const nome of ["Comando", "Chat", "Disparos", "Funis", "Leads", "Copilot", "Automações", "Oráculo"]) {
+      expect(within(nav).getByRole(nome === "Oráculo" ? "button" : "link", { name: nome })).toBeInTheDocument();
     }
-    // A Agenda é BOTÃO, não link: ela abre painel sobreposto por cima da tela
-    // atual em vez de navegar. A rota `/agenda` continua existindo para o
-    // celular e para link direto — ver `AgendaPanel`.
-    expect(screen.getByRole("button", { name: /Agenda/ })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Notificações")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Ajuda/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Pitstop/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Agenda" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ajuda" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pitstop" })).toBeInTheDocument();
   });
 
-  it("não mostra o antigo menu Mais", () => {
+  it("não sobra rótulo visível nem botão de recolher/expandir", () => {
     renderSidebar();
-    expect(screen.queryByText("Mais")).not.toBeInTheDocument();
+    const lateral = screen.getByTestId("sidebar");
+    expect(lateral).toHaveStyle({ width: "76px" });
+    expect(within(lateral).queryByText("Comando")).toBeNull();
+    expect(screen.queryByRole("button", { name: /recolher|expandir/i })).toBeNull();
   });
 
-  it("recolhe e esconde os rótulos, mantendo os alvos clicáveis", async () => {
+  it("Turbo virou duas portas diretas: Copilot navega no primeiro clique", async () => {
     const user = userEvent.setup();
     renderSidebar();
-
-    expect(screen.getByText("Comando")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Recolher menu" }));
-
-    expect(screen.queryByText("Comando")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Expandir menu" })).toBeInTheDocument();
-    // O link continua lá — só perdeu o rótulo visível.
-    expect(document.querySelector('a[href="/dashboard"]')).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Turbo" })).toBeNull();
+    await user.click(screen.getByRole("link", { name: "Copilot" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/copilot");
   });
 
-  it("recolhe o logotipo com a lateral e mantém o hexágono", async () => {
+  it("Funis leva ao funil padrão da org", async () => {
+    const user = userEvent.setup();
+    settingsRef.current = { default_pipeline_id: "f-123" };
+    renderSidebar();
+    await user.click(screen.getByRole("link", { name: "Funis" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+  });
+
+  it("sem funil padrão, Funis cai no hub", async () => {
     const user = userEvent.setup();
     renderSidebar();
-
-    // Quem carrega o nome acessível é o hexágono; o logotipo é decorativo e
-    // some da árvore acessível de qualquer jeito.
-    expect(screen.getByAltText("Torque")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-wordmark")).toHaveAttribute("data-collapsed", "false");
-
-    await user.click(screen.getByRole("button", { name: "Recolher menu" }));
-
-    expect(screen.getByAltText("Torque")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-wordmark")).toHaveAttribute("data-collapsed", "true");
+    await user.click(screen.getByRole("link", { name: "Funis" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funis");
   });
 
-  it("expande Funis e revela os filhos", async () => {
+  it("Agenda e Pitstop navegam para páginas", async () => {
     const user = userEvent.setup();
     renderSidebar();
-
-    expect(screen.queryByText("WhatsApp")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Funis/ }));
-
-    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
-    expect(screen.getByText("Propostas")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Agenda" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/agenda");
+    await user.click(screen.getByRole("link", { name: "Pitstop" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/pitstop");
   });
 
-  it("abre o Pitstop com os grupos e NÃO fecha ao navegar dentro dele", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-
-    await user.click(screen.getByRole("button", { name: /Pitstop/ }));
-
-    const painel = screen.getByRole("complementary", { name: "Pitstop" });
-    expect(within(painel).getByText("Gestão")).toBeInTheDocument();
-    expect(within(painel).getByText("Ranking")).toBeInTheDocument();
-    expect(within(painel).getByText("Comissões")).toBeInTheDocument();
-
-    // Este é o ponto do redesenho: escolher um item mantém o painel aberto.
-    await user.click(within(painel).getByText("Ranking"));
-    expect(screen.getByRole("complementary", { name: "Pitstop" })).toBeInTheDocument();
+  it("sem grupos de Pitstop a porta some — página vazia é pior que porta nenhuma", () => {
+    renderSidebar(makeModel({ pitstopGroups: [] }));
+    expect(screen.queryByRole("link", { name: "Pitstop" })).toBeNull();
   });
 
-  it("fecha o Pitstop pelo botão de fechar", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-
-    await user.click(screen.getByRole("button", { name: /Pitstop/ }));
-    await user.click(screen.getByRole("button", { name: "Fechar Pitstop" }));
-
-    expect(screen.queryByRole("complementary", { name: "Pitstop" })).not.toBeInTheDocument();
-  });
-
-  it("abre o Pitstop sozinho quando a rota atual mora dentro dele", () => {
-    renderSidebar(makeModel({ isPitstopRoute: true }));
-    expect(screen.getByRole("complementary", { name: "Pitstop" })).toBeInTheDocument();
+  it("esconde a Agenda quando a permissão nega", () => {
+    renderSidebar(makeModel({ agenda: null }));
+    expect(screen.queryByRole("link", { name: "Agenda" })).toBeNull();
   });
 
   it("item trancado por plano abre o upgrade em vez de navegar", async () => {
     const user = userEvent.setup();
     renderSidebar(
       makeModel({
-        isLocked: (path) => path === "/turbo",
-        // O mapa REAL, não um dublê. A versão anterior devolvia "copilot" na
-        // mão para "/turbo" — chave que o catálogo não tinha. O teste passava
-        // verde enquanto em produção `openUpgrade` engolia o clique e o modal
-        // nunca abria. Fixture que inventa dado não é guarda, é enfeite.
-        featureKeyFor: (path) => SIDEBAR_FEATURE_MAP[path],
+        isLocked: (path) => path === "/disparos",
+        featureKeyFor: (path) => (path === "/disparos" ? "campaigns" : undefined) as never,
       }),
     );
-
-    const turbo = screen.getByRole("button", { name: /Turbo/ });
-    expect(turbo.tagName).toBe("BUTTON"); // não é link: não navega
-    await user.click(turbo);
-
-    expect(screen.getByTestId("upgrade-modal")).toBeInTheDocument();
-    expect(upgradeSpy).toHaveBeenCalledWith("copilot");
+    await user.click(screen.getByRole("button", { name: /Disparos/ }));
+    expect(upgradeSpy).toHaveBeenCalledWith("campaigns");
+    expect(screen.getByTestId("onde")).toHaveTextContent("/dashboard");
   });
 
-  it("sem grupos de Pitstop o gatilho some — painel vazio é pior que painel nenhum", () => {
-    renderSidebar(makeModel({ pitstopGroups: [] }));
-    expect(screen.queryByRole("button", { name: /Pitstop/ })).not.toBeInTheDocument();
-  });
+  it("o escudo do Master só aparece para master, e abre os atalhos dele", async () => {
+    const { unmount } = renderSidebar();
+    expect(screen.queryByRole("button", { name: "Master" })).toBeNull();
+    unmount();
 
-  it("esconde a Agenda quando a permissão nega", () => {
-    renderSidebar(makeModel({ agenda: null }));
-    expect(screen.queryByRole("button", { name: /Agenda/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
-  });
-
-  it("o botão da Agenda abre e fecha o painel, sem navegar", async () => {
     const user = userEvent.setup();
+    masterRef.current = { isMaster: true, isOutbounder: false };
     renderSidebar();
+    await user.click(screen.getByRole("button", { name: "Master" }));
+    expect(await screen.findByTestId("master-links")).toBeInTheDocument();
+  });
 
-    const botao = screen.getByRole("button", { name: /Agenda/ });
-    expect(botao).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(botao);
-    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    // O painel é `React.lazy`: o que se vê no primeiro paint é o fallback.
-    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Agenda/ }));
-    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    // `AnimatePresence` mantém o painel montado durante a saída — esperar a
-    // remoção, e não afirmar ausência no mesmo tick.
-    await waitForElementToBeRemoved(() => screen.queryByLabelText("Atividades"));
+  it("outbounder vê o mesmo escudo com o nome do painel dele", () => {
+    masterRef.current = { isMaster: true, isOutbounder: true };
+    renderSidebar();
+    expect(screen.getByRole("button", { name: "Painel Outbound" })).toBeInTheDocument();
   });
 });

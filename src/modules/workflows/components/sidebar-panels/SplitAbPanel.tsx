@@ -228,19 +228,19 @@ export function SplitAbPanel({ data, onUpdate }: SplitAbPanelProps) {
       {/* Total indicator */}
       <div
         className={cn(
-          "flex items-center justify-between p-2 rounded-lg border text-sm",
+          "flex items-center justify-between rounded-xl border p-2.5 text-sm",
           isValid
-            ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
-            : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+            ? "border-success/25 bg-success/[.06] text-success"
+            : "border-destructive/30 bg-destructive/[.06] text-destructive"
         )}
       >
         <span>Total</span>
-        <span className="font-semibold">{total}%</span>
+        <span className="font-bold tabular-nums">{total}%</span>
       </div>
 
       {/* Help text */}
-      <div className="p-3 rounded-lg bg-pink-50 dark:bg-pink-950 border border-pink-200 dark:border-pink-800">
-        <p className="text-xs text-pink-700 dark:text-pink-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Divide aleatoriamente os leads entre múltiplos caminhos para testar abordagens diferentes.
           Ideal para A/B/N testing de mensagens, fluxos ou estratégias.
           Leads com uma tag vinculada a um caminho entram direto nele, ignorando o sorteio por %.

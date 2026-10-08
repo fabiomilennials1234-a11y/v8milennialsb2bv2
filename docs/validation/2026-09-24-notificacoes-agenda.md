@@ -81,3 +81,28 @@ Após apply: verificar os dois jobs a cada minuto, grants negados para
 `anon`/`authenticated`, resultados recentes em `cron.job_run_details`, ausência
 de duplicação e entrega com usuário de teste autorizado. Som requer interação
 na sessão do navegador e segue volume/horário silencioso/preferências pessoais.
+
+## Revisão de integração em 2026-10-08
+
+Atualização com `main@3b3a15929`. Os conflitos preservam o visual atual e os
+avisos `scheduled_message_sent/failed`. A revisão encontrou e corrigiu dois
+defeitos antes do merge:
+
+- A interface clássica não recebia o reparo. Foram portados o motor de áudio,
+  receptor único, recuperação por consulta, preferências e controles; o patch
+  reproduzível foi regenerado sem alterar o snapshot base.
+- Lead e horário iguais podiam fazer uma reunião cancelada de outro negócio
+  suprimir um lembrete válido do funil. A deduplicação agora respeita vínculos
+  explícitos e usa a compatibilidade legada apenas sem IDs contraditórios.
+
+Validação: 47 testes focados V5, 31 Classic e 8 verificações SQL aprovados.
+Os testes Classic reproduziram 17 falhas antes do port; três cenários SQL de
+identificadores contraditórios falharam antes do reparo e passaram depois.
+Espelhos reais, remarcação, isolamento de organização, grants e rollback
+continuam cobertos. Build das duas interfaces e ESLint do código alterado
+aprovados. As revisões independentes de padrões e especificação não
+identificaram novos bloqueadores. O ensaio de áudio real registrado acima é
+de setembro; não foi repetido nesta revisão.
+
+Esta revisão não aplicou a migration nem publicou em produção. A situação de
+CI e aprovação obrigatória do CODEOWNER deve ser consultada no SHA final da PR.

@@ -92,7 +92,7 @@ function TakeoverDropdownItems({
             Retomar IA
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => markHumanActive()}>
-            <User className="h-3.5 w-3.5 mr-2 text-green-500" />
+            <User className="h-3.5 w-3.5 mr-2 text-success" />
             Assumir conversa
           </DropdownMenuItem>
         </>
@@ -101,7 +101,7 @@ function TakeoverDropdownItems({
       {state === "WAITING_HUMAN" && (
         <>
           <DropdownMenuItem onSelect={() => markHumanActive()}>
-            <User className="h-3.5 w-3.5 mr-2 text-green-500" />
+            <User className="h-3.5 w-3.5 mr-2 text-success" />
             Assumir conversa
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => resumeAi()}>
@@ -114,7 +114,7 @@ function TakeoverDropdownItems({
       {state === "HUMAN_ACTIVE" && (
         <>
           <DropdownMenuItem onSelect={() => markHandoffBack()}>
-            <RefreshCw className="h-3.5 w-3.5 mr-2 text-blue-500" />
+            <RefreshCw className="h-3.5 w-3.5 mr-2 text-insights" />
             Devolver para IA
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pauseAi("dont_resume")}>
@@ -197,9 +197,9 @@ export function TakeoverControls({
             aria-label={ariaLabel}
             aria-haspopup="menu"
             className={cn(
-              "inline-flex items-center gap-1.5",
-              "h-7 pl-2 pr-1.5 rounded-full",
-              "border text-[11px] font-medium",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap",
+              "h-7 pl-2.5 pr-1.5 rounded-full",
+              "border text-[11px] font-semibold",
               "transition-all duration-150",
               "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               "focus-visible:ring-offset-background",

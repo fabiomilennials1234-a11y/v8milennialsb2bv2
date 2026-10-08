@@ -47,3 +47,4 @@ docs/**                  linguist-documentation=true
 # Auto-gerados — não computar diff por padrão
 src/integrations/supabase/types.ts linguist-generated=true
 package-lock.json                  linguist-generated=true
+cloudflare/worker-configuration.d.ts linguist-generated=true

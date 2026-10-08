@@ -17,6 +17,7 @@ import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-s
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
+import { hasQuoteSimulation } from "./quote-simulation.ts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-4.1-mini";
@@ -417,10 +418,10 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
     // If LLM returned tool_calls WITHOUT text, do a second call to get the text
     // response the agent would send after "executing" the tools. We simulate
     // tool results so the LLM generates the natural language response.
-    const hasQuoteSimulation = rawToolCalls.some((tc: any) => tc.function.name === "generate_order_request");
+    const quoteWasSimulated = hasQuoteSimulation(rawToolCalls);
     const quoteSimulationNotice = "Simulação de orçamento: nenhum rascunho foi salvo e nenhum arquivo foi gerado ou enviado. Use o botão de teste da ferramenta para gerar um arquivo com dados fictícios.";
-    let finalContent = hasQuoteSimulation ? quoteSimulationNotice : rawContent;
-    if (toolCalls.length > 0 && (!rawContent.trim() || hasQuoteSimulation)) {
+    let finalContent = quoteWasSimulated ? quoteSimulationNotice : rawContent;
+    if (toolCalls.length > 0 && (!rawContent.trim() || quoteWasSimulated)) {
       try {
         const simulatedToolResults = rawToolCalls.map((tc: any) => ({
           role: "tool",
@@ -438,7 +439,7 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
         ];
 
         const followUp = await callOpenRouter(OPENROUTER_API_KEY, model, followUpMessages, 500, temperature);
-        finalContent = hasQuoteSimulation ? quoteSimulationNotice : ((followUp as any).choices?.[0]?.message?.content || "");
+        finalContent = quoteWasSimulated ? quoteSimulationNotice : ((followUp as any).choices?.[0]?.message?.content || "");
       } catch (followUpErr) {
         console.warn("[test-copilot-chat] Follow-up call after tool_calls failed:", followUpErr);
       }

@@ -304,14 +304,14 @@ export function EditOrderDialog({
                         0,
                       )}
                     </p>
-                    <p className="text-[13px] tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <p className="text-[13px] font-semibold tabular-nums text-success">
                       +{formatBRL(total, 0)}
                     </p>
                   </div>
                 </div>
 
                 {originGoesEmpty && (
-                  <p className="text-xs text-amber-500 mt-2 flex items-start gap-1.5">
+                  <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-warning-strong">
                     <FileWarning className="w-3.5 h-3.5 shrink-0 mt-px" />
                     {previousClient?.name ?? order.client_name} fica sem pedidos
                     e sai das métricas de carteira

@@ -5,6 +5,7 @@
  *   joined          → green  "Ao vivo"
  *   joining         → amber  "Conectando"
  *   reconnecting    → amber  "Reconectando"
+ *   errored         → amber  "Reconectando" (falha abaixo do limiar, em backoff)
  *   polling         → orange "Polling"     (circuit breaker tripped)
  *   offline         → red    "Offline"
  *
@@ -39,6 +40,7 @@ function classify(
         tooltip: "Estabelecendo conexao de tempo real.",
       };
     case "reconnecting":
+    case "errored":
       return {
         variant: "pending",
         label: "Reconectando",
@@ -50,7 +52,7 @@ function classify(
       return {
         variant: "polling",
         label: "Polling",
-        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens a cada 10s.`,
+        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens periodicamente.`,
       };
     case "offline":
       return {
@@ -71,17 +73,17 @@ function classify(
 }
 
 const variantClasses: Record<Variant, string> = {
-  ok: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  pending: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  polling: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  offline: "bg-red-500/15 text-red-400 border-red-500/30",
+  ok: "bg-success/10 text-success-strong border-success/25",
+  pending: "bg-warning/15 text-warning-strong border-warning/30",
+  polling: "bg-warning/15 text-warning-strong border-warning/30",
+  offline: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
 const dotClasses: Record<Variant, string> = {
-  ok: "bg-emerald-400",
-  pending: "bg-amber-400 animate-pulse",
-  polling: "bg-orange-400 animate-pulse",
-  offline: "bg-red-400",
+  ok: "bg-success",
+  pending: "bg-warning animate-pulse",
+  polling: "bg-warning animate-pulse",
+  offline: "bg-destructive",
 };
 
 export function RealtimeStatusBadge({

@@ -17,10 +17,11 @@ import { SetMeetingDateModal } from "./SetMeetingDateModal";
 
 const ORG_TZ = "America/Sao_Paulo"; // sem campo de tz por org ainda — default
 
+// Tons do botão em tokens (V5) — âmbar = `warning`, verde = `success`.
 const TONE_CLASS: Record<string, string> = {
-  neutral: "border-border text-muted-foreground hover:border-amber-500/60 hover:text-amber-600",
-  amber: "bg-amber-500/12 border-amber-500/40 text-amber-600",
-  green: "bg-green-500/10 border-green-500/45 text-green-600 hover:bg-green-500/16",
+  neutral: "border-border bg-card text-muted-foreground hover:border-warning/60 hover:text-warning-strong",
+  amber: "border-warning/50 bg-warning/15 text-warning-strong",
+  green: "border-success/45 bg-success/10 text-success hover:bg-success/15",
 };
 
 export interface MeetingConfirmationButtonProps {
@@ -65,8 +66,9 @@ export function MeetingConfirmationButton({
           type="button"
           onClick={(e) => { e.stopPropagation(); setDateModalOpen(true); }}
           className={cn(
-            "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-dashed text-xs font-semibold transition-colors",
-            "border-amber-500/40 text-amber-600 hover:bg-amber-500/8",
+            "flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed px-2 py-1.5 text-xs font-semibold transition-colors",
+            "border-warning/50 text-warning-strong hover:bg-warning/10",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           <CalendarPlus className="w-3.5 h-3.5" />
@@ -100,7 +102,8 @@ export function MeetingConfirmationButton({
       onClick={handleClick}
       disabled={btn.disabled || setStatus.isPending}
       className={cn(
-        "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-semibold transition-colors disabled:opacity-100 disabled:cursor-default",
+        "flex w-full items-center justify-center gap-1.5 rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default disabled:opacity-100",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         TONE_CLASS[btn.tone],
         setStatus.isPending && "opacity-60",
       )}

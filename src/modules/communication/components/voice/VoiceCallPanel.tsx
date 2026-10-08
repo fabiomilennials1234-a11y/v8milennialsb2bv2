@@ -18,7 +18,6 @@
  * pilha só, empilhar é consequência da ordem, não de calcular altura.
  */
 import { Mic, MicOff, PhoneOff, Loader2, AlertTriangle, PhoneMissed } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatPeerPhone } from "@/modules/communication/lib/formatPeerPhone";
 import type { VoiceCallState } from "@/modules/communication/hooks/useVoiceCall";
@@ -53,6 +52,31 @@ function formatElapsed(seconds: number): string {
 /** O painel de entrada mostra o mesmo número; a formatação é UMA. */
 const formatPeer = formatPeerPhone;
 
+/**
+ * V5 (mockup "Calls"): o painel é TINTA — é um objeto sobre a tela, não parte
+ * dela. Avatar, nome, telefone em mono, pílula de estado, cronômetro grande e
+ * botões redondos rotulados. Só forma: fases, rótulos e ações são os de antes.
+ */
+const INK_CARD =
+  "w-full overflow-hidden rounded-card border border-tinta-line/60 bg-tinta text-tinta-foreground shadow-relevo-tinta";
+
+function initialOf(text: string): string {
+  const letter = text.trim().match(/\p{L}/u)?.[0];
+  return letter ? letter.toUpperCase() : "#";
+}
+
+function DismissButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-white/15 bg-white/[.06] px-3.5 py-1.5 text-[12.5px] font-semibold text-tinta-foreground transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      Entendi
+    </button>
+  );
+}
+
 export function VoiceCallPanel({
   state,
   leadName,
@@ -69,24 +93,20 @@ export function VoiceCallPanel({
   // Encerrar assim NÃO conta como ocupado — dá para discar de novo agora.
   if (state.phase === "ended") {
     return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="w-full rounded-xl border border-border/60 bg-card shadow-2xl"
-      >
+      <div role="status" aria-live="polite" className={INK_CARD}>
         <div className="flex items-start gap-3 p-4">
-          <PhoneMissed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[.08]">
+            <PhoneMissed className="h-4 w-4 text-tinta-muted" />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">
+            <p className="truncate text-sm font-bold">
               {leadName || formatPeer(state.peer) || "Chamada"}
             </p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{state.endReason}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-tinta-muted">{state.endReason}</p>
           </div>
         </div>
-        <div className="flex justify-end border-t border-border/40 px-4 py-2.5">
-          <Button variant="ghost" size="sm" onClick={onDismiss}>
-            Entendi
-          </Button>
+        <div className="flex justify-end px-4 pb-3.5">
+          <DismissButton onClick={onDismiss} />
         </div>
       </div>
     );
@@ -94,85 +114,101 @@ export function VoiceCallPanel({
 
   if (state.phase === "failed") {
     return (
-      <div
-        role="alert"
-        className="w-full rounded-xl border border-destructive/30 bg-card shadow-2xl"
-      >
+      <div role="alert" className={INK_CARD}>
         <div className="flex items-start gap-3 p-4">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-destructive/20">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">Chamada não completou</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{state.error}</p>
+            <p className="text-sm font-bold">Chamada não completou</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-tinta-muted">{state.error}</p>
           </div>
         </div>
-        <div className="flex justify-end border-t border-border/40 px-4 py-2.5">
-          <Button variant="ghost" size="sm" onClick={onDismiss}>
-            Entendi
-          </Button>
+        <div className="flex justify-end px-4 pb-3.5">
+          <DismissButton onClick={onDismiss} />
         </div>
       </div>
     );
   }
 
   const connecting = state.phase !== "active";
+  const title = leadName || formatPeer(state.peer) || "Chamada";
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="w-full overflow-hidden rounded-xl border border-border/60 bg-card shadow-2xl"
-    >
-      <div className="flex items-center gap-3 p-4">
-        {/* O ponto pulsa só quando há áudio de verdade. Animar durante a
-            negociação faria "conectando" parecer "conectado". */}
+    <div role="status" aria-live="polite" className={INK_CARD}>
+      <div className="flex items-center gap-3 px-4 pt-4">
+        <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-[18px] font-extrabold text-primary-foreground">
+          {initialOf(title)}
+          {/* O ponto pulsa só quando há áudio de verdade. Animar durante a
+              negociação faria "conectando" parecer "conectado". */}
+          <span
+            className={cn(
+              "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-tinta",
+              state.phase === "active" ? "animate-pulse bg-success" : "bg-tinta-muted",
+            )}
+            aria-hidden
+          />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold">{title}</p>
+          {leadName && state.peer && (
+            <p className="truncate font-mono text-[12px] text-tinta-muted">{formatPeer(state.peer)}</p>
+          )}
+        </div>
         <span
           className={cn(
-            "h-2 w-2 shrink-0 rounded-full",
-            state.phase === "active" ? "animate-pulse bg-success" : "bg-muted-foreground/50",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold",
+            state.phase === "active" ? "bg-success/15 text-success" : "bg-white/10 text-tinta-foreground",
           )}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">
-            {leadName || formatPeer(state.peer) || "Chamada"}
-          </p>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {connecting && <Loader2 className="h-3 w-3 animate-spin" />}
-            {PHASE_LABEL[state.phase] ?? state.phase}
-            {leadName && state.peer && (
-              <span className="text-muted-foreground/70">· {formatPeer(state.peer)}</span>
-            )}
-          </p>
-        </div>
-        {state.phase === "active" && (
-          <span className="shrink-0 font-mono text-sm tabular-nums text-foreground">
-            {formatElapsed(state.elapsedSeconds)}
-          </span>
-        )}
+        >
+          {connecting && <Loader2 className="h-3 w-3 animate-spin" />}
+          {PHASE_LABEL[state.phase] ?? state.phase}
+        </span>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-border/40 bg-background/40 px-3 py-2.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleMute}
-          disabled={state.phase !== "active"}
-          aria-pressed={state.muted}
-          className={cn("gap-2", state.muted && "text-warning")}
-        >
-          {state.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          {state.muted ? "Mudo" : "Microfone"}
-        </Button>
-        <div className="flex-1" />
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onHangup}
-          disabled={state.phase === "ending"}
-          className="gap-2"
-        >
-          <PhoneOff className="h-4 w-4" />
-          Desligar
-        </Button>
+      <p
+        className={cn(
+          "px-4 pt-3 text-[2.4rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums",
+          state.phase !== "active" && "text-tinta-muted",
+        )}
+        aria-hidden={state.phase !== "active"}
+      >
+        {formatElapsed(state.phase === "active" ? state.elapsedSeconds : 0)}
+      </p>
+
+      <div className="flex items-start justify-center gap-8 px-4 pb-4 pt-4">
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToggleMute}
+            disabled={state.phase !== "active"}
+            aria-pressed={state.muted}
+            aria-label={state.muted ? "Mudo" : "Microfone"}
+            className={cn(
+              "grid h-12 w-12 place-items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40",
+              state.muted ? "bg-tinta-foreground text-tinta" : "bg-white/[.08] text-tinta-foreground hover:bg-white/[.14]",
+            )}
+          >
+            {state.muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+          <span className="text-[11px] font-semibold text-tinta-muted" aria-hidden>
+            {state.muted ? "Mudo" : "Silenciar"}
+          </span>
+        </div>
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onHangup}
+            disabled={state.phase === "ending"}
+            aria-label="Desligar"
+            className="grid h-12 w-12 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-relevo transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+          >
+            <PhoneOff className="h-5 w-5" />
+          </button>
+          <span className="text-[11px] font-semibold text-tinta-muted" aria-hidden>
+            Desligar
+          </span>
+        </div>
       </div>
     </div>
   );

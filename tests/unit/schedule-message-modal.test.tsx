@@ -19,21 +19,38 @@
  *  (j) mensagem sem data           → dica de data (célula antes silenciosa)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 // Único acoplamento do modal: os hooks de mutation. Stubados — nenhum teste
 // dispara submit; só exercemos a lógica de validação/feedback.
+const { createMutateAsync } = vi.hoisted(() => ({ createMutateAsync: vi.fn() }));
+
 vi.mock("@/modules/communication/hooks/useScheduledMessages", () => ({
   useCreateScheduledMessage: () => ({
-    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    mutateAsync: createMutateAsync,
     isPending: false,
   }),
   useUpdateScheduledMessage: () => ({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
   }),
+}));
+
+// Caminhos diretos em leads (evita ciclo via index.ts, dep-cruiser): o diálogo de negócio vira um stub com botão "fechar".
+const { gateRef } = vi.hoisted(() => ({
+  gateRef: { current: { allowed: true, isLoading: false, reason: undefined as string | undefined } },
+}));
+vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadActionGates", () => ({
+  useLeadActionGates: () => ({ canAddToPipe: gateRef.current }),
+}));
+vi.mock("@/modules/leads/components/lead-card/LeadCardNewDeal", () => ({
+  LeadCardNewDeal: ({ leadId, onOpenChange }: { leadId: string | null; onOpenChange: (o: boolean) => void }) => (
+    <div data-testid="deal-stub" data-lead-id={leadId}>
+      <button type="button" onClick={() => onOpenChange(false)}>fechar negócio</button>
+    </div>
+  ),
 }));
 
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
@@ -70,6 +87,8 @@ const clickQuickDate = (label: string) =>
 describe("ScheduleMessageModal — validação por razão", () => {
   beforeEach(() => {
     baseProps.onOpenChange.mockClear();
+    createMutateAsync.mockReset().mockResolvedValue(undefined);
+    gateRef.current = { allowed: true, isLoading: false, reason: undefined };
   });
 
   it("(a) data futura sem conteúdo → dica de conteúdo + Agendar desabilitado, sem erro de data", () => {
@@ -188,5 +207,91 @@ describe("ScheduleMessageModal — validação por razão", () => {
     expect(screen.getByText(DATE_HINT)).toBeInTheDocument();
     expect(screen.queryByText(DATE_ERROR)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agendar" })).toBeDisabled();
+  });
+});
+
+// ─── "Abrir negócio ao agendar" (Chamado 3a2e213d) ──────────────────────────────
+const DEAL_LABEL = /Abrir negócio ao agendar/i;
+const getCheckbox = () => screen.getByRole("checkbox", { name: DEAL_LABEL });
+const queryCheckbox = () => screen.queryByRole("checkbox", { name: DEAL_LABEL });
+
+function fillValidForm() {
+  typeMessage("Oi, tudo bem?");
+  clickQuickDate("1 semana");
+}
+
+describe("ScheduleMessageModal — Abrir negócio ao agendar", () => {
+  beforeEach(() => {
+    baseProps.onOpenChange.mockClear();
+    createMutateAsync.mockReset().mockResolvedValue(undefined);
+    gateRef.current = { allowed: true, isLoading: false, reason: undefined };
+  });
+
+  it("(a) checkbox ausente sem leadId (null e string vazia)", () => {
+    const { unmount } = renderModal({ leadId: null });
+    expect(queryCheckbox()).not.toBeInTheDocument();
+    unmount();
+    renderModal({ leadId: "" });
+    expect(queryCheckbox()).not.toBeInTheDocument();
+  });
+
+  it("(b) checkbox ausente em edição", () => {
+    renderModal({
+      editingId: "sched-1",
+      editingContent: "x",
+      editingScheduledAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    });
+    expect(queryCheckbox()).not.toBeInTheDocument();
+  });
+
+  it("checkbox presente com lead, desmarcado por padrão", () => {
+    renderModal();
+    expect(getCheckbox()).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("sem permissão → checkbox desabilitado com o motivo no title", () => {
+    gateRef.current = { allowed: false, isLoading: false, reason: "Sem permissão para abrir negócio" };
+    renderModal();
+    expect(getCheckbox()).toBeDisabled();
+    expect(screen.getByTitle("Sem permissão para abrir negócio")).toBeInTheDocument();
+  });
+
+  it("(c)+(f) marcado + agendamento ok → abre o diálogo de negócio e só fecha o modal depois dele", async () => {
+    renderModal();
+    fillValidForm();
+    fireEvent.click(getCheckbox());
+    fireEvent.click(screen.getByRole("button", { name: "Agendar" }));
+
+    const stub = await screen.findByTestId("deal-stub");
+    expect(stub).toHaveAttribute("data-lead-id", "lead-1");
+    expect(createMutateAsync).toHaveBeenCalledTimes(1);
+    expect(baseProps.onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "fechar negócio" }));
+    await waitFor(() => expect(baseProps.onOpenChange).toHaveBeenCalledTimes(1));
+    expect(baseProps.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("(d) marcado + agendamento rejeita → diálogo de negócio não abre e o modal não fecha", async () => {
+    createMutateAsync.mockRejectedValue(new Error("falhou"));
+    renderModal();
+    fillValidForm();
+    fireEvent.click(getCheckbox());
+    fireEvent.click(screen.getByRole("button", { name: "Agendar" }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(screen.queryByTestId("deal-stub")).not.toBeInTheDocument();
+    expect(baseProps.onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("(e) desmarcado → fecha direto, diálogo de negócio nunca renderiza", async () => {
+    renderModal();
+    fillValidForm();
+    fireEvent.click(screen.getByRole("button", { name: "Agendar" }));
+
+    await waitFor(() => expect(baseProps.onOpenChange).toHaveBeenCalledTimes(1));
+    expect(baseProps.onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByTestId("deal-stub")).not.toBeInTheDocument();
   });
 });

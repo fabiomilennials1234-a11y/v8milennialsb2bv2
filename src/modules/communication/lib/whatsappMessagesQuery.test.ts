@@ -260,6 +260,12 @@ describe('UAZAPI persisted message actions', () => {
   });
 });
 
+describe('nome original do documento (Chamado f6fc3c9e)', () => {
+  it('projeta media_file_name: o raw_payload some em 14 dias, a coluna não', () => {
+    expect(WHATSAPP_MESSAGE_COLUMNS.split(', ')).toContain('media_file_name');
+  });
+});
+
 describe('cursor pagination', () => {
   it('preserves microseconds and applies a strict UUID tie-breaker', async () => {
     const timestamp = '2026-09-11T12:00:00.123456+00:00';

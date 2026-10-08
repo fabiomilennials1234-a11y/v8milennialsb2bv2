@@ -2,6 +2,16 @@ import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, History } from "lucide-react";
+import { IconChip } from "@/components/ui/bento";
+
+// Tooltip do recharts no vocabulário V5: superfície de cartão, raio de 12 px.
+const TOOLTIP_STYLE = {
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--card-border))",
+  borderRadius: "12px",
+  boxShadow: "var(--relevo)",
+  color: "hsl(var(--card-foreground))",
+};
 
 interface RankingHistoryChartProps {
   data: Array<{
@@ -14,10 +24,10 @@ interface RankingHistoryChartProps {
 
 export function RankingHistoryChart({ data, memberName }: RankingHistoryChartProps) {
   return (
-    <Card className="glass-card">
+    <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <History className="w-4 h-4 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+          <IconChip icon={History} />
           Histórico de {memberName}
         </CardTitle>
       </CardHeader>
@@ -25,7 +35,7 @@ export function RankingHistoryChart({ data, memberName }: RankingHistoryChartPro
         <div className="h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis 
                 dataKey="month" 
                 tick={{ fontSize: 12 }} 
@@ -45,11 +55,7 @@ export function RankingHistoryChart({ data, memberName }: RankingHistoryChartPro
                 className="text-muted-foreground"
               />
               <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
+                contentStyle={TOOLTIP_STYLE}
               />
               <Legend />
               <Line 
@@ -106,10 +112,10 @@ export function MonthlyRankingComparison({ months }: MonthlyComparisonProps) {
   const closerNames = months[0]?.closers.map(c => c.name) || [];
 
   return (
-    <Card className="glass-card">
+    <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+          <IconChip icon={TrendingUp} />
           Comparativo Mensal
         </CardTitle>
       </CardHeader>
@@ -117,7 +123,7 @@ export function MonthlyRankingComparison({ months }: MonthlyComparisonProps) {
         <div className="h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis 
                 dataKey="month" 
                 tick={{ fontSize: 12 }} 
@@ -129,11 +135,7 @@ export function MonthlyRankingComparison({ months }: MonthlyComparisonProps) {
                 tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}K`}
               />
               <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
+                contentStyle={TOOLTIP_STYLE}
                 formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
               />
               <Legend />

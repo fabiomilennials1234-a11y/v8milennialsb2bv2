@@ -31,19 +31,25 @@ export const ViewToggle = memo(function ViewToggle({
   options = ["board", "table"],
 }: ViewToggleProps) {
   return (
-    <div className="flex items-center border rounded-lg p-1">
+    // V5: alternador segmentado (fundo `muted`, ativo sobe para o cartão).
+    <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]">
       {options.map((mode) => {
         const Icon = VIEW_ICONS[mode];
         return (
           <Button
             key={mode}
-            variant={value === mode ? "secondary" : "ghost"}
+            variant="ghost"
             size="sm"
             onClick={() => onChange(mode)}
             title={VIEW_LABELS[mode]}
-            className={cn("gap-1.5", value === mode && "shadow-sm")}
+            aria-label={VIEW_LABELS[mode]}
+            aria-pressed={value === mode}
+            className={cn(
+              "h-8 gap-1.5 rounded-full px-3 text-muted-foreground hover:bg-transparent hover:text-foreground",
+              value === mode && "bg-card text-foreground shadow-relevo hover:bg-card",
+            )}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className="h-4 w-4" />
           </Button>
         );
       })}

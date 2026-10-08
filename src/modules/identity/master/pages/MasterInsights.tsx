@@ -36,7 +36,9 @@ export default function MasterInsights() {
   const selectedOrg = orgs.find((o) => o.id === orgId) ?? null;
 
   return (
-    <div className="relative min-h-screen bg-background">
+    // V5: a rota mora DENTRO do MainLayout (trilho + barra superior); a bancada
+    // e o padding vêm de lá. Fica só o halo azul da identidade do Gestor.
+    <div className="relative min-w-0">
       {/* Stage-light: radial azul estático atrás do header (DESIGN §3). */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[360px]"
@@ -47,19 +49,19 @@ export default function MasterInsights() {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 px-8 lg:px-12">
-        {/* Chrome próprio: voltar + wordmark Gestor */}
-        <div className="flex items-center justify-between py-4">
+      <div className="relative z-10">
+        {/* Voltar + wordmark Gestor */}
+        <div className="flex items-center justify-between pb-4">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-insights focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-card-border bg-card px-3.5 text-[13px] font-semibold text-foreground/80 shadow-relevo transition-[color,transform] hover:-translate-y-px hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-insights focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
           >
             <ArrowLeft className="h-4 w-4" />
             Voltar
           </button>
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-insights">
-            <LineChart className="h-4 w-4" />
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-insights/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-insights">
+            <LineChart className="h-3.5 w-3.5" />
             Gestor
           </span>
         </div>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, User, Building2, Zap, Globe, Calendar } from "lucide-react";
+import { Search, User, Building2, Zap, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -27,13 +27,18 @@ import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/modules/pipelines/hook
 import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
-// Origin labels and colors mapping (enum lead_origin)
+// Origin labels and colors mapping (enum lead_origin).
+// V5: a cor da origem vira um PONTO dentro de uma pílula neutra (cor de
+// categoria, como série de gráfico) — texto branco sobre a cor reprovava
+// contraste no claro (Tiktok/Outros sumiam).
 const originLabels: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
   instagram: { label: "Instagram", color: "bg-pink-500" },
-  tiktok: { label: "Tiktok", color: "bg-foreground/15" },
+  tiktok: { label: "Tiktok", color: "bg-foreground/60" },
   google_ads: { label: "Google Ads", color: "bg-red-500" },
   site: { label: "Site", color: "bg-teal-500" },
   landing_page: { label: "Landing Page", color: "bg-sky-500" },
@@ -42,7 +47,7 @@ const originLabels: Record<string, { label: string; color: string }> = {
   evento: { label: "Evento", color: "bg-violet-500" },
   prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600" },
   cal: { label: "Cal.com", color: "bg-blue-500" },
-  outro: { label: "Outros", color: "bg-muted-foreground/15" },
+  outro: { label: "Outros", color: "bg-muted-foreground/50" },
 };
 
 interface CreateOpportunityModalProps {
@@ -160,7 +165,7 @@ export function CreateOpportunityModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar oportunidade");
+      notifyError(error, { fallback: "Não foi possível criar oportunidade." });
       console.error(error);
     }
   };
@@ -169,9 +174,9 @@ export function CreateOpportunityModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
-            {step === "select-lead" ? "Selecionar Lead" : "Nova Oportunidade"}
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={Zap} tone="gold" />
+            {step === "select-lead" ? "Selecionar lead" : "Nova oportunidade"}
           </DialogTitle>
         </DialogHeader>
 
@@ -220,21 +225,18 @@ export function CreateOpportunityModal({
                           whileHover={{ scale: 1.01 }}
                           whileTap={{ scale: 0.99 }}
                           className={cn(
-                            "w-full p-4 rounded-lg border text-left transition-all",
-                            "hover:border-primary/50 hover:bg-primary/5",
-                            selectedLeadId === lead.id && "border-primary bg-primary/10"
+                            "w-full p-4 rounded-2xl border text-left transition-all",
+                            "hover:border-primary/50 hover:bg-muted/40",
+                            selectedLeadId === lead.id && "border-primary bg-primary-soft"
                           )}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-primary" />
+                                <User className="w-4 h-4 text-muted-foreground" />
                                 <span className="font-medium truncate">{lead.name}</span>
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs text-white border-0 ${originInfo.color}`}
-                                >
-                                  <Globe className="w-3 h-3 mr-1" />
+                                <Badge variant="soft" className="gap-1.5 text-xs">
+                                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originInfo.color)} aria-hidden />
                                   {originInfo.label}
                                 </Badge>
                               </div>
@@ -275,17 +277,17 @@ export function CreateOpportunityModal({
             >
               {/* Selected Lead Info */}
               {selectedLead && (
-                <div className="p-4 bg-muted/50 rounded-lg mb-6 border">
+                <div className="mb-6 rounded-2xl bg-sunken p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-primary" />
+                        <User className="w-4 h-4 text-muted-foreground" />
                         <span className="font-medium">{selectedLead.name}</span>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs border-0 ${originLabels[selectedLead.origin || "outro"]?.color || "bg-muted-foreground/15"}`}
-                        >
-                          <Globe className="w-3 h-3 mr-1" />
+                        <Badge variant="soft" className="gap-1.5 text-xs">
+                          <span
+                            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originLabels[selectedLead.origin || "outro"]?.color || "bg-muted-foreground/50")}
+                            aria-hidden
+                          />
                           {originLabels[selectedLead.origin || "outro"]?.label || "Outro"}
                         </Badge>
                       </div>
@@ -346,7 +348,7 @@ export function CreateOpportunityModal({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="scheduled_date">Data Agendada (opcional)</Label>
+                  <Label htmlFor="scheduled_date">Data agendada (opcional)</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -374,9 +376,9 @@ export function CreateOpportunityModal({
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-4 bg-primary/10 border border-primary/20 rounded-lg"
+                  className="rounded-2xl border border-primary/25 bg-primary-soft p-4"
                 >
-                  <div className="flex items-center gap-2 text-primary">
+                  <div className="flex items-center gap-2 text-primary-soft-foreground">
                     <Zap className="w-5 h-5" />
                     <span className="font-medium">Próximos passos</span>
                   </div>
@@ -406,7 +408,7 @@ export function CreateOpportunityModal({
                 onClick={handleSubmit}
                 disabled={createPipeWhatsapp.isPending}
               >
-                {createPipeWhatsapp.isPending ? "Criando..." : "Criar Oportunidade"}
+                {createPipeWhatsapp.isPending ? "Criando..." : "Criar oportunidade"}
               </Button>
             )}
           </div>

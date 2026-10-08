@@ -127,8 +127,8 @@ export function CodeJsonPanel({ data, onUpdate }: CodeJsonPanelProps) {
       </div>
 
       {/* 6. Explicação */}
-      <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800">
-        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3">
+        <p className="text-xs text-muted-foreground">
           Monta um JSON com os dados do lead e guarda numa variável. Use a variável no
           corpo de um Webhook Externo, ou em qualquer campo de texto dos nós seguintes.
           Os valores das variáveis são escapados antes de entrar no JSON — um lead com

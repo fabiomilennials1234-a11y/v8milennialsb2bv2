@@ -23,8 +23,8 @@ function findWorstIndex(stages: StageAnalysisItem[]): number {
 }
 
 function getPctColor(pct: number): string {
-  if (pct >= 60) return "text-green-600 dark:text-green-400";
-  if (pct >= 35) return "text-orange-500";
+  if (pct >= 60) return "text-success";
+  if (pct >= 35) return "text-warning-strong";
   return "text-destructive";
 }
 
@@ -62,10 +62,10 @@ export function StageAnalysis({ stages }: Props) {
           return (
             <div
               key={stage.transition_name}
-              className={`rounded-lg border p-3 transition-colors ${
+              className={`rounded-2xl border p-3 transition-colors ${
                 isWorst
                   ? "border-l-4 border-l-destructive border-destructive/30 bg-destructive/5"
-                  : "border-border bg-card"
+                  : "border-transparent bg-sunken"
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -89,7 +89,7 @@ export function StageAnalysis({ stages }: Props) {
                   {delta !== null && (
                     <span
                       className={`text-xs flex items-center gap-0.5 ${
-                        delta >= 0 ? "text-green-600" : "text-destructive"
+                        delta >= 0 ? "text-success" : "text-destructive"
                       }`}
                     >
                       {delta >= 0 ? (

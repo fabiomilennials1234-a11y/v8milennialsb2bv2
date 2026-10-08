@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 import { useOnboardingAdvance } from "@/modules/platform/hooks/useOnboardingAdvance";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface QuestionConfig {
   key: string;
@@ -113,7 +113,7 @@ export function OnbStepPerfil() {
       try {
         await advance.mutateAsync({ action: "advance_profile", payload: { answers } });
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao salvar perfil");
+        notifyError(err, { fallback: "Não foi possível salvar perfil." });
       }
       return;
     }
@@ -124,7 +124,7 @@ export function OnbStepPerfil() {
   return (
     <div className="space-y-6 max-w-md w-full">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-amber-500">{currentQ + 1}</span>
+        <span className="font-semibold text-foreground">{currentQ + 1}</span>
         <span>de {QUESTIONS.length}</span>
       </div>
 
@@ -141,7 +141,7 @@ export function OnbStepPerfil() {
             className={cn(
               "w-full text-left p-4 rounded-xl border transition-all",
               selected === opt.value
-                ? "border-amber-500 bg-amber-500/5 ring-1 ring-amber-500/20"
+                ? "border-primary bg-primary-soft ring-1 ring-primary/30"
                 : "border-border/60 hover:border-border hover:bg-muted/30",
             )}
           >
@@ -166,7 +166,7 @@ export function OnbStepPerfil() {
         <button
           onClick={handleNext}
           disabled={!selected || advance.isPending}
-          className="flex-1 py-2.5 px-4 rounded-xl bg-amber-500 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-all"
+          className="flex-1 py-2.5 px-4 rounded-full bg-primary text-primary-foreground shadow-brilho-ouro font-medium text-sm flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-50 transition-all"
         >
           {advance.isPending ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>

@@ -41,6 +41,8 @@ import {
   POPOVER_ALTURA_MAXIMA,
 } from "./agenda-helpers";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
+import { agendaAttributionLabel } from "@/modules/engagement/lib/agenda-attribution";
+import type { LeadResponsiblesSummary } from "@/modules/leads";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,9 @@ interface PopoverState {
 
 interface EventDetailPopoverProps {
   state: PopoverState;
+  leadResponsibles?: LeadResponsiblesSummary | null;
+  leadResponsiblesLoading?: boolean;
+  leadResponsiblesError?: boolean;
   onClose: () => void;
   onDeleteMeeting: (eventId: string) => Promise<void>;
   onDeleteGoogleEvent: (event: UnifiedEvent) => Promise<void>;
@@ -106,6 +111,9 @@ export function EventDetailPopover(props: EventDetailPopoverProps) {
 
 function EventDetailPopoverContent({
   state,
+  leadResponsibles,
+  leadResponsiblesLoading,
+  leadResponsiblesError,
   onClose,
   onDeleteMeeting,
   onDeleteGoogleEvent,
@@ -284,7 +292,12 @@ function EventDetailPopoverContent({
       // descrição longa) deixa o card mais alto que a tela, e aí não existe
       // posição boa — o conteúdo tem que rolar por dentro em vez de ser
       // cortado em silêncio, que era o que o `hidden` fazia.
-      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl dark:shadow-none dark:ring-1 dark:ring-border overflow-y-auto"
+      //
+      // V5: mesma superfície do `Popover` primitivo (raio 2xl, borda de
+      // cartão) com o relevo alto das camadas flutuantes. `fixed` e `w-72`
+      // são contrato — a geometria (`posicionarPopover`) e os testes medem
+      // por eles.
+      className="fixed z-50 w-72 rounded-2xl border border-card-border bg-card shadow-relevo-alto overflow-y-auto"
       style={{
         left: pos.left,
         top: pos.top,
@@ -300,14 +313,14 @@ function EventDetailPopoverContent({
       <div className="p-4 space-y-3">
         {/* Title + actions */}
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-sm leading-snug flex-1 text-foreground">
+          <h3 className="flex-1 text-[15px] font-bold leading-snug tracking-[-0.02em] text-foreground">
             {event.title}
           </h3>
-          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          <div className="-mr-1.5 -mt-1 flex shrink-0 items-center gap-0.5">
             {podeEditar && (
               <button
                 onClick={() => onEditMeeting?.(event)}
-                className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+                className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="Editar evento"
                 aria-label="Editar evento"
               >
@@ -317,7 +330,7 @@ function EventDetailPopoverContent({
             {podeEditarAgendamento && (
               <button
                 onClick={() => onEditScheduledMessage?.(event)}
-                className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+                className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="Editar mensagem agendada"
                 aria-label="Editar mensagem agendada"
               >
@@ -327,7 +340,7 @@ function EventDetailPopoverContent({
             {canDelete && (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-muted-foreground hover:text-destructive transition-colors rounded p-0.5"
+                className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 title="Excluir evento"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -335,7 +348,9 @@ function EventDetailPopoverContent({
             )}
             <button
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+              className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Fechar"
+              aria-label="Fechar detalhes"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -354,7 +369,7 @@ function EventDetailPopoverContent({
             silêncio. `color-mix` tolera hex E hsl, então as cinco tingem igual. */}
         <Badge
           variant="outline"
-          className="h-5 gap-1 px-2 text-[10px] text-foreground"
+          className="h-6 gap-1 px-2.5 text-[11px] font-semibold text-foreground"
           style={{
             borderColor: SOURCE_COLORS[event.source] ?? color,
             backgroundColor: `color-mix(in srgb, ${SOURCE_COLORS[event.source] ?? color} 16%, transparent)`,
@@ -379,11 +394,25 @@ function EventDetailPopoverContent({
           </div>
         </div>
 
-        {/* Creator / owner */}
+        {/* A autoria da reunião não muda com a atribuição comercial do lead. */}
         {event.creatorName && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <User className="w-3.5 h-3.5 shrink-0" />
-            <span>{event.creatorName}</span>
+            <span>{agendaAttributionLabel(event.source)}: {event.creatorName}</span>
+          </div>
+        )}
+        {event.leadId && (
+          <div className="space-y-1 text-xs text-muted-foreground" aria-live="polite">
+            {leadResponsiblesLoading ? (
+              <p>Carregando responsáveis do lead…</p>
+            ) : leadResponsiblesError || !leadResponsibles ? (
+              <p>Responsáveis do lead indisponíveis.</p>
+            ) : (
+              <>
+                <p>Pré-venda atual: {leadResponsibles.preSaleName ?? "Sem responsável"}</p>
+                <p>Venda atual: {leadResponsibles.saleName ?? "Sem responsável"}</p>
+              </>
+            )}
           </div>
         )}
 
@@ -401,10 +430,12 @@ function EventDetailPopoverContent({
             href={event.meetLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
+            // `primary-soft-foreground`, e não `text-primary`: é o ouro de
+            // TEXTO do V5 — o ouro cheio como texto dá ~1,5:1 no tema claro.
+            className="flex items-center gap-2 text-xs font-semibold text-primary-soft-foreground underline-offset-2 transition-colors hover:underline"
           >
             <Video className="w-3.5 h-3.5 shrink-0" />
-            Entrar na reuniao
+            Entrar na reunião
             <ExternalLink className="w-2.5 h-2.5" />
           </a>
         )}
@@ -413,7 +444,7 @@ function EventDetailPopoverContent({
         {event.leadId && (
           <a
             href={`/leads?lead=${event.leadId}`}
-            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
+            className="flex items-center gap-2 text-xs font-semibold text-primary-soft-foreground underline-offset-2 transition-colors hover:underline"
           >
             <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             {event.leadName
@@ -457,7 +488,7 @@ function EventDetailPopoverContent({
 
         {/* Description */}
         {event.description && (
-          <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-2.5 leading-relaxed">
+          <p className="rounded-xl bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             {event.description}
           </p>
         )}
@@ -482,7 +513,7 @@ function EventDetailPopoverContent({
               transition={{ duration: 0.15 }}
               className="overflow-hidden"
             >
-              <div className="pt-1 border-t border-border/30 space-y-2">
+              <div className="space-y-2 border-t border-border pt-3">
                 <p className="text-[11px] text-destructive font-medium">
                   {deleteLabel}
                 </p>
@@ -490,14 +521,14 @@ function EventDetailPopoverContent({
                   <button
                     onClick={() => setConfirmDelete(false)}
                     disabled={deleting}
-                    className="flex-1 text-[11px] py-1.5 rounded-md border border-border/50 text-muted-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                    className="flex-1 rounded-full border border-border bg-card py-1.5 text-[11px] font-semibold text-foreground/80 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
-                    className="flex-1 text-[11px] py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-destructive py-1.5 text-[11px] font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:opacity-50"
                   >
                     {deleting ? (
                       <Loader2 className="w-3 h-3 animate-spin" />

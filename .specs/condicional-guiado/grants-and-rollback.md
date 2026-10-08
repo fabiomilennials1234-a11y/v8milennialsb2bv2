@@ -35,7 +35,7 @@ Interromper novas execuções guiadas antes de reverter. Nesta etapa elas já es
 4. Aplicar rollback de `20271020000004_guided_workflow_master_authorization.sql`.
 5. Aplicar rollback de `20271020000003_guided_workflow_drafts.sql`.
 6. Aplicar rollback de `20271020000002_guided_condition_authorized_read.sql`.
-7. Aplicar rollback de `20271020000001_workflow_grant_revision_conflict.sql`.
+7. Aplicar rollback de `20271020000001_workflow_grant_revision_conflict.sql` (mantém `PT409`: voltar a `40001` faz o PostgREST repetir a transação sem limite).
 8. Aplicar rollback de `20271020000000_workflow_data_grants.sql`.
 
 Rollback completo remove RPC/policy e revoga permissões, preservando tabela e histórico. Não desabilita RLS, não concede acesso amplo e não altera workflows legados. Reaplicar as oito migrações na ordem original restaura a funcionalidade. Não reaplicar apenas a primeira em uma instalação que já recebeu a correção de conflitos.

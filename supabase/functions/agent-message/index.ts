@@ -17,6 +17,7 @@ import "../_shared/whatsapp-providers/uazapi-provider.ts";
 import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 import { checkAudienceGate } from "./audience-gate.ts";
 import { decideBlockedInboundAction } from "./gate-decision.ts";
+import { checkFunnelGate } from "./funnel-gate.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import { isOrgBlocked } from "../_shared/org-status.ts";
@@ -458,6 +459,34 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
         skipped: true,
         reason: "no_active_agents",
         organization_id: organizationId,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // 1.65. FUNNEL GATE — a IA só responde lead que está num funil em que foi
+    // ligada (`active_pipes`). Lead aberto só em outro funil (ex.: representantes
+    // quando a IA está só em Oportunidades) fica com a equipe. Ver funnel-gate.ts.
+    const funnelGate = await checkFunnelGate(supabase, organizationId, lead.id);
+    if (funnelGate.blocked) {
+      console.log('[agent-message] Lead fora dos funis da IA:', lead.id, funnelGate.currentFunnels);
+      await logRuntime({
+        organizationId,
+        module: "copilot",
+        action: "funnel_gate_block",
+        status: "success",
+        payloadSnapshot: {
+          lead_id: lead.id,
+          gate: "funnel_blocked",
+          current_funnels: funnelGate.currentFunnels,
+          allowed_funnels: funnelGate.allowed,
+        },
+      });
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "lead_outside_agent_funnels",
+        lead_id: lead.id,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }

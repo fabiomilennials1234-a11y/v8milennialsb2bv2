@@ -408,16 +408,17 @@ describe("a página unificada não guarda a fileira de botões antiga (SCRUM-637
     "utf8",
   );
 
-  it("entrega as faixas de reunião ao painel de Filtros", () => {
-    expect(source).toMatch(/type:\s*["']single-choice["']/);
-    expect(source).toMatch(/label:\s*["']Reunião["']/);
-    expect(source).toMatch(/TIME_OPTIONS/);
+  // V5 (decisão do CTO, 02/10 — "mais perto do mockup"): as faixas de reunião
+  // voltaram para a barra, em chips à vista. A obrigação que fica é a de
+  // sempre: UM lugar só para o mesmo filtro — o painel não as repete.
+  it("entrega as faixas de reunião à barra do funil, em chips que ligam e desligam", () => {
+    expect(source).toMatch(/TIME_OPTIONS\.map\(/);
+    expect(source).toMatch(/aria-pressed=\{active\}/);
   });
 
-  it("não renderiza mais os botões de faixa soltos no cabeçalho", () => {
-    // Era `timeOptions.map(...)` numa fileira acima do board. Se voltar, o
-    // operador passa a ter dois lugares para o mesmo filtro — e eles divergem.
-    expect(source).not.toMatch(/TIME_OPTIONS\.map\(/);
+  it("o painel de Filtros não repete as faixas que a barra mostra", () => {
+    // Dois lugares para o mesmo filtro divergem; a seção saiu do painel.
+    expect(source).not.toMatch(/id:\s*["']time-bucket["']/);
   });
 
   it("guarda 'Criados no período' como seção, não como seletor próprio", () => {

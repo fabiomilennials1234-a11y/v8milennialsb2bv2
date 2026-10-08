@@ -30,10 +30,10 @@ export function InsightsEmptyState({ orgs, onSelect, loading }: InsightsEmptySta
       </svg>
 
       <div className="cmd-rise relative z-10 flex flex-col items-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-insights">
+        <span className="rounded-full bg-insights/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[.08em] text-insights">
           Insights
-        </p>
-        <h1 className="mt-3 font-display text-3xl tracking-[-0.02em] text-foreground md:text-[32px]">
+        </span>
+        <h1 className="mt-4 text-[1.75rem] font-extrabold leading-[1.1] tracking-[-0.035em] text-foreground md:text-[2.25rem]">
           Unit economics por organização
         </h1>
         <p className="mt-3 max-w-md text-[15px] text-muted-foreground">

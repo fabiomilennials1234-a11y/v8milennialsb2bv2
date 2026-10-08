@@ -9,33 +9,41 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const rpcMock = vi.fn();
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
- * O dublê LÊ `this`, de propósito.
- *
- * O dublê anterior era `{ rpc: (...a) => rpcMock(...a) }` — uma função que não
- * precisa do receptor. Ele passava verde mesmo quando o código guardava
- * `supabase.rpc` numa const solta, o que em produção desamarra o método do
- * PostgrestClient e estoura antes de tocar a rede: o /chat de 04/09 ficou vazio
- * exatamente assim, sem uma linha nos logs da API.
- *
- * Aqui o dublê exige o receptor. Chamar sem ele lança, e o teste fica vermelho
- * como produção ficaria.
+ * `vi.hoisted` porque o factory do `vi.mock` sobe para o topo do arquivo, e o
+ * `importOriginal` de `@/modules/identity` avalia módulos que leem `supabase`
+ * no carregamento — antes da linha do `const`. Sem o hoist o getter caía na
+ * TDZ e o arquivo inteiro deixava de coletar (estava no baseline assim).
  */
-const supabaseDublê = {
-  marca: "cliente-real",
-  rpc(this: { marca?: string } | undefined, ...a: unknown[]) {
-    if (this?.marca !== "cliente-real") {
-      throw new TypeError(
-        "supabase.rpc chamado sem receptor — o método foi desamarrado do cliente",
-      );
-    }
-    return rpcMock(...a);
-  },
-};
+const { rpcMock, supabaseDublê } = vi.hoisted(() => {
+  const rpcMock = vi.fn();
+  /**
+   * O dublê LÊ `this`, de propósito.
+   *
+   * O dublê anterior era `{ rpc: (...a) => rpcMock(...a) }` — uma função que não
+   * precisa do receptor. Ele passava verde mesmo quando o código guardava
+   * `supabase.rpc` numa const solta, o que em produção desamarra o método do
+   * PostgrestClient e estoura antes de tocar a rede: o /chat de 04/09 ficou vazio
+   * exatamente assim, sem uma linha nos logs da API.
+   *
+   * Aqui o dublê exige o receptor. Chamar sem ele lança, e o teste fica vermelho
+   * como produção ficaria.
+   */
+  const supabaseDublê = {
+    marca: "cliente-real",
+    rpc(this: { marca?: string } | undefined, ...a: unknown[]) {
+      if (this?.marca !== "cliente-real") {
+        throw new TypeError(
+          "supabase.rpc chamado sem receptor — o método foi desamarrado do cliente",
+        );
+      }
+      return rpcMock(...a);
+    },
+  };
+  return { rpcMock, supabaseDublê };
+});
 
 vi.mock("@/integrations/supabase/client", () => ({
   get supabase() {
@@ -60,6 +68,9 @@ vi.mock("./shared/enriquecerContatos", () => ({
 
 import { useConversasUnificadas } from "./useConversasUnificadas";
 import type { InboxBox } from "./types";
+import { JITTER_MAX_FRACAO, PISO_SAUDAVEL_MS } from "./reconcilePolicy";
+import { setChannelState } from "@/lib/realtimeStatusStore";
+import { whatsAppRealtimeStatusKey } from "@/shared/realtime/useRealtimeChannelStatus";
 
 const ORG = "38f3bea4-44c6-4732-bb20-065f547a7ed8";
 const CHIP_A: InboxBox = { kind: "whatsapp", id: "cx-a", name: "Carol", status: "connected", provider: "uazapi" };
@@ -332,5 +343,34 @@ describe("useConversasUnificadas", () => {
       /desamarrado/,
     );
     expect(() => supabaseDublê.rpc("get_whatsapp_conversation_list_multi", {})).not.toThrow();
+  });
+});
+
+describe("useConversasUnificadas — rede contra evento realtime perdido", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("canal joined, nenhum evento: a RPC volta em ≤ 300 s × 1,25 — e não antes de 300 s", async () => {
+    // Antes desta trilha a lista do /chat não tinha backstop: conversa nova com
+    // evento dropado (apply_rls sob carga) só aparecia no F5.
+    vi.useFakeTimers();
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    setChannelState(whatsAppRealtimeStatusKey(ORG), "joined");
+
+    renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+
+    const chamadasDaLista = () =>
+      rpcMock.mock.calls.filter(([nome]) => nome === "get_whatsapp_conversation_list_multi")
+        .length;
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chamadasDaLista()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(PISO_SAUDAVEL_MS.lista - 1_000);
+    expect(chamadasDaLista()).toBe(1); // piso de 300 s vale literalmente
+
+    await vi.advanceTimersByTimeAsync(PISO_SAUDAVEL_MS.lista * (1 + JITTER_MAX_FRACAO));
+    expect(chamadasDaLista()).toBeGreaterThanOrEqual(2);
   });
 });

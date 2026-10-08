@@ -70,12 +70,12 @@ export function MasterOnlineIndicator({
   const ping = (
     <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
       {hasOnline && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
       )}
       <span
         className={
           hasOnline
-            ? "relative inline-flex h-2 w-2 rounded-full bg-emerald-500"
+            ? "relative inline-flex h-2 w-2 rounded-full bg-success"
             : "relative inline-flex h-2 w-2 rounded-full bg-muted-foreground/40"
         }
       />
@@ -104,7 +104,7 @@ export function MasterOnlineIndicator({
         {!collapsed && (
           <>
             <span className="flex-1 truncate text-left">Ativos agora</span>
-            <span className="shrink-0 text-xs font-medium tabular-nums text-emerald-500 dark:text-emerald-400">
+            <span className="shrink-0 text-xs font-medium tabular-nums text-success-strong">
               {label}
             </span>
           </>
@@ -117,7 +117,7 @@ export function MasterOnlineIndicator({
     <Button
       variant="outline"
       size="sm"
-      className="gap-1.5 px-2.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+      className="gap-1.5 border-success/30 px-2.5 text-success-strong hover:bg-success/10 hover:text-success-strong"
       onClick={() => navigate("/master/usuarios-ativos")}
       title={titulo}
       aria-label={`Usuários ativos: ${label}`}

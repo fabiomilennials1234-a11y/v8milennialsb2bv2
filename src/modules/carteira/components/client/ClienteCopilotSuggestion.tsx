@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Copy, MessageCircle, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
 import { useRetentionSuggestion, useGenerateRetentionSuggestion } from "@/modules/carteira/hooks/useRetentionSuggestion";
 import type { Tables } from "@/integrations/supabase/types";
+import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 interface ClienteCopilotSuggestionProps {
   clientId?: string;
@@ -83,8 +84,8 @@ export function ClienteCopilotSuggestion({
   const handleGenerate = () => {
     if (!clientId) return;
     generateMutation.mutate(clientId, {
-      onError: () => {
-        toast({ title: "Erro ao gerar sugestão", description: "Tente novamente em alguns instantes.", variant: "destructive" });
+      onError: (error: unknown) => {
+        notifyError(error, { fallback: "Não foi possível gerar sugestão." });
       },
     });
   };
@@ -92,34 +93,26 @@ export function ClienteCopilotSuggestion({
   const generating = generateMutation.isPending;
 
   return (
-    <Card className={cn(
-      "relative overflow-hidden border",
-      isAI
-        ? "border-primary/30 bg-card"
-        : "border-primary/20 bg-card",
-    )}>
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-
-      <CardContent className="p-4 flex flex-col gap-3">
+    <Card className="relative overflow-hidden">
+      <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/15">
-              <Sparkles size={13} className="text-primary" />
-            </div>
-            <span className="text-xs font-semibold text-card-foreground">
+            <IconChip icon={Sparkles} tone="gold" />
+            <span className="text-[15px] font-bold tracking-[-0.02em] text-card-foreground">
               {isAI ? "Sugestão IA" : "Sugestão Copilot"}
             </span>
             {actionType && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary-soft-foreground">
                 {ACTION_LABELS[actionType] ?? actionType}
               </span>
             )}
           </div>
           {clientId && (
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              aria-label="Gerar sugestão IA"
+              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
               onClick={handleGenerate}
               disabled={generating || loadingCached}
               title="Gerar sugestão IA"
@@ -140,20 +133,20 @@ export function ClienteCopilotSuggestion({
           </div>
         ) : (
           <>
-            <p className="text-sm text-card-foreground leading-relaxed bg-muted/60 rounded-lg px-3 py-2.5 border border-border/50">
+            <p className="rounded-xl bg-sunken px-3.5 py-3 text-sm leading-relaxed text-card-foreground">
               {message}
             </p>
 
             {isAI && aiSuggestion.reasoning && (
               <button
                 onClick={() => setShowReasoning(!showReasoning)}
-                className="text-[10px] text-muted-foreground hover:text-foreground text-left transition-colors"
+                className="text-left text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showReasoning ? "Ocultar raciocínio" : "Ver raciocínio da IA"}
               </button>
             )}
             {showReasoning && aiSuggestion?.reasoning && (
-              <p className="text-[11px] text-muted-foreground leading-relaxed bg-muted/30 rounded px-2.5 py-2 border border-border">
+              <p className="rounded-xl border border-border/70 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                 {aiSuggestion.reasoning}
               </p>
             )}
@@ -164,7 +157,7 @@ export function ClienteCopilotSuggestion({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-1.5 border-border hover:bg-muted text-xs h-8"
+            className="h-9 flex-1 gap-1.5 text-xs"
             onClick={handleCopy}
             disabled={generating}
           >
@@ -182,13 +175,9 @@ export function ClienteCopilotSuggestion({
               phone={phone}
               draft={message}
               size="sm"
+              variant="ink"
               disabled={!phone || generating}
-              className={cn(
-                "flex-1 gap-1.5 text-xs h-8 font-semibold",
-                phone && !generating
-                  ? "bg-primary hover:bg-primary/90 text-primary-foreground"
-                  : "bg-muted text-muted-foreground cursor-not-allowed",
-              )}
+              className="h-9 flex-1 gap-1.5 text-xs"
             >
               <MessageCircle size={12} />
               Abrir com a sugestão

@@ -43,12 +43,12 @@ export function TothPreorderStatusPanel({ dealId }: { dealId: string }) {
         </div>
         {status.localNotice && <Alert><AlertDescription>{status.localNotice}</AlertDescription></Alert>}
         <dl className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
-          {operation.external_id && <div><dt className="text-muted-foreground">Código no ERP</dt><dd>{operation.external_id}</dd></div>}
-          <div><dt className="text-muted-foreground">Versão do rascunho</dt><dd>{operation.draft_revision}</dd></div>
+          {operation.external_id && <div><dt className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Código no ERP</dt><dd className="font-semibold">{operation.external_id}</dd></div>}
+          <div><dt className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Versão do rascunho</dt><dd className="font-semibold tabular-nums">{operation.draft_revision}</dd></div>
           {status.approvalConfirmed && operation.approved_total != null && <div>
-            <dt className="text-muted-foreground">Total aprovado no ERP</dt><dd>{currency.format(operation.approved_total)}</dd>
+            <dt className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Total aprovado no ERP</dt><dd className="font-semibold tabular-nums">{currency.format(operation.approved_total)}</dd>
           </div>}
-          <div><dt className="text-muted-foreground">Última atualização registrada</dt><dd>{new Date(operation.updated_at).toLocaleString("pt-BR")}</dd></div>
+          <div><dt className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Última atualização registrada</dt><dd>{new Date(operation.updated_at).toLocaleString("pt-BR")}</dd></div>
         </dl>
       </CardContent>
       <CardFooter>

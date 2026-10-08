@@ -15,13 +15,13 @@ type PerformanceSection = ComponentProps<typeof Performance>["section"];
 
 function OverviewCard(props: FixedCardContext & { section: OverviewSection }) {
   const { data: member } = useCurrentTeamMember();
-  return <Suspense fallback={<Skeleton className="h-40 w-full" />}><Overview {...props} filterMemberId={null} isAdmin={member?.role === "admin"} onAskOraculo={() => { /* O briefing tem adaptador próprio abaixo. */ }} /></Suspense>;
+  return <Suspense fallback={<Skeleton className="h-40 w-full rounded-2xl" />}><Overview {...props} filterMemberId={null} isAdmin={member?.role === "admin"} onAskOraculo={() => { /* O briefing tem adaptador próprio abaixo. */ }} /></Suspense>;
 }
 function PerformanceCard(props: FixedCardContext & { section: PerformanceSection }) {
   const { allowed, isLoading } = useFeaturePermission("performance.view");
-  if (isLoading) return <Skeleton className="h-40 w-full" />;
-  if (!allowed) return <p className="p-4 text-sm text-muted-foreground">Você não tem permissão para ver a performance da equipe.</p>;
-  return <Suspense fallback={<Skeleton className="h-40 w-full" />}><Performance {...props} /></Suspense>;
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-2xl" />;
+  if (!allowed) return <p className="py-4 text-[13px] text-muted-foreground">Você não tem permissão para ver a performance da equipe.</p>;
+  return <Suspense fallback={<Skeleton className="h-40 w-full rounded-2xl" />}><Performance {...props} /></Suspense>;
 }
 export function MetaMensalCard(props: FixedCardContext) { return <OverviewCard {...props} section="meta" />; }
 export function IndicadoresCard(props: FixedCardContext) { return <OverviewCard {...props} section="kpis" />; }
@@ -34,16 +34,16 @@ export function MetasEquipeCard(props: FixedCardContext) { return <PerformanceCa
 export function MetasIndividuaisCard(props: FixedCardContext) { return <PerformanceCard {...props} section="metas-individuais" />; }
 export function PerdasCard(props: FixedCardContext) { return <PerformanceCard {...props} section="perdas" />; }
 export function RealEsperadoCard(props: FixedCardContext) { return <PerformanceCard {...props} section="real-esperado" />; }
-export function SaudeCard({ range }: FixedCardContext) { return <Suspense fallback={<Skeleton className="h-64 w-full" />}><Health range={range} /></Suspense>; }
-export function MapaCard() { return <Suspense fallback={<Skeleton className="h-64 w-full" />}><Map /></Suspense>; }
+export function SaudeCard({ range }: FixedCardContext) { return <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}><Health range={range} /></Suspense>; }
+export function MapaCard() { return <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}><Map /></Suspense>; }
 
 export function BriefingCard(props: FixedCardContext) {
   const features = useOrgFeaturesOptional();
   const enabled = features ? features.hasFeature("oraculo") : true;
   const { data: member } = useCurrentTeamMember();
   const navigate = useNavigate();
-  if (!enabled) return <p className="p-4 text-sm text-muted-foreground">O Oráculo não está incluído no plano desta organização.</p>;
-  return <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+  if (!enabled) return <p className="py-4 text-[13px] text-muted-foreground">O Oráculo não está incluído no plano desta organização.</p>;
+  return <Suspense fallback={<Skeleton className="h-40 w-full rounded-2xl" />}>
     <Overview {...props} section="oraculo" isAdmin={member?.role === "admin"} onAskOraculo={() => navigate("/oraculo")} />
   </Suspense>;
 }

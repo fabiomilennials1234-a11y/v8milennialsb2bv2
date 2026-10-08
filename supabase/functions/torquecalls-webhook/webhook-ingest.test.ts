@@ -16,6 +16,7 @@
 
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import { __resetWebhookKeysForTests } from "../_shared/voip/webhook-verify.ts";
+import { flushRuntimeLogs } from "../_shared/logger.ts";
 import {
   __burstSizeForTests,
   __resetBurstForTests,
@@ -211,7 +212,11 @@ async function captureRuntimeLogs<T>(
   }) as typeof fetch;
 
   try {
-    return { result: await run(), rows };
+    const result = await run();
+    // `logRuntime` enfileira; o POST sai no flush. Esvazia ANTES de devolver o
+    // fetch real, senão a linha sairia para a rede de verdade.
+    await flushRuntimeLogs();
+    return { result, rows };
   } finally {
     globalThis.fetch = fetchReal;
     if (urlReal === undefined) Deno.env.delete("SUPABASE_URL");

@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowDown, ArrowUp, type LucideIcon } from "lucide-react";
+import { IconChip, type Tone } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { useCountUp } from "@/shared/hooks/useCountUp";
 
@@ -18,7 +20,11 @@ interface KpiCardCompactProps {
   caption: string;
   quickActionLabel: string;
   quickActionTo: string;
+  /** Sem efeito desde o V5: a entrada animada brigava com o levantar do hover. */
   delay?: number;
+  /** V5 (onda "mais perto do mockup"): o chip tintado do `KpiTile`. */
+  icon?: LucideIcon;
+  tone?: Tone;
 }
 
 function formatValue(value: number | null, format: KpiFormat): string {
@@ -39,11 +45,15 @@ function formatValue(value: number | null, format: KpiFormat): string {
 }
 
 /**
- * KPI compacto da Central de Comando — delta badge, comparativo textual e
+ * KPI compacto dos indicadores da operação — delta, comparativo textual e
  * quick action que sobe do rodapé no hover (padrão aprovado no mockup v3).
+ *
+ * V5 (2026-10): mesma anatomia do `KpiTile` (cartão de bento, rótulo, número
+ * herói tabular, nota) — continua um BOTÃO inteiro porque o cartão é a porta
+ * para a tela do assunto.
  */
 function KpiCardCompactBase({
-  label, value, format, delta, caption, quickActionLabel, quickActionTo, delay = 0,
+  label, value, format, delta, caption, quickActionLabel, quickActionTo, icon, tone = "neutral",
 }: KpiCardCompactProps) {
   const navigate = useNavigate();
   const animated = useCountUp(value ?? 0, 1300, true);
@@ -52,29 +62,38 @@ function KpiCardCompactBase({
     <button
       type="button"
       onClick={() => navigate(quickActionTo)}
-      className="cmd-cell cmd-rise group block h-full min-h-[96px] w-full cursor-pointer px-[15px] pb-3.5 pt-[13px] text-left"
-      style={{ animationDelay: `${delay}s` }}
+      className={cn(
+        "group relative flex h-full min-h-[96px] w-full min-w-0 cursor-pointer flex-col gap-1 overflow-hidden rounded-card border border-card-border bg-card px-[18px] pb-4 pt-[15px] text-left text-card-foreground shadow-relevo",
+        "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto motion-reduce:transition-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
       aria-label={`${label}: ${formatValue(value, format)}. ${quickActionLabel}`}
     >
-      <div className="flex items-center justify-between">
-        <span className="cmd-lbl">{label}</span>
+      {/* Anatomia do KpiTile: rótulo + chip tintado no topo, número-herói, a
+          variação logo abaixo (seta + %) e o comparativo em texto. */}
+      <div className="flex items-start gap-2">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground/80">{label}</span>
+        {icon && <IconChip icon={icon} tone={tone} size="sm" />}
+      </div>
+      <div className="text-[1.65rem] font-extrabold leading-[1.05] tracking-[-0.04em] tabular-nums">
+        {formatValue(value === null ? null : animated, format)}
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
         {delta && (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-[7px] px-[7px] py-[2.5px] text-[11px] font-bold",
-              delta.tone === "up" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
+              "inline-flex shrink-0 items-center gap-0.5 font-bold tabular-nums",
+              delta.tone === "up" ? "text-success-strong" : "text-destructive",
             )}
           >
-            {delta.label}
+            {delta.tone === "up" ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
+            {delta.label.replace(/^[+-]/, "")}
           </span>
         )}
+        <span className="min-w-0 truncate text-muted-foreground">{caption}</span>
       </div>
-      <div className="mt-1.5 text-[21px] font-extrabold tracking-[-0.035em] tabular-nums">
-        {formatValue(value === null ? null : animated, format)}
-      </div>
-      <div className="mt-0.5 text-[10.5px] text-muted-foreground/70">{caption}</div>
       <div
-        className="absolute inset-x-0 bottom-0 translate-y-full bg-primary/15 py-[5px] text-center text-[10.5px] font-bold text-primary transition-transform duration-200 [transition-timing-function:cubic-bezier(.22,1,.36,1)] group-hover:translate-y-0 group-focus-visible:translate-y-0"
+        className="absolute inset-x-0 bottom-0 translate-y-full bg-primary-soft py-1.5 text-center text-[11px] font-bold text-primary-soft-foreground transition-transform duration-200 [transition-timing-function:cubic-bezier(.22,1,.36,1)] group-hover:translate-y-0 group-focus-visible:translate-y-0 motion-reduce:transition-none"
       >
         {quickActionLabel}
       </div>

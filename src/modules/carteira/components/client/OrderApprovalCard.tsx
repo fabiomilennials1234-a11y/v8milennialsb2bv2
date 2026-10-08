@@ -9,14 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { PendingOrder } from "@/modules/carteira/hooks/useOrderApproval";
-
-const SOURCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  copilot: { bg: "bg-[#2a2a3a]", text: "text-[#8b8bff]", label: "Copilot" },
-  manual: { bg: "bg-[#2a2a1a]", text: "text-[#fbbf24]", label: "Manual" },
-  pipe: { bg: "bg-[#1a2a2a]", text: "text-[#2dd4bf]", label: "Funil" },
-  erp: { bg: "bg-[#1a2a3a]", text: "text-[#60a5fa]", label: "ERP" },
-  csv_import: { bg: "bg-[#2a2a2a]", text: "text-muted-foreground", label: "CSV" },
-};
+import { SOURCE_STYLES } from "@/modules/carteira/lib/order-source";
 
 interface OrderApprovalCardProps {
   order: PendingOrder;
@@ -48,22 +41,22 @@ export function OrderApprovalCard({
   }).format(order.sale_value);
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+    <div className="space-y-3 rounded-card border border-card-border bg-card p-5 shadow-relevo">
       {/* Header: client + value */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-foreground">
             {order.client_name}
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {dateStr}
-            {" · "}
-            <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", source.bg, source.text)}>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="tabular-nums">{dateStr}</span>
+            <span aria-hidden>·</span>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10.5px] font-semibold", source.className)}>
               {source.label}
             </span>
           </p>
         </div>
-        <span className="text-base font-bold text-primary">{valueStr}</span>
+        <span className="shrink-0 text-lg font-extrabold tabular-nums tracking-[-0.03em] text-foreground">{valueStr}</span>
       </div>
 
       {/* Items chips */}
@@ -72,7 +65,7 @@ export function OrderApprovalCard({
           {order.items.map((item) => (
             <span
               key={item.id}
-              className="bg-muted px-2.5 py-0.5 rounded text-[11px] text-muted-foreground"
+              className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-foreground/75"
             >
               {item.product_name} x{item.quantity}
             </span>
@@ -84,11 +77,11 @@ export function OrderApprovalCard({
       <div className="flex gap-2">
         <Button
           variant="ghost"
-          className="flex-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
+          className="flex-1 bg-success/10 text-success hover:bg-success/15 hover:text-success"
           onClick={() => onApprove(order.id)}
           disabled={isApproving || isRejecting}
         >
-          <Check className="w-4 h-4 mr-1.5" />
+          <Check />
           Aprovar
         </Button>
 
@@ -96,10 +89,10 @@ export function OrderApprovalCard({
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
-              className="flex-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+              className="flex-1 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
               disabled={isApproving || isRejecting}
             >
-              <X className="w-4 h-4 mr-1.5" />
+              <X />
               Rejeitar
             </Button>
           </PopoverTrigger>
@@ -109,7 +102,7 @@ export function OrderApprovalCard({
               value={rejectComment}
               onChange={(e) => setRejectComment(e.target.value)}
               rows={2}
-              className="text-xs mb-2"
+              className="mb-2 text-xs"
             />
             <Button
               variant="destructive"

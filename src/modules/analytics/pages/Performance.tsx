@@ -2,15 +2,29 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Trophy, Target, Gift, Medal, Award, TrendingUp, Star, Crown,
-  Flame, Calendar, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles
+  Trophy, Target, Gift, TrendingUp, Star,
+  Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles,
+  CircleDollarSign, CalendarPlus, Handshake, Building2, Tv, type LucideIcon,
 } from "lucide-react";
-import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, useEndCompetition, type Competition } from "@/modules/engagement/hooks/useCompetitions";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, useEndCompetition } from "@/modules/engagement/hooks/useCompetitions";
 import { CompetitionPodiumV2 } from "@/modules/analytics/components/performance/CompetitionPodiumV2";
-import { CompetitionRankingListV2 } from "@/modules/analytics/components/performance/CompetitionRankingListV2";
+import {
+  AlternadorVisao,
+  ClassificacaoCompleta,
+  MetasDoTime,
+  MetasIndividuais,
+  PodioHero,
+  VidroCompeticao,
+  VidroSemCompeticao,
+  type LinhaClassificacao,
+  type MetaComRealizado,
+  type PessoaComMetas,
+  type VisaoRanking,
+} from "@/modules/analytics/components/performance/RankingV5";
 import { CreateCompetitionModal } from "@/modules/analytics/components/performance/CreateCompetitionModal";
 import { useRankingTransitions } from "@/modules/engagement/hooks/useRankingTransitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
@@ -46,7 +60,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ProgressRing, MiniProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
+import { ProgressRing } from "@/modules/engagement/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/modules/engagement/components/gamification/AchievementBadge";
 import { CelebrationEffect } from "@/modules/engagement/components/gamification/CelebrationEffect";
 import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/modules/engagement/hooks/useGoals";
@@ -64,7 +78,9 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { resolveMeetingGoals } from "@/modules/engagement/lib/goal-progress";
-import badgeIcon from "@/assets/badge-icon.png";
+import { IconChip, KpiTile, ValueUnit } from "@/components/ui/bento";
+import { Link } from "react-router-dom";
+import { notifyError } from "@/shared/errors";
 
 // ============ CONSTANTS ============
 const months = [
@@ -72,26 +88,21 @@ const months = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
-const goalTypes = [
-  { value: "faturamento", label: "Faturamento", icon: "💰" },
-  { value: "clientes", label: "Novos Clientes", icon: "👥" },
-  { value: "reunioes_marcadas", label: "Reuniões Marcadas", icon: "📅" },
-  { value: "reunioes_realizadas", label: "Reuniões Realizadas", icon: "🤝" },
-  { value: "conversao", label: "Taxa de Conversão", icon: "📈" },
-  { value: "vendas", label: "Vendas (Individual)", icon: "🎯" },
+// V5: o ícone do tipo de meta era emoji; virou ícone lucide (mesmo papel).
+const goalTypes: { value: string; label: string; icon: LucideIcon }[] = [
+  { value: "faturamento", label: "Faturamento", icon: CircleDollarSign },
+  { value: "clientes", label: "Novos Clientes", icon: Users },
+  { value: "reunioes_marcadas", label: "Reuniões Marcadas", icon: CalendarPlus },
+  { value: "reunioes_realizadas", label: "Reuniões Realizadas", icon: Handshake },
+  { value: "conversao", label: "Taxa de Conversão", icon: TrendingUp },
+  { value: "vendas", label: "Vendas (Individual)", icon: Target },
 ];
 
 const awardTypeLabels: Record<string, { label: string; icon: typeof Trophy; color: string }> = {
   meta_mensal: { label: "Meta Mensal", icon: Target, color: "text-primary" },
-  campeonato: { label: "Campeonato", icon: Trophy, color: "text-chart-5" },
+  campeonato: { label: "Campeonato", icon: Trophy, color: "text-insights" },
   bonus: { label: "Bônus", icon: Star, color: "text-success" },
-  especial: { label: "Especial", icon: Gift, color: "text-chart-4" },
-};
-
-const positionStyles = {
-  1: { icon: Crown, color: "text-yellow-500", bg: "bg-gradient-to-br from-yellow-400 to-amber-500", border: "border-yellow-400" },
-  2: { icon: Medal, color: "text-slate-400", bg: "bg-gradient-to-br from-slate-300 to-slate-400", border: "border-slate-400" },
-  3: { icon: Award, color: "text-amber-600", bg: "bg-gradient-to-br from-amber-600 to-amber-700", border: "border-amber-600" },
+  especial: { label: "Especial", icon: Gift, color: "text-warning-strong" },
 };
 
 // ============ INTERFACES ============
@@ -101,6 +112,7 @@ interface RankingUser {
   name: string;
   role: string;
   value: number;
+  goal?: number;
   conversions?: number;
   meetings?: number;
   meetingsBooked?: number;
@@ -126,131 +138,7 @@ interface AchievementProgress {
   isUnlocked: boolean;
 }
 
-// ============ HELPER FUNCTIONS ============
-function getPositionIcon(position: number) {
-  if (position === 1) return Crown;
-  if (position === 2) return Award;
-  if (position === 3) return Trophy;
-  return null;
-}
-
-function getPositionStyle(position: number) {
-  if (position === 1) return "from-yellow-400 to-amber-500 border-yellow-400";
-  if (position === 2) return "from-slate-300 to-slate-400 border-slate-400";
-  if (position === 3) return "from-amber-600 to-amber-700 border-amber-600";
-  return "from-muted to-muted border-border";
-}
-
 // ============ SUB-COMPONENTS ============
-
-// Ranking Card Component
-function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser; showValue?: boolean; avatarUrl?: string }) {
-  const isTop3 = user.position <= 3;
-  const styles = positionStyles[user.position as keyof typeof positionStyles];
-  const Icon = styles?.icon;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: user.position * 0.05 }}
-      whileHover={{ scale: 1.01, x: 4 }}
-      className={`relative overflow-hidden rounded-xl border p-4 transition-all ${
-        user.position === 1 
-          ? "bg-gradient-to-r from-yellow-400/10 to-transparent border-yellow-400/50 shadow-lg shadow-yellow-400/10" 
-          : isTop3 
-          ? `bg-gradient-to-r from-${user.position === 2 ? 'slate' : 'amber'}-400/5 to-transparent ${styles.border}/30` 
-          : "bg-card border-border hover:border-primary/30"
-      }`}
-    >
-      {user.position === 1 && (
-        <motion.div
-          className="absolute inset-0 -translate-x-full"
-          animate={{ translateX: ["100%", "-100%"] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
-          style={{
-            background: "linear-gradient(90deg, transparent, rgba(245, 197, 24, 0.1), transparent)",
-          }}
-        />
-      )}
-
-      <div className="relative flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-          isTop3 ? styles.bg : "bg-muted"
-        }`}>
-          {Icon ? (
-            <Icon className="w-6 h-6 text-white" />
-          ) : (
-            <span className="text-lg font-bold text-muted-foreground">
-              {user.position}º
-            </span>
-          )}
-        </div>
-
-        <UserAvatar
-          name={user.name}
-          avatarUrl={avatarUrl}
-          size="lg"
-          className={isTop3 ? "border-2 " + styles.border : ""}
-          fallbackClassName={isTop3 ? "bg-white/20 text-foreground" : "bg-accent text-accent-foreground"}
-        />
-
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold">{user.name}</h3>
-            {user.goalProgress >= 100 && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="flex items-center gap-1 px-2 py-0.5 bg-success/10 rounded-full"
-              >
-                <Star className="w-3 h-3 text-success fill-success" />
-                <span className="text-xs font-medium text-success">Meta!</span>
-              </motion.div>
-            )}
-            {user.goalProgress >= 80 && user.goalProgress < 100 && (
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-orange-500/10 rounded-full">
-                <Flame className="w-3 h-3 text-orange-500" />
-              </div>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground">{user.role}</p>
-        </div>
-
-        <div className="text-right">
-          {showValue ? (
-            <>
-              <p className="text-xl font-bold">R$ {user.value.toLocaleString("pt-BR")}</p>
-              <p className="text-sm text-muted-foreground">
-                {user.conversions || 0} vendas
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-xl font-bold">{user.meetings || 0}</p>
-              <p className="text-sm text-muted-foreground">
-                realizadas · <span className="font-medium text-foreground">{user.meetingsBooked ?? 0} marcadas</span>
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <MiniProgressRing
-            progress={user.goalProgress}
-            color={user.goalProgress >= 100 ? "success" : "primary"}
-          />
-          {!showValue && (user.goalBooked ?? 0) > 0 && (
-            <MiniProgressRing
-              progress={user.goalBookedProgress ?? 0}
-              color="warning"
-            />
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 
 // Achievement Card Component
 function AchievementCard({ achievement, index }: { achievement: AchievementProgress; index: number }) {
@@ -273,10 +161,10 @@ function AchievementCard({ achievement, index }: { achievement: AchievementProgr
         transition={{ delay: index * 0.1 }}
         onClick={handleClick}
         className={cn(
-          "relative overflow-hidden rounded-xl border p-4 cursor-pointer transition-all duration-300",
+          "relative overflow-hidden rounded-2xl border p-4 cursor-pointer transition-all duration-300",
           achievement.isUnlocked
-            ? "bg-gradient-to-br from-primary/10 via-background to-chart-5/10 border-primary/30 hover:shadow-lg hover:shadow-primary/10"
-            : "bg-card border-border hover:border-muted-foreground/30"
+            ? "bg-primary-soft/60 border-primary/30 hover:shadow-relevo-alto"
+            : "bg-card border-card-border shadow-relevo hover:border-foreground/20"
         )}
       >
         {achievement.isUnlocked && (
@@ -284,7 +172,7 @@ function AchievementCard({ achievement, index }: { achievement: AchievementProgr
             initial={{ opacity: 0 }}
             animate={{ opacity: [0.3, 0.6, 0.3] }}
             transition={{ duration: 2, repeat: Infinity }}
-            className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-chart-5/5"
+            className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5"
           />
         )}
 
@@ -317,20 +205,17 @@ function AchievementCard({ achievement, index }: { achievement: AchievementProgr
                 animate={{ scale: 1 }}
                 className="absolute -top-1 -right-1"
               >
-                <Sparkles className="w-4 h-4 text-chart-5" />
+                <Sparkles className="w-4 h-4 text-primary-soft-foreground" />
               </motion.div>
             )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-medium text-sm truncate">{achievement.award.name}</h3>
+              <h3 className="font-semibold text-sm truncate">{achievement.award.name}</h3>
               <Badge
-                variant="outline"
-                className={cn(
-                  "text-[10px] shrink-0",
-                  achievement.isUnlocked ? "bg-success/10 text-success border-success/30" : ""
-                )}
+                variant={achievement.isUnlocked ? "success" : "soft"}
+                className="text-[10px] shrink-0 tabular-nums"
               >
                 {achievement.isUnlocked ? "✓" : `${Math.round(achievement.progress)}%`}
               </Badge>
@@ -344,7 +229,7 @@ function AchievementCard({ achievement, index }: { achievement: AchievementProgr
             {achievement.award.prize_value && (
               <div className="flex items-center gap-1 mt-2">
                 <Gift className="w-3 h-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs tabular-nums text-muted-foreground">
                   R$ {achievement.award.prize_value.toLocaleString("pt-BR")}
                 </span>
               </div>
@@ -369,6 +254,7 @@ function GoalFormDialog({
   selectedMonth,
   selectedYear,
   onSave,
+  onDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -377,6 +263,8 @@ function GoalFormDialog({
   selectedMonth: number;
   selectedYear: number;
   onSave: (data: GoalFormData) => void;
+  /** V5: excluir mora dentro do diálogo de edição (saiu do cartão da meta). */
+  onDelete?: (id: string) => void;
 }) {
   const [formData, setFormData] = useState<GoalFormData>({
     name: goal?.name || "",
@@ -425,9 +313,10 @@ function GoalFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {goalTypes.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.icon} {type.label}
+                {goalTypes.map(({ value, label, icon: TypeIcon }) => (
+                  <SelectItem key={value} value={value}>
+                    <TypeIcon className="mr-2 inline h-4 w-4 align-[-3px] text-muted-foreground" aria-hidden />
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -466,7 +355,10 @@ function GoalFormDialog({
                 <SelectValue placeholder="Meta do time" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="team">🏢 Meta do Time</SelectItem>
+                <SelectItem value="team">
+                  <Building2 className="mr-2 inline h-4 w-4 align-[-3px] text-muted-foreground" aria-hidden />
+                  Meta do Time
+                </SelectItem>
                 {teamMembers.filter(m => m.is_active).map((member) => (
                   <SelectItem key={member.id} value={member.id}>
                     {member.name} ({(member as any).job_title || member.role})
@@ -514,6 +406,17 @@ function GoalFormDialog({
           </div>
 
           <DialogFooter>
+            {goal && onDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+                onClick={() => { onOpenChange(false); onDelete(goal.id); }}
+              >
+                <Trash2 />
+                Excluir meta
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
@@ -646,82 +549,6 @@ function AwardFormDialog({
   );
 }
 
-// ============ COMPETITION INLINE COMPONENTS ============
-
-function CompetitionHeader({
-  competition,
-  participantCount,
-}: {
-  competition: Competition;
-  participantCount: number;
-}) {
-  const daysLeft = Math.max(0, Math.ceil((new Date(competition.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-
-  return (
-    <div className="rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-border p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🏆</span>
-            <h2 className="text-xl font-extrabold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              {competition.name}
-            </h2>
-            <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px] font-bold uppercase">
-              {competition.status === "active" ? "Ativo" : competition.status}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {competition.metric_type === "sales" ? "Vendas" : "Reuniões"} · {competition.criteria === "absolute_value" ? "Valor absoluto" : "% da meta"}
-          </p>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="text-center">
-            <p className="text-2xl font-extrabold text-yellow-400">{daysLeft}</p>
-            <p className="text-[10px] text-muted-foreground uppercase">Dias restantes</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-extrabold text-purple-400">{participantCount}</p>
-            <p className="text-[10px] text-muted-foreground uppercase">Competidores</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyCompetitionState({ onCreateClick, onSeedClick, isSeeding }: { onCreateClick: () => void; onSeedClick?: () => void; isSeeding?: boolean }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-16 text-center"
-    >
-      <motion.div
-        animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
-        transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-      >
-        <Trophy className="w-16 h-16 text-muted-foreground/30" />
-      </motion.div>
-      <h3 className="text-lg font-bold mt-4">Nenhuma competição ativa</h3>
-      <p className="text-sm text-muted-foreground mt-2 max-w-md">
-        Crie uma competição para engajar seu time com ranking, metas e prêmios em tempo real.
-      </p>
-      <div className="flex gap-3 mt-6">
-        <Button onClick={onCreateClick} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Criar Competição
-        </Button>
-        {onSeedClick && (
-          <Button onClick={onSeedClick} variant="outline" className="gap-2" disabled={isSeeding}>
-            <Sparkles className="w-4 h-4" />
-            {isSeeding ? "Criando..." : "Criar Competição Demo"}
-          </Button>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
 // ============ MAIN COMPONENT ============
 export default function Performance() {
   const now = new Date();
@@ -736,6 +563,8 @@ export default function Performance() {
   const [editingCompetition, setEditingCompetition] = useState(false);
   const [cancelCompetitionOpen, setCancelCompetitionOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [aba, setAba] = useState("ranking_vendas");
+  const [visao, setVisao] = useState<VisaoRanking>("venda");
   const queryClient = useQueryClient();
 
   // Hooks
@@ -767,7 +596,7 @@ export default function Performance() {
       await endCompetition.mutateAsync(activeCompetition.id);
       toast.success("Competição cancelada.");
     } catch (err: any) {
-      toast.error("Erro ao cancelar competição: " + (err?.message || ""));
+      notifyError(err, { fallback: "Não foi possível cancelar competição." });
     } finally {
       setCancelCompetitionOpen(false);
     }
@@ -847,7 +676,7 @@ export default function Performance() {
       queryClient.invalidateQueries({ queryKey: ["competition-participants"] });
       queryClient.invalidateQueries({ queryKey: ["competition-prizes"] });
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar competição demo");
+      notifyError(error, { fallback: "Não foi possível criar competição demo." });
     } finally {
       setIsSeeding(false);
     }
@@ -978,7 +807,6 @@ export default function Performance() {
   );
 
   const compPodiumUsers = competitionRanking.slice(0, 3);
-  const restUsers = competitionRanking.slice(3);
 
   const podiumPrizes = prizes.map(p => ({
     position: p.position,
@@ -1087,7 +915,7 @@ export default function Performance() {
       toast.success("Meta excluída com sucesso!");
       setDeleteGoalId(null);
     } catch (error: unknown) {
-      toast.error("Erro ao excluir meta: " + (error as Error).message);
+      notifyError(error, { fallback: "Não foi possível excluir meta." });
     }
   };
 
@@ -1112,7 +940,7 @@ export default function Performance() {
   };
 
   const getGoalTypeInfo = (type: string) => {
-    return goalTypes.find(t => t.value === type) || { label: type, icon: "🎯" };
+    return goalTypes.find(t => t.value === type) || { value: type, label: type, icon: Target };
   };
 
   const formatValue = (type: string, value: number) => {
@@ -1123,350 +951,421 @@ export default function Performance() {
     return value.toString();
   };
 
+  // ── V5: pódio + competição numa tinta, classificação completa, metas com anel ──
+  const mesLabel = months[selectedMonth - 1].toLowerCase();
+  // Cargo da pessoa (job_title). O `role` do RPC às vezes é a função do enum
+  // ("admin", "member") — isso não é cargo e não vai para a tela.
+  const subDe = (id: string, role?: string | null) =>
+    teamMembers.find((m) => m.id === id)?.job_title?.trim() ||
+    (role && !["admin", "member", "master", "Vendas"].includes(role) ? role : undefined);
+
+  const rankingVisao: RankingUser[] = visao === "venda" ? closers : sdrs;
+  const metricaVisao: "sales" | "meetings" = visao === "venda" ? "sales" : "meetings";
+  const valorVisao = (u: RankingUser) => (visao === "venda" ? u.value : (u.meetings ?? u.value));
+
+  const podioMetric: "sales" | "meetings" = activeCompetition ? activeCompetition.metric_type : metricaVisao;
+  const podioUsuarios = activeCompetition
+    ? compPodiumUsers.map((u) => ({
+        id: u.id,
+        name: u.name,
+        value: u.value,
+        goalProgress: u.goalProgress,
+        position: u.position,
+        avatarUrl: u.avatarUrl,
+        sub: subDe(u.id, u.role),
+        count: u.conversions,
+      }))
+    : rankingVisao.slice(0, 3).map((u) => ({
+        id: u.id,
+        name: u.name,
+        value: valorVisao(u),
+        goalProgress: u.goalProgress,
+        position: u.position,
+        avatarUrl: avatarMap.get(u.id),
+        sub: subDe(u.id, u.role),
+        count: u.conversions,
+      }));
+
+  const linhasClassificacao: LinhaClassificacao[] = activeCompetition
+    ? competitionRanking.map((u) => ({
+        id: u.id,
+        name: u.name,
+        sub: subDe(u.id, u.role),
+        avatarUrl: u.avatarUrl,
+        position: u.position,
+        value: podioMetric === "sales" ? u.value : u.meetings || u.value,
+        conversions: u.conversions,
+        goal: u.goal,
+        goalProgress: u.goalProgress,
+        delta: rankingTransitions.getChange(u.id)?.delta,
+      }))
+    : rankingVisao.map((u) => ({
+        id: u.id,
+        name: u.name,
+        sub: subDe(u.id, u.role),
+        avatarUrl: avatarMap.get(u.id),
+        position: u.position,
+        value: valorVisao(u),
+        conversions: u.conversions,
+        meetingsBooked: u.meetingsBooked,
+        goal: (u as RankingUser & { goal?: number }).goal,
+        goalProgress: u.goalProgress,
+      }));
+
+  const faltaFaturamento = faturamentoGoal ? Math.max(faturamentoGoal.target_value - currentFaturamento, 0) : 0;
+  const metaDoTimeTile = (
+    <KpiTile
+      className="h-full"
+      label="Meta do time"
+      icon={Target}
+      tone="gold"
+      value={
+        faturamentoGoal ? (
+          <>
+            {Math.round(faturamentoProgress)}
+            <ValueUnit>%</ValueUnit>
+          </>
+        ) : (
+          "—"
+        )
+      }
+      note={
+        faturamentoGoal
+          ? faltaFaturamento > 0
+            ? `faltam R$ ${Math.round(faltaFaturamento).toLocaleString("pt-BR")}`
+            : "meta de faturamento batida"
+          : "meta de faturamento não configurada"
+      }
+    >
+      {faturamentoGoal && (
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(faturamentoProgress, 100)}%` }} />
+        </div>
+      )}
+    </KpiTile>
+  );
+
+  // Gestão — realizado do mês por tipo de meta (os mesmos números de antes).
+  const realizadoDoTipo = (type: string): number | null => {
+    if (type === "faturamento") return currentFaturamento;
+    if (type === "clientes") return currentClientes;
+    if (type === "reunioes_marcadas") return metrics?.reunioesMarcadas ?? 0;
+    if (type === "reunioes_realizadas" || type === "reunioes") return metrics?.reunioesComparecidas ?? 0;
+    if (type === "conversao") return metrics?.taxaConversao ?? 0;
+    return null;
+  };
+  const metasDoTime: MetaComRealizado[] = teamGoalsFiltered.map((goal) => ({
+    goal,
+    rotulo: getGoalTypeInfo(goal.type).label,
+    realizado: realizadoDoTipo(goal.type),
+    formatar: (v: number) =>
+      goal.type === "faturamento" || goal.type === "vendas"
+        ? v >= 1000
+          ? `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`
+          : `R$ ${Math.round(v).toLocaleString("pt-BR")}`
+        : goal.type === "conversao"
+          ? `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`
+          : Math.round(v).toLocaleString("pt-BR"),
+  }));
+
+  const rankingPorPessoa = new Map<string, RankingUser>([...closers, ...sdrs].map((u) => [u.id, u]));
+  const pessoasComMetas: PessoaComMetas[] = Array.from(
+    individualGoalsFiltered.reduce((acc, g) => {
+      const id = g.team_member_id as string;
+      acc.set(id, [...(acc.get(id) ?? []), g]);
+      return acc;
+    }, new Map<string, Goal[]>()),
+  )
+    .map(([id, goals]) => {
+      const r = rankingPorPessoa.get(id);
+      const vendas = r ? closers.some((c) => c.id === id) : false;
+      return {
+        id,
+        name: getMemberName(id),
+        sub: subDe(id, r?.role),
+        avatarUrl: avatarMap.get(id),
+        progresso: r?.goal ? r.goalProgress : null,
+        realizadoTexto: r
+          ? vendas
+            ? `R$ ${Math.round(r.value).toLocaleString("pt-BR")}`
+            : `${r.meetings ?? r.value} reuniões`
+          : undefined,
+        metas: goals.map((goal) => ({
+          goal,
+          rotulo: getGoalTypeInfo(goal.type).label,
+          alvo: formatValue(goal.type, goal.target_value),
+        })),
+      };
+    })
+    .sort((a, b) => (b.progresso ?? -1) - (a.progresso ?? -1));
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Ranking de Vendas
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Acompanhe a competição do time
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select 
-            value={selectedMonth.toString()} 
-            onValueChange={(v) => setSelectedMonth(Number(v))}
-          >
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month, index) => (
-                <SelectItem key={index} value={(index + 1).toString()}>
-                  {month}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select 
-            value={selectedYear.toString()} 
-            onValueChange={(v) => setSelectedYear(Number(v))}
-          >
-            <SelectTrigger className="w-[90px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[2024, 2025, 2026, 2027].map(year => (
-                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <img src={badgeIcon} alt="" className="w-10 h-10 opacity-80" />
-        </div>
-      </div>
-
-      {/* Movimentações no período — painel aditivo, isolado do ranking/gamificação.
-          Conta por data de movimentação (evento no ledger), não por criação do lead. */}
-      <MovimentacoesPanel />
-
-      {/* Main Tabs */}
-      <Tabs defaultValue="ranking_vendas" className="space-y-6">
-        <TabsList className="grid w-full max-w-lg grid-cols-2">
-          <TabsTrigger value="ranking_vendas" className="flex items-center gap-1.5">
-            <Trophy className="w-4 h-4" />
-            <span className="hidden sm:inline">Ranking de Vendas</span>
-          </TabsTrigger>
-          {canManageGoals && (
-            <TabsTrigger value="gestao" className="flex items-center gap-1.5">
-              <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">Gestão</span>
-            </TabsTrigger>
-          )}
-        </TabsList>
+    <>
+      {/* V5: a página inteira mora dentro do <Tabs> — Radix só exige que a lista
+          (no cabeçalho) e os conteúdos estejam sob o mesmo Root. Mesmos values. */}
+      <Tabs value={aba} onValueChange={setAba} className="space-y-5">
+        <PageHeader
+          title="Ranking de Vendas"
+          subtitle="Acompanhe a competição do time"
+          actions={
+            <>
+              <Select 
+                value={selectedMonth.toString()} 
+                onValueChange={(v) => setSelectedMonth(Number(v))}
+              >
+                <SelectTrigger className="w-[130px]" aria-label="Mês">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((month, index) => (
+                    <SelectItem key={index} value={(index + 1).toString()}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select 
+                value={selectedYear.toString()} 
+                onValueChange={(v) => setSelectedYear(Number(v))}
+              >
+                <SelectTrigger className="w-[90px]" aria-label="Ano">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026, 2027].map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {aba === "gestao" ? (
+                <Button onClick={() => { setEditingGoal(null); setGoalDialogOpen(true); }}>
+                  <Plus />
+                  Nova Meta
+                </Button>
+              ) : (
+                <Button variant="ink" asChild>
+                  <Link to="/tv">
+                    <Tv />
+                    Modo TV
+                  </Link>
+                </Button>
+              )}
+            </>
+          }
+          tabs={
+            // Com uma aba só (sem permissão de gestão) a pílula repetiria o
+            // título; ela só aparece quando há para onde navegar.
+            canManageGoals ? (
+              <TabsList variant="pill" aria-label="Seções do ranking">
+                <TabsTrigger value="ranking_vendas">
+                  <Trophy className="h-3.5 w-3.5" />
+                  Ranking de Vendas
+                </TabsTrigger>
+                <TabsTrigger value="gestao">
+                  <Users className="h-3.5 w-3.5" />
+                  Gestão
+                </TabsTrigger>
+              </TabsList>
+            ) : undefined
+          }
+        />
 
         {/* ========== RANKING VENDAS TAB ========== */}
-        <TabsContent value="ranking_vendas" className="space-y-6">
-          {activeCompetition ? (
-            <>
-              <CompetitionHeader
-                competition={activeCompetition}
-                participantCount={visibleParticipantsCount}
-              />
-              <CompetitionPodiumV2
-                users={compPodiumUsers}
-                prizes={podiumPrizes}
-                metricType={activeCompetition.metric_type}
-                getChange={rankingTransitions.getChange}
-                isAnimatingTransitions={rankingTransitions.isAnimating}
-                previousRanking={rankingTransitions.previousRanking}
-              />
-              {restUsers.length > 0 && (
-                <CompetitionRankingListV2
-                  users={restUsers}
-                  metricType={activeCompetition.metric_type}
-                  getChange={rankingTransitions.getChange}
-                  isAnimatingTransitions={rankingTransitions.isAnimating}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <EmptyCompetitionState
-                onCreateClick={() => setShowCreateCompetition(true)}
-                onSeedClick={handleSeedCompetition}
-                isSeeding={isSeeding}
-              />
-              {/* Fallback: simple ranking without competition */}
-              {rankingData && (rankingData.salesRanking.length > 0 || rankingData.meetingsRanking.length > 0) && (
-                <div className="space-y-6 opacity-60">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Ranking Simples</h3>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Closers */}
-                    <Card className="glass-card">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4 text-primary" />
-                          Ranking Vendas
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {closers.length > 0 ? (
-                          closers.map((user) => (
-                            <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
-                          ))
-                        ) : (
-                          <p className="text-muted-foreground text-center py-8">Nenhum membro de vendas com faturamento.</p>
-                        )}
-                      </CardContent>
-                    </Card>
+        <TabsContent value="ranking_vendas" className="mt-0 space-y-5">
+          {/* Movimentações do mês do cabeçalho — conta por data de movimentação
+              (evento no ledger), não por criação do lead. Antes tinha seletor
+              próprio e aparecia também na aba Gestão. */}
+          <MovimentacoesPanel
+            mesAno={{ month: selectedMonth, year: selectedYear, label: mesLabel }}
+            extra={metaDoTimeTile}
+          />
 
-                    {/* SDRs */}
-                    <Card className="glass-card">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-chart-5" />
-                          Ranking Reuniões
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {sdrs.length > 0 ? (
-                          sdrs.map((user) => (
-                            <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
-                          ))
-                        ) : (
-                          <p className="text-muted-foreground text-center py-8">Nenhum membro de reuniões com dados.</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+          <PodioHero
+            titulo={`Pódio de ${mesLabel}`}
+            count={
+              activeCompetition
+                ? `${activeCompetition.metric_type === "sales" ? "Venda" : "Reuniões"} · competição`
+                : visao === "venda"
+                  ? "Venda · valor fechado"
+                  : "Pré-venda · reuniões realizadas"
+            }
+            actions={!activeCompetition ? <AlternadorVisao value={visao} onChange={setVisao} naTinta /> : undefined}
+            podio={
+              podioUsuarios.length > 0 ? (
+                <CompetitionPodiumV2
+                  users={podioUsuarios}
+                  prizes={activeCompetition ? podiumPrizes : []}
+                  metricType={podioMetric}
+                  getChange={activeCompetition ? rankingTransitions.getChange : undefined}
+                  isAnimatingTransitions={activeCompetition ? rankingTransitions.isAnimating : false}
+                  previousRanking={activeCompetition ? rankingTransitions.previousRanking : null}
+                />
+              ) : (
+                <p className="py-12 text-center text-[13px] text-tinta-muted">
+                  {isLoading ? "Carregando o ranking…" : "Ninguém pontuou neste mês ainda."}
+                </p>
+              )
+            }
+            lateral={
+              activeCompetition ? (
+                <VidroCompeticao
+                  competition={activeCompetition}
+                  participantes={visibleParticipantsCount}
+                  premios={podiumPrizes}
+                  top3={competitionRanking.slice(0, 3).map((u) => ({ id: u.id, name: u.name, value: u.value }))}
+                />
+              ) : (
+                <VidroSemCompeticao
+                  onCriar={() => setShowCreateCompetition(true)}
+                  onDemo={handleSeedCompetition}
+                  criandoDemo={isSeeding}
+                />
+              )
+            }
+          />
+
+          <ClassificacaoCompleta
+            linhas={linhasClassificacao}
+            metrica={podioMetric}
+            subtitulo={
+              activeCompetition
+                ? `${activeCompetition.name} · ${months[selectedMonth - 1]} ${selectedYear}`
+                : `${visao === "venda" ? "Venda · valor fechado no mês" : "Pré-venda · reuniões no mês"} · ${months[selectedMonth - 1]} ${selectedYear}`
+            }
+            alternador={!activeCompetition ? <AlternadorVisao value={visao} onChange={setVisao} /> : undefined}
+            mostrarPosicao={!!activeCompetition}
+          />
         </TabsContent>
 
         {/* ========== GESTÃO TAB (Admin only) ========== */}
         {canManageGoals && (
-          <TabsContent value="gestao" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Target className="w-5 h-5 text-primary" />
-                Gestão de Metas
-              </h2>
-              <Button onClick={() => { setEditingGoal(null); setGoalDialogOpen(true); }} className="gradient-gold">
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Meta
-              </Button>
+          <TabsContent value="gestao" className="mt-0 space-y-5">
+            <div>
+              <h2 className="text-[17px] font-bold tracking-[-0.02em]">Gestão de Metas</h2>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Metas de {mesLabel} de {selectedYear} · apenas administradores editam · valem para o ranking e as comissões
+              </p>
             </div>
 
-            {/* Team Goals */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Metas do Time
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {teamGoalsFiltered.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
+            <section className="space-y-2.5">
+              <p className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                Metas do time
+                <span className="normal-case tracking-normal">
+                  {teamGoalsFiltered.length} {teamGoalsFiltered.length === 1 ? "meta ativa" : "metas ativas"}
+                </span>
+              </p>
+              {teamGoalsFiltered.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-[13px] text-muted-foreground">
                     Nenhuma meta do time configurada para {months[selectedMonth - 1]} {selectedYear}.
-                  </p>
-                ) : (
-                  <div className="grid gap-3">
-                    {teamGoalsFiltered.map((goal) => {
-                      const typeInfo = getGoalTypeInfo(goal.type);
-                      return (
-                        <div key={goal.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">{typeInfo.icon}</span>
-                            <div>
-                              <p className="font-medium">{goal.name || typeInfo.label}</p>
-                              <Badge variant="outline" className="mt-1">{typeInfo.label}</Badge>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-primary">
-                                {formatValue(goal.type, goal.target_value)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">Meta</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" onClick={() => { setEditingGoal(goal); setGoalDialogOpen(true); }}>
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => setDeleteGoalId(goal.id)}>
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              ) : (
+                <MetasDoTime
+                  metas={metasDoTime}
+                  onEditar={(g) => { setEditingGoal(g); setGoalDialogOpen(true); }}
+                />
+              )}
+            </section>
 
-            {/* Individual Goals */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="w-4 h-4" />
-                  Metas Individuais
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {individualGoalsFiltered.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    Nenhuma meta individual configurada para {months[selectedMonth - 1]} {selectedYear}.
-                  </p>
-                ) : (
-                  <div className="grid gap-3">
-                    {individualGoalsFiltered.map((goal) => {
-                      const typeInfo = getGoalTypeInfo(goal.type);
-                      return (
-                        <div key={goal.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <UserAvatar
-                              name={getMemberName(goal.team_member_id)}
-                              avatarUrl={avatarMap.get(goal.team_member_id)}
-                              size="md"
-                              fallbackClassName="bg-primary/10 text-primary"
-                            />
-                            <div>
-                              <p className="font-medium">{getMemberName(goal.team_member_id)}</p>
-                              <Badge variant="outline" className="mt-1">{typeInfo.label}</Badge>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-primary">
-                                {formatValue(goal.type, goal.target_value)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">Meta</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" onClick={() => { setEditingGoal(goal); setGoalDialogOpen(true); }}>
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => setDeleteGoalId(goal.id)}>
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <MetasIndividuais
+              pessoas={pessoasComMetas}
+              onNova={() => { setEditingGoal(null); setGoalDialogOpen(true); }}
+              onEditar={(g) => { setEditingGoal(g); setGoalDialogOpen(true); }}
+              onExcluir={(id) => setDeleteGoalId(id)}
+            />
 
             {/* Competition Management */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-yellow-500" />
-                Competição do Mês
-              </h2>
-              {!activeCompetition && (
-                <Button onClick={() => setShowCreateCompetition(true)} variant="outline" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Criar Competição
-                </Button>
-              )}
-            </div>
-
-            {activeCompetition ? (
-              <Card className="glass-card">
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      🏆 {activeCompetition.name}
-                      <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-500/30 text-[10px] font-bold uppercase ml-2">
-                        Ativo
-                      </Badge>
-                    </CardTitle>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setEditingCompetition(true)}>
-                        <Edit2 className="w-4 h-4" />
-                        Editar
-                      </Button>
-                      <Button variant="ghost" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setCancelCompetitionOpen(true)}>
-                        <Trash2 className="w-4 h-4" />
-                        Cancelar competição
-                      </Button>
+            <Card>
+              <CardHeader className="flex flex-row flex-wrap items-start gap-3 space-y-0 pb-3">
+                <div className="min-w-[12rem] flex-1">
+                  <CardTitle className="flex items-center gap-2 text-[15px] tracking-[-0.02em]">
+                    <IconChip icon={Trophy} tone="gold" />
+                    Competição do Mês
+                  </CardTitle>
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">Aparece no Ranking, no Comando e no Modo TV</p>
+                </div>
+                {activeCompetition ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => setEditingCompetition(true)}>
+                      <Edit2 />
+                      Editar
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setCancelCompetitionOpen(true)}>
+                      <Trash2 />
+                      Cancelar competição
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={() => setShowCreateCompetition(true)} variant="ink" size="sm">
+                    <Plus />
+                    Criar Competição
+                  </Button>
+                )}
+              </CardHeader>
+              {activeCompetition ? (
+                <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-[1.2rem] font-extrabold tracking-[-0.03em]">{activeCompetition.name}</span>
+                      <Badge variant="success" className="text-[10px] font-bold uppercase tracking-[.06em]">Ativo</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                      <div className="rounded-2xl bg-sunken p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Tipo</p>
+                        <p className="mt-0.5 font-semibold">{activeCompetition.metric_type === "sales" ? "Vendas" : "Reuniões"}</p>
+                      </div>
+                      <div className="rounded-2xl bg-sunken p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Critério</p>
+                        <p className="mt-0.5 font-semibold">{activeCompetition.criteria === "absolute_value" ? "Valor absoluto" : "% da meta"}</p>
+                      </div>
+                      <div className="rounded-2xl bg-sunken p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Participantes</p>
+                        <p className="mt-0.5 font-semibold tabular-nums">{visibleParticipantsCount} vendedores</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        Participantes
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {participants
+                          .filter((p) => visibleMemberIds.has(p.team_member_id) && !isVirtualTeamMember(p.team_member_id))
+                          .map((p) => {
+                            const member = teamMembers.find(m => m.id === p.team_member_id);
+                            return (
+                              <div key={p.id} className="flex items-center gap-2 rounded-full bg-muted py-1 pl-1 pr-3">
+                                <UserAvatar name={member?.name || "?"} avatarUrl={avatarMap.get(p.team_member_id)} size="xs" />
+                                <span className="text-sm font-medium">{member?.name || "Desconhecido"}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Competition Info */}
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <p className="text-muted-foreground text-xs">Tipo</p>
-                      <p className="font-semibold">{activeCompetition.metric_type === "sales" ? "Vendas" : "Reuniões"}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <p className="text-muted-foreground text-xs">Critério</p>
-                      <p className="font-semibold">{activeCompetition.criteria === "absolute_value" ? "Valor absoluto" : "% da meta"}</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <p className="text-muted-foreground text-xs">Participantes</p>
-                      <p className="font-semibold">{visibleParticipantsCount} vendedores</p>
-                    </div>
-                  </div>
-
-                  {/* Prizes */}
                   <div>
-                    <p className="text-sm font-semibold mb-2 flex items-center gap-2">
-                      <Gift className="w-4 h-4" />
+                    <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+                      <Gift className="h-3.5 w-3.5" />
                       Prêmios por Colocação
                     </p>
                     <div className="space-y-2">
                       {prizes.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Nenhum prêmio configurado.</p>
+                        <p className="text-[13px] text-muted-foreground">Nenhum prêmio configurado.</p>
                       ) : (
-                        prizes.sort((a, b) => a.position - b.position).map((prize) => (
-                          <div key={prize.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <div className="flex items-center gap-3">
+                        [...prizes].sort((a, b) => a.position - b.position).map((prize) => (
+                          <div key={prize.id} className="flex items-center justify-between gap-3 rounded-2xl bg-sunken p-3">
+                            <div className="flex min-w-0 items-center gap-3">
                               <span className="text-lg">{prize.prize_icon}</span>
-                              <div>
-                                <p className="text-sm font-semibold">{prize.position}º Lugar — {prize.prize_name}</p>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold">{prize.position}º Lugar — {prize.prize_name}</p>
                                 {prize.prize_description && (
                                   <p className="text-xs text-muted-foreground">{prize.prize_description}</p>
                                 )}
                               </div>
                             </div>
                             {prize.prize_value != null && (
-                              <span className="text-sm font-bold text-primary">
+                              <span className="shrink-0 text-sm font-extrabold tabular-nums">
                                 R$ {prize.prize_value.toLocaleString("pt-BR")}
                               </span>
                             )}
@@ -1475,41 +1374,21 @@ export default function Performance() {
                       )}
                     </div>
                   </div>
-
-                  {/* Participants list */}
-                  <div>
-                    <p className="text-sm font-semibold mb-2 flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Participantes
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {participants
-                        .filter((p) => visibleMemberIds.has(p.team_member_id) && !isVirtualTeamMember(p.team_member_id))
-                        .map((p) => {
-                          const member = teamMembers.find(m => m.id === p.team_member_id);
-                          return (
-                            <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50">
-                              <UserAvatar name={member?.name || "?"} avatarUrl={avatarMap.get(p.team_member_id)} size="xs" />
-                              <span className="text-sm">{member?.name || "Desconhecido"}</span>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
                 </CardContent>
-              </Card>
-            ) : (
-              <Card className="glass-card">
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <Trophy className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Nenhuma competição ativa para {months[selectedMonth - 1]} {selectedYear}.</p>
-                  <p className="text-xs mt-1">Crie uma competição para motivar o time.</p>
+              ) : (
+                <CardContent className="flex flex-col items-center py-8 text-center">
+                  <span className="mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                    <Trophy className="h-5 w-5" />
+                  </span>
+                  <p className="text-sm font-semibold">Nenhuma competição ativa para {months[selectedMonth - 1]} {selectedYear}.</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">Crie uma competição para motivar o time.</p>
                 </CardContent>
-              </Card>
-            )}
+              )}
+            </Card>
           </TabsContent>
         )}
       </Tabs>
+
 
       {/* Dialogs */}
       <GoalFormDialog
@@ -1520,6 +1399,7 @@ export default function Performance() {
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
         onSave={handleSaveGoal}
+        onDelete={(id) => setDeleteGoalId(id)}
       />
 
       <AwardFormDialog
@@ -1539,7 +1419,12 @@ export default function Performance() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteGoal}>Excluir</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleDeleteGoal}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1585,6 +1470,6 @@ export default function Performance() {
           prize_icon: p.prize_icon,
         }))}
       />
-    </div>
+    </>
   );
 }

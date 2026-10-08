@@ -1,0 +1,231 @@
+name: Deploy Front (Cloudflare)
+
+# Publica o front (SPA dual V5 + clássica) no Worker `torque-front`, em degraus:
+# versão nova a 0 % → smoke A (com override) → 100 % → smoke B → rollback
+# automático se o B falhar. Operação, rollbacks e passo a passo do CTO:
+# docs/DEPLOY_CLOUDFLARE.md, seção "Pipeline".
+#
+# Dois jobs, dois environments — cada segredo só chega ao job que o usa:
+#   build  (front-build)      → VITE_* (variáveis) + SENTRY_AUTH_TOKEN (só no step da build)
+#   deploy (front-production) → CLOUDFLARE_API_TOKEN (só no step do ci-deploy)
+# O repositório é PÚBLICO: log e artifact são públicos. Por isso nada de
+# `set -x`, nada de despejar o ambiente, e o artifact é cloudflare/.assets (o
+# que já vai ser servido, sem source map) — nunca dist/.
+#
+# Rollback manual: Run workflow com `rollback_to` = version id.
+# Drill de rollback: Run workflow com `drill` (só aceito com CF_SMOKE_URL em
+# *.workers.dev — o ci-deploy recusa no domínio real).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rollback_to:
+        description: "Version id para voltar a 100 % (vazio = deploy normal do HEAD da main)"
+        type: string
+        required: false
+        default: ""
+      drill:
+        description: "Drill: promove e força o rollback automático (só com CF_SMOKE_URL em *.workers.dev)"
+        type: boolean
+        required: false
+        default: false
+
+permissions: {}
+
+# Um deploy por vez, até o fim: cancelar no meio deixaria a versão nova a 0 %
+# ou sem o smoke B. O GitHub guarda só o mais novo na fila — a main mais
+# recente vence.
+concurrency:
+  group: front-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (dual + cf:prepare)
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.rollback_to == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: front-build
+    permissions:
+      contents: read
+    # Espelho do builder do Dockerfile (ARG/ENV/RUN, linhas 18-65), enquanto ele existir:
+    # mesmos nomes, os MESMOS defaults (literais: o EasyPanel não sobrescreve
+    # nenhum, medido em 2026-10-07) e toda VITE_* do ENV definida, vazia se não
+    # houver valor — `import.meta.env.X` vazia vira "" no bundle; ausente vira
+    # `void 0`, e o bundle deixa de ser byte a byte o do EasyPanel.
+    # Variáveis do environment front-build: as 5 obrigatórias (check-build-env)
+    # + VITE_CALENDAR_SERVICE_URL; as outras sem default ficam vazias, como lá.
+    # tests/unit/cloudflare/build-env-drift.test.ts quebra se divergirem.
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID }}
+      VITE_CALENDAR_SERVICE_URL: ${{ vars.VITE_CALENDAR_SERVICE_URL }}
+      VITE_INVITE_API_URL: ${{ vars.VITE_INVITE_API_URL }}
+      VITE_META_APP_ID: ${{ vars.VITE_META_APP_ID }}
+      VITE_META_WA_CONFIG_ID: ${{ vars.VITE_META_WA_CONFIG_ID }}
+      # Fase de prova: sem valor, como no EasyPanel (prod mostra "0.0.0"), para a
+      # paridade bater byte a byte. Passa a `sha-<sha>` num PR separado.
+      VITE_APP_VERSION: ''
+      VITE_SENTRY_DSN: https://e85f15eeea72098a71636681f0574932@o4512181312946176.ingest.de.sentry.io/4512181365702736
+      VITE_SENTRY_ENVIRONMENT: ${{ vars.VITE_SENTRY_ENVIRONMENT }}
+      VITE_SENTRY_REPLAY_ON_ERROR_RATE: ${{ vars.VITE_SENTRY_REPLAY_ON_ERROR_RATE }}
+      SENTRY_ORG: torquecrm
+      SENTRY_PROJECT: torque-web
+      SENTRY_URL: https://de.sentry.io
+      VITE_CHAT_ONDA_2B: 'true'
+      VITE_CHAT_BUBBLE: 'true'
+      VITE_UI_SWITCH: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Sem cache de pacote neste workflow: ele carrega segredo, e o cache da main
+      # é gravável por qualquer workflow que rode lá (o test.yml roda `npm ci`
+      # COM scripts de instalação). Recomendação do setup-node desde a v7 (#1567).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Ambiente da build (VITE_* obrigatórias, nenhuma com cara de segredo)
+        run: npm run cf:ci:check-env
+
+      - name: Dependências (sem scripts de instalação)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # O único step que vê o token do Sentry. Upload falho não derruba a build
+      # (@sentry/vite-plugin 5.4.0, medido: docs/DEPLOY_CLOUDFLARE.md, "Sentry"),
+      # e token AUSENTE também não: a build sai sem upload, com ::warning::. Só
+      # token PESSOAL (sntryu_) derruba, antes de buildar.
+      - name: Build dual (V5 + clássica) com upload de source map
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          npm run cf:ci:check-env -- --sentry-token
+          npm run build:dual
+
+      - name: cf:prepare (tira source map, recusa segredo, gera _headers)
+        run: npm run cf:prepare -- --from dist
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: front-assets-${{ github.sha }}
+          path: cloudflare/.assets
+          # _headers e .assetsignore são gerados; .well-known/ é servido.
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          # "Re-run all jobs" sobe de novo com o mesmo nome.
+          overwrite: true
+
+  deploy:
+    name: Deploy (0 % → smoke A → 100 % → smoke B)
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Pior caso do ci-deploy, com todo prazo estourando (scripts/cloudflare/ci-deploy.mjs
+    # TIMEOUTS/RETRY e smoke.mjs LIMITS; cada smoke dura no máximo retry + 60 s):
+    #   git ls-remote 15 s + status 60 + upload 300 + 0 % 60 + smoke A (120+60)
+    #   + 100 % 60 + triggers 60 + smoke B (180+60) + rollback 60
+    #   + smoke da anterior (180+60) = 1.275 s ≈ 21,3 min.
+    # Step com 24 min (folga de 2,75 min); job com 30 (checkout, node, npm ci e
+    # download levam ~2 min). Se o step estourar, o runner manda SIGINT e o
+    # ci-deploy desfaz a promoção sem B verde antes do SIGKILL.
+    timeout-minutes: 30
+    environment:
+      name: front-production
+      url: ${{ vars.CF_SMOKE_URL }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      # O wrangler fixado em cloudflare/package-lock.json (o mesmo do cf:dev e da
+      # paridade), não o cloudflare/wrangler-action.
+      - name: wrangler (sem scripts de instalação)
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix cloudflare
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: front-assets-${{ github.sha }}
+          path: cloudflare/.assets
+
+      - name: Deploy gradual com rollback automático
+        timeout-minutes: 24
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # Só para o passo 0 (git ls-remote do HEAD da main) funcionar também se o
+          # repo virar privado. Token do job, `contents: read`; o ci-deploy o passa
+          # ao git por GIT_CONFIG_* (nunca argv) e o tira do ambiente do wrangler.
+          GITHUB_TOKEN: ${{ github.token }}
+          CF_SMOKE_URL: ${{ vars.CF_SMOKE_URL }}
+          DRILL: ${{ inputs.drill }}
+          WRANGLER_SEND_METRICS: 'false'
+          CI: 'true'
+        run: |
+          args=(--smoke-url "$CF_SMOKE_URL" --tag "$GITHUB_SHA" --message "GitHub Actions run $GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT" --summary "$RUNNER_TEMP/front-deploy-summary.md")
+          if [ "$DRILL" = "true" ]; then args+=(--drill); fi
+          # exec: o node recebe o SIGINT/SIGTERM do runner direto, sem o bash no meio.
+          exec node scripts/cloudflare/ci-deploy.mjs "${args[@]}"
+
+      - name: Resumo
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/front-deploy-summary.md" ]; then cat "$RUNNER_TEMP/front-deploy-summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+  rollback:
+    name: Rollback manual (versions deploy <id>@100 %)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.rollback_to != ''
+    runs-on: ubuntu-latest
+    # status 60 s + deploy 60 + smoke (180+60) = 360 s = 6 min; step 9, job 15.
+    timeout-minutes: 15
+    environment:
+      name: front-production
+      url: ${{ vars.CF_SMOKE_URL }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: wrangler (sem scripts de instalação)
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix cloudflare
+
+      # O id chega por variável de ambiente e o ci-deploy exige UUID: nada do
+      # input é interpolado no script.
+      - name: Rollback + smoke autoconsistente
+        timeout-minutes: 9
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CF_SMOKE_URL: ${{ vars.CF_SMOKE_URL }}
+          ROLLBACK_TO: ${{ inputs.rollback_to }}
+          DRILL: ${{ inputs.drill }}
+          WRANGLER_SEND_METRICS: 'false'
+          CI: 'true'
+        run: |
+          if [ "$DRILL" = "true" ]; then echo "::error::drill e rollback_to não combinam"; exit 2; fi
+          exec node scripts/cloudflare/ci-deploy.mjs --rollback-to "$ROLLBACK_TO" --smoke-url "$CF_SMOKE_URL" --summary "$RUNNER_TEMP/front-deploy-summary.md"
+
+      - name: Resumo
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/front-deploy-summary.md" ]; then cat "$RUNNER_TEMP/front-deploy-summary.md" >> "$GITHUB_STEP_SUMMARY"; fi

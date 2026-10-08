@@ -18,6 +18,7 @@ import type {
   TicketStatus,
   TicketTipo,
 } from "@/modules/platform/lib/support-ticket-draft";
+import type { OperacaoColumn } from "../lib/operacao-kanban";
 import { useMasterAuth } from "./useMasterAuth";
 
 export type MasterSupportTicket = Tables<"support_tickets"> & {
@@ -218,6 +219,83 @@ export function useCreateStaffComment() {
     onSuccess: (_data, { ticketId }) => {
       queryClient.invalidateQueries({ queryKey: ["support-ticket-comments", ticketId] });
       queryClient.invalidateQueries({ queryKey: [QUEUE_KEY] });
+    },
+  });
+}
+
+/**
+ * O que o kanban da Operação precisa saber do diagnóstico de cada Chamado —
+ * só os campos que decidem coluna e cartão, nunca o prompt (que pode ter 60 KB).
+ */
+export type TicketDiagnosisDigest = Pick<
+  Tables<"support_ticket_diagnoses">,
+  | "ticket_id"
+  | "kind"
+  | "complexity"
+  | "customer_reply"
+  | "estimated_cost_usd"
+  | "actual_cost_usd"
+  | "executed_at"
+  | "execution_outcome"
+>;
+
+export function useMasterDiagnosisDigests(ticketIds: readonly string[]) {
+  const { isMaster } = useMasterAuth();
+  // Ordenado: a mesma fila em outra ordem não vira outra query.
+  const ids = [...ticketIds].sort();
+
+  return useQuery({
+    queryKey: ["master-ticket-diagnosis", "digests", ids],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("support_ticket_diagnoses")
+        .select(
+          "ticket_id, kind, complexity, customer_reply, estimated_cost_usd, actual_cost_usd, executed_at, execution_outcome",
+        )
+        .in("ticket_id", ids);
+      if (error) throw error;
+      return new Map((data as TicketDiagnosisDigest[]).map((d) => [d.ticket_id, d]));
+    },
+    enabled: isMaster && ids.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * O movimento livre do master no kanban da Operação (emenda ao ADR-0018).
+ *
+ * Uma porta só: `master_ticket_move` (migration 20271108000300). A RPC muda o
+ * estado, ajusta o relógio sem contar reabertura, atribui quem moveu quando o
+ * chamado vai para Em andamento sem dono, e grava a auditoria — tudo numa
+ * transação. Com `sendReply`, envia a resposta pronta do diagnóstico como
+ * comentário público na mesma transação (OP-9). UPDATE direto de status pelo
+ * front não é caminho: o gatilho segue recusando fechar e reabrir fechado.
+ */
+export function useMoveOperacaoTicket() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      ticketId,
+      to,
+      sendReply = false,
+    }: {
+      ticketId: string;
+      to: OperacaoColumn;
+      /** Só para `aguardando`: envia o `customer_reply` do diagnóstico ao cliente. */
+      sendReply?: boolean;
+    }) => {
+      const { data, error } = await supabase.rpc("master_ticket_move", {
+        p_ticket_id: ticketId,
+        p_to_column: to,
+        p_send_reply: sendReply,
+      });
+      if (error) throw error;
+      return data as Tables<"support_tickets">;
+    },
+    onSettled: (_d, _e, { ticketId }) => {
+      queryClient.invalidateQueries({ queryKey: [QUEUE_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["support-ticket-comments", ticketId] });
     },
   });
 }

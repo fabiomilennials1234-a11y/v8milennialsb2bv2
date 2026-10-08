@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Check, X } from "lucide-react";
 import type { UnifiedEvent } from "./agenda-helpers";
 import { initialsOf, isFinishedEvent, outcomeOf } from "./agenda-helpers";
+import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 interface MonthEventPillProps {
   event: UnifiedEvent;
@@ -31,7 +32,7 @@ export function MonthEventPill({
 
   return (
     <button
-      className="flex w-full items-center gap-1 rounded border-l-2 px-1.5 py-px text-left text-[10px] leading-snug text-foreground transition-all hover:brightness-110"
+      className="flex w-full items-center gap-1 rounded-md border-l-2 px-1.5 py-px text-left text-[10px] font-medium leading-snug text-foreground transition-all hover:brightness-110"
       style={{
         // A cor da fonte fica na borda e no banho de fundo, nunca no texto: o
         // ouro (`meeting`) sobre o creme do tema claro dá ~1,7:1 — o mesmo
@@ -46,7 +47,7 @@ export function MonthEventPill({
       }}
       title={[
         `${hora} · ${event.title}`,
-        event.creatorName ? `Responsável: ${event.creatorName}` : null,
+        event.creatorName ? `${agendaAttributionLabel(event.source)}: ${event.creatorName}` : null,
         resultado === "compareceu"
           ? "Compareceu"
           : resultado === "nao_compareceu"
@@ -58,7 +59,10 @@ export function MonthEventPill({
     >
       {/* O resultado precisa ser legível na grade, sem abrir o evento. Ícone
           antes do texto, e não só cor — daltônico e impressão em preto e
-          branco continuam funcionando (DESIGN.md § Cor). */}
+          branco continuam funcionando (DESIGN.md § Cor).
+          Par de escala `x dark:y`, e não `text-success`/`text-destructive`:
+          sobre o banho da pílula os tokens de preenchimento não chegam a 3:1
+          no tema claro (medição em `AgendaOutcomeToggle`). */}
       {resultado === "compareceu" && (
         <Check
           className="h-2.5 w-2.5 shrink-0 text-emerald-700 dark:text-emerald-300"

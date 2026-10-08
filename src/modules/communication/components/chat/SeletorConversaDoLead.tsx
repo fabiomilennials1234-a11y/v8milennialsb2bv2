@@ -108,7 +108,7 @@ export function SeletorConversaDoLead({
                   <span className="block truncate text-sm font-medium">{row.instanceName}</span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                     {row.lastMessageDirection === "incoming" ? (
-                      <ArrowDownLeft className="size-3 shrink-0 text-emerald-500" aria-label="recebida" />
+                      <ArrowDownLeft className="size-3 shrink-0 text-success" aria-label="recebida" />
                     ) : (
                       <ArrowUpRight className="size-3 shrink-0" aria-label="enviada" />
                     )}

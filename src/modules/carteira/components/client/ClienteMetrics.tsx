@@ -4,9 +4,9 @@ import {
   RefreshCw,
   ShoppingCart,
   Calendar,
-  Heart,
+  HeartPulse,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateShort } from "@/lib/format";
 
@@ -28,119 +28,100 @@ interface ClienteMetricsProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Mesmas faixas de antes (80/60), em token. */
 function healthColor(score: number | null | undefined) {
   const s = score ?? 0;
-  if (s >= 80) return "text-emerald-400";
-  if (s >= 60) return "text-amber-400";
-  return "text-red-400";
+  if (s >= 80) return "text-success";
+  if (s >= 60) return "text-warning-strong";
+  return "text-destructive";
 }
 
 function healthBarColor(score: number | null | undefined) {
   const s = score ?? 0;
-  if (s >= 80) return "bg-emerald-400";
-  if (s >= 60) return "bg-amber-400";
-  return "bg-red-400";
+  if (s >= 80) return "bg-success";
+  if (s >= 60) return "bg-warning";
+  return "bg-destructive";
 }
 
-// ─── Sub-component ────────────────────────────────────────────────────────────
-
-interface MetricCardProps {
-  label: string;
-  value: React.ReactNode;
-  icon: React.ReactNode;
-  sub?: React.ReactNode;
-}
-
-function MetricCard({ label, value, icon, sub }: MetricCardProps) {
-  return (
-    <Card className="bg-card border-border hover:border-border transition-colors">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-              {label}
-            </span>
-            <span className="text-xl font-semibold text-foreground tabular-nums leading-tight">
-              {value}
-            </span>
-            {sub && <span className="text-xs text-muted-foreground mt-0.5">{sub}</span>}
-          </div>
-          <div className="shrink-0 text-muted-foreground mt-0.5">{icon}</div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function healthTone(score: number) {
+  if (score >= 80) return "good" as const;
+  if (score >= 60) return "neutral" as const;
+  return "bad" as const;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
+//
+// V5 (2026-10): os seis cartões viram `KpiTile`. Mesmos valores e legendas.
 
 export function ClienteMetrics({ client }: ClienteMetricsProps) {
   const score = client.health_score ?? 0;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-      <MetricCard
+    <KpiRow cols={3}>
+      <KpiTile
         label="LTV"
         value={client.lifetime_value != null ? formatBRL(client.lifetime_value) : "—"}
-        icon={<DollarSign size={16} />}
-        sub="valor total acumulado"
+        icon={DollarSign}
+        tone="gold"
+        note="valor total acumulado"
       />
 
-      <MetricCard
-        label="Ticket Médio"
+      <KpiTile
+        label="Ticket médio"
         value={client.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"}
-        icon={<Receipt size={16} />}
-        sub="por pedido"
+        icon={Receipt}
+        tone="info"
+        note="por pedido"
       />
 
-      <MetricCard
+      <KpiTile
         label="Ciclo"
         value={client.reorder_cycle_days != null ? `${client.reorder_cycle_days} dias` : "—"}
-        icon={<RefreshCw size={16} />}
-        sub={(client.order_count ?? 0) < 2 ? "estimado — poucos pedidos" : "entre pedidos"}
+        icon={RefreshCw}
+        tone="neutral"
+        note={(client.order_count ?? 0) < 2 ? "estimado — poucos pedidos" : "entre pedidos"}
       />
 
-      <MetricCard
+      <KpiTile
         label="Pedidos"
         value={client.order_count ?? "—"}
-        icon={<ShoppingCart size={16} />}
-        sub="total histórico"
+        icon={ShoppingCart}
+        tone="neutral"
+        note="total histórico"
       />
 
-      <MetricCard
-        label="Próx. Pedido"
+      <KpiTile
+        label="Próximo pedido"
         value={
           client.next_order_expected
             ? formatDateShort(client.next_order_expected)
             : "Sem dados"
         }
-        icon={<Calendar size={16} />}
-        sub={(client.order_count ?? 0) < 2 && client.next_order_expected ? "baseado em estimativa" : undefined}
+        icon={Calendar}
+        tone="neutral"
+        note={(client.order_count ?? 0) < 2 && client.next_order_expected ? "baseado em estimativa" : undefined}
       />
 
-      {/* Health card — custom */}
-      <Card className="bg-card border-border hover:border-border transition-colors">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex flex-col gap-0.5 min-w-0 w-full">
-              <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
-                Health
-              </span>
-              <span className={cn("text-xl font-semibold tabular-nums leading-tight", healthColor(score))}>
-                {score}
-              </span>
-              {/* Progress bar */}
-              <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn("h-full rounded-full transition-all", healthBarColor(score))}
-                  style={{ width: `${Math.min(score, 100)}%` }}
-                />
-              </div>
-            </div>
-            <Heart size={16} className={cn("shrink-0 mt-0.5", healthColor(score))} />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      <KpiTile
+        label="Health"
+        value={<span className={healthColor(score)}>{score}</span>}
+        icon={HeartPulse}
+        tone={healthTone(score)}
+      >
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-label="Health score"
+          aria-valuenow={Math.min(score, 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all", healthBarColor(score))}
+            style={{ width: `${Math.min(score, 100)}%` }}
+          />
+        </div>
+      </KpiTile>
+    </KpiRow>
   );
 }

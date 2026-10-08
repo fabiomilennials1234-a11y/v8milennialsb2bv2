@@ -21,7 +21,7 @@ function CodeJsonNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="code_json"
-      icon={<Braces className="w-5 h-5 text-emerald-500" />}
+      icon={<Braces />}
       title={nodeData.label || "JSON"}
       subtitle={buildSubtitle(nodeData)}
       selected={selected}

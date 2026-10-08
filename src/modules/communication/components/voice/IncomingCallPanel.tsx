@@ -72,33 +72,33 @@ function CartaoDeEntrada({
     <div
       role="alert"
       aria-live="assertive"
-      className="w-full overflow-hidden rounded-xl border border-accent/40 bg-card shadow-2xl"
+      className="w-full overflow-hidden rounded-card border border-tinta-line/60 bg-tinta text-tinta-foreground shadow-relevo-tinta"
     >
       <div className="flex items-center gap-3 p-4">
-        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10">
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary">
           {/* O halo pulsa enquanto a oferta está viva. Ele some junto com o
               cartão — não há estado "tocou e parou". */}
-          <span className="absolute inset-0 animate-ping rounded-full bg-accent/20" />
-          <PhoneIncoming className="relative h-4 w-4 text-accent" />
+          <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
+          <PhoneIncoming className="relative h-5 w-5 text-primary-foreground" />
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{titulo}</p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-[15px] font-bold">{titulo}</p>
+          <p className="truncate text-xs text-tinta-muted">
             Chamando em {call.instanceName}
             {/* O telefone volta a aparecer ao lado do nome: é ele que o vendedor
                 confere quando o cadastro tem homônimo. */}
             {nome && telefone && (
-              <span className="text-muted-foreground/70"> · {telefone}</span>
+              <span className="font-mono"> · {telefone}</span>
             )}
           </p>
         </div>
       </div>
 
       {silenced && (
-        <div className="flex items-center gap-2 border-t border-border/40 bg-background/40 px-4 py-2">
+        <div className="mx-4 mb-3 flex items-center gap-2 rounded-xl bg-white/[.06] px-3 py-2">
           <BellOff className="h-3.5 w-3.5 shrink-0 text-warning" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-tinta-muted">
             Sem som — o navegador só libera o toque depois que você clicar na
             página.
           </p>
@@ -106,26 +106,24 @@ function CartaoDeEntrada({
       )}
 
       {/* ─── As duas ações, e elas NÃO são simétricas ─────────────────────────
-          Atender é a ação; Recusar é a saída. Por isso uma é o botão cheio e a
-          outra um ícone discreto — e é o mesmo desequilíbrio do produto: quem
+          Atender é a ação; Recusar é a saída. Por isso uma é o botão cheio em
+          ouro e a outra discreta — e é o mesmo desequilíbrio do produto: quem
           recusa não decide nada sobre a ligação, só tira o cartão da frente.
           A ligação segue tocando no celular dele e nos CRMs dos colegas. */}
-      <div className="flex items-center gap-2 border-t border-border/40 bg-background/40 px-3 py-2.5">
-        <Button
-          variant="ghost"
-          size="sm"
+      <div className="flex items-center gap-2 px-4 pb-4">
+        <button
+          type="button"
           onClick={() => onDismiss(call)}
-          className="gap-2 text-muted-foreground"
+          className="inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[.06] px-4 text-[13px] font-semibold text-tinta-foreground transition-colors hover:bg-destructive/20 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           // Diz o que recusar FAZ, porque o rótulo sozinho promete o contrário:
           // "recusar" soa como desligar na cara do cliente, e não é isso.
           title="Tira esta ligação da sua tela. Ela continua tocando no seu celular e para os colegas."
         >
           <X className="h-4 w-4" />
           Recusar
-        </Button>
+        </button>
         <div className="flex-1" />
         <Button
-          size="sm"
           onClick={() => onAnswer(call)}
           disabled={busy}
           className="gap-2"
@@ -162,7 +160,7 @@ export function IncomingCallPanel({
   return (
     <>
       {ocultas > 0 && (
-        <p className="w-full rounded-lg border border-border/60 bg-card/90 px-3 py-1.5 text-center text-xs text-muted-foreground shadow-lg">
+        <p className="w-full rounded-full border border-tinta-line/60 bg-tinta px-3 py-1.5 text-center text-xs font-semibold text-tinta-muted shadow-relevo-tinta">
           +{ocultas} {ocultas === 1 ? "outra ligação" : "outras ligações"} chamando
         </p>
       )}

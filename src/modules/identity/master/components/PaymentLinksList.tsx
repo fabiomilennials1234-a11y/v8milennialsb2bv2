@@ -95,7 +95,7 @@ export function PaymentLinksList() {
           return (
             <div
               key={row.id}
-              className="flex items-center justify-between gap-4 rounded-lg border p-3"
+              className="flex items-center justify-between gap-4 rounded-xl border border-card-border bg-card p-3 shadow-relevo"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

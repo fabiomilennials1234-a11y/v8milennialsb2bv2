@@ -55,11 +55,10 @@ export function MobileBottomNav() {
 
   return (
     <nav
+      // V5: barra de tinta flutuante, 12px acima da borda (e do home indicator).
       className={cn(
-        "fixed bottom-0 inset-x-0 z-[60]",
-        "bg-background/95 backdrop-blur-xl",
-        "border-t border-border/30",
-        "pb-[env(safe-area-inset-bottom)]",
+        "fixed inset-x-3 z-[60] bottom-[calc(0.75rem+env(safe-area-inset-bottom))]",
+        "rounded-[22px] border border-tinta-line/60 bg-tinta text-tinta-muted shadow-relevo-tinta",
       )}
       data-testid="mobile-bottom-nav"
       role="navigation"
@@ -75,14 +74,14 @@ export function MobileBottomNav() {
               data-active={active}
               onClick={() => navigate(tab.path)}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
+                "relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
                 "transition-colors duration-150",
-                "text-muted-foreground",
-                active && "text-[hsl(47_100%_50%)]",
+                "text-tinta-muted",
+                active && "text-primary after:absolute after:bottom-1 after:h-1 after:w-1 after:rounded-full after:bg-primary",
               )}
             >
               <tab.icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium leading-tight">{tab.label}</span>
+              <span className="text-[10px] font-semibold leading-tight">{tab.label}</span>
             </button>
           );
         })}
@@ -93,14 +92,14 @@ export function MobileBottomNav() {
           data-active={!isAnyTabActive}
           onClick={openFullNav}
           className={cn(
-            "flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
+            "relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
             "transition-colors duration-150",
-            "text-muted-foreground",
-            !isAnyTabActive && "text-[hsl(47_100%_50%)]",
+            "text-tinta-muted",
+            !isAnyTabActive && "text-primary after:absolute after:bottom-1 after:h-1 after:w-1 after:rounded-full after:bg-primary",
           )}
         >
           <MoreHorizontal className="w-5 h-5" />
-          <span className="text-[10px] font-medium leading-tight">Mais</span>
+          <span className="text-[10px] font-semibold leading-tight">Mais</span>
         </button>
       </div>
     </nav>

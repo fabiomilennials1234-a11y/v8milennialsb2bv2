@@ -31,9 +31,9 @@ interface WorkflowImportDialogProps {
 }
 
 const STATUS_CONFIG = {
-  success: { icon: CheckCircle2, color: "text-green-500" },
-  warning: { icon: AlertTriangle, color: "text-yellow-500" },
-  pending: { icon: Clock, color: "text-orange-500" },
+  success: { icon: CheckCircle2, color: "text-success" },
+  warning: { icon: AlertTriangle, color: "text-warning-strong" },
+  pending: { icon: Clock, color: "text-warning-strong" },
 };
 
 export function WorkflowImportDialog({
@@ -104,13 +104,13 @@ export function WorkflowImportDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
+              <CheckCircle2 className="w-5 h-5 text-success" />
               {report.mode === "guided_draft" ? "Rascunho importado" : "Workflow importado"}
             </DialogTitle>
             <DialogDescription>
               "{report.workflowName}" — {report.totalNodes} nós
               {report.unresolvedCount > 0 && (
-                <span className="text-orange-500 ml-1">
+                <span className="ml-1 font-semibold text-warning-strong">
                   ({report.unresolvedCount} pendência{report.unresolvedCount > 1 ? "s" : ""})
                 </span>
               )}

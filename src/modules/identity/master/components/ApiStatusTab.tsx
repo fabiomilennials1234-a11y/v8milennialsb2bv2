@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { userMessageOf } from "@/shared/errors";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ const SERVICE_META: Record<string, { icon: React.ReactNode; description: string;
   },
   "Asaas": {
     icon: <CreditCard className="w-5 h-5" />,
-    description: "Pagamentos (PIX, boleto, cartao)",
+    description: "Pagamentos (PIX, boleto, cartão)",
     category: "Billing",
   },
   "Meta (Facebook)": {
@@ -82,7 +83,7 @@ const SERVICE_META: Record<string, { icon: React.ReactNode; description: string;
 function StatusBadge({ status }: { status: ApiHealthResult["status"] }) {
   if (status === "connected") {
     return (
-      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1">
+      <Badge variant="success" className="gap-1">
         <CheckCircle2 className="w-3 h-3" />
         Conectado
       </Badge>
@@ -90,16 +91,16 @@ function StatusBadge({ status }: { status: ApiHealthResult["status"] }) {
   }
   if (status === "error") {
     return (
-      <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 gap-1">
+      <Badge variant="outline" className="gap-1 border-transparent bg-destructive/10 text-destructive">
         <XCircle className="w-3 h-3" />
         Erro
       </Badge>
     );
   }
   return (
-    <Badge className="bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border-zinc-500/20 gap-1">
+    <Badge variant="soft" className="gap-1 text-muted-foreground">
       <MinusCircle className="w-3 h-3" />
-      Nao Configurado
+      Não configurado
     </Badge>
   );
 }
@@ -114,10 +115,10 @@ function ApiCard({ result }: { result: ApiHealthResult }) {
   };
 
   const statusColor = result.status === "connected"
-    ? "border-emerald-500/20"
+    ? "border-success/20"
     : result.status === "error"
-    ? "border-red-500/20"
-    : "border-zinc-500/10";
+    ? "border-destructive/30"
+    : "border-card-border";
 
   return (
     <Card className={`transition-colors ${statusColor}`}>
@@ -125,10 +126,10 @@ function ApiCard({ result }: { result: ApiHealthResult }) {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${
-              result.status === "connected" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
-              result.status === "error" ? "bg-red-500/10 text-red-600 dark:text-red-400" :
-              "bg-zinc-500/10 text-zinc-500"
+            <div className={`p-2 rounded-xl ${
+              result.status === "connected" ? "bg-success/10 text-success-strong" :
+              result.status === "error" ? "bg-destructive/10 text-destructive" :
+              "bg-muted text-muted-foreground"
             }`}>
               {meta.icon}
             </div>
@@ -155,7 +156,7 @@ function ApiCard({ result }: { result: ApiHealthResult }) {
 
         {/* Error message */}
         {result.error && (
-          <div className="text-xs text-red-500 dark:text-red-400 bg-red-500/5 rounded-md px-2.5 py-1.5 font-mono break-all">
+          <div className="text-xs text-destructive bg-destructive/5 rounded-lg px-2.5 py-1.5 font-mono break-all">
             {result.error}
           </div>
         )}
@@ -200,9 +201,9 @@ export function ApiStatusTab() {
     try {
       const { data, error } = await supabase.functions.invoke("check-api-health");
 
-      if (error) {
-        throw new Error(error.message || "Edge function error");
-      }
+      // O erro original, não uma cópia da mensagem: o status HTTP (401 sessão,
+      // 5xx fora do ar) é o que o normalizador usa para escolher a frase.
+      if (error) throw error;
 
       // Handle response — may be string or already parsed
       let response: HealthCheckResponse;
@@ -219,9 +220,9 @@ export function ApiStatusTab() {
       setResults(response.results);
       setLastCheck(response.checked_at);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("Health check failed:", msg);
-      setFetchError(msg);
+      // A causa técnica fica no console de quem opera; a tela mostra a frase.
+      console.error("Health check failed:", e instanceof Error ? e.message : String(e));
+      setFetchError(userMessageOf(e, "Não foi possível consultar o status das APIs."));
     } finally {
       setIsLoading(false);
     }
@@ -240,26 +241,26 @@ export function ApiStatusTab() {
   const notConfigured = results.filter((r) => r.status === "not_configured").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {results.length > 0 && (
             <>
-              <Badge variant="outline" className="gap-1 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+              <Badge variant="outline" className="gap-1 text-success-strong border-success/30">
                 <CheckCircle2 className="w-3 h-3" />
                 {connected} conectadas
               </Badge>
               {errorsCount > 0 && (
-                <Badge variant="outline" className="gap-1 text-red-600 dark:text-red-400 border-red-500/30">
+                <Badge variant="outline" className="gap-1 text-destructive border-destructive/30">
                   <XCircle className="w-3 h-3" />
                   {errorsCount} com erro
                 </Badge>
               )}
               {notConfigured > 0 && (
-                <Badge variant="outline" className="gap-1 text-zinc-500 border-zinc-500/30">
+                <Badge variant="outline" className="gap-1 text-muted-foreground border-border">
                   <MinusCircle className="w-3 h-3" />
-                  {notConfigured} nao configuradas
+                  {notConfigured} não configuradas
                 </Badge>
               )}
             </>
@@ -278,19 +279,19 @@ export function ApiStatusTab() {
           ) : (
             <RefreshCw className="w-3.5 h-3.5" />
           )}
-          Verificar Agora
+          Verificar agora
         </Button>
       </div>
 
       {/* Error state */}
       {fetchError && (
-        <Card className="border-red-500/20">
+        <Card className="border-destructive/30">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+              <XCircle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">Falha ao verificar APIs</p>
-                <p className="text-xs text-muted-foreground font-mono break-all">{fetchError}</p>
+                <p className="text-sm font-medium text-destructive">Falha ao verificar APIs</p>
+                <p className="text-xs text-muted-foreground">{fetchError}</p>
               </div>
             </div>
           </CardContent>

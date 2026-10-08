@@ -103,3 +103,47 @@ describe("nomeDaConversa — sem número de verdade", () => {
       .toBe("5548999998888");
   });
 });
+
+describe("nomeDaConversa — flag chat_nome_do_lead: manda o leads.name", () => {
+  const COM_LEAD = { nomeDoLeadPrimeiro: true };
+
+  it("o nome do lead ganha do nome salvo e do perfil", () => {
+    expect(
+      nomeDaConversa(
+        fontes({ pushName: "Ana", savedContactName: "Ana Agenda", nomeDoLead: "0001-EMPRESA FICTICIA LTDA" }),
+        COM_LEAD,
+      ),
+    ).toBe("0001-EMPRESA FICTICIA LTDA");
+  });
+
+  it("sem lead: nome salvo, depois perfil, depois telefone", () => {
+    expect(nomeDaConversa(fontes({ pushName: "Ana", savedContactName: "Ana Agenda" }), COM_LEAD)).toBe("Ana Agenda");
+    expect(nomeDaConversa(fontes({ pushName: "Ana" }), COM_LEAD)).toBe("Ana");
+    expect(nomeDaConversa(fontes(), COM_LEAD)).toBe("553499254544");
+  });
+
+  it("lead só com espaços ou vazio conta como sem lead", () => {
+    expect(nomeDaConversa(fontes({ nomeDoLead: "   ", pushName: "Ana" }), COM_LEAD)).toBe("Ana");
+    expect(nomeDaConversa(fontes({ nomeDoLead: "", savedContactName: "Salvo" }), COM_LEAD)).toBe("Salvo");
+  });
+
+  it("a queda final esconde LID", () => {
+    expect(nomeDaConversa(fontes({ telefone: "210028246085780" }), COM_LEAD)).toBe(
+      "Contato sem número · 085780",
+    );
+  });
+
+  it("vence a flag antiga se as duas vierem", () => {
+    expect(
+      nomeDaConversa(
+        fontes({ pushName: "Ana", nomeDoLead: "Lead" }),
+        { nomeDoWhatsappPrimeiro: true, nomeDoLeadPrimeiro: true },
+      ),
+    ).toBe("Lead");
+  });
+
+  it("sem a opção nova, nada muda (nome salvo vence, depois lead)", () => {
+    expect(nomeDaConversa(fontes({ savedContactName: "Salvo", nomeDoLead: "Lead", pushName: "Ana" }))).toBe("Salvo");
+    expect(nomeDaConversa(fontes({ nomeDoLead: "Lead", pushName: "Ana" }), { nomeDoLeadPrimeiro: false })).toBe("Lead");
+  });
+});

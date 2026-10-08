@@ -205,7 +205,7 @@ function ChatBubblePanel({ isOpen }: ChatBubblePanelProps) {
         h-[min(560px,calc(100dvh-7rem))]
         flex flex-col
         bg-popover text-popover-foreground
-        rounded-2xl
+        rounded-panel
         ring-1 ring-border/60
         chat-bubble-panel-shadow
         overflow-hidden

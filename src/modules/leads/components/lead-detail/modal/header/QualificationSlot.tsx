@@ -78,7 +78,10 @@ export const QualificationSlot = memo(function QualificationSlot({
               : `${label}${config ? `: ${config.label}` : ""}`}
           </TooltipContent>
         </Tooltip>
-        <PopoverContent align="end" className="w-52 p-1.5">
+        {/* `z-[70]`: no celular a ficha e o painel do Negócio são `Sheet`
+            (`z-[51]`); o `z-50` do primitivo pintaria a lista ATRÁS da folha.
+            Mesma correção do `ResponsibleSlot` ao lado (#1862/#1867). */}
+        <PopoverContent align="end" className="z-[70] w-52 p-1.5">
           <div className="space-y-0.5">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-2 py-1">
               {label}

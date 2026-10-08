@@ -1,74 +1,77 @@
-import { CalendarClock, LineChart, Package, RefreshCw, Timer, Wallet } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { LeadCardMetrics as Metricas } from "./types";
 
 /**
- * Métricas da RELAÇÃO — o que esta pessoa vale, não o que o negócio vale.
+ * A RELAÇÃO — o que esta pessoa vale, não o que o negócio vale.
  *
- * Bloco que a ADR-0024 §1 tirou da lista (coluna vazia em 97,1% das linhas,
- * 290px de largura) e mandou para o card. Aqui custa pouco: some inteiro quando
- * não há compra, em vez de reservar cabeçalho e largura como fazia na lista.
+ * Forma do mockup V5 (aba Dados da gaveta): quem já comprou ganha o cartão em
+ * TINTA "Relacionamento", com os números em ladrilhos de vidro e a porta para o
+ * Cliente 360. É o único painel em tinta da gaveta — é ele que diz "isto aqui é
+ * cliente" antes de qualquer selo.
  *
- * Ladrilho com ícone em vez de número solto: o ícone dá âncora de varredura —
- * a pessoa acha "ciclo de recompra" pela forma antes de ler o rótulo. Cada um
- * tem cor própria e fria; o ouro fica reservado para o valor acumulado, que é o
- * único número aqui que responde "quanto essa relação já valeu".
+ * Quem nunca comprou (94% da base) não ganha tinta: ganha o cartão branco com
+ * os dois números que existem para todo lead — idade e silêncio —, que são a
+ * única leitura de temperatura de quem ainda não comprou. O mockup não mostra
+ * nada para eles; sumir com os dois números seria tirar dado da tela.
  *
- * Idade e "sem contato" ficam SEMPRE, porque existem para todo lead e são a
- * única leitura de temperatura de quem nunca comprou — 94% da base.
+ * Os números são os mesmos de antes (`useLeadCardData`, com a precedência de
+ * `lib/data-metrics`) e são os que saíram da lista de Leads
+ * (`lista-dados-no-card.test.tsx`): só a forma mudou.
  */
 
-function Ladrilho({
-  icone: Icone,
-  cor,
+/**
+ * Número e unidade em nós SEPARADOS — a regra do V5 ("unidade menor", como o
+ * `ValueUnit`) e o contrato de `lista-dados-no-card.test.tsx`: o número que saiu
+ * da lista de Leads tem de ser achável sozinho na ficha.
+ */
+function Numero({ valor, sufixo, tom }: { valor: string; sufixo?: string; tom: "tinta" | "cartao" }) {
+  return (
+    <>
+      <span>{valor}</span>
+      {sufixo && (
+        <small
+          className={cn(
+            "ml-1 text-[0.72em] font-bold tracking-normal",
+            tom === "tinta" ? "text-tinta-muted" : "text-muted-foreground",
+          )}
+        >
+          {sufixo}
+        </small>
+      )}
+    </>
+  );
+}
+
+/** Dias como número + unidade; `null` vira a palavra do vazio, sem unidade. */
+function emDias(n: number | null, vazio: string): { valor: string; sufixo?: string } {
+  if (n === null) return { valor: vazio };
+  return { valor: String(n), sufixo: n === 1 ? "dia" : "dias" };
+}
+
+function Vidro({
   rotulo,
   valor,
   sufixo,
   destaque,
 }: {
-  icone: typeof Wallet;
-  cor: string;
   rotulo: string;
   valor: string;
   sufixo?: string;
   destaque?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-        destaque ? "border-primary/30 bg-primary/[0.07]" : "border-border bg-card",
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <span
-          className={cn(
-            "flex size-[22px] shrink-0 items-center justify-center rounded-md border",
-            cor,
-          )}
-          aria-hidden="true"
-        >
-          <Icone className="size-3" />
-        </span>
-        {/* Sem `truncate`: o rótulo quebra em duas linhas em vez de virar
-            "CICLO DE RE…". Rótulo cortado não identifica o número, que é a
-            única função dele. */}
-        <span className="text-[10.5px] font-medium uppercase leading-[1.25] tracking-[0.06em] text-muted-foreground">
-          {rotulo}
-        </span>
-      </div>
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-[14px] border border-tinta-line bg-tinta-foreground/[0.06] px-2.5 py-2">
       <span
         className={cn(
-          "text-[17px] font-semibold leading-none tracking-[-0.02em] tabular-nums",
-          destaque ? "text-primary" : "text-foreground",
+          "truncate text-[14px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums",
+          destaque ? "text-primary" : "text-tinta-foreground",
         )}
       >
-        {valor}
-        {sufixo && (
-          <span className="ml-0.5 text-[11.5px] font-medium text-muted-foreground">{sufixo}</span>
-        )}
+        <Numero valor={valor} sufixo={sufixo} tom="tinta" />
       </span>
+      <span className="truncate text-[10.5px] font-medium text-tinta-muted">{rotulo}</span>
     </div>
   );
 }
@@ -76,78 +79,66 @@ function Ladrilho({
 export function LeadCardMetrics({ metricas }: { metricas: Metricas }) {
   const comprou = metricas.pedidos > 0;
 
-  return (
-    <section className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">A relação</h2>
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-          {comprou ? "Quanto esta pessoa já valeu" : "Ainda sem compra registrada"}
-        </p>
-      </div>
-
-      {comprou && (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="col-span-2">
-            <Ladrilho
-              icone={Wallet}
-              cor="border-primary/35 bg-primary/10 text-primary"
-              rotulo="Já comprou"
-              valor={formatBRL(metricas.acumulado)}
-              destaque
-            />
-          </div>
-          <Ladrilho
-            icone={LineChart}
-            cor="border-sky-500/25 bg-sky-500/10 text-sky-400"
-            rotulo="Ticket médio"
-            valor={formatBRL(metricas.ticketMedio, 2)}
-          />
-          <Ladrilho
-            icone={Package}
-            cor="border-violet-500/25 bg-violet-500/10 text-violet-400"
-            rotulo="Pedidos"
-            valor={String(metricas.pedidos)}
-          />
-          <Ladrilho
-            icone={RefreshCw}
-            cor="border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-            rotulo="Ciclo de recompra"
-            valor={metricas.cicloDias === null ? "—" : String(metricas.cicloDias)}
-            sufixo={metricas.cicloDias === null ? undefined : "dias"}
-          />
-          <Ladrilho
-            icone={CalendarClock}
-            cor="border-amber-500/25 bg-amber-500/10 text-amber-400"
-            rotulo="Última compra"
-            valor={metricas.ultimaCompraDias === null ? "—" : String(metricas.ultimaCompraDias)}
-            sufixo={metricas.ultimaCompraDias === null ? undefined : "dias"}
-          />
+  if (comprou) {
+    return (
+      <section className="flex flex-col gap-3 rounded-card bg-tinta p-3.5 text-tinta-foreground shadow-relevo-tinta">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[10.5px] font-bold uppercase tracking-[.08em] text-tinta-muted">
+            Relacionamento
+          </h2>
+          {/* O 360 é PÁGINA (decisão de 02/10), e a ficha não sabe de rota:
+              é alcançável por `/preview.html`, que não carrega roteador. Um
+              link de documento é o que sobra — e é honesto: leva à página. */}
+          {metricas.clienteId && (
+            <a
+              href={`/carteira/${metricas.clienteId}`}
+              className={cn(
+                "ml-auto inline-flex h-7 items-center gap-1 rounded-full bg-primary px-3 text-[12px] font-bold text-primary-foreground",
+                "transition-transform hover:-translate-y-px",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-tinta",
+              )}
+            >
+              Cliente 360
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </a>
+          )}
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4">
+          <Vidro rotulo="Já comprou" valor={formatBRL(metricas.acumulado)} destaque />
+          <Vidro rotulo="Pedidos" valor={String(metricas.pedidos)} />
+          <Vidro rotulo="Ticket médio" valor={formatBRL(metricas.ticketMedio)} />
+          <Vidro rotulo="Última compra" {...emDias(metricas.ultimaCompraDias, "—")} />
+          <Vidro rotulo="Ciclo de recompra" {...emDias(metricas.cicloDias, "—")} />
+          <Vidro rotulo="Na base há" {...emDias(metricas.idadeDias, "—")} />
+          <Vidro rotulo="Sem contato" {...emDias(metricas.semContatoDias, "nunca")} />
+        </div>
+      </section>
+    );
+  }
 
-      <div className="grid grid-cols-2 gap-2">
-        <Ladrilho
-          icone={CalendarClock}
-          cor="border-border bg-muted text-muted-foreground"
-          rotulo="Na base há"
-          valor={String(metricas.idadeDias)}
-          sufixo="dias"
-        />
-        <Ladrilho
-          icone={Timer}
-          cor="border-border bg-muted text-muted-foreground"
-          rotulo="Sem contato"
-          valor={metricas.semContatoDias === null ? "nunca" : String(metricas.semContatoDias)}
-          sufixo={metricas.semContatoDias === null ? undefined : "dias"}
-        />
+  return (
+    <section className="flex flex-col gap-2.5 rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo">
+      <h2 className="text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+        Relação
+      </h2>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col">
+          <span className="text-[16px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums">
+            <Numero {...emDias(metricas.idadeDias, "—")} tom="cartao" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">Na base há</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[16px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums">
+            <Numero {...emDias(metricas.semContatoDias, "nunca")} tom="cartao" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">Sem contato</span>
+        </div>
       </div>
-
-      {!comprou && (
-        <p className="text-[11.5px] leading-snug text-muted-foreground">
-          Os números de recompra aparecem quando o primeiro negócio for ganho ou
-          o ERP trouxer um pedido.
-        </p>
-      )}
+      <p className="text-[11.5px] leading-snug text-muted-foreground">
+        Sem compra registrada. Os números de recompra aparecem quando o primeiro negócio for
+        ganho ou o ERP trouxer um pedido.
+      </p>
     </section>
   );
 }

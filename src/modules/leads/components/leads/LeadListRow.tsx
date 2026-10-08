@@ -87,14 +87,14 @@ function nameHue(name: string): number {
   return h;
 }
 
-export function LeadAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
+export function LeadAvatar({ name, size = "md" }: { name: string; size?: "xs" | "sm" | "md" }) {
   const hue = nameHue(name || "?");
   return (
     <div
       style={{ "--lead-hue": hue } as React.CSSProperties}
       className={cn(
         "flex shrink-0 items-center justify-center rounded-full font-semibold",
-        size === "sm" ? "size-8 text-[13px]" : "size-9 text-[15px]",
+        size === "xs" ? "size-7 text-[11px]" : size === "sm" ? "size-8 text-[13px]" : "size-9 text-[15px]",
         "bg-[hsl(var(--lead-hue)_70%_92%)] text-[hsl(var(--lead-hue)_55%_34%)]",
         "dark:bg-[hsl(var(--lead-hue)_45%_24%)] dark:text-[hsl(var(--lead-hue)_55%_74%)]",
       )}
@@ -219,7 +219,7 @@ export function RelacaoCell({ standing, porCadastroErp }: { standing?: LeadStand
 
   return (
     <span
-      className="inline-flex w-fit items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[12.5px] font-semibold text-primary"
+      className="inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary-soft px-2 py-0.5 text-[12.5px] font-semibold text-primary-soft-foreground"
       title={
         porCadastroErp
           ? "Cadastrado no ERP"

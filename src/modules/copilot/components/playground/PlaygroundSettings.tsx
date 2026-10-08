@@ -11,6 +11,7 @@
 import { Users } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PlaygroundData } from "./types";
+import { IconChip } from "@/components/ui/bento";
 
 interface PlaygroundSettingsProps {
   data: PlaygroundData;
@@ -19,18 +20,18 @@ interface PlaygroundSettingsProps {
 
 export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) {
   return (
-    <div className="border rounded-lg divide-y">
+    <div className="rounded-2xl border border-border/70">
       {/* ===== Audiencia ===== */}
-      <div className="border-b border-border/40">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+      <div>
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <IconChip icon={Users} />
             <div className="min-w-0">
-              <p className="text-sm font-medium">Atender contatos sem lead</p>
+              <p className="text-sm font-semibold">Atender contatos sem lead</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {data.attendUnknownContacts
-                  ? "IA responde qualquer numero que mandar mensagem"
-                  : "IA so responde numeros que ja sao lead no sistema"}
+                  ? "IA responde qualquer número que mandar mensagem"
+                  : "IA só responde números que já são lead no sistema"}
               </p>
             </div>
           </div>

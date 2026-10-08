@@ -59,7 +59,7 @@ function quando(iso: string): string {
 export function DealCardActivities({ atividades }: { atividades: DealCardActivity[] }) {
   if (atividades.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-border py-8 text-center text-[12.5px] text-muted-foreground">
+      <p className="rounded-2xl border border-dashed border-border py-8 text-center text-[12.5px] text-muted-foreground">
         Nenhuma tarefa ou atividade neste negócio.
       </p>
     );
@@ -72,7 +72,7 @@ export function DealCardActivities({ atividades }: { atividades: DealCardActivit
         return (
           <li
             key={a.id}
-            className="flex gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-muted/40"
+            className="flex gap-3 rounded-xl px-2 py-2 -mx-2 transition-colors hover:bg-muted/40"
           >
             <span
               className={cn(
@@ -92,7 +92,7 @@ export function DealCardActivities({ atividades }: { atividades: DealCardActivit
                 {/* Pendente é o estado que pede ação — por isso ele é que ganha
                     tinta, e não o concluído. */}
                 {!a.concluida && (
-                  <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 text-[10.5px] font-semibold text-amber-400">
+                  <span className="shrink-0 rounded-full border border-warning/35 bg-warning/15 px-1.5 text-[10.5px] font-semibold text-warning-strong">
                     pendente
                   </span>
                 )}

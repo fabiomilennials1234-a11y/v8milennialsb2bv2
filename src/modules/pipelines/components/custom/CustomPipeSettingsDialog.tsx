@@ -15,6 +15,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   type CustomPipeline,
   type CustomPipelineStage,
@@ -28,6 +29,8 @@ import { FunnelIdentitySection } from "../shared/FunnelIdentitySection";
 import { PipeDispatchRulesSection } from "../shared/PipeDispatchRulesSection";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
 import { ExportLeadsContent, useVentimaisExportDetails } from "@/modules/leads";
+import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 // ────────────────────────────────────────────────────────────
 // Dispatch Tab — Mensagens automáticas por etapa (SCRUM-629, D11)
@@ -53,13 +56,13 @@ function DispatchTabContent({
           : "Mensagens automáticas desativadas — envios pendentes deste funil foram cancelados"
       );
     } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar disparo por etapa");
+      notifyError(error, { fallback: "Não foi possível atualizar disparo por etapa." });
     }
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+      <div className="flex items-start justify-between gap-4 rounded-2xl bg-muted/60 p-4">
         <div className="space-y-1">
           <Label htmlFor="stage-dispatch-toggle" className="text-sm font-medium">
             Mensagens automáticas por etapa
@@ -127,8 +130,8 @@ export function CustomPipeSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[700px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.03em]">
+            <IconChip icon={Settings2} tone="gold" />
             Configurações — {pipeline.name}
           </DialogTitle>
         </DialogHeader>
@@ -137,7 +140,14 @@ export function CustomPipeSettingsDialog({
             mecânica: era a última das quatro, e renomear ou excluir o funil
             exigia atravessar Etapas, Disparos e Importar. */}
         <Tabs defaultValue="geral">
-          <TabsList className={`grid w-full ${exportDetails ? "grid-cols-5" : "grid-cols-4"}`}>
+          {/* Alternador claro do V5 (`segmented`) — abas dentro de um bloco. */}
+          <TabsList
+            variant="segmented"
+            className={cn(
+              "w-full justify-start overflow-x-auto scrollbar-hide sm:grid",
+              exportDetails ? "sm:grid-cols-5" : "sm:grid-cols-4",
+            )}
+          >
             <TabsTrigger value="geral" className="gap-1.5 text-xs">
               <Palette className="w-3.5 h-3.5" />
               Geral

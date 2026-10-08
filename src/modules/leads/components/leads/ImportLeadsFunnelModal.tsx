@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { IconChip, KpiTile } from "@/components/ui/bento";
 import {
   useImportLeads,
   parseFilePreview,
@@ -39,6 +40,7 @@ import {
   UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyError } from "@/shared/errors";
 
 const PIPELINE_TYPE: Record<FunnelDestination, "whatsapp" | "propostas" | "confirmacao"> = {
   qualificacao: "whatsapp",
@@ -202,8 +204,7 @@ export function ImportLeadsFunnelContent({
       ]);
     } catch (error) {
       console.error("Import error:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      toast.error(`Erro durante a importação: ${msg}`);
+      notifyError(error, { fallback: "Não foi possível importar os leads." });
       setStep("preview");
     }
   };
@@ -256,7 +257,7 @@ export function ImportLeadsFunnelContent({
                 <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                   Selecionar arquivo
                 </Button>
-                <Button variant="ghost" size="sm" className="text-primary gap-2" onClick={downloadLeadsImportTemplate}>
+                <Button variant="ghost" size="sm" className="gap-2" onClick={downloadLeadsImportTemplate}>
                   <FileDown className="w-4 h-4" />
                   Baixar modelo
                 </Button>
@@ -280,10 +281,10 @@ export function ImportLeadsFunnelContent({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-4"
             >
-              <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3">
+                <AlertTriangle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">Colunas não reconhecidas</p>
+                  <p className="font-medium text-sm text-foreground">Colunas não reconhecidas</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Mapeie cada coluna para um campo existente ou ignore. Para novo dado, crie um campo personalizado em Configurações → Leads.
                   </p>
@@ -347,8 +348,8 @@ export function ImportLeadsFunnelContent({
                       );
                       setSelectedStageKey(defaultStage?.stage_key ?? "");
                       setStep("preview");
-                    } catch {
-                      toast.error("Erro ao processar arquivo");
+                    } catch (caught) {
+                      notifyError(caught, { fallback: "Não foi possível processar arquivo." });
                     }
                   }}
                 >
@@ -366,8 +367,8 @@ export function ImportLeadsFunnelContent({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-4"
             >
-              <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
-                <FileSpreadsheet className="w-8 h-8 text-primary" />
+              <div className="flex items-center gap-3 rounded-xl bg-primary-soft p-3">
+                <FileSpreadsheet className="w-8 h-8 text-primary-soft-foreground" />
                 <div>
                   <p className="font-medium text-sm">{file?.name}</p>
                   <p className="text-xs text-muted-foreground">{totalLeads} leads encontrados no arquivo</p>
@@ -375,9 +376,9 @@ export function ImportLeadsFunnelContent({
               </div>
 
               {incompleteLeadsCount > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <UserX className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3">
+                  <UserX className="w-4 h-4 text-warning-strong shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground/85">
                     <strong>{incompleteLeadsCount} lead{incompleteLeadsCount > 1 ? "s" : ""} sem telefone e e-mail</strong> — serão importados como incompletos. Você poderá completar os dados depois.
                   </p>
                 </div>
@@ -424,7 +425,7 @@ export function ImportLeadsFunnelContent({
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                   Período para métricas
                 </Label>
                 <p className="text-xs text-muted-foreground -mt-1">
@@ -445,7 +446,7 @@ export function ImportLeadsFunnelContent({
               </div>
               <div className="p-3 bg-muted/50 rounded-lg space-y-1">
                 <p className="text-xs font-medium flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-primary" />
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
                   Etapa e responsável — reconhecimento automático
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -511,55 +512,35 @@ export function ImportLeadsFunnelContent({
               className="py-6 space-y-6"
             >
               <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <Sparkles className="w-8 h-8 text-green-500" />
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/15 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-success-strong" />
                 </div>
                 <h3 className="text-xl font-bold">Importação concluída!</h3>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 bg-green-500/10 rounded-xl text-center">
-                  <CheckCircle2 className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                  <p className="text-2xl font-bold text-green-500">{result.imported}</p>
-                  <p className="text-xs text-muted-foreground">Importados</p>
-                </div>
-                <div className="p-4 bg-blue-500/10 rounded-xl text-center">
-                  <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                  <p className="text-2xl font-bold text-blue-500">{(result as { updated?: number }).updated ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Atualizados</p>
-                </div>
+                <KpiTile label="Importados" value={result.imported} icon={CheckCircle2} tone="good" />
+                <KpiTile label="Atualizados" value={(result as { updated?: number }).updated ?? 0} icon={RefreshCw} tone="info" />
                 {((result as { incomplete?: number }).incomplete ?? 0) > 0 && (
-                  <div className="p-4 bg-orange-500/10 rounded-xl text-center">
-                    <UserX className="w-6 h-6 mx-auto mb-2 text-orange-500" />
-                    <p className="text-2xl font-bold text-orange-500">{(result as { incomplete?: number }).incomplete}</p>
-                    <p className="text-xs text-muted-foreground">Sem contato</p>
-                  </div>
+                  <KpiTile label="Sem contato" value={(result as { incomplete?: number }).incomplete} icon={UserX} tone="neutral" />
                 )}
-                <div className="p-4 bg-amber-500/10 rounded-xl text-center">
-                  <AlertCircle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
-                  <p className="text-2xl font-bold text-amber-500">{result.duplicates}</p>
-                  <p className="text-xs text-muted-foreground">Duplicados</p>
-                </div>
-                <div className="p-4 bg-red-500/10 rounded-xl text-center">
-                  <XCircle className="w-6 h-6 mx-auto mb-2 text-red-500" />
-                  <p className="text-2xl font-bold text-red-500">{result.invalid}</p>
-                  <p className="text-xs text-muted-foreground">Inválidos</p>
-                </div>
+                <KpiTile label="Duplicados" value={result.duplicates} icon={AlertCircle} tone="neutral" />
+                <KpiTile label="Inválidos" value={result.invalid} icon={XCircle} tone="bad" />
               </div>
 
               {((result as { incomplete?: number }).incomplete ?? 0) > 0 && (
-                <div className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                  <UserX className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-orange-800 dark:text-orange-200">
+                <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3">
+                  <UserX className="w-4 h-4 text-warning-strong shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground/85">
                     <strong>{(result as { incomplete?: number }).incomplete} lead{((result as { incomplete?: number }).incomplete ?? 0) > 1 ? "s" : ""} importado{((result as { incomplete?: number }).incomplete ?? 0) > 1 ? "s" : ""} sem telefone/e-mail.</strong> Eles aparecem normalmente no funil — complete os dados de contato depois.
                   </p>
                 </div>
               )}
               {/* Rejection details (collapsible) */}
               {lastReport && lastReport.errors.length > 0 && (
-                <div className="rounded-xl border border-red-200 dark:border-red-900">
+                <div className="rounded-xl border border-destructive/30">
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl"
+                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-destructive hover:bg-destructive/10 rounded-xl"
                     onClick={() => setShowErrors(!showErrors)}
                   >
                     <span className="flex items-center gap-2">
@@ -573,7 +554,7 @@ export function ImportLeadsFunnelContent({
                       <div className="space-y-1 px-3 pb-3">
                         {lastReport.errors.map((err, i) => (
                           <div key={i} className="text-xs text-muted-foreground flex gap-2">
-                            <span className="text-red-500 font-mono shrink-0">
+                            <span className="text-destructive font-mono shrink-0">
                               {err.row > 0 ? `L${err.row}` : ""}
                             </span>
                             <span>{err.reason}</span>
@@ -613,8 +594,8 @@ export function ImportLeadsFunnelModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={FileSpreadsheet} tone="gold" />
             Importar Leads — {nomeDoDestino}
           </DialogTitle>
         </DialogHeader>

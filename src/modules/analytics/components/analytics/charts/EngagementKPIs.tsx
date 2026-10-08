@@ -26,8 +26,8 @@ const CARDS = [
     label: "Tempo Resposta (Nós)",
     subtitle: "Nosso tempo médio de resposta",
     icon: Clock,
-    iconColor: "text-blue-500",
-    bgColor: "bg-blue-500/10",
+    iconColor: "text-insights",
+    bgColor: "bg-insights/10",
     format: (v: number) => formatResponseTime(v),
     thresholdGood: 240,   // <4min green
     thresholdWarn: 420,   // 4-7min orange, else red
@@ -38,8 +38,8 @@ const CARDS = [
     label: "Tempo Resposta (Cliente)",
     subtitle: "Tempo médio que o cliente leva para responder",
     icon: Users,
-    iconColor: "text-purple-500",
-    bgColor: "bg-purple-500/10",
+    iconColor: "text-insights",
+    bgColor: "bg-insights/10",
     format: (v: number) => formatResponseTime(v),
     thresholdGood: 3600,  // <1h
     thresholdWarn: 86400, // <1d
@@ -50,8 +50,8 @@ const CARDS = [
     label: "Taxa de Resposta",
     subtitle: "Leads que responderam nosso contato",
     icon: TrendingUp,
-    iconColor: "text-green-500",
-    bgColor: "bg-green-500/10",
+    iconColor: "text-success",
+    bgColor: "bg-success/10",
     format: (v: number) => `${v.toFixed(1)}%`,
     thresholdGood: 50,
     thresholdWarn: 30,
@@ -62,8 +62,8 @@ const CARDS = [
     label: "Taxa de Fechamento",
     subtitle: "Leads convertidos em vendas",
     icon: CheckCircle2,
-    iconColor: "text-orange-500",
-    bgColor: "bg-orange-500/10",
+    iconColor: "text-warning-strong",
+    bgColor: "bg-warning/10",
     format: (v: number) => `${v.toFixed(1)}%`,
     thresholdGood: 20,
     thresholdWarn: 10,
@@ -78,12 +78,12 @@ function valueColor(
   lowerIsBetter: boolean,
 ): string {
   if (lowerIsBetter) {
-    if (value <= thresholdGood) return "text-green-600 dark:text-green-400";
-    if (value <= thresholdWarn) return "text-yellow-600 dark:text-yellow-400";
+    if (value <= thresholdGood) return "text-success";
+    if (value <= thresholdWarn) return "text-warning-strong";
     return "text-destructive";
   }
-  if (value >= thresholdGood) return "text-green-600 dark:text-green-400";
-  if (value >= thresholdWarn) return "text-yellow-600 dark:text-yellow-400";
+  if (value >= thresholdGood) return "text-success";
+  if (value >= thresholdWarn) return "text-warning-strong";
   return "text-destructive";
 }
 

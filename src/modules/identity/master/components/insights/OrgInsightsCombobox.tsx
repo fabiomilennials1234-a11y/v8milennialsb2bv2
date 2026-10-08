@@ -62,8 +62,8 @@ export function OrgInsightsCombobox({
             "justify-between gap-2 font-medium",
             "focus-visible:ring-2 focus-visible:ring-insights focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             isHero
-              ? "h-11 w-full sm:w-[360px] rounded-xl border-border bg-card/60 px-4 text-[15px]"
-              : "h-9 px-2.5 text-sm text-foreground/80 hover:text-foreground",
+              ? "h-12 w-full rounded-full px-5 text-[15px] sm:w-[360px]"
+              : "h-9 rounded-full px-3 text-sm text-foreground/80 hover:bg-muted hover:text-foreground",
             className,
           )}
         >

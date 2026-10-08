@@ -1,0 +1,147 @@
+/**
+ * OrgFeaturesContext — carrega features e limites da org via RPC e
+ * expõe helpers (hasFeature, checkLimit, canCreateCampaign) para toda a árvore.
+ *
+ * Uso:
+ *   const { hasFeature, checkLimit } = useOrgFeatures();
+ *   if (!hasFeature("copilot")) showUpgradeModal();
+ *   if (checkLimit("max_leads") !== -1 && currentLeads >= checkLimit("max_leads")) ...
+ */
+
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/modules/identity";
+import type { FeatureKey, LimitKey } from "@/modules/platform/lib/feature-registry";
+import { computeFeatureUnlockPlan, type FeatureUnlockMap, type ActivePlan } from "@/modules/platform/lib/feature-unlock";
+
+// ─── Types ─────────────────────────────────────────────────────
+interface FeaturesAndLimits {
+  features: Record<string, boolean>;
+  limits: Record<string, number>;
+  plan_name: string;
+}
+
+interface OrgFeaturesContextType {
+  /** Verifica se a org tem acesso a uma feature */
+  hasFeature: (key: FeatureKey) => boolean;
+  /** Retorna o limite numérico. -1 = ilimitado, 0 = sem acesso */
+  checkLimit: (key: LimitKey) => number;
+  /** Verifica se um tipo de campanha pode ser criado */
+  canCreateCampaign: (type: "manual" | "semi_automatica" | "automatica") => boolean;
+  /** Nome do plano atual */
+  planName: string;
+  /** Todas as features (para o editor de planos no Master) */
+  allFeatures: Record<string, boolean>;
+  /** Todos os limites */
+  allLimits: Record<string, number>;
+  /** Mapa feature → plano mínimo que a desbloqueia (para o UpgradeModal) */
+  featureUnlockPlan: FeatureUnlockMap;
+  /** Loading state */
+  isLoading: boolean;
+  /** Se o contexto está pronto (org carregada + dados retornados) */
+  isReady: boolean;
+}
+
+const OrgFeaturesContext = createContext<OrgFeaturesContextType | undefined>(undefined);
+
+// ─── Campaign type → feature key ──────────────────────────────
+const CAMPAIGN_FEATURE: Record<string, FeatureKey> = {
+  manual: "campaigns_manual",
+  semi_automatica: "campaigns_semi",
+  automatica: "campaigns_auto",
+};
+
+// ─── Provider ──────────────────────────────────────────────────
+export function OrgFeaturesProvider({ children }: { children: ReactNode }) {
+  const { organizationId, isLoading: orgLoading } = useOrganization();
+
+  const { data, isLoading: queryLoading } = useQuery<FeaturesAndLimits>({
+    queryKey: ["org-features", organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("org_get_features_and_limits", {
+        p_org_id: organizationId!,
+      });
+      if (error) throw error;
+      return data as unknown as FeaturesAndLimits;
+    },
+    enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000, // 5 min
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const { data: activePlans } = useQuery<ActivePlan[]>({
+    queryKey: ["active-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("name, display_name, position, features")
+        .eq("is_active", true)
+        .order("position");
+      if (error) throw error;
+      return (data ?? []) as unknown as ActivePlan[];
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
+
+  const value = useMemo<OrgFeaturesContextType>(() => {
+    const features = data?.features ?? {};
+    const limits = data?.limits ?? {};
+    const planName = data?.plan_name ?? "free";
+    const isLoading = orgLoading || queryLoading;
+    const isReady = !isLoading && !!data;
+    const featureUnlockPlan = computeFeatureUnlockPlan(activePlans ?? []);
+
+    return {
+      hasFeature: (key: FeatureKey) => {
+        // Se ainda carregando, libera tudo para evitar flash de lock
+        if (!isReady) return true;
+        // Master nunca vê lock — a RPC monta o mapa do master a partir de
+        // feature_flags e keys sem row ficariam false (classe master-ghost).
+        // plan_name "master" só é retornado pelo branch is_master_user().
+        if (planName === "master") return true;
+        return features[key] === true;
+      },
+      checkLimit: (key: LimitKey) => {
+        if (!isReady) return -1;
+        return typeof limits[key] === "number" ? limits[key] : 0;
+      },
+      canCreateCampaign: (type) => {
+        if (!isReady) return true;
+        const featureKey = CAMPAIGN_FEATURE[type];
+        return featureKey ? features[featureKey] === true : true;
+      },
+      planName,
+      allFeatures: features,
+      allLimits: limits,
+      featureUnlockPlan,
+      isLoading,
+      isReady,
+    };
+  }, [data, orgLoading, queryLoading, activePlans]);
+
+  return (
+    <OrgFeaturesContext.Provider value={value}>
+      {children}
+    </OrgFeaturesContext.Provider>
+  );
+}
+
+// ─── Hook ──────────────────────────────────────────────────────
+export function useOrgFeatures(): OrgFeaturesContextType {
+  const ctx = useContext(OrgFeaturesContext);
+  if (!ctx) {
+    throw new Error("useOrgFeatures must be used within an OrgFeaturesProvider");
+  }
+  return ctx;
+}
+
+/**
+ * Variante fail-open para componentes que podem montar fora do provider
+ * (ex.: chrome global). Sem provider → undefined; chamador trata como
+ * "tudo liberado" (mesma convenção do estado loading de hasFeature).
+ */
+export function useOrgFeaturesOptional(): OrgFeaturesContextType | undefined {
+  return useContext(OrgFeaturesContext);
+}

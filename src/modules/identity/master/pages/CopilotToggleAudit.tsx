@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MasterPageHeader } from "../components/MasterPageHeader";
 import { cn } from "@/lib/utils";
 import {
   useCopilotToggleAudit,
@@ -125,7 +126,7 @@ function HistoryTab() {
             </div>
             <div className="flex items-end">
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-                <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
+                <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
                 Atualizar
               </Button>
             </div>
@@ -135,7 +136,7 @@ function HistoryTab() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">
+          <CardTitle>
             {isLoading ? "Carregando..." : `${rows?.length ?? 0} eventos de toggle`}
           </CardTitle>
         </CardHeader>
@@ -143,9 +144,11 @@ function HistoryTab() {
           {isLoading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Buscando…</div>
           ) : !rows || rows.length === 0 ? (
-            <div className="py-12 text-center">
-              <History className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">Nenhum evento na janela.</p>
+            <div className="flex flex-col items-center py-12 text-center">
+              <span className="mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                <History className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-semibold">Nenhum evento na janela.</p>
             </div>
           ) : (
             <Table>
@@ -180,7 +183,7 @@ function HistoryTab() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={isDisable ? "destructive" : "default"} className="text-xs">
+                          <Badge variant={isDisable ? "destructive" : "success"} className="text-xs">
                             <SwitchIcon className="w-3 h-3 mr-1" />
                             {isDisable ? "Desligou" : "Ligou"}
                           </Badge>
@@ -196,7 +199,7 @@ function HistoryTab() {
                         <TableCell>
                           <div className="flex items-center gap-1.5 text-xs">
                             {r.set_by_master ? (
-                              <Shield className="w-3.5 h-3.5 text-red-500" />
+                              <Shield className="w-3.5 h-3.5 text-destructive" />
                             ) : (
                               <User className="w-3.5 h-3.5 text-muted-foreground" />
                             )}
@@ -214,7 +217,7 @@ function HistoryTab() {
                           <TableCell colSpan={7} className="bg-muted/30">
                             <div className="py-3 space-y-2">
                               <div className="text-xs"><span className="font-semibold">Descrição:</span> {r.description ?? "—"}</div>
-                              <ScrollArea className="max-h-[300px] rounded-md border bg-background">
+                              <ScrollArea className="max-h-[300px] rounded-xl border bg-background">
                                 <pre className="p-3 text-xs whitespace-pre-wrap font-mono">{JSON.stringify(r.metadata, null, 2)}</pre>
                               </ScrollArea>
                             </div>
@@ -255,7 +258,7 @@ function DriftTab() {
             <div className="flex items-center gap-3">
               {drift && drift.length > 0 ? (
                 <>
-                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <AlertTriangle className="w-5 h-5 text-warning-strong" />
                   <div>
                     <p className="font-semibold text-sm">{drift.length} phones com drift</p>
                     <p className="text-xs text-muted-foreground">
@@ -265,7 +268,7 @@ function DriftTab() {
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  <ShieldCheck className="w-5 h-5 text-success-strong" />
                   <div>
                     <p className="font-semibold text-sm">Sem drift detectado</p>
                     <p className="text-xs text-muted-foreground">phone_ai_preferences ↔ leads.ai_disabled coerentes</p>
@@ -274,7 +277,7 @@ function DriftTab() {
               )}
             </div>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
+              <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
               Reverificar
             </Button>
           </div>
@@ -305,7 +308,7 @@ function DriftTab() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{d.normalized_phone}</TableCell>
                     <TableCell>
-                      <Badge variant={d.preferences_disabled ? "destructive" : "default"} className="text-xs">
+                      <Badge variant={d.preferences_disabled ? "destructive" : "success"} className="text-xs">
                         {d.preferences_disabled ? "Desligado" : "Ligado"}
                       </Badge>
                     </TableCell>
@@ -325,31 +328,23 @@ function DriftTab() {
 
 export default function CopilotToggleAudit() {
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-blue-500/10">
-          <SwitchIcon className="w-6 h-6 text-blue-500" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Copilot Toggle Audit</h1>
-          <p className="text-sm text-muted-foreground">
-            Histórico de ações ligar/desligar copilot + detecção de drift entre fontes
-          </p>
-        </div>
-      </div>
-
-      <Tabs defaultValue="history" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="history">
-            <History className="w-4 h-4 mr-2" /> Histórico
-          </TabsTrigger>
-          <TabsTrigger value="drift">
-            <AlertTriangle className="w-4 h-4 mr-2" /> Drift
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="history"><HistoryTab /></TabsContent>
-        <TabsContent value="drift"><DriftTab /></TabsContent>
-      </Tabs>
-    </div>
+    <Tabs defaultValue="history" className="space-y-5">
+      <MasterPageHeader
+        title="Copilot toggle audit"
+        subtitle="Histórico de ações ligar/desligar copilot + detecção de drift entre fontes"
+        tabs={
+          <TabsList aria-label="Visões da auditoria" className="max-w-full overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="history">
+              <History className="w-4 h-4" /> Histórico
+            </TabsTrigger>
+            <TabsTrigger value="drift">
+              <AlertTriangle className="w-4 h-4" /> Drift
+            </TabsTrigger>
+          </TabsList>
+        }
+      />
+      <TabsContent value="history" className="mt-0"><HistoryTab /></TabsContent>
+      <TabsContent value="drift" className="mt-0"><DriftTab /></TabsContent>
+    </Tabs>
   );
 }

@@ -9,6 +9,18 @@ interface CelebrationEffectProps {
   type?: "confetti" | "stars" | "trophy";
 }
 
+// Confete é decoração, não estado — mas hex cru não tem par no escuro. A paleta
+// sai dos tokens do sistema (ouro, verde, azul, prata, âmbar, vermelho).
+const CONFETTI_COLORS = [
+  "hsl(var(--primary))",
+  "hsl(var(--success))",
+  "hsl(var(--insights))",
+  "hsl(var(--silver))",
+  "hsl(var(--destructive))",
+  "hsl(var(--warning))",
+  "hsl(var(--gold-soft))",
+];
+
 const particles = Array.from({ length: 30 }, (_, i) => ({
   id: i,
   x: Math.random() * 100,
@@ -21,7 +33,7 @@ const particles = Array.from({ length: 30 }, (_, i) => ({
 export function CelebrationEffect({ 
   show, 
   onComplete,
-  message = "Parabéns! 🎉",
+  message = "Parabéns!",
   type = "confetti" 
 }: CelebrationEffectProps) {
   const [visible, setVisible] = useState(show);
@@ -76,15 +88,7 @@ export function CelebrationEffect({
                 <div
                   className="w-full h-full rounded-sm"
                   style={{
-                    backgroundColor: [
-                      "#F5C518",
-                      "#22C55E",
-                      "#3B82F6",
-                      "#8B5CF6",
-                      "#EF4444",
-                      "#F97316",
-                      "#EC4899",
-                    ][particle.id % 7],
+                    backgroundColor: CONFETTI_COLORS[particle.id % CONFETTI_COLORS.length],
                   }}
                 />
               )}
@@ -102,24 +106,24 @@ export function CelebrationEffect({
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
           >
-            <div className="bg-card/95 backdrop-blur-lg border border-primary shadow-2xl rounded-2xl p-8 text-center">
+            <div className="rounded-panel border border-card-border bg-card p-8 text-center text-card-foreground shadow-relevo-alto">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: [0, 1.2, 1] }}
                 transition={{ delay: 0.2 }}
-                className="w-20 h-20 mx-auto mb-4 bg-primary/10 rounded-full flex items-center justify-center"
+                className="w-20 h-20 mx-auto mb-4 grid place-items-center rounded-full bg-primary text-primary-foreground shadow-brilho-ouro"
               >
                 {type === "trophy" ? (
-                  <Trophy className="w-10 h-10 text-primary" />
+                  <Trophy className="w-10 h-10" />
                 ) : (
-                  <PartyPopper className="w-10 h-10 text-primary" />
+                  <PartyPopper className="w-10 h-10" />
                 )}
               </motion.div>
               <motion.h2
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="text-2xl font-bold text-foreground"
+                className="text-2xl font-extrabold tracking-[-0.035em] text-foreground"
               >
                 {message}
               </motion.h2>
@@ -129,9 +133,9 @@ export function CelebrationEffect({
                 transition={{ delay: 0.6 }}
                 className="flex items-center justify-center gap-1 mt-2"
               >
-                <Sparkles className="w-4 h-4 text-primary" />
+                <Sparkles className="w-4 h-4 text-primary-soft-foreground" />
                 <span className="text-sm text-muted-foreground">Continue assim!</span>
-                <Sparkles className="w-4 h-4 text-primary" />
+                <Sparkles className="w-4 h-4 text-primary-soft-foreground" />
               </motion.div>
             </div>
           </motion.div>
@@ -142,7 +146,7 @@ export function CelebrationEffect({
 }
 
 export function Confetti({ count = 50 }: { count?: number }) {
-  const colors = ["#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444", "#F97316"];
+  const colors = CONFETTI_COLORS;
   
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">

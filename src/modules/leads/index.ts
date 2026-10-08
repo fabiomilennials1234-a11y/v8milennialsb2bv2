@@ -13,6 +13,8 @@
  */
 
 // ── Hooks: lead CRUD + listing ─────────────────────────────────────────────
+export { useLeadResponsibles, type LeadResponsiblesSummary } from "./hooks/useLeadResponsibles";
+
 export {
   useLeads,
   useLeadsCount,
@@ -60,11 +62,20 @@ export {
   useMoveLeadInStandardPipe,
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
+export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
 export type {
   StandardPipelineStatus,
   CustomPipelineStatus,
   PipelineStatus,
 } from "./hooks/useLeadAllPipelines";
+
+// ── Hooks: negócios do lead (posição + título + desfecho) ─────────────────
+// Reusado pelo painel do chat — a seção "Negócios" e a etapa+valor no bloco do
+// lead (V5, P8a) — que precisa da mesma leitura que o card do Negócio faz; sem
+// ela, duas contas para o mesmo negócio.
+export { useLeadsDeals } from "./hooks/useLeadsDeals";
+export type { LeadDeal } from "./hooks/useLeadsDeals";
+export { dealBoardPath } from "./lib/deal-board-path";
 
 // ── Hooks: lead origins registry (fonte única de lista/label/cor) ──────────
 export {
@@ -269,6 +280,8 @@ export { useDealSheet } from "./components/deal-detail/deal-sheet-context";
 // multiplicar a violação por quatro em vez de fechá-la.
 export { DealCardPanel } from "./components/deal-card/DealCardPanel";
 export { LeadCardPanel } from "./components/lead-card/LeadCardPanel";
+// Mesma criação no card do lead e no painel do chat; consultas só ao abrir.
+export { LeadCardNewDeal as LeadNewDealDialog } from "./components/lead-card/LeadCardNewDeal";
 // Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
 export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
 export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";
@@ -282,6 +295,11 @@ export {
   ORIGIN_COLORS,
 } from "./components/leads/LeadCard";
 export type { LeadCardData, LeadCardVariant, LeadCardProps } from "./components/leads/LeadCard";
+// Efeitos do card: ganho/perda (anéis) e exclusão (poeira). O board monta o
+// host; quem exclui prepara a dissolução antes. Ver `lib/card-effects.ts`.
+export { CardEffectsHost } from "./components/leads/card/CardEffectsHost";
+export { prepararDissolucao, useEntradasEmDesfecho } from "./lib/card-effects";
+export type { Dissolucao } from "./lib/card-effects";
 export { LeadModal } from "./components/leads/LeadModal";
 export { LeadScoreBadge } from "./components/leads/LeadScoreBadge";
 export { TimelineItem } from "./components/leads/TimelineItem";

@@ -95,8 +95,8 @@ export function TinyErpSettings() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-          <Database className="w-5 h-5 text-blue-500" />
+        <div className="w-10 h-10 rounded-lg bg-insights/10 flex items-center justify-center">
+          <Database className="w-5 h-5 text-insights" />
         </div>
         <div>
           <h3 className="font-semibold">TinyERP</h3>
@@ -149,7 +149,7 @@ export function TinyErpSettings() {
               onKeyDown={(e) => e.key === "Enter" && handleConnect()}
             />
             <p className="text-[11px] text-muted-foreground">
-              Encontre seu token em TinyERP &gt; Configuracoes &gt; Geral &gt; Token da API
+              Encontre seu token em TinyERP &gt; Configurações &gt; Geral &gt; Token da API
             </p>
           </div>
 
@@ -161,7 +161,7 @@ export function TinyErpSettings() {
             {connectTinyErp.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Testando conexao...
+                Testando conexão...
               </>
             ) : (
               <>
@@ -201,7 +201,7 @@ export function TinyErpSettings() {
                     <AlertDialogTitle>Desconectar TinyERP?</AlertDialogTitle>
                     <AlertDialogDescription>
                       A sincronizacao de produtos e envio automatico de pedidos serao desativados.
-                      Os dados ja sincronizados nao serao afetados.
+                      Os dados já sincronizados não serão afetados.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -252,13 +252,13 @@ export function TinyErpSettings() {
           {status?.last_product_sync_at && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <RefreshCw className="w-3 h-3" />
-              Ultima sincronizacao de produtos: {formatDistanceToNow(new Date(status.last_product_sync_at), { addSuffix: true, locale: ptBR })}
+              Última sincronização de produtos: {formatDistanceToNow(new Date(status.last_product_sync_at), { addSuffix: true, locale: ptBR })}
             </p>
           )}
 
           {/* Settings Toggles */}
           <div className="space-y-4 border-t pt-4">
-            <h4 className="text-sm font-medium">Automacoes</h4>
+            <h4 className="text-sm font-medium">Automações</h4>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -280,7 +280,7 @@ export function TinyErpSettings() {
           {/* Sync History */}
           {syncLogs.length > 0 && (
             <div className="space-y-3 border-t pt-4">
-              <h4 className="text-sm font-medium">Historico de Sincronizacao</h4>
+              <h4 className="text-sm font-medium">Histórico de sincronização</h4>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {syncLogs.map((log) => {
                   const badge = statusBadges[log.status] || statusBadges.pending;
@@ -314,8 +314,8 @@ export function TinyErpSettings() {
           )}
 
           {/* Info Box */}
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-muted-foreground">
-            <p className="font-medium text-blue-500 mb-1">O que a integracao faz:</p>
+          <div className="bg-insights/5 border border-insights/20 rounded-lg p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-insights mb-1">O que a integração faz:</p>
             <ul className="space-y-1 list-disc list-inside">
               <li>Importa produtos do TinyERP para o catalogo do CRM</li>
               <li>Envia pedidos automaticamente ao fechar uma venda</li>

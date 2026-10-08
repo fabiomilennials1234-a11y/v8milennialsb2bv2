@@ -11,9 +11,10 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Loader2, Send, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBuilderSession } from "@/modules/copilot/hooks/useBuilderSession";
+import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 interface BuilderPanelProps {
   agentId?: string;
@@ -55,9 +56,7 @@ export function BuilderPanel({
       {
         onSuccess: (res) => onApplyActions(res.actions),
         onError: (err) => {
-          toast.error("Não consegui responder agora", {
-            description: err instanceof Error ? err.message : "Tente novamente.",
-          });
+          notifyError(err, { fallback: "Não consegui responder agora." });
           setDraft(text); // restore so the user doesn't lose what they typed
         },
       },
@@ -65,14 +64,14 @@ export function BuilderPanel({
   };
 
   return (
-    <aside className="flex h-full w-full flex-col border-l border-border bg-background">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">Criar com IA</span>
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+      <header className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <IconChip icon={Sparkles} tone="gold" />
+          <span className="text-sm font-bold tracking-tight">Criar com IA</span>
         </div>
         {onClose && (
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Fechar assistente" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -85,7 +84,9 @@ export function BuilderPanel({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-muted-foreground">
-            <Bot className="h-8 w-8 text-primary/70" />
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+              <Bot className="h-6 w-6" />
+            </span>
             <p>Diga o que esse Copilot precisa fazer. Eu monto os campos com você.</p>
           </div>
         ) : (
@@ -96,15 +97,15 @@ export function BuilderPanel({
                 className={cn(
                   "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
                   m.role === "user"
-                    ? "self-end bg-primary text-primary-foreground"
-                    : "self-start bg-muted text-foreground",
+                    ? "self-end rounded-br-md bg-tinta text-tinta-foreground"
+                    : "self-start rounded-bl-md bg-sunken text-foreground",
                 )}
               >
                 {m.content}
               </div>
             ))}
             {sending && (
-              <div className="self-start rounded-2xl bg-muted px-3.5 py-2 text-muted-foreground">
+              <div className="self-start rounded-2xl rounded-bl-md bg-sunken px-3.5 py-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
               </div>
             )}
@@ -112,7 +113,7 @@ export function BuilderPanel({
         )}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border/60 p-3">
         <div className="flex items-end gap-2">
           <Textarea
             value={draft}
@@ -128,7 +129,7 @@ export function BuilderPanel({
             className="max-h-32 min-h-[40px] resize-none"
             disabled={sending || !agentId}
           />
-          <Button size="icon" onClick={handleSend} disabled={sending || !draft.trim() || !agentId}>
+          <Button size="icon" aria-label="Enviar" onClick={handleSend} disabled={sending || !draft.trim() || !agentId}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>

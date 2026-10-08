@@ -29,7 +29,7 @@ export async function runQuoteTool(db: SupabaseClient, ctx: QuoteContext, args: 
     const operation = args.operation;
     // The model cannot select an order: resolve the latest quote using trusted context only.
     const { template, config, lead } = await quoteContext(db, ctx);
-    let read = db.from("copilot_quotes").select("*").eq("organization_id", ctx.organizationId).eq("agent_id", ctx.agentId).eq("lead_id", ctx.leadId).eq("conversation_id", ctx.conversationId);
+    const read = db.from("copilot_quotes").select("*").eq("organization_id", ctx.organizationId).eq("agent_id", ctx.agentId).eq("lead_id", ctx.leadId).eq("conversation_id", ctx.conversationId);
     const query = await read.order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (query.error) throw new Error("Falha ao consultar orçamento.");
     let quote = query.data;

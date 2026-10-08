@@ -24,9 +24,9 @@ interface TimelineItem {
 function alertSeverityDot(severity: string | undefined) {
   switch (severity) {
     case "critical":
-      return "bg-red-400";
+      return "bg-destructive";
     case "warning":
-      return "bg-amber-400";
+      return "bg-warning";
     default:
       return "bg-muted-foreground";
   }
@@ -68,20 +68,20 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
   return (
     <div className="relative flex flex-col">
       {/* Vertical line */}
-      <div className="absolute left-[7px] top-3 bottom-3 w-px bg-border" aria-hidden="true" />
+      <div className="absolute bottom-3 left-[7.5px] top-3 w-px bg-border" aria-hidden="true" />
 
       <ul className="space-y-3">
         {items.map((item) => (
           <li key={item.id} className="relative flex gap-3">
             {/* Icon dot */}
-            <div className="relative z-10 mt-1 flex items-center justify-center w-3.5 h-3.5 shrink-0 rounded-full bg-card border border-border">
+            <div className="relative z-10 mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border bg-card">
               {item.type === "order" ? (
-                <ShoppingCart size={7} className="text-emerald-400" />
+                <ShoppingCart size={8} className="text-success" />
               ) : (
                 <AlertTriangle
-                  size={7}
+                  size={8}
                   className={cn(
-                    item.severity === "critical" ? "text-red-400" : "text-amber-400",
+                    item.severity === "critical" ? "text-destructive" : "text-warning-strong",
                   )}
                 />
               )}
@@ -97,12 +97,12 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
                   {item.description}
                 </p>
                 {item.value != null && (
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-card-foreground">
+                  <span className="shrink-0 text-sm font-bold tabular-nums text-card-foreground">
                     {formatBRL(item.value)}
                   </span>
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
                 {formatDateTime(item.date)}
               </p>
             </div>

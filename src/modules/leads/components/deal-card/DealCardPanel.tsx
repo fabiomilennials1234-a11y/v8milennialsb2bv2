@@ -1,6 +1,6 @@
 import { downloadCommentFile } from "../../lib/comment-attachments/storage";
 import { CopyLeadSummaryButton } from "../lead-detail/modal/summary/CopyLeadSummaryButton";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -13,8 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError, isSaleValueRequiredError } from "@/lib/rpc-errors";
@@ -31,15 +29,23 @@ import {
   useLeadComments,
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
+import { GavetaLateral } from "../lead-card/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
-import { LeadCardEtiquetas } from "../lead-card/LeadCardEtiquetas";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
 import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
+import { useCorrigirVendaHistorica } from "./useCorrigirVendaHistorica";
+import { useCorrigirDataDoDesfecho } from "./useCorrigirDataDoDesfecho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
+import { useCelebracaoDoDesfecho } from "./useCelebracaoDoDesfecho";
+import {
+  cancelarEfeitoDeDesfecho,
+  definirPainelAberto,
+  dispararEfeitoDeDesfecho,
+} from "../../lib/card-effects";
 import { useRenomearNegocio } from "./useRenomearNegocio";
 import {
   useAtualizarItemDoNegocio,
@@ -48,25 +54,25 @@ import {
   useRemoverItemDoNegocio,
 } from "./useItensDoNegocio";
 import type { DealCardComentario, ItemEditado } from "./types";
+import { notifyError } from "@/shared/errors";
 
 /**
- * A casca do painel — diálogo de DUAS COLUNAS no desktop, folha no celular.
+ * A casca do painel do Negócio — a gaveta do V5, aberta na aba do negócio.
  *
- * Mesma separação de antes: `DealCard` desenha, `useDealCardData` busca, este
- * arquivo decide onde aparece. O que mudou é quantas colunas aparecem.
+ * Mesma separação de sempre: `DealCard` desenha, `useDealCardData` busca, este
+ * arquivo decide onde aparece — e é dono de toda escrita do negócio (etapa,
+ * desfecho, produto, comentário, exclusão).
  *
- * ── DE DOIS PAINÉIS QUE SE EXCLUEM PARA UM DE DUAS COLUNAS ────────────────
- * Até aqui, clicar na pessoa FECHAVA o negócio e abria a ficha do lead. A
- * regra por trás era boa — "quem empilha passa a ter duas verdades na tela
- * sobre o mesmo lead" — mas o preço era alto: para conferir o telefone de quem
- * está do outro lado da proposta, perdia-se o negócio de vista.
+ * ── DE DUAS COLUNAS PARA A GAVETA DO MOCKUP (02/10) ───────────────────────
+ * No mockup o cartão do funil abre a MESMA gaveta da pessoa: cabeçalho com
+ * Abrir conversa, Ligar e o Copilot; abas Dados · Negócio · Histórico. O painel
+ * de duas colunas (a pessoa encostada à esquerda, formato DataCrazy) virou
+ * isso: a pessoa é a moldura (`LeadCardContainer modo="negocio"`) e o negócio é
+ * a aba do meio, que é a que abre. Continua havendo uma ficha de cada assunto
+ * numa tela só — agora em abas, e com o funil visível atrás.
  *
- * O print do DataCrazy resolve sem quebrar a regra: **não empilha, encosta**.
- * A pessoa ocupa uma coluna proporcional à esquerda, o negócio ocupa o resto.
- * Continua havendo uma ficha de cada assunto; elas só passaram a caber juntas.
- *
- * A ficha INTEIRA do lead não morreu: o lápis e o "Ver ficha completa" da
- * coluna levam até ela, e a lista de Leads continua abrindo o lead direto.
+ * O celular, que antes perdia a pessoa (não cabia a coluna), passa a ter as
+ * três abas também.
  */
 export const DealCardPanel = memo(function DealCardPanel() {
   const { isOpen, entryId, leadId, aba, close, openDeal } = useDealSheet();
@@ -77,6 +83,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
     useDealCardData(entryId, leadId, isOpen);
+
+  // O efeito do card (ganho, perda, poeira) espera o painel fechar: tocado
+  // por trás do overlay, ninguém o veria. Ver `lib/card-effects.ts`.
+  useEffect(() => {
+    definirPainelAberto(isOpen);
+    return () => definirPainelAberto(false);
+  }, [isOpen]);
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
 
@@ -102,6 +115,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const renomearNegocio = useRenomearNegocio({ entryId, dealId, leadId, organizacaoId });
   const ajustePedido = useAjustarPedidoGanho(
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
+  );
+  const corrigirVenda = useCorrigirVendaHistorica(
+    data?.vendaHistorica ? data.id : dealId, organizacaoId, data?.pedidoAtualizadoEm ?? null,
+  );
+  // Venda histórica mora em outro negócio (`data.id`), como na correção acima.
+  const corrigirDataDoDesfecho = useCorrigirDataDoDesfecho(
+    data?.vendaHistorica ? data.id : dealId, organizacaoId, data?.pedidoAtualizadoEm ?? null,
   );
   const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
   const editarValorProposta = useEditarValorProposta(entryId);
@@ -203,9 +223,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
   /**
    * ── Ganhar / perder ───────────────────────────────────────────────────────
    *
-   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1). Não move o card: o
-   * vendedor decide na etapa em que estiver, que é o que destrava os 283 funis
-   * (71%) sem etapa terminal.
+   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1): o vendedor decide na etapa
+   * em que estiver, que é o que destrava os 283 funis (71%) sem etapa terminal.
+   * Quem move o card para a etapa de ganho/sucesso, quando há, é o BANCO
+   * (trigger em `deals.outcome`, Emenda 2) — esta tela não move nada, só
+   * invalida o board para a coluna nova aparecer.
    *
    * Vai por RPC, não por `.update()`, por três razões — e a terceira decide:
    * `deals.outcome` ainda não existe em `types.ts`; a transição de `outcome` é
@@ -233,10 +255,19 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const [pedindoValor, setPedindoValor] = useState(false);
 
+  /**
+   * Celebração dentro do painel: confete e baú no ganho, lixeira na perda.
+   * A origem do voo é o botão clicado, lida ANTES da RPC — depois dela o
+   * negócio encerra e o botão sai do cabeçalho.
+   */
+  const painelRef = useRef<HTMLDivElement>(null);
+  const { origemDo, celebrar, camada: camadaDaCelebracao } = useCelebracaoDoDesfecho(painelRef);
+
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
       setDecidindo(true);
+      const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
         const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
@@ -267,6 +298,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
             const terminal = data?.etapas.find((e) => e.papel === papel);
             if (terminal) {
               await moverEtapa(terminal.chave);
+              dispararEfeitoDeDesfecho(entryId, desfecho);
+              celebrar(desfecho, origem);
               return;
             }
             // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
@@ -285,6 +318,12 @@ export const DealCardPanel = memo(function DealCardPanel() {
         }
 
         toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        if (desfecho === "open") {
+          cancelarEfeitoDeDesfecho(entryId);
+        } else {
+          dispararEfeitoDeDesfecho(entryId, desfecho);
+          celebrar(desfecho, origem);
+        }
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
@@ -293,12 +332,12 @@ export const DealCardPanel = memo(function DealCardPanel() {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Não foi possível registrar o desfecho");
+        notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
       } finally {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa],
+    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar],
   );
 
   /**
@@ -442,8 +481,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
           // É isto que responde "em qual negócio isto foi dito".
           pipelineEntryId: entryId,
         });
-      } catch {
-        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível publicar o comentário. O texto continua na caixa." });
         // Reergue para o bloco NÃO esvaziar a caixa — ver a regra 1 do
         // `DealCardComments`. Engolir aqui apagaria o que a pessoa escreveu.
         throw new Error("comentario-nao-publicado");
@@ -457,8 +496,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       if (!leadId) return;
       try {
         await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
-      } catch {
-        toast.error("Não foi possível salvar a edição do comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível salvar a edição do comentário." });
         throw new Error("comentario-nao-editado");
       }
     },
@@ -471,8 +510,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       try {
         await removerComentario.mutateAsync({ commentId: id, leadId });
         toast.success("Comentário apagado.");
-      } catch {
-        toast.error("Não foi possível apagar o comentário.");
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível apagar o comentário." });
         throw new Error("comentario-nao-apagado");
       }
     },
@@ -521,24 +560,20 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `tags`. O painel já tem a resposta em mãos — perguntar de novo lá dentro
    * seria uma segunda consulta para um fato que ele acabou de ler.
    */
-  const negocio = (comLead: boolean) =>
+  const negocio =
     isLoading ? (
-      <div className="flex h-full flex-1 items-center justify-center bg-background">
+      <div className="flex items-center justify-center py-16">
         <span className="text-[13px] text-muted-foreground">Carregando…</span>
       </div>
     ) : data ? (
       <DealCard
         negocio={data}
         acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
-        etiquetas={
-          !comLead && leadId ? (
-            <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
-          ) : undefined
-        }
-        /* Vê o negócio → vê o lead → pode ligar. Quem desenha o botão é a
-           raiz (App.tsx), via LeadCallActionSlot. */
+        /* Ligar só quando a gaveta NÃO tem a pessoa no cabeçalho (negócio sem
+           lead): com ela, o Ligar já está na fileira de ações da pessoa, e dois
+           botões de ligar para o mesmo número a 200 px é ruído. */
         acaoLigar={
-          leadId && renderLigar ? renderLigar({ id: leadId, nome: data.lead.nome }) : undefined
+          !leadId && renderLigar ? renderLigar({ id: data.lead.id, nome: data.lead.nome }) : undefined
         }
         onSaveNote={salvarNota}
         onRenomear={(nome, alterarLead) => renomearNegocio.mutateAsync({ nome, alterarLead })}
@@ -551,12 +586,15 @@ export const DealCardPanel = memo(function DealCardPanel() {
            clique. Era esta linha que sumia o botão em 19,2% dos cards. */
         onAdicionarProduto={adicionarProduto}
         onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
+        onCorrigirVendaHistorica={data.estado === "ganho" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirVenda.mutateAsync : undefined}
+        onCorrigirDataDoDesfecho={data.estado !== "aberto" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirDataDoDesfecho.mutateAsync : undefined}
         ajustesPedido={ajustePedido.historico}
         /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
            e a lixeira são de item já lançado, e não há item sem negócio. */
         onEditarItem={dealIdParaProduto ? editarItem : undefined}
         onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
         onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
+        onRecarregarValor={editarValorProposta.recarregarValor}
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}
@@ -576,33 +614,33 @@ export const DealCardPanel = memo(function DealCardPanel() {
         excluindo={excluindo}
       />
     ) : (
-      <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">
+      <div className="flex items-center justify-center rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
         <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
       </div>
     );
 
   /**
-   * `comLead` é o corte de largura, não de importância.
+   * A pessoa é a MOLDURA: o `LeadCardContainer` desenha o cabeçalho dela e as
+   * abas, e o negócio entra como a aba do meio. A coluna recebe o id do LEAD,
+   * nunca o `pipeline_entries.id` (`cards-nunca-empilham.test.tsx`).
    *
-   * No celular não há largura de sobra para a coluna da pessoa sem espremer o
-   * negócio a ponto de a régua de etapas virar textura. Lá o painel volta a ser
-   * de uma coluna, e a pessoa continua a um toque pelo card do Lead.
+   * Negócio órfão de lead não deveria existir (ADR-0023 §2); se existir, a
+   * gaveta abre só com o negócio, em vez de uma moldura vazia acusando falta.
    */
-  const conteudo = (comLead: boolean) => (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
-      {/* A coluna da pessoa só existe quando há pessoa. Um negócio órfão de lead
-          não deveria existir (ADR-0023 §2), mas se existir o painel abre com o
-          negócio ocupando tudo em vez de com uma coluna vazia acusando falta. */}
-      {comLead && leadId && (
+  const conteudo = (
+    <div ref={painelRef} className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-background">
+      {camadaDaCelebracao}
+      {leadId ? (
         <LeadCardContainer
           leadId={leadId}
           isOpen={isOpen}
-          forma="coluna"
-          onAbrirFicha={abrirFicha}
+          modo="negocio"
+          painelNegocios={negocio}
           podeCriarEtiqueta={!!souAdmin}
         />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-14 sm:px-5">{negocio}</div>
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{negocio(comLead)}</div>
     </div>
   );
 
@@ -650,17 +688,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * mantém o `DealCard` sem nada além de desenho. É a mesma forma do
    * `AdicionarProdutoDialog`, e forma repetida é o que se lê rápido.
    *
-   * ── `z-[60]` NÃO é enfeite ────────────────────────────────────────────────
+   * ── Camada: a escala de `ui/layers.ts`, sem override ───────────────────
    * Ser irmão resolve o roubo de foco por ANINHAMENTO; não resolve a ordem de
-   * PINTURA. No celular o painel é um `Sheet`, e `SheetContent` carrega
-   * `z-[51]` (ui/sheet.tsx) enquanto o overlay e o conteúdo do `AlertDialog`
-   * são `z-50` (ui/alert-dialog.tsx). Portalizados como irmãos no mesmo
-   * contexto de empilhamento, 51 vence 50 e a confirmação nasce ATRÁS do
-   * painel — modal, com o resto em `pointer-events: none`, sem Esc no celular.
-   * Ou seja: tela travada, saída só por recarregar a página. No desktop passa
-   * despercebido porque `DialogContent` também é `z-50` e o desempate cai na
-   * ordem do DOM. Subir os dois acima de 51 conserta o celular sem mexer em
-   * primitivo compartilhado.
+   * PINTURA. No celular o painel é um `Sheet` (`z-[51]`). Este diálogo já
+   * passou `z-[60]` nos dois (overlay e caixa) para não nascer atrás dele;
+   * hoje o próprio `AlertDialog` é `z-[70]`/`z-[71]` por padrão, acima de
+   * gaveta, diálogo e listas. Um override aqui só o REBAIXARIA para o degrau
+   * das listas — por isso não há nenhum.
    *
    * ── O texto diz o que REALMENTE acontece ─────────────────────────────────
    * A versão anterior prometia "histórico e outros negócios intactos". Meia
@@ -671,11 +705,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const dialogoExclusao = data ? (
     <AlertDialog open={confirmandoExclusao} onOpenChange={setConfirmandoExclusao}>
-      <AlertDialogContent
-        overlayClassName="z-[60]"
-        className="z-[60]"
-        data-testid="deal-card-excluir-dialogo"
-      >
+      <AlertDialogContent data-testid="deal-card-excluir-dialogo">
         <AlertDialogHeader>
           <AlertDialogTitle>Excluir "{data.titulo}"?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -733,40 +763,20 @@ export const DealCardPanel = memo(function DealCardPanel() {
     />
   ) : null;
 
-  if (isMobile) {
-    return (
-      <>
-        <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-          <SheetContent side="bottom" className="h-[96dvh] overflow-hidden p-0">
-            {conteudo(false)}
-          </SheetContent>
-        </Sheet>
-        {dialogoProduto}
-        {dialogoExclusao}
-        {dialogoValor}
-      </>
-    );
-  }
-
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
-      {/* Sem botão de fechar próprio: o `DialogContent` já desenha um
-          `DialogPrimitive.Close` em `right-4 top-4` (ui/dialog.tsx:48-51).
-          O botão que existia aqui ficava em `right-3 top-3` — 4px ao lado —
-          e o resultado era DOIS "X" quase sobrepostos no canto.
-          Fica o do primitivo: ele já traz rótulo `sr-only`, fecha no Esc e
-          devolve o foco ao gatilho, e é o mesmo de todo diálogo do produto.
-
-          O painel acompanha a janela com uma margem curta; as duas colunas
-          aproveitam o espaço extra sem criar rolagem na casca do diálogo. */}
-      <DialogContent className="flex h-[96dvh] w-[calc(100%-2rem)] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
-        {conteudo(true)}
-      </DialogContent>
-    </Dialog>
-    {dialogoProduto}
-    {dialogoExclusao}
-    {dialogoValor}
+      <GavetaLateral
+        aberta={isOpen}
+        onFechar={close}
+        celular={isMobile}
+        largura="negocio"
+        rotulo="Painel do negócio"
+      >
+        {conteudo}
+      </GavetaLateral>
+      {dialogoProduto}
+      {dialogoExclusao}
+      {dialogoValor}
     </>
   );
 });

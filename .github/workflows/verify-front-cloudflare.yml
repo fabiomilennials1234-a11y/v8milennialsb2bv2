@@ -1,0 +1,80 @@
+name: Verify Front (Cloudflare)
+
+# O que o deploy (deploy-front-cloudflare.yml) vai precisar, provado no PR —
+# sem segredo nenhum: build dual, cf:prepare (que recusa segredo e source map),
+# tipos do Worker e os testes de tests/unit/cloudflare (inclusive a deriva
+# Dockerfile × workflow e as invariantes de segurança do workflow de deploy).
+#
+# `pull_request`, nunca `pull_request_target`: PR de fork roda com token só de
+# leitura e sem secret. Build sem VITE_* é de propósito: aqui se prova que o
+# front compila e que o artefato sai limpo, não o bundle de produção.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'classic/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'vitest.config.ts'
+      - 'tailwind.config.ts'
+      - 'postcss.config.js'
+      - 'tsconfig*.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Dockerfile'
+      - 'cloudflare/**'
+      - 'scripts/cloudflare/**'
+      - 'scripts/ui-classic/**'
+      - 'tests/unit/cloudflare/**'
+      - '.github/workflows/deploy-front-cloudflare.yml'
+      - '.github/workflows/verify-front-cloudflare.yml'
+
+permissions: {}
+
+concurrency:
+  group: verify-front-cloudflare-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: build:dual + cf:prepare + tipos + testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Cache aqui pode: este workflow não tem segredo para vazar.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cloudflare/package-lock.json
+
+      - name: Dependências (raiz e cloudflare/, sem scripts de instalação)
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund --prefix cloudflare
+
+      - name: Build dual (V5 + clássica)
+        run: npm run build:dual
+
+      - name: cf:prepare (tira source map, recusa segredo, gera _headers)
+        run: npm run cf:prepare -- --from dist
+
+      - name: Tipos do Worker
+        run: npm run cf:typecheck
+
+      - name: worker-configuration.d.ts em dia com o wrangler.jsonc
+        run: npm --prefix cloudflare run types -- --check
+
+      - name: Testes do front na Cloudflare
+        run: npx vitest run tests/unit/cloudflare

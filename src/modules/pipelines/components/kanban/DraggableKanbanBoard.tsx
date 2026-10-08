@@ -17,9 +17,22 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { DraggableItem } from "@/contracts/pipe";
+import type { DraggableItem, StageRole } from "@/contracts/pipe";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, Trash2, FileDown, Loader2, ArrowUpDown, Check } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Trash2,
+  FileDown,
+  Loader2,
+  ArrowUpDown,
+  Check,
+  CalendarClock,
+  CalendarCheck,
+  Trophy,
+  CircleX,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -38,6 +51,12 @@ import {
   sortColumnItems,
   type ColumnSortKey,
 } from "@/modules/pipelines/lib/column-sort";
+import {
+  partitionClosedOutcomes,
+  type ClosedGroupingAccessors,
+  type ClosedOutcome,
+} from "@/modules/pipelines/lib/closed-outcome-groups";
+import { ClosedOutcomeStack } from "./ClosedOutcomeStack";
 
 // `DraggableItem` tem definição canônica em contracts (quebra import direto
 // leads→pipelines). Re-exportado para manter a API pública inalterada.
@@ -47,6 +66,8 @@ export interface KanbanColumn<T extends DraggableItem> {
   id: string;
   title: string;
   color: string;
+  /** Papel da etapa — ícone no cabeçalho e fundo das colunas de desfecho. */
+  role?: StageRole | null;
   items: T[];
   totalCount?: number;
   hasMore?: boolean;
@@ -70,6 +91,12 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
   disabled?: boolean;
+  /**
+   * Empilha os cards encerrados (ganhos e perdidos) de cada coluna num grupo
+   * por desfecho, subdividido por mês. Sem os acessores, a coluna é uma lista
+   * plana como sempre foi. Ver `closed-outcome-groups`.
+   */
+  closedGrouping?: ClosedGroupingAccessors<T>;
 }
 
 /**
@@ -87,6 +114,14 @@ function PartialSortNotice() {
   );
 }
 
+/** Ícone por papel; etapa aberta fica com o quadradinho da cor dela. */
+const ROLE_ICON: Partial<Record<StageRole, { icon: LucideIcon; label: string; className: string }>> = {
+  meeting_booked: { icon: CalendarClock, label: "Etapa de reunião marcada", className: "text-foreground/70" },
+  meeting_held: { icon: CalendarCheck, label: "Etapa de reunião realizada", className: "text-foreground/70" },
+  won: { icon: Trophy, label: "Etapa de ganho", className: "text-success-strong" },
+  lost: { icon: CircleX, label: "Etapa de perda", className: "text-destructive" },
+};
+
 function DroppableColumn<T extends DraggableItem>({
   column,
   children,
@@ -98,6 +133,7 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn,
   sortKey,
   onSortChange,
+  autoLoadMore = true,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -109,6 +145,12 @@ function DroppableColumn<T extends DraggableItem>({
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   sortKey?: ColumnSortKey;
   onSortChange?: (stageId: string, sortKey: ColumnSortKey) => void;
+  /**
+   * `false` troca o carregamento por rolagem por um botão. Com cards
+   * empilhados a coluna encolhe, o sentinela fica sempre visível e carregaria
+   * página atrás de página até o fim da etapa sem ninguém pedir.
+   */
+  autoLoadMore?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -128,21 +170,41 @@ function DroppableColumn<T extends DraggableItem>({
         // `p-0` anula o `p-4` que `.kanban-column` aplica no CSS global. O
         // recheio agora é por faixa (cabeçalho `px-3`, corpo `px-2.5`); somados
         // davam 26px de cada lado e o card caía pra 240px dentro de 292px.
-        "kanban-column w-[292px] min-w-[292px] max-w-[292px] flex-shrink-0 flex flex-col p-0",
-        "rounded-xl bg-muted/25 overflow-hidden transition-all duration-200",
-        isOver && "ring-2 ring-primary/50 bg-primary/5",
+        //
+        // V5: a coluna é uma raia AFUNDADA (`bg-sunken`) — um degrau entre a
+        // bancada e o cartão, nos dois temas — e os cards brancos de bento
+        // assentam sobre ela. Raio de cartão, contorno fino; o alvo do arrasto
+        // acende em ouro suave.
+        //
+        // V5 (mockup): 272 px de piso e cresce para dividir a largura quando
+        // há poucas etapas (`flex-[1_0_272px]`, teto de 380 px). Ganho e perda
+        // ganham fundo tintado — o desfecho se lê de longe.
+        "kanban-column flex min-w-[272px] max-w-[380px] flex-[1_0_272px] flex-col p-0",
+        "overflow-hidden rounded-card border border-border/60 transition-[background-color,box-shadow] duration-200",
+        column.role === "won" ? "bg-success/[.07]" : column.role === "lost" ? "bg-destructive/[.06]" : "bg-sunken",
+        isOver && "bg-primary-soft/50 ring-2 ring-primary/60",
         className
       )}
     >
-      <div className="flex items-center gap-2 shrink-0 px-3 pt-3 pb-2">
-        <div
-          className="size-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: column.color }}
-        />
-        <h3 className="text-[12.5px] font-semibold tracking-[-0.01em] truncate">
+      <div className="flex shrink-0 items-center gap-2 px-3.5 pb-2.5 pt-3">
+        {(() => {
+          const role = column.role ? ROLE_ICON[column.role] : undefined;
+          if (role) {
+            const Icon = role.icon;
+            return <Icon className={cn("size-4 shrink-0", role.className)} aria-label={role.label} />;
+          }
+          return (
+            <span
+              className="size-2 shrink-0 rounded-[3px]"
+              style={{ backgroundColor: column.color }}
+              aria-hidden
+            />
+          );
+        })()}
+        <h3 className="truncate text-xs font-extrabold tracking-[-0.01em]">
           {column.title}
         </h3>
-        <span className="rounded-full bg-muted px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+        <span className="inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-card px-1.5 text-[10.5px] font-extrabold tabular-nums text-foreground shadow-relevo">
           {column.totalCount ?? column.items.length}
         </span>
         {renderColumnExtra && renderColumnExtra(column)}
@@ -150,8 +212,13 @@ function DroppableColumn<T extends DraggableItem>({
           {(onExportStage || onDeleteAllLeads || onSortChange) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:text-foreground"
+                  aria-label={`Ações da etapa ${column.title}`}
+                >
+                  <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -211,8 +278,8 @@ function DroppableColumn<T extends DraggableItem>({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            <button className="rounded-lg p-1.5 transition-colors hover:bg-card">
+              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
         </div>
@@ -222,11 +289,17 @@ function DroppableColumn<T extends DraggableItem>({
 
       {sortKey && sortKey !== DEFAULT_COLUMN_SORT && column.hasMore && <PartialSortNotice />}
 
-      <div className="flex-1 min-h-[100px] space-y-2 overflow-y-auto px-2.5 pb-2.5">
+      <div className="min-h-[100px] flex-1 space-y-2.5 overflow-y-auto px-2.5 pb-2.5">
         {children}
-        {column.hasMore && column.onLoadMore && (
+        {column.hasMore && column.onLoadMore && (autoLoadMore ? (
           <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
-        )}
+        ) : (
+          <LoadMoreButton
+            onLoadMore={column.onLoadMore}
+            isFetching={column.isFetchingMore ?? false}
+            remaining={column.totalCount !== undefined ? column.totalCount - column.items.length : null}
+          />
+        ))}
         {!column.hasMore && column.isFetchingMore && (
           <div className="flex justify-center py-2">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -241,16 +314,16 @@ function DroppableColumn<T extends DraggableItem>({
           type="button"
           onClick={() => onCreateInColumn(column.id, column.title)}
           data-testid={`column-create-${column.id}`}
+          aria-label={`Adicionar em ${column.title}`}
+          title={`Adicionar em ${column.title}`}
           className={cn(
-            "mx-2.5 mb-2.5 flex shrink-0 items-center justify-center gap-1.5",
-            "rounded-lg border border-dashed border-border px-2 py-2",
-            "text-[11.5px] font-medium text-muted-foreground",
-            "transition-colors duration-150 hover:border-primary hover:text-primary",
+            "mx-2.5 mb-2.5 flex min-h-[44px] shrink-0 items-center justify-center",
+            "rounded-2xl border-[1.5px] border-dashed border-border text-muted-foreground",
+            "transition-colors duration-150 hover:border-primary/60 hover:bg-card hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
-          <Plus className="size-3.5" aria-hidden />
-          Novo negócio
+          <Plus className="size-4" aria-hidden />
         </button>
       )}
     </motion.div>
@@ -326,6 +399,42 @@ function LoadMoreSentinel({ onLoadMore, isFetching }: { onLoadMore: () => void; 
   );
 }
 
+function LoadMoreButton({ onLoadMore, isFetching, remaining }: {
+  onLoadMore: () => void;
+  isFetching: boolean;
+  remaining: number | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onLoadMore}
+      disabled={isFetching}
+      className={cn(
+        "flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-2",
+        "text-[11px] font-medium text-muted-foreground transition-colors",
+        "hover:bg-background hover:text-foreground disabled:opacity-60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
+      {isFetching && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+      Carregar mais
+      {remaining !== null && remaining > 0 && (
+        <span className="tabular-nums text-muted-foreground/70">· {remaining} na etapa</span>
+      )}
+    </button>
+  );
+}
+
+const groupKey = (columnId: string, outcome: ClosedOutcome) => `${columnId}::${outcome}`;
+const monthKey = (columnId: string, outcome: ClosedOutcome, month: string) => `${columnId}::${outcome}::${month}`;
+
+function toggleIn(set: ReadonlySet<string>, key: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
 export function DraggableKanbanBoard<T extends DraggableItem>({
   columns,
   onStatusChange,
@@ -337,6 +446,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   onExportStage,
   onCreateInColumn,
   disabled,
+  closedGrouping,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
   // Ordenação por coluna: cada etapa guarda a sua. Fica no board (e não na
@@ -346,6 +456,10 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   const handleSortChange = useCallback((stageId: string, sortKey: ColumnSortKey) => {
     setSortByColumn((prev) => ({ ...prev, [stageId]: sortKey }));
   }, []);
+  // Grupos de encerrados abertos e meses abertos dentro deles. Leitura da
+  // coluna, como a ordenação: vive no board, não entra em URL nem em view salva.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [openMonths, setOpenMonths] = useState<ReadonlySet<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -469,11 +583,31 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       <div
         ref={scrollRef}
         onScroll={handleMainScroll}
-        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide"
+        // O topo V5 do funil tem cabeçalho, pílula, faixa de funis e barra de
+        // controle; o quadro ocupa o resto da altura e rola por coluna.
+        className="flex gap-3 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-300px)] min-h-[420px] scrollbar-hide"
       >
         {columns.map((column) => {
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
           const sortedItems = sortColumnItems(column.items, columnSort);
+          const { open: openItems, closed: closedGroups } = closedGrouping
+            ? partitionClosedOutcomes(sortedItems, closedGrouping)
+            : { open: sortedItems, closed: [] };
+
+          // Só o que está NA TELA entra no SortableContext.
+          const visibleClosed = closedGroups.flatMap((group) =>
+            expandedGroups.has(groupKey(column.id, group.outcome))
+              ? group.months
+                  .filter((m) => openMonths.has(monthKey(column.id, group.outcome, m.key)))
+                  .flatMap((m) => m.items)
+              : [],
+          );
+          const closedCount = closedGroups.reduce((n, g) => n + g.items.length, 0);
+          const hidesClosed = visibleClosed.length < closedCount;
+          const renderSortable = (item: T) => (
+            <SortableCard key={item.id} item={item} renderCard={renderCard} />
+          );
+
           return (
             <DroppableColumn
               key={column.id}
@@ -486,18 +620,57 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
               onCreateInColumn={onCreateInColumn}
               sortKey={columnSort}
               onSortChange={handleSortChange}
+              autoLoadMore={!hidesClosed}
             >
               <SortableContext
-                items={sortedItems.map((item) => item.id)}
+                items={[...visibleClosed, ...openItems].map((item) => item.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {sortedItems.map((item) => (
-                  <SortableCard
-                    key={item.id}
-                    item={item}
-                    renderCard={renderCard}
-                  />
-                ))}
+                {closedGroups.map((group) => {
+                  const gKey = groupKey(column.id, group.outcome);
+                  const expanded = expandedGroups.has(gKey);
+                  const prefix = `${gKey}::`;
+                  return (
+                    <ClosedOutcomeStack<T>
+                      key={gKey}
+                      group={group}
+                      expanded={expanded}
+                      hasMore={column.hasMore}
+                      openMonths={
+                        new Set(
+                          [...openMonths]
+                            .filter((k) => k.startsWith(prefix))
+                            .map((k) => k.slice(prefix.length)),
+                        )
+                      }
+                      onToggleExpanded={() => {
+                        setExpandedGroups((prev) => toggleIn(prev, gKey));
+                        // Um mês só abre sozinho ao expandir (um clique a menos
+                        // para nada). Agrupar fecha os meses, para a próxima
+                        // abertura começar do resumo.
+                        setOpenMonths((prev) => {
+                          const next = new Set([...prev].filter((k) => !k.startsWith(prefix)));
+                          if (!expanded && group.months.length === 1) {
+                            next.add(monthKey(column.id, group.outcome, group.months[0].key));
+                          }
+                          return next;
+                        });
+                      }}
+                      onToggleMonth={(m) =>
+                        setOpenMonths((prev) => toggleIn(prev, monthKey(column.id, group.outcome, m)))
+                      }
+                      onOpenAllMonths={() =>
+                        setOpenMonths((prev) => {
+                          const next = new Set(prev);
+                          for (const m of group.months) next.add(monthKey(column.id, group.outcome, m.key));
+                          return next;
+                        })
+                      }
+                      renderItem={renderSortable}
+                    />
+                  );
+                })}
+                {openItems.map(renderSortable)}
               </SortableContext>
             </DroppableColumn>
           );
@@ -506,7 +679,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
 
       <DragOverlay>
         {activeItem ? (
-          <div className="rotate-3 scale-105">
+          <div className="rotate-2 scale-[1.03] cursor-grabbing [&>*]:shadow-relevo-alto">
             {renderCard(activeItem, true)}
           </div>
         ) : null}

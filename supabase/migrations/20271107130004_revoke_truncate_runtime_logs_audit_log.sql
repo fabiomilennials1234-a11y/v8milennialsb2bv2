@@ -1,0 +1,24 @@
+-- Segurança · REVOKE TRUNCATE em runtime_logs e audit_log
+--
+-- TIMESTAMP PROVISÓRIO: renumerar contra o ledger de prod na hora de aplicar.
+--
+-- TRUNCATE não passa por RLS: quem tem o privilégio apaga a tabela inteira,
+-- de todas as orgs, sem policy nenhuma no caminho. `audit_log` é a trilha de
+-- auditoria e `runtime_logs` a de operação — nenhum usuário logado tem motivo
+-- para zerá-las.
+--
+-- Medido em prod em 2026-10-05 (has_table_privilege, MCP só leitura):
+--   authenticated · runtime_logs · TRUNCATE = true
+--   authenticated · audit_log    · TRUNCATE = true
+--   anon          · ambos        · TRUNCATE = false  (revogado aqui também:
+--                                  idempotente e fecha o caso de regressão
+--                                  por GRANT ALL futuro)
+-- Nenhum código do repositório faz TRUNCATE nessas tabelas. As purgas (jobs
+-- 82 e 90) rodam como `postgres` via pg_cron; service_role mantém o que tem.
+--
+-- Transacional e idempotente: pode ir por apply_migration.
+--
+-- REVERSÃO EXATA:
+--   GRANT TRUNCATE ON public.runtime_logs, public.audit_log TO authenticated;
+
+REVOKE TRUNCATE ON public.runtime_logs, public.audit_log FROM authenticated, anon;

@@ -1,0 +1,1168 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  :root {
+    /* Torque Brand Colors — Light mode with warm personality */
+    --background: 42 25% 96%;
+    --foreground: 30 18% 16%;
+
+    --card: 42 18% 99%;
+    --card-foreground: 30 18% 16%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 18% 16%;
+
+    /* Primary Yellow - Torque Brand Identity */
+    --primary: 47 100% 50%;
+    --primary-foreground: 30 18% 15%;
+
+    /* Secondary - Soft Yellow */
+    --secondary: 47 40% 95%;
+    --secondary-foreground: 30 18% 20%;
+
+    /* Muted */
+    --muted: 42 18% 93%;
+    --muted-foreground: 30 10% 46%;
+
+    /* Accent - Dark Brown */
+    --accent: 36 20% 22%;
+    --accent-foreground: 45 100% 96%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success - Gamification Green */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 18% 15%;
+    /* âmbar escurecido p/ texto e ícone sobre superfície tintada.
+       --warning (38 92% 50%) reprova AA sobre --card em light (~2.6:1).
+       Este é o par legível; --warning segue sendo o valor de PREENCHIMENTO. */
+    --warning-strong: 32 90% 34%;   /* ~6.5:1 sobre --card light */
+
+    /* Silver — Ranking "2º lugar" / neutral accent */
+    --silver: 220 9% 55%;
+    --silver-foreground: 0 0% 100%;
+
+    /* Insights — área master de unit economics (azul semântico, ancorado em
+       --chart-5, hue 205 distinto de destructive 0° / success 142° / gold 47°).
+       Light: azure forte AA ~5:1 sobre cream L96. */
+    --insights: 205 90% 40%;
+    --insights-foreground: 210 40% 98%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 47 100% 50%;
+
+    /* ─── Profundidade (claro) ──────────────────────────────────────
+       O detalhe que faz um token só funcionar nos DOIS temas: quem
+       escava muda de lado. No ESCURO quem trabalha é o lábio de luz de
+       BAIXO (branco sobre preto); no CLARO é a parte PRETA de cima
+       (sombra sobre branco). Mesmo nome, mesmo significado, mecanismo
+       invertido — e por isso o "afundado" tem sinal correto nos dois,
+       ao contrário do "levantado", que inverte de mecanismo.
+       É exatamente o defeito medido no `bg-muted`, que hoje lê afundado
+       no claro e levantado no escuro. */
+    --sunken: 40 20% 94%;
+    --elevated: 0 0% 100%;
+
+    /* Tinta da pílula de origem do lead. É o único valor que precisa virar
+       de lado por tema — o matiz de cada origem mora no ORIGIN_COLORS. */
+    --origin-ink-l: 34%;
+
+    --relevo:
+      0 1px 2px 0 hsl(30 18% 20% / .06),
+      0 4px 10px -4px hsl(30 18% 20% / .10);
+    --relevo-alto:
+      0 2px 4px -1px hsl(30 18% 20% / .08),
+      0 16px 40px -12px hsl(30 18% 20% / .18);
+    --afundado:
+      inset 0 2px 5px -1px hsl(30 18% 20% / .12),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .70);
+    --afundado-raso:
+      inset 0 1px 2px 0 hsl(30 18% 20% / .10),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .60);
+
+    /* ─── Bubble tokens ───────────────────────────────────────── */
+    --bubble-outgoing:            220 30% 88%;
+    --bubble-outgoing-foreground: 220 25% 18%;
+    --bubble-outgoing-border:     220 22% 75%;
+
+    --bubble-incoming:            42 18% 97%;
+    --bubble-incoming-foreground: 30 18% 16%;
+    --bubble-incoming-border:     40 15% 84%;
+
+    --bubble-ai:                  47 35% 90%;
+    --bubble-ai-foreground:       36 20% 18%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-workflow:            263 30% 92%;
+    --bubble-workflow-foreground: 263 20% 18%;
+    --bubble-workflow-border:     263 70% 70%;
+
+    --bubble-system:              42 15% 92%;
+    --bubble-system-foreground:   30 12% 33%;
+    --bubble-system-border:       40 12% 80%;
+
+    /* ─── Chat layout density (default: comfortable) ──────────── */
+    --chat-bubble-padding-x:    14px;
+    --chat-bubble-padding-y:    10px;
+    --chat-bubble-radius-lg:    16px;
+    --chat-bubble-radius-sm:    4px;
+    --chat-msg-gap-same-author: 4px;
+    --chat-msg-gap-different:   12px;
+    --chat-avatar-size:         40px;
+    --chat-composer-min-h:      44px;
+    --chat-list-row-height:     72px;
+
+    --radius: 0.75rem;
+
+    /* Sidebar - Dark Theme */
+    --sidebar-background: 36 20% 18%;
+    --sidebar-foreground: 45 20% 90%;
+    --sidebar-primary: 33 81% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 36 15% 25%;
+    --sidebar-accent-foreground: 45 20% 95%;
+    --sidebar-border: 36 15% 25%;
+    --sidebar-ring: 33 81% 54%;
+
+    /* Chart Colors */
+    --chart-1: 47 100% 50%;
+    --chart-2: 142 70% 45%;
+    --chart-3: 36 20% 22%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 200 80% 50%;
+
+    /* Custom Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary-hover: linear-gradient(135deg, hsl(31 85% 47%) 0%, hsl(31 85% 47%) 25%, hsl(47 100% 45%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(152 70% 50%) 100%);
+    --gradient-dark: linear-gradient(135deg, hsl(36 20% 18%) 0%, hsl(36 15% 25%) 100%);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(30 18% 20% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(30 18% 20% / 0.08), 0 2px 4px -2px hsl(30 18% 20% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(30 18% 20% / 0.1), 0 4px 6px -4px hsl(30 18% 20% / 0.05);
+    --shadow-gold: 0 10px 30px -10px hsl(47 100% 50% / 0.3);
+
+    /* ─── Command Palette tokens ────────────────────────────────── */
+    /* Hue neutral-cool 220° separa perceptivamente do warm 36° do chat */
+    --command-palette-bg:     0 0% 100%;
+    --command-palette-border: 220 10% 88%;
+  }
+
+  html.dark,
+  .dark {
+    color-scheme: dark;
+    /* ═══════════════════════════════════════════════════════════════════
+       PRETO NEUTRO — decisão do cliente em 20/08/2026, olhando os dois
+       protótipos lado a lado (preto puro × quase-preto). Venceu o PURO.
+
+       O que havia antes: todo neutro em hue 35-40 com 7-11% de saturação,
+       ou seja R > B em TODOS os 14 tokens de papel (--background tinha
+       R−B=5, --muted-foreground R−B=16). Não era cinza, era marrom de
+       baixa saturação — é isso que lia como "pastel". Agora S = 0%.
+
+       ⚠️ O preto NÃO conserta contraste: medido, a troca melhora só de
+       +0,37 a +2,02 pontos de razão, e nenhum par que reprovava passa a
+       aprovar só por isso. É decisão estética. Onde havia reprovação de
+       verdade, o token foi corrigido à parte (ver --muted-foreground e
+       a nota em --destructive).
+
+       Consequência física de #000 como base: NÃO existe sombra escura
+       sobre ele — não há nada abaixo de zero. Por isso o relevo aqui é
+       feito por LUMINÂNCIA + aresta de luz no topo, e a cava só funciona
+       DENTRO de uma superfície mais clara. Ver os tokens de profundidade
+       no fim deste bloco.
+       ═══════════════════════════════════════════════════════════════════ */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 47 100% 50%;
+    --primary-foreground: 0 0% 8%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
+
+    /* --muted é FILL DE CONTROLE (hover de ícone, thumb de scroll), por isso
+       fica ACIMA do card. Bloco secundário afundado usa --sunken, abaixo.
+       ⚠️ Isto NÃO conserta as ~890 ocorrências de `bg-muted` que hoje
+       significam "bloco secundário" e invertem de sentido entre os temas
+       (no claro --muted é mais escuro que o card, no escuro é mais claro).
+       Migrar aquelas para --sunken é passada separada. */
+    --muted: 0 0% 17%;
+    /* era 40 7% 56% (#948e84, R−B=16 e 4,1:1 sobre o card) — sobe para 64%
+       de lightness, o que dá ~7,3:1 sobre #141414 e passa AA folgado. */
+    --muted-foreground: 0 0% 64%;
+
+    /* 🔴 INCONGRUÊNCIA CORRIGIDA — este token INVERTIA de significado entre
+       os temas: marrom escuro no claro, DOURADO SÓLIDO no escuro. Como o
+       shadcn usa --accent em todo hover/focus de item (menu, dropdown,
+       command, select), no escuro cada botão ghost virava uma tarja
+       dourada. Agora é uma superfície neutra de hover nos dois temas.
+       O dourado continua sendo --primary, que é onde ele significa algo. */
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 95%;
+
+    /* ⚠️ NÃO RESOLVIDO, e registrado de propósito: como TEXTO sobre o card
+       este vermelho dá ~3,5:1 e reprova AA. Clarear conserta o texto e
+       quebra o botão sólido (que usa fg branco). Precisa virar dois tokens
+       — um de tinta, um de superfície — e isso é mudança de contrato. */
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 30 18% 10%;
+    --warning-strong: 38 92% 62%;   /* ~9:1 sobre --card dark */
+
+    --silver: 220 9% 70%;
+    --silver-foreground: 30 18% 10%;
+
+    /* Insights (dark) — azul mais claro p/ vibrar sobre warm-dark, AA ~6:1. */
+    --insights: 205 90% 60%;
+    --insights-foreground: 36 11% 9%;
+
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 47 100% 50%;
+
+    /* ─── Profundidade ──────────────────────────────────────────────
+       O Torque não tinha sistema de elevação: --shadow-sm/md/lg só
+       existiam no :root claro e tinham ZERO consumidores, e todo
+       `shadow-*` do app é o valor de fábrica do Tailwind — preto puro,
+       cego a tema, contraste 1,031 sobre fundo escuro (trabalho zero).
+       A separação era feita por BORDA: 5.047 utilitários `border*`
+       contra 223 `shadow*` em src/modules.
+
+       Vocabulário curto e fechado, senão vira neumorfismo:
+         aresta de luz no topo  = está levantado
+         sombra externa grande  = está solto do documento (popover/toast)
+         cava                   = é secundário
+       Nada mais tem profundidade. */
+    --sunken: 0 0% 4%;              /* bloco secundário DENTRO de um card */
+    --elevated: 0 0% 12%;           /* card em hover */
+    --origin-ink-l: 74%;            /* ver ORIGIN_COLORS no LeadCard.tsx */
+
+    --relevo:
+      inset 0 1px 0 0 hsl(0 0% 100% / .07),
+      0 1px 0 0 hsl(0 0% 0% / 1);
+    --relevo-alto:
+      inset 0 1px 0 0 hsl(0 0% 100% / .10),
+      0 0 0 1px hsl(0 0% 100% / .06),
+      0 20px 48px -12px hsl(0 0% 0% / 1);
+    --afundado:
+      inset 0 2px 6px -1px hsl(0 0% 0% / .95),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .05);
+    --afundado-raso:
+      inset 0 1px 3px 0 hsl(0 0% 0% / .9),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .045);
+
+    /* as sombras genéricas passam a existir no escuro (antes herdavam
+       tinta MARROM a 5% vinda do :root claro, invisível sobre o fundo) */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / .6);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / .7), 0 2px 4px -2px hsl(0 0% 0% / .5);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / .8), 0 4px 6px -4px hsl(0 0% 0% / .6);
+
+    /* ─── Bubble tokens (dark) ────────────────────────────────── */
+    --bubble-outgoing:            217 19% 27%;
+    --bubble-outgoing-foreground: 210 20% 94%;
+    --bubble-outgoing-border:     217 20% 38%;
+
+    /* Incoming (cliente): superfície sutil sobre o preto, lendo como
+       translúcida. Neutralizada — era hue 36 (R−B=8). */
+    --bubble-incoming:            0 0% 10%;
+    --bubble-incoming-foreground: 0 0% 90%;
+    --bubble-incoming-border:     0 0% 18%;
+
+    /* A bolha da IA MANTÉM matiz de propósito: aqui a cor é identidade, não
+       papel neutro. Mas a saturação cai de 22% para 16% — era o token mais
+       amarronzado do arquivo (R−B=27, o pior da paleta inteira). */
+    --bubble-ai:                  47 16% 15%;
+    --bubble-ai-foreground:       47 35% 90%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-workflow:            263 30% 12%;
+    --bubble-workflow-foreground: 263 70% 80%;
+    --bubble-workflow-border:     263 60% 55%;
+
+    --bubble-system:              0 0% 11%;
+    --bubble-system-foreground:   0 0% 62%;
+    --bubble-system-border:       0 0% 18%;
+
+    /* density vars não variam por tema — definidas só em :root */
+
+    /* ─── Command Palette tokens (dark) ─────────────────────────── */
+    --command-palette-bg:     220 15% 10%;
+    --command-palette-border: 220 10% 20%;
+
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 90%;
+
+    /* 🔴 INCONGRUÊNCIA CORRIGIDA — 11 tokens visuais eram declarados SÓ no
+       :root e nunca redefinidos aqui, então o tema escuro herdava valor do
+       tema CLARO. Os piores: --sidebar-accent/--sidebar-border eram
+       #494236 (marrom), --sidebar-primary era #e9932b (laranja de tema
+       claro) e --chart-3 era #433a2d — marrom praticamente invisível
+       sobre o fundo escuro.
+       A paleta de gráficos abaixo é a mesma que a superfície TV já usava
+       (5 matizes distintos e legíveis no escuro), agora promovida ao tema. */
+    --sidebar-primary: 47 100% 50%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 47 100% 50%;
+
+    --chart-1: 47 100% 50%;   /* dourado  */
+    --chart-2: 205 90% 60%;   /* azul     */
+    --chart-3: 271 65% 68%;   /* violeta  */
+    --chart-4: 25 85% 58%;    /* âmbar    */
+    --chart-5: 190 70% 52%;   /* teal     */
+
+    /* o gradiente escuro também era do tema claro (hue 36, marrom) */
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 8%) 0%, hsl(0 0% 14%) 100%);
+  }
+
+  /* ─── Superfície TV — parede vista a 3m, ambiente iluminado ─────────
+     Issue #1223 · spec: docs/design-tv-composable-widgets.md §2
+
+     Escopo de tema, NÃO paleta paralela: redeclara os MESMOS nomes de
+     token que `.dark` já usa, com valores recalibrados para distância e
+     brilho alto. Isto existe para substituir a paleta hardcoded de
+     src/modules/analytics/components/tv/ (#f8f5e7 / #8a857a / #ed9326 /
+     rgba(255,255,255,0.0x)), que hoje é um sistema paralelo
+     não-tematizável — nenhum arquivo daquele diretório usa hsl(var(--…)). */
+  [data-surface="tv"] {
+    color-scheme: dark;
+
+    /* Fundo mais profundo que o app: TV tem brilho alto e a sala tem luz
+       ambiente. 9% do app "lava" em parede; 7% segura o preto. */
+    --background:         36 12% 7%;
+    --foreground:         45 20% 95%;
+
+    /* Superfície do widget — sólida (sem blur; ver spec §2.3). */
+    --card:               35 10% 11%;
+    --card-foreground:    45 20% 95%;
+
+    /* Elevação do hero: +3% de L. A 3m, sombra não lê; luminância lê. */
+    --popover:            35 10% 14%;
+    --popover-foreground: 45 20% 95%;
+
+    /* Borda VISÍVEL. O border-white/5 de hoje some a 3m e a grid vira sopa. */
+    --border:             40 8% 20%;
+    --input:              40 8% 20%;
+
+    --muted:              35 9% 15%;
+    --muted-foreground:   40 8% 62%;   /* 62% vs 56% do app: +contraste p/ distância */
+
+    --primary:            47 100% 50%; /* gold — inalterado, é a marca */
+    --primary-foreground: 30 18% 12%;
+
+    --success:            142 62% 52%; /* +L vs app: verde escuro some em parede */
+    --destructive:          0 72% 60%;
+    --warning:             38 92% 58%;
+
+    /* ─── Escala tipográfica — cinco degraus, só cinco ────────────────
+       Tokens NOVOS: o repo não tinha escala tipográfica tokenizada, e na
+       TV isso degenerou em 14+ tamanhos distintos.
+
+       Fluida: `vw` como unidade porque a TV é sempre fullscreen — a
+       viewport É a tela, então vw mantém o tamanho FÍSICO constante em
+       qualquer resolução.
+
+       Piso de 36px em --tv-value não é arbitrário: regra de sinalização
+       (altura de caractere ≈ distância ÷ 200) exige ~15mm a 3m; numa TV
+       55" a 1920px isso é ~24px de altura-de-x, que em Inter
+       (x-height ≈ 0.727em) pede font-size ≈ 33px. **Confirmado por prova
+       ocular** na #1223 — era a única parte da spec vinda de cálculo e
+       não de observação.
+
+       O piso vale para VIEWPORT DE PAREDE (>= 1280px). Abaixo disso é
+       degradação deliberada para modo janela, onde ninguém está a 3m —
+       contrato diferente, critério diferente.
+
+       TETOS (corrigidos na #1223): a primeira versão usava 5.5vw/6rem e
+       saturava em ~1745px, então de 1920 a 4K a escala NÃO crescia. Numa
+       mesma parede de 55", 96px valem 5% da largura a 1920 e só 2,5% a
+       3840 — metade do tamanho físico, o oposto do que o `vw` existe para
+       garantir. O teto lutava contra o próprio mecanismo. Agora cada teto
+       é o DOBRO do valor de 1920, alcançado exatamente a 3840.
+
+       Dois orçamentos de distância, como o Apple TV:
+         3m   → --tv-hero, --tv-value        (a sala inteira consome)
+         1,5m → --tv-label, --tv-meta        (para quem se aproxima)
+
+       --tv-label e --tv-meta têm razão 1,14 e são quase o mesmo tamanho:
+       INTENCIONAL. Distinguem-se por peso, caixa e tracking, não por
+       escala. Abrir esse intervalo roubaria contraste do salto que
+       importa, que é --tv-value-sm → --tv-label. Não "conserte". */
+    --tv-hero:     clamp(3.5rem,    5vw,     12rem);   /* 56 →  96 @1920 → 192 @4K */
+    --tv-value:    clamp(2.25rem,   2.9vw,   7rem);    /* 36 →  56 @1920 → 112 @4K */
+    --tv-value-sm: clamp(1.5rem,    1.875vw, 4.5rem);  /* 24 →  36 @1920 →  72 @4K */
+    --tv-label:    clamp(0.75rem,   0.83vw,  2rem);    /* 12 →  16 @1920 →  32 @4K */
+    --tv-meta:     clamp(0.6875rem, 0.73vw,  1.75rem); /* 11 →  14 @1920 →  28 @4K */
+
+    /* ─── Séries de gráfico (#1218, spec §2.5) ──────────────────────────────
+       Duas rampas, escolhidas pela NATUREZA do dado, não pelo gosto. */
+
+    /* ORDINAL — barra, funil, ranking. O dado tem ordem → a cor tem ordem.
+       Mono-gold decrescente em L e S; a 3m lê como "intensidade". */
+    --metric-ramp-1: 47 100% 50%;
+    --metric-ramp-2: 45  78% 44%;
+    --metric-ramp-3: 42  56% 38%;
+    --metric-ramp-4: 40  36% 32%;
+    --metric-ramp-5: 38  20% 27%;
+
+    /* CATEGÓRICO — donut por origem/tag/produto/stream. Sem ordem → hues
+       distintos. Redefinição consciente de --chart-* DENTRO do escopo TV: no
+       app --chart-2 é literalmente --success e --chart-4 ~ --destructive, o que
+       pintaria categoria de verde-"bom"/vermelho-"ruim" sem o dado dizer isso
+       (bug de sistema pré-existente, fora desta fatia — só corrijo aqui dentro).
+       Evita 142° (success) e 0° (destructive). */
+    --chart-1: 47 100% 50%;   /* gold      */
+    --chart-2: 205 90% 60%;   /* azure     */
+    --chart-3: 271 65% 68%;   /* violeta   */
+    --chart-4: 25  85% 58%;   /* âmbar-laranja */
+    --chart-5: 190 70% 52%;   /* teal      */
+
+    /* ─── Motion (#1218, spec §2.7) — uma curva só, não uma terceira variante. */
+    --tv-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+    --tv-dur-instant: 50ms;
+    --tv-dur-fast:    150ms;
+    --tv-dur-base:    250ms;
+    --tv-dur-slow:    400ms;
+  }
+
+  /* Carregamento de valor na parede (#1207, spec §5.1).
+     SÓ o valor pulsa — o frame, o eyebrow e a proveniência já estão na tela,
+     porque vêm da configuração e não do dado.
+     SEM shimmer: o sweep de brilho a 3m lê como flicker. E numa TV que refaz
+     fetch a cada 30s, skeleton de tela inteira pisca a sala. */
+  @keyframes tv-value-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.7; }
+  }
+  .tv-value-loading {
+    animation: tv-value-pulse 2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tv-value-loading { animation: none; opacity: 0.55; }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    /* cv11: alterna numeral "1" com serif (legível em timestamps 11:11); ss01: "a" alternativo */
+    font-feature-settings: "cv11", "ss01";
+    min-height: 100vh;
+    /* PWA safe-area: respeita home indicator (iPhone) e barras de navegação */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  #root {
+    min-height: 100vh;
+    @apply bg-background;
+  }
+
+  /* Mobile overflow guard: nenhuma página deve causar scroll lateral.
+     Scrollers internos (kanban list, tabelas com overflow-x-auto) seguem
+     funcionando — são contextos de rolagem aninhados, independentes. */
+  @media (max-width: 767px) {
+    html,
+    body,
+    #root {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+  }
+
+  /* Durante a transição de tema, só o fundo principal fica transparente (sidebar mantém a cor) */
+  body.theme-transitioning,
+  body.theme-transitioning #root,
+  body.theme-transitioning [data-layout="main"] {
+    background: transparent !important;
+  }
+
+  /* Transição suave de cor e fundo ao trocar tema (texto e fundo acompanham sem gargalo) */
+  body,
+  #root,
+  [data-layout="main"] {
+    transition: background-color 0.45s ease, color 0.45s ease;
+  }
+
+  /* Durante a transição de tema, texto e elementos da área principal acompanham a cor suavemente */
+  body.theme-transitioning [data-layout="main"],
+  body.theme-transitioning [data-layout="main"] *,
+  body.theme-transitioning [data-layout="main"] *::before,
+  body.theme-transitioning [data-layout="main"] *::after {
+    transition: color 0.45s ease, border-color 0.35s ease, background-color 0.45s ease;
+  }
+
+  h1 {
+    @apply text-2xl font-bold;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    @apply text-xl font-bold;
+    letter-spacing: -0.025em;
+  }
+
+  h3 {
+    @apply text-base font-semibold;
+    letter-spacing: -0.015em;
+  }
+
+  h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* ─── Search highlight scope ─────────────────────────────────── */
+  /* Isolado em .search-highlight-scope para não poluir <mark> global */
+  .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: inherit;   /* não bold — highlight por cor, sem reflow */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;  /* multi-line highlight sem corte */
+  }
+
+  html.dark .search-highlight-scope mark,
+  .dark .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.35);
+  }
+
+  .glass-card {
+    @apply bg-card border border-border shadow-sm;
+  }
+
+  @keyframes shimmer {
+    0%, 100% { left: -100%; }
+    50% { left: 200%; }
+  }
+
+  /* CrossPipePanel — stage move confirmation flash + panel slide-down. */
+  @keyframes stage-confirm {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5);
+    }
+    100% {
+      box-shadow: 0 0 0 6px hsl(var(--primary) / 0);
+    }
+  }
+
+  @keyframes panel-down {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .stat-card {
+    @apply relative bg-card rounded-lg border border-border p-4 shadow-sm overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute left-0 top-0 w-[3px] h-full bg-primary/50;
+  }
+
+  .stat-card-label {
+    @apply text-[11px] font-semibold uppercase text-muted-foreground;
+    letter-spacing: 0.06em;
+  }
+
+  .stat-card-value {
+    @apply text-xl font-bold tabular-nums mt-1;
+    letter-spacing: -0.02em;
+  }
+
+  .metric-card {
+    @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  /* ─── Copilot: gold hover treatment ──────────────────────────────
+     Scoped to .copilot-surface (applied on the copilot screens' roots).
+     Every enabled button "lights up" gold on hover — a discreet gold glow
+     + subtle lift. Single source of truth for the effect across all copilot
+     buttons. Excludes toggles/switches/radios and the active pill (which
+     keeps its own solid gold fill). Portaled surfaces (dialogs, dropdowns,
+     selects) render outside .copilot-surface and are intentionally untouched. */
+  .copilot-surface button:not([data-gradient]) {
+    transition-property: color, background-color, border-color, box-shadow, transform;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+
+  .copilot-surface button:not(:disabled):not([data-disabled]):not([data-state="active"]):not([role="switch"]):not([role="checkbox"]):not([role="radio"]):not([data-gradient]):hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.14),
+      0 3px 12px -5px hsl(var(--primary) / 0.20);
+  }
+
+  .kanban-column {
+    @apply bg-muted/50 rounded-xl p-4 min-h-[400px];
+  }
+
+  .kanban-card {
+    @apply relative bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-w-0 overflow-hidden;
+  }
+
+  /* Faixa de acento do card. O `--card-accent` inline saiu com o calor
+     (2026-09-03); hoje só o fallback de borda pinta a faixa. */
+  .kanban-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--card-accent, hsl(var(--border)));
+    transition: background 0.2s ease;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-150;
+  }
+
+  .sidebar-item-active {
+    background: var(--gradient-primary);
+    @apply text-white font-medium;
+  }
+
+  /* ─── Top Navigation (premium horizontal nav) ──────────────── */
+  .topnav-header {
+    @apply flex items-center px-5 lg:px-8 h-14 bg-background border-b border-border/50 sticky top-0 z-50;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: hsl(var(--background) / 0.92);
+  }
+
+  /* Mobile: top-bar respeita o notch (safe-area) e ganha px enxuto — feel app. */
+  @media (max-width: 767px) {
+    .topnav-header {
+      @apply px-4;
+      height: calc(3.5rem + env(safe-area-inset-top));
+      padding-top: env(safe-area-inset-top);
+    }
+  }
+
+  .topnav-item {
+    /* Compacto em lg (1024-1280 -- notebooks 1366 com escala do SO); cheio em xl+ */
+    @apply relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[12.5px] xl:text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
+    @apply transition-all duration-150 ease-out;
+    @apply hover:text-foreground/85;
+    font-weight: 460;
+    letter-spacing: -0.01em;
+  }
+
+  .topnav-item-active {
+    @apply text-foreground;
+    font-weight: 600;
+  }
+
+  /* Active-tab underline — neon yellow (same as the selected calendar day),
+     grows outward from the center each time a tab becomes active. */
+  .topnav-item-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #ffd400, transparent);
+    box-shadow: 0 0 8px rgba(255, 212, 0, 0.7);
+    transform: translateX(-50%) scaleX(1);
+    transform-origin: center;
+    animation: topnavUnderline 0.3s cubic-bezier(0.22, 0.68, 0.36, 1);
+    pointer-events: none;
+  }
+
+  @keyframes topnavUnderline {
+    from {
+      transform: translateX(-50%) scaleX(0);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(-50%) scaleX(1);
+      opacity: 1;
+    }
+  }
+
+  /* ─── DashboardTV — painel de parede / tempo real ─────────────── */
+  .tv-live-badge {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: #f87171;
+    letter-spacing: 0.06em;
+  }
+  .tv-live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #f87171;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+    animation: tvLive 1.8s ease-in-out infinite;
+    display: inline-block;
+  }
+  @keyframes tvLive {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.75); }
+  }
+
+  /* KPI cards — micro hover lift */
+  .tv-kpi {
+    transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease, border-color .45s ease;
+    will-change: transform;
+  }
+  .tv-kpi:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.12) !important;
+    box-shadow: 0 12px 28px -12px rgba(0,0,0,0.6);
+  }
+
+  /* Soft sheen sweeping across the hero KPI */
+  .tv-sheen {
+    position: absolute; inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.07) 50%, transparent 65%);
+    transform: translateX(-120%);
+    animation: tvSheen 6.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes tvSheen {
+    0%, 70%  { transform: translateX(-120%); }
+    100%     { transform: translateX(120%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tv-live-dot, .tv-sheen { animation: none; }
+  }
+
+  .topnav-item-locked {
+    @apply opacity-40 cursor-not-allowed;
+  }
+
+  .topnav-mais {
+    @apply text-foreground/45;
+  }
+
+  .topnav-avatar-trigger {
+    @apply flex items-center gap-1.5 p-1 rounded-lg transition-colors duration-150;
+    @apply hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+
+  .topnav-popover {
+    @apply p-1.5 bg-popover border border-border/50 shadow-lg rounded-xl;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: hsl(var(--popover) / 0.97);
+  }
+
+  .topnav-dropdown-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground/70 cursor-pointer select-none;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-muted/60 hover:text-foreground;
+  }
+
+  .topnav-dropdown-item-active {
+    @apply bg-primary/10 text-foreground font-medium;
+  }
+
+  .topnav-dropdown-locked {
+    @apply opacity-40 cursor-not-allowed w-full;
+  }
+
+  /* ─── Mobile Navigation ─────────────────────────────────────── */
+  .mobile-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-foreground/70 cursor-pointer select-none;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-muted/50 hover:text-foreground;
+  }
+
+  .mobile-nav-item-active {
+    @apply bg-primary/10 text-foreground font-medium;
+  }
+
+  .mobile-nav-group-label {
+    @apply flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-foreground/40 uppercase tracking-wider;
+  }
+
+  .badge-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .badge-warning {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .badge-destructive {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+
+  .progress-bar {
+    @apply h-2 rounded-full bg-muted overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  .ranking-card {
+    @apply bg-card rounded-xl border border-border p-4 transition-all duration-300;
+  }
+
+  .ranking-card-winner {
+    @apply border-primary shadow-gold bg-gradient-to-r from-primary/5 to-transparent;
+  }
+
+  /* ─── Chat Bubble (Kanban floating widget) ─────────────────────── */
+  /* Sombra customizada do painel: dark = elevação cinematográfica;   */
+  /* light = sombra calibrada pro warm background do Torque.           */
+  .chat-bubble-panel-shadow {
+    box-shadow:
+      0 24px 60px -20px hsl(36 20% 4% / 0.55),
+      0 8px 24px -12px hsl(36 20% 4% / 0.35);
+  }
+
+  html:not(.dark) .chat-bubble-panel-shadow {
+    box-shadow:
+      0 24px 60px -20px hsl(30 18% 20% / 0.18),
+      0 8px 24px -12px hsl(30 18% 20% / 0.12);
+  }
+}
+
+@layer utilities {
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-primary-hover:hover {
+    background: var(--gradient-primary-hover);
+  }
+
+  .gradient-success {
+    background: var(--gradient-success);
+  }
+
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent;
+    background: var(--gradient-gold);
+  }
+
+  .text-gradient-primary {
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* V8 Racing Font */
+  .font-racing {
+    font-family: 'Racing Sans One', 'Inter', sans-serif;
+  }
+
+  /* Display font — headings premium (mesma família do mockup/landing) */
+  .font-display {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  .animate-pulse-success {
+    animation: pulse-success 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-success {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 hsl(var(--success) / 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 20px 10px hsl(var(--success) / 0);
+    }
+  }
+
+  .animate-celebrate {
+    animation: celebrate 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes celebrate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* V8 Racing Animations */
+  .animate-engine-start {
+    animation: engine-start 0.5s ease-out;
+  }
+
+  @keyframes engine-start {
+    0% { transform: translateX(-20px); opacity: 0; }
+    50% { transform: translateX(5px); }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
+  .animate-speedometer {
+    animation: speedometer 1s ease-out;
+  }
+
+  @keyframes speedometer {
+    0% { transform: rotate(-90deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  .animate-race-in {
+    animation: race-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes race-in {
+    0% { 
+      transform: translateX(-100px) scale(0.9); 
+      opacity: 0; 
+    }
+    100% { 
+      transform: translateX(0) scale(1); 
+      opacity: 1; 
+    }
+  }
+
+  .animate-checkered-flag {
+    animation: checkered-wave 2s ease-in-out infinite;
+  }
+
+  @keyframes checkered-wave {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  .animate-turbo {
+    animation: turbo-boost 0.3s ease-out;
+  }
+
+  @keyframes turbo-boost {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.05); filter: brightness(1.2); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+
+  .animate-rev {
+    animation: engine-rev 0.15s ease-in-out;
+  }
+
+  @keyframes engine-rev {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+
+  /* Checkered pattern for racing theme */
+  .checkered-pattern {
+    background-image: 
+      linear-gradient(45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--primary)) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--primary)) 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  /* Racing stripes */
+  .racing-stripe {
+    @apply relative overflow-hidden;
+  }
+  
+  .racing-stripe::before {
+    content: '';
+    @apply absolute top-0 left-0 w-2 h-full bg-primary opacity-20;
+  }
+  
+  .racing-stripe::after {
+    content: '';
+    @apply absolute top-0 left-4 w-1 h-full bg-primary opacity-10;
+  }
+
+  /* Route 66 vintage style */
+  .vintage-border {
+    border: 3px solid hsl(var(--primary));
+    box-shadow: 
+      inset 0 0 0 2px hsl(var(--background)),
+      inset 0 0 0 4px hsl(var(--primary) / 0.3);
+  }
+
+  /* Neon glow for rock bar style */
+  .neon-glow {
+    text-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary)),
+      0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  .neon-glow-box {
+    box-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary) / 0.5),
+      0 0 20px hsl(var(--primary) / 0.3);
+  }
+
+  /* Fuel gauge animation */
+  .animate-fuel-fill {
+    animation: fuel-fill 1.5s ease-out;
+  }
+
+  @keyframes fuel-fill {
+    0% { width: 0%; }
+    100% { width: var(--fuel-level, 100%); }
+  }
+
+  /* Exhaust smoke effect */
+  .exhaust-smoke {
+    animation: smoke 2s ease-out infinite;
+  }
+
+  @keyframes smoke {
+    0% { 
+      opacity: 0.8; 
+      transform: translateX(0) scale(1); 
+    }
+    100% { 
+      opacity: 0; 
+      transform: translateX(50px) scale(2); 
+    }
+  }
+}
+
+/* ===== Comando v2 (Central de Comando) ===== */
+@layer components {
+  .cmd-cell {
+    @apply bg-card border border-border rounded-2xl relative overflow-hidden;
+    transition: transform .2s cubic-bezier(.22,1,.36,1), border-color .2s;
+  }
+  .cmd-cell:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--border) / 0.7);
+    filter: brightness(1.04);
+  }
+  .cmd-lbl {
+    @apply text-[11px] font-bold uppercase text-muted-foreground;
+    letter-spacing: .09em;
+  }
+  .cmd-mono { font-family: 'JetBrains Mono', monospace; }
+}
+
+@keyframes cmd-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes cmd-fadein { to { opacity: 1; } }
+@keyframes cmd-growy { to { transform: scaleY(1); } }
+@keyframes cmd-slidein { to { opacity: 1; transform: none; } }
+@keyframes cmd-drawline { to { stroke-dashoffset: 0; } }
+@keyframes cmd-livepulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--success) / .5); }
+  50% { box-shadow: 0 0 0 6px hsl(var(--success) / 0); }
+}
+@keyframes cmd-sparkpulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / .4); }
+  50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
+.cmd-rise { animation: cmd-rise .5s cubic-bezier(.22,1,.36,1) both; }
+.cmd-slidein { opacity: 0; transform: translateX(16px); animation: cmd-slidein .5s cubic-bezier(.22,1,.36,1) forwards; }
+.cmd-fadein { opacity: 0; animation: cmd-fadein .45s forwards; }
+.cmd-growy { transform: scaleY(0); transform-origin: top; animation: cmd-growy .55s cubic-bezier(.22,1,.36,1) forwards; }
+.cmd-livepulse { animation: cmd-livepulse 2s ease-in-out infinite; }
+.cmd-sparkpulse { animation: cmd-sparkpulse 3s ease-in-out infinite; }
+.cmd-drawline { animation: cmd-drawline 1.6s cubic-bezier(.4,0,.2,1) forwards; }
+/* Aba Mapa — choropleth */
+.tabmapa-svg svg { width: 100%; height: auto; filter: drop-shadow(0 18px 40px hsl(0 0% 0% / .45)); }
+.tabmapa-svg svg path { stroke: hsl(35 10% 9%); stroke-width: 1.2; cursor: pointer; transition: filter .15s; }
+.tabmapa-svg svg path:hover { filter: brightness(1.35); }
+.tabmapa-svg svg path.uf-sel { stroke: hsl(var(--primary)); stroke-width: 2.5; filter: drop-shadow(0 0 14px hsl(var(--primary) / .55)) brightness(1.15); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-rise, .cmd-slidein, .cmd-fadein, .cmd-growy { animation-duration: .01s; animation-delay: 0s !important; }
+  .cmd-livepulse, .cmd-sparkpulse { animation: none; }
+  .cmd-drawline { animation-duration: .01s; animation-delay: 0s !important; }
+}
+
+/* ===== Marca da lateral ===== */
+/* O logotipo abre e fecha pela largura real da arte (1fr → 0fr), não por um
+   `max-width` chutado. Ver SidebarBrand.tsx. As durações são assimétricas de
+   propósito: ao abrir, o nome só entra depois que existe espaço pra ele; ao
+   fechar, ele sai antes de ser espremido. */
+.sidebar-brand-wordmark {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin-left: 0.625rem;
+  opacity: 1;
+  overflow: hidden;
+  transition:
+    grid-template-columns 200ms cubic-bezier(.32, .72, 0, 1),
+    margin-left 200ms cubic-bezier(.32, .72, 0, 1),
+    opacity 150ms linear 90ms;
+}
+.sidebar-brand-wordmark[data-collapsed="true"] {
+  grid-template-columns: 0fr;
+  margin-left: 0;
+  opacity: 0;
+  transition:
+    grid-template-columns 200ms cubic-bezier(.32, .72, 0, 1),
+    margin-left 200ms cubic-bezier(.32, .72, 0, 1),
+    opacity 110ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-brand-wordmark,
+  .sidebar-brand-wordmark[data-collapsed="true"] { transition: none; }
+}

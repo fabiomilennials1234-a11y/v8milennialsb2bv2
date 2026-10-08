@@ -15,13 +15,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/**
+ * Mesmas cinco faixas de antes (80/60/40/20/>0), em token. A letra fica na cor
+ * do texto do tema: as faixas são preenchimento translúcido sobre o cartão, e
+ * texto colorido em cima de fundo da mesma cor reprovava contraste no claro.
+ */
 function heatColor(pct: number): string {
-  if (pct >= 80) return "bg-emerald-500/70 text-emerald-50";
-  if (pct >= 60) return "bg-emerald-500/40 text-emerald-200";
-  if (pct >= 40) return "bg-amber-500/40 text-amber-100";
-  if (pct >= 20) return "bg-red-500/30 text-red-200";
-  if (pct > 0) return "bg-red-500/50 text-red-100";
-  return "bg-muted/30 text-muted-foreground/60";
+  if (pct >= 80) return "bg-success/60 text-foreground";
+  if (pct >= 60) return "bg-success/30 text-foreground";
+  if (pct >= 40) return "bg-warning/35 text-foreground";
+  if (pct >= 20) return "bg-destructive/25 text-foreground";
+  if (pct > 0) return "bg-destructive/45 text-foreground";
+  return "bg-muted/60 text-muted-foreground";
 }
 
 function formatMonth(iso: string): string {
@@ -49,32 +54,32 @@ export function CarteiraCohortHeatmap() {
 
   if (isLoading) {
     return (
-      <div className="bg-card border border-border rounded-xl p-5 animate-pulse">
-        <div className="h-4 bg-muted rounded w-40 mb-4" />
-        <div className="h-48 bg-muted rounded" />
+      <div className="animate-pulse rounded-card border border-card-border bg-card p-5 shadow-relevo">
+        <div className="mb-4 h-4 w-40 rounded bg-muted" />
+        <div className="h-48 rounded-xl bg-muted" />
       </div>
     );
   }
 
   if (cohorts.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-xl p-5 text-center text-sm text-muted-foreground">
+      <div className="rounded-card border border-card-border bg-card p-8 text-center text-sm text-muted-foreground shadow-relevo">
         Dados insuficientes para análise de coorte.
       </div>
     );
   }
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
+    <section className="rounded-card border border-card-border bg-card p-5 shadow-relevo">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Retenção por Coorte</h3>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            % de clientes que compraram novamente no mês N após primeira compra
+          <h3 className="text-[15px] font-bold tracking-[-0.02em] text-foreground">Retenção por coorte</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            % de clientes que compraram novamente no mês N após a primeira compra
           </p>
         </div>
         <Select value={segment} onValueChange={setSegment}>
-          <SelectTrigger className="w-[160px] h-8 text-xs">
+          <SelectTrigger className="h-9 w-[170px] text-xs" aria-label="Segmento">
             <SelectValue placeholder="Todos segmentos" />
           </SelectTrigger>
           <SelectContent>
@@ -92,13 +97,13 @@ export function CarteiraCohortHeatmap() {
         <table className="w-full text-[11px]">
           <thead>
             <tr>
-              <th className="text-left text-muted-foreground font-medium py-1 pr-3 whitespace-nowrap">
+              <th className="whitespace-nowrap py-1 pr-3 text-left text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                 Coorte
               </th>
               {Array.from({ length: maxOffset + 1 }, (_, i) => (
                 <th
                   key={i}
-                  className="text-center text-muted-foreground font-medium py-1.5 px-1 min-w-[44px]"
+                  className="min-w-[44px] px-1 py-1.5 text-center text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground"
                 >
                   M{i}
                 </th>
@@ -110,10 +115,10 @@ export function CarteiraCohortHeatmap() {
               const base = offsets.get(0);
               return (
                 <tr key={month}>
-                  <td className="text-muted-foreground py-0.5 pr-3 whitespace-nowrap">
+                  <td className="whitespace-nowrap py-0.5 pr-3 font-semibold capitalize text-foreground/80">
                     {formatMonth(month)}
                     {base && (
-                      <span className="text-muted-foreground/60 ml-1">({base.total_clients})</span>
+                      <span className="ml-1 font-normal tabular-nums text-muted-foreground">({base.total_clients})</span>
                     )}
                   </td>
                   {Array.from({ length: maxOffset + 1 }, (_, i) => {
@@ -121,7 +126,7 @@ export function CarteiraCohortHeatmap() {
                     if (!cell) {
                       return (
                         <td key={i} className="p-0.5">
-                          <div className="w-full h-8 rounded border border-dashed border-border/30" />
+                          <div className="h-8 w-full rounded-lg border border-dashed border-border/60" />
                         </td>
                       );
                     }
@@ -132,7 +137,7 @@ export function CarteiraCohortHeatmap() {
                             <TooltipTrigger asChild>
                               <div
                                 className={cn(
-                                  "w-full h-8 rounded border border-border/20 flex items-center justify-center text-[10px] font-semibold tabular-nums cursor-default transition-colors",
+                                  "flex h-8 w-full cursor-default items-center justify-center rounded-lg text-[10.5px] font-bold tabular-nums transition-colors",
                                   heatColor(cell.retention_pct),
                                 )}
                               >
@@ -141,7 +146,7 @@ export function CarteiraCohortHeatmap() {
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
                               <p>{cell.active_clients}/{cell.total_clients} clientes ativos</p>
-                              <p className="text-muted-foreground">{formatMonth(month)} — M{i}</p>
+                              <p className="text-tinta-muted">{formatMonth(month)} — M{i}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -155,15 +160,15 @@ export function CarteiraCohortHeatmap() {
         </table>
       </div>
 
-      <div className="flex items-center gap-2 mt-3 text-[10px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
         <span>Baixa</span>
         <div className="flex gap-0.5">
           {[10, 30, 50, 70, 90].map((p) => (
-            <div key={p} className={cn("w-5 h-3 rounded-sm", heatColor(p))} />
+            <div key={p} className={cn("h-3 w-5 rounded-[4px]", heatColor(p))} />
           ))}
         </div>
         <span>Alta retenção</span>
       </div>
-    </div>
+    </section>
   );
 }

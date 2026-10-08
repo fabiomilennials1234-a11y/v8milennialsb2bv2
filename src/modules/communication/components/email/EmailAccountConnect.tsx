@@ -119,7 +119,7 @@ export function EmailAccountConnect() {
                             title={account.is_active ? "Desativar" : "Ativar"}
                           >
                             {account.is_active ? (
-                              <Power className="w-4 h-4 text-emerald-500" />
+                              <Power className="w-4 h-4 text-success" />
                             ) : (
                               <PowerOff className="w-4 h-4 text-muted-foreground" />
                             )}

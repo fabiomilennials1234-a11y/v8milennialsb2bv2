@@ -10,7 +10,7 @@ import {
   type ComandoAgendaEvent,
 } from "@/modules/analytics/hooks/useComandoAgenda";
 import { ComandoCard } from "./ComandoCard";
-import { DonoDaLinha } from "./DonoDaLinha";
+import { agendaAttributionLabel } from "@/modules/engagement";
 
 /** Os próximos cinco compromissos — pedido do CTO em 2026-09-04. */
 const MOSTRAR = 5;
@@ -125,74 +125,59 @@ export function CardProximasAgendas() {
         ) : null
       }
     >
-      <ul className="divide-y divide-border/50">
-        {visiveis.map((e) => {
+      {/* V5: linha do tempo. O nó de ouro é o PRÓXIMO compromisso; os demais
+          ficam em anel. O dia só aparece quando não é hoje — a hora é a leitura
+          principal, em coluna fixa e monoespaçada. */}
+      <ul className="relative px-4 py-2">
+        <span aria-hidden className="absolute bottom-6 left-[23px] top-6 w-px bg-border" />
+        {visiveis.map((e, i) => {
           const inicioEvento = new Date(e.start_at);
+          const { hoje } = diasAte(inicioEvento, inicio);
+          const proximo = i === 0;
           return (
-            <li key={`${e.source}:${e.id}`}>
+            <li key={`${e.source}:${e.id}`} className="relative">
               <button
                 type="button"
                 onClick={() => navigate("/agenda")}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
+                className="flex w-full items-start gap-3 rounded-2xl py-2 pr-2 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {/* Data e hora ocupam coluna fixa: a lista fica lida na vertical. */}
-                <span className="flex w-[62px] shrink-0 flex-col">
-                  <span className="text-[11px] font-bold capitalize leading-tight">
-                    {rotuloDoDia(inicioEvento)}
-                  </span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground/70">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "relative z-[1] mt-[3px] h-[13px] w-[13px] shrink-0 rounded-full",
+                    proximo ? "bg-primary shadow-brilho-ouro" : "border-2 border-border bg-card",
+                  )}
+                />
+                <span className="flex w-[52px] shrink-0 flex-col">
+                  {!hoje && (
+                    <span className="text-[10.5px] font-bold capitalize leading-tight text-muted-foreground">
+                      {rotuloDoDia(inicioEvento)}
+                    </span>
+                  )}
+                  <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
                     {e.all_day ? "dia todo" : format(inicioEvento, "HH:mm")}
                   </span>
                 </span>
 
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold">
+                  <span className="block truncate text-[13px] font-bold">
                     {e.title?.trim() || e.lead_name || "Compromisso"}
                   </span>
-                  {/* A descrição escrita por quem criou o compromisso. */}
-                  {e.description?.trim() ? (
-                    <span className="block truncate text-[11px] text-muted-foreground/70">
-                      {e.description}
-                    </span>
-                  ) : e.lead_name ? (
-                    <span className="block truncate text-[11px] text-muted-foreground/70">
-                      {e.lead_name}
-                      {e.lead_company ? ` · ${e.lead_company}` : ""}
-                    </span>
-                  ) : null}
-                  {/* Só o admin: para o vendedor a agenda inteira já é dele. */}
-                  {isAdmin && (
-                    <DonoDaLinha
-                      nome={e.owner_name}
-                      className="mt-0.5"
-                      semDonoLabel="Sem responsável"
-                    />
-                  )}
+                  <span className="block truncate text-[11.5px] text-muted-foreground">
+                    {[
+                      e.lead_name ? `${e.lead_name}${e.lead_company ? ` · ${e.lead_company}` : ""}` : e.description?.trim(),
+                      // Só o admin: para o vendedor a agenda inteira já é dele.
+                      isAdmin ? `${agendaAttributionLabel(e.source)}: ${e.creator_name ?? "Não informado"}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </span>
 
-                <span className="hidden shrink-0 items-center gap-1.5 text-muted-foreground/50 sm:flex">
-                  {e.meet_link && <Video className="h-3 w-3" />}
-                  {e.location && <MapPin className="h-3 w-3" />}
+                <span className="mt-0.5 hidden shrink-0 items-center gap-1.5 text-muted-foreground/60 sm:flex">
+                  {e.meet_link && <Video className="h-3.5 w-3.5" aria-label="Com link de reunião" />}
+                  {e.location && <MapPin className="h-3.5 w-3.5" aria-label="Presencial" />}
                 </span>
-
-                {/* Contagem regressiva à direita: a coluna da esquerda diz QUANDO
-                    é, esta diz QUANTO FALTA. São leituras diferentes — "qui, 11
-                    set" não responde "isso é longe?" sem uma conta de cabeça. */}
-                {(() => {
-                  const { texto, hoje } = diasAte(inicioEvento, inicio);
-                  return (
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                        hoje
-                          ? "bg-primary/15 text-primary"
-                          : "bg-muted text-muted-foreground/70",
-                      )}
-                    >
-                      {texto}
-                    </span>
-                  );
-                })()}
               </button>
             </li>
           );

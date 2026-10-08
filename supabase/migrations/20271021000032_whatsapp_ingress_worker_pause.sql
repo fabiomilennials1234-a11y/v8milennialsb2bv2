@@ -40,7 +40,7 @@ BEGIN
   END IF;
   v_revision := coalesce(v_revision, 0);
   IF v_revision <> p_expected_revision THEN
-    RAISE EXCEPTION 'stale ingress worker control revision' USING ERRCODE = '40001';
+    RAISE EXCEPTION 'stale ingress worker control revision' USING ERRCODE = 'PT409';
   END IF;
   IF NOT p_paused AND EXISTS (
     SELECT 1 FROM public.whatsapp_ingress_events

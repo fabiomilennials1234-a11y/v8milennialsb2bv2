@@ -95,6 +95,7 @@ export function useApproveOrder() {
     onSuccess: () => {
       toast.success("Pedido aprovado");
       queryClient.invalidateQueries({ queryKey: ["pending-orders", organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["order-status-counts"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_orders"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
@@ -125,6 +126,7 @@ export function useRejectOrder() {
     onSuccess: () => {
       toast.success("Pedido rejeitado");
       queryClient.invalidateQueries({ queryKey: ["pending-orders", organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["order-status-counts"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_orders"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
@@ -154,9 +156,46 @@ export function useBulkApproveOrders() {
     onSuccess: (_, vars) => {
       toast.success(`${vars.orderIds.length} pedidos aprovados`);
       queryClient.invalidateQueries({ queryKey: ["pending-orders", organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["order-status-counts"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_orders"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-kpis"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-clients"] });
     },
+  });
+}
+
+export interface OrderStatusCounts {
+  pending: number;
+  approved: number;
+  rejected: number;
+}
+
+/**
+ * Quantos pedidos há em cada um dos 3 estados REAIS de `approval_status`
+ * (pendente → aprovado | recusado) — a esteira da aba Pedidos.
+ *
+ * Três contagens `head` na própria tabela (RLS da org vale; nenhuma linha
+ * trafega). Nenhuma RPC nova: é a mesma tabela que `usePendingOrders` já lê.
+ */
+export function useOrderStatusCounts() {
+  const { organizationId } = useOrganization();
+
+  return useQuery<OrderStatusCounts>({
+    queryKey: ["order-status-counts", organizationId],
+    queryFn: async () => {
+      const count = async (status: "pending" | "approved" | "rejected") => {
+        const { count: n, error } = await supabase
+          .from("upsell_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId!)
+          .eq("approval_status", status);
+        if (error) throw error;
+        return n ?? 0;
+      };
+      const [pending, approved, rejected] = await Promise.all([count("pending"), count("approved"), count("rejected")]);
+      return { pending, approved, rejected };
+    },
+    enabled: !!organizationId,
+    staleTime: 30_000,
   });
 }

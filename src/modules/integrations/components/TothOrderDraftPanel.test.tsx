@@ -40,7 +40,7 @@ function setupRpc() {
     }
     if (name === "toth_save_order_draft") {
       if (args.p_expected_revision !== (server.draft?.revision ?? 0)) {
-        return { data: null, error: { code: "40001", message: "toth_revision_conflict" } };
+        return { data: null, error: { code: "PT409", message: "toth_revision_conflict" } };
       }
       server.draft = {
         ...workspace().draft!, revision: (server.draft?.revision ?? 0) + 1,
@@ -50,7 +50,7 @@ function setupRpc() {
     }
     if (name === "toth_review_order_draft") {
       if (args.p_expected_revision !== server.draft?.revision) {
-        return { data: null, error: { code: "40001", message: "toth_revision_conflict" } };
+        return { data: null, error: { code: "PT409", message: "toth_revision_conflict" } };
       }
       server.draft = { ...server.draft!, reviewed_revision: server.draft!.revision, reviewed_at: date, reviewed_by: "admin-1" };
       return { data: structuredClone(server), error: null };

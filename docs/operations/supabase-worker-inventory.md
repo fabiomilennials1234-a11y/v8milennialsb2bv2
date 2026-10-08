@@ -88,22 +88,24 @@ Não aplicado neste pacote. Rollback futuro remove somente `isGroupYes`, preserv
 
 ## Inventário completo da agenda viva
 
+> **Reescalonamento anti-rajada (incidente 02/10):** os 20 jobs marcados com † mudam só de fase (minuto inicial), sem mudar período nem comando. A agenda nova é **vigente após aplicar a migration `20271103000900_escalonar_crons_por_fase_anti_rajada.sql`**; até lá, prod roda a agenda `antes`. Pico de jobs não-por-minuto no mesmo minuto cai de 28 para 8 (medir com `node scripts/cron/carga-por-minuto.mjs scripts/cron/prod-snapshot-2026-10-02.json <migration>`).
+
 | ID | Job | Agenda | Entrada identificada |
 |---|---|---|---|
-| 2 | process-outbound-dispatches | `*/5 * * * *` | invoke_process_outbound_dispatches |
-| 3 | process-copilot-followups | `*/5 * * * *` | invoke_process_copilot_followups |
-| 4 | process-followup-automations | `*/5 * * * *` | invoke_process_followup_automations |
+| 2 | process-outbound-dispatches | `1-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_process_outbound_dispatches |
+| 3 | process-copilot-followups | `1-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_process_copilot_followups |
+| 4 | process-followup-automations | `1-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_process_followup_automations |
 | 6 | purge-deleted-whatsapp-conversations | `0 3 * * *` | SQL / verificar fanout indireto |
 | 11 | cleanup_usage_events_180d | `0 4 * * *` | SQL / verificar fanout indireto |
 | 13 | cleanup-automation-jobs | `0 2 * * *` | SQL / verificar fanout indireto |
-| 14 | retry-dead-letter-jobs | `*/5 * * * *` | invoke_retry_dead_letter_jobs |
+| 14 | retry-dead-letter-jobs | `4-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_retry_dead_letter_jobs |
 | 23 | refresh-meta-tokens | `0 2 * * *` | invoke_refresh_meta_tokens |
 | 39 | cron-health-monitor | `2-59/5 * * * *` | SQL / verificar fanout indireto |
 | 40 | pgnet_response_cleanup | `0 3 * * *` | SQL / verificar fanout indireto |
-| 41 | cron_health_check | `*/5 * * * *` | invoke_cron_health_check |
+| 41 | cron_health_check | `3-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_cron_health_check |
 | 45 | mass-send-status-poll | `*/2 * * * *` | invoke_mass_send_status |
-| 47 | whatsapp_dlq_replay | `*/5 * * * *` | invoke_whatsapp_dlq_replay |
-| 48 | whatsapp_session_watchdog | `*/10 * * * *` | invoke_whatsapp_session_watchdog |
+| 47 | whatsapp_dlq_replay | `2-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_whatsapp_dlq_replay |
+| 48 | whatsapp_session_watchdog | `5-59/10 * * * *` † (antes `*/10 * * * *`) | invoke_whatsapp_session_watchdog |
 | 49 | whatsapp_health_monitor | `*/5 * * * *` | invoke_whatsapp_health_monitor |
 | 51 | whatsapp_media_retry | `*/2 * * * *` | invoke_whatsapp_media_retry |
 | 52 | cleanup-copilot-batching | `0 3 * * *` | SQL / verificar fanout indireto |
@@ -118,40 +120,40 @@ Não aplicado neste pacote. Rollback futuro remove somente `isGroupYes`, preserv
 | 63 | process-scheduled-user-messages | `* * * * *` | invoke_process_scheduled_user_messages |
 | 64 | history-sync-worker | `* * * * *` | invoke_history_sync_worker |
 | 65 | calculate-portfolio-health | `21-59/30 * * * *` | invoke_calculate_portfolio_health |
-| 66 | process-followup-situations | `*/5 * * * *` | invoke_process_followup_situations |
+| 66 | process-followup-situations | `2-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_process_followup_situations |
 | 67 | cron-job-run-details-retention | `17 3 * * *` | SQL / verificar fanout indireto |
 | 73 | agent-decision-logs-retention | `23 3 * * *` | SQL / verificar fanout indireto |
 | 75 | raw-payload-retention | `33 3 * * *` | SQL / verificar fanout indireto |
 | 77 | whatsapp-dlq-retention | `43 3 * * *` | SQL / verificar fanout indireto |
 | 78 | purge-deleted-leads-log | `17 3 * * *` | SQL / verificar fanout indireto |
-| 80 | meta-leadgen-poll | `*/5 * * * *` | invoke_meta_leadgen_poll |
-| 81 | meta-conversion-dispatch | `*/10 * * * *` | invoke_meta_conversion_dispatch |
+| 80 | meta-leadgen-poll | `4-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_meta_leadgen_poll |
+| 81 | meta-conversion-dispatch | `5-59/10 * * * *` † (antes `*/10 * * * *`) | invoke_meta_conversion_dispatch |
 | 82 | cleanup-audit-log-14d | `6-59/10 * * * *` | SQL / verificar fanout indireto |
 | 83 | cleanup-wa-health-checks-7d | `4-59/10 * * * *` | SQL / verificar fanout indireto |
 | 84 | cleanup-wa-media-jobs-14d | `13-59/15 * * * *` | SQL / verificar fanout indireto |
 | 85 | copilot-queue-sweep | `* * * * *` | SQL / verificar fanout indireto |
-| 87 | tinyerp-pull-orders-basic4u | `*/15 * * * *` | HTTP direto |
+| 87 | tinyerp-pull-orders-basic4u | `12-59/15 * * * *` † (antes `*/15 * * * *`) | HTTP direto |
 | 90 | purge-runtime-logs | `9-59/10 * * * *` | SQL / verificar fanout indireto |
 | 91 | whatsapp_media_retention | `0 4 * * *` | invoke_whatsapp_media_retention |
 | 92 | close-resolved-support-tickets | `20 4 * * *` | SQL / verificar fanout indireto |
 | 93 | omie-sync-dispatch | `* * * * *` | invoke_omie_sync_dispatch |
-| 94 | send-dedup-log-cleanup | `*/5 * * * *` | SQL / verificar fanout indireto |
+| 94 | send-dedup-log-cleanup | `4-59/5 * * * *` † (antes `*/5 * * * *`) | SQL / verificar fanout indireto |
 | 96 | voip-sweep-stuck-calls | `* * * * *` | SQL / verificar fanout indireto |
 | 99 | history-sync-budget-cleanup | `3-59/15 * * * *` | SQL / verificar fanout indireto |
-| 100 | infra-watchdog | `*/2 * * * *` | invoke_infra_watchdog |
-| 101 | whatsapp_instance_reaper | `*/5 * * * *` | invoke_whatsapp_instance_reaper |
+| 100 | infra-watchdog | `1-59/2 * * * *` † (antes `*/2 * * * *`) | invoke_infra_watchdog |
+| 101 | whatsapp_instance_reaper | `1-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_whatsapp_instance_reaper |
 | 106 | purge-copilot-midia-logs | `8-59/15 * * * *` | SQL / verificar fanout indireto |
-| 107 | billing-provision-worker | `*/2 * * * *` | invoke_billing_provision_worker |
-| 109 | notificame-subscription-repair | `*/5 * * * *` | invoke_notificame_subscription_repair |
+| 107 | billing-provision-worker | `1-59/2 * * * *` † (antes `*/2 * * * *`) | invoke_billing_provision_worker |
+| 109 | notificame-subscription-repair | `3-59/5 * * * *` † (antes `*/5 * * * *`) | invoke_notificame_subscription_repair |
 | 139 | voip-reap-authorized | `* * * * *` | SQL / verificar fanout indireto |
-| 140 | voip-webhook-events-cleanup | `*/5 * * * *` | SQL / verificar fanout indireto |
+| 140 | voip-webhook-events-cleanup | `4-59/5 * * * *` † (antes `*/5 * * * *`) | SQL / verificar fanout indireto |
 | 141 | torquecalls-recording-maintenance | `3-59/5 * * * *` | invoke_torquecalls_recording_maintenance |
 | 142 | inv5-public-tables-readable-by-anon | `17 4 * * *` | SQL / verificar fanout indireto |
-| 143 | toth-sync-clientes | `0 * * * *` | invoke_toth_sync |
+| 143 | toth-sync-clientes | `31 * * * *` † (antes `0 * * * *`) | invoke_toth_sync |
 | 144 | toth-sync-cobrancas | `15 */2 * * *` | invoke_toth_sync |
 | 146 | process-blast-recipients | `* * * * *` | invoke_process_blast_recipients |
 | 151 | avisos-varredura-followups | `0 10 * * *` | SQL / verificar fanout indireto |
-| 152 | avisos-varredura-reuniao-proxima | `*/15 * * * *` | SQL / verificar fanout indireto |
+| 152 | avisos-varredura-reuniao-proxima | `3-59/15 * * * *` † (antes `*/15 * * * *`) | SQL / verificar fanout indireto |
 | 153 | send-push | `* * * * *` | invoke_send_push |
 | 154 | avisos-limpeza-semanal | `0 7 * * 0` | SQL / verificar fanout indireto |
 | 155 | summarize-conversations-batch | `7-59/10 * * * *` | invoke_summarize_conversations_batch |
@@ -160,7 +162,7 @@ Não aplicado neste pacote. Rollback futuro remove somente `isGroupYes`, preserv
 | 158 | oraculo-benchmark-weekly | `15 13 * * 1` | SQL / verificar fanout indireto |
 | 159 | oraculo-admin-briefing | `*/5 * * * *` | SQL / verificar fanout indireto |
 | 160 | oraculo-admin-briefing-shrinkage | `7,22,37,52 * * * *` | SQL / verificar fanout indireto |
-| 161 | oraculo-member-briefing | `*/5 * * * *` | SQL / verificar fanout indireto |
+| 161 | oraculo-member-briefing | `1-59/5 * * * *` † (antes `*/5 * * * *`) | SQL / verificar fanout indireto |
 
 ## Validação e segurança
 

@@ -8,7 +8,7 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const migrations = readdirSync(new URL('../../supabase/migrations/', import.meta.url));
 const fix = migrations.find(name => name.endsWith('_agenda_notification_reminders.sql'));
 
-test('agenda reminders reach internal meetings and follow-ups once per scheduled instant', async () => {
+test('agenda reminders reach internal meetings and follow-ups once per scheduled instant', async (t) => {
   const db = new PGlite();
   try {
     await db.exec(`
@@ -101,6 +101,66 @@ test('agenda reminders reach internal meetings and follow-ups once per scheduled
       UPDATE follow_ups SET archived_at=now(),due_date=now() WHERE id='${id(51)}';
       SELECT fn_varredura_avisos_followups();`);
     assert.equal((await db.query(`SELECT count(*)::int AS n FROM notifications WHERE entity_id IN ('${id(50)}','${id(51)}')`)).rows[0].n,1);
+
+    const sqlId = value => value ? `'${value}'` : 'NULL';
+    for (const scenario of [
+      { name: 'different deals', entryDeal: id(90), meetingDeal: id(91) },
+      { name: 'different pipeline entries', meetingEntry: id(82) },
+      { name: 'different explicit meeting reference', mirrorId: id(82) },
+    ]) {
+      await t.test(`same lead and time do not merge reminders with ${scenario.name}`, async () => {
+        await db.exec('BEGIN');
+        try {
+          await db.exec(`
+            INSERT INTO leads(id,organization_id,name,sale_responsible_id)
+              VALUES('${id(31)}','${id(100)}','Independent appointments','${id(1)}');
+            INSERT INTO pipeline_entries(id,organization_id,lead_id,assigned_to,deal_id,metadata)
+              VALUES('${id(81)}','${id(100)}','${id(31)}','${id(2)}',${sqlId(scenario.entryDeal)},
+                jsonb_build_object('meeting_date',now()+interval '10 minutes',
+                  'agenda_espelho',jsonb_build_object('meeting_id',${sqlId(scenario.mirrorId)}::text)));
+            INSERT INTO meetings(id,organization_id,lead_id,title,start_at,created_by,status,deal_id,pipeline_entry_id)
+              VALUES('${id(80)}','${id(100)}','${id(31)}','Unrelated cancelled appointment',
+                now()+interval '10 minutes','${id(11)}','cancelled',${sqlId(scenario.meetingDeal)},${sqlId(scenario.meetingEntry)});
+            SELECT fn_varredura_avisos_reuniao_proxima();
+          `);
+          const reminders = (await db.query(`SELECT entity_id,user_id,type FROM notifications
+            WHERE entity_id IN ('${id(80)}','${id(81)}')`)).rows;
+          assert.deepEqual(reminders, [{ entity_id: id(81), user_id: id(12), type: 'meeting_soon' }],
+            'an unrelated cancelled meeting cannot suppress the active pipeline appointment');
+        } finally { await db.exec('ROLLBACK'); }
+      });
+    }
+
+    for (const scenario of [
+      { name: 'explicit meeting ID after rescheduling', mirrorId: id(80), offset: '2 hours', status: 'cancelled', expected: [] },
+      { name: 'pipeline entry ID', meetingEntry: id(81), status: 'scheduled', expected: [id(80)] },
+      { name: 'deal ID', entryDeal: id(90), meetingDeal: id(90), status: 'completed', expected: [] },
+      { name: 'legacy lead and time without conflicting IDs', status: 'scheduled', expected: [id(80)] },
+    ]) {
+      await t.test(`a real agenda projection is deduplicated by ${scenario.name}`, async () => {
+        await db.exec('BEGIN');
+        try {
+          await db.exec(`
+            INSERT INTO leads(id,organization_id,name,sale_responsible_id)
+              VALUES('${id(31)}','${id(100)}','Projected appointment','${id(1)}');
+            INSERT INTO pipeline_entries(id,organization_id,lead_id,assigned_to,deal_id,metadata)
+              VALUES('${id(81)}','${id(100)}','${id(31)}','${id(2)}',${sqlId(scenario.entryDeal)},
+                jsonb_build_object('meeting_date',now()+interval '10 minutes',
+                  'agenda_espelho',jsonb_build_object('meeting_id',${sqlId(scenario.mirrorId)}::text)));
+            INSERT INTO meetings(id,organization_id,lead_id,title,start_at,created_by,status,deal_id,pipeline_entry_id)
+              VALUES('${id(80)}','${id(100)}','${id(31)}','Canonical appointment',
+                now()+interval '${scenario.offset ?? '10 minutes'}','${id(11)}','${scenario.status}',
+                ${sqlId(scenario.meetingDeal)},${sqlId(scenario.meetingEntry)});
+            SELECT fn_varredura_avisos_reuniao_proxima();
+          `);
+          const reminders = (await db.query(`SELECT entity_id,user_id,type FROM notifications
+            WHERE entity_id IN ('${id(80)}','${id(81)}')`)).rows;
+          assert.deepEqual(reminders, scenario.expected.map(entity_id => ({ entity_id, user_id: id(11), type: 'meeting_soon' })),
+            'only the canonical scheduled meeting may notify, never its pipeline projection');
+        } finally { await db.exec('ROLLBACK'); }
+      });
+    }
+
     for (const fn of ['fn_varredura_avisos_reuniao_proxima','fn_varredura_avisos_followups']) {
       const [access]=(await db.query(`SELECT has_function_privilege('anon','${fn}()','EXECUTE') AS anon,
         has_function_privilege('authenticated','${fn}()','EXECUTE') AS authenticated,

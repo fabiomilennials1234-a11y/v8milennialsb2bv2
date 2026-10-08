@@ -16,6 +16,7 @@ import { Loader2, Kanban, Target, Users, ShoppingBag, Heart, Briefcase, Star, Za
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { notifyError } from "@/shared/errors";
 
 interface CreatePipelineModalProps {
   open: boolean;
@@ -71,7 +72,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
       resetForm();
       navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar funil");
+      notifyError(error, { fallback: "Não foi possível criar funil." });
     }
   };
 
@@ -86,7 +87,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Criar Novo Funil</DialogTitle>
+          <DialogTitle>Criar novo funil</DialogTitle>
           <DialogDescription>
             Crie um funil personalizado com etapas customizáveis.
           </DialogDescription>
@@ -95,7 +96,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
         <div className="space-y-4 py-2">
           {/* Nome */}
           <div className="space-y-2">
-            <Label htmlFor="pipeline-name">Nome do Funil *</Label>
+            <Label htmlFor="pipeline-name">Nome do funil *</Label>
             <Input
               id="pipeline-name"
               value={name}
@@ -130,7 +131,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-all",
                       selectedIcon === item.name
-                        ? "border-primary bg-primary/10 text-primary"
+                        ? "border-primary bg-primary-soft text-primary-soft-foreground"
                         : "border-border hover:border-primary/50"
                     )}
                   >

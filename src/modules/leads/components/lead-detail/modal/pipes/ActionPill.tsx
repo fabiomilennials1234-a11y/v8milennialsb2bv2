@@ -102,7 +102,7 @@ export const ActionPill = memo(function ActionPill({
       data-testid={`action-pill-${type}`}
       className={cn(
         "group relative flex items-center gap-2.5 h-9 pl-3 pr-3.5 rounded-full",
-        "border bg-card transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        "border bg-card transition-all duration-200 ease-out-expo",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isOpen
           ? "border-primary/40 bg-primary/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]"

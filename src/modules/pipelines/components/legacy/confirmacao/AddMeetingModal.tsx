@@ -23,7 +23,7 @@ import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalend
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 import { logger } from "@/modules/platform";
-import { getErrorMessage } from "@/shared/errors";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 interface AddMeetingModalProps {
   open: boolean;
@@ -328,7 +328,7 @@ export function AddMeetingModal({
             console.warn("[AddMeetingModal] Google Calendar error:", errData);
             toast.success("Reunião adicionada com sucesso!");
             toast.warning("Não foi possível criar o evento no Google Calendar", {
-              description: (errData as { message?: string }).message ?? "Verifique se o Google Calendar está conectado.",
+              description: userMessageOf(errData, "Verifique se o Google Calendar está conectado."),
             });
           }
         } catch (gcErr) {
@@ -343,14 +343,13 @@ export function AddMeetingModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      const message = getErrorMessage(error);
       console.error("[AddMeetingModal] Falha ao adicionar reunião:", error);
       void logger.error(
         "Falha ao adicionar reunião",
         error instanceof Error ? error : new Error(String(error)),
         { resource: "pipelines", action: "add-meeting-failed", metadata: { leadId: selectedLeadId, status } },
       );
-      toast.error("Erro ao adicionar reunião", { description: message });
+      notifyError(error, { fallback: "Não foi possível adicionar a reunião." });
     } finally {
       setIsSubmitting(false);
     }
@@ -383,7 +382,7 @@ export function AddMeetingModal({
                 const lead = leads?.find(l => l.id === prefilledLeadId);
                 return lead ? (
                   <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-success-strong shrink-0" />
                     <span className="font-medium">{lead.name}</span>
                     {lead.company && <span className="text-muted-foreground">— {lead.company}</span>}
                   </div>
@@ -406,13 +405,13 @@ export function AddMeetingModal({
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Digite o email para buscar lead existente..."
                     className={cn(
-                      foundLeadByEmail && "border-green-500 pr-10"
+                      foundLeadByEmail && "border-success pr-10"
                     )}
                   />
                   {email.trim() && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {foundLeadByEmail ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-success-strong" />
                       ) : (
                         <AlertCircle className="h-4 w-4 text-muted-foreground" />
                       )}
@@ -422,7 +421,7 @@ export function AddMeetingModal({
                 {email.trim() && (
                   <p className={cn(
                     "text-xs",
-                    foundLeadByEmail ? "text-green-600" : "text-muted-foreground"
+                    foundLeadByEmail ? "text-success-strong" : "text-muted-foreground"
                   )}>
                     {foundLeadByEmail
                       ? `Lead encontrado: ${foundLeadByEmail.name}${foundLeadByEmail.company ? ` - ${foundLeadByEmail.company}` : ""}`
@@ -547,10 +546,10 @@ export function AddMeetingModal({
 
           {/* Google Calendar Section */}
           {hasCalendars && (
-            <div className="rounded-lg border border-border/50 p-3 space-y-3 bg-muted/20">
+            <div className="rounded-2xl bg-sunken p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-primary" />
+                  <Video className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Google Calendar</span>
                 </div>
                 <Switch
@@ -589,7 +588,7 @@ export function AddMeetingModal({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting} className="gradient-gold">
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Adicionar Reunião
             </Button>

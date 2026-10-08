@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface ClientData {
   name?: string;
@@ -111,8 +112,7 @@ export function TinyErpUpsellConfirmDialog({
       onOpenChange(false);
       onComplete();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      toast.error("Erro ao enviar pedido", { description: msg });
+      notifyError(err, { fallback: "Não foi possível enviar o pedido ao TinyERP." });
     } finally {
       setIsPushing(false);
     }
@@ -139,7 +139,7 @@ export function TinyErpUpsellConfirmDialog({
       <DialogContent className="max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Send className="w-5 h-5 text-blue-500" />
+            <Send className="h-5 w-5 text-insights" />
             Enviar pedido ao TinyERP
           </DialogTitle>
         </DialogHeader>
@@ -160,7 +160,7 @@ export function TinyErpUpsellConfirmDialog({
           <Separator className="my-1" />
           <div className="flex justify-between text-sm font-semibold">
             <span>Total</span>
-            <span className="text-green-500">
+            <span className="tabular-nums text-success">
               {saleValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </span>
           </div>

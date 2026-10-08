@@ -27,11 +27,12 @@ import { ChatReplyProvider } from "./ReplyContext";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, WifiOff, UserPlus } from "lucide-react";
+import { Loader2, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
-import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -64,6 +65,7 @@ import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes"
 import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
 import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
 import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
+import { pedirAtualizacaoDeNaoLidas } from "@/modules/communication/hooks/chat/unreadRefresh";
 import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
 import {
@@ -87,7 +89,7 @@ import { zerarNaoLidas } from "@/modules/communication/hooks/chat/shared/cacheDe
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
-import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
+import { AiStateStrip } from "@/modules/communication/components/chat/takeover/AiStateStrip";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -164,6 +166,13 @@ interface ChatViewProps {
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
   isMobile: boolean;
+  /** Telefone da caixa aberta — o "final 4400" do compositor. */
+  instancePhone?: string | null;
+  /** Ações do ⋯ do cabeçalho — as mesmas do menu da linha. */
+  onMarkUnread?: () => void;
+  isArchived?: boolean;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
 }
 
 function ChatView({
@@ -179,6 +188,11 @@ function ChatView({
   density,
   onDensityChange,
   isMobile,
+  instancePhone,
+  onMarkUnread,
+  isArchived,
+  onArchive,
+  onUnarchive,
 }: ChatViewProps) {
   const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
   const conversationId = selectedContact?.conversation_id ?? null;
@@ -210,6 +224,8 @@ function ChatView({
    * que segurar a thread inteira num skeleton esperando a flag.
    */
   const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
+  // `chat_nome_do_lead`: o `leads.name` manda no topo, na lista e no painel.
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
 
   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
   // daqui é o único ponto que sabe qual lead está aberto.
@@ -249,15 +265,8 @@ function ChatView({
   // mensagens. Uma requisição por conversa aberta, cacheada — sem poll.
   const { data: calls = [] } = useConversationCalls(phoneNumber, effectiveLeadId, hasOlderMessages ? messages?.[0]?.timestamp : undefined);
 
-  // ── C1: useTakeover real — FSM ia_state da conversa ──────────────────────
-  const {
-    state: takeoverState,
-    isMutating: takeoverMutating,
-    markHumanActive,
-  } = useTakeover(conversationId);
-
-  const isWaitingHuman = takeoverState === "WAITING_HUMAN";
-  const isHumanActive  = takeoverState === "HUMAN_ACTIVE";
+  // O estado da IA (FSM `conversations.ai_state`) é lido pela `AiStateStrip`,
+  // que é quem desenha e oferece as transições — ver o cabeçalho dela.
 
   // Image preview state (C6)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -275,10 +284,7 @@ function ChatView({
   });
 
   const aiDisabled = copilotToggle.aiDisabled;
-  const toggleAiMutation = {
-    mutate: (checked: boolean) => copilotToggle.toggle(!checked),
-    isPending: copilotToggle.isPending,
-  };
+  const toggleAi = (checked: boolean) => copilotToggle.toggle(!checked);
 
   const handleRetry = useCallback(
     (msg: FailedMessage) => {
@@ -289,9 +295,11 @@ function ChatView({
 
   if ((!selectedContact && !selectedPhone) || !instanceId) {
     return (
-      <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
-        <WifiOff className="w-10 h-10 opacity-30" />
-        <p className="text-sm">Selecione uma conversa</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-sunken text-muted-foreground">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-card shadow-relevo">
+          <WifiOff className="h-5 w-5 opacity-60" />
+        </span>
+        <p className="text-sm font-semibold">Selecione uma conversa</p>
       </div>
     );
   }
@@ -306,7 +314,11 @@ function ChatView({
       savedContactName: selectedContact?.saved_contact_name,
       telefone: phoneNumber ?? null,
     },
-    { nomeDoWhatsappPrimeiro },
+    {
+      nomeDoWhatsappPrimeiro,
+      // Grupo fica com a regra de sempre.
+      nomeDoLeadPrimeiro: nomeDoLeadPrimeiro && !selectedContact?.is_group,
+    },
   );
 
   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
@@ -326,27 +338,6 @@ function ChatView({
   return (
     <ChatReplyProvider key={conversationKey} messages={messages}>
     <div className="flex flex-col h-full min-h-0 min-w-0">
-      {/* C1 — Banner WAITING_HUMAN */}
-      {isWaitingHuman && (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-300 shrink-0"
-        >
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <UserPlus className="w-4 h-4 shrink-0" aria-hidden />
-            IA pediu ajuda. Assuma a conversa.
-          </div>
-          <button
-            type="button"
-            className="text-xs font-semibold underline underline-offset-2 hover:no-underline shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 rounded"
-            onClick={() => { void markHumanActive(); }}
-            disabled={takeoverMutating}
-          >
-            {takeoverMutating ? "..." : "Assumir"}
-          </button>
-        </div>
-      )}
-
       {isMobile ? (
         <MobileChatThreadHeader
           contactName={contactName}
@@ -362,31 +353,37 @@ function ChatView({
           contactName={contactName}
           hasLead={!!effectiveLeadId}
           leadId={effectiveLeadId ?? undefined}
-          conversationId={conversationId}
           instanceId={instanceId ?? undefined}
-          aiDisabled={aiDisabled || isHumanActive}
-          isWaitingHuman={isWaitingHuman}
+          instanceName={instanceName}
           szChatSession={null}
           organizationId={organizationId}
           onBack={onBack}
           onOpenLeadModal={onOpenLeadModal}
-          onToggleAi={(checked) => {
-            if (isHumanActive) return;
-            toggleAiMutation.mutate(checked);
-          }}
           onTransferToSzChatTeam={() => {
             // SZ.chat transfer — Onda 6
           }}
-          toggleAiPending={toggleAiMutation.isPending || isHumanActive}
           transferPending={false}
           density={density}
           onDensityChange={onDensityChange}
-          humanPaused={copilotPause.isPaused}
-          humanPausedUntil={copilotPause.pausedUntil}
-          onReactivateCopilot={copilotPause.reactivate}
-          isReactivating={copilotPause.isReactivating}
+          onMarkUnread={onMarkUnread}
+          isArchived={isArchived}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
         />
       )}
+
+      {/* Faixa de estado da IA — logo abaixo do cabeçalho, nos dois tamanhos
+          de tela: no celular ela substitui o banner "IA pediu ajuda". */}
+      <AiStateStrip
+        conversationId={conversationId}
+        aiDisabled={aiDisabled}
+        onToggleAi={toggleAi}
+        toggleAiPending={copilotToggle.isPending}
+        humanPaused={copilotPause.isPaused}
+        humanPausedUntil={copilotPause.pausedUntil}
+        onReactivateCopilot={copilotPause.reactivate}
+        isReactivating={copilotPause.isReactivating}
+      />
 
       {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
           precisa saber que a automação fala por outro número ANTES de ler a
@@ -476,6 +473,7 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           canReply
           density={density}
+          instancePhone={instancePhone}
           selectedContact={{
             push_name: selectedContact?.push_name ?? null,
             lead_name: effectiveLeadName,
@@ -576,6 +574,7 @@ export function ChatShellWithContext() {
     alternar: alternarCaixa,
     marcarSomente,
     marcarTodas,
+    marcarConjunto,
   } = useCaixasSelecionadas({
     caixas: boxes,
     caixaPreferida: preferredInstanceId,
@@ -783,6 +782,9 @@ export function ChatShellWithContext() {
    * argumento) e a lista refaz a busca — uma vez, no load.
    */
   const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
+  // `chat_nome_do_lead`: o painel lateral resolve o `leads.name` por conta própria;
+  // aqui só vai a queda (salvo → perfil → telefone) para quando não há lead.
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
 
   // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
   // estado persistido — empurrar essas dimensões pro servidor sumiria com
@@ -1060,9 +1062,14 @@ export function ChatShellWithContext() {
           p_instance_id: instanceId,
           p_normalized_phone: norm,
         }))
-        .then(undefined, () => {
-          /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
-        });
+        .then(
+          // Read-state gravado: as contagens (badge e ponto por caixa) pedem
+          // releitura pelo throttle, nunca direto — ver `unreadRefresh.ts`.
+          () => pedirAtualizacaoDeNaoLidas(queryClient),
+          () => {
+            /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
+          },
+        );
     },
     [queryClient, organizationId],
   );
@@ -1368,9 +1375,11 @@ export function ChatShellWithContext() {
   // Não é mais "nenhuma instância WhatsApp": uma org pode ter só Instagram.
   if (!boxes.length) {
     return (
-      <div className="flex h-full items-center justify-center flex-col gap-2 text-muted-foreground">
-        <WifiOff className="w-8 h-8 opacity-40" />
-        <p className="text-sm">Nenhuma caixa de entrada disponível</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-card shadow-relevo">
+          <WifiOff className="h-5 w-5 opacity-60" />
+        </span>
+        <p className="text-sm font-semibold">Nenhuma caixa de entrada disponível</p>
       </div>
     );
   }
@@ -1393,6 +1402,7 @@ export function ChatShellWithContext() {
             onAlternarCaixa={alternarCaixa}
             onSomenteCaixa={setSelectedBoxId}
             onTodasAsCaixas={marcarTodas}
+            onMarcarConjunto={marcarConjunto}
             naoLidasPorCaixa={naoLidasPorCaixa}
             metaPorLinha={metaPorLinha}
             waitingHumanCount={waitingHumanCount}
@@ -1461,6 +1471,23 @@ export function ChatShellWithContext() {
               density={density}
               onDensityChange={setDensity}
               isMobile={isMobile}
+              instancePhone={instances.find((i) => i.id === selectedInstanceId)?.phone_number ?? null}
+              onMarkUnread={
+                telefoneSelecionado && selectedInstanceId
+                  ? () => { void handleMarkUnread(telefoneSelecionado, selectedInstanceId); }
+                  : undefined
+              }
+              isArchived={!!selectedContact?.archived_at}
+              onArchive={
+                telefoneSelecionado
+                  ? () => handleArchive(telefoneSelecionado, selectedInstanceId)
+                  : undefined
+              }
+              onUnarchive={
+                selectedContact?.conversation_id
+                  ? () => handleUnarchive(selectedContact.conversation_id!)
+                  : undefined
+              }
             />
           )
         }
@@ -1495,6 +1522,16 @@ export function ChatShellWithContext() {
                 leadId={selectedContact?.lead_id ?? undefined}
                 phoneNumber={telefoneSelecionado ?? undefined}
                 pushName={selectedContact?.push_name ?? null}
+                nomeDaConversa={
+                  nomeDoLeadPrimeiro && selectedContact && !selectedContact.is_group
+                    ? nomeComLeadPrimeiro({
+                        pushName: selectedContact.push_name ?? null,
+                        savedContactName: selectedContact.saved_contact_name,
+                        nomeDoLead: null,
+                        telefone: telefoneSelecionado ?? null,
+                      })
+                    : undefined
+                }
               />
             )
           ) : undefined

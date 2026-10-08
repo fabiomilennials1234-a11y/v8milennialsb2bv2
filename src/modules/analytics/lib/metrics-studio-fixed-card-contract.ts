@@ -43,5 +43,13 @@ export interface FixedCardEntry {
   /** Tamanho com que o card nasce ao ser solto no canvas. */
   tamanhoPadrao: { w: number; h: number };
   requiresPerformance?: boolean;
+  /**
+   * Corpo que já se desenha como cartões próprios (a faixa de KPIs, a Saúde
+   * do funil, que é um bento inteiro). Em
+   * Visualização a janela não pinta moldura nem título — os cartões pousam
+   * direto na bancada; em Edição a moldura volta, porque é ela que arrasta.
+   * Só forma: dado, permissão e geometria não mudam.
+   */
+  semMoldura?: boolean;
   render: ComponentType<FixedCardContext>;
 }

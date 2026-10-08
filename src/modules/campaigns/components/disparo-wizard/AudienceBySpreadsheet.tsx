@@ -47,6 +47,7 @@ import {
   type ParsedSpreadsheet,
 } from "./spreadsheet-parse";
 import type { DisparoDraft } from "./wizard-machine";
+import { notifyError } from "@/shared/errors";
 
 interface AudienceBySpreadsheetProps {
   draft: DisparoDraft;
@@ -130,8 +131,8 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       if (result.map.phone < 0) {
         toast.warning("Não detectei a coluna de telefone — selecione manualmente.");
       }
-    } catch {
-      toast.error("Não consegui ler o arquivo. Use um CSV válido.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não consegui ler o arquivo. Use um CSV válido." });
     }
   };
 
@@ -163,7 +164,7 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       });
       setPreview({ report: res.report, recipients: res.recipient_count });
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao calcular o público.");
+      notifyError(e, { fallback: "Não foi possível calcular o público." });
     }
   };
 
@@ -192,7 +193,7 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
       });
       toast.success(`${ids.length.toLocaleString("pt-BR")} contatos prontos pro disparo.`);
     } catch (e) {
-      toast.error((e as Error).message ?? "Falha ao preparar o público.");
+      notifyError(e, { fallback: "Não foi possível preparar o público." });
     }
   };
 
@@ -210,10 +211,10 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
   // Confirmed-and-navigated-back: no local file in memory but the audience is frozen.
   if (confirmed && !parsed) {
     return (
-      <div className="rounded-xl border border-border/70 bg-card p-4">
+      <div className="rounded-2xl border border-border/60 bg-sunken p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground">
               <CheckCircle2 className="h-4 w-4" />
             </div>
             <div className="min-w-0">

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AlertsDropdown } from "./AlertsDropdown";
 
 const mocks = vi.hoisted(() => ({ salvar: vi.fn(), tocar: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("@/shared/errors", () => ({ notifyError: mocks.error }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error, info: vi.fn() } }));
 vi.mock("@/components/ui/dropdown-menu", () => ({

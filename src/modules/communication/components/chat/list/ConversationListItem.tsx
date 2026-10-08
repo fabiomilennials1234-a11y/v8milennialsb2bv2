@@ -49,6 +49,7 @@ import {
 import { ChannelBadge } from "../ChannelBadge";
 import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,8 +59,8 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
  * nomear conversa de cada canal — este export continua existindo porque a lista
  * e a linha do mobile já o importam por este nome.
  */
-export function contactDisplayName(c: InboxContact): string {
-  return contactLabel(c);
+export function contactDisplayName(c: InboxContact, nomeDoLeadPrimeiro?: boolean): string {
+  return contactLabel(c, { nomeDoLeadPrimeiro });
 }
 
 export function formatContactTime(timestamp: string): string {
@@ -128,10 +129,13 @@ function ContactContextMenu({
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="p-1 rounded-md hover:bg-muted/80 transition-colors"
+            // Recolhido (largura zero, invisível) até a linha ter mouse ou foco,
+            // ou o menu estar aberto — assim não rouba espaço do nome. Continua
+            // no DOM e alcançável por teclado (o foco o expande).
+            className="-mr-1 w-0 shrink-0 overflow-hidden rounded-md p-0 opacity-0 transition-[width,opacity] duration-150 hover:bg-muted/80 focus-visible:w-6 focus-visible:p-1 focus-visible:opacity-100 group-hover/linha:w-6 group-hover/linha:p-1 group-hover/linha:opacity-100 group-focus-within/linha:w-6 group-focus-within/linha:p-1 group-focus-within/linha:opacity-100 data-[state=open]:w-6 data-[state=open]:p-1 data-[state=open]:opacity-100 group-data-[selected=true]/linha:hover:bg-primary-foreground/10"
             aria-label="Opções da conversa"
           >
-            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+            <MoreVertical className="h-3.5 w-3.5 text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
@@ -285,6 +289,7 @@ export function ConversationListItem({
   contact,
   isSelected,
   onSelect,
+  waitingHumanLeadIds,
   activeTab,
   isAdmin,
   instanceId,
@@ -300,13 +305,25 @@ export function ConversationListItem({
   caixa,
   tambemEm,
 }: ConversationListItemProps) {
-  const displayName = contactDisplayName(contact);
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  const displayName = contactDisplayName(contact, nomeDoLeadPrimeiro);
   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
   const key = contactKey(contact);
   // Ações de conversa (arquivar/excluir/etiquetar) vivem em
   // `whatsapp_conversations`. Não existe tabela equivalente para canal social,
   // então o menu não é renderizado — melhor ausente do que presente e inerte.
   const isWhatsApp = contact.channel === "whatsapp";
+  const naoLida = contact.unread_count > 0 && !isSelected;
+  // A última mensagem saiu do Copilot — o selo "IA" vai ao lado do nome, como
+  // no mockup. Só o WhatsApp grava a origem (`last_message_sent_source`).
+  const ultimaDaIa =
+    isWhatsApp &&
+    contact.last_message_direction === "outgoing" &&
+    contact.last_message_sent_source === "copilot";
+  // "Pediu atendente": a mesma fila de handoff que alimenta o chip do trilho
+  // (`waiting-human-leads`). O dado já chegava aqui e não era desenhado.
+  const pediuAtendente =
+    !!contact.lead_id && (waitingHumanLeadIds?.has(contact.lead_id) ?? false);
 
   return (
     <motion.div
@@ -321,13 +338,14 @@ export function ConversationListItem({
           onSelect(key);
         }
       }}
+      data-selected={isSelected}
       className={cn(
-        "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 focus-visible:relative",
+        // V5: linha arredondada; a selecionada vira ouro (como no painel de
+        // tinta do Comando). O resto da linha lê `data-selected` pelo grupo.
+        "group/linha relative w-full cursor-pointer rounded-2xl px-2.5 py-2.5 text-left outline-none transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary",
         isSelected
-          ? "bg-primary/[0.08] border-l-primary"
-          : contact.unread_count > 0
-            ? "bg-primary/[0.04] border-l-primary/40 hover:bg-primary/[0.07]"
-            : "hover:bg-muted/50 border-l-transparent",
+          ? "bg-primary text-primary-foreground shadow-brilho-ouro"
+          : "hover:bg-foreground/[.05]",
       )}
       whileTap={{ scale: 0.99 }}
       onClick={() => onSelect(key)}
@@ -338,13 +356,16 @@ export function ConversationListItem({
             <img
               src={contact.avatar_url}
               alt=""
-              className="w-11 h-11 rounded-full border-2 border-background shadow-sm object-cover"
+              className="h-11 w-11 rounded-full object-cover"
             />
           ) : (
             <div
               className={cn(
-                "w-11 h-11 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-                avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+                "flex h-11 w-11 select-none items-center justify-center rounded-full text-sm font-bold",
+                // Letra escura ou clara conforme o gradiente do avatar (cor do
+                // dado, derivada do nome). Os tokens de tinta são os mesmos nos
+                // dois temas — o contraste é com o gradiente, não com a página.
+                avatarGradient.ink ? "text-tinta" : "text-tinta-foreground",
               )}
               style={{ background: avatarGradient.background }}
               aria-hidden
@@ -357,144 +378,151 @@ export function ConversationListItem({
           <ChannelBadge channel={contact.channel} size={18} overlay />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1">
-              <span className="truncate">{displayName}</span>
-              {isWhatsApp && (
-                <ContactContextMenu
-                  contact={contact}
-                  activeTab={activeTab}
-                  isAdmin={isAdmin}
-                  instanceId={instanceId}
-                  organizationId={organizationId}
-                  allTags={allTags}
-                  onMarkUnread={onMarkUnread}
-                    onArchive={onArchive}
-                  onUnarchive={onUnarchive}
-                  onDelete={onDelete}
-                  onAddTag={onAddTag}
-                  onRemoveTag={onRemoveTag}
-                />
-              )}
-              {/* "Sem lead ainda" é informação onde o vínculo é possível — e
-                  desde que a conversa de Instagram pode virar lead pelo painel,
-                  isso passou a valer para os dois canais. O ponto some assim que
-                  alguém vincula, nos dois. */}
-              {!contact.lead_id && (
-                <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
-              )}
-              {/* No WhatsApp o nome do lead JÁ é o título da linha
-                  (`contactDisplayName`). No Instagram o título é o @handle —
-                  que é o que a pessoa vê no app — então o lead vinculado só
-                  aparece se ganhar espaço próprio. */}
-              {!isWhatsApp && contact.lead_name && (
-                <span
-                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 max-w-[104px] truncate bg-muted text-muted-foreground/90 whitespace-nowrap"
-                  title={`Lead: ${contact.lead_name}`}
-                >
-                  {contact.lead_name}
-                </span>
-              )}
-              {contact.tags.slice(0, 2).map((tag) => (
-                <span
-                  key={tag.id}
-                  className="text-[10px] px-1.5 py-0.5 rounded-full leading-none shrink-0 whitespace-nowrap"
-                  style={{
-                    backgroundColor: `${tag.color}20`,
-                    color: tag.color,
-                    border: `1px solid ${tag.color}40`,
-                  }}
-                >
-                  {tag.name}
-                </span>
-              ))}
-              {contact.tags.length > 2 && (
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  +{contact.tags.length - 2}
-                </span>
-              )}
-            </span>
+          {/* Andar 1 — nome · IA · hora. O NOME tem prioridade: é o que a
+              pessoa procura ao varrer a lista. O ⋮ fica no canto, depois da
+              hora, e só ocupa espaço sob o mouse, no foco ou com o menu aberto. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 truncate text-sm font-bold">{displayName}</span>
+            {/* "Sem lead ainda" é informação onde o vínculo é possível. O ponto
+                some assim que alguém vincula, nos dois canais. */}
+            {!contact.lead_id && (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-primary/70 group-data-[selected=true]/linha:bg-primary-foreground/60" title="Novo" />
+            )}
+            {ultimaDaIa && (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-primary/15 px-1 py-px text-[10px] font-bold leading-none text-primary group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground"
+                title="A última mensagem foi do Copilot"
+              >
+                <Bot className="h-2.5 w-2.5" aria-hidden />
+                IA
+              </span>
+            )}
             <time
               dateTime={contact.last_message_time || ""}
-              className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums"
+              className={cn(
+                "ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums",
+                naoLida
+                  ? "font-bold text-primary"
+                  : "font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70",
+              )}
             >
               {formatContactTime(contact.last_message_time)}
             </time>
+            {isWhatsApp && (
+              <ContactContextMenu
+                contact={contact}
+                activeTab={activeTab}
+                isAdmin={isAdmin}
+                instanceId={instanceId}
+                organizationId={organizationId}
+                allTags={allTags}
+                onMarkUnread={onMarkUnread}
+                onArchive={onArchive}
+                onUnarchive={onUnarchive}
+                onDelete={onDelete}
+                onAddTag={onAddTag}
+                onRemoveTag={onRemoveTag}
+              />
+            )}
           </div>
-          <div className="flex items-center justify-between gap-2 mt-0.5">
-            <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
-              {/* De qual caixa esta conversa corre. Vive na linha de metadados,
-                  e não ao lado do nome: o nome é o que a pessoa procura ao
-                  varrer a lista, e um selo disputando esse espaço rouba a
-                  varredura. A cor é a MESMA que a bolha de chat dá ao número —
-                  duas derivações dariam duas cores para a mesma caixa. */}
-              {caixa && (
-                <span
-                  className="flex items-center gap-1 shrink-0 max-w-[132px]"
-                  title={`Caixa: ${caixa.nome}`}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: instanceColor(caixa.id) }}
-                    aria-hidden
-                  />
-                  <span className="text-[10px] leading-none truncate text-muted-foreground/90">
-                    {caixa.nome}
-                  </span>
-                </span>
+
+          {/* Andar 2 — prévia (com a autoria) · contador. */}
+          <div className="mt-0.5 flex items-center justify-between gap-2">
+            <p
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-1 truncate text-[12px]",
+                naoLida
+                  ? "font-semibold text-foreground/85"
+                  : "text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/75",
               )}
-              {/* O FIO. Texto, e não só um ícone: cor e forma sozinhas não dizem
-                  QUAL é a outra caixa, e é justamente isso que decide se a
-                  pessoa responde aqui ou lá. Fica na mesma linha e trunca —
-                  altura de linha variável quebra a lista virtualizada. */}
-              {tambemEm && tambemEm.length > 0 && (
-                <span
-                  className="flex items-center gap-0.5 shrink-0 text-[10px] leading-none text-muted-foreground/70"
-                  title={`O mesmo contato também tem conversa em: ${tambemEm
-                    .map((c) => c.nome)
-                    .join(", ")}`}
-                >
-                  <Link2 className="w-3 h-3 shrink-0" aria-hidden />
-                  <span className="truncate max-w-[112px]">
-                    {tambemEm.length === 1
-                      ? `também em ${tambemEm[0].nome}`
-                      : `também em ${tambemEm.length} caixas`}
-                  </span>
-                </span>
-              )}
-              {stageLabel && (
-                <span
-                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 bg-muted text-muted-foreground/90 whitespace-nowrap"
-                  title={`Etapa: ${stageLabel}`}
-                >
-                  {stageLabel}
-                </span>
-              )}
+            >
               {/* Autoria da última mensagem. `last_message_sent_source` é campo
                   de `whatsapp_messages`; no canal social a origem ainda não
-                  existe (nada sai daqui nesta fatia), então o marcador se
-                  resume ao "Você:" quando a direção for de saída. */}
+                  existe, então o marcador se resume ao "Você:" de saída. */}
               {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
-                <Zap className="h-2.5 w-2.5 text-[#a78bfa] shrink-0" />
+                <Zap className="h-2.5 w-2.5 shrink-0 text-bubble-workflow-foreground group-data-[selected=true]/linha:text-primary-foreground" />
               )}
-              {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "copilot" && (
-                <Bot className="h-2.5 w-2.5 text-[#fbbf24] shrink-0" />
+              {ultimaDaIa && (
+                <span className="shrink-0 opacity-70">IA:</span>
               )}
               {contact.last_message_direction === "outgoing" &&
                 (!isWhatsApp || !contact.last_message_sent_source || contact.last_message_sent_source === "manual") && (
-                <span className="text-foreground/50 shrink-0" title="Você enviou">
+                <span className="shrink-0 opacity-70" title="Você enviou">
                   Você:
                 </span>
               )}
-              <span className="truncate min-w-0">{contact.last_message || "Sem mensagens"}</span>
+              <span className="min-w-[3.5rem] flex-1 truncate">{contact.last_message || "Sem mensagens"}</span>
             </p>
-            {contact.unread_count > 0 && !isSelected && (
+            {naoLida && (
               <Badge
-                className="h-5 min-w-5 px-1.5 shrink-0 text-xs bg-primary text-primary-foreground border-0 hover:bg-primary/90 rounded-full"
+                className="h-5 min-w-5 shrink-0 rounded-full border-0 bg-primary px-1.5 text-[10.5px] font-extrabold tabular-nums text-primary-foreground hover:bg-primary/90"
                 title="Mensagens não lidas"
               >
                 {contact.unread_count > 99 ? "99+" : contact.unread_count}
               </Badge>
+            )}
+          </div>
+
+          {/* Andar 3 — metadados em 10,5 px, como no mockup: de qual caixa
+              corre · etapa · pediu atendente · o "fio". Etiquetas saíram da
+              linha (moram no painel de contexto e no filtro "Tag"): eram elas
+              que estouravam a linha quando o lead pedia atendente. Uma linha
+              só, truncando — altura variável quebraria a lista virtualizada. */}
+          <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
+            {/* A cor é a MESMA que a bolha de chat dá ao número — duas
+                derivações dariam duas cores para a mesma caixa. */}
+            {caixa && (
+              <span
+                className="flex min-w-[4.5rem] max-w-[132px] shrink-[2] items-center gap-1"
+                title={`Caixa: ${caixa.nome}`}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: instanceColor(caixa.id) }}
+                  aria-hidden
+                />
+                <span className="truncate">{caixa.nome}</span>
+              </span>
+            )}
+            {/* No WhatsApp o nome do lead JÁ é o título da linha. No Instagram
+                o título é o @handle, então o lead vinculado ganha a meta. */}
+            {!isWhatsApp && contact.lead_name && (
+              <span className="min-w-0 max-w-[104px] shrink truncate" title={`Lead: ${contact.lead_name}`}>
+                {contact.lead_name}
+              </span>
+            )}
+            {pediuAtendente && (
+              <span className="flex shrink-0 items-center gap-1 font-semibold text-destructive group-data-[selected=true]/linha:text-primary-foreground">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive group-data-[selected=true]/linha:bg-primary-foreground" aria-hidden />
+                Pediu atendente
+              </span>
+            )}
+            {stageLabel && (
+              <span
+                className="flex min-w-[3.25rem] max-w-[7.5rem] shrink-[3] items-center gap-1"
+                title={`Etapa: ${stageLabel}`}
+              >
+                <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-60" aria-hidden />
+                <span className="truncate">{stageLabel}</span>
+              </span>
+            )}
+            {/* O FIO. Texto, e não só um ícone: cor e forma sozinhas não dizem
+                QUAL é a outra caixa, e é justamente isso que decide se a
+                pessoa responde aqui ou lá. */}
+            {tambemEm && tambemEm.length > 0 && (
+              <span
+                className="flex min-w-0 shrink items-center gap-0.5 opacity-80"
+                title={`O mesmo contato também tem conversa em: ${tambemEm
+                  .map((c) => c.nome)
+                  .join(", ")}`}
+              >
+                <Link2 className="w-3 h-3 shrink-0" aria-hidden />
+                <span className="truncate max-w-[112px]">
+                  {tambemEm.length === 1
+                    ? `também em ${tambemEm[0].nome}`
+                    : `também em ${tambemEm.length} caixas`}
+                </span>
+              </span>
             )}
           </div>
         </div>

@@ -83,17 +83,14 @@ describe("checkSubscription", () => {
     expect(result.graceRemaining).toBe(5);
   });
 
-  it("returns blocked/expired fallback on RPC error", async () => {
-    mockRpc.mockResolvedValue({
-      data: null,
-      error: { message: "RPC failed" },
-    });
+  // ADR-0038: falha de consulta não é assinatura vencida. Antes, o erro virava
+  // `expired` + `isBlocked` e um cliente pagante via "assinatura bloqueada". O
+  // guard continua fechando o acesso — mas diz que não conseguiu verificar.
+  it("lança o erro da RPC em vez de inventar assinatura vencida", async () => {
+    const rpcError = { message: "RPC failed", code: "57014", details: null, hint: null };
+    mockRpc.mockResolvedValue({ data: null, error: rpcError });
 
-    const result = await checkSubscription("org-123");
-    expect(result.status).toBe("expired");
-    expect(result.isValid).toBe(false);
-    expect(result.isBlocked).toBe(true);
-    expect(result.plan).toBeNull();
+    await expect(checkSubscription("org-123")).rejects.toBe(rpcError);
   });
 
   it("returns blocked/expired when data is null", async () => {

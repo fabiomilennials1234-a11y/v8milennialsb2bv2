@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { StudioPeriod, StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
@@ -85,18 +86,19 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         style={{ backgroundPosition: "12px 12px", minHeight: Math.max(contentHeight, 0) || undefined }}
         className={cn(
           "relative h-full min-h-full w-full",
-          "bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:24px_24px]",
-          "bg-background",
+          // Edição: mesa de trabalho afundada com a malha de referência.
+          // Visualização: sem fundo — os cards pousam na própria bancada.
+          editavel && "bg-sunken bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:24px_24px]",
         )}
       >
       {empty && (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
-          <div className="rounded-2xl border border-dashed border-border/70 p-4">
-            <LayoutGrid className="h-6 w-6 text-muted-foreground/40" strokeWidth={1.5} />
-          </div>
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <LayoutGrid className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+          </span>
           <div>
-            <p className="text-[13px] font-semibold">Painel em branco</p>
-            <p className="mt-0.5 max-w-[320px] text-[11px] leading-relaxed text-muted-foreground/60">
+            <p className="text-sm font-semibold">Painel em branco</p>
+            <p className="mx-auto mt-1 max-w-[340px] text-[13px] leading-relaxed text-muted-foreground">
               {editavel
                 ? "Escolha uma métrica na lista ao lado. Ela vira uma janela aqui — arraste pela barra de título, redimensione pela borda e troque o corte ao selecioná-la."
                 : podeEditar
@@ -109,13 +111,9 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
               mas só para quem tem para onde ir. Oferecer "Montar painel" a
               membro seria mandá-lo bater numa recusa da RLS. */}
           {!editavel && podeEditar && (
-            <button
-              type="button"
-              onClick={onEditar}
-              className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary px-4 py-[9px] text-[13px] font-bold text-primary-foreground transition-transform duration-150 hover:-translate-y-px"
-            >
+            <Button type="button" onClick={onEditar}>
               Montar painel
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -144,8 +142,8 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         const metric = byId.get(win.metricId);
         if (!metric) return (
           <div key={win.id} role="group" aria-label="Métrica indisponível"
-            className="absolute overflow-auto p-3" style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}>
-            <Alert><AlertTitle>Métrica indisponível</AlertTitle><AlertDescription>
+            className="absolute overflow-auto rounded-card border border-dashed border-border bg-card/60 p-1" style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}>
+            <Alert className="rounded-[18px] border-0 bg-transparent"><AlertTitle className="font-semibold">Métrica indisponível</AlertTitle><AlertDescription className="text-[13px] text-muted-foreground">
               O card continua salvo. O catálogo pode estar carregando ou esta métrica não está mais disponível.
             </AlertDescription></Alert>
           </div>

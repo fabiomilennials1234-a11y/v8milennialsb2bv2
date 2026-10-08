@@ -33,22 +33,24 @@ export function TimeGridEvent({
 
   return (
     <div
-      className="absolute rounded-r-md cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-110 hover:shadow-md z-10"
+      className="absolute rounded-r-lg cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-110 hover:shadow-relevo z-10"
       style={{
         top: `${top}px`,
         height: `${height}px`,
         left: `calc(${leftPct * 100}% + ${MARGIN}px)`,
         width: `calc(${widthPct * 100}% - ${MARGIN * 2}px)`,
         borderLeft: `3px solid ${color}`,
-        backgroundColor: `${color}1A`,
+        // `color-mix`, e não o sufixo de alfa `${cor}1A`: três das cinco
+        // fontes são `hsl(...)`, e `"hsl(47, 100%, 50%)1A"` é declaração
+        // inválida, descartada em silêncio — mesmo conserto do popover.
+        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
       }}
       onClick={(e) => onClick(e, event)}
     >
       <div className="px-2 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-        <p
-          className="text-[11px] font-semibold leading-tight truncate"
-          style={{ color }}
-        >
+        {/* A cor da fonte fica na borda e no banho, nunca no texto — mesmo
+            idioma de `MonthEventPill`: o ouro como texto dá ~1,7:1. */}
+        <p className="text-[11px] font-semibold leading-tight truncate text-foreground">
           {event.title}
         </p>
         {height > 38 && (

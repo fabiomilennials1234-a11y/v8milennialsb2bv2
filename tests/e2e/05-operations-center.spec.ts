@@ -24,8 +24,10 @@ test.describe('Operations Center', () => {
     await page.goto('/master/operations');
     await page.waitForLoadState('networkidle');
 
-    // Try clicking tab buttons if they exist
-    const tabs = page.getByRole('tab');
+    // Try clicking tab buttons if they exist. Só as abas da página: a pílula
+    // dos grupos do Master (também `tab`) mora na barra superior e navegaria
+    // para fora do Operations.
+    const tabs = page.getByRole('tablist', { name: 'Painéis de operações' }).getByRole('tab');
     const tabCount = await tabs.count();
 
     for (let i = 0; i < Math.min(tabCount, 3); i++) {

@@ -2,6 +2,7 @@
 DO $$ BEGIN IF to_regclass('public.organizations') IS NOT NULL THEN RAISE EXCEPTION 'fixture requires empty preview'; END IF; END $$;
 CREATE TABLE organizations(id uuid PRIMARY KEY, chat_restrict_to_owner boolean DEFAULT false);
 CREATE TABLE team_members(id uuid, user_id uuid, organization_id uuid, is_active boolean);
+CREATE TABLE master_users(user_id uuid, is_active boolean NOT NULL DEFAULT true);
 CREATE FUNCTION get_my_organization_ids() RETURNS SETOF uuid LANGUAGE sql STABLE AS $$ SELECT organization_id FROM public.team_members WHERE user_id=auth.uid() AND is_active $$;
 CREATE FUNCTION is_master_user() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE FUNCTION is_user_admin() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
@@ -9,12 +10,12 @@ CREATE FUNCTION is_org_admin(uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SEL
 CREATE TABLE whatsapp_instances(id uuid PRIMARY KEY, organization_id uuid);
 CREATE FUNCTION whatsapp_chip_instance_ids(uuid,uuid) RETURNS uuid[] LANGUAGE sql STABLE AS $$ SELECT ARRAY[$2] $$;
 CREATE FUNCTION whatsapp_readable_instance_ids(uuid,uuid[]) RETURNS uuid[] LANGUAGE sql STABLE AS $$ SELECT coalesce(array_agg(id),'{}') FROM public.whatsapp_instances WHERE organization_id=$1 AND ($2 IS NULL OR id=ANY($2)) $$;
-CREATE TABLE conversation_read_state(organization_id uuid, user_id uuid NOT NULL, conversation_key text, last_read_at timestamptz, updated_at timestamptz, PRIMARY KEY(organization_id,user_id,conversation_key));
+CREATE TABLE conversation_read_state(organization_id uuid, user_id uuid NOT NULL, conversation_key text, last_read_at timestamptz, updated_at timestamptz, marked_unread boolean NOT NULL DEFAULT false, PRIMARY KEY(organization_id,user_id,conversation_key));
 ALTER TABLE conversation_read_state ENABLE ROW LEVEL SECURITY;
 CREATE POLICY own_state ON conversation_read_state FOR ALL TO authenticated USING(user_id=auth.uid() AND organization_id IN (SELECT get_my_organization_ids()));
 GRANT SELECT,INSERT,UPDATE ON conversation_read_state TO authenticated;
 GRANT SELECT ON team_members TO authenticated;
-CREATE TABLE whatsapp_messages(organization_id uuid,instance_id uuid,normalized_phone text,direction text,deleted_at timestamptz,is_group boolean DEFAULT false,timestamp timestamptz);
+CREATE TABLE whatsapp_messages(organization_id uuid,instance_id uuid,message_id text,normalized_phone text,direction text,deleted_at timestamptz,is_group boolean DEFAULT false,timestamp timestamptz);
 CREATE TABLE whatsapp_conversations(id uuid,organization_id uuid,instance_id uuid,normalized_phone text,archived_at timestamptz,deleted_at timestamptz,created_at timestamptz);
 CREATE TABLE whatsapp_conversation_summary(organization_id uuid,instance_id uuid,normalized_phone text,phone_number text,last_push_name text,last_message text,last_message_time timestamptz,last_message_direction text,last_message_sent_source text,lead_id uuid,is_group boolean DEFAULT false);
 CREATE TABLE leads(id uuid,organization_id uuid,normalized_phone text,deleted_at timestamptz,pre_sale_responsible_id uuid,sale_responsible_id uuid,sdr_id uuid,closer_id uuid,responsible_id uuid,qualification_tier text);

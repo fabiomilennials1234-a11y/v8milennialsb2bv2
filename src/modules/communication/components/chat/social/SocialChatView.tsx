@@ -53,6 +53,7 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
 import {
@@ -90,6 +91,7 @@ import {
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import type { SocialMessage } from "@/modules/communication/hooks/chat/useSocialMessages";
+import { notifyError } from "@/shared/errors";
 
 // ─── Adaptação para a timeline compartilhada ─────────────────────────────────
 
@@ -163,7 +165,7 @@ function SocialChatHeader({
   const gradient = getAvatarGradient(contact.external_user_id || name);
 
   return (
-    <header className="flex items-center gap-3 px-4 py-3 border-b border-border/60 bg-background shrink-0">
+    <header className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-card px-4 py-3">
       {isMobile && (
         <Button
           variant="ghost"
@@ -180,13 +182,14 @@ function SocialChatHeader({
           <img
             src={contact.avatar_url}
             alt=""
-            className="w-10 h-10 rounded-full border-2 border-background shadow-sm object-cover"
+            className="h-10 w-10 rounded-full object-cover"
           />
         ) : (
           <div
             className={cn(
-              "w-10 h-10 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-              gradient.ink ? "text-[#1c1c1c]" : "text-white",
+              "flex h-10 w-10 select-none items-center justify-center rounded-full text-sm font-bold",
+              // Letra escura/clara conforme o gradiente (cor do dado, não do tema).
+              gradient.ink ? "text-tinta" : "text-tinta-foreground",
             )}
             style={{ background: gradient.background }}
             aria-hidden
@@ -299,6 +302,7 @@ function SocialComposer({
   instanceIdDoCanal: string | null;
 }) {
   const [texto, setTexto] = useState("");
+  const textoRef = useRef<HTMLTextAreaElement>(null);
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
 
   /**
@@ -340,7 +344,7 @@ function SocialComposer({
     try {
       setAnexo(await uploadSocialAttachment(file, organizationId, canal));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao anexar");
+      notifyError(e, { fallback: "Não foi possível anexar." });
     } finally {
       setSubindo(false);
     }
@@ -390,9 +394,7 @@ function SocialComposer({
           } catch (e) {
             // Falhar aqui é melhor que subir o que a Meta recusa em silêncio: o
             // vendedor fica sabendo na hora, com o áudio ainda na mão.
-            toast.error("Não foi possível preparar o áudio para o WhatsApp", {
-              description: e instanceof Error ? e.message : undefined,
-            });
+            notifyError(e, { fallback: "Não foi possível preparar o áudio para o WhatsApp." });
             return;
           }
         }
@@ -405,10 +407,8 @@ function SocialComposer({
       gravadorRef.current = rec;
       rec.start();
       setGravando(true);
-    } catch {
-      toast.error("Não foi possível acessar o microfone", {
-        description: "Verifique a permissão do navegador.",
-      });
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível acessar o microfone." });
     }
   };
 
@@ -437,19 +437,19 @@ function SocialComposer({
       setAnexo(null);
       onCancelarResposta();
     } catch (e) {
-      const erro = e as SocialSendError;
-      toast.error(erro.message, {
-        // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
-        // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
-        description: erro.detail ?? undefined,
+      // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
+      // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
+      notifyError(e, {
+        fallback: "Não foi possível enviar.",
+        detail: (e as Partial<SocialSendError> | null)?.detail ?? undefined,
       });
     }
   };
 
   return (
-    <div className="shrink-0 border-t border-border/60 bg-background px-4 py-3">
+    <div className="shrink-0 border-t border-border/60 bg-card px-3 pb-3 pt-2.5">
       {anexo && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/60 bg-sunken px-3 py-2">
           <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-xs text-foreground">{anexo.filename}</span>
           <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -471,7 +471,7 @@ function SocialComposer({
           Mostrar o trecho, e não só "respondendo", é o que evita citar a
           mensagem errada num histórico longo. */}
       {respondendoA && (
-        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-primary/60 bg-muted/40 px-2.5 py-1.5">
+        <div className="mb-2 flex items-start gap-2 rounded-xl border-l-2 border-primary/60 bg-sunken px-2.5 py-1.5">
           <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
             {respondendoA.texto?.trim() || "Mensagem sem texto"}
@@ -585,7 +585,14 @@ function SocialComposer({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        <ComposerEmojiPicker
+          key={contactExternalId}
+          inputRef={textoRef}
+          onChange={setTexto}
+          disabled={subindo || enviar.isPending || gravando || janela.open === false}
+        />
         <Textarea
+          ref={textoRef}
           value={texto}
           onChange={(e) => {
             setTexto(e.target.value);
@@ -605,14 +612,14 @@ function SocialComposer({
                 : "Responder no Direct…"
           }
           rows={1}
-          className="min-h-[42px] max-h-32 resize-none"
+          className="min-h-[42px] max-h-32 resize-none rounded-[20px] bg-sunken focus-visible:bg-card"
           disabled={enviar.isPending}
         />
         <Button
           onClick={() => void submeter()}
           disabled={(!texto.trim() && !anexo) || enviar.isPending || subindo}
           size="sm"
-          className="h-[42px] px-3 shrink-0"
+          className="h-[42px] w-[42px] shrink-0 rounded-full px-0"
           aria-label="Enviar"
         >
           {enviar.isPending
@@ -625,7 +632,7 @@ function SocialComposer({
         <p
           className={cn(
             "mt-1.5 text-[11px]",
-            janela.open ? "text-muted-foreground" : "text-amber-500",
+            janela.open ? "text-muted-foreground" : "font-semibold text-warning-strong",
           )}
         >
           {janela.open
@@ -749,7 +756,7 @@ export function SocialChatView({
               selectedContact.external_user_id,
             )
               .then(() => toast.success("Contato bloqueado"))
-              .catch((e: Error) => toast.error(e.message));
+              .catch((e: Error) => notifyError(e, { fallback: "Não foi possível bloquear o contato." }));
           }
           : undefined}
       />
@@ -802,7 +809,7 @@ export function SocialChatView({
                 .send({ contactExternalId: selectedContact.external_user_id, text: texto })
                 .then(() => toast.success("Mensagem reenviada"))
                 .catch((e) =>
-                  toast.error(e instanceof Error ? e.message : "Não foi possível reenviar"),
+                  notifyError(e, { fallback: "Não foi possível reenviar." }),
                 );
             }}
             onOpenTemplates={() => {
@@ -838,7 +845,7 @@ export function SocialChatView({
                           selectedContact.external_user_id,
                         ),
                       }))
-                    .catch((e: Error) => toast.error(e.message));
+                    .catch((e: Error) => notifyError(e, { fallback: "Não foi possível reagir à mensagem." }));
                 },
                 onResponder: (m) => {
                   if (!m.providerMessageId) return;

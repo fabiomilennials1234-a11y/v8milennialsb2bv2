@@ -37,7 +37,7 @@ function qualityScore(o: OriginQuality): number {
 
 function scoreColor(score: number): string {
   if (score >= 7) return "bg-success/15 text-success";
-  if (score >= 4) return "bg-orange-500/15 text-orange-500";
+  if (score >= 4) return "bg-warning/15 text-warning-strong";
   return "bg-destructive/15 text-destructive";
 }
 
@@ -65,7 +65,7 @@ export function LeadQualityByOrigin({ origins }: Props) {
         {origins.map((o) => {
           const score = qualityScore(o);
           return (
-            <div key={o.origin} className="rounded-lg border border-border bg-card p-3">
+            <div key={o.origin} className="rounded-2xl bg-sunken p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">{ORIGIN_LABELS[o.origin] ?? o.origin}</span>
                 <Badge className={`text-xs ${scoreColor(score)}`}>

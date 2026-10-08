@@ -41,12 +41,9 @@ function HeroKPICardBase({ title, value, format = "number", icon: Icon, trend, a
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay }}
-      className="relative bg-card rounded-lg border border-border p-6 hover:border-border/80 transition-colors overflow-hidden group"
+      className="relative overflow-hidden rounded-card border border-card-border bg-card p-[18px] shadow-relevo transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-relevo-alto"
     >
-      {/* Gradient glow at bottom */}
-      <div className={`absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t ${accent.gradient} pointer-events-none`} />
-
-      <div className="relative flex items-start justify-between">
+      <div className="relative flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className={AT.metricLabel}>
             {title}
@@ -63,8 +60,8 @@ function HeroKPICardBase({ title, value, format = "number", icon: Icon, trend, a
             </span>
           )}
         </div>
-        <div className={`p-2.5 rounded-lg ${accent.iconBg}`}>
-          <Icon className={`w-4 h-4 ${accent.iconText}`} />
+        <div className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] ${accent.iconBg}`}>
+          <Icon className={`h-4 w-4 ${accent.iconText}`} />
         </div>
       </div>
     </motion.div>

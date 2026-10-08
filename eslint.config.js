@@ -6,10 +6,66 @@ import tseslint from "typescript-eslint";
 import boundaries from "eslint-plugin-boundaries";
 import noBrittleSupabaseMocks from "./eslint-rules/no-brittle-supabase-mocks.js";
 
+// ── Mensagem técnica não vai para a tela (ADR-0038) ─────────────────────────
+//
+// `toast.error(err.message)` mostrava ao cliente o texto do Postgres em inglês
+// ("new row violates row-level security policy") ou "Edge Function returned a
+// non-2xx status code" — e não deixava rastro nenhum do erro. Em 2026-09-30
+// eram ~250 sítios; o codemod da S4 levou todos para `notifyError`. Esta regra
+// segura o 251º.
+//
+// Só olha variável com cara de erro (`e`, `err`, `error`, `(x as Error)`…):
+// `result.message` de um validador que já fala português é mensagem de domínio.
+const ERROR_VAR = "/^(e|err|error|erro|ex|exc|failure|reason|cause|err2|error2|mutationError|[a-z]*Err(or)?)$/";
+const ERROR_MESSAGE_ADVICE =
+  "Mensagem técnica não vai para a tela (ADR-0038). Use notifyError(err, { fallback: \"Não foi possível …\" }) — ou userMessageOf(err, fallback) para erro mostrado inline — de @/shared/errors.";
+const TOAST_ERROR = "CallExpression[callee.object.name='toast'][callee.property.name=/^(error|warning)$/]";
+const SHADCN_DESCRIPTION = "CallExpression[callee.name='toast'] Property[key.name='description']";
+const ERROR_MESSAGE_SELECTORS = [
+  `${TOAST_ERROR} MemberExpression[property.name='message'][object.name=${ERROR_VAR}]`,
+  `${TOAST_ERROR} MemberExpression[property.name='message'][object.type='TSAsExpression']`,
+  `${TOAST_ERROR} CallExpression[callee.name='getErrorMessage']`,
+  `${SHADCN_DESCRIPTION} MemberExpression[property.name='message'][object.name=${ERROR_VAR}]`,
+  `${SHADCN_DESCRIPTION} MemberExpression[property.name='message'][object.type='TSAsExpression']`,
+].map((selector) => ({ selector, message: ERROR_MESSAGE_ADVICE }));
+
+// ── Chave composta no realtime vai ANINHADA ─────────────────────────────────
+//
+// `useRealtimeSubscription(t, ["pipeline_stages", pipelineType])` parece
+// invalidar `["pipeline_stages", pipelineType]` e não invalida: cada item da
+// lista é um alvo, e uma string é UM segmento. Invalidava `["pipeline_stages"]`
+// inteiro e, 2 s depois, `[pipelineType]`, que não casa com nada. Sete call
+// sites tinham esse formato em 2026-10-05. A forma certa é aninhada:
+// `[["pipeline_stages", pipelineType]]`.
+//
+// Raiz é string literal, constante em CAIXA ALTA (`UNREAD_KEY`), acesso a
+// membro (`keys.root`, `QUERY_KEYS.LEADS`) ou chamada (`rootOf(slug)`);
+// qualquer outra coisa depois dela é composto plano. Seguidores aceitos: os
+// mesmos literais/constantes, `QUERY_KEYS.PIPELINE` (membro em CAIXA ALTA),
+// composto aninhado e alvo com idade mínima. Chave inteira numa variável vai
+// dentro da lista (`[queryKey]`), não solta.
+//
+// Custo conhecido: lista de chaves INTEIRAS vindas de fábrica
+// (`[keys.list(org), outraChave]`) também acusa — a sintaxe não diz se a
+// chamada devolve um segmento ou a chave toda. Ponha cada chave numa variável
+// (`[listKey, outraChave]`): fica legível e passa.
+const CONST_NAME = "/^[A-Z][A-Z0-9_]*$/";
+const REALTIME_CALL = "CallExpression[callee.name='useRealtimeSubscription']";
+const REALTIME_TARGET_ADVICE =
+  "Chave composta em useRealtimeSubscription vai ANINHADA: [[\"raiz\", a, b]]. Plana ([\"raiz\", a, b]) vira um alvo por item — invalida o domínio inteiro e os outros não casam com nada. Chave inteira numa variável vai dentro da lista: [queryKey].";
+const REALTIME_TARGET_SELECTORS = [
+  `${REALTIME_CALL} > ArrayExpression:nth-child(2):has(> :matches(Literal, Identifier[name=${CONST_NAME}], MemberExpression, CallExpression):first-child) > :not(:first-child):not(Literal, TemplateLiteral[expressions.length=0], Identifier[name=${CONST_NAME}], MemberExpression[computed=false][property.name=${CONST_NAME}], ArrayExpression, ObjectExpression)`,
+  `${REALTIME_CALL} > Identifier:nth-child(2):not([name=${CONST_NAME}])`,
+].map((selector) => ({ selector, message: REALTIME_TARGET_ADVICE }));
+
 export default tseslint.config(
   {
     ignores: [
       "dist",
+      // Interface clássica: cópia congelada do front da main, gerada por
+      // scripts/ui-classic/snapshot.mjs. Já passou pelos gates lá; aqui só builda.
+      "classic/**",
+      "dist-classic",
       // Auto-gerado pelo Supabase CLI — regen via `supabase gen types typescript`.
       // Editar manualmente é proibido (ver CLAUDE.md). Parsing errors aqui
       // indicam drift de versão CLI ou schema; corrigir é regen, não fix manual.
@@ -44,6 +100,13 @@ export default tseslint.config(
       // no checkout acrescenta **2.979 warnings** ao ratchet, atribuídos a quem
       // por acaso tem a branch aberta.
       ".worktrees/",
+      // Cloudflare: .prod-dist/ e .assets/ são cópias da build (`npm run
+      // cf:extract` / `cf:prepare`), o .wrangler/ é cache do wrangler e o
+      // worker-configuration.d.ts sai do `wrangler types`.
+      "cloudflare/.prod-dist/**",
+      "cloudflare/.assets/**",
+      "cloudflare/.wrangler/**",
+      "cloudflare/worker-configuration.d.ts",
     ],
   },
   {
@@ -157,6 +220,17 @@ export default tseslint.config(
     },
   },
 
+  // ADR-0038 para o que o bloco do `wa.me` (abaixo) ignora. No flat config, um
+  // bloco posterior que redefine `no-restricted-syntax` SUBSTITUI a lista — por
+  // isso os seletores de erro (e os do realtime) também entram lá.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/shared/errors/**"],
+    rules: {
+      "no-restricted-syntax": ["error", ...ERROR_MESSAGE_SELECTORS, ...REALTIME_TARGET_SELECTORS],
+    },
+  },
+
   // ── Conversa do Lead: um caminho só ───────────────────────────────────────
   //
   // `useOpenWhatsAppChat` era chamado em 9 lugares, cada card com a sua regra.
@@ -214,6 +288,8 @@ export default tseslint.config(
           message:
             "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
         },
+        ...ERROR_MESSAGE_SELECTORS,
+        ...REALTIME_TARGET_SELECTORS,
       ],
     },
   },

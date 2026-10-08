@@ -1,3 +1,4 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 /**
  * ChatBubbleComposer — composer compact próprio para o Bubble (380×).
  *
@@ -27,6 +28,8 @@ import {
   ATTACHMENT_ACCEPT,
 } from "@/modules/communication/lib/attachment-media-type";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
+import { notifyError } from "@/shared/errors";
+import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 
 interface ChatBubbleComposerProps {
   phoneNumber: string;
@@ -50,6 +53,7 @@ export function ChatBubbleComposer({
   // Anexo pendente — imagem mostra thumbnail; documento/vídeo mostram chip.
   const [attachment, setAttachment] = useState<{ data: string; name: string; mime: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   const sendMessage = useSendWhatsAppMessage();
@@ -74,11 +78,7 @@ export function ChatBubbleComposer({
         leadId,
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar." });
     }
   };
 
@@ -89,7 +89,7 @@ export function ChatBubbleComposer({
     }
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const validationError = getAttachmentValidationError(file);
@@ -102,20 +102,14 @@ export function ChatBubbleComposer({
       e.target.value = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = reader.result as string;
+    const input = e.target;
+    try {
+      const data = await readMediaAsDataUrl(file);
       setAttachment({ data, name: file.name, mime: file.type });
-    };
-    reader.onerror = () => {
-      toast({
-        title: "Erro ao ler arquivo",
-        description: "Não foi possível ler o arquivo selecionado. Tente novamente.",
-        variant: "destructive",
-      });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = ""; // permite re-selecionar mesmo arquivo
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível ler o arquivo." });
+    }
+    input.value = ""; // permite re-selecionar mesmo arquivo
   };
 
   const handleSendAttachment = async () => {
@@ -144,23 +138,14 @@ export function ChatBubbleComposer({
             : "Imagem enviada!",
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar arquivo",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     }
   };
 
   const handleAudioRecorded = async (blob: Blob) => {
     setIsRecording(false);
     try {
-      const reader = new FileReader();
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      const dataUrl = await readMediaAsDataUrl(blob);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -171,11 +156,7 @@ export function ChatBubbleComposer({
         leadId,
       });
     } catch (err) {
-      toast({
-        title: "Falha ao enviar áudio",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
   };
 
@@ -215,6 +196,7 @@ export function ChatBubbleComposer({
               {attachment.name}
             </p>
             <Textarea
+              ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Adicione uma legenda (opcional)"
@@ -225,6 +207,7 @@ export function ChatBubbleComposer({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-3 pb-2">
+          <ComposerEmojiPicker inputRef={inputRef} onChange={setText} disabled={isSending} className="mr-auto" />
           <Button
             variant="ghost"
             size="sm"
@@ -269,14 +252,15 @@ export function ChatBubbleComposer({
         <Paperclip className="w-4 h-4" aria-hidden />
       </Button>
 
+      <ComposerEmojiPicker key={`${instanceId}:${phoneNumber}`} inputRef={inputRef} onChange={setText} className="h-9 w-9" />
       <Textarea
+        ref={inputRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Mensagem"
         aria-label="Mensagem"
         rows={1}
-        disabled={isSending}
         className="
           flex-1 min-h-[36px] max-h-[120px] py-2 px-3
           resize-none border-0 bg-muted/40

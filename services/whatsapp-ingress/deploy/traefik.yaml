@@ -1,0 +1,35 @@
+# Dedicated file-provider configuration; never edit EasyPanel's generated main.yaml.
+# Runtime admission remains independently disabled until the controlled cutover.
+http:
+  routers:
+    torque-whatsapp-ingress:
+      rule: "Host(`ingress.torquecrm.com.br`)"
+      entryPoints: [https]
+      service: torque-whatsapp-ingress
+      middlewares: [torque-ingress-limits]
+      observability:
+        accessLogs: false
+        tracing: false
+      tls:
+        certResolver: letsencrypt
+    torque-whatsapp-ingress-http:
+      rule: "Host(`ingress.torquecrm.com.br`)"
+      entryPoints: [http]
+      service: torque-whatsapp-ingress
+      middlewares: [torque-ingress-https]
+      observability:
+        accessLogs: false
+        tracing: false
+  middlewares:
+    torque-ingress-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    torque-ingress-limits:
+      inFlightReq:
+        amount: 32
+  services:
+    torque-whatsapp-ingress:
+      loadBalancer:
+        servers:
+          - url: "http://torque-whatsapp-ingress:8080"

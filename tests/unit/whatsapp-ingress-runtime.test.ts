@@ -49,6 +49,19 @@ describe('standalone ingress rollout configuration', () => {
 });
 
 describe('transport preserves canonical responses and applies admission limits', () => {
+  it('admits durable writes while the worker is unhealthy, preserving commit failures', async () => {
+    const canonical = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"error":"inbox_unavailable"}', { status: 503 }));
+    const ingress = createIngress(config(), canonical, new BackgroundTasks(), () => false);
+    expect((await ingress.handle(new Request('https://ingress.test/ready'))).status).toBe(503);
+    expect((await ingress.handle(request())).status).toBe(200);
+    const failedCommit = await ingress.handle(request());
+    expect(failedCommit.status).toBe(503);
+    expect(await failedCommit.text()).toContain('inbox_unavailable');
+    expect(canonical).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['/whatsapp-webhook/fixture-secret', '/functions/v1/whatsapp-webhook/fixture-secret/instance/messages'])('forwards original route/body without proxying to Edge: %s', async path => {
     const canonical = vi.fn(async (req: Request) => {
       expect(new URL(req.url).pathname).toBe(path);
@@ -110,4 +123,18 @@ describe('transport preserves canonical responses and applies admission limits',
     expect(background.size).toBe(0);
     expect((await ingress.handle(request())).status).toBe(503);
   });
+});
+
+it('reports queue health independently of disabled direct admission and preserves durable admission while unhealthy', async () => {
+  const probe = vi.fn(async () => ({ healthy: false, reason: 'dead_letter' as const }));
+  const canonical = vi.fn(async () => new Response(null, { status: 200 }));
+  const ingress = createIngress(config(), canonical, new BackgroundTasks(), () => true, probe);
+  const health = await ingress.handle(new Request('https://ingress.test/worker-health'));
+  expect(health.status).toBe(503);
+  expect(await health.json()).toEqual({ healthy: false, reason: 'dead_letter' });
+  expect((await ingress.handle(request())).status).toBe(200);
+  const healthy = createIngress(config({ INGRESS_ACCEPTING: 'false' }), canonical, new BackgroundTasks(), () => true,
+    async () => ({ healthy: true, reason: 'ok' }));
+  expect((await healthy.handle(new Request('https://ingress.test/worker-health'))).status).toBe(200);
+  expect((await healthy.handle(new Request('https://ingress.test/ready'))).status).toBe(503);
 });

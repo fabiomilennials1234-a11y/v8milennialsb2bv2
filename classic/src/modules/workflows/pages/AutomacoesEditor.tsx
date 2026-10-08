@@ -1,0 +1,885 @@
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useNodesState, useEdgesState } from "@xyflow/react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  extractSelection,
+  cloneSelection,
+  type WorkflowSelection,
+} from "@/modules/workflows/lib/clipboard";
+import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
+import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
+import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
+import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
+import { QUESTION_BUTTONS_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { useFeatureFlag } from "@/modules/platform";
+import { useOrganization, useAuth } from "@/modules/identity";
+
+import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
+import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
+import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
+import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
+import { LegacyConditionReviewDialog } from "@/modules/workflows/components/LegacyConditionReviewDialog";
+import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  useWorkflow,
+  useCreateWorkflow,
+  useUpdateWorkflow,
+} from "@/modules/workflows/hooks/useWorkflows";
+import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
+import { useGuidedWorkflowDraft, GuidedPublicationError, type GuidedPublicationIssue } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
+import { buildLegacyConditionReviewDraft, inspectLegacyConditions } from "@/modules/workflows/lib/legacy-condition-review";
+import type {
+  WorkflowNode,
+  WorkflowEdge,
+  WorkflowNodeData,
+  WorkflowNodeType,
+  TriggerNodeData,
+  ActionNodeData,
+  ConditionNodeData,
+  DelayNodeData,
+  CopilotNodeData,
+  EndNodeData,
+  WaitResponseNodeData,
+  SplitAbNodeData,
+  WebhookCallNodeData,
+  GotoNodeData,
+  WaitBusinessWindowNodeData,
+  AssignResponsibleNodeData,
+  CodeJsonNodeData,
+  CodeJavascriptNodeData,
+  CodeHttpsNodeData,
+} from "@/types/workflow";
+import { notifyError } from "@/shared/errors";
+
+const DEFAULT_TRIGGER_NODE: WorkflowNode = {
+  id: "trigger-1",
+  type: "trigger",
+  position: { x: 400, y: 50 },
+  data: {
+    type: "trigger",
+    triggerType: "lead_created",
+    config: {},
+    label: "Trigger",
+  } as TriggerNodeData,
+};
+
+// O banco ainda guarda o campo para preservar workflows antigos. A antiga UI
+// de "inscrição automática" só salvava este JSON: nenhum trigger ou executor o
+// avaliava. Manter a promessa na tela fazia o usuário ativar uma regra inerte.
+const EMPTY_ENROLLMENT = {
+  enabled: false,
+  match_all: true,
+  conditions: [] as Array<{ field: string; operator: string; value: string }>,
+};
+
+function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
+  switch (type) {
+    case "trigger":
+      return { type: "trigger", triggerType: "lead_created", config: {}, label: "Trigger" } as TriggerNodeData;
+    case "action":
+      return { type: "action", actionType: "send_whatsapp", label: "Ação" } as ActionNodeData;
+    case "condition":
+      return {
+        type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field",
+        // New nodes use the guided contract. Saved legacy nodes keep their
+        // original contract until the user creates an explicit review draft.
+        guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
+      } as ConditionNodeData;
+    case "delay":
+      return { type: "delay", label: "Delay", amount: 1, unit: "hours" } as DelayNodeData;
+    case "copilot":
+      return { type: "copilot", label: "Copilot", agentId: "", agentName: "" } as CopilotNodeData;
+    case "end":
+      return { type: "end", label: "Fim" } as EndNodeData;
+    case "question_buttons":
+      return { type: "question_buttons", text: "", buttons: [{ id: crypto.randomUUID(), label: "Opção 1" }], timeoutHours: 24 };
+    case "wait_response":
+      return { type: "wait_response", label: "Esperar Resposta", timeoutHours: 24, timeoutMinutes: 0, channel: "any" } as WaitResponseNodeData;
+    case "split_ab":
+      return {
+        type: "split_ab",
+        label: "Split A/B",
+        variants: [
+          { id: "a", label: "A", percentage: 50 },
+          { id: "b", label: "B", percentage: 50 },
+        ],
+      } as SplitAbNodeData;
+    case "webhook_call":
+      return { type: "webhook_call", label: "Webhook", url: "", method: "POST", bodyTemplate: "", outputVariable: "" } as WebhookCallNodeData;
+    case "goto":
+      return { type: "goto", label: "Ir Para", targetNodeId: "", targetNodeLabel: "" } as GotoNodeData;
+    case "wait_business_window":
+      // Nasce com `windows[]` preenchido. Antes o nó nascia LEGADO (só `days`
+      // com chaves PT + startTime/endTime) e caía no caminho de retrocompat até
+      // alguém abrir o painel — comportamento diferente do que a UI mostrava.
+      return {
+        type: "wait_business_window",
+        label: "Janela Comercial",
+        timezone: "America/Sao_Paulo",
+        windows: [
+          {
+            id: typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `w-${Date.now()}`,
+            name: "Comercial",
+            days: ["mon", "tue", "wed", "thu", "fri"],
+            start: "08:00",
+            end: "18:00",
+            action: "pass",
+          },
+        ],
+      } as WaitBusinessWindowNodeData;
+    case "assign_responsible":
+      return {
+        type: "assign_responsible",
+        label: "Definir Responsável",
+        assignMode: "round_robin",
+        assignTarget: "responsible",
+      } as AssignResponsibleNodeData;
+    case "code_json":
+      return {
+        type: "code_json",
+        label: "JSON",
+        code: "",
+        outputVariable: "payload",
+        requiredKeys: [],
+        onError: "fail",
+      } as CodeJsonNodeData;
+    case "code_javascript":
+      return {
+        type: "code_javascript",
+        label: "JavaScript",
+        code: "",
+        outputVariable: "resultado",
+        timeoutMs: 500,
+        onError: "fail",
+      } as CodeJavascriptNodeData;
+    case "code_https":
+      return {
+        type: "code_https",
+        label: "HTTPS",
+        code: HTTPS_CODE_EXAMPLE,
+        outputVariable: "resposta",
+        onError: "fail",
+      } as CodeHttpsNodeData;
+  }
+}
+
+let nodeIdCounter = 1;
+
+export default function AutomacoesEditor() {
+  const { user } = useAuth();
+  const { organizationId } = useOrganization();
+  const { id } = useParams<{ id: string }>();
+  return <AutomacoesEditorContent key={`${user?.id}:${organizationId}:${id}`} />;
+}
+
+function AutomacoesEditorContent() {
+  const { user } = useAuth();
+  const { organizationId, role } = useOrganization();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isNew = !id || id === "novo";
+
+  // Pre-configured trigger from URL (e.g. from Kanban badge)
+  const preConfiguredTrigger = useMemo(() => {
+    const trigger = searchParams.get("trigger");
+    if (trigger !== "stage_changed") return null;
+    const pipe_type = searchParams.get("pipe_type") || "";
+    const pipeline_id = searchParams.get("pipeline_id") || "";
+    const stage = searchParams.get("stage") || "";
+    const stage_name = searchParams.get("stage_name") || "";
+    return { pipe_type, pipeline_id, stage, stage_name };
+  }, [searchParams]);
+
+  const { data: workflow, isLoading, isError: workflowLoadFailed, refetch: retryWorkflow } = useWorkflow(isNew ? undefined : id);
+  const guidedDraft = useGuidedWorkflowDraft(user?.id, organizationId, isNew ? undefined : id);
+  const createWorkflow = useCreateWorkflow();
+  const updateWorkflow = useUpdateWorkflow();
+  const handleExport = useExportWorkflow();
+
+  const [name, setName] = useState("Novo Workflow");
+  const [isActive, setIsActive] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+  const [publicationIssues, setPublicationIssues] = useState<GuidedPublicationIssue[]>([]);
+  const [draftRevision, setDraftRevision] = useState(0);
+  const [newGuidedId] = useState(() => crypto.randomUUID());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [legacyReviewOpen, setLegacyReviewOpen] = useState(false);
+  const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
+  const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
+  const legacyReview = useMemo(() => inspectLegacyConditions({ nodes, edges }), [nodes, edges]);
+
+  // Node unificado gateado por org (ADR-0012). Fail-closed: só converte os nós
+  // legados quando a flag está ON para a org corrente.
+  const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
+    useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+
+  const { enabled: questionButtonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
+
+  // In-memory clipboard for copy/paste of node subgraphs (same editor only).
+  const clipboardRef = useRef<WorkflowSelection | null>(null);
+
+  // Mint a fresh, globally-unique node id from the shared counter.
+  const genNodeId = useCallback((type: string) => `${type}-${nodeIdCounter++}`, []);
+
+  // ── Histórico (undo/redo) ──────────────────────────────────────────────
+  // Refs com o estado atual, pra snapshots sempre lerem o valor mais recente
+  // sem recriar callbacks a cada render.
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+
+  const historyPast = useRef<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
+  const historyFuture = useRef<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }[]>([]);
+
+  // Captura o estado atual ANTES de uma mudança. Limpa o "refazer" (nova ramificação).
+  const takeSnapshot = useCallback(() => {
+    historyPast.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    if (historyPast.current.length > 100) historyPast.current.shift();
+    historyFuture.current = [];
+  }, []);
+
+  const undo = useCallback(() => {
+    const prev = historyPast.current.pop();
+    if (!prev) return;
+    historyFuture.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setSelectedNodeId(null);
+  }, [setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    const next = historyFuture.current.pop();
+    if (!next) return;
+    historyPast.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+  }, [setNodes, setEdges]);
+
+  // Load workflow data when editing
+  useEffect(() => {
+    // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
+    // valor fail-closed (false) e depois "pular" para o convertido.
+    if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess && !guidedDraft.isFetching) {
+      setName(guidedDraft.data?.settings?.name ?? workflow.name);
+      setIsActive(workflow.is_active);
+      const definition = guidedDraft.data?.definition ?? workflow.definition;
+      setDraftRevision(guidedDraft.data?.revision ?? 0);
+      if (definition?.nodes) {
+        // Lazy migration (ADR-0012): legacy WhatsApp send nodes become the
+        // unified send_whatsapp_message node; persisted on next save. Gateado
+        // por org — orgs sem a flag mantêm os nós legados intactos.
+        setNodes(
+          unifiedEnabled
+            ? upgradeWorkflowNodes(definition.nodes)
+            : definition.nodes,
+        );
+        setEdges(definition.edges || []);
+        // Track max node id for counter
+        const maxId = definition.nodes.reduce((max, n) => {
+          const num = parseInt(n.id.split("-").pop() || "0");
+          return num > max ? num : max;
+        }, 0);
+        nodeIdCounter = maxId + 1;
+      }
+      // Load enrollment/reenrollment from DB columns
+      const wf = { ...workflow, ...guidedDraft.data?.settings } as any;
+      if (wf.enrollment_criteria && typeof wf.enrollment_criteria === "object") {
+        setEnrollment({
+          enabled: wf.enrollment_criteria.enabled ?? false,
+          match_all: wf.enrollment_criteria.match_all ?? true,
+          conditions: wf.enrollment_criteria.conditions ?? [],
+        });
+      }
+      if (wf.re_enrollment_enabled != null) {
+        setReenrollment({
+          enabled: wf.re_enrollment_enabled ?? false,
+          cooldown_days: wf.re_enrollment_cooldown_days ?? 30,
+          max_times: wf.re_enrollment_max_times ?? 1,
+        });
+      }
+      setInitialized(true);
+    }
+  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading, guidedDraft.data, guidedDraft.isSuccess, guidedDraft.isFetching]);
+
+  // For new workflows, apply pre-configured trigger if present
+  useEffect(() => {
+    if (isNew && !initialized) {
+      if (preConfiguredTrigger) {
+        const config: Record<string, unknown> = {};
+        if (preConfiguredTrigger.pipe_type) config.pipe_type = preConfiguredTrigger.pipe_type;
+        if (preConfiguredTrigger.pipeline_id) config.pipeline_id = preConfiguredTrigger.pipeline_id;
+        if (preConfiguredTrigger.stage) config.stages = [preConfiguredTrigger.stage];
+
+        const triggerNode: WorkflowNode = {
+          id: "trigger-1",
+          type: "trigger",
+          position: { x: 400, y: 50 },
+          data: {
+            type: "trigger",
+            triggerType: "stage_changed",
+            config,
+            label: preConfiguredTrigger.stage_name
+              ? `Quando entra em "${preConfiguredTrigger.stage_name}"`
+              : "Mudança de Etapa",
+          } as TriggerNodeData,
+        };
+        setNodes([triggerNode]);
+        setName(
+          preConfiguredTrigger.stage_name
+            ? `Automação — ${preConfiguredTrigger.stage_name}`
+            : "Novo Workflow"
+        );
+      }
+      setInitialized(true);
+    }
+  }, [isNew, initialized, preConfiguredTrigger, setNodes]);
+
+  const handleAddNode = useCallback(
+    (type: WorkflowNodeType) => {
+      if (type === "question_buttons" && !questionButtonsEnabled) return;
+      takeSnapshot();
+      const newId = genNodeId(type);
+      // Place below the last node
+      const maxY = nodes.reduce((max, n) => Math.max(max, n.position.y), 0);
+      const newNode: WorkflowNode = {
+        id: newId,
+        type,
+        position: { x: 400, y: maxY + 150 },
+        data: createDefaultNodeData(type),
+      };
+      setNodes((nds) => [...nds, newNode]);
+      setSelectedNodeId(newId);
+    },
+    [nodes, setNodes, genNodeId, takeSnapshot, questionButtonsEnabled]
+  );
+
+  const handleNodeClick = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+  }, []);
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleUpdateNode = useCallback(
+    (nodeId: string, dataUpdates: Partial<WorkflowNodeData>) => {
+      takeSnapshot();
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? { ...n, type: dataUpdates.type ?? n.type, data: (() => {
+              const merged = { ...(dataUpdates.type && dataUpdates.type !== n.data.type ? {} : n.data), ...dataUpdates } as Record<string, unknown>;
+              for (const [key, value] of Object.entries(dataUpdates)) if (value === undefined) delete merged[key];
+              return merged as typeof n.data;
+            })() }
+            : n
+        )
+      );
+
+      if (dataUpdates.type && nodes.some(node => node.id === nodeId && node.data.type !== dataUpdates.type)) {
+        setEdges(current => current.filter(edge => edge.source !== nodeId));
+      }
+
+      if ("buttons" in dataUpdates && Array.isArray(dataUpdates.buttons)) {
+        const handles = new Set(dataUpdates.buttons.map((button: { id: string }) => `button:${button.id}`));
+        setEdges((current) => current.filter((edge) => edge.source !== nodeId || !edge.sourceHandle?.startsWith("button:") || handles.has(edge.sourceHandle)));
+      }
+
+      // Clean up orphaned edges when split_ab variants change
+      if ("variants" in dataUpdates && Array.isArray((dataUpdates as any).variants)) {
+        const validHandles = new Set(
+          ((dataUpdates as any).variants as { id: string }[]).map(
+            (v) => `variant_${v.id}`
+          )
+        );
+        setEdges((eds) =>
+          eds.filter((e) => {
+            if (e.source !== nodeId) return true;
+            if (!e.sourceHandle) return true;
+            return validHandles.has(e.sourceHandle);
+          })
+        );
+      }
+    },
+    [nodes, setNodes, setEdges, takeSnapshot]
+  );
+
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      takeSnapshot();
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setSelectedNodeId(null);
+    },
+    [setNodes, setEdges, takeSnapshot]
+  );
+
+  // Paste a cloned selection into the graph: deselect originals, append clones,
+  // select the clones, and focus the single pasted node (if exactly one).
+  const pasteSelection = useCallback(
+    (selection: WorkflowSelection) => {
+      const cloned = cloneSelection(selection, genNodeId);
+      if (cloned.nodes.length === 0) return 0;
+      takeSnapshot();
+      setNodes((nds) => [
+        ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
+        ...cloned.nodes,
+      ]);
+      if (cloned.edges.length > 0) {
+        setEdges((eds) => [...eds, ...cloned.edges]);
+      }
+      setSelectedNodeId(cloned.nodes.length === 1 ? cloned.nodes[0].id : null);
+      return cloned.nodes.length;
+    },
+    [genNodeId, setNodes, setEdges, takeSnapshot]
+  );
+
+  // Ctrl/Cmd+C — capture selected copyable nodes + internal edges to clipboard.
+  const handleCopy = useCallback((): number => {
+    const selection = extractSelection(nodes, edges);
+    if (selection.nodes.length === 0) return 0;
+    clipboardRef.current = selection;
+    toast.success(`${selection.nodes.length} nó(s) copiado(s)`);
+    return selection.nodes.length;
+  }, [nodes, edges]);
+
+  // Ctrl/Cmd+V — paste the clipboard contents (no-op if empty).
+  const handlePaste = useCallback((): number => {
+    const clip = clipboardRef.current;
+    if (!clip || clip.nodes.length === 0) return 0;
+    const count = pasteSelection(clip);
+    if (count > 0) toast.success(`${count} nó(s) colado(s)`);
+    return count;
+  }, [pasteSelection]);
+
+  // Ctrl/Cmd+D — duplicate the current selection without touching the clipboard.
+  // Falls back to the sidebar-selected node when nothing is multi-selected.
+  const handleDuplicate = useCallback((): number => {
+    let selection = extractSelection(nodes, edges);
+    if (selection.nodes.length === 0 && selectedNodeId) {
+      const node = nodes.find((n) => n.id === selectedNodeId && n.type !== "trigger");
+      if (node) selection = { nodes: [node], edges: [] };
+    }
+    if (selection.nodes.length === 0) return 0;
+    const count = pasteSelection(selection);
+    if (count > 0) toast.success(`${count} nó(s) duplicado(s)`);
+    return count;
+  }, [nodes, edges, selectedNodeId, pasteSelection]);
+
+  // Duplicate a single node by id (sidebar "Duplicar" button).
+  const handleDuplicateNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node || node.type === "trigger") return;
+      const count = pasteSelection({ nodes: [node], edges: [] });
+      if (count > 0) toast.success("Nó duplicado");
+    },
+    [nodes, pasteSelection]
+  );
+
+  // Keyboard shortcuts — ignored while typing in form fields.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      switch (e.key.toLowerCase()) {
+        case "c":
+          if (handleCopy() > 0) e.preventDefault();
+          break;
+        case "v":
+          if (handlePaste() > 0) e.preventDefault();
+          break;
+        case "d":
+          e.preventDefault(); // always — overrides browser "bookmark"
+          handleDuplicate();
+          break;
+        case "z":
+          // Ctrl/Cmd+Z = desfazer | Ctrl/Cmd+Shift+Z = refazer
+          e.preventDefault();
+          if (e.shiftKey) redo();
+          else undo();
+          break;
+        case "y":
+          // Ctrl/Cmd+Y = refazer (padrão Windows)
+          e.preventDefault();
+          redo();
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleCopy, handlePaste, handleDuplicate, undo, redo]);
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) {
+      toast.error("Dê um nome ao workflow");
+      return;
+    }
+
+    const triggerNode = nodes.find((n) => n.type === "trigger");
+    const isGuidedDraft = Boolean(guidedDraft.data) || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'));
+    if (!triggerNode && !isGuidedDraft) {
+      toast.error("O workflow precisa de um nó Trigger");
+      return;
+    }
+
+    // Nós de código são o único tipo com validação por-nó no save: um fonte
+    // inválido só apareceria na execução, e o `definition` inteiro viaja em
+    // todo tick do cron — barrar aqui é o único gate que o editor tem.
+    const erros = validateCodeNodes(nodes);
+    if (erros.length > 0) {
+      toast.error(erros[0]);
+      return;
+    }
+
+    const triggerData = triggerNode?.data as unknown as TriggerNodeData;
+
+    // Nó de ação incompleto não impede SALVAR (rascunho pela metade é legítimo),
+    // mas impede ATIVAR. Medido em produção: ~6.400 execuções morreram em 90 dias
+    // porque o editor deixava ligar workflow com campo obrigatório vazio, e o
+    // cliente não via erro nenhum — a automação simplesmente não acontecia.
+    const issues = findNodeConfigIssues(nodes, edges);
+    const issueByNode = new Map(issues.map((i) => [i.nodeId, `Falta: ${i.missing}`]));
+
+    // Marca o culpado no canvas. Recusar sem apontar qual nó, entre vinte, seria
+    // trocar um defeito por outro.
+    setNodes((atuais) =>
+      atuais.map((n) => {
+        const aviso = issueByNode.get(n.id);
+        const jaTem = (n.data as Record<string, unknown>).__configIssue;
+        if (aviso === jaTem) return n;
+        const data = { ...(n.data as Record<string, unknown>) };
+        if (aviso) data.__configIssue = aviso;
+        else delete data.__configIssue;
+        return { ...n, data } as typeof n;
+      }),
+    );
+
+    if (isActive && issues.length > 0 && !(isGuidedDraft && workflow?.is_active)) {
+      const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");
+      toast.error(
+        issues.length === 1
+          ? `"${nomes}" está incompleto — falta ${issues[0].missing}. Complete ou desative o workflow para salvar.`
+          : `${issues.length} nós incompletos (${nomes}${issues.length > 3 ? "…" : ""}). Complete ou desative o workflow para salvar.`,
+        { duration: 8000 },
+      );
+      return;
+    }
+
+    // A marca de aviso é estado de tela — não pode poluir o DAG salvo.
+    const nodesLimpos = nodes.map((n) => {
+      const data = { ...(n.data as Record<string, unknown>) };
+      delete data.__configIssue;
+      return { ...n, data } as typeof n;
+    });
+    const definition = { nodes: nodesLimpos, edges };
+
+    // Build extra fields for enrollment/reenrollment
+    const extraFields = {
+      enrollment_criteria: enrollment,
+      re_enrollment_enabled: reenrollment.enabled,
+      re_enrollment_cooldown_days: reenrollment.cooldown_days,
+      re_enrollment_max_times: reenrollment.max_times,
+    };
+
+    try {
+      if (isNew) {
+        if (nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const created = await guidedDraft.create.mutateAsync({ id: newGuidedId, settings: { name, ...extraFields }, definition });
+          setDraftRevision(created.revision);
+          toast.success("Rascunho criado. Publique quando estiver pronto.");
+          navigate(`/automacoes/${created.workflow_id}`, { replace: true });
+          return;
+        }
+        const result = await createWorkflow.mutateAsync({
+          name,
+          is_active: isActive,
+          trigger_type: triggerData.triggerType,
+          trigger_config: triggerData.config,
+          definition,
+          ...extraFields,
+        } as any);
+        toast.success("Workflow criado!");
+        navigate(`/automacoes/${result.id}`, { replace: true });
+      } else {
+        if (guidedDraft.data || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision, settings: { name, ...extraFields } });
+          setDraftRevision(saved.revision);
+          toast.success("Rascunho salvo. A versão publicada permanece igual.");
+          return saved.revision;
+        }
+        await updateWorkflow.mutateAsync({
+          id: id!,
+          name,
+          is_active: isActive,
+          trigger_type: triggerData.triggerType,
+          trigger_config: triggerData.config,
+          definition,
+          ...extraFields,
+        } as any);
+        toast.success("Workflow salvo!");
+      }
+    } catch (err: any) {
+      if (err?.code === 'PT409') {
+        toast.error("Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.");
+      } else {
+        notifyError(err, { fallback: "Não foi possível salvar o workflow." });
+      }
+    }
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
+
+  const handleToggleActive = useCallback(async () => {
+    if (!isActive && !questionButtonsEnabled && nodes.some(node => node.type === "question_buttons")) {
+      toast.error("Pergunta com botões ainda não está liberada nesta organização.");
+      return;
+    }
+    if (!isActive) {
+      const issue = findNodeConfigIssues(nodes, edges).find(item => item.actionType === "question_buttons");
+      if (issue) {
+        setSelectedNodeId(issue.nodeId);
+        toast.error(`Complete Pergunta com botões: ${issue.missing}.`);
+        return;
+      }
+    }
+    if (!isNew && guidedDraft.data && (isActive || guidedDraft.publication.data)) {
+      try {
+        const result = await guidedDraft.setActive.mutateAsync(!isActive);
+        setIsActive(result.is_active);
+        toast.success(result.is_active ? 'Automação ativada.' : 'Automação desativada.');
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados." });
+      }
+      return;
+    }
+    setIsActive(!isActive);
+  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, questionButtonsEnabled, nodes, edges]);
+
+  const handlePublish = useCallback(async () => {
+    setPublicationIssues([]);
+    const revision = await handleSave();
+    if (typeof revision !== 'number') return;
+    try {
+      const published = await guidedDraft.publish.mutateAsync(revision);
+      toast.success(`Versão ${published.version_number} publicada.`);
+    } catch (error) {
+      if (error instanceof GuidedPublicationError) {
+        const messages: Record<string, string> = {
+          access_denied: 'Acesso negado. Verifique sua permissão e a autorização de dados da automação.',
+          reference_unavailable: 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.',
+          draft_revision_conflict: 'Outra pessoa alterou o rascunho. Compare a versão atual antes de publicar.',
+          temporarily_unavailable: `A publicação excedeu ${GUIDED_CONDITION_LIMITS.serverTimeoutMs / 1000} segundos. Tente novamente.`,
+        };
+        setPublicationIssues(error.issues.length ? error.issues : [{ code: error.code,
+          message: messages[error.code] ?? 'Não foi possível publicar. Seu rascunho foi preservado.' }]);
+      }
+      toast.error('Não foi possível publicar. Seu rascunho foi preservado.');
+    }
+  }, [handleSave, guidedDraft.publish]);
+
+  const handleCreateLegacyReviewDraft = useCallback(async () => {
+    if (isNew || !id || guidedDraft.data || legacyReview.items.length === 0) return;
+    const converted = buildLegacyConditionReviewDraft({ nodes, edges });
+    const settings = {
+      name,
+      enrollment_criteria: enrollment,
+      re_enrollment_enabled: reenrollment.enabled,
+      re_enrollment_cooldown_days: reenrollment.cooldown_days,
+      re_enrollment_max_times: reenrollment.max_times,
+    };
+    try {
+      const saved = await guidedDraft.save.mutateAsync({ definition: converted.definition, revision: 0, settings });
+      setNodes(converted.definition.nodes);
+      setEdges(converted.definition.edges);
+      setDraftRevision(saved.revision);
+      await guidedDraft.refetch();
+      setLegacyReviewOpen(false);
+      toast.success("Rascunho de revisão criado. A automação ativa permanece igual.");
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code === "PT409") await guidedDraft.refetch();
+      toast.error(code === "PT409"
+        ? "Outra pessoa já iniciou esta revisão. Recarregue o rascunho atual."
+        : "Não foi possível criar o rascunho de revisão.");
+    }
+  }, [isNew, id, guidedDraft, legacyReview.items.length,
+    nodes, edges, name, enrollment, reenrollment, setNodes, setEdges]);
+
+  const selectedNode = selectedNodeId
+    ? nodes.find((n) => n.id === selectedNodeId) || null
+    : null;
+
+  const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending || guidedDraft.create.isPending;
+
+  if (!isNew && workflowLoadFailed) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar a automação.</p>
+      <Button variant="outline" onClick={() => retryWorkflow()}>Tentar novamente</Button></div>;
+  }
+
+  if (!isNew && workflow === null) {
+    return <div role="alert" className="space-y-3 p-6"><p>Automação indisponível ou sem acesso.</p>
+      <Button variant="outline" onClick={() => navigate('/automacoes')}>Voltar às automações</Button></div>;
+  }
+
+  if (!isNew && guidedDraft.isError) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
+      <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
+  }
+
+  if (!isNew && (isLoading || guidedDraft.isPending || !initialized)) {
+    return (
+      <div className="flex items-center justify-center h-[80vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <WorkflowToolbar
+        name={name}
+        questionButtonsEnabled={questionButtonsEnabled}
+        onNameChange={setName}
+        isActive={isActive}
+        onToggleActive={handleToggleActive}
+        isToggleDisabled={Boolean(guidedDraft.data) && (guidedDraft.setActive.isPending || (!isActive && (guidedDraft.publication.isPending || guidedDraft.publication.isError)))}
+        onSave={handleSave}
+        isSaving={isSaving}
+        onPublish={!isNew && guidedDraft.data ? handlePublish : undefined}
+        isPublishing={guidedDraft.publish.isPending}
+        onAddNode={handleAddNode}
+        isNew={isNew}
+        workflowId={id}
+        onExport={!isNew && workflow ? () => {
+          const trigger = nodes.find(node => node.type === "trigger")?.data as TriggerNodeData | undefined;
+          void handleExport({ ...workflow, name,
+            trigger_type: trigger?.triggerType ?? workflow.trigger_type,
+            trigger_config: trigger?.config ?? workflow.trigger_config,
+          }, { nodes, edges });
+        } : undefined}
+        onOpenSettings={() => setSettingsOpen(true)}
+        // O executor deliberadamente não roda JavaScript sem sandbox. A flag
+        // antiga podia expor um node que sempre era ignorado; oculto até haver
+        // runtime isolado de verdade.
+        hiddenNodeTypes={["code_javascript"]}
+      />
+
+      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
+            <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
+      </div>}
+      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
+          <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
+      </div>}
+
+      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p>Não foi possível consultar a versão publicada.</p>
+        <button type="button" className="mt-1 underline underline-offset-4" disabled={guidedDraft.publication.isFetching}
+          onClick={() => guidedDraft.publication.refetch()}>Recarregar publicação</button>
+      </div>}
+      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p className="font-medium">Publicação não concluída</p>
+        <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
+          {issue.nodeId ? <button type="button" className="text-left underline underline-offset-4"
+            onClick={() => setSelectedNodeId(issue.nodeId!)}>{issue.message}</button> : issue.message}
+        </li>)}</ul>
+      </div>}
+      <div className="flex flex-1 overflow-hidden">
+        <WorkflowCanvas
+          initialNodes={nodes}
+          initialEdges={edges}
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          setEdges={setEdges}
+          onNodeClick={handleNodeClick}
+          onPaneClick={handlePaneClick}
+          onTakeSnapshot={takeSnapshot}
+        />
+
+        <WorkflowSidebar
+          actorId={user?.id}
+          workflowId={isNew ? undefined : id}
+          canManageDataGrant={role === "admin"}
+          organizationId={organizationId ?? undefined}
+          selectedNode={selectedNode as any}
+          onClose={() => setSelectedNodeId(null)}
+          onUpdateNode={handleUpdateNode}
+          onDeleteNode={handleDeleteNode}
+          onDuplicateNode={handleDuplicateNode}
+          allNodes={nodes as any}
+        />
+      </div>
+
+      {/* Workflow Settings Sheet — re-inscrição + analytics */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="sm:max-w-lg p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
+            <SheetTitle>Configuracoes do workflow</SheetTitle>
+          </SheetHeader>
+          <Tabs defaultValue="reenrollment" className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
+              <TabsTrigger value="reenrollment">Re-inscricao</TabsTrigger>
+              {!isNew && id && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+            </TabsList>
+
+            <TabsContent value="reenrollment" className="flex-1 overflow-hidden mt-0">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-4">
+                  <ReenrollmentConfig value={reenrollment} onChange={setReenrollment} />
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {!isNew && id && (
+              <TabsContent value="analytics" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full">
+                  <div className="px-6 py-4">
+                    <WorkflowAnalytics workflowId={id} />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            )}
+          </Tabs>
+        </SheetContent>
+      </Sheet>
+
+      <LegacyConditionReviewDialog
+        open={legacyReviewOpen}
+        onOpenChange={setLegacyReviewOpen}
+        review={legacyReview}
+        onCreateDraft={() => void handleCreateLegacyReviewDraft()}
+        isCreating={guidedDraft.save.isPending}
+      />
+    </div>
+  );
+}

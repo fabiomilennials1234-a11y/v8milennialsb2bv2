@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { applyMessageUpdate } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
+import { applyMessageUpdate, isFileDownloadedNotification, isPureReceiptUpdate, normalizeMessageUpdatePayload } from "../../supabase/functions/whatsapp-webhook/message-update.ts";
 
 const { completeQuotePresentations, logRuntime } = vi.hoisted(() => ({
   completeQuotePresentations: vi.fn(async () => {}), logRuntime: vi.fn(async () => {}),
@@ -20,6 +20,39 @@ const urlAt = (index: number) => new URL(String(fetchMock.mock.calls[index][0]))
 const bodyAt = (index: number) => JSON.parse(fetchMock.mock.calls[index][1].body);
 const methodAt = (index: number) => fetchMock.mock.calls[index][1].method;
 beforeEach(() => { fetchMock.mockReset(); completeQuotePresentations.mockClear(); logRuntime.mockClear(); });
+
+describe("FileDownloaded provider notification", () => {
+  const envelope = () => ({ type: "FileDownloadedMessage", state: "FileDownloaded", EventType: "messages_update", event: {
+    Type: "FileDownloaded", IsFromMe: true, MessageIDs: ["message-a"],
+    Chat: "5511@s.whatsapp.net", chatid: "5511@s.whatsapp.net",
+    FileURL: "https://media.example.com/audio.ogg", MimeType: "audio/ogg",
+  } });
+  it("recognizes only the observed non-mutational envelope", () => {
+    expect(isFileDownloadedNotification(envelope())).toBe(true);
+    expect(isFileDownloadedNotification({ ...envelope(), event: { ...envelope().event, IsFromMe: false } })).toBe(true);
+    for (const changed of [
+      { Type: "Read" }, { IsFromMe: "false" }, { IsFromMe: null }, { IsFromMe: undefined },
+      { MessageIDs: [] }, { MessageIDs: ["message-a", "message-b"] },
+      { MessageIDs: [" "] }, { chatid: "other@s.whatsapp.net" }, { Chat: 123, chatid: "123" },
+      { FileURL: "http://media.example.com/a" },
+      { FileURL: "https://user:pass@media.example.com/a" }, { FileURL: "https://media.example.com/a#fragment" },
+      { status: "read" }, { Status: "read" }, { pinned: true }, { Pinned: true },
+      { reaction: { emoji: "👍" } }, { Reactions: [] },
+      { action: "delete" }, { message: {} }, { protocolMessage: {} },
+    ]) {
+      expect(isFileDownloadedNotification({ ...envelope(), event: { ...envelope().event, ...changed } })).toBe(false);
+    }
+    const missingFlag: Record<string, unknown> = { ...envelope().event };
+    delete missingFlag.IsFromMe;
+    expect(isFileDownloadedNotification({ ...envelope(), event: missingFlag })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), data: { status: "read" } })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), EventType: "messages" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), type: "ReadReceipt" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), state: "Read" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), action: "delete" })).toBe(false);
+    expect(isFileDownloadedNotification({ ...envelope(), event: [] })).toBe(false);
+  });
+});
 
 function assertScope(url: URL) {
   expect(url.searchParams.get("organization_id")).toBe("eq.org-a");
@@ -61,9 +94,69 @@ describe("receipt HTTP contract", () => {
     expect(completeQuotePresentations).toHaveBeenLastCalledWith(db, "org-a", "instance-a", ["message-a", "5511888888888:message-a"], { strict: true });
   });
 
-  it("operator reads do not rewrite incoming status or seal outgoing quotes", async () => {
-    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: true });
+  it("persists synthetic status without quote completion, including duplicate replay", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH" ? [{ id: "row-a" }] : [{ id: "row-a", status: "read" }]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true },
+      { suppressQuotePresentation: true });
+    expect(fetchMock.mock.calls.some((_, index) => methodAt(index) === "PATCH" && bodyAt(index).status === "read")).toBe(true);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true },
+      { suppressQuotePresentation: true });
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("ignores a provider-supplied recovery marker", async () => {
+    fetchMock.mockImplementation(async () => json([]));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", receipt_recovery: true });
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("scopes trusted recovery to exact composite ID and chat, while ordinary receipts retain ID expansion", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH"
+      ? [{ id: "composite-row" }]
+      : [{ id: "composite-row", message_id: "owner:ABC", status: "sent", direction: "outgoing", reactions: [] }]));
+    await applyMessageUpdate(db, instance, { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false },
+      { requireTarget: true, exactRecoveryMessageId: true, suppressQuotePresentation: true });
+    const scoped = fetchMock.mock.calls.map((_, index) => urlAt(index));
+    expect(scoped).toHaveLength(2);
+    for (const url of scoped) {
+      expect(url.searchParams.get("message_id")).toBe("in.(owner:ABC)");
+      expect(url.searchParams.get("remote_jid")).toBe("eq.chat-a");
+      expect(url.searchParams.get("direction")).toBe("eq.outgoing");
+    }
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+
+    fetchMock.mockClear();
+    await applyMessageUpdate(db, instance, { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false },
+      { requireTarget: true });
+    const normalWrites = fetchMock.mock.calls.map((_, index) => urlAt(index));
+    expect(normalWrites[0].searchParams.get("message_id")).toBe("in.(owner:ABC,ABC)");
+    expect(normalWrites[1].searchParams.get("message_id")).toBe("in.(owner:ABC,ABC)");
+    expect(normalWrites[1].searchParams.has("remote_jid")).toBe(false);
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
+  });
+
+  it("rejects malformed trusted recovery scope before database access", async () => {
+    for (const data of [
+      { id: "owner:ABC", status: "read", fromMe: false },
+      { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false, ids: ["owner:ABC", "ABC"] },
+      { id: "owner:ABC", chatid: "chat-a", status: "read", fromMe: false, pinned: true },
+    ]) {
+      await expect(applyMessageUpdate(db, instance, data, { requireTarget: true, exactRecoveryMessageId: true }))
+        .rejects.toThrow("Recovery receipt scope unavailable");
+    }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Chamado 6ebb4b73: an operator read (own-number ReadReceipt, IsFromMe=true) used to be a
+  // silent no-op. It now syncs Torque unread state through a service_role RPC, but must still
+  // never rewrite incoming status nor seal outgoing quotes.
+  it("operator reads do not rewrite incoming status or seal outgoing quotes", async () => {
+    fetchMock.mockImplementation(async () => json(3));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: true });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(methodAt(0)).toBe("POST");
+    expect(urlAt(0).pathname).toBe("/rest/v1/rpc/apply_external_conversation_read");
     expect(completeQuotePresentations).not.toHaveBeenCalled();
   });
 
@@ -71,6 +164,67 @@ describe("receipt HTTP contract", () => {
     fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
     await expect(applyMessageUpdate(db, instance, { id: "message-a", status: "read" })).rejects.toThrow("Receipt persistence failed");
     expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+});
+
+describe("bounded missing receipt policy", () => {
+  const age = (ms: number) => ({ requireTarget: true, queuedEventCreatedAt: new Date(Date.now() - ms).toISOString(), unmatchedReceiptGraceMs: 300_000 });
+  it("classifies normalized pure V2 receipts and rejects mixed mutations", () => {
+    const normalized = normalizeMessageUpdatePayload({ event: { MessageIDs: ["message-a"], Type: "Read", IsFromMe: false, pinned: true } });
+    expect(normalized.pinned).toBe(true);
+    expect(isPureReceiptUpdate(normalized)).toBe(false);
+    expect(isPureReceiptUpdate({ ids: ["message-a"], status: "read", fromMe: false })).toBe(true);
+    expect(isPureReceiptUpdate({ ids: ["message-a", ""], status: "read" })).toBe(false);
+    const emptyIds = normalizeMessageUpdatePayload({ event: { MessageIDs: [], messageid: "message-a", Type: "read" } });
+    expect(emptyIds.id).toBe("message-a");
+    expect(isPureReceiptUpdate(emptyIds)).toBe(true);
+  });
+
+  it("defers absent IDs during grace without delaying matched writes; audits after grace", async () => {
+    fetchMock.mockImplementation(async (_input, init) => init.method === "GET"
+      ? json([{ id: "row-a", message_id: "message-a", status: "sent", direction: "outgoing", reactions: [] }])
+      : json([{ id: "row-a" }]));
+    const update = { ids: ["message-a", "outside-crm"], status: "read" };
+    expect(await applyMessageUpdate(db, instance, update, age(299_000)))
+      .toEqual({ outcome: "deferred_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(1);
+    fetchMock.mockClear();
+    const result = await applyMessageUpdate(db, instance, update, age(301_000));
+    expect(result).toEqual({ outcome: "unmatched_receipt", unmatchedCount: 1 });
+    const patch = fetchMock.mock.calls.find(([, init]) => init.method === "PATCH");
+    expect(patch).toBeDefined();
+    const candidates = new URL(String(patch![0])).searchParams.get("message_id");
+    expect(candidates).toContain("message-a");
+    expect(candidates).not.toContain("outside-crm");
+    expect(completeQuotePresentations).toHaveBeenCalledTimes(2);
+    expect(completeQuotePresentations.mock.lastCall?.[3]).not.toContain("outside-crm");
+  });
+
+  it("records all absent IDs after grace without claiming a write", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    expect(await applyMessageUpdate(db, instance, { id: "outside-crm", status: "delivered" }, age(301_000)))
+      .toEqual({ outcome: "unmatched_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(0);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("defers an entirely absent pure receipt before grace without business writes", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    expect(await applyMessageUpdate(db, instance, { id: "outside-crm", status: "sent" }, age(1_000)))
+      .toEqual({ outcome: "deferred_receipt", unmatchedCount: 1 });
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("never relaxes invalid time, mixed mutations or database failure", async () => {
+    fetchMock.mockResolvedValue(json([]));
+    const missing = { id: "outside-crm", status: "read" };
+    await expect(applyMessageUpdate(db, instance, missing, { requireTarget: true, queuedEventCreatedAt: "invalid", unmatchedReceiptGraceMs: 300_000 }))
+      .rejects.toThrow("Message update target unavailable");
+    await expect(applyMessageUpdate(db, instance, { ...missing, pinned: true }, age(301_000)))
+      .rejects.toThrow("Message update target unavailable");
+    fetchMock.mockResolvedValue(json({ code: "42501", message: "denied" }, 403));
+    await expect(applyMessageUpdate(db, instance, missing, age(301_000)))
+      .rejects.toThrow("Message update target unavailable");
   });
 });
 
@@ -173,7 +327,10 @@ describe("durable target availability", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each([{ status: "pending" }, { status: "read", fromMe: true }, { edited: false }, { deleted: false }])(
+  // `{status:"read", fromMe:true}` left this list (Chamado 6ebb4b73): it now syncs unread
+  // state; see "external read sync". Own-number non-read receipts remain durable no-ops.
+  it.each([{ status: "pending" }, { status: "delivered", fromMe: true }, { status: "sent", fromMe: true },
+    { edited: false }, { deleted: false }])(
     "preserves recognized durable no-ops: %j", async operation => {
       await applyMessageUpdate(db, instance, { id: "message-a", ...operation }, { requireTarget: true });
       expect(fetchMock).not.toHaveBeenCalled();
@@ -339,5 +496,90 @@ describe("reaction assignment semantics", () => {
     await applyMessageUpdate(db, instance, { ids: ["message-a", "message-b"], status: "delivered" }, { requireTarget: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(bodyAt(1)).toEqual({ status: "delivered" });
+  });
+});
+
+describe("external read sync (own-number ReadReceipt, Chamado 6ebb4b73)", () => {
+  const RPC_PATH = "/rest/v1/rpc/apply_external_conversation_read";
+  const rpcCalls = () => fetchMock.mock.calls.map((_, index) => index)
+    .filter(index => urlAt(index).pathname === RPC_PATH);
+  const ownRead = (Type: string, extra: Record<string, unknown> = {}) => normalizeMessageUpdatePayload({
+    type: "ReadReceipt", EventType: "messages_update", owner: "5511888888888",
+    event: { Type, IsFromMe: true, IsGroup: false, MessageIDs: ["message-a", "message-b"],
+      chatid: "5511777777777@s.whatsapp.net", ...extra },
+  });
+
+  it.each(["Read", "Played"])("%s with IsFromMe=true marks the conversation read via the scoped RPC only", async Type => {
+    fetchMock.mockImplementation(async () => json(8));
+    await applyMessageUpdate(db, instance, ownRead(Type));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(methodAt(0)).toBe("POST");
+    expect(urlAt(0).pathname).toBe(RPC_PATH);
+    expect(bodyAt(0)).toEqual({
+      p_org: "org-a", p_instance: "instance-a",
+      p_message_ids: ["message-a", "5511888888888:message-a", "message-b", "5511888888888:message-b"],
+    });
+    expect(fetchMock.mock.calls.some(([, init]) => init.method === "PATCH")).toBe(false);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+    expect(logRuntime).toHaveBeenCalledOnce();
+    const entry = logRuntime.mock.calls[0][0] as Record<string, unknown>;
+    expect(entry).toMatchObject({ organizationId: "org-a", module: "webhook",
+      action: "uazapi_external_read_applied", status: "success",
+      payloadSnapshot: { instance_id: "instance-a", message_count: 2, rows_written: 8 } });
+    expect(JSON.stringify(entry)).not.toMatch(/5511|message-a|message-b/);
+  });
+
+  it("logs rows_written=0 when the receipt arrives but changes nothing (unknown ids / already read)", async () => {
+    fetchMock.mockImplementation(async () => json(0));
+    await applyMessageUpdate(db, instance, ownRead("Read"));
+    expect(logRuntime).toHaveBeenCalledOnce();
+    expect(logRuntime.mock.calls[0][0]).toMatchObject({
+      action: "uazapi_external_read_applied", payloadSnapshot: { rows_written: 0 } });
+  });
+
+  it.each([
+    ["Delivered own receipt", { Type: "Delivered" }],
+    ["group read (IsGroup)", { Type: "Read", IsGroup: true }],
+    ["group read (chat jid)", { Type: "Read", IsGroup: undefined, chatid: "1203630@g.us" }],
+  ])("%s calls nothing", async (_label, extra) => {
+    const { Type, ...rest } = extra as Record<string, unknown> & { Type: string };
+    await applyMessageUpdate(db, instance, ownRead(Type, rest));
+    await applyMessageUpdate(db, instance, ownRead(Type, rest), { requireTarget: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("does not throw under requireTarget when no message matches (unknown read is a no-op)", async () => {
+    fetchMock.mockImplementation(async () => json(0));
+    await expect(applyMessageUpdate(db, instance, ownRead("Read"), { requireTarget: true })).resolves.toBeUndefined();
+    expect(rpcCalls()).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  // Best-effort: an RPC failure (slow DB, RPC missing after a wrong-order deploy) must not
+  // turn every own read into a webhook 500 and a provider retry storm. Log, no PII, move on.
+  it.each([
+    ["RPC error", () => fetchMock.mockResolvedValue(json({ code: "PGRST202", message: "not found" }, 404)), "PGRST202"],
+    ["network failure", () => fetchMock.mockRejectedValue(new TypeError("fetch failed")), undefined],
+  ])("logs a %s and resolves instead of failing the webhook", async (_label, arrange, code) => {
+    arrange();
+    await expect(applyMessageUpdate(db, instance, ownRead("Read"), { requireTarget: true })).resolves.toBeUndefined();
+    expect(logRuntime).toHaveBeenCalledOnce();
+    const entry = logRuntime.mock.calls[0][0] as Record<string, unknown>;
+    expect(entry).toMatchObject({ organizationId: "org-a", module: "webhook",
+      action: "uazapi_external_read_failed", status: "error",
+      payloadSnapshot: { instance_id: "instance-a", message_count: 2 } });
+    if (code) expect(entry.errorMessage).toBe(code);
+    expect(JSON.stringify(entry)).not.toMatch(/5511|message-a|message-b/);
+    expect(completeQuotePresentations).not.toHaveBeenCalled();
+  });
+
+  it("leaves contact receipts (fromMe=false) on the outgoing status path", async () => {
+    fetchMock.mockImplementation(async (_input, init) => json(init.method === "PATCH" ? [{ id: "row-a" }] : []));
+    await applyMessageUpdate(db, instance, { id: "message-a", status: "read", fromMe: false });
+    expect(rpcCalls()).toHaveLength(0);
+    expect(methodAt(0)).toBe("PATCH");
+    expect(urlAt(0).searchParams.get("direction")).toBe("eq.outgoing");
+    expect(completeQuotePresentations).toHaveBeenCalledOnce();
   });
 });

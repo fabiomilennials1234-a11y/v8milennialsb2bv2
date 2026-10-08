@@ -309,6 +309,31 @@ export async function downloadMedia(
   });
 }
 
+/**
+ * Encaminha uma mensagem do chat para outra conversa 1:1 da org.
+ *
+ * `destInstanceId` é o chip da conversa de DESTINO — é por ele que a mensagem
+ * sai. A origem é identificada pelo par (chip, id do provider), o mesmo que as
+ * outras ações de mensagem usam.
+ */
+export async function forwardMessage(args: {
+  destInstanceId: string;
+  destNumber: string;
+  sourceInstanceId: string;
+  sourceMessageId: string;
+  destLeadId?: string | null;
+}): Promise<{ message_id: string | null; status?: string }> {
+  return callProxy("forwardMessage", {
+    instance_id: args.destInstanceId,
+    payload: {
+      number: args.destNumber,
+      source_instance_id: args.sourceInstanceId,
+      source_message_id: args.sourceMessageId,
+      ...(args.destLeadId ? { lead_id: args.destLeadId } : {}),
+    },
+  });
+}
+
 export async function syncHistory(
   instanceId: string,
   opts?: { chatJid?: string; limit?: number; cursor?: string }
@@ -404,4 +429,27 @@ export async function requestHistoryRecovery(
 
 export function transcribeAudio(instanceId: string, rowId: string) {
   return callProxy<{ text: string; provider: string; createdAt: string; cached: boolean }>("transcribeAudio", { instance_id: instanceId, payload: { row_id: rowId } });
+}
+
+// ============================================================================
+// Grupos (nó de automação `send_to_group`)
+// ============================================================================
+
+export type InstanceGroup = { jid: string; name: string };
+export type InstanceGroupList = { groups: InstanceGroup[]; truncated: boolean };
+
+/**
+ * Os grupos de que a instância participa, para o seletor do nó "Enviar p/
+ * grupo". Só Uazapi lista (422 `groups_not_supported` nos demais) e só quem
+ * edita automações pode listar (403) — o painel cai no campo manual nos dois.
+ */
+export async function listGroups(instanceId: string): Promise<InstanceGroupList> {
+  const r = await callProxy<Partial<InstanceGroupList>>("listGroups", {
+    instance_id: instanceId,
+    payload: {},
+  });
+  return {
+    groups: Array.isArray(r?.groups) ? r.groups : [],
+    truncated: r?.truncated === true,
+  };
 }

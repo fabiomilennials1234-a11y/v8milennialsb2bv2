@@ -1,12 +1,11 @@
 import { useState, useMemo } from "react";
-import { Book, Menu, X, Key, ChevronDown, ChevronUp } from "lucide-react";
+import { Book, Menu, X, Key } from "lucide-react";
 import { useOrganization } from "@/modules/identity";
 import { useApiKeys } from "@/modules/platform/hooks/useApiKeys";
 import { apiCategories } from "@/lib/api-docs/endpoints";
 import { ApiDocsSidebar } from "./ApiDocsSidebar";
 import { ApiDocsContent } from "./ApiDocsContent";
 import { ApiCodePanel } from "./ApiCodePanel";
-import { ApiKeysPanel } from "@/modules/platform/components/settings/ApiKeysPanel";
 import {
   Select,
   SelectContent,
@@ -14,11 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import type { OrgContext } from "@/lib/api-docs/code-generators";
 
 export function ApiDocsSettings() {
@@ -37,7 +31,6 @@ export function ApiDocsSettings() {
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedKeyPrefix, setSelectedKeyPrefix] = useState<string>("");
-  const [keysOpen, setKeysOpen] = useState(true);
 
   const selectedEndpoint = allEndpoints.find((e) => e.id === selectedEndpointId) || allEndpoints[0];
 
@@ -56,21 +49,26 @@ export function ApiDocsSettings() {
 
   if (!selectedEndpoint) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
+      <div className="flex h-64 items-center justify-center rounded-card border border-card-border bg-card text-muted-foreground shadow-relevo">
         <p>Nenhum endpoint documentado ainda.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-0 -mx-6 -mt-6">
+    // V5: a aba é renderizada sem cartão em Configurações — o cartão mora
+    // aqui (antes, `-mx-6 -mt-6` compensava um padding que não existia). As
+    // chaves saíram daqui: têm painel próprio no topo da aba API & Webhooks.
+    <div className="overflow-hidden rounded-card border border-card-border bg-card text-card-foreground shadow-relevo">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-border">
-        <Book className="w-5 h-5 text-primary" />
-        <div>
-          <h3 className="text-lg font-semibold">API & Chaves</h3>
-          <p className="text-sm text-muted-foreground">
-            Gerencie chaves e consulte a documentação dos endpoints
+      <div className="flex flex-wrap items-center gap-3 border-b border-border px-6 pb-4 pt-5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+          <Book className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-base font-bold tracking-tight">Documentação da API</h3>
+          <p className="text-[13px] text-muted-foreground">
+            Endpoints da API REST pública, com exemplos prontos para a sua organização
           </p>
         </div>
         {/* API Key selector for code examples */}
@@ -81,7 +79,7 @@ export function ApiDocsSettings() {
             onValueChange={setSelectedKeyPrefix}
             disabled={activeKeys.length === 0}
           >
-            <SelectTrigger className="w-[200px] h-8 text-xs">
+            <SelectTrigger className="h-9 w-[200px] rounded-full text-xs">
               <SelectValue placeholder={activeKeys.length === 0 ? "Nenhuma key ativa" : "Selecionar API Key"} />
             </SelectTrigger>
             <SelectContent>
@@ -97,34 +95,21 @@ export function ApiDocsSettings() {
           {/* Mobile nav toggle */}
           <button
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            className="xl:hidden p-2 rounded-md hover:bg-muted/50 transition-colors"
+            aria-label={mobileNavOpen ? "Fechar lista de endpoints" : "Abrir lista de endpoints"}
+            className="rounded-xl p-2 transition-colors hover:bg-muted xl:hidden"
           >
             {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      {/* API Keys section — collapsible */}
-      <Collapsible open={keysOpen} onOpenChange={setKeysOpen}>
-        <CollapsibleTrigger className="flex items-center justify-between w-full px-6 py-3 border-b border-border hover:bg-muted/30 transition-colors">
-          <div className="flex items-center gap-2">
-            <Key className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Chaves de API</span>
-            <span className="text-xs text-muted-foreground">({activeKeys.length} ativas)</span>
-          </div>
-          {keysOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-6 py-4 border-b border-border bg-muted/5">
-            <ApiKeysPanel />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Three-panel docs layout */}
-      <div className="flex flex-col xl:flex-row min-h-[600px]">
+      {/* Três painéis. V5: a tela agora divide largura com a lateral e o
+          Pitstop; com três colunas a partir de xl o texto do meio ficava com
+          ~140px. Em xl o código desce para baixo do conteúdo; lado a lado só
+          em 2xl. */}
+      <div className="grid min-h-[600px] grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_420px]">
         {/* Sidebar - desktop */}
-        <div className="hidden xl:block w-[240px] shrink-0 border-r border-border">
+        <div className="hidden border-r border-border xl:row-span-2 xl:block 2xl:row-span-1">
           <ApiDocsSidebar
             categories={apiCategories}
             selectedEndpointId={selectedEndpointId}
@@ -134,7 +119,7 @@ export function ApiDocsSettings() {
 
         {/* Sidebar - mobile overlay */}
         {mobileNavOpen && (
-          <div className="xl:hidden border-b border-border bg-background">
+          <div className="border-b border-border bg-card xl:hidden">
             <ApiDocsSidebar
               categories={apiCategories}
               selectedEndpointId={selectedEndpointId}
@@ -147,12 +132,12 @@ export function ApiDocsSettings() {
         )}
 
         {/* Content panel */}
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-hidden">
           <ApiDocsContent endpoint={selectedEndpoint} baseUrl={baseUrl} />
         </div>
 
         {/* Code panel */}
-        <div className="xl:w-[420px] shrink-0">
+        <div className="min-w-0 p-3 xl:col-start-2 xl:pt-0 2xl:col-start-auto 2xl:pl-0 2xl:pt-3">
           <ApiCodePanel endpoint={selectedEndpoint} orgContext={orgContext} />
         </div>
       </div>

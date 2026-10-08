@@ -1,30 +1,22 @@
 /**
  * ContextPanelTabInfo — aba INFOS do ContextPanel.
  *
- * Escopo (definido pelo CTO em 2026-04-23):
- *   1. Campos padrão do sistema (editáveis inline)
- *   2. Campos personalizados (+ CTA criar)
- *   3. Notas (lista + composer)
+ * Escopo (definido pelo CTO em 2026-04-23): campos padrão do sistema
+ * (editáveis inline), campos personalizados (+ CTA criar) e notas.
+ *
+ * V5 (02/10): os campos padrão se partem nas seções do mockup, nesta ordem —
+ * Funis do lead · Responsáveis · Tags · Qualificação · Contato · Campos
+ * personalizados · Notas. Mesmos dados, mesmos slots de escrita.
+ *
+ * Exceção por org: onde `mostraNegocioNoChat` libera (hoje só a Riofix), entra
+ * a seção "Negócios" logo abaixo dos funis — ver `lib/negocioNoChat.ts`.
  *
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Tables } from "@/integrations/supabase/types";
-import {
-  AtSign,
-  Check,
-  Copy,
-  FileText,
-  GitBranch,
-  Loader2,
-  Phone,
-  Plus,
-  Sparkles,
-  Tag as TagIcon,
-  User,
-  X,
-} from "lucide-react";
+import { Check, Loader2, Phone, Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -48,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUpdateLead } from "@/modules/leads";
-import { useResponsibleMembers } from "@/modules/identity";
+import { useOrganization, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
@@ -59,7 +51,10 @@ import {
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
+import { ContextPanelNegocios } from "./ContextPanelNegocios";
+import { mostraNegocioNoChat } from "@/modules/communication/lib/negocioNoChat";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
+import { notifyError } from "@/shared/errors";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -133,6 +128,8 @@ export function ContextPanelTabInfo({
   phoneNumber,
 }: ContextPanelTabInfoProps) {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const { organizationId } = useOrganization();
+  const comNegocios = mostraNegocioNoChat(organizationId);
 
   if (!lead && phoneNumber) {
     return (
@@ -157,7 +154,7 @@ export function ContextPanelTabInfo({
         <Button
           variant="outline"
           size="sm"
-          className="mt-3 h-8 text-xs"
+          className="mt-3 h-9 text-xs"
           onClick={() => setLeadModalOpen(true)}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -176,58 +173,188 @@ export function ContextPanelTabInfo({
   if (!lead || !activeLeadId) return null;
 
   return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col">
-        <SectionHeader icon={User} label="Campos padrão do sistema" />
-        <StandardFields lead={lead} />
-
-        <SectionHeader icon={GitBranch} label="Funis do lead" />
-        <div className="px-4 pb-4">
+    // O wrapper interno do Radix é `display: table; min-width: 100%` — o
+    // conteúdo decidia a largura e saía pela direita do cartão (telefone,
+    // avatares, chips de funil cortados). `block` devolve a largura à coluna.
+    <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
+      {/* Ordem do mockup V5: onde o lead está (funis) → quem cuida dele →
+          como está marcado (tags, qualificação) → como falar com ele →
+          o resto. Cada seção é um rótulo micro, sem régua entre elas. */}
+      <div className="flex flex-col gap-5 px-4 pb-5 pt-2">
+        <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
-        </div>
+        </Secao>
 
-        <SectionHeader icon={Sparkles} label="Campos personalizados" />
-        <CustomFieldsBlock leadId={activeLeadId} />
+        {/* Negócios do lead — exceção por org (`mostraNegocioNoChat`, hoje só a
+            Riofix). Logo depois dos funis: os dois dizem onde o lead está. */}
+        {comNegocios && (
+          <Secao rotulo="Negócios">
+            <ContextPanelNegocios key={`${organizationId}:${activeLeadId}`} leadId={activeLeadId} />
+          </Secao>
+        )}
 
-        <SectionHeader icon={FileText} label="Notas" last />
-        <NotesBlock leadId={activeLeadId} organizationId={lead.organization_id ?? null} />
+        <ResponsaveisBlock lead={lead} />
+
+        <TagsBlock lead={lead} />
+
+        <QualificacaoBlock lead={lead} />
+
+        <ContatoBlock lead={lead} />
+
+        <Secao rotulo="Campos personalizados">
+          <CustomFieldsBlock leadId={activeLeadId} />
+        </Secao>
+
+        <Secao rotulo="Notas">
+          <NotesBlock leadId={activeLeadId} organizationId={lead.organization_id ?? null} />
+        </Secao>
       </div>
     </ScrollArea>
   );
 }
 
-/* ─── Section header ─────────────────────────────────────────────────────── */
+/* ─── Seção ──────────────────────────────────────────────────────────────── */
 
-function SectionHeader({
-  icon: Icon,
-  label,
-  last,
+function Secao({
+  rotulo,
+  acao,
+  children,
 }: {
-  icon: typeof User;
-  label: string;
-  last?: boolean;
+  rotulo: string;
+  /** Ação curta à direita do rótulo (ex.: "+ Tag"). */
+  acao?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "px-4 pt-4 pb-2.5",
-        !last && "border-t border-border/40 first:border-t-0",
-      )}
-    >
-      <p className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-[0.08em] font-semibold text-muted-foreground/70">
-        <Icon className="w-3 h-3" />
-        {label}
-      </p>
+    <section className="flex flex-col gap-2">
+      <div className="flex min-h-7 items-center gap-2">
+        <h3 className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+          {rotulo}
+        </h3>
+        <span className="flex-1" />
+        {acao}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Linha de "quem/qual" do mockup: rótulo micro em cima, valor em negrito,
+ * e à direita o MESMO slot de sempre (`ResponsibleSlot`/`QualificationSlot`
+ * do módulo de leads) — é ele que guarda permissão, escrita e log. A linha só
+ * muda a moldura.
+ */
+function LinhaDeSlot({
+  rotulo,
+  valor,
+  vazio,
+  children,
+}: {
+  rotulo: string;
+  valor: string | null;
+  vazio: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-[10.5px] font-semibold text-muted-foreground">{rotulo}</p>
+        <p
+          className={cn(
+            "truncate text-[13px] font-bold",
+            valor ? "text-foreground" : "font-semibold text-muted-foreground",
+          )}
+        >
+          {valor ?? vazio}
+        </p>
+      </div>
+      {children}
     </div>
   );
 }
 
-/* ─── Campos padrão ──────────────────────────────────────────────────────── */
+/* ─── Responsáveis ───────────────────────────────────────────────────────── */
 
-function StandardFields({ lead }: { lead: LeadShape }) {
-  const { mutate: updateLead, isPending: saving } = useUpdateLead();
+function ResponsaveisBlock({ lead }: { lead: LeadShape }) {
   const responsibleMembers = useResponsibleMembers();
   const leadId = lead.id ?? null;
+  if (!leadId) return null;
+
+  return (
+    <Secao rotulo="Responsáveis">
+      <div className="flex flex-col gap-1.5">
+        <LinhaDeSlot
+          rotulo="Pré-venda"
+          valor={memberName(responsibleMembers, lead.pre_sale_responsible_id)}
+          vazio="Sem responsável"
+        >
+          <ResponsibleSlot
+            leadId={leadId}
+            field="pre_sale_responsible_id"
+            label="Pré-venda"
+            currentMember={memberById(responsibleMembers, lead.pre_sale_responsible_id)}
+            expectedUpdatedAt={lead.updated_at ?? null}
+          />
+        </LinhaDeSlot>
+        <LinhaDeSlot
+          rotulo="Vendas"
+          valor={memberName(responsibleMembers, lead.sale_responsible_id)}
+          vazio="Sem responsável"
+        >
+          <ResponsibleSlot
+            leadId={leadId}
+            field="sale_responsible_id"
+            label="Vendas"
+            currentMember={memberById(responsibleMembers, lead.sale_responsible_id)}
+            expectedUpdatedAt={lead.updated_at ?? null}
+          />
+        </LinhaDeSlot>
+      </div>
+    </Secao>
+  );
+}
+
+/* ─── Qualificação ───────────────────────────────────────────────────────── */
+
+/**
+ * O mockup desenha a qualificação como fileira de chips. Aqui fica o
+ * `QualificationSlot` (popover) porque é ele que aplica o gate de permissão
+ * (`useLeadActionGates`) e grava o log — refazer isso em chips seria
+ * duplicar regra de escrita fora do módulo de leads.
+ */
+function QualificacaoBlock({ lead }: { lead: LeadShape }) {
+  const leadId = lead.id ?? null;
+  if (!leadId) return null;
+
+  return (
+    <Secao rotulo="Qualificação">
+      <div className="flex flex-col gap-1.5">
+        <LinhaDeSlot rotulo="Pré-qualificação" valor={tierLabel(lead.pre_qualification_tier)} vazio="Não definida">
+          <QualificationSlot
+            leadId={leadId}
+            field="pre_qualification_tier"
+            label="Pré-qualificação"
+            current={(lead.pre_qualification_tier as QualificationTier | null) ?? null}
+          />
+        </LinhaDeSlot>
+        <LinhaDeSlot rotulo="Qualificação" valor={tierLabel(lead.qualification_tier)} vazio="Não definida">
+          <QualificationSlot
+            leadId={leadId}
+            field="qualification_tier"
+            label="Qualificação"
+            current={(lead.qualification_tier as QualificationTier | null) ?? null}
+          />
+        </LinhaDeSlot>
+      </div>
+    </Secao>
+  );
+}
+
+/* ─── Contato ────────────────────────────────────────────────────────────── */
+
+function ContatoBlock({ lead }: { lead: LeadShape }) {
+  const { mutate: updateLead, isPending: saving } = useUpdateLead();
 
   const save = (patch: Record<string, unknown>) => {
     if (!lead.id) return;
@@ -235,161 +362,87 @@ function StandardFields({ lead }: { lead: LeadShape }) {
       { id: lead.id, ...patch } as any,
       {
         onSuccess: () => toast.success("Atualizado"),
-        onError: () => toast.error("Falha ao salvar"),
+        onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar." }),
       },
     );
   };
 
   return (
-    <div className="px-4 pb-4 space-y-1">
-      {/* Telefone (read-only, copy) */}
-      <FieldRow label="Telefone" icon={Phone}>
-        <button
-          type="button"
-          className="text-[13px] text-foreground tabular-nums truncate hover:text-primary transition-colors"
-          onClick={() => {
-            if (!lead.phone) return;
-            navigator.clipboard.writeText(lead.phone);
-            toast.success("Copiado");
-          }}
-          title="Copiar telefone"
-        >
-          {lead.phone || "—"}
-        </button>
-      </FieldRow>
-
-      {/* E-mail (inline edit) */}
-      <InlineEditText
-        label="E-mail"
-        icon={AtSign}
-        value={lead.email ?? ""}
-        placeholder="Adicionar e-mail"
-        type="email"
-        disabled={saving}
-        onSave={(v) => save({ email: v || null })}
-      />
-
-      {/* Origem (select com dot) */}
-      <FieldRow label="Origem">
-        <Select
-          value={lead.origin ?? ""}
-          onValueChange={(v) => save({ origin: v })}
-          disabled={saving}
-        >
-          <SelectTrigger
-            className={cn(
-              "h-7 gap-1.5 text-[13px] px-2",
-              "border-transparent hover:border-border/60 focus:border-border",
-              "bg-transparent hover:bg-muted/20",
-              "transition-colors shadow-none",
-            )}
+    <Secao rotulo="Contato">
+      <div className="flex flex-col">
+        {/* Telefone (read-only, copy) */}
+        <FieldRow label="Telefone">
+          <button
+            type="button"
+            className="truncate font-mono text-[12.5px] tabular-nums text-foreground transition-colors hover:text-primary"
+            onClick={() => {
+              if (!lead.phone) return;
+              navigator.clipboard.writeText(lead.phone);
+              toast.success("Copiado");
+            }}
+            title="Copiar telefone"
           >
-            <SelectValue placeholder="—">
-              {lead.origin && (
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{
-                      background: dotFor(lead.origin),
-                      boxShadow: `0 0 6px ${dotFor(lead.origin)}`,
-                    }}
-                  />
-                  {labelFor(lead.origin)}
-                </span>
+            {lead.phone || "—"}
+          </button>
+        </FieldRow>
+
+        {/* E-mail (inline edit) */}
+        <InlineEditText
+          label="E-mail"
+          value={lead.email ?? ""}
+          placeholder="Adicionar e-mail"
+          type="email"
+          disabled={saving}
+          onSave={(v) => save({ email: v || null })}
+        />
+
+        {/* Origem (select com dot) */}
+        <FieldRow label="Origem">
+          <Select
+            value={lead.origin ?? ""}
+            onValueChange={(v) => save({ origin: v })}
+            disabled={saving}
+          >
+            <SelectTrigger
+              className={cn(
+                "h-7 gap-1.5 text-[13px] px-2",
+                "border-transparent hover:border-border/60 focus:border-border",
+                "bg-transparent hover:bg-muted/20",
+                "transition-colors shadow-none",
               )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {SOURCE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value} className="text-[13px]">
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: opt.dot }}
-                  />
-                  {opt.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FieldRow>
-
-      {/* Responsáveis: Pré-venda + Vendas (modelo novo, reusa ResponsibleSlot) */}
-      {leadId && (
-        <>
-          <FieldRow label="Pré-venda">
-            <ResponsibleValue
-              name={memberName(responsibleMembers, lead.pre_sale_responsible_id)}
             >
-              <ResponsibleSlot
-                leadId={leadId}
-                field="pre_sale_responsible_id"
-                label="Pré-venda"
-                currentMember={memberById(responsibleMembers, lead.pre_sale_responsible_id)}
-                expectedUpdatedAt={lead.updated_at ?? null}
-              />
-            </ResponsibleValue>
-          </FieldRow>
-          <FieldRow label="Vendas">
-            <ResponsibleValue
-              name={memberName(responsibleMembers, lead.sale_responsible_id)}
-            >
-              <ResponsibleSlot
-                leadId={leadId}
-                field="sale_responsible_id"
-                label="Vendas"
-                currentMember={memberById(responsibleMembers, lead.sale_responsible_id)}
-                expectedUpdatedAt={lead.updated_at ?? null}
-              />
-            </ResponsibleValue>
-          </FieldRow>
-        </>
-      )}
-
-      {/* Qualificação + Pré-qualificação (reusa QualificationSlot) */}
-      {leadId && (
-        <>
-          <FieldRow label="Pré-qualificação">
-            <ResponsibleValue name={tierLabel(lead.pre_qualification_tier)}>
-              <QualificationSlot
-                leadId={leadId}
-                field="pre_qualification_tier"
-                label="Pré-qualificação"
-                current={(lead.pre_qualification_tier as QualificationTier | null) ?? null}
-              />
-            </ResponsibleValue>
-          </FieldRow>
-          <FieldRow label="Qualificação">
-            <ResponsibleValue name={tierLabel(lead.qualification_tier)}>
-              <QualificationSlot
-                leadId={leadId}
-                field="qualification_tier"
-                label="Qualificação"
-                current={(lead.qualification_tier as QualificationTier | null) ?? null}
-              />
-            </ResponsibleValue>
-          </FieldRow>
-        </>
-      )}
-
-      {/* Tags */}
-      <FieldRow label="Tags" align="start">
-        <TagsEditor lead={lead} />
-      </FieldRow>
-    </div>
-  );
-}
-
-/** Envolve um slot (avatar/ícone) com o nome/tier atual à esquerda, no padrão FieldRow. */
-function ResponsibleValue({ name, children }: { name: string | null; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <span className={cn("text-[13px] truncate", name ? "text-foreground" : "text-muted-foreground/60")}>
-        {name ?? "—"}
-      </span>
-      {children}
-    </div>
+              <SelectValue placeholder="—">
+                {lead.origin && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        background: dotFor(lead.origin),
+                        boxShadow: `0 0 6px ${dotFor(lead.origin)}`,
+                      }}
+                    />
+                    {labelFor(lead.origin)}
+                  </span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {SOURCE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-[13px]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: opt.dot }}
+                    />
+                    {opt.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+      </div>
+    </Secao>
   );
 }
 
@@ -502,7 +555,7 @@ function InlineEditText({
 
 /* ─── Tags editor ────────────────────────────────────────────────────────── */
 
-function TagsEditor({ lead }: { lead: LeadShape }) {
+function TagsBlock({ lead }: { lead: LeadShape }) {
   const qc = useQueryClient();
   const { data: allTags = [] } = useTags();
   const [open, setOpen] = useState(false);
@@ -526,107 +579,114 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
       qc.invalidateQueries({ queryKey: ["lead_by_phone"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["lead-detail"] });
-    } catch {
-      toast.error("Erro ao atualizar tag");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível atualizar tag." });
     } finally {
       setBusy(null);
     }
   };
 
-  return (
-    <div className="flex flex-wrap justify-end items-center gap-1.5 w-full">
-      <AnimatePresence initial={false}>
-        {current.map((t) => (
-          <motion.span
-            key={t.id}
-            layout
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.15 }}
-          >
-            <Badge
-              variant="outline"
-              className="text-[11px] h-5 px-1.5 gap-1 group cursor-pointer"
-              // `tags.color` é anulável no schema. Sem o `?? undefined`, um
-              // `null` viraria a string "null20" no CSS — cor inválida, chip
-              // sem estilo. `undefined` deixa o Badge usar o próprio default.
-              style={{
-                backgroundColor: t.color ? `${t.color}20` : undefined,
-                borderColor: t.color ? `${t.color}40` : undefined,
-                color: t.color ?? undefined,
-              }}
-              onClick={() => toggle(t.id)}
-              title="Remover tag"
-            >
-              {t.name}
-              <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-80 transition-opacity" />
-            </Badge>
-          </motion.span>
-        ))}
-      </AnimatePresence>
-
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Adicionar tag"
-            className={cn(
-              "inline-flex items-center justify-center h-5 w-5 rounded-md",
-              "border border-dashed border-border/60 text-muted-foreground",
-              "hover:border-primary/40 hover:text-primary hover:bg-primary/5",
-              "transition-colors",
-            )}
-          >
-            <Plus className="w-3 h-3" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="end"
-          className="w-60 p-2 max-h-[280px] overflow-y-auto"
-          aria-label="Selecionar tags"
-        >
-          {allTags.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground px-2 py-4 text-center">
-              Nenhuma tag disponível
-            </p>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {allTags.map((t) => {
-                const active = current.some((c) => c.id === t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggle(t.id)}
-                    disabled={busy === t.id}
-                    className={cn(
-                      "flex items-center gap-2 px-2 py-1.5 rounded-md text-[12.5px] text-left",
-                      "hover:bg-muted/60 transition-colors",
-                      "disabled:opacity-60",
-                    )}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: t.color ?? undefined }}
-                    />
-                    <span className="flex-1 truncate text-foreground">{t.name}</span>
-                    {active && <Check className="w-3.5 h-3.5 text-primary" />}
-                  </button>
-                );
-              })}
-            </div>
+  const acao = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Adicionar tag"
+          className={cn(
+            "inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-2.5",
+            "text-[11.5px] font-bold text-foreground shadow-relevo",
+            "hover:bg-muted/60 transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           )}
-        </PopoverContent>
-      </Popover>
+        >
+          <Plus className="h-3 w-3" aria-hidden />
+          Tag
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        className="w-60 p-2 max-h-[280px] overflow-y-auto"
+        aria-label="Selecionar tags"
+      >
+        {allTags.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground px-2 py-4 text-center">
+            Nenhuma tag disponível
+          </p>
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            {allTags.map((t) => {
+              const active = current.some((c) => c.id === t.id);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggle(t.id)}
+                  disabled={busy === t.id}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 rounded-md text-[12.5px] text-left",
+                    "hover:bg-muted/60 transition-colors",
+                    "disabled:opacity-60",
+                  )}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ background: t.color ?? undefined }}
+                  />
+                  <span className="flex-1 truncate text-foreground">{t.name}</span>
+                  {active && <Check className="w-3.5 h-3.5 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 
-      {current.length === 0 && (
-        <span className="text-[11.5px] text-muted-foreground/60 italic">
-          Nenhuma tag
-        </span>
+  return (
+    <Secao rotulo="Tags" acao={acao}>
+      {current.length === 0 ? (
+        <p className="text-[12px] font-semibold text-muted-foreground">Nenhuma tag</p>
+      ) : (
+        <div className="flex w-full flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false}>
+            {current.map((t) => (
+              <motion.span
+                key={t.id}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Badge
+                  variant="outline"
+                  className="text-[11px] h-5 px-1.5 gap-1 group cursor-pointer"
+                  // `tags.color` é anulável no schema. Sem o `?? undefined`, um
+                  // `null` viraria a string "null20" no CSS — cor inválida, chip
+                  // sem estilo. `undefined` deixa o Badge usar o próprio default.
+                  // A cor da tag pinta fundo, borda e o ponto — nunca o texto:
+                  // cor escolhida pelo cliente ("Ouro" #FFD700) dava 1,5:1.
+                  style={{
+                    backgroundColor: t.color ? `${t.color}20` : undefined,
+                    borderColor: t.color ? `${t.color}40` : undefined,
+                  }}
+                  onClick={() => toggle(t.id)}
+                  title="Remover tag"
+                >
+                  {t.color && (
+                    <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                  )}
+                  {t.name}
+                  <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-80 transition-opacity" />
+                </Badge>
+              </motion.span>
+            ))}
+          </AnimatePresence>
+        </div>
       )}
-    </div>
+    </Secao>
   );
 }
 
@@ -634,7 +694,7 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
 
 function CustomFieldsBlock({ leadId }: { leadId: string }) {
   return (
-    <div className="px-4 pb-4">
+    <div>
       <LeadCustomFields leadId={leadId} />
       <div className="mt-2">
         <AddCustomFieldPopover />
@@ -730,7 +790,7 @@ function NotesBlock({
         ref.current?.blur();
         setFocused(false);
       },
-      onError: (err: any) => toast.error(err?.message || "Erro ao salvar nota"),
+      onError: (err: any) => notifyError(err, { fallback: "Não foi possível salvar nota." }),
     });
   }, [draft, addNote]);
 
@@ -738,13 +798,13 @@ function NotesBlock({
   const expanded = focused || draft.length > 0;
 
   return (
-    <div className="px-4 pb-4 space-y-3">
+    <div className="space-y-3">
       {/* Composer */}
       <div
         className={cn(
-          "relative rounded-lg border transition-colors",
+          "relative rounded-xl border transition-colors",
           expanded
-            ? "border-border bg-muted/20"
+            ? "border-border bg-sunken"
             : "border-border/60 bg-transparent hover:border-border",
         )}
       >
@@ -823,11 +883,11 @@ function NotesBlock({
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18 }}
-                  className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2"
+                  className="rounded-xl border border-border/60 bg-sunken px-3 py-2"
                 >
                   <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground mb-1">
                     <Avatar className="h-4 w-4 shrink-0">
-                      <AvatarFallback className="text-[7.5px] bg-primary/15 text-primary font-bold">
+                      <AvatarFallback className="text-[7.5px] bg-primary-soft text-primary-soft-foreground font-bold">
                         {parsed.author.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>

@@ -19,6 +19,7 @@ import {
 } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateTemplateModalProps {
   open: boolean;
@@ -255,7 +256,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
       onSuccess?.(newTemplate.id);
     } catch (error: any) {
       console.error("Erro ao criar template:", error);
-      toast.error(error?.message || "Erro ao criar template. Verifique suas permissões.");
+      notifyError(error, { fallback: "Não foi possível criar template. Verifique suas permissões." });
     }
   };
 
@@ -288,7 +289,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            Criar Novo Template
+            Criar novo template
           </DialogTitle>
         </DialogHeader>
 
@@ -613,9 +614,9 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
 
           {/* === Tips for text === */}
           {messageType === "text" && (
-            <Card className="bg-blue-500/5 border-blue-500/20">
+            <Card className="bg-insights/5 border-insights/20">
               <CardContent className="p-4 text-sm space-y-2">
-                <p className="font-medium text-blue-700">Dicas para bons templates:</p>
+                <p className="font-medium text-insights">Dicas para bons templates:</p>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1">
                   <li>Use o nome do lead para personalizar</li>
                   <li>Seja direto e objetivo</li>
@@ -632,7 +633,7 @@ export function CreateTemplateModal({ open, onOpenChange, onSuccess }: CreateTem
               Cancelar
             </Button>
             <Button type="submit" disabled={createTemplate.isPending}>
-              {createTemplate.isPending ? "Criando..." : "Criar Template"}
+              {createTemplate.isPending ? "Criando..." : "Criar template"}
             </Button>
           </DialogFooter>
         </form>

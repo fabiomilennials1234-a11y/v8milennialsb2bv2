@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   LeadListRow,
   LeadListHeader,
@@ -27,6 +29,8 @@ import {
 } from "../components/leads/LeadListRow";
 import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
 import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
+import { LeadsPageSegments } from "../components/leads/LeadsPageSegments";
+import { EMPTY_COUNT, cappedPagination, formatCappedCount, formatShownTotal } from "../lib/capped-count";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -75,7 +79,7 @@ import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportLeadsModal } from "../components/leads/ImportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
-import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
+import { QUALIFICATION_TIERS, type QualificationTier } from "../components/lead-detail/modal/types";
 import { LeadPanelProvider, useLeadSheet } from "../components/lead-detail";
 import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
 import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
@@ -98,6 +102,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { FilterChip } from "@/shared/components/FilterChip";
 import { ClientPortfolioSection } from "../components/client-portfolio/ClientPortfolioSection";
 import { LeadCardNewDeal } from "../components/lead-card/LeadCardNewDeal";
 import { useDealSheet } from "../components/deal-detail/deal-sheet-context";
@@ -120,6 +125,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
+import { notifyError } from "@/shared/errors";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -132,15 +138,23 @@ const originLabels: Record<string, string> = {
   indicacao: "Indicação",
 };
 
+/**
+ * Tinta de cada origem — só tokens (V5). A paleta crua de antes (`green-600`,
+ * `blue-600`…) era afinada para o claro e reprovava contraste no escuro. A
+ * origem sempre vem escrita ao lado da cor, então dois canais com o mesmo
+ * matiz (WhatsApp e Indicação; Meta Ads e Site) não perdem identidade. Texto
+ * sempre no par `-strong`: o verde de preenchimento dava 2,3:1 sobre o cartão
+ * claro, e a cor de série de gráfico (`chart-5`) não é cor de texto.
+ */
 const originColors: Record<string, string> = {
-  whatsapp: "bg-green-500/10 text-green-600 border-green-500/20",
-  meta_ads: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  outro: "bg-muted text-muted-foreground border-muted",
-  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
-  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
-  cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  indicacao: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  whatsapp: "bg-success/10 text-success-strong border-success/25",
+  meta_ads: "bg-insights/10 text-insights border-insights/25",
+  outro: "bg-muted text-muted-foreground border-border",
+  site: "bg-insights/10 text-insights border-insights/25",
+  remarketing: "bg-warning/15 text-warning-strong border-warning/30",
+  google_ads: "bg-destructive/10 text-destructive border-destructive/25",
+  cal: "bg-primary-soft text-primary-soft-foreground border-primary/30",
+  indicacao: "bg-success/10 text-success-strong border-success/25",
 };
 
 interface LeadFormData {
@@ -359,8 +373,9 @@ function LeadsInner() {
   const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
-  const tabCounts: Record<string, number | undefined> = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
-  const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
+  const tabCounts = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
+  // Paginação sobre contagem COM TETO — ver `cappedPagination`.
+  const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
@@ -487,6 +502,17 @@ function LeadsInner() {
     setPage(0);
   }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
+  // Com a contagem no teto, "Próxima" vale enquanto a página vem cheia — então
+  // num recorte de exatamente N×50 leads a página seguinte chega vazia (e um
+  // lead apagado pode esvaziar a última). Página vazia depois da primeira não
+  // é estado útil: volta uma.
+  const leadsLoaded = leadsQuery.isSuccess && !leadsQuery.isFetching;
+  useEffect(() => {
+    if (!portfolioActive && page > 0 && leadsLoaded && loadedLeads.length === 0) {
+      setPage((p) => Math.max(0, p - 1));
+    }
+  }, [portfolioActive, page, leadsLoaded, loadedLeads.length]);
+
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
    *
@@ -512,9 +538,9 @@ function LeadsInner() {
   const [searchFocused, setSearchFocused] = useState(false);
 
   const stats = useMemo(() => ({
-    total: totalLeads ?? leads.length,
-    thisMonth: orgStats?.thisMonth ?? 0,
-    withSDR: orgStats?.withOwner ?? 0,
+    total: totalLeads ?? { value: leads.length, capped: false },
+    thisMonth: orgStats?.thisMonth ?? EMPTY_COUNT,
+    withSDR: orgStats?.withOwner ?? EMPTY_COUNT,
   }), [totalLeads, leads.length, orgStats]);
 
   const handleOpenDialog = (lead?: any) => {
@@ -630,7 +656,7 @@ function LeadsInner() {
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
         toast.error("Erro: organização não encontrada. Execute o script SQL de vinculação.");
       } else {
-        toast.error(`Erro ao salvar lead: ${error?.message || 'Erro desconhecido'}`);
+        notifyError(error, { fallback: "Não foi possível salvar lead." });
       }
     }
   };
@@ -704,59 +730,50 @@ function LeadsInner() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-2xl font-bold"
+    <div className="space-y-5">
+      <PageHeader
+        title="Leads"
+        subtitle="Da primeira conversa à próxima compra."
+        // Ações da lista de leads; a carteira (aba Clientes) tem as suas.
+        secondaryActions={portfolioActive ? undefined : [
+          { label: "Importações", icon: History, onSelect: () => setIsImportHistoryOpen(true) },
+          { label: "Importar", icon: FileUp, onSelect: () => setIsImportModalOpen(true), disabled: !canImport },
+        ]}
+        secondaryActionsLabel="Mais ações de leads"
+        actions={!portfolioActive && <>
+          {/* Exportar é ícone (mockup): a ação é rara e o rótulo vai no title. */}
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Exportar"
+            title="Exportar leads"
+            onClick={() => setIsExportModalOpen(true)}
+            disabled={!canExport}
           >
-            Leads
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Da primeira conversa à próxima compra.
-          </p>
-        </div>
-
-        {/* Ações da lista de leads; carteira tem suas próprias ações. */}
-        {!portfolioActive && <div className="flex flex-wrap items-center gap-2">
-          {isV2 ? (
-            <Button variant="outline" onClick={() => setIsImportHistoryOpen(true)} className="gap-2">
-              <History className="w-4 h-4" />
-              Importações
-            </Button>
-          ) : (
-            <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-              <History className="w-4 h-4" />
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
-            <FileUp className="w-4 h-4" />
-            Importar
+            <FileDown />
           </Button>
-          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
-            <FileDown className="w-4 h-4" />
-            Exportar
+          <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
+            <Plus />
+            Novo lead
           </Button>
-          <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
-            <Plus className="w-4 h-4" />
-            Novo Lead
-          </Button>
-        </div>}
-      </div>
-
-      <div className="flex gap-6 overflow-x-auto border-b border-border" role="group" aria-label="Classificação dos leads">
-        {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
-          <button key={option.value} type="button" aria-pressed={filterClassificacao === option.value}
-            onClick={() => setFilterClassificacao(option.value)}
-            className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
-            <span className="ml-2 text-xs tabular-nums opacity-80">{tabCounts[option.value]?.toLocaleString("pt-BR") ?? "—"}</span>
-          </button>
-        ))}
-      </div>
+        </>}
+        tabs={
+          /* A gaveta troca a vista inteira (Clientes vira a carteira) — é
+             navegação de página, por isso a pílula escura. Mesmos valores. */
+          <Tabs value={filterClassificacao} onValueChange={setFilterClassificacao}>
+            <TabsList variant="pill" aria-label="Classificação dos leads">
+              {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
+                <TabsTrigger key={option.value} value={option.value}>
+                  {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
+                  <span className="text-[11px] font-bold tabular-nums opacity-70">
+                    {formatCappedCount(tabCounts[option.value])}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
+      />
       {!portfolioActive && <>
       {/* Stats */}
       {isV2 ? (
@@ -792,7 +809,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Total de Leads</p>
-          <p className="text-xl font-bold">{stats.total}</p>
+          <p className="text-xl font-bold">{formatCappedCount(stats.total)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -801,7 +818,7 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Este Mês</p>
-          <p className="text-xl font-bold text-primary">{stats.thisMonth}</p>
+          <p className="text-xl font-bold text-primary">{formatCappedCount(stats.thisMonth)}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -810,111 +827,123 @@ function LeadsInner() {
           className="stat-card"
         >
           <p className="stat-card-label">Com Responsável</p>
-          <p className="text-xl font-bold text-success">{stats.withSDR}</p>
+          <p className="text-xl font-bold text-success">{formatCappedCount(stats.withSDR)}</p>
         </motion.div>
       </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* A busca respira no foco: cresce, e a contagem à direita cede a vez —
-            os dois com a mesma transição pra linha inteira se acomodar junto. */}
+      {/* Filtros — uma linha de chips (mockup V5). Cada chip abre a mesma
+          lista que o Select abria; ligado, vira tinta e diz o valor. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* A busca respira no foco: cresce de 360 px até ~36 rem. */}
         <div
           className={cn(
-            "relative flex-1 transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
-            searchFocused ? "max-w-xl" : "max-w-sm",
+            "relative w-full transition-[max-width] duration-300 ease-standard",
+            searchFocused ? "sm:max-w-xl" : "sm:max-w-[360px]",
           )}
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, empresa, email ou telefone..."
+            placeholder="Buscar por nome, empresa, e-mail ou telefone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
-            className="pl-9"
+            className="h-[38px] rounded-full pl-10 shadow-relevo"
           />
         </div>
-        <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Origens</SelectItem>
-            {Object.entries(originLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterQualification} onValueChange={setFilterQualification}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue placeholder="Qualificação" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Qualificações</SelectItem>
-            {QUALIFICATION_TIERS.map((tier) => {
-              const cfg = QUALIFICATION_TIER_CONFIG[tier];
-              const Icon = cfg.icon;
-              return (
-                <SelectItem key={tier} value={tier}>
-                  <span className="flex items-center gap-2">
-                    <Icon className={cn("w-3.5 h-3.5", cfg.colorClass)} />
-                    {cfg.label}
-                  </span>
-                </SelectItem>
-              );
-            })}
-            <SelectItem value="none">
-              <span className="flex items-center gap-2">
-                <CircleDashed className="w-3.5 h-3.5 text-muted-foreground" />
-                Sem qualificação
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        {/* Dono da conta — casa exatamente o que a coluna homônima da lista
-            mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
-        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Dono da conta" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os donos</SelectItem>
-            <SelectItem value="none">
-              <span className="flex items-center gap-2">
-                <UserX className="w-3.5 h-3.5 text-muted-foreground" />
-                Sem dono
-              </span>
-            </SelectItem>
-            {responsibleMembers.map((m) => (
-              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <SavedViewsDropdown
-          entityType="leads"
-          currentFilters={filterState}
-          defaultFilters={DEFAULT_LEADS_FILTERS}
-          onApplyFilters={(f) => setFilterState(() => f)}
-          activeViewId={activeViewId}
-          onActiveViewChange={handleActiveViewChange}
-        />
-        {/* Contagem do recorte junto dos filtros — o rodapé só aparece com
-            mais de uma página, e o número é a resposta que o filtro dá.
-            Some enquanto a busca está focada, cedendo o espaço da expansão. */}
-        {isV2 && totalLeads !== undefined && (
-          <span
-            className={cn(
-              "self-center overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground",
-              "transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
-              searchFocused ? "max-w-0 opacity-0" : "max-w-[220px] opacity-100",
-            )}
-            aria-hidden={searchFocused}
-          >
-            {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
-            {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
-          </span>
-        )}
+        {/* No celular os chips viram uma faixa que rola; no desktop o invólucro
+            some (`sm:contents`) e eles voltam a ser itens da linha. */}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:contents">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <FilterChip caret active={filterOrigin !== "all"}>
+                {filterOrigin !== "all" ? `Origem: ${originLabels[filterOrigin] ?? filterOrigin}` : "Origem"}
+              </FilterChip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              <DropdownMenuRadioGroup value={filterOrigin} onValueChange={setFilterOrigin}>
+                <DropdownMenuRadioItem value="all">Todas as origens</DropdownMenuRadioItem>
+                <DropdownMenuSeparator />
+                {Object.entries(originLabels).map(([key, label]) => (
+                  <DropdownMenuRadioItem key={key} value={key}>{label}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <FilterChip
+                caret
+                active={filterQualification !== "all"}
+                icon={filterQualification !== "all" && filterQualification !== "none"
+                  ? QUALIFICATION_TIER_CONFIG[filterQualification as QualificationTier]?.icon
+                  : undefined}
+              >
+                {filterQualification === "all"
+                  ? "Qualificação"
+                  : filterQualification === "none"
+                    ? "Sem qualificação"
+                    : `Qualificação: ${QUALIFICATION_TIER_CONFIG[filterQualification as QualificationTier]?.label ?? filterQualification}`}
+              </FilterChip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuRadioGroup value={filterQualification} onValueChange={setFilterQualification}>
+                <DropdownMenuRadioItem value="all">Todas as qualificações</DropdownMenuRadioItem>
+                <DropdownMenuSeparator />
+                {QUALIFICATION_TIERS.map((tier) => {
+                  const cfg = QUALIFICATION_TIER_CONFIG[tier];
+                  const Icon = cfg.icon;
+                  return (
+                    <DropdownMenuRadioItem key={tier} value={tier}>
+                      <Icon className={cn("mr-2 h-3.5 w-3.5", cfg.colorClass)} />
+                      {cfg.label}
+                    </DropdownMenuRadioItem>
+                  );
+                })}
+                <DropdownMenuRadioItem value="none">
+                  <CircleDashed className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Sem qualificação
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Dono da conta — casa exatamente o que a coluna homônima da lista
+              mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <FilterChip caret active={filterResponsible !== "all"} icon={filterResponsible === "none" ? UserX : undefined}>
+                {filterResponsible === "all"
+                  ? "Dono da conta"
+                  : filterResponsible === "none"
+                    ? "Sem dono"
+                    : `Dono: ${responsibleMembers.find((m) => m.id === filterResponsible)?.name ?? "—"}`}
+              </FilterChip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+              <DropdownMenuRadioGroup value={filterResponsible} onValueChange={setFilterResponsible}>
+                <DropdownMenuRadioItem value="all">Todos os donos</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="none">
+                  <UserX className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Sem dono
+                </DropdownMenuRadioItem>
+                {responsibleMembers.length > 0 && <DropdownMenuSeparator />}
+                {responsibleMembers.map((m) => (
+                  <DropdownMenuRadioItem key={m.id} value={m.id}>{m.name}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <span className="hidden flex-1 sm:block" />
+          <SavedViewsDropdown
+            entityType="leads"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_LEADS_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
+          />
+        </div>
       </div>
 
       {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
@@ -923,7 +952,7 @@ function LeadsInner() {
 
       {hasCreatedRange && (
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+          <Badge variant="soft" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
             <Calendar className="h-3.5 w-3.5" />
             {createdFrom && createdTo
               ? formatDayInTz(createdFrom, orgTimezone) === formatDayInTz(createdTo, orgTimezone)
@@ -936,7 +965,7 @@ function LeadsInner() {
               type="button"
               onClick={clearCreatedRange}
               aria-label="Remover filtro de período"
-              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-card"
             >
               <X className="h-3 w-3" />
             </button>
@@ -948,14 +977,14 @@ function LeadsInner() {
           ele o deep-link filtra a lista em silêncio e o admin lê "sumiram leads". */}
       {hasAssignmentFilter && (
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+          <Badge variant="soft" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
             <UserX className="h-3.5 w-3.5" />
             Sem responsável
             <button
               type="button"
               onClick={clearAssignmentFilter}
               aria-label="Remover filtro de atribuição"
-              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-card"
             >
               <X className="h-3 w-3" />
             </button>
@@ -974,7 +1003,7 @@ function LeadsInner() {
             <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{Object.entries(originLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={filterQualification} onValueChange={setFilterQualification}>
-            <SelectTrigger className="w-44" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[13.5rem]" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">Todas as qualificações</SelectItem><SelectItem value="none">Sem qualificação</SelectItem>{QUALIFICATION_TIERS.map(tier => <SelectItem key={tier} value={tier}>{QUALIFICATION_TIER_CONFIG[tier].label}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={filterResponsible} onValueChange={setFilterResponsible}>
@@ -987,7 +1016,7 @@ function LeadsInner() {
         </div>}
       /> : <>
       {/* Table (desktop) / Card list (mobile) */}
-      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
+      <div className={cn(!isMobile && "overflow-hidden rounded-card border border-card-border bg-card shadow-relevo")}>
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
             {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
@@ -1004,10 +1033,10 @@ function LeadsInner() {
             <LeadMobileSortBar sort={sort} onSortChange={setPersistedSort} />
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                <Skeleton key={i} className="h-24 w-full rounded-card" />
               ))
             ) : leads.length === 0 ? (
-              <div className="rounded-xl border border-border py-10 text-center text-sm text-muted-foreground">
+              <div className="rounded-card border border-card-border bg-card py-10 text-center text-sm text-muted-foreground shadow-relevo">
                 Nenhum lead encontrado
               </div>
             ) : (
@@ -1058,7 +1087,7 @@ function LeadsInner() {
               )}
               {isLoading ? (
                 isV2 ? (
-                  <div className="divide-y divide-border/70">
+                  <div className="divide-y divide-border">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <div key={i} className="flex h-14 items-center gap-4 px-4">
                         <Skeleton className="size-4 rounded" />
@@ -1125,30 +1154,15 @@ function LeadsInner() {
           </div>
         )}
 
-        {/* Paginação */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <span className="text-sm text-muted-foreground">
-              Página {page + 1} de {totalPages} ({totalLeads} leads)
+        {/* Rodapé — quanto da lista está na tela + páginas (mockup V5). */}
+        {!isLoading && leads.length > 0 && totalLeads !== undefined && (
+          <div className={cn("flex flex-wrap items-center justify-between gap-3 py-3", !isMobile && "border-t border-border px-4")}>
+            <span className="text-[13px] tabular-nums text-muted-foreground">
+              {formatShownTotal(totalLeads, page, LEADS_PAGE_SIZE, leads.length)}
             </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >
-                Próxima
-              </Button>
-            </div>
+            {(page > 0 || hasNextPage) && (
+              <LeadsPageSegments page={page} lastPage={lastPage} hasNext={hasNextPage} onChange={setPage} />
+            )}
           </div>
         )}
       </div>
@@ -1178,10 +1192,10 @@ function LeadsInner() {
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingLead ? "Editar Lead" : "Novo Lead"}
+              {editingLead ? "Editar lead" : "Novo lead"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">Nome *</Label>
@@ -1205,7 +1219,7 @@ function LeadsInner() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
                   type="email"
@@ -1246,7 +1260,7 @@ function LeadsInner() {
             {!editingLead && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Adicionar ao Funil</Label>
+                  <Label>Adicionar ao funil</Label>
                   <Select
                     value={selectedPipe}
                     onValueChange={(v) => { setSelectedPipe(v); setSelectedStage(""); }}
@@ -1263,10 +1277,10 @@ function LeadsInner() {
                 </div>
                 {selectedPipe && stageOptions.length > 0 && (
                   <div className="grid gap-2">
-                    <Label>Etapa Inicial</Label>
+                    <Label>Etapa inicial</Label>
                     <Select value={selectedStage} onValueChange={setSelectedStage}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder="Selecione…" />
                       </SelectTrigger>
                       <SelectContent>
                         {stageOptions.map((opt) => (
@@ -1286,7 +1300,7 @@ function LeadsInner() {
                   id="segment"
                   value={formData.segment}
                   onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                  placeholder="Ex: Tecnologia, Varejo..."
+                  placeholder="Ex.: Tecnologia, Varejo…"
                 />
               </div>
               <div className="grid gap-2">
@@ -1295,7 +1309,7 @@ function LeadsInner() {
                   id="faturamento"
                   value={formData.faturamento}
                   onChange={(e) => setFormData({ ...formData, faturamento: e.target.value })}
-                  placeholder="Ex: R$ 100.000, Acima de 1M..."
+                  placeholder="Ex.: R$ 100.000, acima de 1 mi…"
                 />
               </div>
             </div>
@@ -1339,7 +1353,7 @@ function LeadsInner() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="compromisso_date">Compromisso Marcado</Label>
+                <Label htmlFor="compromisso_date">Compromisso marcado</Label>
                 <Input
                   id="compromisso_date"
                   type="datetime-local"
@@ -1353,7 +1367,7 @@ function LeadsInner() {
                   id="urgency"
                   value={formData.urgency}
                   onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
-                  placeholder="Ex: Alta, Média, Baixa..."
+                  placeholder="Ex.: Alta, Média, Baixa…"
                 />
               </div>
             </div>
@@ -1364,18 +1378,18 @@ function LeadsInner() {
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anotações sobre o lead..."
+                placeholder="Anotações sobre o lead…"
                 rows={3}
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={handleSubmit} disabled={createLead.isPending || updateLead.isPending}>
-              {editingLead ? "Salvar" : "Criar Lead"}
+              {editingLead ? "Salvar" : "Criar lead"}
             </Button>
           </div>
         </DialogContent>
@@ -1388,7 +1402,7 @@ function LeadsInner() {
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Lead</AlertDialogTitle>
+            <AlertDialogTitle>Excluir lead</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir o lead "{leadToDelete?.name}"? Esta ação irá remover também todas as reuniões, propostas e follow-ups associados.
             </AlertDialogDescription>

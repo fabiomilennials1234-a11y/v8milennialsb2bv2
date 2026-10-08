@@ -22,6 +22,13 @@ interface AchievementBadgeProps {
   showTooltip?: boolean;
 }
 
+/**
+ * V5: cada tipo de conquista pinta com um TOKEN, não com degradê cru — o
+ * degradê `from-amber-600 to-amber-800` não tinha par no escuro. Medalhas
+ * seguem o pódio (ouro = primary, prata = silver, bronze = warning); os demais
+ * tipos usam a cor semântica mais próxima do significado. `gradient` guarda o
+ * preenchimento conquistado (nome mantido para não mexer na forma do mapa).
+ */
 const badgeConfig: Record<BadgeType, { 
   icon: typeof Trophy; 
   gradient: string;
@@ -30,63 +37,63 @@ const badgeConfig: Record<BadgeType, {
 }> = {
   bronze: {
     icon: Medal,
-    gradient: "from-amber-600 to-amber-800",
-    bgColor: "bg-amber-100",
-    borderColor: "border-amber-400",
+    gradient: "bg-warning text-warning-foreground",
+    bgColor: "bg-warning/15",
+    borderColor: "border-warning/60",
   },
   silver: {
     icon: Medal,
-    gradient: "from-slate-300 to-slate-500",
-    bgColor: "bg-slate-100",
-    borderColor: "border-slate-400",
+    gradient: "bg-silver text-silver-foreground",
+    bgColor: "bg-silver/15",
+    borderColor: "border-silver/60",
   },
   gold: {
     icon: Trophy,
-    gradient: "from-yellow-400 to-amber-500",
-    bgColor: "bg-yellow-50",
-    borderColor: "border-yellow-400",
+    gradient: "bg-primary text-primary-foreground",
+    bgColor: "bg-primary-soft",
+    borderColor: "border-primary/60",
   },
   platinum: {
     icon: Crown,
-    gradient: "from-cyan-300 to-blue-500",
-    bgColor: "bg-cyan-50",
-    borderColor: "border-cyan-400",
+    gradient: "bg-tinta text-tinta-foreground",
+    bgColor: "bg-muted",
+    borderColor: "border-tinta-line",
   },
   first_sale: {
     icon: Star,
-    gradient: "from-green-400 to-emerald-500",
-    bgColor: "bg-green-50",
-    borderColor: "border-green-400",
+    gradient: "bg-success text-success-foreground",
+    bgColor: "bg-success/10",
+    borderColor: "border-success/60",
   },
   streak: {
     icon: Flame,
-    gradient: "from-orange-400 to-red-500",
-    bgColor: "bg-orange-50",
-    borderColor: "border-orange-400",
+    gradient: "bg-warning text-warning-foreground",
+    bgColor: "bg-warning/15",
+    borderColor: "border-warning/60",
   },
   overachiever: {
     icon: Rocket,
-    gradient: "from-purple-400 to-pink-500",
-    bgColor: "bg-purple-50",
-    borderColor: "border-purple-400",
+    gradient: "bg-insights text-insights-foreground",
+    bgColor: "bg-insights/10",
+    borderColor: "border-insights/60",
   },
   top_seller: {
     icon: Crown,
-    gradient: "from-yellow-400 to-orange-500",
-    bgColor: "bg-yellow-50",
-    borderColor: "border-yellow-500",
+    gradient: "bg-tinta text-primary",
+    bgColor: "bg-primary-soft",
+    borderColor: "border-primary/60",
   },
   rising_star: {
     icon: TrendingUp,
-    gradient: "from-blue-400 to-indigo-500",
-    bgColor: "bg-blue-50",
-    borderColor: "border-blue-400",
+    gradient: "bg-insights text-insights-foreground",
+    bgColor: "bg-insights/10",
+    borderColor: "border-insights/60",
   },
   goal_crusher: {
     icon: Target,
-    gradient: "from-red-400 to-pink-500",
-    bgColor: "bg-red-50",
-    borderColor: "border-red-400",
+    gradient: "bg-destructive text-destructive-foreground",
+    bgColor: "bg-destructive/10",
+    borderColor: "border-destructive/60",
   },
 };
 
@@ -122,26 +129,26 @@ export function AchievementBadge({
       <div
         className={`relative ${sizeStyles[size]} rounded-full flex items-center justify-center border-2 ${
           earned 
-            ? `bg-gradient-to-br ${config.gradient} ${config.borderColor} shadow-lg` 
-            : "bg-muted border-muted-foreground/30"
+            ? `${config.gradient} ${config.borderColor} shadow-relevo` 
+            : "bg-muted border-border text-muted-foreground/50"
         }`}
       >
         <Icon 
-          className={`${iconSizes[size]} ${earned ? "text-white" : "text-muted-foreground/50"}`} 
+          className={iconSizes[size]} 
         />
         {earned && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 0.3, delay: 0.2 }}
-            className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full flex items-center justify-center"
+            className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full flex items-center justify-center ring-2 ring-card"
           >
-            <Zap className="w-2.5 h-2.5 text-white" />
+            <Zap className="w-2.5 h-2.5 text-success-foreground" />
           </motion.div>
         )}
       </div>
       <div className="text-center">
-        <p className={`text-xs font-semibold ${earned ? "text-foreground" : "text-muted-foreground"}`}>
+        <p className={`text-xs font-bold tracking-[-0.01em] ${earned ? "text-foreground" : "text-muted-foreground"}`}>
           {title}
         </p>
         {description && (

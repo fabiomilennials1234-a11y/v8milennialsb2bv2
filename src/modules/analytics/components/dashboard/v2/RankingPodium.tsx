@@ -112,41 +112,43 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
   const rest = ranked.slice(3);
 
   if (isLoading) {
-    return <Skeleton className="h-[360px] rounded-2xl" />;
+    return <Skeleton className="h-full min-h-[240px] rounded-2xl" />;
   }
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".1s" }}>
-      <div className="mb-[18px] flex items-center justify-between">
-        <span className="cmd-lbl">Ranking do mês</span>
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-[2px] rounded-[9px] border border-border bg-background p-[3px]">
-            {(["vendas", "reunioes"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  "rounded-md px-3.5 py-[5px] text-[11.5px] font-bold transition-all",
-                  mode === m
-                    ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_hsl(47_70%_40%/.5)]"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {m === "vendas" ? "Vendas" : "Reuniões"}
-              </button>
-            ))}
-          </div>
-          <span className="rounded-full bg-primary/15 px-[9px] py-[3px] text-[10.5px] font-extrabold text-primary tabular-nums">
-            {totalLabel}
-          </span>
+    // Corpo da janela "Pódio de vendedores" — o título mora na moldura.
+    <div className="flex h-full flex-col">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        {/* Alternador claro dentro do bloco (segmented do V5), com a mesma
+            semântica de botão pressionado de antes. */}
+        <div className="inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]" role="group" aria-label="Ranking por">
+          {(["vendas", "reunioes"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              aria-pressed={mode === m}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                mode === m
+                  ? "bg-card text-foreground shadow-relevo"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m === "vendas" ? "Vendas" : "Reuniões"}
+            </button>
+          ))}
         </div>
+        <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
+          {totalLabel}
+        </span>
       </div>
 
       {unassignedSales > 0 && (
-        <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[hsl(36_80%_45%/.4)] bg-[hsl(36_80%_50%/.08)] px-3 py-2 text-[11.5px] text-muted-foreground">
-          <b className="font-extrabold text-[hsl(36_85%_60%)]">{formatK(unassignedSales)} em vendas sem vendedor atribuído</b>
-          <span>— atribua o vendedor nos cards do funil de fechamento pra contar no ranking.</span>
+        <div className="mb-3 rounded-2xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
+          <b className="font-bold text-warning-strong">{formatK(unassignedSales)} em vendas sem vendedor atribuído</b>
+          <span> — atribua o vendedor nos cards do funil de fechamento pra contar no ranking.</span>
         </div>
       )}
       {ranked.length === 0 ? (
@@ -155,45 +157,46 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-[1fr_1.25fr_1fr] items-end gap-3.5">
+          <div className="grid grid-cols-[1fr_1.25fr_1fr] items-end gap-3">
             {podium.map((p) => {
               const first = p.position === 1;
               return (
                 <div
                   key={`${mode}-${p.id}`}
                   className={cn(
-                    "cmd-rise rounded-2xl border bg-card p-[18px] text-center",
-                    first
-                      ? "border-[hsl(47_70%_40%/.5)] p-6 [background:linear-gradient(180deg,hsl(47_60%_16%/.5),hsl(var(--card))_55%)]"
-                      : "border-border",
+                    "cmd-rise min-w-0 rounded-2xl p-4 text-center",
+                    first ? "bg-primary-soft p-5 ring-1 ring-primary/40" : "bg-sunken",
                   )}
                 >
-                  <span className={cn("cmd-mono text-[11px] font-extrabold tracking-[.15em]", first ? "text-primary" : "text-muted-foreground/60")}>
-                    {first ? "P1 — LÍDER" : `P${p.position}`}
+                  <span className={cn(
+                    "text-[11px] font-bold uppercase tracking-[.08em]",
+                    first ? "text-primary-soft-foreground" : "text-muted-foreground",
+                  )}>
+                    {first ? "P1 — Líder" : `P${p.position}`}
                   </span>
                   <div
                     className={cn(
                       "mx-auto mb-2 mt-2.5 flex items-center justify-center rounded-2xl font-extrabold text-background",
                       first
-                        ? "h-16 w-16 text-[21px] shadow-[0_0_0_3px_hsl(var(--background)),0_0_0_5px_hsl(var(--primary)),0_8px_28px_hsl(var(--primary)/.3)]"
+                        ? "h-16 w-16 text-[21px] ring-2 ring-primary ring-offset-2 ring-offset-primary-soft"
                         : "h-[52px] w-[52px] text-[17px]",
                     )}
                     style={{ background: AV_COLORS[p.colorIdx] }}
                   >
                     {initials(p.name)}
                   </div>
-                  <div className="text-[13.5px] font-bold">{p.name}</div>
-                  <div className={cn("mt-1 font-black tracking-[-0.03em] tabular-nums", first ? "text-[27px]" : "text-[22px]")}>
+                  <div className="truncate text-[13px] font-bold">{p.name}</div>
+                  <div className={cn("mt-1 truncate font-extrabold tracking-[-0.04em] tabular-nums", first ? "text-[26px]" : "text-[21px]")}>
                     {p.valueLabel}
                   </div>
-                  <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground/60">{p.subLabel}</div>
-                  <div className="mt-3 h-[5px] overflow-hidden rounded-full bg-background">
+                  <div className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">{p.subLabel}</div>
+                  <div className="mt-3 h-[5px] overflow-hidden rounded-full bg-foreground/10">
                     <i
                       className="block h-full rounded-full"
                       style={{ width: `${Math.min(p.goalProgress, 100)}%`, background: BAR_COLORS[p.colorIdx] }}
                     />
                   </div>
-                  <div className={cn("mt-[5px] text-[10.5px] font-bold", first ? "text-primary" : "text-muted-foreground")}>
+                  <div className={cn("mt-[5px] text-[11px] font-bold tabular-nums", first ? "text-primary-soft-foreground" : "text-muted-foreground")}>
                     {p.goalProgress}% da meta
                   </div>
                 </div>
@@ -202,17 +205,17 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
           </div>
 
           {rest.length > 0 && (
-            <table className="mt-1 w-full border-collapse">
+            <table className="mt-2 w-full border-collapse">
               <tbody>
                 {rest.map((r) => (
                   <tr key={`${mode}-${r.id}`}>
-                    <td className="cmd-mono w-[30px] border-t border-border/70 py-[9px] pr-2 text-[11px] font-extrabold text-muted-foreground/60">
+                    <td className="w-[34px] border-t border-border/60 py-2.5 pr-2 text-[11px] font-bold tabular-nums text-muted-foreground">
                       P{r.position}
                     </td>
-                    <td className="border-t border-border/70 py-[9px]">
-                      <span className="flex items-center gap-[9px] text-[12.5px] font-semibold">
+                    <td className="border-t border-border/60 py-2.5">
+                      <span className="flex items-center gap-[9px] text-[13px] font-semibold">
                         <span
-                          className="flex h-[26px] w-[26px] items-center justify-center rounded-lg text-[10px] font-extrabold text-background"
+                          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-[10px] font-extrabold text-background"
                           style={{ background: AV_COLORS[r.colorIdx] }}
                         >
                           {initials(r.name)}
@@ -220,9 +223,9 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                         {r.name}
                       </span>
                     </td>
-                    <td className="border-t border-border/70 py-[9px] text-right text-[12.5px] font-bold tabular-nums">{r.valueLabel}</td>
-                    <td className="border-t border-border/70 py-[9px] text-right text-[11px] text-muted-foreground/60">{r.subLabel}</td>
-                    <td className="border-t border-border/70 py-[9px] text-right text-[11px] text-muted-foreground/60">{r.goalProgress}% da meta</td>
+                    <td className="border-t border-border/60 py-2.5 text-right text-[13px] font-bold tabular-nums">{r.valueLabel}</td>
+                    <td className="border-t border-border/60 py-2.5 text-right text-[11px] text-muted-foreground">{r.subLabel}</td>
+                    <td className="border-t border-border/60 py-2.5 text-right text-[11px] tabular-nums text-muted-foreground">{r.goalProgress}% da meta</td>
                   </tr>
                 ))}
               </tbody>

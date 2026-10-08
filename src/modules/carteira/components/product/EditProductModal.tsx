@@ -231,7 +231,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto sm:rounded-lg">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Produto</DialogTitle>
         </DialogHeader>
@@ -307,7 +307,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
           </div>
 
           {/* Variants toggle */}
-          <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+          <div className="flex items-center gap-2 rounded-xl bg-sunken p-3">
             <Switch
               id="has_variants"
               checked={formData.has_variants}
@@ -353,7 +353,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
 
           {/* Variants section */}
           {formData.has_variants && (
-            <div className="space-y-3 border rounded-lg p-4">
+            <div className="space-y-3 rounded-xl border border-border/70 p-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm">
                   Variações <Badge variant="secondary">{variants.length}</Badge>
@@ -370,7 +370,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
               )}
 
               {variants.map((variant, index) => (
-                <div key={variant.id || `new-${index}`} className="border rounded-md p-3 space-y-3 bg-background">
+                <div key={variant.id || `new-${index}`} className="space-y-3 rounded-xl bg-sunken p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <GripVertical className="h-4 w-4 text-muted-foreground" />

@@ -168,7 +168,7 @@ describe("Hub de funis — renomear e excluir no cartão", () => {
     await usuario.click(await screen.findByTestId("funnel-actions-renomear"));
 
     // O campo nasce com o nome canônico escolhido pelo usuário.
-    const campo = (await screen.findByLabelText("Nome do Funil")) as HTMLInputElement;
+    const campo = (await screen.findByLabelText("Nome do funil")) as HTMLInputElement;
     expect(campo.value).toBe("Oportunidades");
     expect(screen.getByText(/renomear funil/i)).toBeTruthy();
   });
@@ -180,7 +180,7 @@ describe("Hub de funis — renomear e excluir no cartão", () => {
     await abrirMenuDe(usuario, "Pós-venda");
     await usuario.click(await screen.findByTestId("funnel-actions-excluir"));
 
-    expect(await screen.findByText(/Excluir Funil "Pós-venda"\?/)).toBeTruthy();
+    expect(await screen.findByText(/Excluir funil "Pós-venda"\?/)).toBeTruthy();
     expect(screen.getByText(/3 etapa\(s\)/)).toBeTruthy();
   });
 

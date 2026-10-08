@@ -1,0 +1,122 @@
+{
+  "observed_at_utc": "2026-09-24T15:41:55Z",
+  "measurement": "Supabase function_edge_logs; non-OPTIONS HTTP invocations; observational proxy, not billing ledger",
+  "window_utc": {
+    "start": "2026-09-23T15:30:00Z",
+    "end": "2026-09-24T15:30:00Z"
+  },
+  "organization": {
+    "id": "rovcfbcyfmmrxadzovvf",
+    "plan": "pro"
+  },
+  "organization_usage_ui": {
+    "observed_at_utc_approx": "2026-09-24T15:55:00Z",
+    "filter": "all_projects",
+    "billing_cycle_start_date": "2026-09-24",
+    "billing_cycle_end_date_displayed": "2026-09-27",
+    "refresh_lag_up_to_hours": 1,
+    "pro_quota_exceeded_message": false,
+    "edge_function_invocations": {
+      "used": 36406,
+      "included": 2000000,
+      "overage": 0
+    },
+    "storage_size_gb": {
+      "displayed": 45.141,
+      "included": 100,
+      "overage": 0
+    },
+    "egress_gb": {
+      "displayed": 1.501,
+      "included": 250,
+      "overage": 0
+    },
+    "realtime_messages": {
+      "used": 44457,
+      "included": 5000000,
+      "overage": 0
+    },
+    "disk": {
+      "included_gb_per_project": 8,
+      "crm_provisioned_gb": 18,
+      "wallet_provisioned_gb": 18,
+      "overage_gp3_gb_hours_displayed": 0
+    },
+    "compute": {
+      "micro_hours": 11,
+      "micro_usd_displayed": 0.15,
+      "small_hours": 11,
+      "small_usd_displayed": 0.23,
+      "plan_compute_credit_usd": 10
+    },
+    "interpretation": "Partial, hourly-lagged billing cycle. Do not extrapolate this cycle reading to 31 days. Other billable dimensions remain independent of the internal 1.4M Edge target."
+  },
+  "projects": [
+    {
+      "id": "jsjsmuncfkbsbzqzqhfq",
+      "name": "Torque CRM | PRODUÇÃO",
+      "non_options_requests": 85423,
+      "http_5xx": 1695,
+      "whatsapp_webhook_requests": 53857,
+      "messages_update_route_requests": 25950
+    },
+    {
+      "id": "socqwvcmbopiwmvterdf",
+      "name": "torque-wallet-motor100",
+      "non_options_requests": 0,
+      "deployed_edge_functions": 0
+    }
+  ],
+  "historical_seven_days": {
+    "window_utc": [
+      "2026-09-16T22:00:00Z",
+      "2026-09-23T22:00:00Z"
+    ],
+    "crm_non_options_requests": 584535,
+    "crm_messages_update_route_requests": 144166,
+    "wallet_non_options_requests": 0,
+    "sources": [
+      "supabase-capacity-edge-history-2026-09-23.json",
+      "supabase-capacity-webhook-routes-2026-09-23.json",
+      "supabase-capacity-wallet-history-2026-09-23.json"
+    ]
+  },
+  "pilot": {
+    "instance": "TorqueSDR",
+    "successful_updates_in_runtime_logs_fixed_24h": 538,
+    "source": "supabase-capacity-ingress-runtime-2026-09-24.md",
+    "warning": "Runtime success count is not billed invocations or a complete provider callback count."
+  },
+  "projection_31_days_if_rate_constant": {
+    "latest_24h_no_new_change": 2648113,
+    "latest_24h_after_hypothetical_pilot_only": 2631435,
+    "latest_24h_after_hypothetical_all_update_routes_removed": 1843663,
+    "historical_7d_no_new_change": 2588655,
+    "historical_7d_after_hypothetical_all_update_routes_removed": 1950206
+  },
+  "future_candidate_not_implemented": {
+    "route": "whatsapp-webhook/messages",
+    "historical_seven_days_requests": 171723,
+    "historical_rate_31_day_projection_rounded": 760488,
+    "latest_24h_all_non_update_webhook_routes_upper_bound": 27907,
+    "latest_24h_upper_bound_31_day_projection": 865117,
+    "gap_after_hypothetical_all_updates_removed_31_days": 443663,
+    "historical_messages_coverage_required_for_gap_fraction_approx": 0.5834,
+    "source": "supabase-capacity-webhook-routes-2026-09-23.json",
+    "warning": "Planning coverage only. Current Edge-to-inbox bridge still counts as Edge invocation; direct-route behavior and per-instance volume remain unverified."
+  },
+  "limits": {
+    "internal_target_per_month": 1400000,
+    "published_pro_included_per_billing_cycle": 2000000,
+    "billing_readback_available": true
+  },
+  "activation_update": {
+    "at_utc": "2026-09-24T16:04:00Z",
+    "scope": "TorqueSDR messages_update via existing Edge URL",
+    "edge_to_inbox_active": true,
+    "direct_provider_to_vps_active": false,
+    "realized_invocation_savings": 0,
+    "gate_revision": 2,
+    "worker_revision": 2
+  }
+}

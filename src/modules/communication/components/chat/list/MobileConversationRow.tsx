@@ -1,14 +1,28 @@
 /**
- * MobileConversationRow — WhatsApp-style conversation list item for mobile.
+ * MobileConversationRow — linha da lista de conversas no celular.
  *
  * Pure presentational: no state, no dropdown menus, no complex interactions.
  * Just avatar + text + badges + tap handler.
+ *
+ * V5: mesmo vocabulário da linha do desktop (mockup) — três andares
+ * (nome · IA · hora / prévia · contador / caixa · pediu atendente), avatar no
+ * gradiente do contato e a selecionada em ouro. O celular segue lista →
+ * conversa; só a linha muda de forma.
  */
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Bot } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { contactKey, isWhatsAppContact, type InboxContact } from "@/modules/communication/hooks/chat/types";
+import {
+  contactAvatarSeed,
+  contactKey,
+  isWhatsAppContact,
+  type InboxContact,
+} from "@/modules/communication/hooks/chat/types";
+import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 import { ChannelBadge } from "../ChannelBadge";
+import { instanceColor } from "../bubble/utils/instanceColor";
+import { getAvatarGradient } from "./avatarGradient";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -21,6 +35,10 @@ export interface MobileConversationRowProps {
   onLongPress?: (key: string) => void;
   stageName?: string | null;
   stageColor?: string | null;
+  /** Fila de handoff (`waiting-human-leads`) — a mesma do desktop. */
+  waitingHumanLeadIds?: Set<string>;
+  /** A caixa de onde a conversa corre; ausente com uma caixa só. */
+  caixa?: CaixaDaLinha;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -32,9 +50,13 @@ export function MobileConversationRow({
   onLongPress,
   stageName,
   stageColor,
+  waitingHumanLeadIds,
+  caixa,
 }: MobileConversationRowProps) {
-  const name = contactDisplayName(contact);
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  const name = contactDisplayName(contact, nomeDoLeadPrimeiro);
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
+  const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
   const hasUnread = contact.unread_count > 0 && !isSelected;
   const key = contactKey(contact);
   // Predicado, nao comparacao inline: alem do default de canal ausente, ele
@@ -53,19 +75,29 @@ export function MobileConversationRow({
     contact.last_message_direction === "outgoing" &&
     contact.last_message_sent_source === "workflow";
 
+  // Selo "IA" = a ÚLTIMA mensagem saiu do Copilot (mesma regra do desktop).
+  // Não é estado da IA na conversa — esse ficou fora da linha (decisão D5).
+  const ultimaDaIa =
+    isWhatsApp &&
+    contact.last_message_direction === "outgoing" &&
+    contact.last_message_sent_source === "copilot";
+
+  const pediuAtendente =
+    !!contact.lead_id && (waitingHumanLeadIds?.has(contact.lead_id) ?? false);
+  const temMeta = !!caixa || pediuAtendente;
+
   return (
     <div
       role="button"
       tabIndex={0}
       aria-label={`Conversa com ${name}`}
       aria-pressed={isSelected}
+      data-selected={isSelected}
       className={cn(
-        "flex items-center gap-3 px-4 h-14 cursor-pointer select-none transition-colors",
+        "group/linha mx-2 flex cursor-pointer select-none items-start gap-3 rounded-2xl px-2.5 py-2.5 transition-colors",
         isSelected
-          ? "bg-primary/15"
-          : hasUnread
-            ? "bg-amber-950/20"
-            : "active:bg-muted/60",
+          ? "bg-primary text-primary-foreground shadow-brilho-ouro"
+          : "active:bg-muted/60",
       )}
       onClick={() => onPress(key)}
       onContextMenu={(e) => {
@@ -83,46 +115,66 @@ export function MobileConversationRow({
     >
       {/* Avatar */}
       <div className="relative shrink-0">
-        <Avatar className="w-10 h-10">
-          {!isWhatsApp && contact.avatar_url && (
-            <AvatarImage src={contact.avatar_url} alt="" />
-          )}
-          <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+        {!isWhatsApp && contact.avatar_url ? (
+          <img src={contact.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover" />
+        ) : (
+          <div
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold",
+              avatarGradient.ink ? "text-tinta" : "text-tinta-foreground",
+            )}
+            style={{ background: avatarGradient.background }}
+            aria-hidden
+          >
             {initials}
-          </AvatarFallback>
-        </Avatar>
-        {/* Só aparece quando há mais de um canal em jogo seria melhor, mas a
-            linha do mobile não sabe o contexto — o selo é barato e nunca mente. */}
-        {!isWhatsApp && <ChannelBadge channel={contact.channel} size={14} overlay />}
+          </div>
+        )}
+        <ChannelBadge channel={contact.channel} size={16} overlay />
       </div>
 
-      {/* Center content */}
-      <div className="flex-1 min-w-0">
-        {/* Top row: name + timestamp */}
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-sm text-foreground truncate">
+      <div className="min-w-0 flex-1">
+        {/* Andar 1 — nome · IA · hora */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={cn("min-w-0 truncate text-sm", hasUnread ? "font-extrabold" : "font-bold")}>
             {name}
           </span>
+          {ultimaDaIa && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-primary/15 px-1 py-px text-[10px] font-bold leading-none text-primary-soft-foreground group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground"
+              title="A última mensagem foi do Copilot"
+            >
+              <Bot className="h-2.5 w-2.5" aria-hidden />
+              IA
+            </span>
+          )}
           <time
             dateTime={contact.last_message_time || ""}
             className={cn(
-              "text-xs whitespace-nowrap shrink-0 tabular-nums",
-              hasUnread ? "text-amber-500 font-medium" : "text-muted-foreground",
+              "ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums",
+              hasUnread
+                ? "font-bold text-primary-soft-foreground"
+                : "font-semibold text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70",
             )}
           >
             {formatContactTime(contact.last_message_time)}
           </time>
         </div>
 
-        {/* Bottom row: preview + badges */}
-        <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className="text-xs text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
+        {/* Andar 2 — prévia · etapa · contador */}
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <p
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1 truncate text-[12.5px]",
+              hasUnread
+                ? "font-semibold text-foreground/85"
+                : "text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/75",
+            )}
+          >
             {isOutgoingWorkflow && (
-              <span className="text-purple-400 shrink-0 text-[10px]">Auto:</span>
+              <span className="shrink-0 text-[10px] font-semibold text-bubble-workflow-foreground">Auto:</span>
             )}
-            {isOutgoingManual && (
-              <span className="text-foreground/50 shrink-0">Você:</span>
-            )}
+            {ultimaDaIa && <span className="shrink-0 opacity-70">IA:</span>}
+            {isOutgoingManual && <span className="shrink-0 opacity-70">Você:</span>}
             <span className="truncate min-w-0">
               {contact.last_message || "Sem mensagens"}
             </span>
@@ -144,12 +196,37 @@ export function MobileConversationRow({
 
             {/* Unread badge */}
             {hasUnread && (
-              <Badge className="h-5 min-w-5 px-1.5 text-xs bg-amber-500 text-white border-0 hover:bg-amber-500">
+              <Badge className="h-5 min-w-5 border-0 bg-primary px-1.5 text-[10.5px] font-extrabold tabular-nums text-primary-foreground hover:bg-primary">
                 {contact.unread_count > 99 ? "99+" : contact.unread_count}
               </Badge>
             )}
           </div>
         </div>
+
+        {/* Andar 3 — caixa · pediu atendente. Some quando não há o que dizer. */}
+        {temMeta && (
+          <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
+            {caixa && (
+              <span className="flex min-w-0 shrink items-center gap-1" title={`Caixa: ${caixa.nome}`}>
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: instanceColor(caixa.id) }}
+                  aria-hidden
+                />
+                <span className="truncate">{caixa.nome}</span>
+              </span>
+            )}
+            {pediuAtendente && (
+              <span className="flex shrink-0 items-center gap-1 font-semibold text-destructive group-data-[selected=true]/linha:text-primary-foreground">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive group-data-[selected=true]/linha:bg-primary-foreground"
+                  aria-hidden
+                />
+                Pediu atendente
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

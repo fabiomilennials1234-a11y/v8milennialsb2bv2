@@ -60,6 +60,12 @@ export function kickerDoPasso(id: DisparoStepId): string {
   return `Passo ${i + 1} de ${DISPARO_STEPS.length}`;
 }
 
+/** O rótulo acima do título do passo: "Passo 1 de 6 · Pra quem". */
+export function eyebrowDoPasso(id: DisparoStepId): string {
+  const step = DISPARO_STEPS.find((s) => s.id === id);
+  return step ? `${kickerDoPasso(id)} · ${step.label}` : kickerDoPasso(id);
+}
+
 /**
  * O número do Disparo e o regime que ele impõe ao conteúdo vivem no módulo
  * ÚNICO (`@/shared/disparo/disparo-numbers`), porque o Disparo Rápido consulta o mesmo

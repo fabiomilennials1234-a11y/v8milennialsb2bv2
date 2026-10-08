@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, AlertTriangle, QrCode } from "lucide-react";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useCreateWhatsAppInstance,
@@ -27,6 +26,7 @@ import {
   useDeleteWhatsAppInstance,
 } from "@/modules/communication/hooks/useWhatsAppInstances";
 import { useSetMigrationStatus } from "@/modules/communication/hooks/useOrgWhatsAppMigration";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 interface Props {
   open: boolean;
@@ -35,6 +35,8 @@ interface Props {
 }
 
 type WizardStep = "intro" | "provisioning" | "pairing" | "done" | "error";
+
+const MIGRATION_FAILED = "Não foi possível concluir a migração.";
 
 export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
   const [step, setStep] = useState<WizardStep>("intro");
@@ -136,8 +138,7 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
       setQrCode(qrResp.instance.qr_code ?? null);
       setStep("pairing");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErrorMsg(msg);
+      setErrorMsg(userMessageOf(e, MIGRATION_FAILED));
       setStep("error");
       try {
         await setMigration.mutateAsync({
@@ -147,7 +148,7 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
       } catch {
         /* silent */
       }
-      toast.error(`Erro na migração: ${msg}`);
+      notifyError(e, { fallback: MIGRATION_FAILED });
     }
   };
 
@@ -229,7 +230,7 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
 
           {step === "done" && (
             <div className="flex flex-col items-center gap-3 py-6">
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
+              <CheckCircle2 className="h-12 w-12 text-success" />
               <p className="text-sm">Migração concluída com sucesso!</p>
             </div>
           )}

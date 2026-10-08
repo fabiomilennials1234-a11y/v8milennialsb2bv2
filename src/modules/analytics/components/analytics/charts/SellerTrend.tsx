@@ -48,7 +48,7 @@ export function SellerTrend({ members }: Props) {
           let color = "bg-success";
           let textColor = "text-success";
           if (pctVal < -10) { color = "bg-destructive"; textColor = "text-destructive"; }
-          else if (pctVal < 0) { color = "bg-orange-500"; textColor = "text-orange-500"; }
+          else if (pctVal < 0) { color = "bg-warning"; textColor = "text-warning-strong"; }
 
           return (
             <div key={m.member_id} className="flex items-center gap-3">

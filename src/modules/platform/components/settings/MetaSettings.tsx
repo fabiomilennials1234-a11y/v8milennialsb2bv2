@@ -45,6 +45,7 @@ import {
 } from "@/modules/communication/hooks/useMetaConnection";
 import { MetaLeadgenConfig } from "./MetaLeadgenConfig";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -143,11 +144,7 @@ function ConnectionSection({
               connectMeta.mutate(type, {
                 onError: (err) => {
                   console.error(`[MetaSettings] Erro ao conectar ${type}:`, err);
-                  toast.error(
-                    err instanceof Error
-                      ? err.message
-                      : "Erro ao iniciar conexao Meta"
-                  );
+                  notifyError(err, { fallback: "Não foi possível iniciar conexão Meta." });
                 },
               });
             }}
@@ -180,7 +177,7 @@ function ConnectionSection({
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   {isConnected ? (
-                    <Badge className="bg-success/20 text-success border-success/30 gap-1">
+                    <Badge className="bg-success/20 text-success-strong border-success/30 gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Conectado
                     </Badge>
@@ -253,7 +250,7 @@ function ConnectionSection({
                   <AlertDialogHeader>
                     <AlertDialogTitle>{disconnectLabel}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Voce nao recebera mais mensagens desse canal ate
+                      Você não receberá mais mensagens desse canal até
                       reconectar.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -265,7 +262,7 @@ function ConnectionSection({
                           disconnectMeta.mutate(connection.id, {
                             onSuccess: () =>
                               toast.success("Desconectado com sucesso!"),
-                            onError: () => toast.error("Erro ao desconectar"),
+                            onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível desconectar." }),
                           });
                         }
                       }}
@@ -293,15 +290,15 @@ function ConnectionSection({
 
           {/* Empty Pages Warning */}
           {isConnected && pages.length === 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-medium text-amber-800">
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+              <p className="text-sm font-medium text-warning-strong">
                 {type === "instagram"
                   ? "Nenhuma conta Instagram vinculada"
-                  : "Nenhuma pagina vinculada"}
+                  : "Nenhuma página vinculada"}
               </p>
-              <p className="text-sm text-amber-700 mt-1">
-                Durante a conexao, nenhuma pagina foi selecionada ou voce nao tem
-                acesso de administrador a nenhuma pagina.
+              <p className="text-sm text-warning-strong mt-1">
+                Durante a conexão, nenhuma página foi selecionada ou você não tem
+                acesso de administrador a nenhuma página.
               </p>
               <Button
                 variant="outline"

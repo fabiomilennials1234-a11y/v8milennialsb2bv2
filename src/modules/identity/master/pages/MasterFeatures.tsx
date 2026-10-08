@@ -7,7 +7,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import {
-  Flag,
   Plus,
   Edit,
   Trash2,
@@ -15,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -43,6 +42,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { MasterPageHeader } from "../components/MasterPageHeader";
+import { notifyError } from "@/shared/errors";
 
 interface FeatureFlag {
   id: string;
@@ -94,8 +95,8 @@ export default function MasterFeatures() {
       setCreateOpen(false);
       resetForm();
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível criar a feature." });
     },
   });
 
@@ -112,8 +113,8 @@ export default function MasterFeatures() {
       toast.success("Feature atualizada!");
       setEditOpen(false);
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível atualizar a feature." });
     },
   });
 
@@ -126,8 +127,8 @@ export default function MasterFeatures() {
       queryClient.invalidateQueries({ queryKey: ["master-features"] });
       toast.success("Feature excluída!");
     },
-    onError: (error: any) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      notifyError(error, { fallback: "Não foi possível excluir a feature." });
     },
   });
 
@@ -160,39 +161,30 @@ export default function MasterFeatures() {
   );
 
   const getCategoryBadge = (category: string) => {
-    const colors: Record<string, string> = {
-      ai: "bg-purple-500",
-      integrations: "bg-blue-500",
-      analytics: "bg-green-500",
-      sales: "bg-orange-500",
-      engagement: "bg-pink-500",
-      branding: "bg-yellow-500",
+    // Paleta categórica em tons do V5 (não é status): só distingue a categoria.
+    const tones: Record<string, BadgeProps["variant"]> = {
+      ai: "gold",
+      integrations: "info",
+      analytics: "success",
+      sales: "warning",
+      engagement: "ink",
+      branding: "outline",
     };
-    return (
-      <Badge className={colors[category] || "bg-muted text-muted-foreground"}>
-        {category}
-      </Badge>
-    );
+    return <Badge variant={tones[category] ?? "soft"}>{category}</Badge>;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Flag className="w-6 h-6" />
-            Feature Flags
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie as features disponíveis no sistema
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Feature
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title="Feature flags"
+        subtitle="Gerencie as features disponíveis no sistema"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Nova feature
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -205,60 +197,61 @@ export default function MasterFeatures() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão: dentro
+          dela, no celular, o texto seguia a largura das colunas e ia parar na
+          borda. Key e categoria sobem para baixo do nome quando a coluna some;
+          planos só a partir de lg. */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filteredFeatures?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma feature encontrada</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Feature</TableHead>
-                <TableHead>Key</TableHead>
-                <TableHead>Categoria</TableHead>
+                <TableHead className="max-md:hidden">Key</TableHead>
+                <TableHead className="max-sm:hidden">Categoria</TableHead>
                 <TableHead>Padrão</TableHead>
-                <TableHead>Planos</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-lg:hidden">Planos</TableHead>
+                <TableHead className="w-[100px]">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filteredFeatures?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhuma feature encontrada
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredFeatures?.map((feature) => (
+              {filteredFeatures.map((feature) => (
                   <TableRow key={feature.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{feature.name}</p>
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{feature.name}</p>
                         {feature.description && (
                           <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                             {feature.description}
                           </p>
                         )}
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 md:hidden">
+                          <code className="truncate rounded bg-muted px-1 py-0.5 text-xs">{feature.key}</code>
+                          <div className="sm:hidden">{getCategoryBadge(feature.category)}</div>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <code className="text-sm bg-muted px-1 py-0.5 rounded">
                         {feature.key}
                       </code>
                     </TableCell>
-                    <TableCell>{getCategoryBadge(feature.category)}</TableCell>
+                    <TableCell className="max-sm:hidden">{getCategoryBadge(feature.category)}</TableCell>
                     <TableCell>
                       {feature.default_enabled ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
+                        <Badge variant="success">Ativo</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-lg:hidden">
                       <div className="flex flex-wrap gap-1">
                         {feature.requires_plan?.map((plan) => (
                           <Badge key={plan} variant="outline" className="text-xs">
@@ -272,6 +265,7 @@ export default function MasterFeatures() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Editar ${feature.name}`}
                           onClick={() => handleEdit(feature)}
                         >
                           <Edit className="w-4 h-4" />
@@ -280,6 +274,7 @@ export default function MasterFeatures() {
                           variant="ghost"
                           size="icon"
                           className="text-destructive"
+                          aria-label={`Excluir ${feature.name}`}
                           onClick={() => {
                             if (confirm("Excluir esta feature?")) {
                               deleteFeature.mutate(feature.id);
@@ -291,10 +286,10 @@ export default function MasterFeatures() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -302,7 +297,7 @@ export default function MasterFeatures() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Feature Flag</DialogTitle>
+            <DialogTitle>Nova feature flag</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -323,7 +318,7 @@ export default function MasterFeatures() {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome da Feature"
+                placeholder="Nome da feature"
               />
             </div>
             <div className="space-y-2">
@@ -384,7 +379,7 @@ export default function MasterFeatures() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Feature - {selectedFeature?.name}</DialogTitle>
+            <DialogTitle>Editar feature - {selectedFeature?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

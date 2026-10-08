@@ -86,5 +86,22 @@ export function useBillingAccount(
       return result.data;
     },
   });
-  return { account, history, quotas };
+  // Catálogo de planos ativos, só para COMPARAR (decisão de 02/10): nenhuma
+  // ação de troca sai daqui — o checkout não existe. Mesma leitura que o
+  // OrgFeaturesContext já faz na tabela `subscription_plans`.
+  const plans = useQuery({
+    queryKey: ["billing-plan-catalog"],
+    enabled: ready,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("id, name, display_name, description, price_monthly, included_users, included_copilots, position")
+        .eq("is_active", true)
+        .order("position");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+  return { account, history, quotas, plans };
 }

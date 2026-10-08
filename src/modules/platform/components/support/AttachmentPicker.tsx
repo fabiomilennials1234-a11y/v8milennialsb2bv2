@@ -145,7 +145,7 @@ export function AttachmentPicker({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-amber-500" aria-hidden />
+              <ShieldAlert className="h-4 w-4 text-warning-strong" aria-hidden />
               Esse arquivo mostra dados dos seus clientes?
             </AlertDialogTitle>
             <AlertDialogDescription>

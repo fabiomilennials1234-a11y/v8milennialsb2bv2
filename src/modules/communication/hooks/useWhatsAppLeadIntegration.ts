@@ -143,6 +143,34 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
   });
 }
 
+const LEAD_PHONE_UNIQUE_INDEX = "idx_leads_org_phone_unique";
+
+export const LEAD_PHONE_OWNED_BY_OTHER_MESSAGE =
+  "Este telefone já está cadastrado como lead de outro responsável da equipe. Peça a ele ou a um gestor para atribuir ou liberar o lead.";
+
+/** 23505 especificamente do índice (organização, telefone normalizado) de `leads`. */
+function isLeadPhoneUniqueViolation(error: { code?: string; message?: string }): boolean {
+  return error.code === "23505" && (error.message ?? "").includes(LEAD_PHONE_UNIQUE_INDEX);
+}
+
+/**
+ * O telefone já é de um lead ativo da org que a RLS esconde de quem está criando
+ * (outro responsável, sem `leads.view_all`). Formato de erro do PostgREST de
+ * propósito: `toAppError` lê `code` 23505 (→ `record.duplicate`, não reportável)
+ * e usa `hint` como a frase da tela. A `details` do original (que traz o valor
+ * da linha) NÃO é copiada — nada do lead alheio vai para a mensagem.
+ */
+export class LeadPhoneOwnedByOtherError extends Error {
+  readonly code = "23505";
+  readonly details = "";
+  readonly hint = LEAD_PHONE_OWNED_BY_OTHER_MESSAGE;
+
+  constructor(readonly original: unknown) {
+    super(`duplicate key value violates unique constraint "${LEAD_PHONE_UNIQUE_INDEX}"`);
+    this.name = "LeadPhoneOwnedByOtherError";
+  }
+}
+
 export type LeadDestination = "qualificacao" | "confirmacao" | "propostas" | "campanha" | "custom" | "none";
 
 /**
@@ -197,13 +225,21 @@ export function useCreateLeadFromWhatsApp() {
       const effectiveDestination = destination || "qualificacao";
 
       // 1. Verificar se já existe lead com esse telefone na mesma organização
-      const { data: existingLead } = await supabase
+      const { data: existingLead, error: lookupError } = await supabase
         .from("leads")
         .select("id, is_shadow")
         .eq("organization_id", teamMember.organization_id)
         .eq("normalized_phone", normalizedPhone)
         .limit(1)
         .maybeSingle();
+
+      // Falha de leitura ≠ "não existe". Seguir para o INSERT às cegas faria o
+      // 23505 de um lead que a RLS esconde parecer defeito nosso — e esconderia
+      // a causa real (timeout, 5xx, sessão). A falha sobe como ela é.
+      if (lookupError) {
+        console.error("[WhatsApp Lead] Erro ao verificar lead existente:", lookupError);
+        throw lookupError;
+      }
 
       if (existingLead && !existingLead.is_shadow) {
         // Lead real já existe — retornar sem criar
@@ -352,6 +388,7 @@ export function useCreateLeadFromWhatsApp() {
 
       if (leadError) {
         console.error("[WhatsApp Lead] Erro ao criar lead:", leadError);
+        if (isLeadPhoneUniqueViolation(leadError)) throw new LeadPhoneOwnedByOtherError(leadError);
         throw leadError;
       }
 

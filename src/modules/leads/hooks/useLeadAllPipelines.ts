@@ -15,6 +15,12 @@ export interface StandardPipelineStatus {
   /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
   pipelineDbId: string | null;
   pipeId: string | null;
+  /**
+   * `pipeline_entries.closed_at` do negócio desta linha. Negócio fechado
+   * (ganho/perdido) não impede abrir outro no mesmo funil — é a recompra.
+   * Ausente = trate como aberto (é o lado seguro: não oferece duplicata).
+   */
+  closedAt?: string | null;
   currentStage: string | null;
   currentStageLabel: string | null;
   stages: { id: string; label: string; color: string; role?: string | null }[];
@@ -27,6 +33,8 @@ export interface CustomPipelineStatus {
   pipelineColor: string;
   pipelineIcon: string;
   entryId: string | null;
+  /** Ver `StandardPipelineStatus.closedAt`. */
+  closedAt?: string | null;
   currentStageId: string | null;
   currentStageName: string | null;
   stages: { id: string; name: string; color: string; position: number; role?: string | null }[];
@@ -60,14 +68,7 @@ export function useLeadAllPipelines(leadId: string | null) {
     queryFn: async (): Promise<PipelineStatus[]> => {
       if (!leadId || !orgId) return [];
 
-      const [
-        { data: allEntries },
-        { data: dynamicStages },
-        { data: allPipelines },
-        { data: customStagesAll },
-        { data: pipeUpsell },
-        { data: displayConfigs },
-      ] = await Promise.all([
+      const responses = await Promise.all([
         // Ordem idêntica à de `readActivePipelineEntry`
         // (`pipelines/hooks/model/usePipelineEntries.ts`) e à de `readPipeEntries`
         // (`supabase/functions/_shared/pipeline-adapter.ts`): aberto antes de
@@ -97,13 +98,9 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
-        // Upsell still lives in its own table (no sync trigger yet)
-        supabase
-          .from("upsell")
-          .select("id, status")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
+        // Sem leitura de `upsell`: a tabela legada não existe em prod (404
+        // PGRST205 em toda chamada) e, com o throw estrito abaixo, derrubava
+        // os funis do lead inteiros (Chamados 6bdadd97 / f055fbd8).
         // O nome que a ORG usa (SCRUM-641): pipelines.name de funil de sistema
         // é o seed congelado; a canônica é pipeline_display_config.
         supabase
@@ -111,6 +108,19 @@ export function useLeadAllPipelines(leadId: string | null) {
           .select("pipe_type, display_name, is_visible, position")
           .eq("organization_id", orgId),
       ]);
+
+      // Falha de leitura não significa ausência de negócio: não oferecer uma
+      // nova abertura com base em uma lista incompleta (ex.: timeout/503).
+      for (const response of responses) {
+        if (response.error) throw response.error;
+      }
+      const [
+        { data: allEntries },
+        { data: dynamicStages },
+        { data: allPipelines },
+        { data: customStagesAll },
+        { data: displayConfigs },
+      ] = responses;
 
       const entries = allEntries ?? [];
       const pipelines = (allPipelines ?? []) as { id: string; slug: string; type: string; name: string; color: string; icon: string }[];
@@ -211,22 +221,25 @@ export function useLeadAllPipelines(leadId: string | null) {
           results.push({
             ...base,
             pipeId: entry.id || null,
+            closedAt: entry.closed_at ?? null,
             currentStage: entry.stage_key || null,
             currentStageLabel: stages.find((s) => s.id === entry.stage_key)?.label || null,
           });
         }
       }
 
-      // Upsell (still legacy — no sync trigger yet)
+      // Linha sintética "Carteira" (legado): emitida como sempre saiu em prod —
+      // sem negócio e sem etapa — para não mudar os consumidores. Não consulta
+      // nada: a tabela `upsell` não existe. Aposentá-la é follow-up à parte.
       results.push({
         type: "standard",
         pipeType: "upsell",
         label: "Carteira",
         color: "#3b82f6",
-        pipelineDbId: null, // upsell é tabela legacy própria — não adicionável via pipeline_entries
-        pipeId: pipeUpsell?.id || null,
-        currentStage: pipeUpsell?.status || null,
-        currentStageLabel: getStages("upsell").find((s) => s.id === pipeUpsell?.status)?.label || null,
+        pipelineDbId: null, // não adicionável via pipeline_entries
+        pipeId: null,
+        currentStage: null,
+        currentStageLabel: null,
         stages: getStages("upsell"),
       });
 
@@ -265,6 +278,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           results.push({
             ...base,
             entryId: entry.id || null,
+            closedAt: entry.closed_at ?? null,
             currentStageId: currentStage?.id || null,
             currentStageName: currentStage?.name || null,
           });

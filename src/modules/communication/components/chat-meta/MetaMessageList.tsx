@@ -40,7 +40,7 @@ export function MetaMessageList({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-y-auto p-4">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto bg-sunken p-4">
       {messages?.map((m) => (
         <MetaMessageBubble key={m.id} message={m} />
       ))}

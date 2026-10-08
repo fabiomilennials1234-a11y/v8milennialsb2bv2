@@ -62,6 +62,7 @@ import {
   type HelpArticleMedia,
 } from "@/modules/platform/hooks/useHelpCenter";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const iconOptions = [
   "Rocket", "LayoutGrid", "MessageSquare", "Bot", "Calendar",
@@ -113,8 +114,8 @@ function CategoryForm({ category, open, onOpenChange }: CategoryFormProps) {
         toast.success("Categoria criada!");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao salvar categoria");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar categoria." });
     }
   };
 
@@ -236,8 +237,8 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
         media: [...f.media, { url, type: isGif ? "gif" : "image", caption: "" }],
       }));
       toast.success("Mídia enviada!");
-    } catch {
-      toast.error("Erro ao enviar mídia");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível enviar mídia." });
     }
   };
 
@@ -288,8 +289,8 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
         toast.success("Artigo criado!");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Erro ao salvar artigo");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar artigo." });
     }
   };
 
@@ -410,7 +411,7 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
             <Label>Mídias (Screenshots / GIFs)</Label>
             <div className="flex flex-wrap gap-3">
               {form.media.map((m, i) => (
-                <div key={i} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border">
+                <div key={i} className="group relative h-24 w-24 overflow-hidden rounded-xl border border-border">
                   <img src={m.url} alt={m.caption || ""} className="w-full h-full object-cover" />
                   <button
                     type="button"
@@ -421,7 +422,7 @@ function ArticleForm({ article, categories, defaultCategoryId, open, onOpenChang
                   </button>
                 </div>
               ))}
-              <label className="w-24 h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center cursor-pointer transition-colors">
+              <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border transition-colors hover:border-foreground/30">
                 <Upload className="w-5 h-5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground mt-1">Upload</span>
                 <input
@@ -498,34 +499,34 @@ export function HelpAdminPanel() {
         toast.success("Artigo removido!");
       }
       setDeleteTarget(null);
-    } catch {
-      toast.error("Erro ao remover");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover." });
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Gerenciar Central de Ajuda</h3>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-bold tracking-tight">Gerenciar Central de Ajuda</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Crie e edite categorias e artigos de ajuda
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleNewCategory} className="gap-1">
-            <FolderPlus className="w-4 h-4" />
+          <Button variant="outline" size="sm" onClick={handleNewCategory}>
+            <FolderPlus />
             Nova Categoria
           </Button>
-          <Button size="sm" onClick={() => handleNewArticle()} className="gap-1">
-            <Plus className="w-4 h-4" />
+          <Button size="sm" onClick={() => handleNewArticle()}>
+            <Plus />
             Novo Artigo
           </Button>
         </div>
       </div>
 
       {categories.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+        <div className="rounded-xl border border-dashed border-border py-12 text-center text-muted-foreground">
           <p>Nenhuma categoria criada.</p>
           <p className="text-sm mt-1">Crie categorias para organizar seus artigos de ajuda.</p>
         </div>
@@ -534,11 +535,11 @@ export function HelpAdminPanel() {
           {categories.map((category) => {
             const catArticles = articles.filter((a) => a.category_id === category.id);
             return (
-              <div key={category.id} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{category.name}</span>
-                    <Badge variant="secondary" className="text-xs">
+              <div key={category.id} className="space-y-3 rounded-xl border border-border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-bold tracking-tight">{category.name}</span>
+                    <Badge variant="soft" className="text-xs tabular-nums">
                       {catArticles.length} artigos
                     </Badge>
                   </div>
@@ -577,11 +578,11 @@ export function HelpAdminPanel() {
                     {catArticles.map((art) => (
                       <div
                         key={art.id}
-                        className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
+                        className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/50"
                       >
                         <div className="flex items-center gap-2">
                           {art.is_published ? (
-                            <Eye className="w-3.5 h-3.5 text-success" />
+                            <Eye className="w-3.5 h-3.5 text-success-strong" />
                           ) : (
                             <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
                           )}
@@ -661,7 +662,7 @@ export function HelpAdminPanel() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remover
             </AlertDialogAction>

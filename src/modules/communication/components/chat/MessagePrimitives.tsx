@@ -27,6 +27,7 @@ import {
   BarChart3,
   FileText,
   LayoutList,
+  Forward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +39,7 @@ import {
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
+import { readDocumentFileName, type DocumentFileNameFields } from "@/modules/communication/lib/documentFileName";
 import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
 import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
@@ -45,6 +47,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
+import { OnDemandMedia } from "./media/OnDemandMedia";
 import { Button } from "@/components/ui/button";
 import { Reply } from "lucide-react";
 import {
@@ -57,6 +60,7 @@ import {
 import { useEditMessage, isFeatureUnavailable } from "@/modules/communication/hooks/useMessageActions";
 import { toast } from "sonner";
 import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // MessagesAreaErrorBoundary
@@ -112,10 +116,11 @@ export function formatMessageTime(timestamp: string): string {
 // ---------------------------------------------------------------------------
 
 export function MessageStatusIcon({ status, onInk = false }: { status: string; onInk?: boolean }) {
-  // onInk → ícone está sobre o gradiente laranja (bubble manual outgoing): usa
-  // tinta escura para legibilidade. Caso contrário, mantém os tons originais.
-  const muted = onInk ? "text-[#1c1c1c]/45" : "text-muted-foreground/40";
-  const readTone = onInk ? "text-[#1c1c1c]/70" : "text-blue-500/70";
+  // onInk → ícone está sobre o OURO (bolha da IA, V5): usa a tinta do próprio
+  // ouro para legibilidade. Caso contrário, tons neutros + azul de lida — o que
+  // também serve à bolha humana em tinta, que roda no escopo `dark`.
+  const muted = onInk ? "text-primary-foreground/45" : "text-muted-foreground/60";
+  const readTone = onInk ? "text-primary-foreground/80" : "text-insights";
   switch (status) {
     case "pending":
       return <Clock className={cn("w-2.5 h-2.5", muted)} />;
@@ -141,6 +146,7 @@ export function MessageBubble({
   onImagePreview,
   isFirstInGroup = true,
   isLastInGroup = true,
+  senderName,
   mountTime,
   onRetry,
   instanceId,
@@ -153,6 +159,8 @@ export function MessageBubble({
   onImagePreview: (url: string) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Remetente em conversa de grupo (só na 1ª da sequência). Ver `groupSenderName`. */
+  senderName?: string | null;
   mountTime?: number;
   onRetry?: (message: FailedMessage) => void;
   /** When set + enableActions=true, reveals S1 action bar on hover */
@@ -170,6 +178,8 @@ export function MessageBubble({
       ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
       : "manual";
   const isWhatsAppMsg = "message_type" in message;
+  const waInstanceId = isWhatsAppMsg ? (message as WhatsAppMessage).instance_id : undefined;
+  const waMessageId = isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined;
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
@@ -251,6 +261,12 @@ export function MessageBubble({
   const phone = (meta.remote_jid ?? "").split("@")[0] ?? "";
   const canEdit = isOutgoing && !!message.content && !hasMedia;
   const canDelete = isOutgoing;
+  const isForwarded = isWhatsAppMsg && !!(message as WhatsAppMessage).forwarded_from_message_id;
+  // Mesmo recorte que o servidor aceita (`_shared/whatsapp-forward.ts`):
+  // texto e mídia. Localização, contato, menu e afins ficam de fora.
+  const isPlainText = messageType === "text" || messageType === "conversation";
+  const canForward =
+    isWhatsAppMsg && !isFailed && ((isPlainText && !!message.content?.trim()) || hasMedia);
 
   const handleEditSave = async (newText: string) => {
     if (!instanceId || !message.message_id || !phone) return;
@@ -267,23 +283,30 @@ export function MessageBubble({
       if (isFeatureUnavailable(e)) {
         toast.error("Disponível apenas em instâncias Uazapi");
       } else {
-        toast.error(`Erro ao editar: ${(e as Error).message}`);
+        notifyError(e, { fallback: "Não foi possível editar." });
       }
     }
   };
 
   // Bubble color tokens — C9.
-  // Manual/humano outgoing recebe o tratamento laranja da marca (gradient gold +
-  // texto ink + sombra). Copilot/workflow preservam as cores semânticas (IA/automação).
+  // V5 ("mais perto do mockup", 02/10): quem escreveu se lê pela cor.
+  //   humano (saída) → TINTA, no escopo `dark` para os tokens internos (texto
+  //                    apagado, mídia, selos) lerem claro sobre ela;
+  //   IA (Copilot)   → OURO sólido;
+  //   automação      → violeta, como sempre;
+  //   recebida       → cartão branco.
   const isManualOutgoing = isOutgoing && sentSource === "manual";
+  const isAiOutgoing = isOutgoing && sentSource === "copilot";
   const bubbleColorClass =
-    sentSource === "copilot"
-      ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
+    isAiOutgoing
+      ? "bg-primary text-primary-foreground border border-transparent shadow-[0_6px_16px_-10px_hsl(var(--primary)/0.8)]"
       : sentSource === "workflow"
         ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
-        : isManualOutgoing
-          ? "gradient-gold text-primary-foreground border-0 shadow-[0_4px_12px_hsl(var(--primary)/0.25)]"
-          : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
+        // Falha não entra na tinta: o vermelho da falha é calibrado para o
+        // tema da página, e o escopo `dark` o clarearia sobre fundo claro.
+        : isManualOutgoing && !isFailed
+          ? "dark bg-tinta text-tinta-foreground border border-tinta-line shadow-relevo-tinta"
+          : "bg-card text-card-foreground border border-border/70 shadow-relevo";
 
   const radiusClass = isOutgoing
     ? (isFirstInGroup && isLastInGroup
@@ -361,6 +384,7 @@ export function MessageBubble({
             canDelete={canDelete}
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
+            canForward={canForward}
             onRequestEdit={() => setIsEditing(true)}
           />
         </div>
@@ -380,16 +404,41 @@ export function MessageBubble({
           <div className="flex items-center gap-1 mb-1">
             {sentSource === "workflow" ? (
               <>
-                <Zap className="h-3 w-3 text-[#a78bfa]/60" />
-                <span className="text-[10px] text-[#a78bfa]/70 font-medium">Automação</span>
+                <Zap className="h-3 w-3 text-bubble-workflow-foreground/70" />
+                <span className="text-[10px] font-bold text-bubble-workflow-foreground/80">Automação</span>
               </>
             ) : (
               <>
-                <Bot className="h-3 w-3 text-bubble-ai-foreground/60" />
-                <span className="text-[10px] text-bubble-ai-foreground/70 font-medium">Copilot</span>
+                <Bot className="h-3 w-3 text-primary-foreground/70" />
+                <span className="text-[10px] font-bold text-primary-foreground/80">Copilot</span>
               </>
             )}
           </div>
+        )}
+
+        {senderName && !isOutgoing && (
+          <p data-group-sender className="mb-1 truncate text-xs font-semibold text-muted-foreground">
+            {senderName}
+          </p>
+        )}
+
+        {/* A evidência no Torque. No aparelho do cliente o WhatsApp desenha o
+            próprio rótulo (`forward: true` no envio). */}
+        {isForwarded && !isDeleted && (
+          <p
+            data-forwarded
+            className={cn(
+              "mb-1 flex items-center gap-1 text-[11px] font-medium",
+              isAiOutgoing
+                ? "text-primary-foreground/70"
+                : isManualOutgoing && !isFailed
+                  ? "text-tinta-muted"
+                  : "text-muted-foreground",
+            )}
+          >
+            <Forward className="h-3 w-3 shrink-0" aria-hidden />
+            Encaminhada
+          </p>
         )}
 
         {isDeleted ? (
@@ -457,23 +506,29 @@ export function MessageBubble({
 
             {/* Imagem */}
             {isImage && message.media_url && (
-              <MessageImage
-                src={message.media_url}
-                onPreview={() => onImagePreview(message.media_url!)}
-              />
+              <OnDemandMedia kind="image" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageImage src={url} onPreview={() => onImagePreview(url)} />}
+              </OnDemandMedia>
             )}
 
             {/* Vídeo */}
             {isVideo && message.media_url && (
-              <MessageVideo src={message.media_url} />
+              <OnDemandMedia kind="video" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageVideo src={url} />}
+              </OnDemandMedia>
             )}
 
             {/* Documento */}
             {isDocument && message.media_url && (
-              <MessageDocument
-                src={message.media_url}
-                isOutgoing={isOutgoing}
-              />
+              <OnDemandMedia kind="document" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => (
+                  <MessageDocument
+                    src={url}
+                    fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
+                    isOutgoing={isAiOutgoing}
+                  />
+                )}
+              </OnDemandMedia>
             )}
 
             {/* Sticker */}
@@ -580,7 +635,7 @@ export function MessageBubble({
                   return <MessageVideo src={mediaUrl} />;
                 if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
                   return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
-                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
+                return <MessageDocument src={mediaUrl} fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined} isOutgoing={isAiOutgoing} />;
               })()
             )}
 
@@ -601,7 +656,13 @@ export function MessageBubble({
             {botoesDoTemplate.length > 0 && (
               <div className="-mx-3 -mb-2 mt-2 divide-y divide-border/30 border-t border-border/30">
                 {botoesDoTemplate.map((rotulo, i) => (
-                  <p key={i} className="py-1.5 text-center text-[13px] text-sky-500/90">
+                  <p
+                    key={i}
+                    className={cn(
+                      "py-1.5 text-center text-[13px] font-semibold",
+                      isAiOutgoing ? "text-primary-foreground" : isManualOutgoing ? "text-tinta-foreground" : "text-insights",
+                    )}
+                  >
                     {rotulo}
                   </p>
                 ))}
@@ -618,7 +679,7 @@ export function MessageBubble({
         )}
 
         {!isFailed && (message.retry_attempt ?? 0) > 0 && (
-          <p role="status" className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+          <p role="status" className="mt-1 text-[11px] text-warning-strong">
             Erro no envio, tentando novamente {message.retry_attempt}/10
           </p>
         )}
@@ -642,12 +703,12 @@ export function MessageBubble({
               dateTime={message.timestamp}
               className={cn(
                 "text-[10px] tabular-nums",
-                isManualOutgoing ? "text-primary-foreground/60" : "text-muted-foreground/50",
+                isAiOutgoing ? "text-primary-foreground/65" : isManualOutgoing && !isFailed ? "text-tinta-muted" : "text-muted-foreground",
               )}
             >
               {formatMessageTime(message.timestamp)}
             </time>
-            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isManualOutgoing} />}
+            {isOutgoing && <MessageStatusIcon status={message.status} onInk={isAiOutgoing} />}
           </div>
         )}
       </div>
@@ -664,6 +725,7 @@ export function MessageBubble({
             canDelete={false}
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
+            canForward={canForward}
             onRequestEdit={() => {}}
           />
         </div>

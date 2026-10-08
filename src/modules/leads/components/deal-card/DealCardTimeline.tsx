@@ -61,7 +61,7 @@ export function DealCardTimeline({ movimentacoes }: { movimentacoes: DealCardMov
               className={cn(
                 "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full ring-1",
                 nascimento
-                  ? "bg-sky-500/15 text-sky-400 ring-sky-500/25"
+                  ? "bg-insights/15 text-insights ring-insights/30"
                   : "bg-muted text-muted-foreground ring-border",
               )}
               aria-hidden="true"

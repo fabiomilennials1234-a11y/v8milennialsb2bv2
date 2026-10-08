@@ -12,10 +12,12 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
+import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -28,6 +30,7 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { useAuth } from "../../auth/contexts/AuthContext";
 import { setSelectedOrgId } from "../../org-team/hooks/useCurrentTeamMember";
 import { useGestorOrganizations } from "../hooks/useGestorOrganizations";
+import { notifyError } from "@/shared/errors";
 
 const number = new Intl.NumberFormat("pt-BR");
 
@@ -66,11 +69,7 @@ export default function AreaGestor() {
       await queryClient.invalidateQueries();
       navigate("/dashboard");
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível abrir a organização.",
-      );
+      notifyError(error, { fallback: "Não foi possível abrir a organização." });
     } finally {
       entering.current = false;
       setEnteringId(null);
@@ -86,72 +85,76 @@ export default function AreaGestor() {
   const hasBlockedOrgs = orgs.some((org) => org.access_blocked);
 
   return (
-    <div className="min-h-screen bg-background md:flex">
-      <aside className="flex shrink-0 flex-col border-b border-border bg-card md:sticky md:top-0 md:h-screen md:w-60 md:border-b-0 md:border-r">
-        <div className="flex items-center gap-3 px-5 py-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <LayoutGrid className="h-5 w-5" />
+    // Página fora do MainLayout: liga a bancada V5 (grade de 28 px) por conta própria.
+    <div data-layout="main" className="min-h-screen bg-background md:flex">
+      {/* Lateral em tinta flutuante — o mesmo objeto da lateral do app
+          (`platform/components/layout/Sidebar.tsx`), com um item só. */}
+      <aside className="m-3 mb-0 flex shrink-0 flex-col overflow-hidden rounded-panel border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-relevo-tinta md:sticky md:top-3 md:mb-3 md:mr-0 md:h-[calc(100vh-1.5rem)] md:w-60">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-4 md:pb-4 md:pt-5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sidebar-accent text-primary">
+            <LayoutGrid className="h-[18px] w-[18px]" />
           </div>
-          <div>
-            <h1 className="font-semibold">Área do Gestor</h1>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">Área do Gestor</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">
               Gestão de organizações
             </p>
           </div>
         </div>
         <nav
           aria-label="Navegação do gestor"
-          className="flex items-center gap-2 px-3 pb-3 md:flex-1 md:flex-col md:items-stretch"
+          className="flex items-center gap-1 px-2.5 pb-2.5 md:flex-1 md:flex-col md:items-stretch md:gap-0.5"
         >
           <a
             href="/gestor"
             aria-current="page"
-            className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+            className="relative flex items-center gap-3 rounded-xl bg-sidebar-accent px-2.5 py-2 text-sm font-semibold text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar"
           >
-            <Building2 className="h-4 w-4" />
+            {/* Trilho dourado do ativo, colado na borda da lateral. */}
+            <span
+              aria-hidden
+              className="absolute -left-2.5 top-1/2 hidden h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/.65)] md:block"
+            />
+            <Building2 className="h-[17px] w-[17px] shrink-0 text-primary" />
             Organizações
           </a>
           <Button
             variant="ghost"
-            className="justify-start md:mt-auto"
+            className="ml-auto h-auto justify-start gap-3 rounded-xl px-2.5 py-2 font-normal text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground md:ml-0 md:mt-auto"
             onClick={() => signOut()}
           >
-            <LogOut className="mr-2 h-4 w-4" />
+            <LogOut className="h-[17px] w-[17px]" />
             Sair
           </Button>
         </nav>
       </aside>
 
       <main className="min-w-0 flex-1 px-4 py-6 sm:p-8 lg:p-10">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <header className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold">Suas organizações</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Acompanhe os resultados das organizações vinculadas à sua conta.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isFetching}
-              onClick={() => void refetch()}
-            >
-              <RefreshCw
-                className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
-              />
-              Atualizar
-            </Button>
-          </header>
+        <div className="mx-auto max-w-7xl space-y-5">
+          <PageHeader
+            title="Suas organizações"
+            subtitle="Acompanhe os resultados das organizações vinculadas à sua conta."
+            actions={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                <RefreshCw className={cn(isFetching && "animate-spin")} />
+                Atualizar
+              </Button>
+            }
+          />
 
           {isLoading ? (
             <TorqueLoader variant="full" />
           ) : isError ? (
             <div
               role="alert"
-              className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center"
+              className="rounded-card border border-destructive/30 bg-destructive/5 p-8 text-center"
             >
-              <h3 className="font-semibold">
+              <h3 className="text-base font-bold tracking-tight">
                 Não foi possível carregar suas organizações
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -167,9 +170,11 @@ export default function AreaGestor() {
               </Button>
             </div>
           ) : orgs.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-20 text-center">
-              <Building2 className="h-10 w-10 text-muted-foreground" />
-              <h3 className="text-lg font-semibold">
+            <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-card/60 px-6 py-20 text-center">
+              <span className="grid h-12 w-12 place-items-center rounded-xl bg-muted text-foreground/70">
+                <Building2 className="h-6 w-6" />
+              </span>
+              <h3 className="text-lg font-bold tracking-tight">
                 Nenhuma organização vinculada
               </h3>
               <p className="max-w-md text-sm text-muted-foreground">
@@ -179,43 +184,40 @@ export default function AreaGestor() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {[
+              <KpiRow cols={3}>
+                {([
                   {
                     label: "Organizações vinculadas",
                     value: orgs.length,
                     Icon: Building2,
+                    tone: "neutral",
                     detail: "Sob sua gestão",
                   },
                   {
                     label: "Leads recebidos",
                     value: leads,
                     Icon: Users,
+                    tone: "info",
                     detail: "Últimos 7 dias",
                   },
                   {
                     label: "Vendas realizadas",
                     value: sales,
                     Icon: TrendingUp,
+                    tone: "good",
                     detail: "Últimos 7 dias · sem estornos",
                   },
-                ].map(({ label, value, Icon, detail }) => (
-                  <Card key={label}>
-                    <CardContent className="p-5">
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>{label}</span>
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <p className="mt-3 text-3xl font-semibold tabular-nums">
-                        {number.format(value)}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {detail}
-                      </p>
-                    </CardContent>
-                  </Card>
+                ] as const).map(({ label, value, Icon, tone, detail }) => (
+                  <KpiTile
+                    key={label}
+                    label={label}
+                    value={number.format(value)}
+                    icon={Icon}
+                    tone={tone}
+                    note={detail}
+                  />
                 ))}
-              </div>
+              </KpiRow>
 
               {hasBlockedOrgs && (
                 <p className="text-sm text-muted-foreground">
@@ -225,7 +227,7 @@ export default function AreaGestor() {
               )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="relative w-full sm:max-w-sm">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="Buscar organização"
                     placeholder="Buscar organização..."
@@ -234,7 +236,7 @@ export default function AreaGestor() {
                     onChange={(event) => setSearch(event.target.value)}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs tabular-nums text-muted-foreground">
                   Atualizado às{" "}
                   {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", {
                     hour: "2-digit",
@@ -244,20 +246,20 @@ export default function AreaGestor() {
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <Card className="overflow-hidden">
                 <Table className="min-w-[700px] text-card-foreground">
                   <TableHeader>
-                    <TableRow className="bg-muted/40">
+                    <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5">Organização</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="h-auto py-2.5 text-right">
                         Leads
-                        <span className="block text-xs font-normal">
+                        <span className="block text-[11px] font-medium normal-case tracking-normal text-muted-foreground/80">
                           Últimos 7 dias
                         </span>
                       </TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="h-auto py-2.5 text-right">
                         Vendas
-                        <span className="block text-xs font-normal">
+                        <span className="block text-[11px] font-medium normal-case tracking-normal text-muted-foreground/80">
                           Últimos 7 dias
                         </span>
                       </TableHead>
@@ -282,21 +284,21 @@ export default function AreaGestor() {
                         <TableRow key={org.organization_id}>
                           <TableCell className="py-5 pl-5">
                             <div className="flex items-center gap-3">
-                              <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                                <Building2 className="h-5 w-5" />
+                              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                                <Building2 className="h-[18px] w-[18px]" />
                               </div>
-                              <div>
-                                <p className="font-medium">{org.name}</p>
+                              <div className="min-w-0">
+                                <p className="font-semibold">{org.name}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {org.slug}
                                 </p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">
+                          <TableCell className="text-right font-bold tabular-nums">
                             {org.leads_last_7_days === null ? "—" : number.format(org.leads_last_7_days)}
                           </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">
+                          <TableCell className="text-right font-bold tabular-nums">
                             {org.sales_last_7_days === null ? "—" : number.format(org.sales_last_7_days)}
                           </TableCell>
                           <TableCell>
@@ -305,7 +307,10 @@ export default function AreaGestor() {
                             ) : <details className="max-w-56">
                               <summary className="flex cursor-pointer items-center gap-2 text-sm">
                                 <span
-                                  className={`h-2 w-2 rounded-full ${org.online_users.length ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
+                                  className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    org.online_users.length ? "bg-success" : "bg-muted-foreground/40",
+                                  )}
                                 />
                                 {number.format(org.online_users.length)} online
                                 <span className="sr-only">
@@ -339,7 +344,7 @@ export default function AreaGestor() {
                               {enteringId === org.organization_id
                                 ? "Entrando..."
                                 : "Entrar"}
-                              <ArrowRight className="ml-2 h-4 w-4" />
+                              <ArrowRight />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -347,7 +352,7 @@ export default function AreaGestor() {
                     )}
                   </TableBody>
                 </Table>
-              </div>
+              </Card>
               <p className="text-xs text-muted-foreground">
                 Online: membros ativos com o CRM visível nos últimos 2 minutos.
                 Clique na contagem para ver os nomes.

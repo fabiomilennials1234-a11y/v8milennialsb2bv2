@@ -9,11 +9,12 @@ interface Props {
 }
 
 const POSITION_COLORS: Record<number, string> = {
-  1: "bg-chart-1 text-white",
-  2: "bg-chart-2 text-white",
-  3: "bg-chart-3 text-white",
-  4: "bg-orange-500 text-white",
-  5: "bg-destructive text-white",
+  // Posição é semântica (ouro/prata/bronze), não série: tokens com o par de texto.
+  1: "bg-primary text-primary-foreground",
+  2: "bg-silver text-silver-foreground",
+  3: "bg-warning text-warning-foreground",
+  4: "bg-muted text-foreground",
+  5: "bg-destructive text-destructive-foreground",
 };
 
 export function RankingEvolution({ members }: Props) {

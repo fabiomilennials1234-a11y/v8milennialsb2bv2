@@ -48,7 +48,7 @@ export function PixButtonBubble({
     >
       <div className="flex items-center gap-2">
         {isPaid ? (
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
+          <CheckCircle2 className="h-5 w-5 text-success" />
         ) : (
           <QrCode className="h-5 w-5 text-primary" />
         )}

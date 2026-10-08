@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Gauge, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const CX = 180;
 const CY = 176;
@@ -70,20 +71,19 @@ function GaugeEmptyStateBase() {
 
       {/* Convite */}
       <div className="cmd-rise absolute inset-0 flex flex-col items-center justify-center text-center" style={{ animationDelay: ".25s" }}>
-        <span className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 shadow-[0_0_24px_hsl(var(--primary)/.15)]">
-          <Gauge className="h-5 w-5 text-primary" />
+        <span className="mb-3.5 grid h-11 w-11 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+          <Gauge className="h-5 w-5" />
         </span>
-        <h3 className="text-[15px] font-extrabold tracking-[-0.02em]">Velocímetro desligado</h3>
-        <p className="mt-1.5 max-w-[230px] text-[12px] leading-relaxed text-muted-foreground">
+        <h3 className="text-[15px] font-bold tracking-[-0.02em]">Velocímetro desligado</h3>
+        <p className="mt-1.5 max-w-[230px] text-[13px] leading-relaxed text-muted-foreground">
           Defina a meta de faturamento do mês pra acompanhar o ritmo da equipe em tempo real.
         </p>
-        <Link
-          to="/gestao-metas"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-bold text-primary-foreground shadow-[inset_0_1px_0_hsl(47_100%_65%/.45),0_6px_18px_hsl(var(--primary)/.18)] transition-transform duration-150 hover:-translate-y-px"
-        >
-          Configurar meta
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </Link>
+        <Button asChild size="sm" className="mt-4">
+          <Link to="/gestao-metas">
+            Configurar meta
+            <ArrowRight />
+          </Link>
+        </Button>
       </div>
     </div>
   );

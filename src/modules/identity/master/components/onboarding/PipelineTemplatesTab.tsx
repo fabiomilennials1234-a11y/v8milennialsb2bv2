@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePipelineTemplates, useDeletePipelineTemplate } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { PipelineTemplateEditor } from "./PipelineTemplateEditor";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function PipelineTemplatesTab() {
   const { data: templates, isLoading } = usePipelineTemplates();
@@ -16,19 +17,19 @@ export function PipelineTemplatesTab() {
     try {
       await deleteMutation.mutateAsync(id);
       toast.success("Template removido");
-    } catch {
-      toast.error("Erro ao remover template");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover template." });
     }
   };
 
   return (
-    <div className="space-y-4 mt-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           {templates?.length ?? 0} templates
         </h3>
         <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="w-4 h-4 mr-1" /> Novo Template
+          <Plus className="w-4 h-4 mr-1" /> Novo template
         </Button>
       </div>
 
@@ -49,7 +50,7 @@ export function PipelineTemplatesTab() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{tpl.name}</span>
                   <Badge variant="outline" className="text-[10px]">P{tpl.priority}</Badge>
-                  {!tpl.is_active && <Badge variant="destructive" className="text-[10px]">Inativo</Badge>}
+                  {!tpl.is_active && <Badge variant="soft" className="text-[10px]">Inativo</Badge>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{tpl.description}</p>
                 {tpl.custom_pipelines?.length > 0 && (

@@ -64,8 +64,8 @@ export function OraculoPanel({ open, onClose, sidebarWidth, conversaInicial }: O
         aria-modal="false"
         aria-label="Oráculo"
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[380px] max-w-[calc(100vw-4rem)] flex-col",
-          "border-r border-border bg-background shadow-2xl",
+          "fixed inset-y-3 z-50 flex w-[380px] max-w-[calc(100vw-4rem)] flex-col overflow-hidden",
+          "rounded-panel border border-card-border bg-card shadow-relevo-alto",
           "duration-200 animate-in slide-in-from-left-4 fade-in motion-reduce:animate-none",
         )}
         style={{ left: sidebarWidth }}

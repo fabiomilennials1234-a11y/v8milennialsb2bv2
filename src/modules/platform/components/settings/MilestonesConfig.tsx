@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useBadges, useCreateBadge, useDeleteBadge } from "@/modules/engagement/hooks/useBadges";
 import { MILESTONE_ICONS, MILESTONE_ICON_OPTIONS } from "@/modules/analytics/components/dashboard-outbound/milestone-icons";
+import { notifyError } from "@/shared/errors";
 
 const CRITERIA_TYPES = [
   { value: "leads_recebidos", label: "Leads recebidos" },
@@ -45,7 +46,7 @@ export function MilestonesConfig() {
       setName("");
       setCriteriaValue("");
     } catch (err: any) {
-      toast.error("Erro ao criar marco", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível criar marco." });
     }
   };
 
@@ -54,15 +55,15 @@ export function MilestonesConfig() {
       await deleteBadge.mutateAsync(id);
       toast.success("Marco removido");
     } catch (err: any) {
-      toast.error("Erro ao remover", { description: err?.message });
+      notifyError(err, { fallback: "Não foi possível remover." });
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Criar Novo Marco</CardTitle>
+          <CardTitle>Criar novo marco</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -99,7 +100,9 @@ export function MilestonesConfig() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Marcos Configurados ({milestones.length})</CardTitle>
+          <CardTitle>
+            Marcos configurados <span className="tabular-nums text-muted-foreground">({milestones.length})</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {milestones.length === 0 ? (
@@ -109,15 +112,17 @@ export function MilestonesConfig() {
               {milestones.map((m) => {
                 const Icon = MILESTONE_ICONS[m.icon ?? "target"] ?? MILESTONE_ICONS.target;
                 return (
-                  <div key={m.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Icon className="w-5 h-5 text-primary" />
+                  <div key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary-soft-foreground">
+                        <Icon className="h-4 w-4" />
+                      </span>
                       <div>
-                        <p className="text-sm font-medium">{m.name}</p>
+                        <p className="truncate text-sm font-semibold">{m.name}</p>
                         <p className="text-xs text-muted-foreground">{m.criteria_type}: {m.criteria_value}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(m.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(m.id)} aria-label={`Excluir marco ${m.name}`}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>

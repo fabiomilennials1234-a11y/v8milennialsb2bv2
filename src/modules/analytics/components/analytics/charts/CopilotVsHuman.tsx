@@ -55,7 +55,7 @@ const METRICS: MetricRowDef[] = [
 ];
 
 function winnerClass(meWin: boolean, other: boolean): string {
-  if (meWin && !other) return "bg-green-500/10 text-green-700 dark:text-green-400 font-semibold";
+  if (meWin && !other) return "bg-success/10 text-success font-semibold";
   if (!meWin && other) return "bg-destructive/10 text-destructive";
   return "text-foreground";
 }
@@ -162,7 +162,7 @@ export function CopilotVsHuman({ data }: Props) {
 
         <div className="flex items-center gap-4 mt-3 pt-2 border-t border-border">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-green-500/20 border border-green-500/40" />
+            <div className="w-3 h-3 rounded bg-success/20 border border-success/40" />
             <span className="text-[10px] text-muted-foreground">Melhor</span>
           </div>
           <div className="flex items-center gap-1.5">

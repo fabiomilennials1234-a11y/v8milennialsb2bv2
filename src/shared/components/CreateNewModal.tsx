@@ -8,6 +8,7 @@ import { CreatePipelineModal, useAvailableSystemPipes, useCreateCustomPipeline, 
 import type { SystemPipeType } from "@/modules/pipelines";
 import { FUNIL_DE_VENDAS_NOME, FUNIL_DE_VENDAS_STAGES } from "@/contracts/pipe";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CreateNewModalProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
       if (pipeline?.slug) navigate(`/funil/${pipeline.slug}`);
       handleClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao criar funil");
+      notifyError(e, { fallback: "Não foi possível criar funil." });
     }
   };
 
@@ -60,8 +61,8 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
       const route = pipeRoute(pipeType);
       if (route) navigate(route);
       handleClose();
-    } catch {
-      toast.error("Erro ao ativar funil");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ativar funil." });
     }
   };
 
@@ -90,25 +91,25 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                 <div className="flex gap-4 mt-4">
                   <button
                     onClick={() => setStep("funnel-templates")}
-                    className="flex-1 bg-primary/5 border border-primary/20 rounded-xl p-5 text-center hover:border-primary/40 transition-colors"
+                    className="flex-1 rounded-card bg-primary-soft p-5 text-center text-primary-soft-foreground transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-relevo"
                   >
-                    <GitBranch className="w-7 h-7 text-primary mx-auto mb-2" />
-                    <p className="font-semibold text-sm">Funil</p>
+                    <GitBranch className="mx-auto mb-2 h-7 w-7" />
+                    <p className="text-sm font-bold text-foreground">Funil</p>
                     <p className="text-xs text-muted-foreground mt-1">Permanente</p>
                   </button>
                   <button
                     onClick={handleCreateCampaign}
-                    className="flex-1 bg-orange-500/5 border border-orange-500/20 rounded-xl p-5 text-center hover:border-orange-500/40 transition-colors"
+                    className="flex-1 rounded-card bg-warning/15 p-5 text-center text-warning-strong transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-relevo"
                   >
-                    <Target className="w-7 h-7 text-orange-500 mx-auto mb-2" />
-                    <p className="font-semibold text-sm">Campanha</p>
+                    <Target className="mx-auto mb-2 h-7 w-7" />
+                    <p className="text-sm font-bold text-foreground">Campanha</p>
                     <p className="text-xs text-muted-foreground mt-1">Temporária</p>
                   </button>
                 </div>
-                <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs text-muted-foreground text-center">
-                    <strong className="text-primary">Funil</strong> = processo contínuo da operação &nbsp;|&nbsp;
-                    <strong className="text-orange-500">Campanha</strong> = ação com prazo, meta e incentivos
+                <div className="mt-3 rounded-xl bg-muted/50 p-3">
+                  <p className="text-center text-xs text-muted-foreground">
+                    <strong className="text-primary-soft-foreground">Funil</strong> = processo contínuo da operação &nbsp;|&nbsp;
+                    <strong className="text-warning-strong">Campanha</strong> = ação com prazo, meta e incentivos
                   </p>
                 </div>
               </motion.div>
@@ -130,9 +131,9 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                 <div className="grid grid-cols-2 gap-3 mt-3">
                   <button
                     onClick={handleOpenCreatePipeline}
-                    className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-left hover:border-primary/40 transition-colors"
+                    className="rounded-xl bg-primary-soft p-4 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-relevo"
                   >
-                    <Plus className="w-5 h-5 text-primary mb-2" />
+                    <Plus className="mb-2 h-5 w-5 text-primary-soft-foreground" />
                     <p className="font-semibold text-sm">Em branco</p>
                     <p className="text-xs text-muted-foreground mt-1">Etapas personalizadas</p>
                   </button>
@@ -141,13 +142,13 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                   <button
                     onClick={handleCreateSalesFunnel}
                     disabled={createPipeline.isPending}
-                    className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors disabled:opacity-50"
+                    className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-foreground/20 disabled:opacity-50"
                   >
                     <p className="font-semibold text-sm">{FUNIL_DE_VENDAS_NOME}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Novo → Em conversa → Reunião → Proposta → Ganhou/Perdeu
                     </p>
-                    <p className="text-xs text-primary mt-1">Criar com etapas prontas</p>
+                    <p className="mt-1 text-xs font-semibold text-primary-soft-foreground">Criar com etapas prontas</p>
                   </button>
 
                   {/* Reativação de funil legado OCULTO (org antiga com registro). */}
@@ -156,11 +157,11 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                       key={pipe.pipe_type}
                       onClick={() => handleActivateHiddenPipe(pipe.pipe_type)}
                       disabled={enablePipe.isPending}
-                      className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors disabled:opacity-50"
+                      className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-foreground/20 disabled:opacity-50"
                     >
                       <p className="font-semibold text-sm">{pipe.display_name}</p>
                       <p className="text-xs text-muted-foreground mt-1">Você já teve este funil — está oculto</p>
-                      <p className="text-xs text-primary mt-1">Clique para reativar</p>
+                      <p className="mt-1 text-xs font-semibold text-primary-soft-foreground">Clique para reativar</p>
                     </button>
                   ))}
                 </div>

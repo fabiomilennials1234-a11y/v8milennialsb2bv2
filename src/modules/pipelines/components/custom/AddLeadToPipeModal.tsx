@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal } from "@/modules/leads";
+import { notifyError } from "@/shared/errors";
 
 interface AddLeadToPipeModalProps {
   open: boolean;
@@ -36,6 +37,8 @@ interface AddLeadToPipeModalProps {
   pipelineId: string;
   pipelineName: string;
   stages: CustomPipelineStage[];
+  /** Etapa já escolhida ao abrir (o "+" ao pé da coluna). */
+  defaultStageId?: string | null;
 }
 
 interface LeadResult {
@@ -52,10 +55,15 @@ export function AddLeadToPipeModal({
   pipelineId,
   pipelineName,
   stages,
+  defaultStageId,
 }: AddLeadToPipeModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [selectedStageId, setSelectedStageId] = useState<string>(stages[0]?.id || "");
+  const [selectedStageId, setSelectedStageId] = useState<string>(defaultStageId || stages[0]?.id || "");
+  // Abrir pelo "+" de uma coluna traz a etapa daquela coluna.
+  useEffect(() => {
+    if (open && defaultStageId) setSelectedStageId(defaultStageId);
+  }, [open, defaultStageId]);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -97,7 +105,7 @@ export function AddLeadToPipeModal({
       toast.success(`Lead adicionado ao funil "${pipelineName}"`);
       handleClose();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao adicionar lead");
+      notifyError(error, { fallback: "Não foi possível adicionar lead." });
     }
   };
 
@@ -115,7 +123,7 @@ export function AddLeadToPipeModal({
       toast.success(`Lead criado e adicionado ao funil "${pipelineName}"`);
       handleClose();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao adicionar lead ao funil");
+      notifyError(error, { fallback: "Não foi possível adicionar lead ao funil." });
     }
   };
 
@@ -132,7 +140,7 @@ export function AddLeadToPipeModal({
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else onOpenChange(v); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Adicionar Lead ao Funil</DialogTitle>
+          <DialogTitle>Adicionar lead ao funil</DialogTitle>
           <DialogDescription>
             Busque um lead existente ou cadastre um novo para adicionar ao funil "{pipelineName}".
           </DialogDescription>
@@ -141,7 +149,7 @@ export function AddLeadToPipeModal({
         <div className="space-y-4 py-2">
           {/* Busca */}
           <div className="space-y-2">
-            <Label>Buscar Lead</Label>
+            <Label>Buscar lead</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -182,7 +190,7 @@ export function AddLeadToPipeModal({
                     className={cn(
                       "w-full text-left p-2 rounded-md transition-colors",
                       selectedLeadId === lead.id
-                        ? "bg-primary/10 border border-primary/30"
+                        ? "bg-primary-soft border border-primary/30"
                         : "hover:bg-muted"
                     )}
                   >
@@ -213,8 +221,8 @@ export function AddLeadToPipeModal({
 
           {/* Lead selecionado */}
           {selectedLead && (
-            <div className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded-lg">
-              <UserCheck className="w-4 h-4 text-primary shrink-0" />
+            <div className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary-soft p-2">
+              <UserCheck className="w-4 h-4 text-primary-soft-foreground shrink-0" />
               <div className="text-sm">
                 <span className="font-medium">{selectedLead.name}</span>
                 {selectedLead.company && (
@@ -226,7 +234,7 @@ export function AddLeadToPipeModal({
 
           {/* Etapa inicial */}
           <div className="space-y-2">
-            <Label>Etapa Inicial</Label>
+            <Label>Etapa inicial</Label>
             <Select
               value={selectedStageId}
               onValueChange={setSelectedStageId}

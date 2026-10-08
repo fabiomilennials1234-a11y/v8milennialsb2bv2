@@ -47,6 +47,7 @@ import {
   type FollowUpAutomation,
   type TriggerType,
 } from "@/modules/engagement/hooks/useFollowUps";
+import { IconChip } from "@/components/ui/bento";
 
 // SCRUM-641: o NOME do funil saiu daqui — vinha do seed congelado
 // ("Qualificação"/"Confirmacao"/"Propostas") e aparecia independente do que a
@@ -65,20 +66,20 @@ const pipeConfig = {
   },
   confirmacao: {
     icon: Calendar,
-    color: "text-chart-4",
+    color: "text-insights",
     stages: [
-      { value: "reuniao_marcada", label: "Reuniao Marcada" },
+      { value: "reuniao_marcada", label: "Reunião Marcada" },
       { value: "confirmar_d5", label: "Confirmar D-5" },
       { value: "confirmar_d3", label: "Confirmar D-3" },
       { value: "confirmar_d1", label: "Confirmar D-1" },
-      { value: "confirmacao_no_dia", label: "Confirmacao no Dia" },
+      { value: "confirmacao_no_dia", label: "Confirmação no Dia" },
       { value: "compareceu", label: "Compareceu" },
       { value: "perdido", label: "Perdido" },
     ],
   },
   propostas: {
     icon: Kanban,
-    color: "text-primary",
+    color: "text-primary-soft-foreground",
     stages: [
       { value: "marcar_compromisso", label: "Marcar Compromisso" },
       { value: "compromisso_marcado", label: "Compromisso Marcado" },
@@ -111,15 +112,15 @@ const priorityLabels: Record<string, string> = {
 };
 
 const triggerTypeLabels: Record<string, string> = {
-  no_response_from_team: "Equipe nao respondeu",
-  no_response_from_lead: "Lead nao respondeu",
-  not_confirmed: "Nao confirmou reuniao",
+  no_response_from_team: "Equipe não respondeu",
+  no_response_from_lead: "Lead não respondeu",
+  not_confirmed: "Não confirmou reunião",
 };
 
 const triggerTypeDescriptions: Record<string, string> = {
-  no_response_from_team: "Cria revisao quando o lead manda mensagem e a equipe nao responde dentro do tempo configurado",
-  no_response_from_lead: "Cria revisao quando a equipe manda mensagem e o lead nao responde dentro do tempo configurado",
-  not_confirmed: "Cria revisao quando o lead tem reuniao marcada mas nao confirmou presenca dentro do tempo configurado",
+  no_response_from_team: "Cria revisão quando o lead manda mensagem e a equipe não responde dentro do tempo configurado",
+  no_response_from_lead: "Cria revisão quando a equipe manda mensagem e o lead não responde dentro do tempo configurado",
+  not_confirmed: "Cria revisão quando o lead tem reunião marcada mas não confirmou presença dentro do tempo configurado",
 };
 
 const triggerTypeIcons: Record<string, typeof Clock> = {
@@ -166,7 +167,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
   )?.label || automation.stage;
 
   return (
-    <div className="p-4 rounded-lg border bg-card">
+    <div className="rounded-2xl border border-border/60 bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -183,7 +184,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
               variant="outline"
               className={`text-xs ${
                 automation.priority === "urgent" ? "text-destructive border-destructive/30" :
-                automation.priority === "high" ? "text-chart-5 border-chart-5/30" :
+                automation.priority === "high" ? "text-warning-strong border-warning/40" :
                 "text-muted-foreground"
               }`}
             >
@@ -238,7 +239,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
                 </div>
               </div>
               <div>
-                <Label className="text-xs">Titulo da tarefa</Label>
+                <Label className="text-xs">Título da tarefa</Label>
                 <Input
                   value={editedAutomation.title_template}
                   onChange={(e) => setEditedAutomation({
@@ -249,7 +250,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
                 />
               </div>
               <div>
-                <Label className="text-xs">Descricao</Label>
+                <Label className="text-xs">Descrição</Label>
                 <Input
                   value={editedAutomation.description_template || ""}
                   onChange={(e) => setEditedAutomation({
@@ -257,12 +258,12 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
                     description_template: e.target.value,
                   })}
                   className="h-8 text-sm"
-                  placeholder="Descricao opcional"
+                  placeholder="Descrição opcional"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Dias apos entrada na etapa</Label>
+                  <Label className="text-xs">Dias após entrada na etapa</Label>
                   <Input
                     type="number"
                     min={0}
@@ -336,9 +337,9 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir automacao?</AlertDialogTitle>
+                    <AlertDialogTitle>Excluir automação?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Esta acao nao pode ser desfeita. A automacao sera removida permanentemente.
+                      Esta ação não pode ser desfeita. A automação será removida permanentemente.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -393,10 +394,10 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-      <h4 className="font-medium text-sm flex items-center gap-2">
-        <Plus className="w-4 h-4" />
-        Nova Automacao por Etapa
+    <div className="space-y-4 rounded-2xl bg-sunken p-4">
+      <h4 className="flex items-center gap-2 text-sm font-bold tracking-tight">
+        <Plus className="h-4 w-4" />
+        Nova Automação por Etapa
       </h4>
 
       <div className="grid grid-cols-2 gap-3">
@@ -451,7 +452,7 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div>
-        <Label className="text-xs">Titulo da tarefa *</Label>
+        <Label className="text-xs">Título da tarefa *</Label>
         <Input
           value={newAutomation.title_template}
           onChange={(e) => setNewAutomation({
@@ -464,21 +465,21 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div>
-        <Label className="text-xs">Descricao (opcional)</Label>
+        <Label className="text-xs">Descrição (opcional)</Label>
         <Input
           value={newAutomation.description_template}
           onChange={(e) => setNewAutomation({
             ...newAutomation,
             description_template: e.target.value,
           })}
-          placeholder="Descricao adicional da tarefa"
+          placeholder="Descrição adicional da tarefa"
           className="h-9"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label className="text-xs">Dias apos entrada na etapa</Label>
+          <Label className="text-xs">Dias após entrada na etapa</Label>
           <Input
             type="number"
             min={0}
@@ -521,7 +522,7 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
           disabled={!newAutomation.title_template.trim() || createAutomation.isPending}
         >
           <Plus className="w-4 h-4 mr-1" />
-          Criar Automacao
+          Criar Automação
         </Button>
       </div>
     </div>
@@ -538,11 +539,11 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
   const pipeTypeConfig = pipeConfig[automation.pipe_type];
 
   const delayLabel = automation.trigger_type === "not_confirmed"
-    ? `${automation.trigger_delay_hours}h${automation.trigger_delay_minutes > 0 ? `${automation.trigger_delay_minutes}min` : ""} antes da reuniao`
+    ? `${automation.trigger_delay_hours}h${automation.trigger_delay_minutes > 0 ? `${automation.trigger_delay_minutes}min` : ""} antes da reunião`
     : `${automation.trigger_delay_hours}h${automation.trigger_delay_minutes > 0 ? `${automation.trigger_delay_minutes}min` : ""} sem resposta`;
 
   return (
-    <div className="p-4 rounded-lg border bg-card">
+    <div className="rounded-2xl border border-border/60 bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -560,14 +561,14 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
               variant="outline"
               className={`text-xs ${
                 automation.priority === "urgent" ? "text-destructive border-destructive/30" :
-                automation.priority === "high" ? "text-chart-5 border-chart-5/30" :
+                automation.priority === "high" ? "text-warning-strong border-warning/40" :
                 "text-muted-foreground"
               }`}
             >
               {priorityLabels[automation.priority]}
             </Badge>
             {automation.copilot_can_handle && (
-              <Badge variant="secondary" className="text-xs text-chart-4">
+              <Badge variant="info" className="text-xs">
                 Copiloto
               </Badge>
             )}
@@ -580,7 +581,7 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
             </p>
           )}
           <p className="text-xs text-muted-foreground mt-1">
-            Max {automation.max_triggers_per_lead}x por lead
+            Máx. {automation.max_triggers_per_lead}x por lead
             {automation.filter_stages && automation.filter_stages.length > 0 && (
               <> &middot; Etapas: {automation.filter_stages.map(s => {
                 const stageObj = pipeTypeConfig?.stages.find(st => st.value === s);
@@ -599,9 +600,9 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Excluir automacao?</AlertDialogTitle>
+                <AlertDialogTitle>Excluir automação?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Esta acao nao pode ser desfeita. A automacao sera removida permanentemente.
+                  Esta ação não pode ser desfeita. A automação será removida permanentemente.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -676,9 +677,9 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-      <h4 className="font-medium text-sm flex items-center gap-2">
-        <Clock className="w-4 h-4" />
+    <div className="space-y-4 rounded-2xl bg-sunken p-4">
+      <h4 className="flex items-center gap-2 text-sm font-bold tracking-tight">
+        <Clock className="h-4 w-4" />
         Nova Regra por Tempo
       </h4>
 
@@ -700,13 +701,13 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="no_response_from_team">
-              Equipe nao respondeu o lead
+              Equipe não respondeu o lead
             </SelectItem>
             <SelectItem value="no_response_from_lead">
-              Lead nao nos respondeu
+              Lead não nos respondeu
             </SelectItem>
             <SelectItem value="not_confirmed">
-              Lead nao confirmou reuniao
+              Lead não confirmou reunião
             </SelectItem>
           </SelectContent>
         </Select>
@@ -767,7 +768,7 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
       {/* Tempo de espera */}
       <div>
         <Label className="text-xs">
-          {form.trigger_type === "not_confirmed" ? "Tempo antes da reuniao *" : "Tempo de espera *"}
+          {form.trigger_type === "not_confirmed" ? "Tempo antes da reunião *" : "Tempo de espera *"}
         </Label>
         <div className="grid grid-cols-2 gap-2 mt-1">
           <div>
@@ -799,33 +800,33 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Titulo */}
+      {/* Título */}
       <div>
-        <Label className="text-xs">Titulo da revisao *</Label>
+        <Label className="text-xs">Título da revisão *</Label>
         <Input
           value={form.title_template}
           onChange={(e) => setForm({ ...form, title_template: e.target.value })}
           placeholder={
             form.trigger_type === "no_response_from_team" ? "Ex: Lead aguardando resposta" :
             form.trigger_type === "no_response_from_lead" ? "Ex: Follow up - lead sem resposta" :
-            "Ex: Confirmar presenca na reuniao"
+            "Ex: Confirmar presença na reunião"
           }
           className="h-9"
         />
       </div>
 
-      {/* Descricao */}
+      {/* Descrição */}
       <div>
-        <Label className="text-xs">Descricao (opcional)</Label>
+        <Label className="text-xs">Descrição (opcional)</Label>
         <Input
           value={form.description_template}
           onChange={(e) => setForm({ ...form, description_template: e.target.value })}
-          placeholder="Descricao adicional da tarefa"
+          placeholder="Descrição adicional da tarefa"
           className="h-9"
         />
       </div>
 
-      {/* Prioridade + Max por lead */}
+      {/* Prioridade + Máx. por lead */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="text-xs">Prioridade</Label>
@@ -845,7 +846,7 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
           </Select>
         </div>
         <div>
-          <Label className="text-xs">Max por lead</Label>
+          <Label className="text-xs">Máx. por lead</Label>
           <Input
             type="number"
             min={1}
@@ -869,7 +870,7 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
         </Label>
       </div>
 
-      {/* Botoes */}
+      {/* Botões */}
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={onClose}>
           Cancelar
@@ -927,7 +928,7 @@ function StageBasedTab() {
           variant="outline"
         >
           <Plus className="w-4 h-4" />
-          Criar Nova Automacao
+          Criar Nova Automação
         </Button>
       )}
 
@@ -951,13 +952,13 @@ function StageBasedTab() {
               <AccordionItem
                 key={pipeType}
                 value={pipeType}
-                className="border rounded-lg px-4"
+                className="rounded-2xl border border-border/60 px-4"
               >
                 <AccordionTrigger className="hover:no-underline">
                   <div className="flex items-center gap-2">
                     <PipeIcon className={`w-4 h-4 ${config.color}`} />
-                    <span className="font-medium">{nomeDoPipe(pipeType)}</span>
-                    <Badge variant="secondary" className="text-xs">
+                    <span className="font-semibold">{nomeDoPipe(pipeType)}</span>
+                    <Badge variant="soft" className="text-xs tabular-nums">
                       {pipeAutomations.filter((a) => a.is_active).length} ativas
                     </Badge>
                   </div>
@@ -1016,7 +1017,7 @@ function TimeBasedTab() {
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-4">
-        Regras que criam revisoes automaticamente com base em tempo: quando ninguem responde, ou quando o lead nao confirma uma reuniao.
+        Regras que criam revisões automaticamente com base em tempo: quando ninguém responde, ou quando o lead não confirma uma reunião.
       </p>
 
       {!showCreateForm && (
@@ -1037,10 +1038,12 @@ function TimeBasedTab() {
       )}
 
       {allTimeRules.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">Nenhuma regra por tempo configurada</p>
-          <p className="text-xs mt-1">Crie regras para automatizar revisoes com base em tempo de resposta</p>
+        <div className="flex flex-col items-center gap-1 py-8 text-center">
+          <span className="mb-1.5 grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <Clock className="h-5 w-5" />
+          </span>
+          <p className="text-sm font-semibold">Nenhuma regra por tempo configurada</p>
+          <p className="text-[13px] text-muted-foreground">Crie regras para automatizar revisões com base em tempo de resposta</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1066,21 +1069,21 @@ export function AutomationSettings() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
-          <Zap className="w-4 h-4" />
-          Automacoes
+        <Button variant="outline">
+          <Zap />
+          Automações
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="w-5 h-5 text-primary" />
-            Configurar Automacoes de Follow Up
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconChip icon={Settings2} tone="gold" />
+            Configurar Automações de Follow Up
           </DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="stage" className="mt-4">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList variant="segmented" className="grid w-full grid-cols-2">
             <TabsTrigger value="stage" className="gap-1.5">
               <Kanban className="w-4 h-4" />
               Por Etapa

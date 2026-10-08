@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
+import { CardEffectsHost, LeadCard, useEntradasEmDesfecho, type LeadCardData, type LeadMetrics } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -12,6 +12,8 @@ import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActio
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
+import { cardClosedAt, cardOutcome } from "./funil-card-outcome";
+import type { ClosedGroupingAccessors } from "@/modules/pipelines/lib/closed-outcome-groups";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -23,6 +25,9 @@ export interface FunilEntry {
   stage_key: string;
   notes: string | null;
   created_at: string;
+  /** Datas da entrada — recuo de `cardClosedAt` quando o negócio não diz quando fechou. */
+  entered_at?: string | null;
+  stage_changed_at?: string | null;
   /** Funil mergeado (ADR-0004): dados de reunião achatados do metadata. */
   meeting_date?: string | null;
   /** Valor achatado de `metadata.sale_value` pelo leitor canônico do funil. */
@@ -83,6 +88,8 @@ interface FunilKanbanProps {
    * sem override, o badge por pipeline_id (funil custom) é usado.
    */
   renderStageBadge?: (col: { id: string; title: string }) => ReactNode;
+  /** "+" ao pé da coluna — só onde a página sabe criar direto na etapa. */
+  onCreateInStage?: (stage: CustomPipelineStage) => void;
 }
 
 function FunilStageBadge({
@@ -134,6 +141,7 @@ export function FunilKanban({
   onDisparar,
   onDeleteAllLeads,
   renderStageBadge,
+  onCreateInStage,
 }: FunilKanbanProps) {
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
@@ -143,6 +151,19 @@ export function FunilKanban({
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipelineId);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
+
+  // Cards ganhos e perdidos ficam empilhados na coluna, por mês do desfecho.
+  // Exceção: o card cuja onda de ganho/perda ainda vai tocar fica solto até
+  // ela acabar — senão a celebração tocaria dentro da pilha fechada.
+  const emDesfecho = useEntradasEmDesfecho();
+  const closedGrouping = useMemo<ClosedGroupingAccessors<LeadCardData>>(
+    () => ({
+      outcomeOf: (card) => (emDesfecho.has(card.id) ? null : card.outcome),
+      closedAtOf: (card) => card.closedAt,
+      amountOf: (card) => card.value,
+    }),
+    [emDesfecho],
+  );
 
   // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
   // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
@@ -215,6 +236,10 @@ export function FunilKanban({
       // ações (ADR-0004); a DATA não. Montar amplo é seguro.
       stageKey: entry.stage_key ?? null,
       stageRole: stageRoleByKey.get(entry.stage_key) ?? null,
+      // Ganho/perda é o desfecho do NEGÓCIO, não a coluna: o card ganho num
+      // funil sem etapa de ganho também pinta de verde. Ver `cardOutcome`.
+      outcome: cardOutcome(entry, stageRoleByKey.get(entry.stage_key)),
+      closedAt: cardClosedAt(entry),
       pipelineId,
       meetingDate,
       // ── A reunião no card (S6) ──
@@ -242,6 +267,7 @@ export function FunilKanban({
           id: stage.stage_key,
           title: stage.name,
           color: stage.color || "#64748b",
+          role: stage.stage_role ?? null,
           items,
           totalCount: slot?.totalCount ?? items.length,
           hasMore: slot?.hasMore ?? false,
@@ -270,7 +296,16 @@ export function FunilKanban({
           if (stage) onMove(itemId, stage);
         }}
         disabled={!canMovePipe}
+        closedGrouping={closedGrouping}
         onDeleteAllLeads={onDeleteAllLeads}
+        onCreateInColumn={
+          onCreateInStage
+            ? (stageKey) => {
+                const stage = stages.find((s) => s.stage_key === stageKey);
+                if (stage) onCreateInStage(stage);
+              }
+            : undefined
+        }
         onExportStage={(stageKey, stageTitle) => {
           const col = columns.find((c) => c.id === stageKey);
           setStageToExport({ id: stageKey, title: stageTitle, count: col?.items.length ?? 0 });
@@ -349,6 +384,8 @@ export function FunilKanban({
           Sem `escopoFunil`, o botão vermelho desta barra mandava a PESSOA para
           a lixeira: ela sumia da lista de Leads, dos outros funis, da carteira
           e do chat — a partir de um clique dado sobre um card de negócio. */}
+      {/* Poeira dos cards excluídos — ver `prepararDissolucao`. */}
+      <CardEffectsHost />
       <BulkActionBar
         selectedIds={bulk.selectedIds}
         onClear={bulk.clearSelection}

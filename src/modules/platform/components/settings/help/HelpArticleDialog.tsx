@@ -54,10 +54,10 @@ export function HelpArticleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             {article.category?.name}
           </div>
-          <DialogTitle className="text-xl">{article.title}</DialogTitle>
+          <DialogTitle className="text-xl font-extrabold tracking-[-0.02em]">{article.title}</DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="flex-1 px-6 pb-4">
@@ -84,7 +84,7 @@ export function HelpArticleDialog({
           {mediaItems.length > 0 && (
             <div className="mt-6 space-y-4">
               {mediaItems.map((media, i) => (
-                <figure key={i} className="rounded-lg overflow-hidden border border-border">
+                <figure key={i} className="overflow-hidden rounded-xl border border-border">
                   <img
                     src={media.url}
                     alt={media.caption || `Imagem ${i + 1}`}

@@ -53,7 +53,7 @@ function cellColor(
   if (prev === undefined) return "bg-muted/30 text-foreground";
   const improved = lowerIsBetter ? current < prev : current > prev;
   const degraded = lowerIsBetter ? current > prev : current < prev;
-  if (improved) return "bg-green-500/15 text-green-700 dark:text-green-400";
+  if (improved) return "bg-success/15 text-success";
   if (degraded) return "bg-destructive/10 text-destructive";
   return "bg-muted/30 text-foreground";
 }
@@ -70,7 +70,7 @@ function TrendIcon({
   if (prev === undefined) return <Minus className="h-2.5 w-2.5 opacity-40" />;
   const improved = lowerIsBetter ? current < prev : current > prev;
   const degraded = lowerIsBetter ? current > prev : current < prev;
-  if (improved) return <TrendingUp className="h-2.5 w-2.5 text-green-600" />;
+  if (improved) return <TrendingUp className="h-2.5 w-2.5 text-success" />;
   if (degraded) return <TrendingDown className="h-2.5 w-2.5 text-destructive" />;
   return <Minus className="h-2.5 w-2.5 opacity-40" />;
 }

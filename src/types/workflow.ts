@@ -126,6 +126,7 @@ export type WorkflowActionType =
   | "send_meta_message"
   | "send_semi_automatic"
   | "send_to_number"
+  | "send_to_group"
   // Lead Management
   | "move_stage"
   | "add_tag"
@@ -557,6 +558,10 @@ export interface ActionNodeData {
   // messageTemplate (acima) carrega o texto; reusa o mesmo resolvedor de variáveis.
   notifyPhones?: string[];
   includeConversationSummary?: boolean;
+  // Enviar para grupo (send_to_group) — UM grupo (`…@g.us`) da instância fixa
+  // `whatsappInstanceId`. `groupName` é só rótulo; o executor usa `groupJid`.
+  groupJid?: string;
+  groupName?: string;
   // Move stage
   /** O funil de destino (`pipelines.id`) — canônico, qualquer funil (SCRUM-627). */
   pipelineId?: string;
@@ -1143,23 +1148,29 @@ export interface WorkflowExecutionHistoryStep {
 // UI HELPERS
 // =====================================================
 
-export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: string; bgDark: string }> = {
-  trigger:        { border: "border-blue-500",    bgLight: "bg-blue-50",    bgDark: "dark:bg-blue-950" },
-  action:         { border: "border-green-500",   bgLight: "bg-green-50",   bgDark: "dark:bg-green-950" },
-  condition:      { border: "border-yellow-500",  bgLight: "bg-yellow-50",  bgDark: "dark:bg-yellow-950" },
-  delay:          { border: "border-purple-500",  bgLight: "bg-purple-50",  bgDark: "dark:bg-purple-950" },
-  copilot:        { border: "border-cyan-500",    bgLight: "bg-cyan-50",    bgDark: "dark:bg-cyan-950" },
-  end:            { border: "border-border",      bgLight: "bg-muted",      bgDark: "dark:bg-muted" },
-  question_buttons: { border: "border-primary", bgLight: "bg-card", bgDark: "dark:bg-card" },
-  wait_response:  { border: "border-orange-500",  bgLight: "bg-orange-50",  bgDark: "dark:bg-orange-950" },
-  split_ab:       { border: "border-pink-500",    bgLight: "bg-pink-50",    bgDark: "dark:bg-pink-950" },
-  webhook_call:   { border: "border-indigo-500",  bgLight: "bg-indigo-50",  bgDark: "dark:bg-indigo-950" },
-  goto:                  { border: "border-teal-500",    bgLight: "bg-teal-50",    bgDark: "dark:bg-teal-950" },
-  wait_business_window:  { border: "border-amber-500",   bgLight: "bg-amber-50",   bgDark: "dark:bg-amber-950" },
-  assign_responsible:    { border: "border-rose-500",    bgLight: "bg-rose-50",    bgDark: "dark:bg-rose-950" },
-  code_json:             { border: "border-emerald-500", bgLight: "bg-emerald-50", bgDark: "dark:bg-emerald-950" },
-  code_javascript:       { border: "border-sky-500",     bgLight: "bg-sky-50",     bgDark: "dark:bg-sky-950" },
-  code_https:            { border: "border-violet-500",  bgLight: "bg-violet-50",  bgDark: "dark:bg-violet-950" },
+/**
+ * Matiz de cada tipo de nó no canvas (V5). O cartão do nó é branco; só o chip
+ * do ícone carrega a cor — é categoria, como série de gráfico, por isso o matiz
+ * é literal e cada texto tem o par do escuro. O gatilho é o nó de tinta e o seu
+ * chip é ouro (ver BaseNode).
+ */
+export const NODE_COLORS: Record<WorkflowNodeType, { chip: string }> = {
+  trigger:               { chip: "bg-primary text-primary-foreground" },
+  action:                { chip: "bg-green-500/15 text-green-700 dark:text-green-400" },
+  condition:             { chip: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400" },
+  delay:                 { chip: "bg-purple-500/15 text-purple-700 dark:text-purple-400" },
+  copilot:               { chip: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" },
+  end:                   { chip: "bg-muted text-foreground/60" },
+  question_buttons:      { chip: "bg-primary-soft text-primary-soft-foreground" },
+  wait_response:         { chip: "bg-orange-500/15 text-orange-700 dark:text-orange-400" },
+  split_ab:              { chip: "bg-pink-500/15 text-pink-700 dark:text-pink-400" },
+  webhook_call:          { chip: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400" },
+  goto:                  { chip: "bg-teal-500/15 text-teal-700 dark:text-teal-400" },
+  wait_business_window:  { chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
+  assign_responsible:    { chip: "bg-rose-500/15 text-rose-700 dark:text-rose-400" },
+  code_json:             { chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  code_javascript:       { chip: "bg-sky-500/15 text-sky-700 dark:text-sky-400" },
+  code_https:            { chip: "bg-violet-500/15 text-violet-700 dark:text-violet-400" },
 };
 
 export const NODE_LABELS: Record<WorkflowNodeType, string> = {
@@ -1196,12 +1207,15 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_meta_message: "Enviar Mensagem no Instagram",
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
+  send_to_group: "Enviar p/ grupo",
   // Lead Management
   move_stage: "Mover para Etapa",
   add_tag: "Adicionar Tag",
   remove_tag: "Remover Tag",
   update_lead_field: "Atualizar Campo do Lead",
   update_custom_field: "Atualizar Campo Customizado",
+  // Descontinuadas (ver DISCONTINUED_ACTION_TYPES): o rótulo fica para que o
+  // nó já salvo continue legível no canvas e nas execuções.
   update_rating: "Atualizar Rating",
   calculate_score: "Calcular Lead Score (IA)",
   duplicate_to_pipe: "Adicionar a Outro Funil",
@@ -1246,7 +1260,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   lead_created: "Lead Criado",
   stage_changed: "Mudança de Etapa",
   tag_added: "Tag Adicionada",
-  score_reached: "Score Atingido",
+  score_reached: "Score Atingido", // descontinuado — ver DISCONTINUED_TRIGGER_TYPES
   cron: "Agendamento (Cron)",
   lead_replied: "Lead Respondeu",
   lead_no_reply: "Lead Não Respondeu",
@@ -1297,6 +1311,35 @@ export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
 };
 
 // =====================================================
+// DESCONTINUADOS (CTO, 2026-10-02)
+// =====================================================
+//
+// Score e rating do lead saíram do produto (rating/calor em 03/09, score em
+// 01/10). Saem de TODA superfície de criação — catálogo de gatilhos, de ações,
+// inseridor de variáveis — mas os identificadores continuam na união de tipos e
+// nos mapas de rótulo: workflows já salvos em produção podem conter estes
+// passos, e o editor, a lista e as execuções precisam continuar renderizando
+// (com o selo "Descontinuado") e permitindo apagar. O executor nas edge
+// functions é um passo separado — nada aqui muda o que roda.
+
+export const DISCONTINUED_TRIGGER_TYPES: ReadonlySet<WorkflowTriggerType> = new Set<WorkflowTriggerType>(["score_reached"]);
+export const DISCONTINUED_ACTION_TYPES: ReadonlySet<WorkflowActionType> = new Set<WorkflowActionType>([
+  "update_rating",
+  "calculate_score",
+]);
+/** Variáveis que o inseridor não oferece mais. Mensagens antigas que as usam seguem resolvendo no executor. */
+export const DISCONTINUED_VARIABLE_KEYS: ReadonlySet<string> = new Set(["{{score}}", "{{rating}}", "{{ai_temperatura}}"]);
+export const DISCONTINUED_STEP_HINT = "Este passo não é mais oferecido. Remova-o ou troque por Qualificação.";
+
+export function isDiscontinuedTrigger(type: string | null | undefined): boolean {
+  return !!type && DISCONTINUED_TRIGGER_TYPES.has(type as WorkflowTriggerType);
+}
+
+export function isDiscontinuedAction(type: string | null | undefined): boolean {
+  return !!type && DISCONTINUED_ACTION_TYPES.has(type as WorkflowActionType);
+}
+
+// =====================================================
 // ACTION CATEGORIES (para UI de seleção agrupada)
 // =====================================================
 
@@ -1321,6 +1364,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_meta_message",
       "send_semi_automatic",
       "send_to_number",
+      "send_to_group",
     ],
   },
   {
@@ -1331,8 +1375,6 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "remove_tag",
       "update_lead_field",
       "update_custom_field",
-      "update_rating",
-      "calculate_score",
       "duplicate_to_pipe",
       "remove_from_pipe",
       "mark_as_lost",
@@ -1436,8 +1478,6 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{telefone}}",      label: "Telefone",                      category: "Lead" },
   { key: "{{faturamento}}",   label: "Faturamento",                   category: "Lead" },
   { key: "{{segmento}}",      label: "Segmento",                      category: "Lead" },
-  { key: "{{score}}",         label: "Score de qualificação",         category: "Lead" },
-  { key: "{{rating}}",        label: "Rating (estrelas)",             category: "Lead" },
   { key: "{{origem}}",        label: "Origem do lead",                category: "Lead" },
   { key: "{{urgencia}}",      label: "Urgência",                      category: "Lead" },
   { key: "{{observacoes}}",   label: "Observações",                   category: "Lead" },
@@ -1460,7 +1500,6 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // I.A.
   { key: "{{ai_resumo}}",        label: "Resumo da conversa (I.A.)",       category: "I.A." },
   { key: "{{ai_sentimento}}",    label: "Sentimento (positive/neutral/negative)", category: "I.A." },
-  { key: "{{ai_temperatura}}",   label: "Temperatura do lead (cold/warm/hot)",    category: "I.A." },
   { key: "{{ai_proxima_acao}}",  label: "Próxima ação sugerida (I.A.)",    category: "I.A." },
   // Personalizado + Tags: injetados dinamicamente em VariableInserter via
   // useLeadCustomFields() / useTags() (categorias "Campos Personalizados" e "Tags").
@@ -1474,7 +1513,7 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
 export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   {
     label: "Lead",
-    triggers: ["lead_created", "lead_assigned", "field_changed", "score_reached", "tag_added"],
+    triggers: ["lead_created", "lead_assigned", "field_changed", "tag_added"],
   },
   {
     label: "Comunicação",

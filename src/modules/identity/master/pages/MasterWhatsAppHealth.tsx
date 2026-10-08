@@ -15,7 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RefreshCw, AlertTriangle, ServerOff, Inbox } from "lucide-react";
+import { RefreshCw, AlertTriangle, AlertCircle, ServerOff, Inbox, Smartphone } from "lucide-react";
+import { MasterPageHeader } from "../components/MasterPageHeader";
+import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -53,12 +55,12 @@ type DlqRow = {
 
 function statusVariant(status: HealthCheck["status"]) {
   switch (status) {
-    case "healthy": return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-    case "warning": return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    case "critical": return "bg-red-500/15 text-red-400 border-red-500/30";
-    case "rebind_triggered": return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    case "healthy": return "bg-success/10 text-success-strong border-success/30";
+    case "warning": return "bg-warning/15 text-warning-strong border-warning/40";
+    case "critical": return "bg-destructive/10 text-destructive border-destructive/30";
+    case "rebind_triggered": return "bg-insights/10 text-insights border-insights/30";
     case "probe_failed":
-    case "error": return "bg-zinc-500/15 text-zinc-400 border-zinc-500/30";
+    case "error": return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -134,57 +136,45 @@ export default function MasterWhatsAppHealth() {
   })();
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">WhatsApp Health</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Saúde do pipeline Uazapi por instância. Atualiza a cada 1 min.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => { checks.refetch(); dead.refetch(); dlq.refetch(); }}
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title="WhatsApp health"
+        subtitle="Saúde do pipeline Uazapi por instância. Atualiza a cada 1 min."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { checks.refetch(); dead.refetch(); dlq.refetch(); }}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Instâncias monitoradas</p>
-            <p className="text-2xl font-semibold mt-1">{summary.total}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Critical / rebind</p>
-            <p className="text-2xl font-semibold mt-1 text-red-400">{summary.critical}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Warning</p>
-            <p className="text-2xl font-semibold mt-1 text-amber-400">{summary.warning}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">DLQ pendente</p>
-            <p className="text-2xl font-semibold mt-1">{dlq.data?.pending.length ?? 0}</p>
-            {dlq.data && dlq.data.exhausted > 0 && (
-              <p className="text-xs text-red-400 mt-1">+{dlq.data.exhausted} exhausted</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <KpiRow cols={4}>
+        <KpiTile label="Instâncias monitoradas" icon={Smartphone} value={summary.total} />
+        <KpiTile
+          label="Critical / rebind"
+          icon={AlertTriangle}
+          tone="bad"
+          value={<span className="text-destructive">{summary.critical}</span>}
+        />
+        <KpiTile
+          label="Warning"
+          icon={AlertCircle}
+          value={<span className="text-warning-strong">{summary.warning}</span>}
+        />
+        <KpiTile label="DLQ pendente" icon={Inbox} value={dlq.data?.pending.length ?? 0}>
+          {dlq.data && dlq.data.exhausted > 0 && (
+            <p className="text-xs font-medium text-destructive">+{dlq.data.exhausted} exhausted</p>
+          )}
+        </KpiTile>
+      </KpiRow>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2">
             <Inbox className="w-4 h-4" /> Health checks (último por instância)
           </CardTitle>
         </CardHeader>
@@ -239,7 +229,7 @@ export default function MasterWhatsAppHealth() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2">
             <ServerOff className="w-4 h-4" /> Sessões WhatsApp mortas
           </CardTitle>
         </CardHeader>
@@ -275,7 +265,7 @@ export default function MasterWhatsAppHealth() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" /> DLQ — eventos pendentes ({dlq.data?.pending.length ?? 0})
           </CardTitle>
         </CardHeader>

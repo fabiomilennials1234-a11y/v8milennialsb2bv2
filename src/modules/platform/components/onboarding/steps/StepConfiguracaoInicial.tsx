@@ -50,8 +50,8 @@ export function StepConfiguracaoInicial({ answers, onApply, isApplying }: Props)
                   key={j}
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full border",
-                    stage.is_final_positive ? "border-green-500/30 text-green-600 bg-green-500/10" :
-                    stage.is_final_negative ? "border-red-500/30 text-red-600 bg-red-500/10" :
+                    stage.is_final_positive ? "border-success/30 text-success-strong bg-success/10" :
+                    stage.is_final_negative ? "border-destructive/30 text-destructive bg-destructive/10" :
                     "border-border/50 text-muted-foreground"
                   )}
                 >

@@ -2,18 +2,26 @@ import { isPipelineVisible, selectVisiblePipelines } from "../lib/pipeline-navig
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
-import { useOrganization } from "@/modules/identity";
+import { useOrganization, useOrganizationSettings } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   GitBranch,
   Plus,
-  Loader2,
   Kanban,
-  ArrowRight,
   ChevronDown,
+  ArrowRight,
+  LayoutGrid,
+  List,
+  BarChart3,
+  Layers,
+  Timer,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
 import { FunnelActionsMenu } from "@/modules/pipelines/components/funis/FunnelActionsMenu";
 import { usePipelines, type Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
@@ -37,12 +45,36 @@ interface FunilCard {
   icon: LucideIcon;
   /** Linha de apoio: prazo, meta, estado. Vazia quando não há o que dizer. */
   meta?: string;
+  /** `pipelines.description` — o que o usuário escreveu sobre o funil. */
+  description?: string | null;
+  /** Funil com prazo: dias restantes e o bônus combinado (fatos do funil). */
+  temporary?: { endsAt: string | null; daysLeft: number | null; teamGoal: number | null; bonus: number | null };
   /**
    * Linha canônica em `pipelines` — o que o menu de ações precisa para
    * renomear/excluir. Ausente só enquanto o registro não chegou: sem ela o
    * cartão continua listando e navegando, apenas sem menu.
    */
   pipeline?: Pipeline;
+}
+
+/** Valor da aba "Todos os funis" — a deste hub. */
+const HUB_TAB = "todos-os-funis";
+const HUB_VIEWS = [
+  { value: "kanban", label: "Kanban", icon: LayoutGrid },
+  { value: "list", label: "Lista", icon: List },
+  { value: "analytics", label: "Analytics", icon: BarChart3 },
+] as const;
+
+/** Texto/ícone sobre o ladrilho preenchido: escuro em cor clara (ouro), branco no resto. */
+function tileText(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "text-white";
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "text-black/80" : "text-white";
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -56,6 +88,7 @@ export default function FunisHub() {
   // Registro único → cor/ícone reais de qualquer funil.
   const pipeById = new Map(pipelines.map((p) => [p.id, p] as const));
   const temporaryById = new Map(temporaryFunnels.map((p) => [p.id, p] as const));
+  const { settings } = useOrganizationSettings();
   const [createOpen, setCreateOpen] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
 
@@ -84,8 +117,6 @@ export default function FunisHub() {
       // Só o que é fato do funil. "Ativo" não entra: é o estado de todos os
       // outros da lista também, e dizê-lo só aqui recriaria a distinção.
       const partes = [
-        daysLeft !== null ? `${daysLeft}d restantes` : null,
-        pipe?.team_goal != null ? `Meta: ${pipe.team_goal}` : null,
         pipe?.status === "paused" ? "Pausado" : null,
         pipe?.status === "draft" ? "Rascunho" : null,
       ].filter(Boolean);
@@ -96,152 +127,277 @@ export default function FunisHub() {
         color: pipeline.color ?? FUNNEL_FALLBACK_COLOR,
         icon: funilIcon(pipeline.icon),
         meta: partes.length > 0 ? partes.join(" · ") : undefined,
+        description: pipeline.description,
+        temporary: pipe
+          ? {
+              endsAt: pipe.ends_at ?? null,
+              daysLeft,
+              teamGoal: pipe.team_goal ?? null,
+              bonus: pipe.bonus_value ?? null,
+            }
+          : undefined,
         pipeline,
       };
     });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // A pílula do funil vive aqui também (V5): "Todos os funis" é a 5ª aba. As
+  // outras abrem o funil padrão da org já na visão escolhida.
+  const defaultPath = settings?.default_pipeline_id
+    ? `/funil/${settings.default_pipeline_id}`
+    : allFunnels[0]?.path ?? null;
 
   return (
-    <div className="space-y-8">
-      {/* ── Header ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Funis</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie seus funis de vendas
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Criar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Funis"
+        subtitle="Gerencie seus funis de vendas."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Criar
+          </Button>
+        }
+        tabs={
+          // `min-w-0 max-w-full` na raiz: sem eles ela não encolhe no slot da
+          // barra, a pílula vaza da tela em vez de rolar e "Todos os funis" (a
+          // ativa) fica cortada na borda — a pílula só traz a ativa para dentro
+          // quando ela mesma rola.
+          <Tabs
+            value={HUB_TAB}
+            onValueChange={(v) => {
+              if (v !== HUB_TAB && defaultPath) navigate(defaultPath, { state: { view: v } });
+            }}
+            className="min-w-0 max-w-full"
+          >
+            <TabsList variant="pill" aria-label="Visão do funil">
+              {HUB_VIEWS.map(({ value, label, icon: Icon }) => (
+                <TabsTrigger key={value} value={value} disabled={!defaultPath}>
+                  <Icon className="size-4" aria-hidden />
+                  {label}
+                </TabsTrigger>
+              ))}
+              <TabsTrigger value={HUB_TAB}>
+                <Layers className="size-4" aria-hidden />
+                Todos os funis
+                {allFunnels.length > 0 && (
+                  <span className="rounded-full bg-primary-foreground px-1.5 py-px text-[10px] font-extrabold tabular-nums text-primary">
+                    {allFunnels.length}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
+      />
 
-      {/* Uma lista só. A linha abaixo do nome mostra apenas fatos do funil,
-          como prazo, meta e estado. */}
-      {allFunnels.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {allFunnels.map((funil) => (
-            /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
-               de ações, e botão dentro de botão é HTML inválido (o menu nem
-               abriria). A área de navegação continua sendo um botão — só que
-               agora ela é o miolo do cartão, e o menu é irmão dela. */
-            <div
-              key={funil.key}
-              className="group flex items-center rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all"
-            >
-              <button
-                onClick={() => navigate(funil.path)}
-                className="flex flex-1 min-w-0 items-center gap-3 p-4 text-left"
-              >
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: funil.color + "15" }}
-                >
-                  <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{funil.name}</p>
-                  {funil.meta && (
-                    <p className="text-xs text-muted-foreground truncate">{funil.meta}</p>
-                  )}
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-              {funil.pipeline && (
-                <div className="pr-3 pl-1">
-                  <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
-                </div>
-              )}
-            </div>
+      {/* Carregando: o esqueleto já tem a forma da grade — o cabeçalho não
+          espera dado nenhum, então ele não some enquanto a lista chega. */}
+      {isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Carregando funis">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-[76px] rounded-card" />
           ))}
         </div>
-      )}
-
-      {/* ── Encerrados (collapsed) ──────────────────────────── */}
-      {endedTemporary.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowEnded(!showEnded)}
-            className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronDown
-              className={cn(
-                "w-4 h-4 transition-transform",
-                showEnded && "rotate-180"
-              )}
-            />
-            {endedTemporary.length} funil{endedTemporary.length > 1 ? "s" : ""}{" "}
-            encerrado{endedTemporary.length > 1 ? "s" : ""}
-          </button>
-          {showEnded && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 opacity-60">
-              {endedTemporary.map((pipe) => {
-                const canonical = pipeById.get(pipe.id);
-                const displayName = canonical?.name ?? pipe.name;
+      ) : (
+        <>
+          {/* Uma grade só (mockup V5): cartão por funil, e o último é a porta de
+              criar. Só fatos do funil — sem contagem por cartão (seriam N
+              consultas) e sem mini-barras (decisão do líder). Por isso o cartão
+              é uma linha densa (ladrilho · nome · apoio · seta): com 132 px de
+              altura e nada no miolo, ele lia como cartão quebrado. */}
+          {(allFunnels.length > 0 || endedTemporary.length > 0) && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {allFunnels.map((funil) => {
+                const isDefault = settings?.default_pipeline_id === funil.key;
+                const TileIcon = funil.temporary ? Timer : funil.icon;
+                const apoio = funil.temporary
+                  ? funil.temporary.endsAt
+                    ? `Funil temporário · termina ${new Date(funil.temporary.endsAt).toLocaleDateString("pt-BR")}`
+                    : "Funil temporário"
+                  : funil.description;
                 return (
-                /* Encerrado é estado, não espécie: o funil segue sendo funil e
-                   ganha o mesmo menu — é justamente aqui que "excluir" costuma
-                   ser o que a pessoa quer. */
-                <div
-                  key={pipe.id}
-                  className="group flex items-start rounded-xl border border-border/50 bg-card"
-                >
-                  <button
-                    onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
-                    className="flex-1 min-w-0 p-4 text-left"
+                  /* O cartão hospeda o menu de ações, e botão dentro de botão é
+                     HTML inválido (o menu nem abriria). A navegação é o miolo do
+                     cartão; o menu é irmão dela. */
+                  <div
+                    key={funil.key}
+                    className={cn(
+                      "group relative flex rounded-card border border-card-border bg-card text-card-foreground shadow-relevo",
+                      "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-relevo-alto",
+                      "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                    )}
                   >
-                    <div className="flex items-center gap-2">
-                      <Kanban className="w-4 h-4 text-muted-foreground" />
-                      <p className="text-sm font-medium truncate">{displayName}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
-                  </button>
-                  {canonical && (
-                    <div className="pr-3 pt-4 pl-1">
-                      <FunnelActionsMenu
-                        pipeline={canonical}
-                        displayName={displayName}
+                    <button
+                      onClick={() => navigate(funil.path)}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-3.5 rounded-card py-4 pl-4 pr-14 text-left",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      {/* Ladrilho PREENCHIDO com a cor que o usuário escolheu. */}
+                      <span
+                        className={cn("grid size-10 shrink-0 place-items-center self-start rounded-xl", tileText(funil.color))}
+                        style={{ backgroundColor: funil.color }}
+                      >
+                        <TileIcon className="size-[18px]" aria-hidden />
+                      </span>
+                      <span className="flex min-h-10 min-w-0 flex-1 flex-col justify-center">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[14.5px] font-bold leading-snug tracking-[-0.01em]" title={funil.name}>
+                            {funil.name}
+                          </span>
+                          {isDefault && (
+                            <Badge variant="gold" className="shrink-0 px-2 py-0 text-[10px] uppercase tracking-[.04em]">
+                              Padrão
+                            </Badge>
+                          )}
+                        </span>
+                        {apoio && <span className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{apoio}</span>}
+                        {(funil.temporary || funil.meta) && (
+                          <span className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {funil.temporary?.daysLeft != null && (
+                              <Badge variant="warning" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                {funil.temporary.daysLeft} {funil.temporary.daysLeft === 1 ? "dia" : "dias"}
+                              </Badge>
+                            )}
+                            {funil.temporary?.teamGoal != null && (
+                              <Badge variant="soft" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                Meta do time: {funil.temporary.teamGoal.toLocaleString("pt-BR")}
+                              </Badge>
+                            )}
+                            {funil.temporary?.bonus != null && funil.temporary.bonus > 0 && (
+                              <Badge variant="gold" className="px-2 py-0.5 text-[11px] tabular-nums">
+                                Bônus {funil.temporary.bonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                              </Badge>
+                            )}
+                            {funil.meta && (
+                              <Badge variant="soft" className="px-2 py-0.5 text-[11px]">
+                                {funil.meta}
+                              </Badge>
+                            )}
+                          </span>
+                        )}
+                      </span>
+                      {/* "Abrir quadro" segue no nome acessível; à vista, só a seta. */}
+                      <span className="sr-only">Abrir quadro</span>
+                      <ArrowRight
+                        className="size-4 shrink-0 text-muted-foreground transition-[color,transform] group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden
                       />
-                    </div>
-                  )}
-                </div>
+                    </button>
+                    {funil.pipeline && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
+                      </div>
+                    )}
+                  </div>
                 );
               })}
+
+              {/* A porta de criar é o último cartão (mockup), além do botão de ouro. */}
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className={cn(
+                  "flex min-h-[76px] items-center justify-center gap-2 rounded-card border-[1.5px] border-dashed border-border",
+                  "text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/60 hover:bg-card hover:text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <Plus className="size-4" aria-hidden />
+                Criar funil ou campanha
+              </button>
             </div>
           )}
-        </div>
-      )}
 
-      {/* ── Estado vazio ─────────────────────────────────────
-          Antes aparecia mesmo COM funis na tela ("seus funis estruturais estão
-          prontos, crie os customizados"). Sem as duas espécies, a frase não
-          fazia mais sentido — e o vazio só é vazio quando não há funil algum. */}
-      {allFunnels.length === 0 && endedTemporary.length === 0 && (
-        <div className="text-center py-12 bg-muted/20 rounded-xl border border-border/30">
-          <GitBranch className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <h3 className="text-base font-semibold mb-1">
-            Nenhum funil por aqui ainda
-          </h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-            Crie um funil para organizar sua operação
-          </p>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            variant="outline"
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Criar funil
-          </Button>
-        </div>
+          {/* ── Encerrados (recolhidos) ─────────────────────────── */}
+          {endedTemporary.length > 0 && (
+            <section className="space-y-3 rounded-card border border-card-border bg-card p-4 shadow-relevo">
+              <button
+                onClick={() => setShowEnded(!showEnded)}
+                aria-expanded={showEnded}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-1 py-1 text-[13px] font-semibold text-muted-foreground transition-colors",
+                  "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <ChevronDown
+                  className={cn("h-4 w-4 transition-transform duration-200", showEnded && "rotate-180")}
+                  aria-hidden
+                />
+                {endedTemporary.length} funil{endedTemporary.length > 1 ? "s" : ""}{" "}
+                encerrado{endedTemporary.length > 1 ? "s" : ""}
+              </button>
+              {showEnded && (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {endedTemporary.map((pipe) => {
+                    const canonical = pipeById.get(pipe.id);
+                    const displayName = canonical?.name ?? pipe.name;
+                    return (
+                    /* Encerrado é estado, não espécie: o funil segue sendo funil e
+                       ganha o mesmo menu — é justamente aqui que "excluir" costuma
+                       ser o que a pessoa quer. */
+                    <div
+                      key={pipe.id}
+                      className="group flex items-center rounded-card border border-dashed border-border bg-card/60 text-card-foreground"
+                    >
+                      <button
+                        onClick={() => navigate(`/funil/${canonical?.slug ?? pipe.slug}`)}
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center gap-3.5 rounded-card p-4 text-left",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                      >
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+                          <Kanban className="h-5 w-5" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-foreground/80">
+                            {displayName}
+                          </span>
+                          <Badge variant="soft" className="mt-1 px-2 py-0 text-[11px]">
+                            Encerrado
+                          </Badge>
+                        </span>
+                      </button>
+                      {canonical && (
+                        <div className="pl-1 pr-3">
+                          <FunnelActionsMenu
+                            pipeline={canonical}
+                            displayName={displayName}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Estado vazio ─────────────────────────────────────
+              Antes aparecia mesmo COM funis na tela ("seus funis estruturais estão
+              prontos, crie os customizados"). Sem as duas espécies, a frase não
+              fazia mais sentido — e o vazio só é vazio quando não há funil algum. */}
+          {allFunnels.length === 0 && endedTemporary.length === 0 && (
+            <div className="flex flex-col items-center rounded-panel border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+              <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+                <GitBranch className="h-5 w-5" aria-hidden />
+              </span>
+              <h3 className="text-base font-bold tracking-tight">
+                Nenhum funil por aqui ainda
+              </h3>
+              <p className="mx-auto mb-5 mt-1 max-w-sm text-sm text-muted-foreground">
+                Crie um funil para organizar sua operação
+              </p>
+              <Button onClick={() => setCreateOpen(true)} variant="outline">
+                <Plus />
+                Criar funil
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <CreateFunilOuCampanhaModal open={createOpen} onOpenChange={setCreateOpen} />

@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   Bell,
   Calendar,
+  CalendarCheck,
+  CalendarX,
   CheckCircle,
   ChevronRight,
   Clock,
@@ -15,6 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -45,27 +48,37 @@ import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 
 const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string }> = {
   lead_message: { icone: MessageSquare, classe: "text-chart-5", fundo: "bg-chart-5/10" },
-  lead_new: { icone: UserPlus, classe: "text-success", fundo: "bg-success/10" },
-  meeting_booked: { icone: Calendar, classe: "text-primary", fundo: "bg-primary/10" },
+  lead_new: { icone: UserPlus, classe: "text-success-strong", fundo: "bg-success/10" },
+  meeting_booked: { icone: Calendar, classe: "text-primary-soft-foreground", fundo: "bg-primary-soft/60" },
   meeting_soon: { icone: Zap, classe: "text-chart-5", fundo: "bg-chart-5/10" },
-  follow_up_due: { icone: Clock, classe: "text-warning", fundo: "bg-warning/10" },
+  follow_up_due: { icone: Clock, classe: "text-warning-strong", fundo: "bg-warning/10" },
   follow_up_overdue: { icone: AlertTriangle, classe: "text-destructive", fundo: "bg-destructive/10" },
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", fundo: "bg-destructive/10" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", fundo: "bg-destructive/10" },
   transfer_to_human: { icone: UserPlus, classe: "text-destructive", fundo: "bg-destructive/10" },
+  scheduled_message_sent: { icone: CalendarCheck, classe: "text-success-strong", fundo: "bg-success/10" },
+  scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", fundo: "bg-destructive/10" },
 };
 
 const PADRAO = { icone: Bell, classe: "text-muted-foreground", fundo: "bg-muted/50" };
 
 /** Os tipos que valem pintar o badge de vermelho — o resto conta, mas não grita. */
-const URGENTES = new Set(["workflow_alert", "cron_drift", "lead_message", "transfer_to_human"]);
+const URGENTES = new Set([
+  "workflow_alert",
+  "cron_drift",
+  "lead_message",
+  "transfer_to_human",
+  "scheduled_message_failed",
+]);
 
 export interface AlertsDropdownProps {
   /** Texto ao lado do sino. Faz parte do gatilho: clicar na palavra abre. */
   rotulo?: string;
+  /** Forma do gatilho — na barra superior do V5 ele é um botão branco com relevo. */
+  triggerVariant?: "ghost" | "outline";
 }
 
-export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
+export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropdownProps = {}) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
@@ -80,8 +93,8 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
       await salvar({ sound_enabled: ligar });
       if (teste && !(await teste)) toast.info("Som habilitado. Confira o volume e a permissão de áudio do navegador.");
       else toast.success(ligar ? "Som das notificações ativado" : "Notificações silenciadas");
-    } catch {
-      toast.error("Não foi possível salvar o som. Tente novamente.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar o som. Tente novamente." });
     }
   };
 
@@ -118,7 +131,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
     >
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant={triggerVariant}
           size={rotulo ? "default" : "icon"}
           className={cn("relative", rotulo && "w-full justify-start gap-3 px-2.5")}
           aria-label="Notificações"
@@ -143,9 +156,9 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-[368px] p-0">
-        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold">Notificações</h3>
+            <h3 className="text-[15px] font-bold tracking-tight">Notificações</h3>
             {/* Silenciar tudo em um clique: numa reunião, ninguém vai procurar
                 a tela de configurações. */}
             <button
@@ -155,7 +168,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
               aria-label={preferencias.sound_enabled ? "Silenciar notificações" : "Ativar som das notificações"}
               aria-pressed={!preferencias.sound_enabled}
               title={preferencias.sound_enabled ? "Silenciar tudo" : "Voltar a tocar"}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {preferencias.sound_enabled ? (
                 <Volume2 className="h-3.5 w-3.5" />
@@ -168,14 +181,14 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
             <button
               type="button"
               onClick={() => marcarTodosComoLidos()}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
               Marcar todas como lidas
             </button>
           )}
         </div>
 
-        <div className="flex gap-1 px-2 py-2 border-b border-border overflow-x-auto scrollbar-hide">
+        <div className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 scrollbar-hide">
           {FAMILIAS.map(({ chave, rotulo: nomeDaFamilia }) => (
             <button
               key={chave}
@@ -183,15 +196,15 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
               onClick={() => setFamilia(chave)}
               aria-pressed={familia === chave}
               className={cn(
-                "shrink-0 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors",
                 familia === chave
-                  ? "border-border bg-muted text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-muted/50",
+                  ? "bg-tinta text-tinta-foreground dark:bg-foreground dark:text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {nomeDaFamilia}
               {contagem[chave] > 0 && (
-                <span className="ml-1.5 tabular-nums text-muted-foreground">{contagem[chave]}</span>
+                <span className={cn("ml-1.5 tabular-nums", familia === chave ? "text-tinta-muted dark:text-background/60" : "text-muted-foreground")}>{contagem[chave]}</span>
               )}
             </button>
           ))}
@@ -206,7 +219,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
               <AnimatePresence mode="popLayout">
                 {grupos.map((grupo) => (
                   <div key={grupo.rotulo}>
-                    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
                       {grupo.rotulo}
                     </p>
                     {grupo.avisos.map((aviso, index) => {
@@ -222,13 +235,13 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
                           transition={{ delay: Math.min(index, 6) * 0.04 }}
                           onClick={() => aoClicar(aviso)}
                           className={cn(
-                            "mb-1 flex cursor-pointer items-start gap-3 rounded-lg border-l-2 p-3 transition-colors hover:bg-muted/50",
+                            "mb-1 flex cursor-pointer items-start gap-3 rounded-xl border-l-2 p-3 transition-colors hover:bg-muted/50",
                             naoLido ? cn(visual.fundo, "border-l-primary") : "border-l-transparent opacity-60",
                           )}
                         >
                           <Icone className={cn("mt-0.5 h-4 w-4 shrink-0", visual.classe)} />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium">
+                            <p className="text-sm font-semibold">
                               {aviso.title}
                               {aviso.event_count > 1 && (
                                 <span className="ml-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
@@ -260,7 +273,7 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
           </div>
         ) : (
           <div className="p-8 text-center">
-            <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/30" />
+            <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success-strong/30" />
             <p className="text-sm text-muted-foreground">
               {familia === "tudo"
                 ? "Tudo em dia! Nenhuma notificação pendente."

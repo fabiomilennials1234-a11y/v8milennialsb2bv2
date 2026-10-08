@@ -16,8 +16,8 @@ export function OraculoPerfilPerguntaCard({ question, onAnswer, onSkip, busy }: 
 
   if (question.status === "answered") {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-        <Check className="h-3.5 w-3.5 text-primary" />
+      <div className="mt-2 flex items-center gap-2 rounded-2xl border border-success/20 bg-success/[.06] px-3 py-2 text-xs text-muted-foreground">
+        <Check className="h-3.5 w-3.5 text-success" />
         Perfil atualizado. Você pode revisar em Configurações.
       </div>
     );
@@ -25,11 +25,11 @@ export function OraculoPerfilPerguntaCard({ question, onAnswer, onSkip, busy }: 
   if (question.status === "skipped") return null;
 
   return (
-    <div className="mt-2 space-y-3 rounded-xl border border-primary/25 bg-background/70 p-3 shadow-sm">
+    <div className="mt-2 space-y-3 rounded-2xl border border-primary/30 bg-primary-soft/50 p-3">
       <div className="flex gap-2">
-        <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-primary-soft-foreground" />
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-primary">
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground">
             Confirme a medição
           </p>
           <p className="mt-1 text-xs leading-relaxed text-foreground">{question.prompt}</p>
@@ -43,7 +43,7 @@ export function OraculoPerfilPerguntaCard({ question, onAnswer, onSkip, busy }: 
         rows={2}
         maxLength={2000}
         disabled={busy}
-        className="min-h-[64px] resize-none bg-background text-xs"
+        className="min-h-[64px] resize-none rounded-xl bg-card text-xs"
       />
       {question.error && <p className="text-[11px] text-destructive">{question.error}</p>}
       <div className="flex items-center justify-between gap-2">

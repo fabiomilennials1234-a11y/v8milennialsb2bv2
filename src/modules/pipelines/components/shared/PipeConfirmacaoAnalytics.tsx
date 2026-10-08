@@ -9,6 +9,8 @@ import {
   OriginDonut,
   MemberLeaderboard,
 } from "./analytics-ui";
+import { CalendarClock, CalendarCheck, CheckCircle2, Percent } from "lucide-react";
+import { KpiRow } from "@/components/ui/bento";
 
 interface PipeConfirmacaoAnalyticsProps {
   items: any[];
@@ -29,7 +31,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
 
   const funnelStages = useMemo(
     () => [
-      { key: "marcadas", label: "Reuniões Marcadas", count: counts.total },
+      { key: "marcadas", label: "Reuniões marcadas", count: counts.total },
       { key: "confirmadas", label: "Confirmadas", count: counts.confirmadas },
       { key: "compareceram", label: "Compareceram", count: counts.compareceram, tone: "success" as const },
     ],
@@ -88,12 +90,13 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
   }, [items, responsibleMembers]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" />
+      <KpiRow cols={4}>
+        <AnalyticsStatCard label="Marcadas" value={counts.total} accent="neutral" icon={CalendarClock} />
         <AnalyticsStatCard
           label="Confirmadas"
+          icon={CheckCircle2}
           value={counts.confirmadas}
           sub={counts.total > 0 ? `${((counts.confirmadas / counts.total) * 100).toFixed(0)}% das marcadas` : undefined}
           accent="blue"
@@ -101,6 +104,7 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
         />
         <AnalyticsStatCard
           label="Compareceram"
+          icon={CalendarCheck}
           value={counts.compareceram}
           accent="success"
           tintValue
@@ -108,30 +112,31 @@ export function PipeConfirmacaoAnalytics({ items, responsibleMembers }: PipeConf
         />
         <AnalyticsStatCard
           label="Show rate"
+          icon={Percent}
           value={`${counts.showRate.toFixed(1)}%`}
           sub="compareceram / marcadas"
           accent="gold"
           tintValue
           delay={0.15}
         />
-      </div>
+      </KpiRow>
 
       {/* Gráficos */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <AnalyticsPanel title="Funil de Comparecimento" subtitle="Volume por etapa e perda entre etapas">
+      <div className="grid gap-4 md:grid-cols-2">
+        <AnalyticsPanel title="Funil de comparecimento" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="reuniões" />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Taxa de Conversão" subtitle="Saúde de cada passagem" dot="success">
+        <AnalyticsPanel title="Taxa de conversão" subtitle="Saúde de cada passagem" dot="success">
           <ConversionHealth items={conversions} />
         </AnalyticsPanel>
 
-        <AnalyticsPanel title="Reuniões por Origem" subtitle="Distribuição do período" dot="blue">
+        <AnalyticsPanel title="Reuniões por origem" subtitle="Distribuição do período" dot="blue">
           <OriginDonut slices={originData} unit="reuniões" />
         </AnalyticsPanel>
 
         <AnalyticsPanel
-          title="Performance por Responsável"
+          title="Performance por responsável"
           subtitle="Reuniões trabalhadas e comparecimento"
         >
           <MemberLeaderboard rows={leaderboard} />

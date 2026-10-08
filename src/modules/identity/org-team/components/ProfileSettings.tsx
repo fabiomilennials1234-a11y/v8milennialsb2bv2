@@ -11,6 +11,7 @@ import { useGestor } from "../../gestor/hooks/useGestor";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 export function ProfileSettings() {
   const { user } = useAuth();
@@ -34,7 +35,7 @@ export function ProfileSettings() {
     : user?.email?.substring(0, 2).toUpperCase() || "??";
 
   const roleLabels: Record<string, { label: string; color: string }> = {
-    admin: { label: "Administrador", color: "bg-success/10 text-success border-success/30" },
+    admin: { label: "Administrador", color: "bg-success/10 text-success-strong border-success/30" },
     sdr: { label: "Vendedor", color: "bg-chart-5/10 text-chart-5 border-chart-5/30" },
     closer: { label: "Vendedor", color: "bg-primary/10 text-primary border-primary/30" },
     member: { label: "Membro", color: "bg-muted text-muted-foreground border-border" },
@@ -101,7 +102,7 @@ export function ProfileSettings() {
       toast.success("Foto de perfil atualizada!");
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error);
-      toast.error(error.message || "Erro ao fazer upload da foto");
+      notifyError(error, { fallback: "Não foi possível fazer upload da foto." });
     } finally {
       setIsUploading(false);
       // Limpar o input para permitir re-upload do mesmo arquivo
@@ -181,7 +182,7 @@ export function ProfileSettings() {
       {/* Form */}
       <div className="space-y-4">
         <div className="grid gap-2">
-          <Label htmlFor="full_name">Nome Completo</Label>
+          <Label htmlFor="full_name">Nome completo</Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -219,7 +220,7 @@ export function ProfileSettings() {
 
       {/* Account Info */}
       <div className="pt-6 border-t border-border">
-        <h4 className="font-medium mb-4">Informações da Conta</h4>
+        <h4 className="font-medium mb-4">Informações da conta</h4>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">ID do Usuário</p>
@@ -235,7 +236,7 @@ export function ProfileSettings() {
             </p>
           </div>
           <div>
-            <p className="text-muted-foreground">Último Login</p>
+            <p className="text-muted-foreground">Último login</p>
             <p className="mt-1">
               {user?.last_sign_in_at
                 ? new Date(user.last_sign_in_at).toLocaleDateString('pt-BR')

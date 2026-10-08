@@ -128,10 +128,10 @@ export function OnboardingPreviewTab() {
   const allSelected = QUIZ_OPTIONS.every((q) => selections[q.key]);
 
   return (
-    <div className="space-y-6 mt-4">
+    <div className="space-y-6 rounded-card border border-card-border bg-card p-5 shadow-relevo">
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Simulador de Quiz
+          Simulador de quiz
         </h3>
         <p className="text-xs text-muted-foreground mb-4">
           Simule respostas do quiz e veja quais templates seriam matched.
@@ -176,7 +176,7 @@ export function OnboardingPreviewTab() {
 
       {ran && (
         <div className="space-y-4 pt-4 border-t border-border/40">
-          <div className="p-3 rounded-lg bg-muted/30">
+          <div className="p-3 rounded-xl bg-sunken">
             <Label className="text-xs text-muted-foreground block mb-1">Answers expandidas (debug)</Label>
             <pre className="text-[10px] font-mono text-muted-foreground overflow-x-auto">
               {JSON.stringify(answers, null, 2)}
@@ -206,7 +206,7 @@ export function OnboardingPreviewTab() {
               </div>
             ))}
             {matchedPipelines.length > 1 && (
-              <p className="text-[10px] text-amber-500">
+              <p className="text-[10px] text-warning-strong">
                 Maior prioridade vence: {matchedPipelines[0]?.name}
               </p>
             )}

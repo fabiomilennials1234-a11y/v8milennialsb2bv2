@@ -12,6 +12,7 @@
  * seria pior que não oferecer.
  */
 
+import { cn } from "@/lib/utils";
 import { StudioWindowFrame } from "./StudioWindowFrame";
 import { resolveFixedCard } from "@/modules/analytics/lib/metrics-studio-fixed-cards";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
@@ -65,12 +66,20 @@ export function FixedWindow({
       onMove={onMove}
       onResize={onResize}
       onRemove={onRemove}
+      semMoldura={card.semMoldura}
     >
       {/* `min-h-0` é o que impede o corpo de empurrar a moldura: sem ele, um
-          card com conteúdo alto estoura a altura que o usuário escolheu. */}
-      <div className="min-h-0 flex-1 overflow-auto">
+          card com conteúdo alto estoura a altura que o usuário escolheu.
+          Sem moldura em Visualização a área de rolagem transborda a janela
+          pelo respiro exato da sombra (e do levantar no hover) dos cartões
+          dele — rola quando aperta, mas não corta a sombra. Sem moldura não
+          há borda dizendo "tem mais embaixo": o esmaecido no pé faz esse papel. */}
+      <div className={cn(
+        "min-h-0 flex-1 overflow-auto",
+        card.semMoldura && !editavel && "-mx-3 -mb-5 -mt-1 px-3 pb-5 pt-1 [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
+      )}>
         {card.requiresPerformance && !podeVerPorPessoa
-          ? <p className="p-4 text-sm text-muted-foreground">Você não tem permissão para ver a performance da equipe.</p>
+          ? <p className="py-4 text-[13px] text-muted-foreground">Você não tem permissão para ver a performance da equipe.</p>
           : <Corpo {...context} />}
       </div>
     </StudioWindowFrame>

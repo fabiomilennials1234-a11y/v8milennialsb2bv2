@@ -13,7 +13,7 @@ interface ConversionHealthProps {
 
 function health(rate: number) {
   if (rate >= 60) return { text: "text-success", bar: "bg-gradient-to-r from-success/60 to-success" };
-  if (rate >= 30) return { text: "text-primary", bar: "bg-gradient-to-r from-primary/60 to-primary" };
+  if (rate >= 30) return { text: "text-primary-soft-foreground", bar: "bg-gradient-to-r from-primary/60 to-primary" };
   return { text: "text-destructive", bar: "bg-gradient-to-r from-destructive/60 to-destructive" };
 }
 
@@ -42,11 +42,11 @@ export function ConversionHealth({ items }: ConversionHealthProps) {
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-[13px] font-medium">{item.label}</span>
               <span className="text-xs text-muted-foreground tabular-nums">
-                <b className={cn("text-[15px] font-bold mr-1.5", h.text)}>{item.rate.toFixed(0)}%</b>
+                <b className={cn("mr-1.5 text-[15px] font-extrabold tracking-[-0.02em]", h.text)}>{item.rate.toFixed(0)}%</b>
                 {item.to} de {item.from}
               </span>
             </div>
-            <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
               <motion.div
                 className={cn("h-full rounded-full", h.bar)}
                 initial={{ width: 0 }}

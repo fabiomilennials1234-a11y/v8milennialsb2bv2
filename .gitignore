@@ -97,6 +97,7 @@ services/**/.venv/
 # Playwright MCP screenshots/logs (local, ephemeral)
 .playwright-mcp/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 scripts/basic4u-clients.json
 
 # Scripts one-off de ops/incidentes — arquivar fora do repo (Desktop/torque-ops-archive-*)
@@ -133,3 +134,17 @@ scripts/recovery/
 # Ensaio transacional do #1721 — artefato montado, nao versionado
 .ensaio-*.montado.sql
 .apply-*.montado.sql
+
+# Build da interface clássica (scripts/ui-classic/merge-dist.mjs junta em dist/)
+dist-classic/
+
+# Prints da harness de UI (scripts/ui-preview/shoot.mjs)
+.ui-shots/
+
+# Cloudflare (cloudflare/, docs/DEPLOY_CLOUDFLARE.md): cópia do front no ar
+# (`npm run cf:extract`), diretório publicado (`npm run cf:prepare`), cache do
+# wrangler e segredos locais.
+cloudflare/.prod-dist/
+cloudflare/.assets/
+cloudflare/.wrangler/
+cloudflare/.dev.vars*

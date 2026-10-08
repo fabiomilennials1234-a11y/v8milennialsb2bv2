@@ -17,6 +17,8 @@ import { useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { IconChip } from "@/components/ui/bento";
+import { notifyError } from "@/shared/errors";
 
 interface ConditionRow {
   field: string;
@@ -80,7 +82,7 @@ export function ApprovalRulesConfig() {
 
   async function handleCreate() {
     if (!form.name.trim()) {
-      toast.error("Nome obrigatorio");
+      toast.error("Nome obrigatório");
       return;
     }
     if (!organizationId) return;
@@ -101,7 +103,7 @@ export function ApprovalRulesConfig() {
       setDialogOpen(false);
       resetForm();
     } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao criar regra");
+      notifyError(err, { fallback: "Não foi possível criar regra." });
     } finally {
       setSaving(false);
     }
@@ -140,24 +142,26 @@ export function ApprovalRulesConfig() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            Regras de aprovacao
+          <h3 className="flex items-center gap-2 text-[15px] font-bold tracking-[-0.02em]">
+            <IconChip icon={Shield} tone="gold" />
+            Regras de aprovação
           </h3>
-          <p className="text-sm text-muted-foreground">
-            Defina quando negocios ou propostas precisam de aprovacao
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Defina quando negócios ou propostas precisam de aprovação
           </p>
         </div>
-        <Button size="sm" onClick={() => { resetForm(); setDialogOpen(true); }}>
-          <Plus className="mr-1 h-4 w-4" /> Nova regra
+        <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+          <Plus /> Nova regra
         </Button>
       </div>
 
       {rules.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Shield className="h-8 w-8 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma regra configurada</p>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
+              <Shield className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-semibold">Nenhuma regra configurada</p>
           </CardContent>
         </Card>
       ) : (
@@ -167,8 +171,8 @@ export function ApprovalRulesConfig() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm">{rule.name}</CardTitle>
-                    <Badge variant="outline" className="text-[10px] uppercase">
+                    <CardTitle className="text-[15px] tracking-[-0.02em]">{rule.name}</CardTitle>
+                    <Badge variant="soft" className="text-[10px] font-bold uppercase tracking-[.06em]">
                       {rule.entity_type}
                     </Badge>
                   </div>
@@ -177,8 +181,9 @@ export function ApprovalRulesConfig() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => handleDelete(rule.id)}
+                      aria-label="Remover regra"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -188,7 +193,7 @@ export function ApprovalRulesConfig() {
               <CardContent className="pt-0">
                 <div className="flex flex-wrap gap-2">
                   {(rule.conditions as ConditionRow[]).map((c, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">
+                    <Badge key={i} variant="soft" className="text-xs">
                       {CONDITION_FIELDS.find((f) => f.value === c.field)?.label ?? c.field}{" "}
                       {OPERATORS.find((o) => o.value === c.operator)?.label ?? c.operator}{" "}
                       {c.value}
@@ -205,7 +210,7 @@ export function ApprovalRulesConfig() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova regra de aprovacao</DialogTitle>
+            <DialogTitle>Nova regra de aprovação</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -236,7 +241,7 @@ export function ApprovalRulesConfig() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Condicoes</Label>
+              <Label className="text-xs">Condições</Label>
               {form.conditions.map((c, i) => (
                 <div key={i} className="flex gap-2 items-center">
                   <Select
@@ -276,8 +281,9 @@ export function ApprovalRulesConfig() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 shrink-0"
+                      className="h-8 w-8 shrink-0 rounded-[10px]"
                       onClick={() => removeCondition(i)}
+                      aria-label="Remover condição"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -285,12 +291,12 @@ export function ApprovalRulesConfig() {
                 </div>
               ))}
               <Button variant="ghost" size="sm" onClick={addCondition} className="text-xs">
-                <Plus className="mr-1 h-3 w-3" /> Adicionar condicao
+                <Plus className="mr-1 h-3 w-3" /> Adicionar condição
               </Button>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Auto-rejeitar apos (horas, opcional)</Label>
+              <Label className="text-xs">Auto-rejeitar após (horas, opcional)</Label>
               <Input
                 type="number"
                 min={1}

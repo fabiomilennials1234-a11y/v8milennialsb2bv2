@@ -1,4 +1,4 @@
-import { applyMessageUpdate } from "./message-update.ts";
+import { applyMessageUpdate, isFileDownloadedNotification, isPureReceiptUpdate, normalizeMessageUpdatePayload, type UnmatchedReceiptOutcome } from "./message-update.ts";
 import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
@@ -14,7 +14,8 @@ import { recordQuotePresentation, completeQuotePresentations } from "../_shared/
  *   .../whatsapp-webhook/<SECRET>/<event>
  *
  * Auth: secret path segment validated with constant-time compare.
- * Tenant resolution: lookup via whatsapp_instance_secrets.uazapi_instance_id.
+ * Tenant resolution: one RPC, resolve_uazapi_instance (uazapi_instance_id,
+ * then per-instance token). RPC = POST, so the token never lands in a URL.
  * Idempotency: UPSERT on (message_id, instance_id) — preserves contract from
  * commit 3066b5e. Echo elimination is server-side via excludeMessages filter
  * configured at instance creation (T2.2).
@@ -88,15 +89,15 @@ const isPoisonToken = makePoisonChecker({
       const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      const { count, error } = await supabase
-        .from("whatsapp_webhook_dlq")
-        .select("id", { count: "exact", head: true })
-        .eq("reason", "unknown_instance")
-        .is("resolved_at", null)
-        .gte("attempts", DLQ_REPLAY_MAX_ATTEMPTS)
-        .eq("payload->>token", token);
-      if (error) return null;
-      return count ?? 0;
+      // RPC (POST) so the token travels in the body — a REST filter
+      // `payload->>token=eq.<TOKEN>` would land in edge_logs in clear text.
+      const { data, error } = await supabase.rpc("count_exhausted_uazapi_dlq_by_token", {
+        p_token: token,
+        p_min_attempts: DLQ_REPLAY_MAX_ATTEMPTS,
+      });
+      if (error || data === null || data === undefined) return null;
+      const count = Number(data);
+      return Number.isFinite(count) ? count : null;
     } catch {
       return null;
     }
@@ -205,62 +206,50 @@ type ResolvedInstance = {
   provider?: string | null;
 };
 
-async function resolveInstance(
+type InstanceResolution = { instance: ResolvedInstance; via: "instance_id" | "token" };
+
+/**
+ * Resolve o tenant do evento numa única RPC (`resolve_uazapi_instance`,
+ * service_role only): uazapi_instance_id primeiro, token depois.
+ *
+ * É RPC — POST — de propósito: o token por instância vai no CORPO. Antes eram
+ * três GETs REST, um deles `whatsapp_instance_secrets?uazapi_token=eq.<TOKEN>`,
+ * e edge_logs grava a query string em claro (~5,5 mil linhas/h, 90 tokens).
+ * Erro ou nenhuma linha → null, como o `.maybeSingle()` antigo.
+ */
+async function resolveUazapiInstance(
   supabase: SupabaseClient,
-  uazapiInstanceId: string
-): Promise<ResolvedInstance | null> {
-  const { data, error } = await supabase
-    .from("whatsapp_instance_secrets")
-    .select("instance_id, organization_id")
-    .eq("uazapi_instance_id", uazapiInstanceId)
-    .maybeSingle();
-
+  instanceRef: string | null,
+  token: string | null,
+): Promise<InstanceResolution | null> {
+  if (!instanceRef && !token) return null;
+  const { data, error } = await supabase.rpc("resolve_uazapi_instance", {
+    p_instance_ref: instanceRef,
+    p_token: token,
+  });
   if (error || !data) return null;
-
-  const { data: inst } = await supabase
-    .from("whatsapp_instances")
-    .select("id, organization_id, instance_name, phone_number, provider")
-    .eq("id", data.instance_id)
-    .maybeSingle();
-
-  if (!inst) return null;
-  return inst as ResolvedInstance;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | (ResolvedInstance & { via?: string })
+    | undefined;
+  if (!row?.id || !row.organization_id) return null;
+  const { via, ...instance } = row;
+  return { instance, via: via === "instance_id" ? "instance_id" : "token" };
 }
 
-// Uazapi V2 sometimes omits instance_id at the top level but still sends the
-// per-instance token. Resolve by uazapi_token as a defensive fallback.
-async function resolveInstanceByToken(
-  supabase: SupabaseClient,
-  uazapiToken: string
-): Promise<ResolvedInstance | null> {
-  const { data, error } = await supabase
-    .from("whatsapp_instance_secrets")
-    .select("instance_id")
-    .eq("uazapi_token", uazapiToken)
-    .maybeSingle();
-
-  if (error || !data) return null;
-
-  const { data: inst } = await supabase
-    .from("whatsapp_instances")
-    .select("id, organization_id, instance_name, phone_number, provider")
-    .eq("id", data.instance_id)
-    .maybeSingle();
-
-  if (!inst) return null;
-  return inst as ResolvedInstance;
-}
-
-// Defensive instance-id picker: tolerates Uazapi V2 schema variations.
+// Defensive instance-ref picker: tolerates Uazapi V2 schema variations.
 // - Treats empty / whitespace strings as missing (?? would let "" through).
 // - Tries multiple camel/Pascal/snake aliases observed in V2 payloads.
-// Returns the first non-empty candidate or null.
-function pickInstanceId(
+// Returns the first non-empty candidate and whether it came from a field that
+// carries the Uazapi instance id (`r…`). `instanceName` is the DISPLAY NAME
+// (whatsapp_instances.instance_name), never the id: it is passed along for
+// parity but it can't match uazapi_instance_id, and it is not unique across
+// organizations, so it must never resolve a tenant on its own.
+function pickInstanceRef(
   payload: Record<string, unknown> | null | undefined,
   pathInstanceId?: string,
-): string | null {
+): { ref: string | null; explicitId: boolean } {
   const p: Record<string, unknown> = payload ?? {};
-  const candidates: unknown[] = [
+  const idCandidates: unknown[] = [
     p.instance,
     p.instance_id,
     p.instanceId,
@@ -268,16 +257,49 @@ function pickInstanceId(
     p.InstanceID,
     p.instanceID,
     pathInstanceId,
-    p.instanceName,
-    p.InstanceName,
   ];
-  for (const c of candidates) {
-    if (typeof c === "string") {
-      const trimmed = c.trim();
-      if (trimmed.length > 0) return trimmed;
+  const nameCandidates: unknown[] = [p.instanceName, p.InstanceName];
+  const first = (list: unknown[]): string | null => {
+    for (const c of list) {
+      if (typeof c === "string") {
+        const trimmed = c.trim();
+        if (trimmed.length > 0) return trimmed;
+      }
     }
+    return null;
+  };
+  const id = first(idCandidates);
+  if (id) return { ref: id, explicitId: true };
+  return { ref: first(nameCandidates), explicitId: false };
+}
+
+/** First 12 hex chars of SHA-256(token): correlatable in logs, not reversible. */
+async function tokenFingerprint(token: string): Promise<string | null> {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
+  } catch {
+    return null;
   }
-  return null;
+}
+
+/** Path for logs with the global webhook secret segment masked. */
+function redactedWebhookPath(pathname: string): string {
+  const segments = pathname.split("/");
+  const idx = segments.indexOf("whatsapp-webhook");
+  if (idx >= 0 && segments[idx + 1]) segments[idx + 1] = "<secret>";
+  return segments.join("/");
+}
+
+/**
+ * Shape-only description of a raw webhook payload for runtime_logs. Never the
+ * content: message text, phones and tokens live in VALUES, and redactSecrets
+ * only filters by key name.
+ */
+function payloadShape(payload: Record<string, unknown>): { keys: string[]; payload_bytes: number | null } {
+  let bytes: number | null = null;
+  try { bytes = JSON.stringify(payload).length; } catch { bytes = null; }
+  return { keys: Object.keys(payload).slice(0, 15), payload_bytes: bytes };
 }
 
 // Pick a per-instance Uazapi token from payload variants when present.
@@ -1244,8 +1266,12 @@ async function handlePaymentResponseEvent(
   });
 }
 
-async function handleMessagesUpdateEvent(supabase: SupabaseClient, instance: ResolvedInstance, data: any, requireTarget = false) {
-  await applyMessageUpdate(supabase, instance, data, { requireTarget });
+async function handleMessagesUpdateEvent(supabase: SupabaseClient, instance: ResolvedInstance, data: any, options: {
+  requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
+  suppressQuotePresentation?: boolean;
+  exactRecoveryMessageId?: boolean;
+} = {}) {
+  return await applyMessageUpdate(supabase, instance, data, options);
 }
 
 async function handleConnectionEvent(
@@ -1363,6 +1389,13 @@ export interface WhatsAppWebhookOptions {
   strictUpdateTargets?: boolean;
   /** Internal durable replay only; the original ingress already checked age. */
   trustedQueuedReplay?: boolean;
+  /** Worker-only DB provenance. Never derive from request body. */
+  suppressQuotePresentation?: boolean;
+  /** Worker-only recovery scope: exact database message ID and chat. */
+  exactRecoveryMessageId?: boolean;
+  /** Durable queue creation time; worker-only bounded grace for pure receipts with absent targets. */
+  queuedEventCreatedAt?: string;
+  unmatchedReceiptGraceMs?: number;
   /** Optional durable admission after authentication and database tenant resolution.
    * Only null selects inline handling. An admission error must never fall back. */
   admitEvent?: (context: {
@@ -1371,7 +1404,13 @@ export interface WhatsAppWebhookOptions {
     event: string;
     payload: Record<string, unknown>;
     pathInstanceId?: string;
-  }) => Promise<Response | null>;
+  }) => Promise<Response | null | InlineExecution>;
+}
+
+/** A database ticket stays live until the actual business operation succeeds. */
+export interface InlineExecution {
+  kind: "inline";
+  complete: () => Promise<void>;
 }
 
 export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {}) {
@@ -1491,7 +1530,7 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
 
     // pathInstanceId (from URL) is the reliable Uazapi instance ID for reconfigured instances.
     // Defensive picker tolerates Uazapi V2 schema variations (empty strings, camel/Pascal/snake aliases).
-    const uazapiInstanceId = pickInstanceId(payload, pathInstanceId);
+    const { ref: uazapiInstanceId, explicitId: hasExplicitInstanceId } = pickInstanceRef(payload, pathInstanceId);
     const uazapiToken = pickUazapiToken(payload);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -1519,9 +1558,8 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       // A scoped standalone canary cannot admit an event whose instance is
       // unknown. Leave it unacknowledged for provider retry; Edge keeps DLQ.
       if (options.allowInstance) return genericResponse(503, { error: "instance_not_enabled" });
-      const rawSnippet = (() => {
-        try { return JSON.stringify(payload).slice(0, 2048); } catch { return "[unserializable]"; }
-      })();
+      // Shape only. The raw payload (message text, phones, tokens) stays in the
+      // DLQ row below, which is service_role-only; runtime_logs never gets it.
       await logRuntime({
         module: "webhook",
         action: "uazapi_missing_instance",
@@ -1529,9 +1567,8 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
         payloadSnapshot: {
           source_ip: sourceIp,
           event,
-          url_path: url.pathname,
-          keys: Object.keys(payload).slice(0, 15),
-          raw_truncated: rawSnippet,
+          url_path: redactedWebhookPath(url.pathname),
+          ...payloadShape(payload),
         },
       });
       const parked = await enqueueDlq(supabase, {
@@ -1544,25 +1581,31 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       return dlqOutcomeResponse(parked, "missing_instance");
     }
 
-    let instance: ResolvedInstance | null = null;
-    if (uazapiInstanceId) {
-      instance = await resolveInstance(supabase, uazapiInstanceId);
-    }
-    if (!instance && uazapiToken) {
-      instance = await resolveInstanceByToken(supabase, uazapiToken);
-      if (instance) {
-        await logRuntime({
-          module: "webhook",
-          action: "uazapi_resolved_by_token_fallback",
-          status: "success",
-          payloadSnapshot: {
-            instance_id: instance.id,
-            organization_id: instance.organization_id,
-            event,
-            had_instance_id_candidate: !!uazapiInstanceId,
-          },
-        });
-      }
+    // Only an explicit id field may compete with the token. `instanceName` is
+    // chosen by the customer (uazapi-provider initInstance `name`): naming an
+    // instance after another org's `r…` id would otherwise hijack routing,
+    // since the id outranks the token inside the RPC.
+    const resolution = await resolveUazapiInstance(
+      supabase,
+      hasExplicitInstanceId ? uazapiInstanceId : null,
+      uazapiToken,
+    );
+    const instance: ResolvedInstance | null = resolution?.instance ?? null;
+    // Token is the normal path for V2 payloads (they carry `instanceName`, the
+    // display name, not the `r…` id). The fallback signal is only an anomaly
+    // when the payload/path DID carry an explicit instance id that missed.
+    if (resolution?.via === "token" && hasExplicitInstanceId) {
+      await logRuntime({
+        module: "webhook",
+        action: "uazapi_resolved_by_token_fallback",
+        status: "success",
+        payloadSnapshot: {
+          instance_id: resolution.instance.id,
+          organization_id: resolution.instance.organization_id,
+          event,
+          had_instance_id_candidate: true,
+        },
+      });
     }
     if (!instance) {
       if (options.allowInstance) return genericResponse(503, { error: "instance_not_enabled" });
@@ -1578,7 +1621,9 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
             status: "skipped",
             payloadSnapshot: {
               event,
-              instance_ref: uazapiToken.slice(0, 8),
+              // Fingerprint, not a token prefix: a prefix is part of the secret.
+              // Correlate with SQL: left(encode(sha256(convert_to(payload->>'token','UTF8')),'hex'),12).
+              instance_ref_sha256: await tokenFingerprint(uazapiToken),
               drops_since_boot: poisonDropsSinceBoot,
             },
           });
@@ -1609,14 +1654,20 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       return genericResponse(503, { error: "instance_not_enabled" });
     }
 
+    let inlineExecution: InlineExecution | null = null;
     if (options.admitEvent) {
-      const admitted = await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
-      if (admitted !== null) return admitted;
+      try {
+        const admitted = await options.admitEvent({ supabase, instance, event, payload, pathInstanceId });
+        if (admitted instanceof Response) return admitted;
+        if (admitted !== null) inlineExecution = admitted;
+      } catch {
+        return genericResponse(503, { error: "admission_unavailable" });
+      }
     }
 
     try {
-      await withTimeout(
-        (async () => {
+      let updateOutcome: UnmatchedReceiptOutcome | undefined;
+      const businessWork = (async () => {
           switch (event) {
             case "messages": {
               const msgData = uazapiEventMessage(payload);
@@ -1624,26 +1675,21 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
               break;
             }
             case "messages_update": {
-              // Uazapi V2: update data in payload.event (object) with PascalCase fields
-              let updateData = payload.data;
-              if (!updateData && typeof payload.event === "object" && payload.event !== null) {
-                const ev = payload.event;
-                updateData = {
-                  ...ev,
-                  id: ev.MessageIDs?.[0] ?? ev.messageid,
-                  // MessageIDs é array: um receipt pode cobrir várias mensagens.
-                  ids: Array.isArray(ev.MessageIDs) ? ev.MessageIDs : undefined,
-                  status: ev.Type ?? ev.type,
-                  chatid: ev.chatid ?? ev.Chat,
-                  // IsFromMe distingue "o contato leu a minha" (false) de "eu li a
-                  // dele" (true) — sem isso o receipt sobrescreve linha incoming.
-                  fromMe: ev.IsFromMe ?? ev.isFromMe,
-                  // Fallback do prefixo do message_id composto quando a instância
-                  // ainda não tem phone_number gravado.
-                  owner: payload.owner,
-                };
+              if (options.trustedQueuedReplay && isFileDownloadedNotification(payload)) {
+                updateOutcome = { outcome: "provider_notification", unmatchedCount: 0 };
+                break;
               }
-              await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload, options.strictUpdateTargets ?? false);
+              const updateData = normalizeMessageUpdatePayload(payload);
+              updateOutcome = await handleMessagesUpdateEvent(supabase, instance, updateData, {
+                requireTarget: (options.strictUpdateTargets ?? false)
+                  || (inlineExecution !== null && !isPureReceiptUpdate(updateData)),
+                ...(options.trustedQueuedReplay ? {
+                  queuedEventCreatedAt: options.queuedEventCreatedAt,
+                  unmatchedReceiptGraceMs: options.unmatchedReceiptGraceMs,
+                  suppressQuotePresentation: options.suppressQuotePresentation === true,
+                  exactRecoveryMessageId: options.exactRecoveryMessageId === true,
+                } : {}),
+              });
               break;
             }
             case "connection":
@@ -1674,9 +1720,13 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
                 },
               });
           }
-        })(),
-        PROCESSING_TIMEOUT_MS
-      );
+        })();
+      // Attach before the HTTP deadline races. Late success still closes the
+      // ticket; rejected work or failed settlement leaves it for reconciliation.
+      const trackedWork = inlineExecution
+        ? businessWork.then(() => inlineExecution.complete())
+        : businessWork;
+      await withTimeout(trackedWork, PROCESSING_TIMEOUT_MS);
 
       await logRuntime({
         organizationId: instance.organization_id,
@@ -1686,7 +1736,9 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
         payloadSnapshot: { event, instance_id: instance.id },
       });
 
-      return genericResponse(200, { ok: true });
+      return genericResponse(200, updateOutcome
+        ? { ok: true, outcome: updateOutcome.outcome, unmatched_count: updateOutcome.unmatchedCount }
+        : { ok: true });
     } catch (e) {
       await logRuntime({
         organizationId: instance.organization_id,
@@ -1701,6 +1753,9 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
       });
       if ((e as Error).message === "question_buttons_ingress_unavailable") {
         return genericResponse(503, { error: "question_buttons_ingress_unavailable" });
+      }
+      if ((e as Error).message === "execution_settlement_failed") {
+        return genericResponse(503, { error: "execution_settlement_failed" });
       }
       return genericResponse(500, { error: "internal" });
     }

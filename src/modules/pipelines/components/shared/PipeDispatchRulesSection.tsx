@@ -42,6 +42,7 @@ import { useOrganization } from "@/modules/identity";
 import { cn } from "@/lib/utils";
 import { usePipeQueueItems, useRetryDispatchItems } from "@/modules/campaigns/hooks/useDispatchQueueItems";
 import { DispatchQueueSheet } from "@/shared/components/DispatchQueueSheet";
+import { notifyError } from "@/shared/errors";
 
 const TRIGGER_LABELS: Record<PipeDispatchRuleTriggerType, string> = {
   lead_added: "Ao adicionar lead no funil",
@@ -52,7 +53,7 @@ const ACTION_LABELS: Record<PipeDispatchRuleStepActionType, string> = {
   send_template: "Enviar template",
   wait_response: "Esperar resposta",
   change_stage: "Mudar etapa",
-  assign_sdr: "Atribuir Responsável",
+  assign_sdr: "Atribuir responsável",
   cancel_sequence: "Cancelar sequência",
 };
 
@@ -252,8 +253,8 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
     try {
       await deleteRule.mutateAsync({ id: r.id, pipe_type: pipeType, pipeline_id: pipelineId });
       toast.success("Regra removida");
-    } catch {
-      toast.error("Erro ao remover regra");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível remover regra." });
     }
   };
 
@@ -329,7 +330,7 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
         body: pipelineId ? { pipeline_id: pipelineId } : { pipe_type: pipeType },
       });
       if (error) {
-        toast.error(error.message || "Erro ao processar fila");
+        notifyError(error, { fallback: "Não foi possível processar fila." });
         return;
       }
       const result = data as { processed?: number; sent?: number; failed?: number; actions_executed?: number; message?: string } | null;
@@ -344,7 +345,7 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
       }
       queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_metrics", organizationId, pipelineId ?? pipeType] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
+      notifyError(e, { fallback: "Não foi possível processar fila." });
     } finally {
       setProcessingQueue(false);
     }
@@ -401,11 +402,11 @@ export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }
           {/* Dispatch Metrics */}
           {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.processing > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" onClick={() => setQueueSheetStatus("sent")} />
-              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled + dispatchMetrics.processing} label={dispatchMetrics.processing > 0 ? `Pendentes (${dispatchMetrics.processing} em proc.)` : "Pendentes"} onClick={() => setQueueSheetStatus("scheduled")} />
-              <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" onClick={() => setQueueSheetStatus("waiting_response")} />
-              <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" onClick={() => setQueueSheetStatus("executed")} />
-              <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" onClick={() => setQueueSheetStatus("failed")} />
+              <MetricCard icon={CheckCircle2} color="text-success" value={dispatchMetrics.sent} label="Enviadas" onClick={() => setQueueSheetStatus("sent")} />
+              <MetricCard icon={Clock} color="text-warning-strong" value={dispatchMetrics.scheduled + dispatchMetrics.processing} label={dispatchMetrics.processing > 0 ? `Pendentes (${dispatchMetrics.processing} em proc.)` : "Pendentes"} onClick={() => setQueueSheetStatus("scheduled")} />
+              <MetricCard icon={Hourglass} color="text-insights" value={dispatchMetrics.waiting_response} label="Aguardando" onClick={() => setQueueSheetStatus("waiting_response")} />
+              <MetricCard icon={ArrowRightLeft} color="text-primary-soft-foreground" value={dispatchMetrics.executed} label="Ações" onClick={() => setQueueSheetStatus("executed")} />
+              <MetricCard icon={XCircle} color="text-destructive" value={dispatchMetrics.failed} label="Falharam" onClick={() => setQueueSheetStatus("failed")} />
             </div>
           )}
 

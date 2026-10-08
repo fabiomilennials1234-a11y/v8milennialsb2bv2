@@ -100,12 +100,12 @@ export function CodeHttpsPanel({ data, onUpdate }: CodeHttpsPanelProps) {
 
       {/* 6. Explicação — aqui ela também é a documentação do formato, porque não
           existe campo de formulário para consultar. */}
-      <div className="p-3 rounded-lg bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800 space-y-2">
-        <p className="text-xs text-violet-700 dark:text-violet-300">
+      <div className="rounded-xl border border-border/60 bg-sunken p-3 space-y-2">
+        <p className="text-xs text-muted-foreground">
           Dispara uma chamada HTTPS e guarda a resposta em {`{{${outVar}}}`}. A
           requisição inteira é escrita como um JSON, com estas chaves:
         </p>
-        <ul className="text-xs text-violet-700 dark:text-violet-300 space-y-1 pl-1">
+        <ul className="text-xs text-muted-foreground space-y-1 pl-1">
           <li>
             <code className="font-mono">url</code> — obrigatória, e precisa começar com{" "}
             <code className="font-mono">https://</code>. Endereço{" "}
@@ -129,11 +129,11 @@ export function CodeHttpsPanel({ data, onUpdate }: CodeHttpsPanelProps) {
             30000.
           </li>
         </ul>
-        <p className="text-xs text-violet-700 dark:text-violet-300">
+        <p className="text-xs text-muted-foreground">
           As {"{{variáveis}}"} são substituídas antes do envio, em qualquer lugar do
           JSON — inclusive dentro da URL e dos cabeçalhos.
         </p>
-        <p className="text-xs text-violet-700 dark:text-violet-300">
+        <p className="text-xs text-muted-foreground">
           No histórico de execuções ficam o método, o host, o caminho, o tamanho e um
           trecho da resposta. Os cabeçalhos, a query da URL e o corpo enviado não são
           gravados — assim um token no{" "}

@@ -19,6 +19,7 @@ import {
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface CustomizableField {
   field_path: string;
@@ -98,8 +99,8 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
     try {
       parsedWorkflow = JSON.parse(workflowDef);
       parsedTrigger = JSON.parse(triggerConfig);
-    } catch {
-      toast.error("JSON inválido em workflow ou trigger config");
+    } catch (caught) {
+      notifyError(caught, { fallback: "JSON inválido em workflow ou trigger config." });
       return;
     }
 
@@ -125,7 +126,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
       toast.success(templateId ? "Template atualizado" : "Template criado");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+      notifyError(err, { fallback: "Não foi possível salvar." });
     }
   };
 
@@ -136,7 +137,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
       <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">
-            {templateId ? "Editar Automação" : "Nova Automação"}
+            {templateId ? "Editar automação" : "Nova automação"}
           </h3>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />
@@ -186,7 +187,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <Label>Trigger Config (JSON)</Label>
+            <Label>Trigger config (JSON)</Label>
           </div>
           <Textarea
             value={triggerConfig}
@@ -198,7 +199,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <Label>Workflow Definition (JSON)</Label>
+            <Label>Workflow definition (JSON)</Label>
             <Button
               variant="ghost"
               size="sm"
@@ -219,7 +220,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <Label>Campos Customizáveis</Label>
+            <Label>Campos customizáveis</Label>
             <Button variant="outline" size="sm" onClick={addCustomField}>
               <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
             </Button>
@@ -272,7 +273,7 @@ export function AutomationTemplateEditor({ templateId, onClose }: Props) {
         </div>
 
         <div>
-          <Label className="mb-2 block">Match Criteria (opcional)</Label>
+          <Label className="mb-2 block">Match criteria (opcional)</Label>
           <MatchCriteriaBuilder value={matchCriteria} onChange={setMatchCriteria} />
         </div>
 

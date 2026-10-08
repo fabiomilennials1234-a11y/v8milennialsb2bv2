@@ -40,7 +40,7 @@ type DbInstance = {
   session_dead_since: string | null;
 };
 
-type Secrets = { uazapi_token: string | null; uazapi_instance_id: string | null };
+type Secrets = { instance_id: string; uazapi_token: string | null };
 
 async function fetchUazapiInbound1h(baseUrl: string, token: string): Promise<number | null> {
   return countUazapiInboundWindow(baseUrl, token, Math.floor(Date.now() / 1000) - 3600);
@@ -126,6 +126,22 @@ Deno.serve(
       probe_failed: 0,
     };
 
+    // One secrets read per run (was one per instance inside the loop). A failed
+    // read leaves the map empty, so each instance lands in the same
+    // "uazapi_token missing" probe_failed branch the per-row read produced.
+    const tokenByInstance = new Map<string, string>();
+    const instanceIds = (instances ?? []).map((inst) => inst.id);
+    if (instanceIds.length > 0) {
+      const { data: secretRows } = await supabase
+        .from("whatsapp_instance_secrets")
+        .select("instance_id, uazapi_token")
+        .in("instance_id", instanceIds)
+        .returns<Secrets[]>();
+      for (const row of secretRows ?? []) {
+        if (row.uazapi_token) tokenByInstance.set(row.instance_id, row.uazapi_token);
+      }
+    }
+
     for (const inst of instances ?? []) {
       summary.checked += 1;
 
@@ -150,13 +166,9 @@ Deno.serve(
         continue;
       }
 
-      const { data: secrets } = await supabase
-        .from("whatsapp_instance_secrets")
-        .select("uazapi_token, uazapi_instance_id")
-        .eq("instance_id", inst.id)
-        .maybeSingle<Secrets>();
+      const uazapiToken = tokenByInstance.get(inst.id);
 
-      if (!secrets?.uazapi_token) {
+      if (!uazapiToken) {
         summary.probe_failed += 1;
         await supabase.from("whatsapp_health_checks").insert({
           instance_id: inst.id,
@@ -170,7 +182,7 @@ Deno.serve(
         continue;
       }
 
-      const uazapiCount = await fetchUazapiInbound1h(UAZAPI_BASE_URL, secrets.uazapi_token);
+      const uazapiCount = await fetchUazapiInbound1h(UAZAPI_BASE_URL, uazapiToken);
 
       if (uazapiCount === null) {
         summary.probe_failed += 1;

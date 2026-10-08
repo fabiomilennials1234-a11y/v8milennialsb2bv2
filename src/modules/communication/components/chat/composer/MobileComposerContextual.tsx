@@ -1,4 +1,6 @@
+import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { ReplyPreview } from "../ReplyContext";
+import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 /**
  * MobileComposerContextual — WhatsApp-style contextual composer for mobile.
@@ -37,6 +39,7 @@ import {
 } from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
+import { notifyError } from "@/shared/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,6 +123,7 @@ export function MobileComposerContextual({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reply = useChatReply();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
 
   const isSending = sendMessage.isPending || sendMedia.isPending;
@@ -148,7 +152,7 @@ export function MobileComposerContextual({
       });
       setMessage("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar");
+      notifyError(err, { fallback: "Não foi possível enviar." });
     }
   }, [message, instanceName, phoneNumber, instanceId, leadId, sendMessage, setMessage]);
 
@@ -156,12 +160,7 @@ export function MobileComposerContextual({
     setIsRecording(false);
     try {
       const mp3 = await convertAudioBlobToMp3(audioBlob);
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(mp3);
-      });
+      const base64 = await readMediaAsDataUrl(mp3);
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
@@ -173,7 +172,7 @@ export function MobileComposerContextual({
       });
       toast.success("Áudio enviado!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
+      notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
   }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
 
@@ -189,18 +188,13 @@ export function MobileComposerContextual({
       return;
     }
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const base64 = await readMediaAsDataUrl(file);
       // Preview antes de enviar (paridade desktop/bubble) — mis-tap no picker
       // não dispara mais o arquivo direto pro cliente.
       setPendingAttachment({ data: base64, name: file.name, mime: file.type });
       setAttachmentCaption("");
-    } catch {
-      toast.error("Erro ao ler arquivo. Tente novamente.");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível ler arquivo. Tente novamente." });
     }
   }, [isSending]);
 
@@ -232,7 +226,7 @@ export function MobileComposerContextual({
           : "Imagem enviada!",
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar arquivo");
+      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     }
   }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
 
@@ -269,7 +263,7 @@ export function MobileComposerContextual({
         setMessage("");
         toast.success("Template enviado!");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
+        notifyError(err, { fallback: "Não foi possível enviar template." });
       }
       return;
     }
@@ -316,7 +310,7 @@ export function MobileComposerContextual({
   if (!canReply) {
     return (
       <div className="p-3 border-t border-border/60 bg-background" style={{ paddingBottom: offset || undefined }}>
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-strong">
           <X className="w-4 h-4 shrink-0" />
           <span>Sem permissão para responder neste chat.</span>
         </div>
@@ -438,6 +432,7 @@ export function MobileComposerContextual({
                   </p>
                 )}
                 <Textarea
+                  ref={captionRef}
                   value={attachmentCaption}
                   onChange={(e) => setAttachmentCaption(e.target.value)}
                   placeholder="Adicionar legenda (opcional)..."
@@ -445,6 +440,7 @@ export function MobileComposerContextual({
                   rows={1}
                   className="min-h-[36px] max-h-24 resize-none py-2"
                 />
+                <ComposerEmojiPicker inputRef={captionRef} onChange={setAttachmentCaption} disabled={isSending} />
                 <Button
                   onClick={handleSendAttachment}
                   disabled={isSending}
@@ -484,6 +480,12 @@ export function MobileComposerContextual({
         </Button>
 
         {/* Text input — textarea p/ suportar quebra de linha + slash popover */}
+        <ComposerEmojiPicker
+          key={conversationKey}
+          inputRef={inputRef}
+          onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
+          disabled={isSending}
+        />
         <div className="relative flex-1">
           {showSlashPopover && templates && (
             <SlashCommandPopover
@@ -505,7 +507,7 @@ export function MobileComposerContextual({
             }}
             disabled={isSending}
             aria-label={`Mensagem para ${contactName}`}
-            className="w-full min-h-[40px] max-h-32 resize-none rounded-2xl border border-border/60 bg-background py-2 leading-5"
+            className="w-full min-h-[40px] max-h-32 resize-none rounded-[20px] border border-border/60 bg-sunken py-2 leading-5 focus-visible:bg-card"
           />
         </div>
 
@@ -516,7 +518,7 @@ export function MobileComposerContextual({
             disabled={isSending}
             size="icon"
             aria-label="Enviar mensagem"
-            className="gradient-primary text-white border-0 shrink-0"
+            className="shrink-0 rounded-full"
           >
             {isSending ? (
               <Loader2 className="w-4 h-4 animate-spin" />

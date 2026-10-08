@@ -12,6 +12,7 @@ import {
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 const COLORS = ["#7dc4e4", "#a6d189", "#ca9ee6", "#f6c177", "#e78284", "#8caaee"];
 
@@ -101,7 +102,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
       toast.success(templateId ? "Template atualizado" : "Template criado");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+      notifyError(err, { fallback: "Não foi possível salvar." });
     }
   };
 
@@ -112,7 +113,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
       <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">
-            {templateId ? "Editar Template" : "Novo Template"}
+            {templateId ? "Editar template" : "Novo template"}
           </h3>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />
@@ -168,7 +169,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <Label>Custom Pipelines</Label>
+            <Label>Custom pipelines</Label>
             <Button variant="outline" size="sm" onClick={addCustomPipeline}>
               <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
             </Button>
@@ -266,7 +267,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
         </div>
 
         <div>
-          <Label className="mb-2 block">Match Criteria</Label>
+          <Label className="mb-2 block">Match criteria</Label>
           <MatchCriteriaBuilder value={matchCriteria} onChange={setMatchCriteria} />
         </div>
 

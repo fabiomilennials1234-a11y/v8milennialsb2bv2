@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +29,7 @@ import {
 } from "@/modules/workflows/components/action-configs";
 import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
+import { SendToGroupConfig } from "./SendToGroupConfig";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
@@ -37,6 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/modules/identity";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/modules/communication/lib/audioToMp3";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
 import {
   TemplateTextarea,
@@ -800,6 +801,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         <SendToNumberConfig data={data} onUpdate={onUpdate} />
       )}
 
+      {/* Send to ONE WhatsApp group — instância presa, sem política de roteamento */}
+      {at === "send_to_group" && (
+        <SendToGroupConfig data={data} onUpdate={onUpdate} />
+      )}
+
       {/* ═══════ LEAD MANAGEMENT ═══════ */}
 
       {/* Move Stage */}
@@ -869,28 +875,13 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         </>
       )}
 
-      {/* Update Rating */}
-      {at === "update_rating" && (
-        <div className="space-y-2">
-          <Label>Rating (0-10): {data.ratingValue ?? 5}</Label>
-          <Slider
-            value={[data.ratingValue ?? 5]}
-            onValueChange={([v]) => onUpdate({ ratingValue: v })}
-            min={0}
-            max={10}
-            step={1}
-          />
-        </div>
-      )}
-
-      {/* Calculate Score */}
-      {at === "calculate_score" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
-            Chama a IA para calcular o lead score automaticamente com base nos
-            dados do lead e histórico de conversas.
-          </p>
-        </div>
+      {/* Update Rating / Calculate Score — descontinuadas (CTO, 02/10). Sem
+          campo de edição: o seletor acima já mostra o selo e a dica. O valor
+          salvo só é exibido para quem for reconstruir o passo. */}
+      {at === "update_rating" && typeof data.ratingValue === "number" && (
+        <p className="text-xs text-muted-foreground">
+          Configuração salva: rating <span className="font-semibold tabular-nums text-foreground">{data.ratingValue}</span>
+        </p>
       )}
 
       {/* Duplicate to Pipe */}
@@ -1236,8 +1227,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       )}
 
       {at === "summarize_conversation" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
+        <div className="rounded-xl border border-border/60 bg-sunken p-3">
+          <p className="text-xs text-muted-foreground">
             Resume automaticamente o histórico de conversa do lead e salva no
             contexto do workflow. Útil antes de um handoff para Copilot ou para
             enriquecer notificações.
@@ -1246,8 +1237,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       )}
 
       {at === "evaluate_conversation" && (
-        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-          <p className="text-xs text-green-700 dark:text-green-300">
+        <div className="rounded-xl border border-border/60 bg-sunken p-3">
+          <p className="text-xs text-muted-foreground">
             Avalia a qualidade da conversa com IA: tom, engajamento,
             qualificação. O resultado fica disponível nas condições seguintes.
           </p>
@@ -1766,8 +1757,7 @@ function WhatsAppImagePanel({
         onUpdate({ imageUrl: urlData.publicUrl });
         toast.success("Imagem enviada!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar imagem";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar a imagem." });
       } finally {
         setIsUploading(false);
       }
@@ -1931,8 +1921,7 @@ function WhatsAppVideoPanel({
         onUpdate({ videoUrl: urlData.publicUrl, videoMode: "upload" });
         toast.success("Vídeo enviado!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar vídeo";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o vídeo." });
       } finally {
         setIsUploading(false);
       }
@@ -2093,8 +2082,7 @@ function WhatsAppDocumentPanel({
         onUpdate({ documentUrl: urlData.publicUrl, documentName: file.name });
         toast.success("Documento enviado!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar documento";
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o documento." });
       } finally {
         setIsUploading(false);
       }
@@ -2507,7 +2495,9 @@ function AudioRecorderField({
             upsert: false,
           });
 
-        if (error) throw new Error(`Erro ao enviar áudio: ${error.message}`);
+        // O erro original: prefixar a mensagem do Storage com uma frase em PT
+        // faria o texto técnico passar por humano e chegar ao toast.
+        if (error) throw error;
 
         const { data: urlData } = supabase.storage
           .from("media")
@@ -2524,9 +2514,8 @@ function AudioRecorderField({
         setLocalBlob(null);
         toast.success("Áudio salvo com sucesso!");
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro ao enviar áudio";
         console.error("Erro ao enviar áudio:", err);
-        toast.error(message);
+        notifyError(err, { fallback: "Não foi possível enviar o áudio." });
       } finally {
         setIsUploading(false);
       }
@@ -2631,10 +2620,10 @@ function AudioRecorderField({
           {isRecording && (
             <div className="flex items-center gap-3">
               <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/70 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
               </span>
-              <span className="text-sm font-medium text-red-600">
+              <span className="text-sm font-medium tabular-nums text-destructive">
                 Gravando... {formatTime(recordingTime)}
               </span>
               <Button
@@ -2709,7 +2698,7 @@ function AudioRecorderField({
                     <Play className="w-4 h-4" />
                   )}
                 </Button>
-                <span className="text-sm text-green-700 dark:text-green-400">
+                <span className="text-sm font-medium text-success">
                   Áudio salvo
                 </span>
               </div>

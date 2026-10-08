@@ -11,10 +11,11 @@ interface ApprovalRequestCardProps {
   entityLabel?: string;
 }
 
+// Selo tintado (fundo suave + texto do mesmo matiz), só tokens — vale no escuro.
 const STATUS_CONFIG: Record<ApprovalStatus, { label: string; className: string }> = {
-  pending: { label: "Pendente", className: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
-  approved: { label: "Aprovado", className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  rejected: { label: "Rejeitado", className: "bg-red-500/20 text-red-400 border-red-500/30" },
+  pending: { label: "Pendente", className: "bg-warning/15 text-warning-strong" },
+  approved: { label: "Aprovado", className: "bg-success/10 text-success" },
+  rejected: { label: "Rejeitado", className: "bg-destructive/10 text-destructive" },
   expired: { label: "Expirado", className: "bg-muted text-muted-foreground" },
 };
 
@@ -35,19 +36,19 @@ export function ApprovalRequestCard({ request, ruleName, entityLabel }: Approval
   }
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 p-4 space-y-3">
-      <div className="flex items-start justify-between">
+    <div className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">
+            <span className="text-sm font-semibold">
               {ruleName ?? `Regra ${request.rule_id.slice(0, 8)}`}
             </span>
-            <Badge className={status.className}>{status.label}</Badge>
+            <Badge variant="soft" className={status.className}>{status.label}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             {request.entity_type}: {entityLabel ?? request.entity_id.slice(0, 8)}
           </p>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <p className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
             <Clock className="h-3 w-3" />
             {new Date(request.created_at).toLocaleDateString("pt-BR", {
               day: "2-digit",
@@ -65,6 +66,7 @@ export function ApprovalRequestCard({ request, ruleName, entityLabel }: Approval
               variant="outline"
               className="h-8 text-xs"
               onClick={() => setShowComment(!showComment)}
+              aria-expanded={showComment}
             >
               <MessageSquare className="mr-1 h-3 w-3" />
               Comentar
@@ -72,7 +74,7 @@ export function ApprovalRequestCard({ request, ruleName, entityLabel }: Approval
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs text-emerald-500 hover:text-emerald-400 hover:border-emerald-500/50"
+              className="h-8 text-xs text-success hover:border-success/40 hover:bg-success/10 hover:text-success"
               onClick={() => handleDecision("approved")}
               disabled={decide.isPending}
             >
@@ -81,7 +83,7 @@ export function ApprovalRequestCard({ request, ruleName, entityLabel }: Approval
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs text-red-500 hover:text-red-400 hover:border-red-500/50"
+              className="h-8 text-xs text-destructive hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
               onClick={() => handleDecision("rejected")}
               disabled={decide.isPending}
             >
@@ -95,7 +97,7 @@ export function ApprovalRequestCard({ request, ruleName, entityLabel }: Approval
         <Textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Comentario opcional..."
+          placeholder="Comentário opcional..."
           className="min-h-[60px] resize-none"
         />
       )}

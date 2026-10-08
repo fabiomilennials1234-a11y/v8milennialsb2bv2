@@ -283,6 +283,11 @@ describe("O Lead e o Negócio abrem juntos, num overlay só", { timeout: TIMEOUT
     montarFunil();
     fireEvent.click(screen.getByText("abrir negócio do funil"));
 
+    // V5 (02/10): a pessoa deixou de ser coluna encostada e virou a aba Dados
+    // da MESMA gaveta — o negócio abre na aba do meio. Abre-se a aba antes.
+    fireEvent.click(screen.getByRole("button", { name: /^dados/i }));
+    expect(overlaysAbertos()).toBe(1);
+
     // A empresa continua clicável — mas agora é campo EDITÁVEL da coluna, não
     // o link que trocava de card. Clicar tem de deixar a tela como estava.
     fireEvent.click(

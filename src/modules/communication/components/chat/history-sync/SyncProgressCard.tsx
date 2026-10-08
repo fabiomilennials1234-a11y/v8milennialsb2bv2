@@ -14,6 +14,7 @@ import {
   type HistorySyncJob,
 } from "@/modules/communication/hooks/useHistorySyncJobs";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   job: HistorySyncJob;
@@ -71,7 +72,7 @@ export function SyncProgressCard({ job }: Props) {
       await control.mutateAsync({ job, action: "cancel" });
       toast.success("Job cancelado");
     } catch (e) {
-      toast.error(`Erro ao cancelar: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível cancelar." });
     }
   };
 
@@ -80,7 +81,7 @@ export function SyncProgressCard({ job }: Props) {
       await control.mutateAsync({ job, action: "retry" });
       toast.success("Retomada agendada");
     } catch (e) {
-      toast.error(`Erro ao retomar: ${(e as Error).message}`);
+      notifyError(e, { fallback: "Não foi possível retomar." });
     }
   };
 
@@ -97,7 +98,7 @@ export function SyncProgressCard({ job }: Props) {
             <div className="flex items-center gap-2 flex-wrap">
               {job.status === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
               {job.status === "queued" && <Clock className="h-4 w-4 text-muted-foreground" />}
-              {job.status === "completed" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+              {job.status === "completed" && <CheckCircle2 className="h-4 w-4 text-success" />}
               {job.status === "failed" && <XCircle className="h-4 w-4 text-destructive" />}
               {job.status === "paused" && <StopCircle className="h-4 w-4 text-muted-foreground" />}
               <span className="font-medium text-sm">{scopeLabel}</span>

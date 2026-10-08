@@ -25,11 +25,11 @@ function initials(name: string): string {
 function barColor(pct: number): string {
   if (pct >= 80) return "hsl(var(--success))";
   if (pct >= 40) return "hsl(var(--primary))";
-  return "hsl(0 62% 52%)";
+  return "hsl(var(--destructive))";
 }
 function textColor(pct: number): string {
   if (pct >= 80) return "text-success";
-  if (pct >= 40) return "text-primary";
+  if (pct >= 40) return "text-primary-soft-foreground";
   return "text-destructive";
 }
 
@@ -45,32 +45,30 @@ function IndividualGoalsListBase({ month, year }: IndividualGoalsListProps) {
   }, [goals]);
 
   if (isLoading) {
-    return <Skeleton className="h-[280px] rounded-2xl" />;
+    return <Skeleton className="h-full min-h-[200px] rounded-2xl" />;
   }
 
   return (
-    <div className="cmd-cell cmd-rise p-5" style={{ animationDelay: ".2s" }}>
+    // Corpo da janela "Metas individuais" — o título mora na moldura.
+    <div className="flex h-full flex-col">
       <div className="flex items-center justify-between">
-        <span className="flex items-baseline gap-1.5">
-          <span className="cmd-lbl">Metas individuais</span>
-          <span
-            className="text-[10px] font-semibold text-muted-foreground/50"
-            title="As metas seguem mensais mesmo com período personalizado selecionado."
-          >
-            · mês
-          </span>
+        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendas e reuniões</span>
+        <span
+          className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
+          title="As metas seguem mensais mesmo com período personalizado selecionado."
+        >
+          mês
         </span>
-        <span className="text-[11px] font-semibold text-muted-foreground/60">vendas e reuniões</span>
       </div>
-      <div className="mt-2 max-h-[280px] overflow-y-auto pr-1">
+      <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto pr-1">
         {rows.length === 0 && (
           <p className="py-6 text-center text-[13px] text-muted-foreground">Nenhuma meta individual configurada.</p>
         )}
         {rows.map((g, i) => (
           <div
             key={`${g.kind}-${g.id}`}
-            className={`grid grid-cols-[30px_1fr_52px] items-center gap-2.5 border-b border-border/70 py-2 last:border-b-0 ${
-              g.id === me?.id ? "rounded-lg bg-primary/5 px-2 -mx-2" : ""
+            className={`grid grid-cols-[30px_1fr_52px] items-center gap-2.5 border-b border-border/60 py-2 last:border-b-0 ${
+              g.id === me?.id ? "-mx-2 rounded-xl bg-primary-soft/60 px-2" : ""
             }`}
           >
             <span
@@ -81,10 +79,10 @@ function IndividualGoalsListBase({ month, year }: IndividualGoalsListProps) {
             </span>
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="truncate text-[12.5px] font-semibold">{g.name}</span>
-                <span className="text-[9.5px] font-bold uppercase tracking-[.05em] text-muted-foreground/50">{g.kind}</span>
+                <span className="truncate text-[13px] font-semibold">{g.name}</span>
+                <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">{g.kind}</span>
               </div>
-              <div className="mt-[5px] h-[5px] overflow-hidden rounded-full bg-background">
+              <div className="mt-[5px] h-[5px] overflow-hidden rounded-full bg-muted">
                 <i
                   className="block h-full rounded-full"
                   style={{ width: `${Math.min(g.percentage, 100)}%`, background: barColor(g.percentage) }}

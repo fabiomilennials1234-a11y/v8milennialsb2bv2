@@ -51,7 +51,7 @@ function Atraso({ titulo }: { titulo: TituloNaTela }) {
     );
   }
   if (titulo.diasDeAtraso === 0) {
-    return <span className="font-medium text-amber-400">hoje</span>;
+    return <span className="font-medium text-warning-strong">hoje</span>;
   }
   return (
     <span className="text-muted-foreground tabular-nums">
@@ -68,7 +68,7 @@ export function ClienteTitulos({ clientId }: ClienteTitulosProps) {
     return (
       <div className="space-y-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-8 animate-pulse rounded bg-muted/40" />
+          <div key={i} className="h-8 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     );
@@ -97,31 +97,31 @@ export function ClienteTitulos({ clientId }: ClienteTitulosProps) {
     <div className="space-y-3">
       {/* Os três números que decidem se o vendedor liga hoje. */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="rounded-xl bg-sunken px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <CircleDollarSign className="h-3 w-3" />
             Em aberto
           </div>
-          <p className="mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]">
+          <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">
             {formatBRL(resumo.emAberto)}
           </p>
         </div>
 
         <div
           className={cn(
-            "rounded-lg border px-3 py-2",
+            "rounded-xl px-3 py-2.5",
             resumo.atrasado > 0
-              ? "border-destructive/30 bg-destructive/[0.06]"
-              : "border-border/60 bg-muted/20",
+              ? "bg-destructive/10"
+              : "bg-sunken",
           )}
         >
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <AlertTriangle className="h-3 w-3" />
             Atrasado
           </div>
           <p
             className={cn(
-              "mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]",
+              "mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]",
               resumo.atrasado > 0 && "text-destructive",
             )}
           >
@@ -136,12 +136,12 @@ export function ClienteTitulos({ clientId }: ClienteTitulosProps) {
           )}
         </div>
 
-        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="rounded-xl bg-sunken px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <CalendarClock className="h-3 w-3" />
             Próximo
           </div>
-          <p className="mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]">
+          <p className="mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.03em]">
             {resumo.proximoVencimento ? formatarData(resumo.proximoVencimento) : "—"}
           </p>
         </div>
@@ -168,8 +168,8 @@ export function ClienteTitulos({ clientId }: ClienteTitulosProps) {
                   className={cn(
                     "text-[10px] font-medium",
                     titulo.atrasado
-                      ? "border-destructive/25 bg-destructive/10 text-destructive"
-                      : "border-border/60 bg-muted/30 text-muted-foreground",
+                      ? "border-transparent bg-destructive/10 text-destructive"
+                      : "border-transparent bg-muted text-muted-foreground",
                   )}
                 >
                   {titulo.atrasado ? "Atrasado" : "A vencer"}

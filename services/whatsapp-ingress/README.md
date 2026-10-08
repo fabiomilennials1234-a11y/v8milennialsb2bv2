@@ -1,10 +1,21 @@
-# Dedicated WhatsApp ingress — disabled by default
+# Dedicated WhatsApp ingress — TorqueSDR pilot active
 
-Candidate runtime, not a production routing change. The service imports the same
+Current production checkpoint (2026-09-25 01:23:45 UTC): TorqueSDR's existing
+Uazapi webhook points to `ingress.torquecrm.com.br`, with direct admission and
+legacy forwarding enabled only for this pilot. The other instances remain on
+their existing routes. Provider readback matched the intended single route.
+Later scoped SQL found 22 regular post-cutover updates completed; an earlier
+sample saw four new messages for the same pilot organization/instance. Queue
+332 completed, zero pending/dead letters. Public readiness/worker health and Docker health
+passed. Provider error history showed no post-cutover entry in the short sample.
+Edge invocation savings remain unmeasured. [Cutover and rollback evidence](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
+
+The service imports the same
 `supabase/functions/whatsapp-webhook/handler.ts` used by the Edge entry point.
 Instance resolution, authentication, tenant scope, message persistence, media,
-triggers and Copilot remain canonical code. No event is forwarded to the Edge
-webhook as an intermediate hop.
+triggers and Copilot remain canonical code. The optional event router can forward
+only legacy `messages` and `connection` to the existing Edge webhook; updates
+still enter the durable inbox locally.
 
 ## Admission and acknowledgment
 
@@ -17,8 +28,9 @@ webhook as an intermediate hop.
 - Requests use the existing `/whatsapp-webhook/<secret>[/instance][/event]` or
   `/functions/v1/whatsapp-webhook/<secret>[/instance][/event]` shape. Keep secrets
   out of access logs; configure the reverse proxy to redact these paths.
-- Initial canary accepts **only `messages_update`**. Messages, connection and
-  other events return 503; provider routing must separate event types first.
+- With `INGRESS_FORWARD_LEGACY_EVENTS=false` (default), initial canary accepts
+  **only `messages_update`**. Other events return 503. Opt-in routing for the
+  existing single provider webhook is described below.
 - Authentication and database tenant resolution precede durable admission.
   The service returns **200 only after the enqueue RPC commits**, preserving
   the existing Edge success status. Failed inbox
@@ -30,19 +42,24 @@ webhook as an intermediate hop.
   are NOT unique because pin → unpin → pin can repeat identical payloads.
   This is at-least-once delivery, not exactly-once execution.
 - A local worker drains durable events, invoking the canonical handler with
-  strict update targets. A receipt preceding its message retries instead of
-  being marked complete. Admission timestamp remains audit evidence only.
+  strict update targets. Pure receipts with missing targets enter a private
+  deferred lane for up to five minutes measured from durable admission. Matched
+  IDs are processed immediately; missing IDs retry separately. After that
+  window, missing IDs receive an explicit `unmatched_receipt` outcome with the
+  original payload retained for the normal two-day completed-event retention.
   Commercial acceptance keeps the existing time-of-verification behavior;
   never backdate from a stale receipt without persisted per-chunk evidence.
   Queue delay can require reconfirmation: validate or exclude organizations
   with live quotes before canary routing.
-- Claims serialize per instance, preserve FIFO (including backoff), and issue
+- Claims serialize normal events per instance, preserve FIFO for their failures,
+  and issue
   fenced lease tokens. One event per instance can be active. A lease expires
   after 120 seconds; failures use exponential backoff, at most eight attempts,
   then remain visible in `dead_letter`. Different instances rotate fairly.
-  A missing target at the head blocks later events for that instance during
-  backoff. Monitor oldest pending age and canary latency; this design does not
-  promise zero delay. Do not bypass FIFO to conceal a stuck receipt.
+  A pure receipt with a missing target moves to the deferred lane with a
+  ten-second retry and does not hold later normal updates behind it. Other
+  malformed or failed operations retain the normal FIFO barrier. Monitor oldest
+  pending age, deferred count and canary latency.
 - Each event waits for its own tracked background promises before completion.
   If the event exceeds 45 seconds the process exits with its lease retained;
   it never releases the lease while its old handler is still running. A lost
@@ -65,10 +82,12 @@ webhook as an intermediate hop.
   Explicit deletion of an instance/organization cascades its technical inbox
   and decrements the counter, preserving the existing deletion flow; this is
   intentional user deletion, not an automatic discard of accepted work.
-- Before enabling traffic, verify provider retry/backoff
-  for 408, 429, 500 and 503, plus replay of out-of-order receipts. Durable inbox
-  protects events **after** successful commit; provider redelivery is still
-  essential before commit, during capacity rejection or database downtime.
+- Before direct provider routing, account for the provider's documented lack
+  of automatic retry on failed webhook HTTP delivery. The durable inbox protects
+  events **after** successful commit; 408, 429, 500, 503, timeout, full inbox
+  and database downtime can all fail before commit. See the direct-route
+  boundary below. The current same-URL Edge pilot does not change this existing
+  precommit risk or save an Edge invocation.
 
 ## Runtime limits
 
@@ -78,6 +97,11 @@ Body read deadline defaults to 10 seconds. Defaults: 32 concurrent requests,
 reject new events with 503 and Retry-After; existing requests and tracked
 background work are drained before shutdown. A drain deadline exits nonzero
 and requires reconciliation; it must not be reported as successful delivery.
+
+Opt-in forwarding to the Edge has a separate 20-second upper deadline (the
+canonical Edge business path can itself take 12 seconds). It is not the 10-second
+request-body read deadline. Forwarding accepts at most 64 KiB of Edge response,
+does not follow redirects and never retries an ambiguous upstream result.
 
 Set the proxy/container stop grace period greater than the configured drain.
 Keep the canary at one worker until effect-level fencing or failure tests prove
@@ -137,8 +161,9 @@ Remote SQL fixtures test quota boundaries with a synthetic private counter;
 the separate local PGlite test fills all 20,000 rows. Neither is a peak-load test.
 These tests do not establish
 VPS capacity, provider retries or failover. A separate process-restart rehearsal
-below covers only the durable worker with a fixture business handler. Live routing stays
-disabled until those acceptance checks pass. Rollback changes provider routing
+below covers only the durable worker with a fixture business handler. This
+paragraph records earlier preparation; the TorqueSDR cutover above is active.
+Rollback changes provider routing
 back to the existing Edge endpoint; keep its deployment and credentials valid.
 After restoring and verifying provider routing, stop new admission, then
 drain/preserve accepted events. The migration
@@ -192,7 +217,8 @@ remove it first, which would allow an old rebind to overwrite the transition.
 ## Deployment evidence — 2026-09-24
 
 Production inbox migration is now applied under ledger version `20260924124643`.
-The service remains disabled and provider routes unchanged. A disabled Docker
+At that historical checkpoint the service was disabled and provider routes
+were unchanged. A disabled Docker
 container built from main `1498af879` passed health/readiness and graceful stop
 on the VPS; the temporary container was removed.
 
@@ -239,9 +265,9 @@ while requests still arrive does not prove the handoff safe.
 
 Provider redelivery before queue commit remains unproven. This bridge improves
 separation of admission and effects; it still consumes an Edge invocation per
-callback. Do not count it as invocation savings, or activate a direct provider
-split based only on these tests. Production activation remains blocked pending
-handoff/recovery evidence recorded in the capacity runtime report.
+callback. Do not count the Edge bridge as invocation savings or use these tests
+alone to justify a direct split. The later TorqueSDR cutover and its bounded
+evidence are recorded at the top and in the direct-route runbook.
 
 
 ## Worker claim pause and terminal FIFO barrier
@@ -257,3 +283,126 @@ ownership. The operator CLI performs explicit actions without polling, prints
 only redacted counters, and never retries an ambiguous mutation. Full contract,
 permissions, rollback and limits: `docs/operations/whatsapp-ingress-worker-handoff.md`.
 This does not make the old Edge handoff or provider recovery safe automatically.
+
+## Deferred receipt lane — SQL34, 2026-09-24
+
+`20271021000034_whatsapp_ingress_completion_outcome.sql` records `processed`,
+`deferred_receipt` and `unmatched_receipt` outcomes. Only a well-formed pure
+status receipt can enter the deferred lane. A mixed pin, reaction, edit or delete
+remains on the normal strict path. Each retry rechecks the original payload;
+the receipt update is monotonic and repeated writes remain idempotent. A
+deferred result consumes no failure attempt, retains the payload, and releases
+the normal FIFO lane. The worker records the unmatched count, never labels a
+missing target as an externally delivered message. After the five-minute grace
+period, the missing result is terminal and auditable; late target creation does
+not trigger automatic repair. Operators can inspect the retained event before
+normal cleanup removes completed evidence after two days.
+
+The generated live Edge bundle has an offline smoke test using only a local
+loopback backend. Set `TORQUE_LIVE_EXECUTION_ARTIFACT` to the prepared bundle
+directory, then run:
+
+```sh
+deno test --cached-only --no-check --allow-read --allow-env --allow-net=127.0.0.1 tests/integration/whatsapp-live-execution-smoke.test.ts
+```
+
+It checks gate-off behavior, inline and queued paths, and completion after an
+HTTP deadline. It does not deploy or activate an instance.
+
+## Direct provider route: delivery boundary
+
+The official Uazapi [`messages_update` page](https://docs.uazapi.com/webhook/messages_update)
+says its worker does not automatically retry a failed HTTP delivery; the
+[`messages` page](https://docs.uazapi.com/webhook/messages) says the same.
+The [webhook guide](https://docs.uazapi.com/docs/integrations-webhooks) asks
+receivers to return 200 promptly and warns that a slow or unavailable target
+can delay later events and lead to discards at high volume. It does not promise
+recovery by status code. Generic `Retry-After` guidance in
+[errors and reliability](https://docs.uazapi.com/docs/errors-and-retries)
+applies to clients calling the Uazapi API; it is not a webhook sender contract.
+The [`/webhook/errors` endpoint](https://docs.uazapi.com/endpoint/get/webhook~errors)
+is diagnosis only: at most 20 errors in memory, lost on provider restart. Its
+`attempts` field does not establish a durable replay policy.
+
+The [configuration API](https://docs.uazapi.com/endpoint/post/webhook)
+supports multiple destinations per instance by `action` and webhook ID, with
+event lists, but that alone does not prove a gap-free handoff. A bounded pilot
+may update the URL of the existing webhook ID once after exact route readback,
+preserving events, filters and URL suffix flags. The current Edge route has the
+same pre-commit loss boundary: an impossible zero-loss proof is not an absolute
+veto. Test the VPS/proxy failure surface, confirm committed admissions and
+retain a fast route rollback. Partial provider-state reconciliation can repair
+only confirmed delivered/read progress for known outgoing messages; it cannot
+reconstruct pin, reaction, edit, delete or original operation order. Do not
+describe it as webhook replay or a guarantee of delivery.
+
+## Optional single-webhook event routing (enabled for TorqueSDR)
+
+`INGRESS_FORWARD_LEGACY_EVENTS=true` enables the event router. After the shared
+handler authenticates the secret and resolves the database instance, only
+`messages` and `connection` are forwarded to the fixed HTTPS Supabase Edge
+origin from `SUPABASE_URL`; `messages_update` still commits to the inbox before
+200. Unknown event types return 503. The router carries the original bounded
+JSON body and existing secret path, but does not relay arbitrary request
+headers, follow redirects, or retry a timeout. Add the Edge host to the narrow
+`INGRESS_ALLOWED_NET` list before enabling. Check the public URL's rewrite and
+the unchanged Edge response/status in a controlled rehearsal.
+
+The DNS A record for `ingress.torquecrm.com.br` points to `46.202.148.241`
+(TTL 300s); a real certificate was issued 2026-09-24 and expires 2026-12-23.
+The separate Traefik file-provider config is `deploy/traefik.yaml`. EasyPanel's
+network overlay must keep alias `torque-whatsapp-ingress` after every container
+recreation. Traefik access logs are off for this secret-bearing route. Initial
+public probes returned `/health` 200, `/worker-health` 200 and `/ready` 503 with
+direct admission off. At 20:17 UTC a new `FileDownloaded` dead letter with
+`IsFromMe=false` made `/worker-health` 503. SQL37 and image
+`readiness-20260924-v1` repaired and drained that head by the 20:26 UTC
+snapshot: 249 completed, zero pending/dead letters; public worker and Docker
+health returned healthy. At that 20:26 UTC checkpoint, direct admission and
+legacy forwarding were off and the supplier URL was unchanged. Earlier
+service-key rebind probes returned 401; authenticated cron-config probes later
+confirmed the protected skip before the direct cutover recorded above. The VPS is now an availability
+dependency even for events forwarded to Edge. See the
+[direct-route runbook](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).
+
+
+## Bounded receipt recovery — SQL35
+
+Recovery is separately opt-in through `INGRESS_RECEIPT_RECOVERY_ENABLED=true`
+and `INGRESS_RECEIPT_RECOVERY_INSTANCE_IDS`, an explicit subset of the ingress
+allowlist. It shares the sole worker process: at most 50 known outgoing messages
+from seven days per batch, followed by a five-minute wait. Preview CLI
+`recovery-command.ts <instance UUID>` is read-only; `--apply` reserves a durable
+cursor and enqueues confirmed delivered/read progress. It never sends messages.
+
+SQL35 retains inconclusive cases, fences overlapping batches and reserves trusted
+recovery provenance on inbox rows. Recovery receipts cannot complete commercial
+quote presentations or expand a stored compound message ID to a second target.
+Normal provider processing remains unchanged. The historical Edge v121 builder
+uses immutable helper fixtures; these worker changes do not imply an Edge deploy.
+
+Direct HTTP admission now attempts durable enqueue independently of worker
+health. `/ready` still reports worker health; database failure/capacity rejection
+returns 503. This does not recover provider deliveries lost before persistence.
+
+Scope, production evidence, resource budget and rollback:
+[receipt recovery runbook](../../docs/operations/whatsapp-receipt-recovery-2026-09-24.md).
+This is partial current-status repair, not event replay or invocation savings.
+
+
+## Queue health and observed provider notifications
+
+`/health` remains process liveness. `/worker-health` independently verifies worker
+claims and cached queue metadata; Docker probes it each minute. Dead-letter,
+expired lease, paused worker or regular pending work older than five minutes
+returns503 even when direct admission is disabled. Age includes retry backoff;
+this reports degraded service, not a crash. It does not restart the worker,
+release a FIFO barrier or send external notifications. Admission remains durable
+and independent of this health signal.
+
+SQL36 adds a strict observed FileDownloaded envelope classification with explicit
+`provider_notification` completion and a one-shot, audited replay RPC. This
+notification cannot update delivery/read status or complete quote presentations.
+Unknown/mixed shapes still fail closed. Full incident evidence, operational
+contract, rollback and remaining direct-route gates:
+[direct-route readiness](../../docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md).

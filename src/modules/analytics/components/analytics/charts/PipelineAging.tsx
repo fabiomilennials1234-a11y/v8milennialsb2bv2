@@ -84,13 +84,13 @@ export function PipelineAging({ stages }: Props) {
         {/* Legend */}
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Saudável (&lt;3d)
+            <span className="w-3 h-3 rounded-sm bg-success inline-block" /> Saudável (&lt;3d)
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Atenção (3–7d)
+            <span className="w-3 h-3 rounded-sm bg-warning inline-block" /> Atenção (3–7d)
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Risco (7–14d)
+            <span className="w-3 h-3 rounded-sm bg-destructive inline-block" /> Risco (7–14d)
           </div>
           <div className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-sm bg-destructive/60 inline-block" /> Crítico (&gt;14d)
@@ -99,7 +99,7 @@ export function PipelineAging({ stages }: Props) {
 
         {/* Alert */}
         {dangerStages.length > 0 && (
-          <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <div className="flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
               {dangerStages.length === 1

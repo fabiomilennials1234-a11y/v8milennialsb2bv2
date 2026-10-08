@@ -275,7 +275,7 @@ describe("useRealtimeChannel", () => {
     expect(mockRemoveChannel).toHaveBeenCalledTimes(1);
     expect(mockChannel.subscribe).toHaveBeenCalledTimes(2);
   });
-  it("keeps simultaneous subscriptions and immediate remounts distinct", () => {
+  it("shares one channel per key; an immediate remount opens a fresh, distinct one", () => {
     vi.setSystemTime(new Date("2026-09-16T12:00:00Z"));
     const { rerender } = renderHook(({ enabled }) => {
       useRealtimeChannel({ table: "pipeline_stages", filter: "organization_id=eq.qa", onEvent: vi.fn(), enabled });
@@ -284,8 +284,11 @@ describe("useRealtimeChannel", () => {
     rerender({ enabled: false });
     rerender({ enabled: true });
     const names = vi.mocked(supabase.channel).mock.calls.map(([name]) => name);
-    expect(names).toHaveLength(4);
-    expect(new Set(names).size).toBe(4);
+    // 2 consumidores → 1 canal; remount → 1 canal novo com nome novo
+    // (supabase-js devolve o canal existente quando o tópico se repete).
+    expect(names).toHaveLength(2);
+    expect(new Set(names).size).toBe(2);
+    expect(mockRemoveChannel).toHaveBeenCalledTimes(1);
   });
 
 });

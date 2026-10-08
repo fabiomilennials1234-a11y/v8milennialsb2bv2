@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, Settings, History } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 interface QuotaManagementPanelProps {
   organizationId: string;
@@ -101,7 +102,7 @@ export function QuotaManagementPanel({ organizationId }: QuotaManagementPanelPro
       setAdjustmentReason("");
       queryClient.invalidateQueries({ queryKey: ["admin-quota-summary", organizationId] });
     } catch (err: any) {
-      toast.error(err.message || "Erro ao ajustar quota");
+      notifyError(err, { fallback: "Não foi possível ajustar quota." });
     } finally {
       setIsSubmitting(false);
     }
@@ -278,7 +279,7 @@ export function QuotaManagementPanel({ organizationId }: QuotaManagementPanelPro
                   Salvando...
                 </>
               ) : (
-                "Salvar Ajuste"
+                "Salvar ajuste"
               )}
             </Button>
           </DialogFooter>

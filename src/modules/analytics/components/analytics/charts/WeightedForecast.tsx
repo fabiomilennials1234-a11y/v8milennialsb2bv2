@@ -25,9 +25,9 @@ function fmt(value: number): string {
 }
 
 function pctBadgeColor(prob: number): string {
-  if (prob >= 0.6) return "bg-green-500/15 text-green-700 dark:text-green-400";
-  if (prob >= 0.3) return "bg-orange-500/15 text-orange-600";
-  return "bg-red-500/15 text-red-600";
+  if (prob >= 0.6) return "bg-success/15 text-success";
+  if (prob >= 0.3) return "bg-warning/15 text-warning-strong";
+  return "bg-destructive/15 text-destructive";
 }
 
 export function WeightedForecast({ stages, forecastTotal }: Props) {

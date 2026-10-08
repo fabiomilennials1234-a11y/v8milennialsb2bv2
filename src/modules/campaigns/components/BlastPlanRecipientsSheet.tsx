@@ -129,12 +129,12 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
     <Sheet open={plan !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
         <SheetHeader className="border-b border-border px-6 pb-4 pt-6">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+          <div className="text-[11px] font-bold uppercase tracking-[.06em] text-primary-soft-foreground">
             Leads do disparo
           </div>
           <SheetTitle className="flex items-baseline gap-2.5 text-[22px] font-extrabold tracking-tight">
             <span className="min-w-0 truncate">{plan ? firstLine(plan.message) : ""}</span>
-            <span className="text-primary tabular-nums">{recipients?.length ?? plan?.total_recipients ?? 0}</span>
+            <span className="tabular-nums text-muted-foreground">{recipients?.length ?? plan?.total_recipients ?? 0}</span>
           </SheetTitle>
           <SheetDescription className="text-xs">
             A audiência congelada deste disparo, grupo a grupo.
@@ -156,14 +156,14 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                 tab === t.key &&
                   (t.key === "failed"
                     ? "border-destructive/50 bg-destructive/10 text-foreground"
-                    : "border-primary/50 bg-primary/10 text-foreground"),
+                    : "border-transparent bg-tinta text-tinta-foreground dark:bg-foreground dark:text-background"),
               )}
             >
               {t.label}
               <span
                 className={cn(
                   "tabular-nums",
-                  t.key === "failed" ? "text-destructive" : "text-primary",
+                  t.key === "failed" ? "text-destructive" : tab === t.key ? "text-primary" : "text-foreground",
                 )}
               >
                 {counts[t.key]}
@@ -209,7 +209,7 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                   <span
                     className={cn(
                       "flex h-9 w-9 flex-none items-center justify-center rounded-full border border-border bg-muted text-[11px] font-bold",
-                      deleted ? "text-muted-foreground" : "text-primary",
+                      deleted ? "text-muted-foreground" : "text-foreground",
                     )}
                   >
                     {deleted ? "—" : initialsOf(r.name ?? "?")}
@@ -231,7 +231,7 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                     className={cn(
                       "flex-none text-right text-[11.5px] font-medium",
                       r.status === "skipped"
-                        ? "text-orange-400"
+                        ? "text-warning-strong"
                         : r.status === "failed"
                           ? "text-destructive"
                           : "text-muted-foreground",
@@ -241,7 +241,7 @@ export function BlastPlanRecipientsSheet({ plan, onClose, onOpenLead }: BlastPla
                     {detail}
                   </span>
                   {!deleted && (
-                    <span className="hidden flex-none rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[10.5px] font-semibold text-primary group-hover:inline-flex">
+                    <span className="hidden flex-none rounded-full bg-primary-soft px-2.5 py-1 text-[10.5px] font-semibold text-primary-soft-foreground group-hover:inline-flex">
                       Abrir lead ↗
                     </span>
                   )}

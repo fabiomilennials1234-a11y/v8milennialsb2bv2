@@ -4,7 +4,6 @@
 
 import { useState } from "react";
 import {
-  Users,
   Search,
   MoreVertical,
   UserCog,
@@ -69,8 +68,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { MasterPageHeader } from "../components/MasterPageHeader";
+import { notifyError, functionsErrorFromResponse } from "@/shared/errors";
 
 type AppRole = Enums<"app_role">;
+
+/** Selo vermelho legível: tinta forte sobre vermelho tintado (branco sobre o vermelho cheio dava 3,8:1). */
+const VERMELHO_LEGIVEL = "bg-destructive/10 text-destructive hover:bg-destructive/15";
 
 export default function MasterUsers() {
   const [search, setSearch] = useState("");
@@ -194,8 +198,7 @@ export default function MasterUsers() {
       });
       const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
       if (!res.ok) {
-        const msg = data?.message ?? data?.error ?? "Erro ao criar usuário";
-        toast.error(msg);
+        notifyError(functionsErrorFromResponse(res.status, data), { fallback: "Não foi possível criar o usuário." });
         setCreateUserLoading(false);
         return;
       }
@@ -217,20 +220,20 @@ export default function MasterUsers() {
   const getRoleBadge = (role: string | null) => {
     switch (role) {
       case "admin":
-        return <Badge variant="destructive">Admin</Badge>;
+        return <Badge variant="destructive" className={VERMELHO_LEGIVEL}>Admin</Badge>;
       case "member":
-        return <Badge variant="default">Membro</Badge>;
+        return <Badge variant="gold">Membro</Badge>;
       case "agency":
-        return <Badge variant="destructive">Agency</Badge>;
+        return <Badge variant="destructive" className={VERMELHO_LEGIVEL}>Agency</Badge>;
       // Legacy roles (pre-migration data)
       case "sdr":
-        return <Badge variant="default">Membro (Pré-Venda)</Badge>;
+        return <Badge variant="gold">Membro (Pré-Venda)</Badge>;
       case "closer":
-        return <Badge variant="secondary">Membro (Vendedor)</Badge>;
+        return <Badge variant="soft">Membro (Vendedor)</Badge>;
       case "bdr":
-        return <Badge variant="default">Membro (BDR)</Badge>;
+        return <Badge variant="gold">Membro (BDR)</Badge>;
       case "cliente":
-        return <Badge variant="secondary">Membro (Cliente)</Badge>;
+        return <Badge variant="soft">Membro (Cliente)</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
@@ -250,23 +253,17 @@ export default function MasterUsers() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="w-6 h-6" />
-            Usuários
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie todos os usuários do sistema
-          </p>
-        </div>
-        <Button onClick={() => setCreateUserOpen(true)}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Criar usuário
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <MasterPageHeader
+        title="Usuários"
+        subtitle="Gerencie todos os usuários do sistema"
+        actions={
+          <Button onClick={() => setCreateUserOpen(true)}>
+            <UserPlus className="w-4 h-4" />
+            Criar usuário
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -281,10 +278,10 @@ export default function MasterUsers() {
 
       {/* Cadastros pendentes (usuários que se cadastraram mas não têm organização) */}
       {unassignedUsers.length > 0 && (
-        <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
-          <CardContent className="p-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        <Card className="border-warning/40 bg-warning/[.06]">
+          <CardContent className="p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold tracking-tight">
+              <Clock className="h-5 w-5 text-warning-strong" />
               Cadastros pendentes
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
@@ -342,65 +339,78 @@ export default function MasterUsers() {
         </Card>
       )}
 
-      {/* Table */}
+      {/* Table — carga e vazio ficam FORA da tabela, centrados no cartão: dentro
+          dela o texto seguia a largura das colunas e ia parar na borda. Abaixo
+          de md a organização sobe para baixo do nome e, abaixo de sm, o status
+          vai para junto da role — nenhuma coluna sai da tela. */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+          ) : !filteredUsers?.length ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nenhum usuário encontrado</p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Usuário</TableHead>
-                <TableHead>Organização</TableHead>
+                <TableHead className="max-md:hidden">Organização</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="max-sm:hidden">Status</TableHead>
+                <TableHead className="w-[100px] max-sm:w-14">
+                  <span className="max-sm:sr-only">Ações</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              ) : filteredUsers?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Nenhum usuário encontrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredUsers?.map((user) => (
+              {filteredUsers.map((user) => (
                   <TableRow key={user.team_member_id || user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium">
+                    {/* `max-w-0` + `w-full` no celular: a coluna ocupa a sobra e o
+                        texto trunca, em vez de empurrar as outras para fora. */}
+                    <TableCell className="max-md:w-full max-md:max-w-0">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
+                          <span className="text-sm font-semibold">
                             {user.full_name?.substring(0, 2).toUpperCase() || "??"}
                           </span>
                         </div>
-                        <div>
-                          <p className="font-medium">{user.full_name || "Sem nome"}</p>
-                          <p className="text-sm text-muted-foreground">{user.email || "-"}</p>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{user.full_name || "Sem nome"}</p>
+                          <p className="truncate text-sm text-muted-foreground">{user.email || "-"}</p>
+                          <p className="truncate text-xs text-muted-foreground md:hidden">
+                            {user.organization_name || "Sem organização"}
+                          </p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       {user.organization_name || (
                         <span className="text-muted-foreground">Sem organização</span>
                       )}
                     </TableCell>
-                    <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        {getRoleBadge(user.role)}
+                        <div className="sm:hidden">
+                          {user.is_active ? (
+                            <Badge variant="success">Ativo</Badge>
+                          ) : (
+                            <Badge variant="soft">Inativo</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-sm:hidden">
                       {user.is_active ? (
-                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
+                        <Badge variant="success">Ativo</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="soft">Inativo</Badge>
                       )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label={`Ações de ${user.full_name || "usuário"}`}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -408,7 +418,7 @@ export default function MasterUsers() {
                           <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                               <UserCog className="w-4 h-4 mr-2" />
-                              Alterar Role
+                              Alterar role
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                               {getRolesForOrgType(user.org_type ?? undefined).map((r) => (
@@ -433,7 +443,7 @@ export default function MasterUsers() {
                             }}
                           >
                             <Building2 className="w-4 h-4 mr-2" />
-                            Mover para Organização
+                            Mover para organização
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -471,10 +481,10 @@ export default function MasterUsers() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -482,17 +492,17 @@ export default function MasterUsers() {
       <Dialog open={moveOrgOpen} onOpenChange={setMoveOrgOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Mover Usuário - {selectedUser?.full_name}</DialogTitle>
+            <DialogTitle>Mover usuário - {selectedUser?.full_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Organização Atual</Label>
+              <Label>Organização atual</Label>
               <p className="text-sm text-muted-foreground">
                 {selectedUser?.organization_name || "Sem organização"}
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Nova Organização</Label>
+              <Label>Nova organização</Label>
               <Select
                 value={newOrgId}
                 onValueChange={(v) => {

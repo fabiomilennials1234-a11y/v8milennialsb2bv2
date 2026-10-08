@@ -97,11 +97,14 @@ export function SaleValueRequiredModal({
         if (!next) onCancel();
       }}
     >
-      <DialogContent className="sm:max-w-[420px]">
+      {/* `z-[60]`: no celular quem abre isto é o painel do Negócio, que é um
+          `Sheet` (`z-[51]`); no `z-50` padrão o pedido de valor nascia ATRÁS
+          da folha e travava a tela. Convenção do repo para "acima da folha". */}
+      <DialogContent className="z-[60] sm:max-w-[420px]" overlayClassName="z-[60]">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/20">
-              <TrendingUp className="h-5 w-5 text-emerald-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 ring-1 ring-success/20">
+              <TrendingUp className="h-5 w-5 text-success-strong" />
             </div>
             <div>
               <DialogTitle>Valor da venda</DialogTitle>
@@ -149,7 +152,7 @@ export function SaleValueRequiredModal({
               <p className="text-xs text-destructive">{errors.saleValue.message}</p>
             ) : preview ? (
               <p className="text-xs text-muted-foreground tabular-nums">
-                Registrando <span className="text-emerald-400">{preview}</span>
+                Registrando <span className="font-semibold text-success-strong">{preview}</span>
               </p>
             ) : (
               <span />
@@ -162,7 +165,7 @@ export function SaleValueRequiredModal({
             </Button>
             <Button
               type="submit"
-              className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+              className="bg-success text-success-foreground shadow-sm hover:bg-success/90"
             >
               Confirmar venda
             </Button>

@@ -19,7 +19,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const teamMemberRef = {
   value: { id: "tm1", organization_id: "org-A", user_id: "u1" },
 };
-vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
+// Dublê por SPREAD: o módulo re-exporta `isVirtualTeamMember`, que
+// `usePreferredInstance` usa; um dublê por LISTA o apagava e derrubava o provider.
+vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/identity/org-team/hooks/useTeamMembers")>()),
   useCurrentTeamMember: () => ({ data: teamMemberRef.value }),
 }));
 

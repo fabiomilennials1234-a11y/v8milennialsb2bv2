@@ -10,15 +10,23 @@ export const eventTasks = new AsyncLocalStorage<BackgroundTasks>();
 export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, secret: string, factory: HandlerFactory, fatalTimeout: () => void): Promise<void> {
   const tasks = new BackgroundTasks();
   let errorCode: string | null = null;
+  let outcome: 'processed' | 'deferred_receipt' | 'unmatched_receipt' | 'provider_notification' = 'processed';
+  let unmatchedCount = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
   try {
     await Promise.race([
       eventTasks.run(tasks, async () => {
-        if (await skipDisabledGroupUpdate(db, event.organization_id, event.payload)) return;
+        // Synthetic recovery targets an existing outgoing row by exact ID/chat.
+        // Group capture policy governs new provider events, not that row's status.
+        if (event.receipt_recovery !== true
+          && await skipDisabledGroupUpdate(db, event.organization_id, event.payload)) return;
         const handler = factory({
           allowInstance: (id, org) => id === event.instance_id && org === event.organization_id,
           strictUpdateTargets: true, trustedQueuedReplay: true,
+          suppressQuotePresentation: event.receipt_recovery === true,
+          exactRecoveryMessageId: event.receipt_recovery === true,
+          queuedEventCreatedAt: event.created_at, unmatchedReceiptGraceMs: 300_000,
         });
         const pathHint = event.path_instance_id ? `/${encodeURIComponent(event.path_instance_id)}` : '';
         const response = await handler(new Request(`https://internal.invalid/whatsapp-webhook/${encodeURIComponent(secret)}${pathHint}/messages_update`, {
@@ -30,6 +38,18 @@ export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, s
         await tasks.drain();
         if (!response.ok) throw new Error(`http_${response.status}`);
         if (tasks.failed) throw new Error('background_failed');
+        const result = await response.json() as Record<string, unknown>;
+        if (!result || result.ok !== true) throw new Error('invalid_worker_result');
+        if (result.outcome !== undefined) {
+          const notification = result.outcome === 'provider_notification' && result.unmatched_count === 0;
+          const unmatched = (result.outcome === 'unmatched_receipt' || result.outcome === 'deferred_receipt')
+            && Number.isSafeInteger(result.unmatched_count) && (result.unmatched_count as number) >= 1;
+          if (!notification && !unmatched) {
+            throw new Error('invalid_worker_result');
+          }
+          outcome = notification ? 'provider_notification' : result.outcome as 'unmatched_receipt' | 'deferred_receipt';
+          unmatchedCount = notification ? 0 : result.unmatched_count as number;
+        }
       }),
       new Promise<never>((_, reject) => { timer = setTimeout(() => {
         timedOut = true;
@@ -44,7 +64,10 @@ export async function processInboxEvent(db: SupabaseClient, event: InboxEvent, s
     errorCode = /^(http_[0-9]{3}|background_failed|worker_timeout|group_policy_unavailable)$/.test(message) ? message : 'processing_failed';
   } finally { if (timer !== undefined) clearTimeout(timer); }
   if (timedOut) throw new Error('worker_timeout_lease_retained');
-  const { data, error } = await db.rpc('finish_whatsapp_ingress_event', { p_id: event.id, p_lease_token: event.lease_token, p_error_code: errorCode });
+  const { data, error } = await db.rpc('finish_whatsapp_ingress_event_with_outcome', {
+    p_id: event.id, p_lease_token: event.lease_token, p_error_code: errorCode,
+    p_outcome: errorCode ? 'processed' : outcome, p_unmatched_count: errorCode ? 0 : unmatchedCount,
+  });
   // Losing completion leaves a lease for recovery. Never force-complete with a
   // stale lease token or delete an unconfirmed event.
   if (error || data !== true) throw new Error('inbox_finish_unconfirmed');

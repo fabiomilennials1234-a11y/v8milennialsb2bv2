@@ -1,5 +1,5 @@
 import { memo, useRef, type ReactNode } from "react";
-import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -10,12 +10,14 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
+import { OUTCOME_CARD_CLASSES } from "./outcome-card-classes";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
 import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardChecklistsPanel } from "./LeadCardChecklistsPanel";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
+import { CardOutcomeBurst } from "./CardOutcomeBurst";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
 
@@ -55,6 +57,12 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  * O padrão "campo vazio é link azul sublinhado" vem do print e é intencional:
  * é o convite a preencher. Vale para produto, responsáveis e valor.
  */
+
+/** O selo que diz com palavra o que a cor diz. */
+const OUTCOME_BADGE = {
+  won: { className: "border-success/35 bg-success/15 text-success", Icon: Check, label: "Ganho" },
+  lost: { className: "border-destructive/35 bg-destructive/15 text-destructive", Icon: X, label: "Perdido" },
+} as const;
 
 interface Responsavel {
   name: string | null;
@@ -100,6 +108,8 @@ interface LeadCardCompactProps {
     qualTier?: QualificationTier | null;
     avatarUrl?: string | null;
     metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
+    /** Negócio encerrado — pinta o card (verde/vermelho) e troca "parado" pelo selo. */
+    outcome?: "won" | "lost" | null;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -178,21 +188,31 @@ function formatarCompromisso(d: Date): string {
   return `${dia} · ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-/** Badge de 16px — o `.bdg` do protótipo. */
+/** Badge de ~17px — o `.bdg` do protótipo, em pílula (vocabulário V5). */
 function Badge({ children, className, style }: {
   children: ReactNode; className?: string; style?: React.CSSProperties;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-[3px] rounded border border-transparent",
-        "px-[5px] text-[9px] font-semibold leading-[1.65] tracking-[0.01em]",
+        "inline-flex items-center gap-[3px] rounded-full border border-transparent",
+        "px-1.5 text-[10px] font-semibold leading-[15px] tracking-[0.01em]",
         className,
       )}
       style={style}
     >
       {children}
     </span>
+  );
+}
+
+function OutcomeBadge({ outcome }: { outcome: "won" | "lost" }) {
+  const { className, Icon, label } = OUTCOME_BADGE[outcome];
+  return (
+    <Badge className={className}>
+      <Icon className="size-[9px]" />
+      {label}
+    </Badge>
   );
 }
 
@@ -212,7 +232,9 @@ function Linha({ icone, children, vazio }: {
       {preenchida ? (
         <span className="min-w-0 truncate text-muted-foreground">{children}</span>
       ) : (
-        <span className="min-w-0 truncate text-[#3da8f5] underline decoration-[#3da8f5]/40 underline-offset-2">
+        /* O convite a preencher — azul semântico (`insights`), não hex: o
+           `#3da8f5` cru lia lavado no claro e não seguia o tema. */
+        <span className="min-w-0 truncate text-insights underline decoration-insights/40 underline-offset-2">
           {vazio}
         </span>
       )}
@@ -272,12 +294,19 @@ export const LeadCardCompact = memo(function LeadCardCompact({
         className={cn(
           // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
           "kanban-card group relative cursor-pointer p-0",
-          "flex flex-col rounded-[10px]",
+          // V5: cartão branco de bento — raio 16, contorno do cartão (some no
+          // claro, lábio de luz no escuro), relevo, e sobe no hover. A faixa
+          // lateral do `.kanban-card` some no card aberto (o desfecho a devolve).
+          "flex flex-col rounded-2xl border-card-border bg-card shadow-relevo before:opacity-0",
+          "hover:shadow-relevo-alto motion-reduce:hover:translate-y-0",
+          lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
           lead.isInactive && "opacity-60",
-          selected && "ring-2 ring-primary/50",
+          selected && "ring-2 ring-primary/60",
         )}
       >
-        <div className="flex flex-col gap-1.5 px-2.5 py-2">
+        {/* Ganho/perda: anéis verdes ou vermelhos por cima do card. */}
+        <CardOutcomeBurst entryId={lead.id} />
+        <div className="flex flex-col gap-1.5 px-3 py-2.5">
 
           {/* ── 1. inicial · nome + empresa · QUALIFICAÇÃO · menu ── */}
           <div className="flex items-start gap-2">
@@ -289,7 +318,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 aria-label={`Selecionar ${lead.name}`}
                 onClick={(e) => { e.stopPropagation(); onSelect(e); }}
                 className={cn(
-                  "mt-px flex size-[15px] shrink-0 items-center justify-center rounded border transition-all",
+                  "mt-px flex size-[15px] shrink-0 items-center justify-center rounded-[5px] border transition-all",
                   selected
                     ? "border-primary bg-primary text-primary-foreground opacity-100"
                     : "border-muted-foreground/40 bg-background/80 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
@@ -315,7 +344,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
             <div className="min-w-0 flex-1">
               <h4
-                className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary"
+                className="truncate text-[13px] font-bold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary-soft-foreground"
                 title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
               >
                 {lead.erpCode && (
@@ -369,7 +398,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           {config.showProducts && (
             <a
               onClick={(e) => e.stopPropagation()}
-              className="block min-w-0 truncate text-[11px] leading-[1.35] text-[#3da8f5] underline decoration-[#3da8f5]/40 underline-offset-2"
+              className="block min-w-0 truncate text-[11px] leading-[1.35] text-insights underline decoration-insights/40 underline-offset-2"
             >
               {produto ?? "Sem produto"}
             </a>
@@ -405,7 +434,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                    sabe. Mesma regra do painel do Negócio (decisão de 22/08). */
                 <Linha icone={<Wallet className="size-[13px]" />} vazio="Sem valor">
                   {valorExibido ? (
-                    <span className="font-semibold tabular-nums text-emerald-500">{valorExibido}</span>
+                    <span className="font-bold tabular-nums text-success">{valorExibido}</span>
                   ) : null}
                 </Linha>
               )}
@@ -443,10 +472,10 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                   leadId={lead.leadId}
                   completed={feitos}
                   total={totalCk}
-                  triggerClassName="rounded hover:bg-muted/50"
+                  triggerClassName="rounded-lg hover:bg-muted/60"
                 >
                   <Linha icone={<ClipboardList className="size-[13px]" />} vazio="Sem atividades">
-                    <span className={cn(tudoFeito && "text-emerald-500")}>{atividades}</span>
+                    <span className={cn(tudoFeito && "font-semibold text-success")}>{atividades}</span>
                   </Linha>
                 </LeadCardChecklistPopover>
               ) : (
@@ -476,7 +505,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                     aria-label={`Opções de ${lead.name}`}
                     title="Opções"
                     className={cn(
-                      "grid size-[26px] shrink-0 place-items-center rounded-md",
+                      "grid size-[26px] shrink-0 place-items-center rounded-lg",
                       "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                       "data-[state=open]:bg-muted data-[state=open]:text-foreground",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
@@ -502,6 +531,11 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
           {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}
           <div className="flex flex-wrap items-center gap-1">
+            {/* A cor sozinha não carrega informação para quem não distingue
+                verde de vermelho (WCAG 1.4.1): o selo diz com palavra o que o
+                fundo diz. */}
+            {lead.outcome && <OutcomeBadge outcome={lead.outcome} />}
+
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
@@ -520,12 +554,13 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
             {dateIndicator && <Badge className={dateIndicator.className}>{dateIndicator.label}</Badge>}
 
-            {diasParado != null && diasParado >= 3 && (
+            {/* Negócio ganho ou perdido não está "parado": está encerrado. */}
+            {!lead.outcome && diasParado != null && diasParado >= 3 && (
               <Badge
                 className={cn(
-                  diasParado >= 14 ? "border-red-500/30 bg-red-500/10 text-red-500"
-                    : diasParado >= 7 ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
-                    : "border-blue-500/30 bg-blue-500/10 text-blue-500",
+                  diasParado >= 14 ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : diasParado >= 7 ? "border-warning/35 bg-warning/15 text-warning-strong"
+                    : "border-insights/30 bg-insights/10 text-insights",
                 )}
               >
                 {diasParado}d parado
@@ -533,7 +568,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             )}
 
             {lead.createdAt && (
-              <Badge className="border-muted-foreground/20 bg-muted-foreground/10 font-medium text-muted-foreground">
+              <Badge className="border-border bg-muted font-medium text-muted-foreground">
                 <Clock className="size-[9px]" />
                 {formatDistanceToNowStrict(new Date(lead.createdAt), { addSuffix: true, locale: ptBR })}
               </Badge>
@@ -576,7 +611,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-[10px] font-semibold text-primary hover:underline"
+              className="text-[10px] font-semibold text-insights hover:underline"
             >
               Entrar no Meet
             </a>
@@ -586,7 +621,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
           {/* ── 5. divisória + etiquetas COM NOME, no rodapé ── */}
           {lead.tags && lead.tags.length > 0 && (
-            <div className="mt-px border-t border-border/40 pt-1.5">
+            <div className="mt-0.5 border-t border-border/60 pt-2">
               <LeadCardLabels tags={lead.tags} />
             </div>
           )}

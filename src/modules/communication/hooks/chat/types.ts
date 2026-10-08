@@ -6,6 +6,7 @@
  */
 
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
+import { nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
 
 export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
 
@@ -30,7 +31,11 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
   media_url: string | null;
   /** True when media was purged by the 30-day retention job. Renders "expired" state. */
   media_expired?: boolean | null;
+  /** Original document name, copied from raw_payload on INSERT (survives the 14-day payload retention). */
+  media_file_name?: string | null;
   push_name: string | null;
+  /** Mensagem de conversa de grupo (`@g.us`). Em grupo, `push_name` é o remetente. */
+  is_group?: boolean | null;
   status: string;
   lead_id: string | null;
   timestamp: string;
@@ -38,6 +43,11 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
   /** Whether this message was sent by the Copilot AI agent */
   sent_by_ai: boolean | null;
   sent_source: "manual" | "copilot" | "workflow" | null;
+  /**
+   * Encaminhada pelo Torque: `whatsapp_messages.id` da mensagem de origem.
+   * Opcional porque só o chat da Uazapi seleciona a coluna.
+   */
+  forwarded_from_message_id?: string | null;
   /**
    * Por que o envio falhou, quando o provider soube dizer. Opcional: só o canal
    * oficial preenche hoje, a partir do callback da Meta.
@@ -334,8 +344,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string | 
  * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
  * na lista.
  */
-export function contactLabel(c: InboxContact): string {
+export function contactLabel(
+  c: InboxContact,
+  opcoes?: { nomeDoLeadPrimeiro?: boolean },
+): string {
   if (c.channel === "whatsapp") {
+    // Flag `chat_nome_do_lead`: `leads.name` primeiro, a mesma regra do topo e
+    // do painel. Grupo fica com a regra de sempre.
+    if (opcoes?.nomeDoLeadPrimeiro && !c.is_group) {
+      return (
+        nomeComLeadPrimeiro({
+          pushName: c.push_name,
+          savedContactName: c.saved_contact_name,
+          nomeDoLead: c.lead_name,
+          telefone: c.phone_number,
+        }) || "Contato"
+      );
+    }
     const nome = c.saved_contact_name?.trim() || (c.push_name || c.lead_name || "").trim();
     if (nome) return nome;
     // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um

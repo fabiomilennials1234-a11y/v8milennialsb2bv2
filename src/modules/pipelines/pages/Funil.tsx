@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,12 +31,15 @@ import {
   BarChart3,
   Send,
   Calendar as CalendarIcon,
+  CalendarPlus,
+  CalendarRange,
+  AlarmClock,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
-import { funilIcon } from "@/modules/pipelines/lib/funil-icons";
 import {
   useFunilStages,
   usePaginatedFunil,
@@ -58,10 +62,11 @@ import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineSt
 import { FunilKanban, type FunilEntry } from "@/modules/pipelines/components/funis/FunilKanban";
 import { useFunilMoveFlow, type FunilFlowEntry } from "@/modules/pipelines/components/funis/useFunilMoveFlow";
 import { FunilAnalytics } from "@/modules/pipelines/components/funis/FunilAnalytics";
+import { FunilListTable } from "@/modules/pipelines/components/funis/FunilListTable";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
-import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
+import { FunilMeetingTimeline } from "@/modules/pipelines/components/funis/FunilMeetingTimeline";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
 import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
@@ -78,6 +83,7 @@ import {
   LeadModal,
   useBatchedLeadMetrics,
   useDeleteAllLeadsInPipe,
+  prepararDissolucao,
 } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
@@ -105,6 +111,10 @@ import {
   endOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { IconChip } from "@/components/ui/bento";
+import { FilterChip } from "@/shared/components/FilterChip";
+import { useFunnelOptions } from "@/modules/pipelines/lib/funnel-nav";
+import { notifyError, userMessageOf } from "@/shared/errors";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -116,6 +126,8 @@ function formatPeriodLabel(range: { startStr: string; endStr: string }): string 
 }
 
 type FunilViewMode = "kanban" | "list" | "timeline" | "analytics";
+/** Valor da 5ª aba da pílula — navega para o hub em vez de trocar a visão. */
+const HUB_TAB = "todos-os-funis";
 
 /** Papel efetivo da etapa — `open` quando a governança ainda não a marcou. */
 const roleDe = (s: { stage_role?: import("@/contracts/pipe").StageRole | null }) =>
@@ -123,11 +135,11 @@ const roleDe = (s: { stage_role?: import("@/contracts/pipe").StageRole | null })
 
 /** Faixas de reunião (porte do quick-filter da Confirmação). */
 type TimeFilter = "all" | "today" | "tomorrow" | "week" | "overdue";
-const TIME_OPTIONS: { value: TimeFilter; label: string }[] = [
-  { value: "today", label: "Hoje" },
-  { value: "tomorrow", label: "Amanhã" },
-  { value: "week", label: "Semana" },
-  { value: "overdue", label: "Atrasadas" },
+const TIME_OPTIONS: { value: TimeFilter; label: string; icon: typeof CalendarIcon }[] = [
+  { value: "today", label: "Hoje", icon: CalendarIcon },
+  { value: "tomorrow", label: "Amanhã", icon: CalendarPlus },
+  { value: "week", label: "Semana", icon: CalendarRange },
+  { value: "overdue", label: "Atrasadas", icon: AlarmClock },
 ];
 
 /**
@@ -179,8 +191,25 @@ function FunilPageInner() {
   const { organizationId } = useOrganization();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
+  const {
+    data: pipelines = [],
+    isLoading: loadingPipelines,
+    isFetching: fetchingPipelines,
+    error: pipelinesError,
+    refetch: refetchPipelines,
+  } = usePipelines();
   const pipeline = resolveFunil(pipelines, param);
+
+  // Um slug ausente da lista em cache ainda não é "não encontrado": quem acabou
+  // de criar o funil navega antes do cache da lista atualizar. Refaz a consulta
+  // uma vez por slug antes de afirmar que o funil não existe (ADR-0038).
+  const conferidoNoServidor = useRef(new Set<string>());
+  const precisaConferir = !loadingPipelines && !pipeline && !!param && !conferidoNoServidor.current.has(param);
+  useEffect(() => {
+    if (!precisaConferir || !param) return;
+    conferidoNoServidor.current.add(param);
+    void refetchPipelines();
+  }, [precisaConferir, param, refetchPipelines]);
   const ehCustom = pipeline?.type === "custom";
   const ehSystem = pipeline?.type === "system";
   /** Slug de sistema do trio legado — liga os portes específicos de família. */
@@ -214,7 +243,12 @@ function FunilPageInner() {
 
   // ── Filtros: bloco universal (SCRUM-633) + dimensões extras por capacidade ─
   const controller = useFunilFilters(pipeline?.id);
-  const [viewMode, setViewMode] = useState<FunilViewMode>("kanban");
+  // O hub ("Todos os funis") abre o funil já na visão escolhida na pílula.
+  const location = useLocation();
+  const initialView = (location.state as { view?: FunilViewMode } | null)?.view;
+  const [viewMode, setViewMode] = useState<FunilViewMode>(initialView ?? "kanban");
+  const { options: funnelOptions } = useFunnelOptions();
+  const activeFunnelCount = funnelOptions.filter((o) => !o.ended).length;
   const [extra, setExtra] = useState<ExtraFilterState>(DEFAULT_EXTRA_FILTERS);
   const patchExtra = useCallback(
     (patch: Partial<ExtraFilterState>) => setExtra((s) => ({ ...s, ...patch })),
@@ -406,16 +440,10 @@ function FunilPageInner() {
   // ── Seções do painel: universais + extras por capacidade ──────────────────
   const filterSections: FilterSectionConfig[] = useMemo(() => {
     const extras: FilterSectionConfig[] = [];
+    // As faixas de reunião (Hoje · Amanhã · Semana · Atrasadas) saíram do
+    // painel para a barra de controle, em chips à vista (V5). Um lugar só para
+    // o mesmo filtro — o painel não as repete.
     if (temEtapaMeeting) {
-      extras.push({
-        type: "single-choice",
-        id: "time-bucket",
-        label: "Reunião",
-        value: extra.timeFilter,
-        onChange: (v: string) => patchExtra({ timeFilter: v as TimeFilter }),
-        options: TIME_OPTIONS,
-        allValue: "all",
-      });
       extras.push({ type: "urgency", value: extra.urgencyFilter, onChange: (v: string) => patchExtra({ urgencyFilter: v }) });
     }
     if (temEtapaWon) {
@@ -482,6 +510,8 @@ function FunilPageInner() {
 
   // ── Criação por família (porte dos primaryActions das páginas velhas) ─────
   const [showAddLead, setShowAddLead] = useState(false);
+  /** Etapa do "+" ao pé da coluna — o modal de adicionar abre nela. */
+  const [addLeadStageId, setAddLeadStageId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showSystemSettings, setShowSystemSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
@@ -537,16 +567,19 @@ function FunilPageInner() {
 
   const handleRemoveEntry = async () => {
     if (!removeEntryId || !pipeline) return;
+    // Cópia do card antes de remover: vira poeira só se a remoção der certo.
+    const poeira = prepararDissolucao([removeEntryId]);
     try {
       if (ehCustom) {
         await removeLead.mutateAsync({ entry_id: removeEntryId, pipeline_id: pipeline.id });
       } else {
         await deleteEntry.mutateAsync(removeEntryId);
       }
+      poeira.dissolver();
       toast.success("Lead removido do funil");
       setRemoveEntryId(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao remover lead");
+      notifyError(e, { fallback: "Não foi possível remover lead." });
     }
   };
 
@@ -558,17 +591,43 @@ function FunilPageInner() {
 
   if (isLoading) {
     return (
+      <div className="flex h-[60vh] items-center justify-center" aria-busy="true">
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" aria-label="Carregando funil" />
+      </div>
+    );
+  }
+
+  if (!pipeline && (precisaConferir || fetchingPipelines)) {
+    return (
       <div className="flex items-center justify-center h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  // Consulta que falhou não é funil inexistente.
+  if (!pipeline && pipelinesError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-center px-6">
+        <AlertTriangle className="w-12 h-12 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Não conseguimos carregar este funil</h2>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          {userMessageOf(pipelinesError, "Tente de novo em instantes.")}
+        </p>
+        <Button variant="outline" onClick={() => void refetchPipelines()}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
+
   if (!pipeline) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <AlertTriangle className="w-12 h-12 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">Funil não encontrado</h2>
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <AlertTriangle className="h-5 w-5" aria-hidden />
+        </span>
+        <h2 className="text-lg font-bold tracking-tight">Funil não encontrado</h2>
         <Button variant="outline" onClick={() => navigate("/funis")}>
           Ver todos os funis
         </Button>
@@ -576,7 +635,6 @@ function FunilPageInner() {
     );
   }
 
-  const PipeIcon = funilIcon(pipeline.icon);
   const periodRange = controller.metricsRange;
 
   const viewOptions: { value: FunilViewMode; icon: typeof LayoutGrid; label: string }[] = [
@@ -586,36 +644,109 @@ function FunilPageInner() {
     { value: "analytics", icon: BarChart3, label: "Analytics" },
   ];
 
+  // O ÚNICO botão de ouro do cabeçalho (V5): a criação típica de cada família.
   const primaryAction = ehCustom ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Adicionar Lead
+    <Button onClick={() => setShowAddLead(true)}>
+      <Plus />
+      Adicionar lead
     </Button>
   ) : trioSlug === "whatsapp" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateOpportunity(true)}>
-      <Plus className="w-4 h-4 mr-2" />
+    <Button onClick={() => setShowCreateOpportunity(true)}>
+      <Plus />
       Novo negócio
     </Button>
   ) : trioSlug === "confirmacao" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateMeeting(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Nova Reunião
+    <Button onClick={() => setShowCreateMeeting(true)}>
+      <Plus />
+      Nova reunião
     </Button>
   ) : trioSlug === "propostas" ? (
-    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateProposal(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Nova Proposta
+    <Button onClick={() => setShowCreateProposal(true)}>
+      <Plus />
+      Nova proposta
     </Button>
   ) : undefined;
 
   return (
-    <div className="space-y-4">
+    // A pílula de visões é navegação Radix (`Tabs`) e cada visão é o seu
+    // `TabsContent` — mesmo `viewMode`, mesmo estado; só ganhou forma.
+    <Tabs
+      value={viewMode}
+      onValueChange={(v) => {
+        // "Todos os funis" é a 5ª aba da pílula, mas é outra página (o hub).
+        if (v === HUB_TAB) navigate("/funis");
+        else setViewMode(v as FunilViewMode);
+      }}
+      className="space-y-5"
+    >
       <FunnelControlBar
         funnelKey={`pipeline:${pipeline.id}`}
         funnelLabel={pipeline.name}
         funnelColor={pipeline.color}
+        funnelIcon={pipeline.icon}
+        subtitle={pipeline.description || undefined}
         search={controller.search}
         onSearchChange={controller.setSearch}
+        tabs={
+          <TabsList variant="pill" aria-label="Visão do funil">
+            {stages.length > 0 &&
+              viewOptions.map(({ value, icon: Icon, label }) => (
+                <TabsTrigger key={value} value={value}>
+                  <Icon className="size-4" aria-hidden />
+                  {label}
+                </TabsTrigger>
+              ))}
+            <TabsTrigger value={HUB_TAB}>
+              <Layers className="size-4" aria-hidden />
+              Todos os funis
+              {activeFunnelCount > 0 && (
+                <span className="rounded-full bg-tinta-3 px-1.5 py-px text-[10px] font-extrabold tabular-nums text-tinta-foreground">
+                  {activeFunnelCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        }
+        summary={
+          metrics.generic ? (
+            <div
+              className="inline-flex h-[34px] items-center gap-3 whitespace-nowrap rounded-full bg-tinta px-4 text-xs text-tinta-muted shadow-relevo-tinta"
+              data-testid="funnel-summary"
+            >
+              <span>
+                Negócios{" "}
+                <b className="text-[13px] font-extrabold tabular-nums text-tinta-foreground">
+                  {metrics.generic.total.toLocaleString("pt-BR")}
+                </b>
+              </span>
+              <span>
+                Conversão{" "}
+                <b className="text-[13px] font-extrabold tabular-nums text-tinta-foreground">
+                  {metrics.generic.conversionRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+                </b>
+              </span>
+            </div>
+          ) : undefined
+        }
+        quickFilters={
+          temEtapaMeeting && viewMode !== "analytics"
+            ? TIME_OPTIONS.map(({ value, label, icon }) => {
+                const active = extra.timeFilter === value;
+                return (
+                  <FilterChip
+                    key={value}
+                    icon={icon}
+                    active={active}
+                    aria-pressed={active}
+                    title={value === "overdue" ? "Reuniões atrasadas" : `Reuniões: ${label.toLowerCase()}`}
+                    onClick={() => patchExtra({ timeFilter: active ? "all" : value })}
+                  >
+                    {label}
+                  </FilterChip>
+                );
+              })
+            : undefined
+        }
         views={
           <FunnelViewsMenu
             viewMode={viewMode}
@@ -627,46 +758,41 @@ function FunilPageInner() {
             onApplyFilters={applyBoardState}
             activeViewId={activeViewId}
             onActiveViewChange={handleActiveViewChange}
+            // A pílula acima já troca a visão; o menu fica com as views salvas.
+            withViewSwitcher={false}
           />
         }
         filters={
-          <>
-            <PipeIcon
-              className="hidden size-4 shrink-0 sm:block"
-              style={{ color: pipeline.color }}
-              aria-hidden
-            />
-            {stages.length > 0 && viewMode !== "analytics" && (
-              <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
-            )}
-          </>
+          stages.length > 0 && viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+          ) : undefined
+        }
+        headerActions={
+          (ehCustom && customRow) || trioSlug ? (
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label="Configurações"
+              title="Configurações do funil"
+              onClick={() => (trioSlug ? setShowSystemSettings(true) : setShowSettings(true))}
+            >
+              <Settings2 />
+            </Button>
+          ) : undefined
         }
         actions={
           <>
-            {ehCustom && customRow && (
-              <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
-                Configurações
-              </Button>
-            )}
-            {trioSlug && (
-              <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSystemSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
-                Configurações
-              </Button>
-            )}
-
             {stages.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-9 px-2"
+                    size="icon"
+                    variant="outline"
+                    className="h-[34px] w-[34px] shrink-0"
                     aria-label="Mais ações do funil"
                     data-testid="funnel-overflow"
                   >
-                    <MoreHorizontal className="w-4 h-4" />
+                    <MoreHorizontal />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
@@ -701,26 +827,22 @@ function FunilPageInner() {
         }
       />
 
-      {pipeline.description && (
-        <p className="-mt-2 truncate text-sm text-muted-foreground">{pipeline.description}</p>
-      )}
-
       {/* Sem GhostLeadsBanner de propósito: `get_pipeline_page` usa INNER JOIN
           com `leads` sob RLS — entry cujo lead o usuário não enxerga nem chega
           na tela, e a contagem da coluna sai do MESMO recorte. */}
 
       {/* Indicador de período ativo (porte das páginas velhas) */}
       {viewMode !== "analytics" && periodRange && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
-          <CalendarIcon className="w-4 h-4 shrink-0" />
-          <span className="flex-1">
+        <div className="flex items-center gap-3 rounded-2xl border border-card-border bg-card py-2 pl-2 pr-2 text-sm text-muted-foreground shadow-relevo">
+          <IconChip icon={CalendarIcon} tone="gold" />
+          <span className="min-w-0 flex-1">
             Exibindo cards criados em{" "}
-            <span className="text-foreground font-medium">{formatPeriodLabel(periodRange)}</span>
+            <span className="font-semibold text-foreground tabular-nums">{formatPeriodLabel(periodRange)}</span>
           </span>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs"
+            className="h-8 rounded-full text-xs"
             onClick={() =>
               controller.setState((s) => ({ ...s, period: createInitialPeriodState() }))
             }
@@ -731,81 +853,120 @@ function FunilPageInner() {
       )}
 
       {stages.length > 0 ? (
-        viewMode === "analytics" ? (
-          <FunilAnalytics
-            pipeline={pipeline}
-            stages={stages}
-            stageData={stageData}
-            allItems={allItems}
-            metrics={metrics}
-            periodRange={periodRange}
-            responsibleMembers={responsibleMembers}
-          />
-        ) : viewMode === "timeline" ? (
-          <MeetingTimeline
-            meetings={timelineItems}
-            onMeetingClick={(meeting) => {
-              if (meeting.lead_id) openDeal(meeting.id, meeting.lead_id);
-            }}
-          />
-        ) : isMobile || viewMode === "list" ? (
-          <PipelineListView
-            stages={mobileStages}
-            leads={mobileLeads}
-            onLeadClick={handleMobileLeadClick}
-            onMoveLeadToStage={handleMobileMove}
-            isLoading={loadingBoard}
-          />
-        ) : (
-          <FunilKanban
-            pipelineId={pipeline.id}
-            stages={stages}
-            stageData={stageData}
-            onMove={handleMove}
-            onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
-            onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
-            metricsMap={metricsMap}
-            onDisparar={handleDispararManual}
-            onDeleteAllLeads={
-              trioSlug
-                ? (stageKey, stageTitle) => setStageToDelete({ id: stageKey, title: stageTitle })
-                : undefined
-            }
-            renderStageBadge={
-              trioSlug
-                ? (col) => {
-                    const allCounts = systemWorkflowCounts["__all__"] || { total: 0, active: 0 };
-                    const stageCounts = systemWorkflowCounts[col.id] || { total: 0, active: 0 };
-                    return (
-                      <StageWorkflowsBadgeWrapper
-                        pipeType={trioSlug}
-                        stageKey={col.id}
-                        stageName={col.title}
-                        counts={{
-                          total: stageCounts.total + allCounts.total,
-                          active: stageCounts.active + allCounts.active,
-                        }}
-                      />
-                    );
-                  }
-                : undefined
-            }
-          />
-        )
+        <>
+          <TabsContent value="analytics" className="mt-0">
+            <FunilAnalytics
+              pipeline={pipeline}
+              stages={stages}
+              stageData={stageData}
+              allItems={allItems}
+              metrics={metrics}
+              periodRange={periodRange}
+              responsibleMembers={responsibleMembers}
+            />
+          </TabsContent>
+          <TabsContent value="timeline" className="mt-0">
+            <FunilMeetingTimeline
+              meetings={timelineItems}
+              stages={stages}
+              onMeetingClick={(meeting) => {
+                if (meeting.lead_id) openDeal(meeting.id, meeting.lead_id);
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="list" className="mt-0">
+            {isMobile ? (
+              <PipelineListView
+                stages={mobileStages}
+                leads={mobileLeads}
+                onLeadClick={handleMobileLeadClick}
+                onMoveLeadToStage={handleMobileMove}
+                isLoading={loadingBoard}
+              />
+            ) : (
+              // Desktop: tabela agrupada por etapa (mockup V5), os mesmos cards do quadro.
+              <FunilListTable
+                stages={stages}
+                stageData={stageData}
+                onOpen={(entry) => {
+                  if (entry.lead_id) openDeal(entry.id, entry.lead_id);
+                }}
+                onMove={handleMobileMove}
+                isLoading={loadingBoard}
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="kanban" className="mt-0">
+            {isMobile ? (
+              <PipelineListView
+                stages={mobileStages}
+                leads={mobileLeads}
+                onLeadClick={handleMobileLeadClick}
+                onMoveLeadToStage={handleMobileMove}
+                isLoading={loadingBoard}
+              />
+            ) : (
+              <FunilKanban
+                pipelineId={pipeline.id}
+                stages={stages}
+                stageData={stageData}
+                onMove={handleMove}
+                onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
+                onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
+                onCreateInStage={
+                  ehCustom
+                    ? (stage) => {
+                        setAddLeadStageId(stage.id);
+                        setShowAddLead(true);
+                      }
+                    : undefined
+                }
+                metricsMap={metricsMap}
+                onDisparar={handleDispararManual}
+                onDeleteAllLeads={
+                  trioSlug
+                    ? (stageKey, stageTitle) => setStageToDelete({ id: stageKey, title: stageTitle })
+                    : undefined
+                }
+                renderStageBadge={
+                  trioSlug
+                    ? (col) => {
+                        const allCounts = systemWorkflowCounts["__all__"] || { total: 0, active: 0 };
+                        const stageCounts = systemWorkflowCounts[col.id] || { total: 0, active: 0 };
+                        return (
+                          <StageWorkflowsBadgeWrapper
+                            pipeType={trioSlug}
+                            stageKey={col.id}
+                            stageName={col.title}
+                            counts={{
+                              total: stageCounts.total + allCounts.total,
+                              active: stageCounts.active + allCounts.active,
+                            }}
+                          />
+                        );
+                      }
+                    : undefined
+                }
+              />
+            )}
+          </TabsContent>
+        </>
       ) : (
-        <div className="text-center py-16 text-muted-foreground">
-          <Kanban className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium">Nenhuma etapa configurada</p>
+        <div className="flex flex-col items-center rounded-panel border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
+            <Kanban className="h-5 w-5" aria-hidden />
+          </span>
+          <p className="text-base font-bold tracking-tight">Nenhuma etapa configurada</p>
           {ehCustom && customRow ? (
             <>
-              <p className="text-sm mt-1">Abra as configurações para criar etapas.</p>
-              <Button variant="outline" className="mt-4" onClick={() => setShowSettings(true)}>
-                <Settings2 className="w-4 h-4 mr-2" />
-                Configurar Etapas
+              <p className="mt-1 text-sm text-muted-foreground">Abra as configurações para criar etapas.</p>
+              <Button variant="outline" className="mt-5" onClick={() => setShowSettings(true)}>
+                <Settings2 />
+                Configurar etapas
               </Button>
             </>
           ) : (
-            <p className="text-sm mt-1">Este funil ainda não tem etapas ativas.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Este funil ainda não tem etapas ativas.</p>
           )}
         </div>
       )}
@@ -817,7 +978,11 @@ function FunilPageInner() {
       {ehCustom && pipeline && stages.length > 0 && (
         <AddLeadToPipeModal
           open={showAddLead}
-          onOpenChange={setShowAddLead}
+          onOpenChange={(open) => {
+            setShowAddLead(open);
+            if (!open) setAddLeadStageId(null);
+          }}
+          defaultStageId={addLeadStageId}
           pipelineId={pipeline.id}
           pipelineName={pipeline.name}
           stages={stages}
@@ -912,8 +1077,8 @@ function FunilPageInner() {
                       ? `${result.deleted} leads movidos para lixeira.`
                       : "Leads movidos para lixeira.",
                   );
-                } catch {
-                  toast.error("Erro ao mover leads para lixeira.");
+                } catch (caught) {
+                  notifyError(caught, { fallback: "Não foi possível mover leads para lixeira." });
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -928,7 +1093,7 @@ function FunilPageInner() {
       <AlertDialog open={!!removeEntryId} onOpenChange={() => setRemoveEntryId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover Lead do Funil</AlertDialogTitle>
+            <AlertDialogTitle>Remover lead do funil</AlertDialogTitle>
             <AlertDialogDescription>
               O lead será removido deste funil, mas continuará existindo no sistema.
             </AlertDialogDescription>
@@ -940,14 +1105,14 @@ function FunilPageInner() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {(removeLead.isPending || deleteEntry.isPending) && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               )}
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Tabs>
   );
 }
 

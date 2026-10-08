@@ -37,6 +37,9 @@ import {
 import { governSend, isSkippedSend } from "./send-governor/gate.ts";
 import { espelharMidiaDosComponentes } from "./mirror-template-media.ts";
 import { deriveCategory } from "./send-governor/core.ts";
+import type { SendCategory } from "./send-governor/types.ts";
+import { isValidGroupJid } from "./whatsapp-jid.ts";
+import { GROUP_PROVIDERS } from "./instance-routing.ts";
 
 export type ResolveOptions = {
   /** Preferred instance id from agent.whatsapp_instance_id */
@@ -321,15 +324,47 @@ export function dispatchSendResult(result: SendResult): SendResultSimple {
   return { success: true, messageId: result.message_id, ...(result.status ? { status: result.status } : {}) };
 }
 
-export async function sendTextViaInstance(
+type SendTextOpts = {
+  trackSource?: string;
+  trackId?: string;
+  delay?: number;
+  replyId?: string;
+  idempotencyKey?: string;
+  /**
+   * Categoria explícita do governor. Sem ela, vale `deriveCategory(trackSource)`.
+   * Existe para o caminho manual do proxy: o `trackSource` dele precisa seguir
+   * `"whatsapp-api-proxy"` (é o que o webhook lê para autoria e classificação),
+   * mas `deriveCategory` leria esse valor como automação.
+   */
+  category?: SendCategory;
+  /** Rótulo nativo "Encaminhada" no WhatsApp (Uazapi). */
+  forward?: boolean;
+};
+
+/** Opções de envio de mídia — mesmo contrato de `SendTextOpts` no que se aplica. */
+type SendMediaOpts = Pick<
+  SendTextOpts,
+  "trackSource" | "trackId" | "idempotencyKey" | "category" | "forward"
+>;
+
+/**
+ * Núcleo governado do envio de texto: provider + Send Governor + classificação
+ * do resultado. Privado — os dois remetentes públicos decidem o DESTINO e o que
+ * o governor enxerga como destinatário, e só então delegam aqui.
+ *
+ * `destination` vai ao provider sem transformação. `governorRecipient` é o que
+ * o governor usa para os gates por destinatário (frio P4, dedup interno) — null
+ * quando o destino não é telefone (grupo), porque ali "nunca escreveu" não tem
+ * significado e o gate frio barraria todo envio em enforce.
+ */
+async function sendTextGoverned(
   supabaseAdmin: any,
   instance: WhatsAppInstance,
-  phoneNumber: string,
+  destination: string,
+  governorRecipient: string | null,
   text: string,
-  opts: { trackSource?: string; trackId?: string; delay?: number; replyId?: string; idempotencyKey?: string } = {}
+  opts: SendTextOpts,
 ): Promise<SendResultSimple> {
-  const phone = normalizeBrazilianPhone(phoneNumber);
-  if (!phone) return { success: false, error: "Invalid phone" };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     // Send Governor (SHADOW seam). doSend runs exactly once; in shadow/off it
@@ -341,20 +376,21 @@ export async function sendTextViaInstance(
       {
         orgId: instance.organization_id,
         instanceId: instance.id,
-        category: deriveCategory(opts.trackSource),
-        recipientPhone: phone,
+        category: opts.category ?? deriveCategory(opts.trackSource),
+        recipientPhone: governorRecipient,
         trackSource: opts.trackSource,
         content: text,
         idempotencyKey: opts.idempotencyKey,
       },
       () =>
         provider.sendText({
-          number: phone,
+          number: destination,
           text,
           trackSource: opts.trackSource,
           trackId: opts.trackId,
           delay: opts.delay,
           replyid: opts.replyId,
+          ...(opts.forward ? { forward: true } : {}),
         }),
     );
     if (isSkippedSend(governed)) {
@@ -367,6 +403,52 @@ export async function sendTextViaInstance(
       error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
+}
+
+export async function sendTextViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  text: string,
+  opts: SendTextOpts = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  return await sendTextGoverned(supabaseAdmin, instance, phone, phone, text, opts);
+}
+
+
+
+/**
+ * Manda TEXTO para um GRUPO (`…@g.us`) — nó `send_to_group`.
+ *
+ * Separado de `sendTextViaInstance` de propósito: aquele helper tem mais de dez
+ * callers e o destinatário dele É um telefone (normalizado, checado pelo gate
+ * frio). Um flag `isGroup` lá mudaria o significado do parâmetro para todos.
+ *
+ *  - O JID é validado no formato estrito e vai INTACTO ao provider — nunca por
+ *    `normalizeBrazilianPhone`, que leria os dígitos do grupo como telefone.
+ *  - Só Uazapi: é o único provedor com envio a grupo verificado.
+ *  - O governor recebe `recipientPhone: null` — o gate frio (P4) procuraria
+ *    inbound do JID em `channel_messages` e barraria em enforce; o dedup
+ *    interno por destinatário também é pulado (o handler já reserva por
+ *    conteúdo antes). Cap, assinatura, quarentena e categoria seguem valendo.
+ */
+export async function sendTextToGroupViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  groupJid: string,
+  text: string,
+  opts: SendTextOpts = {}
+): Promise<SendResultSimple> {
+  if (!isValidGroupJid(groupJid)) return { success: false, error: "Invalid group JID" };
+  if (!(GROUP_PROVIDERS as readonly string[]).includes(String(instance.provider))) {
+    return {
+      success: false,
+      error: `Group send not supported by provider ${String(instance.provider)}`,
+    };
+  }
+  return await sendTextGoverned(supabaseAdmin, instance, groupJid, null, text, opts);
 }
 
 /**
@@ -654,12 +736,12 @@ export async function sendMediaViaInstance(
   instance: WhatsAppInstance,
   phoneNumber: string,
   media: {
-    type: "image" | "video" | "document" | "audio" | "sticker";
+    type: "image" | "video" | "document" | "audio" | "ptt" | "sticker";
     file: string;
     filename?: string;
     caption?: string;
   },
-  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
+  opts: SendMediaOpts = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -671,7 +753,7 @@ export async function sendMediaViaInstance(
       {
         orgId: instance.organization_id,
         instanceId: instance.id,
-        category: deriveCategory(opts.trackSource),
+        category: opts.category ?? deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
         content: media.caption && media.caption.trim().length > 0 ? media.caption : media.file,
@@ -684,6 +766,7 @@ export async function sendMediaViaInstance(
           file: media.file,
           filename: media.filename,
           caption: media.caption,
+          ...(opts.forward ? { forward: true } : {}),
           trackSource: opts.trackSource,
           trackId: opts.trackId,
         }),

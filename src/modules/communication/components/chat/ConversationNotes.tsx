@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/modules/identity";
 import {
   useConversationNotes,
@@ -24,6 +23,7 @@ import {
   useDeleteConversationNote,
   type ConversationNote,
 } from "@/modules/communication/hooks/useConversationNotes";
+import { notifyError } from "@/shared/errors";
 
 interface ConversationNotesProps {
   leadId: string;
@@ -31,7 +31,6 @@ interface ConversationNotesProps {
 
 export default function ConversationNotes({ leadId }: ConversationNotesProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { data: notes, isLoading } = useConversationNotes(leadId);
   const createNote = useCreateConversationNote();
   const updateNote = useUpdateConversationNote();
@@ -75,8 +74,8 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
       await createNote.mutateAsync({ leadId, content: trimmed });
       setNewNoteContent("");
       setShowNewNote(false);
-    } catch {
-      toast({ title: "Erro ao salvar nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível salvar nota." });
     }
   };
 
@@ -97,16 +96,16 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
       await updateNote.mutateAsync({ id: editingId, leadId, content: trimmed });
       setEditingId(null);
       setEditContent("");
-    } catch {
-      toast({ title: "Erro ao atualizar nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível atualizar nota." });
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteNote.mutateAsync({ id, leadId });
-    } catch {
-      toast({ title: "Erro ao excluir nota.", variant: "destructive" });
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível excluir nota." });
     }
   };
 
@@ -128,20 +127,20 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
   const sortedNotes = notes ?? [];
 
   return (
-    <div className="border rounded-lg bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-800/30">
+    <div className="rounded-xl border border-warning/30 bg-warning/10">
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
           onClick={() => setIsExpanded((v) => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-200 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-warning-strong hover:text-warning-strong/80 transition-colors"
         >
           <StickyNote className="h-4 w-4" />
           <span>Notas internas</span>
           {noteCount > 0 && (
             <Badge
               variant="secondary"
-              className="bg-amber-200/70 dark:bg-amber-800/40 text-amber-800 dark:text-amber-300 text-xs px-1.5 py-0"
+              className="bg-warning/20 text-warning-strong border-0 text-xs px-1.5 py-0"
             >
               {noteCount}
             </Badge>
@@ -156,7 +155,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
           variant="ghost"
           size="sm"
           onClick={handleNewNote}
-          className="h-7 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100/60 dark:hover:bg-amber-900/30"
+          className="h-7 text-xs text-warning-strong hover:bg-warning/15 hover:text-warning-strong"
         >
           <Plus className="h-3.5 w-3.5 mr-1" />
           Nova nota
@@ -167,7 +166,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
       {isExpanded && (
         <div className="px-3 pb-3 space-y-3">
           {/* Warning text */}
-          <p className="flex items-center gap-1.5 text-[11px] text-amber-600/80 dark:text-amber-500/70">
+          <p className="flex items-center gap-1.5 text-[11px] text-warning-strong/80">
             <StickyNote className="h-3 w-3 flex-shrink-0" />
             Visível apenas para a equipe. Nunca enviado ao cliente.
           </p>
@@ -181,7 +180,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                 onChange={(e) => setNewNoteContent(e.target.value)}
                 onKeyDown={handleNewNoteKeyDown}
                 placeholder="Escreva uma nota interna sobre esta conversa..."
-                className="min-h-[80px] text-sm border-amber-300 dark:border-amber-700 focus-visible:ring-amber-400/50 bg-white dark:bg-amber-950/20 resize-none"
+                className="min-h-[80px] text-sm border-warning/40 bg-card focus-visible:ring-warning/50 resize-none"
               />
               <div className="flex items-center justify-end gap-2">
                 <Button
@@ -196,7 +195,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                   size="sm"
                   onClick={handleSaveNew}
                   disabled={!newNoteContent.trim() || createNote.isPending}
-                  className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                  className="h-7 text-xs bg-warning text-warning-foreground shadow-none hover:bg-warning/90"
                 >
                   {createNote.isPending && (
                     <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -210,10 +209,10 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
           {/* Notes list */}
           {isLoading ? (
             <div className="flex justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-amber-500" />
+              <Loader2 className="h-5 w-5 animate-spin text-warning-strong" />
             </div>
           ) : sortedNotes.length === 0 ? (
-            <p className="text-center text-xs text-amber-600/60 dark:text-amber-500/50 py-3">
+            <p className="text-center text-xs text-warning-strong/70 py-3">
               Nenhuma nota registrada nesta conversa.
             </p>
           ) : (
@@ -221,7 +220,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
               {sortedNotes.map((note) => (
                 <div
                   key={note.id}
-                  className="group rounded-md border bg-white dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/30 p-2.5"
+                  className="group rounded-lg border border-warning/25 bg-card p-2.5"
                 >
                   {editingId === note.id ? (
                     <div className="space-y-2">
@@ -230,7 +229,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         onKeyDown={handleEditKeyDown}
-                        className="min-h-[60px] text-sm border-amber-300 dark:border-amber-700 focus-visible:ring-amber-400/50 bg-white dark:bg-amber-950/20 resize-none"
+                        className="min-h-[60px] text-sm border-warning/40 bg-card focus-visible:ring-warning/50 resize-none"
                       />
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -246,7 +245,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                           size="sm"
                           onClick={handleSaveEdit}
                           disabled={!editContent.trim() || updateNote.isPending}
-                          className="h-6 w-6 p-0 text-amber-700 dark:text-amber-400"
+                          className="h-6 w-6 p-0 text-warning-strong"
                         >
                           {updateNote.isPending ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -262,7 +261,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                         {note.content}
                       </p>
                       <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[11px] text-amber-600/60 dark:text-amber-500/50">
+                        <span className="text-[11px] text-muted-foreground">
                           {formatDistanceToNow(new Date(note.created_at), {
                             addSuffix: true,
                             locale: ptBR,
@@ -275,7 +274,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleStartEdit(note)}
-                              className="h-6 w-6 p-0 text-amber-600/70 hover:text-amber-700"
+                              className="h-6 w-6 p-0 text-warning-strong/70 hover:text-warning-strong"
                             >
                               <Pencil className="h-3 w-3" />
                             </Button>
@@ -284,7 +283,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                               size="sm"
                               onClick={() => handleDelete(note.id)}
                               disabled={deleteNote.isPending}
-                              className="h-6 w-6 p-0 text-red-400/70 hover:text-red-600"
+                              className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>

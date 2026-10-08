@@ -14,7 +14,12 @@ export async function createQuotePresentation(db: SupabaseClient, presentation: 
   return {...presentation,message_id:result.data.id};
 }
 
-async function sealPresentation(db: SupabaseClient, organizationId: string, message: {id:string; metadata:Record<string,any>}, strict = false) {
+interface PresentationMetadata extends Record<string, unknown> {
+  quote_presentation?: QuoteReceipt;
+  quote_delivery?: QuotePresentation & { instance_id: string; message_ids: string[] };
+}
+
+async function sealPresentation(db: SupabaseClient, organizationId: string, message: {id:string; metadata:PresentationMetadata}, strict = false) {
   if (message.metadata.quote_presentation) return;
   const delivery = message.metadata.quote_delivery;
   if (!delivery?.message_ids?.length) return;

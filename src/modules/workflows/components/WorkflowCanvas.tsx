@@ -159,7 +159,9 @@ export function WorkflowCanvas({
         selectionKeyCode={["Shift", "Meta", "Control"]}
         multiSelectionKeyCode={["Shift", "Meta", "Control"]}
         selectionOnDrag={false}
-        className="bg-background"
+        // A marca "React Flow" vem com fundo branco a 50% fixo do xyflow — no
+        // escuro virava uma caixa cinza clara. A variável de tema dele leva o token.
+        className="bg-background [--xy-attribution-background-color:hsl(var(--background)/0.7)]"
       >
         <SelectionAutoPan />
         <Background
@@ -170,10 +172,11 @@ export function WorkflowCanvas({
           color="hsl(var(--muted-foreground) / 0.2)"
         />
         <Controls
-          className="!bg-card !border-border !shadow-md [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-accent"
+          className="!overflow-hidden !rounded-xl !border !border-card-border !bg-card !shadow-relevo [&>button]:!border-border/60 [&>button]:!bg-card [&>button]:!text-foreground [&>button:hover]:!bg-muted"
         />
+        {/* Abaixo de `md` o MiniMap cobria os nós — ali atrapalha mais do que orienta. */}
         <MiniMap
-          className="!bg-card !border-border !shadow-md"
+          className="!overflow-hidden !rounded-xl !border !border-card-border !bg-card !shadow-relevo max-md:!hidden"
           nodeColor="hsl(var(--primary) / 0.3)"
           maskColor="hsl(var(--background) / 0.7)"
         />

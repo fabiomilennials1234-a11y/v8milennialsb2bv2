@@ -251,7 +251,7 @@ BEGIN
   PERFORM toth_order_private.validate_items(v_org,p_items);
   SELECT * INTO v_before FROM public.toth_order_drafts WHERE organization_id=v_org AND deal_id=p_deal_id FOR UPDATE;
   IF p_expected_revision IS NULL OR p_expected_revision IS DISTINCT FROM COALESCE(v_before.revision,0) THEN
-    RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='40001';
+    RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='PT409';
   END IF;
   IF v_before.id IS NULL THEN
     INSERT INTO public.toth_order_drafts(organization_id,deal_id,lead_id,client_id,customer_external_id,items,notes,created_by,updated_by)
@@ -261,7 +261,7 @@ BEGIN
     IF v_before.lead_id IS DISTINCT FROM (v_ctx->>'lead_id')::uuid
       OR v_before.client_id IS DISTINCT FROM (v_customer->>'client_id')::uuid
       OR v_before.customer_external_id IS DISTINCT FROM v_customer->>'customer_external_id' THEN
-      RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='40001';
+      RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='PT409';
     END IF;
     UPDATE public.toth_order_drafts SET items=p_items,notes=p_notes,revision=revision+1,
       reviewed_revision=NULL,reviewed_by=NULL,reviewed_at=NULL,updated_by=auth.uid(),updated_at=clock_timestamp()
@@ -285,14 +285,14 @@ BEGIN
   SELECT * INTO v_before FROM public.toth_order_drafts WHERE organization_id=v_org AND deal_id=p_deal_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'toth_draft_unavailable' USING ERRCODE='P0002'; END IF;
   IF p_expected_revision IS NULL OR p_expected_revision IS DISTINCT FROM v_before.revision THEN
-    RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='40001';
+    RAISE EXCEPTION 'toth_revision_conflict' USING ERRCODE='PT409';
   END IF;
   v_customer := toth_order_private.customer(v_org,(v_ctx->>'lead_id')::uuid);
   IF v_customer IS NULL THEN RAISE EXCEPTION 'toth_client_link_unavailable' USING ERRCODE='22023'; END IF;
   IF v_before.lead_id IS DISTINCT FROM (v_ctx->>'lead_id')::uuid
     OR v_before.client_id IS DISTINCT FROM (v_customer->>'client_id')::uuid
     OR v_before.customer_external_id IS DISTINCT FROM v_customer->>'customer_external_id' THEN
-    RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='40001';
+    RAISE EXCEPTION 'toth_client_link_changed' USING ERRCODE='PT409';
   END IF;
   IF jsonb_array_length(v_before.items)=0 THEN RAISE EXCEPTION 'toth_review_requires_items' USING ERRCODE='22023'; END IF;
   PERFORM toth_order_private.validate_items(v_org,v_before.items);

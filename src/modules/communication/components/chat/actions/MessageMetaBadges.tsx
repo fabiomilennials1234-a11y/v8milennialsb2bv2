@@ -64,7 +64,7 @@ export function MessageMetaBadges({
     <div className={cn("flex flex-wrap items-center gap-2 mt-1", className)}>
       {pinnedAt && (
         <span
-          className="inline-flex items-center gap-0.5 text-[10px] text-primary/70"
+          className="inline-flex items-center gap-0.5 text-[10px] opacity-70"
           aria-label="Mensagem fixada"
         >
           <Pin className="h-3 w-3 fill-current" />
@@ -87,7 +87,7 @@ export function MessageMetaBadges({
                   : "border-border"
               )}
             >
-              <span className="text-lg leading-none [font-family:'Apple_Color_Emoji','Segoe_UI_Emoji','Noto_Color_Emoji',sans-serif]">{r.emoji}</span>
+              <span className="text-lg leading-none [font-family:'Noto_Color_Emoji','Apple_Color_Emoji','Segoe_UI_Emoji',sans-serif]">{r.emoji}</span>
               {r.count && r.count > 1 ? (
                 <span className="text-xs font-semibold tabular-nums leading-none">{r.count}</span>
               ) : null}

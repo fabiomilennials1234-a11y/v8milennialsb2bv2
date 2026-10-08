@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { userMessageOf } from "@/shared/errors";
 
 /** O título tem escrita própria; renomear a pessoa exige uma escolha explícita. */
 export function NomeDoNegocio({
@@ -38,7 +39,7 @@ export function NomeDoNegocio({
       setEditando(false);
       setPerguntando(false);
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível salvar o nome. Tente novamente.");
+      setErro(userMessageOf(error, "Não foi possível salvar o nome. Tente novamente."));
     } finally {
       emVoo.current = false;
       setSalvando(false);
@@ -48,7 +49,9 @@ export function NomeDoNegocio({
   if (!editando) {
     return (
       <div className="flex min-w-0 items-center gap-1.5">
-        <h1 className="truncate text-[18px] font-semibold tracking-[-0.02em]" title={titulo}>
+        {/* Duas linhas antes de cortar: na gaveta de 640 px o título do
+            negócio (empresa — interesse) passava do meio e virava reticências. */}
+        <h1 className="line-clamp-2 break-words text-[18px] font-bold leading-snug tracking-[-0.02em]" title={titulo}>
           {titulo}
         </h1>
         {onRenomear && (

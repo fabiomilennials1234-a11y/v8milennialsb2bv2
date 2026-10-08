@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Target } from "lucide-react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, ArrowRight, Target } from "lucide-react";
 import {
   useCreateGoal,
   useIndividualGoals,
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ComandoCard } from "./ComandoCard";
+import { RealVsExpectedChart } from "./RealVsExpectedChart";
 
 /**
  * Metas do mês — da equipe e de cada vendedor.
@@ -114,6 +116,9 @@ export function CardMetas() {
     [data],
   );
 
+  const vendas = grupos.find((g) => g.metrica === "sales");
+  const top3 = (vendas?.linhas ?? []).slice(0, 3);
+
   return (
     <ComandoCard
       icon={Target}
@@ -137,97 +142,110 @@ export function CardMetas() {
           : "Assim que a sua meta do mês for definida, o acompanhamento aparece aqui."
       }
       footer={
-        semMetaTotal > 0 ? (
-          <p className="text-[11px] text-muted-foreground/70">
-            <span className="font-bold tabular-nums">{semMetaTotal}</span>{" "}
-            {semMetaTotal === 1
-              ? "vendedor ainda sem meta"
-              : "vendedores ainda sem meta"}
-          </p>
+        semMetaTotal > 0 || podeVerEquipe ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {semMetaTotal > 0 && (
+              <span>
+                <span className="font-bold tabular-nums">{semMetaTotal}</span>{" "}
+                {semMetaTotal === 1 ? "vendedor ainda sem meta" : "vendedores ainda sem meta"}
+              </span>
+            )}
+            {/* V5: o Comando mostra o resumo (top 3); a lista inteira de vendas e
+                reuniões por pessoa mora em Performance › Gestão. */}
+            {podeVerEquipe && (
+              <Link to="/performance" className="ml-auto inline-flex items-center gap-1 font-semibold text-foreground hover:underline">
+                Ver todos em Performance
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </div>
         ) : null
       }
     >
-      <div className="divide-y divide-border/50">
-        {podeVerEquipe && (
-          <MetaDaOrganizacao
-            podeEditar={isAdmin}
-            derivadaDeIndividuais={temMetasIndividuaisDeVendas}
-          />
-        )}
-        {grupos.map((g) => (
-          <div key={g.metrica} className="px-4 py-3">
-            {/* Linha da equipe: é a soma exata do que está logo abaixo. */}
-            <div className="mb-2.5">
-              <div className="flex items-baseline gap-2">
-                <span className="cmd-lbl">
-                  {g.metrica === "sales" ? "Vendas" : "Reuniões"}
-                  {podeVerEquipe ? " · equipe" : " · minha meta"}
-                </span>
-                <span className="ml-auto text-[12px] font-semibold tabular-nums">
-                  {formatarValor(g.feito, g.metrica)}
-                  <span className="font-normal text-muted-foreground/60">
-                    {" / "}
-                    {formatarValor(g.alvo, g.metrica)}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "w-[38px] shrink-0 text-right text-[12px] font-bold tabular-nums",
-                    g.percentual >= 100 ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  {g.percentual}%
-                </span>
-              </div>
-              <Barra percentual={g.percentual} destaque />
-            </div>
+      <div className="grid items-center gap-x-6 gap-y-5 px-5 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className="min-w-0">
+          {podeVerEquipe ? (
+            <MetaDaOrganizacao
+              podeEditar={isAdmin}
+              derivadaDeIndividuais={temMetasIndividuaisDeVendas}
+            />
+          ) : (
+            /* Sem ver a equipe, só as próprias metas — e nenhum total que
+               denuncie a soma dos outros. */
+            <ul className="space-y-4">
+              {grupos.map((g) => (
+                <li key={g.metrica}>
+                  <span className="cmd-lbl">{g.metrica === "sales" ? "Vendas · minha meta" : "Reuniões · minha meta"}</span>
+                  <p className="mt-1 text-[1.65rem] font-extrabold leading-none tracking-[-0.04em] tabular-nums">
+                    {formatarValor(g.feito, g.metrica)}
+                    <span className="ml-1.5 text-[12px] font-semibold tracking-normal text-muted-foreground">
+                      de {formatarValor(g.alvo, g.metrica)}
+                    </span>
+                  </p>
+                  <Barra percentual={g.percentual} destaque />
+                  <p className="mt-1 text-[12px] font-bold tabular-nums">{g.percentual}%</p>
+                </li>
+              ))}
+            </ul>
+          )}
 
-            {/* Sem equipe visível, a lista teria UMA linha repetindo a faixa
-                acima. A faixa já diz "minha meta" — a lista some. */}
-            <ul className={cn("space-y-2", !podeVerEquipe && "hidden")}>
-              {g.linhas.map((linha) => {
-                const souEu = meuId != null && linha.id === meuId;
-                return (
-                  <li key={`${g.metrica}:${linha.id}`}>
-                    <div className="flex items-baseline gap-2">
+          {podeVerEquipe && top3.length > 0 && (
+            <>
+              <div className="my-4 h-px bg-border/60" />
+              <ul className="space-y-2.5" aria-label="Três vendedores mais adiantados na meta">
+                {top3.map((linha) => {
+                  const souEu = meuId != null && linha.id === meuId;
+                  return (
+                    <li key={linha.id} className="flex items-center gap-2.5">
                       <span
-                        className={cn(
-                          "min-w-0 truncate text-[12px]",
-                          souEu ? "font-bold" : "font-medium",
-                        )}
+                        aria-hidden
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-tinta text-[9px] font-bold text-tinta-foreground"
                       >
-                        {linha.name}
-                        {souEu && (
-                          <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-primary">
-                            você
-                          </span>
-                        )}
+                        {linha.name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("")}
                       </span>
-                      <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
-                        {formatarValor(linha.current, g.metrica)}
-                        {" / "}
-                        {formatarValor(linha.goal, g.metrica)}
+                      <span className={cn("w-[120px] min-w-0 truncate text-[12.5px]", souEu ? "font-bold" : "font-semibold")}>
+                        {linha.name}
+                      </span>
+                      <span className="flex-1">
+                        <Barra percentual={linha.percentage} />
                       </span>
                       <span
                         className={cn(
-                          "w-[38px] shrink-0 text-right text-[11px] font-bold tabular-nums",
-                          linha.percentage >= 100
-                            ? "text-primary"
-                            : "text-muted-foreground/70",
+                          "w-[42px] shrink-0 text-right text-[12px] font-bold tabular-nums",
+                          linha.percentage >= 100 ? "text-success-strong" : "text-foreground",
                         )}
                       >
                         {linha.percentage}%
                       </span>
-                    </div>
-                    <Barra percentual={linha.percentage} />
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+
+        {/* O gráfico é da receita da ORGANIZAÇÃO — só para quem vê a equipe. */}
+        {podeVerEquipe && <GraficoDoMes />}
       </div>
     </ComandoCard>
+  );
+}
+
+/** Realizado × esperado no mês — o mesmo gráfico do Estúdio, sem moldura. */
+function GraficoDoMes() {
+  const agora = new Date();
+  const mes = agora.getMonth() + 1;
+  const ano = agora.getFullYear();
+  const { data: metasDaOrg } = useTeamGoals(mes, ano);
+  const { data: metrics } = useDashboardMetrics(mes, ano, null);
+  const meta = (metasDaOrg ?? []).find((g) => g.type === "faturamento");
+  const alvo = Number(meta?.target_value ?? 0);
+  if (alvo <= 0) return null;
+  return (
+    <div className="flex h-full min-h-[220px] min-w-0 flex-col">
+      <RealVsExpectedChart dailySales={metrics?.dailySales ?? []} goalTarget={alvo} month={mes} year={ano} />
+    </div>
   );
 }
 
@@ -273,6 +291,10 @@ function MetaDaOrganizacao({
   const alvo = Number(meta?.target_value ?? 0);
   const realizado = metrics?.vendaTotal ?? 0;
   const percentual = pct(realizado, alvo);
+  // Ritmo linear do mês: no dia 15 de um mês de 30, o esperado é 50%.
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const diasRestantes = diasNoMes - agora.getDate();
+  const esperado = Math.round((agora.getDate() / diasNoMes) * 100);
 
   const valorDigitado = Number(rascunho.replace(/\./g, "").replace(",", "."));
   const podeSalvar =
@@ -299,33 +321,37 @@ function MetaDaOrganizacao({
   if (isLoading) return null;
 
   return (
-    <div className="px-4 py-3">
-      <div className="flex items-baseline gap-2">
-        <span className="cmd-lbl">Faturamento · organização</span>
-        {alvo > 0 && (
-          <>
-            <span className="ml-auto text-[12px] font-semibold tabular-nums">
-              {formatBRL(realizado)}
-              <span className="font-normal text-muted-foreground/60">
-                {" / "}
-                {formatBRL(alvo)}
-              </span>
-            </span>
-            <span
-              className={cn(
-                "w-[38px] shrink-0 text-right text-[12px] font-bold tabular-nums",
-                percentual >= 100 ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              {percentual}%
-            </span>
-          </>
-        )}
-      </div>
+    <div className="px-5 py-4">
+      <span className="cmd-lbl">Faturamento · organização</span>
+      {/* V5: o realizado é o número da tela — grande; o alvo e o prazo embaixo. */}
+      {alvo > 0 && (
+        <div className="mb-2 mt-1.5">
+          <p className="text-[2rem] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
+            {formatBRL(realizado)}
+          </p>
+          <p className="mt-1.5 text-[12.5px] text-muted-foreground tabular-nums">
+            de {formatBRL(alvo)} ·{" "}
+            {diasRestantes <= 0 ? "último dia do mês" : `${diasRestantes} ${diasRestantes === 1 ? "dia restante" : "dias restantes"}`}
+          </p>
+        </div>
+      )}
 
       {alvo > 0 ? (
         <>
           <Barra percentual={percentual} destaque />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[13px] font-extrabold tabular-nums">{percentual}%</span>
+            {percentual < esperado ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-bold text-warning-strong">
+                <AlertTriangle className="h-3 w-3" aria-hidden />
+                esperado {esperado}% hoje
+              </span>
+            ) : (
+              <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success-strong">
+                no ritmo · esperado {esperado}%
+              </span>
+            )}
+          </div>
           {derivadaDeIndividuais && (
             <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/60">
               Este alvo é recalculado como a soma das metas individuais de

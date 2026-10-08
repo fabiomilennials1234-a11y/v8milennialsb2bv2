@@ -26,7 +26,7 @@ export function OraculoPerfilSettings() {
   }
   if (profile.isError) {
     return (
-      <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+      <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/[.06] p-4 text-sm text-destructive">
         Não consegui carregar o perfil da operação.
       </div>
     );
@@ -35,11 +35,11 @@ export function OraculoPerfilSettings() {
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-3">
-        <div className="rounded-xl border border-primary/20 bg-primary/10 p-2.5">
-          <BrainCircuit className="h-5 w-5 text-primary" />
-        </div>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+          <BrainCircuit className="h-5 w-5" />
+        </span>
         <div>
-          <h3 className="text-lg font-medium">Perfil da operação</h3>
+          <h3 className="text-lg font-bold tracking-tight">Perfil da operação</h3>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Contexto confirmado por quem executa a venda. O Oráculo usa estas respostas nas próximas análises.
           </p>
@@ -47,18 +47,18 @@ export function OraculoPerfilSettings() {
       </div>
 
       {groups.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
-          <p className="text-sm font-medium">Perfil ainda sem respostas</p>
+        <div className="rounded-card border border-dashed border-border bg-sunken px-6 py-10 text-center">
+          <p className="text-sm font-semibold">Perfil ainda sem respostas</p>
           <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
             O Oráculo fará perguntas curtas depois de medir sua operação. Todas são opcionais.
           </p>
         </div>
       ) : groups.map(([memberId, rows]) => (
-        <section key={memberId} className="overflow-hidden rounded-2xl border border-border bg-card/60">
-          <header className="border-b border-border bg-muted/20 px-5 py-3">
-            <h4 className="text-sm font-medium">{rows[0].team_member_name}</h4>
+        <section key={memberId} className="overflow-hidden rounded-card border border-card-border bg-card shadow-relevo">
+          <header className="border-b border-border/60 px-5 py-3.5">
+            <h4 className="text-sm font-bold">{rows[0].team_member_name}</h4>
           </header>
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/60">
             {rows.map((row) => (
               <ProfileItem
                 key={row.question_key}
@@ -94,22 +94,22 @@ function ProfileItem({ row, canAdjust, isOwn, busy, onSave }: {
   return (
     <div className="space-y-3 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           {LABELS[row.question_key]}
         </p>
         {row.divergent && (
-          <Badge variant="outline" className="gap-1 border-amber-500/40 bg-amber-500/10 text-amber-500">
+          <Badge variant="warning" className="gap-1">
             <AlertCircle className="h-3 w-3" /> Divergência registrada
           </Badge>
         )}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl bg-muted/35 p-3">
+        <div className="rounded-xl bg-sunken p-3">
           <p className="text-[11px] text-muted-foreground">{isOwn ? "Sua resposta" : `${row.team_member_name} descreveu`}</p>
           <p className="mt-1 text-sm leading-relaxed">{row.member_answer}</p>
         </div>
         {row.admin_answer && (
-          <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+          <div className="rounded-xl border border-primary/25 bg-primary-soft/50 p-3">
             <p className="text-[11px] text-muted-foreground">Ajuste administrativo</p>
             <p className="mt-1 text-sm leading-relaxed">{row.admin_answer}</p>
           </div>

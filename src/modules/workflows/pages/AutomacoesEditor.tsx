@@ -20,6 +20,10 @@ import { useOrganization, useAuth } from "@/modules/identity";
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
 import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
+import { WorkflowPalette } from "@/modules/workflows/components/WorkflowPalette";
+import { WorkflowInspectorEmpty } from "@/modules/workflows/components/WorkflowInspectorEmpty";
+import { AutomacoesTabs } from "@/modules/workflows/components/AutomacoesTabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
 import { LegacyConditionReviewDialog } from "@/modules/workflows/components/LegacyConditionReviewDialog";
 import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
@@ -56,6 +60,7 @@ import type {
   CodeJavascriptNodeData,
   CodeHttpsNodeData,
 } from "@/types/workflow";
+import { notifyError } from "@/shared/errors";
 
 const DEFAULT_TRIGGER_NODE: WorkflowNode = {
   id: "trigger-1",
@@ -213,6 +218,7 @@ function AutomacoesEditorContent() {
   const [draftRevision, setDraftRevision] = useState(0);
   const [newGuidedId] = useState(() => crypto.randomUUID());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"reenrollment" | "analytics">("reenrollment");
   const [legacyReviewOpen, setLegacyReviewOpen] = useState(false);
   const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
   const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
@@ -643,9 +649,11 @@ function AutomacoesEditorContent() {
         toast.success("Workflow salvo!");
       }
     } catch (err: any) {
-      toast.error(err.code === 'PT409'
-        ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
-        : err.message || "Erro ao salvar workflow");
+      if (err?.code === 'PT409') {
+        toast.error("Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.");
+      } else {
+        notifyError(err, { fallback: "Não foi possível salvar o workflow." });
+      }
     }
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
@@ -667,8 +675,8 @@ function AutomacoesEditorContent() {
         const result = await guidedDraft.setActive.mutateAsync(!isActive);
         setIsActive(result.is_active);
         toast.success(result.is_active ? 'Automação ativada.' : 'Automação desativada.');
-      } catch {
-        toast.error('Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados.');
+      } catch (caught) {
+        notifyError(caught, { fallback: "Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados." });
       }
       return;
     }
@@ -743,7 +751,7 @@ function AutomacoesEditorContent() {
 
   if (!isNew && guidedDraft.isError) {
     return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
-      <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
+      <Button type="button" variant="outline" onClick={() => guidedDraft.refetch()}>Tentar novamente</Button></div>;
   }
 
   if (!isNew && (isLoading || guidedDraft.isPending || !initialized)) {
@@ -754,8 +762,15 @@ function AutomacoesEditorContent() {
     );
   }
 
+  const triggerTypeNow = (nodes.find((n) => n.type === "trigger")?.data as TriggerNodeData | undefined)?.triggerType;
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3 sm:p-4">
+      <PageHeader
+        title="Automações"
+        tabs={<AutomacoesTabs active="editor" workflowId={isNew ? null : id ?? null} />}
+        className="gap-3 max-sm:hidden"
+      />
       <WorkflowToolbar
         name={name}
         questionButtonsEnabled={questionButtonsEnabled}
@@ -777,75 +792,116 @@ function AutomacoesEditorContent() {
             trigger_config: trigger?.config ?? workflow.trigger_config,
           }, { nodes, edges });
         } : undefined}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={(tab) => {
+          setSettingsTab(tab);
+          setSettingsOpen(true);
+        }}
         // O executor deliberadamente não roda JavaScript sem sandbox. A flag
         // antiga podia expor um node que sempre era ignorado; oculto até haver
         // runtime isolado de verdade.
         hiddenNodeTypes={["code_javascript"]}
       />
 
-      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
-        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <div><p className="font-medium">{legacyReview.items.length} condicionais legados</p>
+      {!guidedDraft.data && legacyReview.items.length > 0 && <div className="flex items-center justify-between gap-4 rounded-2xl border border-warning/25 bg-warning/[.08] px-4 py-3 text-sm">
+        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
+          <div><p className="font-semibold">{legacyReview.items.length} condicionais legados</p>
             <p className="text-muted-foreground">Abrir o editor não altera a execução. Compare o significado antes de criar uma nova versão.</p></div>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setLegacyReviewOpen(true)}>Revisar migração</Button>
       </div>}
-      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 border-b border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-        <div><p className="font-medium">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
+      {guidedDraft.data && legacyReview.items.length > 0 && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-warning/25 bg-warning/[.08] px-4 py-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
+        <div><p className="font-semibold">Rascunho ainda contém {legacyReview.items.length} {legacyReview.items.length === 1 ? "condição legada" : "condições legadas"}.</p>
           <p className="text-muted-foreground">Horário pausante permanece no executor antigo. Redesenhe explicitamente antes de publicar.</p></div>
       </div>}
 
-      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-        <p>Não foi possível consultar a versão publicada.</p>
+      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/[.06] px-4 py-3 text-sm">
+        <p className="font-semibold text-destructive">Não foi possível consultar a versão publicada.</p>
         <button type="button" className="mt-1 underline underline-offset-4" disabled={guidedDraft.publication.isFetching}
           onClick={() => guidedDraft.publication.refetch()}>Recarregar publicação</button>
       </div>}
-      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-        <p className="font-medium">Publicação não concluída</p>
+      {publicationIssues.length > 0 && <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/[.06] px-4 py-3 text-sm">
+        <p className="font-semibold text-destructive">Publicação não concluída</p>
         <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
           {issue.nodeId ? <button type="button" className="text-left underline underline-offset-4"
             onClick={() => setSelectedNodeId(issue.nodeId!)}>{issue.message}</button> : issue.message}
         </li>)}</ul>
       </div>}
-      <div className="flex flex-1 overflow-hidden">
-        <WorkflowCanvas
-          initialNodes={nodes}
-          initialEdges={edges}
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          setEdges={setEdges}
-          onNodeClick={handleNodeClick}
-          onPaneClick={handlePaneClick}
-          onTakeSnapshot={takeSnapshot}
+      {/* Paleta fixa · canvas em cartão · inspetor fixo */}
+      <div className="flex min-h-0 flex-1 gap-3">
+        <WorkflowPalette
+          onAddNode={handleAddNode}
+          questionButtonsEnabled={questionButtonsEnabled}
+          // O executor deliberadamente não roda JavaScript sem sandbox.
+          hiddenNodeTypes={["code_javascript"]}
+          className="hidden w-[212px] shrink-0 xl:flex"
         />
 
-        <WorkflowSidebar
-          actorId={user?.id}
-          workflowId={isNew ? undefined : id}
-          canManageDataGrant={role === "admin"}
-          organizationId={organizationId ?? undefined}
-          selectedNode={selectedNode as any}
-          onClose={() => setSelectedNodeId(null)}
-          onUpdateNode={handleUpdateNode}
-          onDeleteNode={handleDeleteNode}
-          onDuplicateNode={handleDuplicateNode}
-          allNodes={nodes as any}
-        />
+        <div className="relative min-h-[420px] min-w-0 flex-1 overflow-hidden rounded-panel border border-card-border bg-background shadow-relevo">
+          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-1.5">
+            <span
+              className={
+                isActive
+                  ? "inline-flex items-center gap-1.5 rounded-full bg-tinta px-2.5 py-1 text-[11px] font-bold text-tinta-foreground shadow-relevo-tinta"
+                  : "inline-flex items-center gap-1.5 rounded-full border border-card-border bg-card px-2.5 py-1 text-[11px] font-bold text-muted-foreground shadow-relevo"
+              }
+            >
+              <span className={isActive ? "h-1.5 w-1.5 rounded-full bg-success" : "h-1.5 w-1.5 rounded-full bg-muted-foreground"} />
+              {isActive ? "Ativo" : "Inativo"}
+            </span>
+            <span className="rounded-full border border-card-border bg-card px-2.5 py-1 text-[11px] font-bold tabular-nums text-foreground/80 shadow-relevo">
+              {nodes.length} {nodes.length === 1 ? "nó" : "nós"} · {edges.length} {edges.length === 1 ? "conexão" : "conexões"}
+            </span>
+          </div>
+          <WorkflowCanvas
+            initialNodes={nodes}
+            initialEdges={edges}
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            setEdges={setEdges}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
+            onTakeSnapshot={takeSnapshot}
+          />
+        </div>
+
+        {selectedNode ? (
+          <WorkflowSidebar
+            embedded
+            actorId={user?.id}
+            workflowId={isNew ? undefined : id}
+            canManageDataGrant={role === "admin"}
+            organizationId={organizationId ?? undefined}
+            selectedNode={selectedNode as any}
+            onClose={() => setSelectedNodeId(null)}
+            onUpdateNode={handleUpdateNode}
+            onDeleteNode={handleDeleteNode}
+            onDuplicateNode={handleDuplicateNode}
+            allNodes={nodes as any}
+          />
+        ) : (
+          <div className="hidden shrink-0 lg:block">
+            <WorkflowInspectorEmpty
+              workflowId={isNew ? undefined : id}
+              triggerType={triggerTypeNow}
+              nodeCount={nodes.length}
+              edgeCount={edges.length}
+            />
+          </div>
+        )}
       </div>
 
       {/* Workflow Settings Sheet — re-inscrição + analytics */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="sm:max-w-lg p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
-            <SheetTitle>Configuracoes do workflow</SheetTitle>
+            <SheetTitle>Configurações do workflow</SheetTitle>
           </SheetHeader>
-          <Tabs defaultValue="reenrollment" className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
-              <TabsTrigger value="reenrollment">Re-inscricao</TabsTrigger>
+          <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as "reenrollment" | "analytics")} className="flex-1 flex flex-col overflow-hidden">
+            <TabsList variant="segmented" className="mx-6 mt-4 self-start">
+              <TabsTrigger value="reenrollment">Re-inscrição</TabsTrigger>
               {!isNew && id && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
             </TabsList>
 

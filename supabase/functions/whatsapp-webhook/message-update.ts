@@ -6,6 +6,67 @@ import { buildMessageIdCandidates, extractRawMessageIds, mapReceiptStatus } from
 type Instance = { id: string; organization_id: string; phone_number?: string | null };
 type Reaction = Record<string, unknown>;
 type Update = Record<string, unknown> & { ids?: unknown; id?: unknown; messageid?: unknown; key?: { id?: unknown } };
+export interface UnmatchedReceiptOutcome { outcome: "deferred_receipt" | "unmatched_receipt" | "provider_notification"; unmatchedCount: number }
+
+/** Observed FileDownloaded callback carries no receipt or message mutation. */
+export function isFileDownloadedNotification(payload: Record<string, unknown>): boolean {
+  const envelopeKeys = new Set(["type", "event", "owner", "state", "token", "BaseUrl", "EventType", "instanceName"]);
+  const eventKeys = new Set(["Chat", "Type", "Sender", "chatid", "FileURL", "IsGroup", "chatlid",
+    "IsFromMe", "MimeType", "Timestamp", "sender_pn", "MessageIDs", "sender_lid"]);
+  if (payload.type !== "FileDownloadedMessage" || payload.state !== "FileDownloaded"
+    || payload.EventType !== "messages_update" || Object.keys(payload).some(key => !envelopeKeys.has(key))
+    || !payload.event || typeof payload.event !== "object"
+    || Array.isArray(payload.event)) return false;
+  const event = payload.event as Record<string, unknown>;
+  if (Object.keys(event).some(key => !eventKeys.has(key))) return false;
+  const ids = event.MessageIDs;
+  const chat = event.chatid;
+  const fileUrl = event.FileURL;
+  if (event.Type !== "FileDownloaded" || typeof event.IsFromMe !== "boolean"
+    || !Array.isArray(ids) || ids.length !== 1 || typeof ids[0] !== "string"
+    || !ids[0] || ids[0].trim() !== ids[0]
+    || typeof chat !== "string" || !chat || chat.trim() !== chat || event.Chat !== chat
+    || typeof fileUrl !== "string" || !fileUrl || fileUrl.trim() !== fileUrl
+    || !/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?(?:[/?][^#\s]*)?$/.test(fileUrl)) return false;
+  try {
+    const url = new URL(fileUrl);
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) return false;
+  } catch { return false; }
+  return true;
+}
+
+export function normalizeMessageUpdatePayload(payload: Record<string, unknown>): Update {
+  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) return payload.data as Update;
+  if (payload.event && typeof payload.event === "object" && !Array.isArray(payload.event)) {
+    const ev = payload.event as Record<string, unknown>;
+    return {
+      ...ev,
+      id: (Array.isArray(ev.MessageIDs) ? ev.MessageIDs[0] : undefined) ?? ev.messageid,
+      ids: Array.isArray(ev.MessageIDs) ? ev.MessageIDs : undefined,
+      status: ev.Type ?? ev.type,
+      chatid: ev.chatid ?? ev.Chat,
+      fromMe: ev.IsFromMe ?? ev.isFromMe,
+      owner: payload.owner,
+    };
+  }
+  return payload;
+}
+
+export function isPureReceiptUpdate(data: Update): boolean {
+  const ids = extractRawMessageIds(data);
+  return ["sent", "delivered", "read", "failed"].includes(mapReceiptStatus(data.status) ?? "")
+    && ids.length > 0 && ids.every(id => id.trim().length > 0)
+    && (data.ids === undefined || (Array.isArray(data.ids)
+      && data.ids.every(id => typeof id === "string" && id.trim().length > 0)))
+    && (data.fromMe === undefined || data.fromMe === false)
+    && data.edited === undefined && data.deleted === undefined && data.pinned === undefined
+    && data.reaction === undefined && data.reactions === undefined;
+}
+
+function isGroupUpdate(data: Update): boolean {
+  return data.IsGroup === true || data.isGroup === true
+    || (typeof data.chatid === "string" && data.chatid.endsWith("@g.us"));
+}
 
 /** An atomic SQL predicate prevents late receipts from overwriting later states. */
 export function receiptPredecessors(status: string): string[] {
@@ -39,9 +100,19 @@ export function mergeUpdateReaction(current: unknown, value: unknown): Reaction[
   return kept;
 }
 
-export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: { requireTarget?: boolean } = {}): Promise<void> {
-  const rawIds = extractRawMessageIds(data);
+export async function applyMessageUpdate(db: SupabaseClient, instance: Instance, data: Update, options: {
+  requireTarget?: boolean; unmatchedReceiptGraceMs?: number; queuedEventCreatedAt?: string;
+  suppressQuotePresentation?: boolean;
+  exactRecoveryMessageId?: boolean;
+} = {}): Promise<UnmatchedReceiptOutcome | undefined> {
+  const rawIds = [...new Set(extractRawMessageIds(data))];
   const receipt = mapReceiptStatus(data.status);
+  if (options.exactRecoveryMessageId && (!options.requireTarget || !isPureReceiptUpdate(data)
+    || !["delivered", "read"].includes(receipt ?? "") || data.fromMe !== false
+    || typeof data.id !== "string" || rawIds.length !== 1 || rawIds[0] !== data.id
+    || data.ids !== undefined || typeof data.chatid !== "string" || !data.chatid.trim())) {
+    throw new Error("Recovery receipt scope unavailable");
+  }
   if (options.requireTarget) {
     // Durable deliveries must retain unknown/malformed targets for investigation,
     // rather than completing after the permissive Edge parser drops bad IDs.
@@ -67,26 +138,79 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     if (data.reaction !== undefined) mergeUpdateReaction([], data.reaction);
   }
   if (!rawIds.length) return;
-  const ids = [...new Set(rawIds.flatMap(id => buildMessageIdCandidates(id, instance.phone_number, data.owner)))];
-  const scope = () => db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
-    .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
+  const candidatesFor = (id: string) => options.exactRecoveryMessageId
+    ? [id] : buildMessageIdCandidates(id, instance.phone_number, data.owner);
+  let ids = [...new Set(rawIds.flatMap(candidatesFor))];
+  const scope = () => {
+    let query = db.from("whatsapp_messages").select("id,message_id,reactions,status,direction")
+      .eq("organization_id", instance.organization_id).eq("instance_id", instance.id).in("message_id", ids);
+    if (options.exactRecoveryMessageId) query = query.eq("remote_jid", data.chatid).eq("direction", "outgoing");
+    return query;
+  };
   const mutates = (receipt && receipt !== "pending" && data.fromMe !== true) || data.edited || data.deleted
     || typeof data.pinned === "boolean" || data.reactions || data.reaction;
   let scopedTargets: Array<{ id: string; message_id: string; reactions: unknown; status: string; direction: string }> | null = null;
+  let outcome: UnmatchedReceiptOutcome | undefined;
   if (options.requireTarget && mutates) {
     const { data: targets, error } = await scope();
     const found = new Set((targets ?? []).map(target => target.message_id));
-    if (error || rawIds.some(id => !buildMessageIdCandidates(id, instance.phone_number, data.owner).some(candidate => found.has(candidate)))) {
-      throw new Error("Message update target unavailable");
+    if (error) throw new Error("Message update target unavailable");
+    const matched = rawIds.filter(id => candidatesFor(id).some(candidate => found.has(candidate)));
+    const missingCount = rawIds.length - matched.length;
+    if (missingCount) {
+      if (options.exactRecoveryMessageId) throw new Error("Recovery receipt target unavailable");
+      const pureReceipt = isPureReceiptUpdate(data);
+      const createdAt = Date.parse(options.queuedEventCreatedAt ?? "");
+      const elapsed = Date.now() - createdAt;
+      const pastGrace = Number.isFinite(createdAt) && Number.isFinite(elapsed)
+        && elapsed >= (options.unmatchedReceiptGraceMs ?? Number.POSITIVE_INFINITY)
+        && Number.isFinite(options.unmatchedReceiptGraceMs) && (options.unmatchedReceiptGraceMs ?? 0) >= 0;
+      if (!pureReceipt || !Number.isFinite(createdAt) || !Number.isFinite(elapsed)
+        || !Number.isFinite(options.unmatchedReceiptGraceMs) || (options.unmatchedReceiptGraceMs ?? 0) < 0) {
+        throw new Error("Message update target unavailable");
+      }
+      ids = [...new Set(matched.flatMap(candidatesFor))];
+      outcome = { outcome: pastGrace ? "unmatched_receipt" : "deferred_receipt", unmatchedCount: missingCount };
     }
     scopedTargets = targets ?? [];
+  }
+  if (ids.length === 0) return outcome;
+  if (receipt === "read" && data.fromMe === true && !isGroupUpdate(data)) {
+    // Own-number read (WhatsApp Web/phone): the conversation becomes read in Torque for the
+    // whole org team, up to the read message. Status and quotes stay untouched: this is not
+    // a delivery receipt. Unknown ids are a no-op inside the RPC, so no requireTarget throw.
+    // Best-effort: it only moves unread markers, so a slow/missing RPC is logged and the
+    // webhook still answers 200 — throwing would turn every own read into a 500 retry storm.
+    let failure: string | undefined;
+    let rowsWritten: number | null = null;
+    try {
+      const { data: written, error } = await db.rpc("apply_external_conversation_read", {
+        p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
+      });
+      if (error) failure = error.code || "rpc_error";
+      else if (typeof written === "number") rowsWritten = written;
+    } catch (err) {
+      failure = err instanceof Error ? err.name : "rpc_exception";
+    }
+    if (failure) await logRuntime({ organizationId: instance.organization_id, module: "webhook",
+      action: "uazapi_external_read_failed", status: "error", errorMessage: failure,
+      payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length } });
+    // Observability for Chamado 6ebb4b73: the RPC is silent for ids it does not know and for
+    // conversations already read, so without this a receipt that arrived but changed nothing is
+    // indistinguishable from a receipt that never arrived. Counts only, no ids/phones.
+    // rows_written = 0 → unknown ids or already read; absent log → the provider sent no receipt.
+    else await logRuntime({ organizationId: instance.organization_id, module: "webhook",
+      action: "uazapi_external_read_applied", status: "success",
+      payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length, rows_written: rowsWritten } });
   }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
     if (predecessors.length) {
-      const { data: changed, error } = await db.from("whatsapp_messages").update({ status: receipt })
+      let statusWrite = db.from("whatsapp_messages").update({ status: receipt })
         .eq("organization_id", instance.organization_id).eq("instance_id", instance.id)
-        .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors).select("id");
+        .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors);
+      if (options.exactRecoveryMessageId) statusWrite = statusWrite.eq("remote_jid", data.chatid);
+      const { data: changed, error } = await statusWrite.select("id");
       if (error) throw new Error("Receipt persistence failed");
       if (!changed?.length) {
         let hasOutgoing = scopedTargets?.some(target => target.direction === "outgoing");
@@ -102,7 +226,7 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     }
     // A duplicate receipt can finish an earlier interrupted commercial side effect.
     // The quote helper checks actual persisted states before sealing acceptance.
-    if (["sent", "delivered", "read"].includes(receipt)) {
+    if (!options.suppressQuotePresentation && ["sent", "delivered", "read"].includes(receipt)) {
       await completeQuotePresentations(db, instance.organization_id, instance.id, ids, { strict: true });
     }
   }
@@ -161,4 +285,5 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
       if (!persisted) throw new Error("Reaction update contention");
     }
   }
+  return outcome;
 }

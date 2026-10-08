@@ -14,6 +14,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
 import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
+import { camposDeOrigemDaCampanha } from "./campos-de-origem-da-campanha";
 import type {
   LeadCardData,
   LeadCardDeal,
@@ -359,6 +360,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
         ],
       },
+      ...camposDeOrigemDaCampanha(l),
       ...(orgVazios.length > 0
         ? [{ titulo: "Campos a preencher", campos: orgVazios }]
         : []),
@@ -397,7 +399,11 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       relacao: standing.relacao,
       prova: standing.prova,
       situacao: standing.maisAvancado
-        ? { funil: standing.maisAvancado.funnelName, funilCor: standing.maisAvancado.funnelColor }
+        ? {
+            funil: standing.maisAvancado.funnelName,
+            funilCor: standing.maisAvancado.funnelColor,
+            negocioId: standing.maisAvancado.id,
+          }
         : null,
 
       dono,
@@ -419,6 +425,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
         // fica vazio em lead sem histórico.
         idadeDias: diasDesde(texto(l, "created_at")) ?? 0,
         semContatoDias: diasDesde(timeline.data?.metrics.lastContact),
+        clienteId: carteira?.clientId ?? null,
       },
 
       negocios,

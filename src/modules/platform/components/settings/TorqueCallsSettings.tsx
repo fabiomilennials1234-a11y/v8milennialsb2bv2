@@ -3,16 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/modules/identity";
 import {
   logoutVoiceSession,
   useVoiceSessionsCap,
   useVoipSessions,
   useWhatsAppInstances,
-  VoiceControlError,
   VoicePairingDialog,
 } from "@/modules/communication";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Voz não é um número novo: é uma capacidade de um número que a organização já
@@ -109,11 +108,7 @@ export function TorqueCallsSettings() {
       await queryClient.invalidateQueries({ queryKey: ["voip_sessions"] });
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
     } catch (err) {
-      toast({
-        title: "Não foi possível desconectar",
-        description: err instanceof VoiceControlError ? err.message : "Tente de novo.",
-        variant: "destructive",
-      });
+      notifyError(err, { fallback: "Não foi possível desconectar." });
     } finally {
       setDesconectando(null);
     }
@@ -142,7 +137,7 @@ export function TorqueCallsSettings() {
                 {sessao ? (
                   <>
                     {sessao.status === "open" ? (
-                      <Badge variant="outline" className="border-success/40 text-success">
+                      <Badge variant="outline" className="border-success/40 text-success-strong">
                         Voz ativa
                       </Badge>
                     ) : (

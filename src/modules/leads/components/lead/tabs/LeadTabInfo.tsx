@@ -81,7 +81,7 @@ export function LeadTabInfo({
 
   return (
     <div className="space-y-4">
-      {/* Score IA — semântico, fica separado no topo */}
+      {/* O "Score IA" saiu (CTO, 2026-10-01): o slot não desenha mais nada. */}
       <LeadQualification qualificationScore={qualificationScore} />
 
       {/* Responsáveis — SDR/Closer/Responsible, semântico */}

@@ -71,7 +71,7 @@ export function StepRevisao({ suggestions, onFinish }: Props) {
                 <p className="text-sm font-medium">{item.label}</p>
                 <p className="text-xs text-muted-foreground truncate">{item.description}</p>
               </div>
-              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 ml-auto" />
+              <CheckCircle className="w-4 h-4 text-success-strong flex-shrink-0 ml-auto" />
             </div>
           ))}
         </div>

@@ -34,16 +34,13 @@ beforeAll(() => {
 vi.mock("@/modules/communication/hooks/useMessageLimits", () => ({
   useMessageLimits: () => ({ data: null }),
 }));
-vi.mock("@/modules/communication/components/chat/takeover/TakeoverControls", () => ({
-  TakeoverControls: () => null,
-}));
 vi.mock("@/modules/communication/components/chat/RealtimeStatusBadge", () => ({
   RealtimeStatusBadge: ({ className }: { className?: string }) => (
     <span className={className} data-testid="ao-vivo">Ao vivo</span>
   ),
 }));
 vi.mock("@/modules/communication/components/chat/history-sync/SyncChatButton", () => ({
-  SyncChatButton: () => <button type="button" aria-label="Sync histórico" />,
+  SyncChatDialog: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Histórico desta conversa" /> : null),
 }));
 /**
  * O botão de ligar com DOIS números, como no print: é o pior caso de largura
@@ -65,17 +62,13 @@ const base: React.ComponentProps<typeof ChatHeader> = {
   contactName: "Carlos Alberto Manso LEAD_ID: 1819254802395016",
   hasLead: true,
   leadId: "lead-1",
-  conversationId: "conv-1",
   instanceId: "inst-1",
-  aiDisabled: false,
-  isWaitingHuman: false,
+  instanceName: "Comercial",
   szChatSession: null,
   organizationId: "org-1",
   onBack: vi.fn(),
   onOpenLeadModal: vi.fn(),
-  onToggleAi: vi.fn(),
   onTransferToSzChatTeam: vi.fn(),
-  toggleAiPending: false,
   transferPending: false,
   density: "comfortable",
   onDensityChange: vi.fn(),
@@ -137,12 +130,15 @@ describe("ChatHeader — o contato é o último a perder espaço", () => {
 });
 
 describe("ChatHeader — as ações moram num grupo que não encolhe", () => {
-  it("Ligar, Ver lead e histórico ficam no mesmo grupo shrink-0", () => {
+  // V5 (02/10): "Sincronizar histórico" saiu do botão solto para o ⋯ — o
+  // grupo agora é Ver lead · Ligar · densidade · ⋯.
+  it("Ver lead, Ligar, densidade e ⋯ ficam no mesmo grupo shrink-0", () => {
     montar();
     const grupo = screen.getByTestId("ligar").parentElement!;
     expect(grupo.className).toMatch(/\bshrink-0\b/);
     expect(within(grupo).getByRole("button", { name: "Ver lead" })).toBeInTheDocument();
-    expect(within(grupo).getByRole("button", { name: "Sync histórico" })).toBeInTheDocument();
+    expect(within(grupo).getByRole("button", { name: "Densidade das mensagens" })).toBeInTheDocument();
+    expect(within(grupo).getByRole("button", { name: "Mais ações da conversa" })).toBeInTheDocument();
   });
 
   // Abaixo de `lg` o rótulo vira ícone; o nome acessível fica, pelo aria-label.
@@ -159,35 +155,60 @@ describe("ChatHeader — as ações moram num grupo que não encolhe", () => {
     expect(screen.getByText("Criar Lead").className).toMatch(/lg:inline/);
     expect(screen.getByRole("button", { name: "Criar lead" })).toBeInTheDocument();
   });
+
+  it("a legenda traz a caixa ao lado do telefone", () => {
+    montar();
+    expect(screen.getByText("Comercial")).toBeInTheDocument();
+  });
 });
 
-describe("ChatHeader — a densidade abaixo de lg vai para um menu ⋯", () => {
-  it("os três ícones só existem do lg para cima; o ⋯ só entre md e lg", () => {
+describe("ChatHeader — o ⋯ da conversa", () => {
+  it("sincronizar histórico abre o diálogo de sempre", async () => {
+    const user = userEvent.setup();
     montar();
-    const grupo = screen.getByRole("group", { name: /densidade/i });
-    expect(grupo.className).toMatch(/\bhidden\b/);
-    expect(grupo.className).toMatch(/lg:flex/);
-    const mais = screen.getByRole("button", { name: "Mais opções" });
-    expect(mais.className).toMatch(/md:inline-flex/);
-    expect(mais.className).toMatch(/lg:hidden/);
+    await user.click(screen.getByRole("button", { name: "Mais ações da conversa" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sincronizar histórico" }));
+    expect(await screen.findByRole("dialog", { name: "Histórico desta conversa" })).toBeInTheDocument();
   });
 
-  it("o ⋯ abre as três densidades, marca a atual e usa o mesmo handler", async () => {
+  it("marcar como não lida e arquivar chamam os handlers da linha", async () => {
+    const user = userEvent.setup();
+    const onMarkUnread = vi.fn();
+    const onArchive = vi.fn();
+    montar({ onMarkUnread, onArchive });
+    await user.click(screen.getByRole("button", { name: "Mais ações da conversa" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Marcar como não lida" }));
+    expect(onMarkUnread).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Mais ações da conversa" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Arquivar conversa" }));
+    expect(onArchive).toHaveBeenCalledOnce();
+  });
+
+  it("conversa arquivada oferece desarquivar, não arquivar", async () => {
+    const user = userEvent.setup();
+    montar({ isArchived: true, onArchive: vi.fn(), onUnarchive: vi.fn() });
+    await user.click(screen.getByRole("button", { name: "Mais ações da conversa" }));
+    expect(await screen.findByRole("menuitem", { name: "Desarquivar conversa" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Arquivar conversa" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ChatHeader — densidade num botão com três opções", () => {
+  it("abre as três densidades com descrição, marca a atual e usa o mesmo handler", async () => {
     const onDensityChange = vi.fn();
     const user = userEvent.setup();
     montar({ onDensityChange, density: "comfortable" });
 
-    await user.click(screen.getByRole("button", { name: "Mais opções" }));
-    expect(await screen.findByText("Densidade das mensagens")).toBeInTheDocument();
-    expect(screen.getByRole("menuitemradio", { name: "Padrão" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("button", { name: "Densidade das mensagens" }));
+    expect(await screen.findByText("Equilíbrio entre leitura e volume")).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: /Padrão/ })).toHaveAttribute("aria-checked", "true");
 
-    await user.click(screen.getByRole("menuitemradio", { name: "Compacto" }));
+    await user.click(screen.getByRole("menuitemradio", { name: /Compacto/ }));
     expect(onDensityChange).toHaveBeenCalledWith("compact");
   });
 
-  it("sem onDensityChange, nem os ícones nem o ⋯ existem", () => {
+  it("sem onDensityChange, o botão de densidade não existe", () => {
     montar({ onDensityChange: undefined });
-    expect(screen.queryByRole("group", { name: /densidade/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mais opções" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Densidade das mensagens" })).not.toBeInTheDocument();
   });
 });

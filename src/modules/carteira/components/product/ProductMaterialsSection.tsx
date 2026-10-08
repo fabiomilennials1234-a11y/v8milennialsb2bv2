@@ -30,6 +30,7 @@ import {
 } from "@/modules/carteira/hooks/useProductMaterials";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   productId: string;
@@ -82,7 +83,7 @@ export function ProductMaterialsSection({ productId }: Props) {
       setDescription("");
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error: any) {
-      toast.error(error.message || "Erro ao enviar arquivo");
+      notifyError(error, { fallback: "Não foi possível enviar arquivo." });
     }
   };
 
@@ -95,7 +96,7 @@ export function ProductMaterialsSection({ productId }: Props) {
       });
       toast.success(`"${material.file_name}" removido`);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao remover arquivo");
+      notifyError(error, { fallback: "Não foi possível remover arquivo." });
     }
   };
 
@@ -103,8 +104,8 @@ export function ProductMaterialsSection({ productId }: Props) {
     try {
       const url = await getProductMaterialUrl(material.file_path);
       window.open(url, "_blank");
-    } catch {
-      toast.error("Erro ao abrir arquivo");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível abrir arquivo." });
     }
   };
 
@@ -195,9 +196,9 @@ export function ProductMaterialsSection({ productId }: Props) {
               >
                 <div className={cn(
                   "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-                  isImage ? "bg-purple-500/10" : "bg-blue-500/10"
+                  isImage ? "bg-primary-soft" : "bg-insights/10"
                 )}>
-                  <Icon className={cn("w-4 h-4", isImage ? "text-purple-500" : "text-blue-500")} />
+                  <Icon className={cn("w-4 h-4", isImage ? "text-primary-soft-foreground" : "text-insights")} />
                 </div>
 
                 <div className="flex-1 min-w-0">

@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Calendar, Clock, MessageSquare, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Calendar, CalendarCheck, CalendarX, Clock, MessageSquare, UserPlus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -26,12 +26,14 @@ import {
 
 const VISUAL: Record<string, { icone: typeof MessageSquare; classe: string; borda: string }> = {
   lead_message: { icone: MessageSquare, classe: "text-chart-5", borda: "border-border" },
-  lead_new: { icone: UserPlus, classe: "text-success", borda: "border-success/40" },
+  lead_new: { icone: UserPlus, classe: "text-success-strong", borda: "border-success/40" },
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
   meeting_soon: { icone: Calendar, classe: "text-primary", borda: "border-primary/40" },
   follow_up_due: { icone: Clock, classe: "text-primary", borda: "border-primary/40" },
-  follow_up_overdue: { icone: Clock, classe: "text-warning", borda: "border-warning/40" },
+  follow_up_overdue: { icone: Clock, classe: "text-warning-strong", borda: "border-warning/40" },
+  scheduled_message_sent: { icone: CalendarCheck, classe: "text-success-strong", borda: "border-success/40" },
+  scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", borda: "border-destructive/50" },
 };
 
 export function PilhaDeCartoes() {
@@ -86,7 +88,7 @@ export function PilhaDeCartoes() {
               exit={{ opacity: 0, x: 24 }}
               transition={{ duration: 0.18 }}
               className={cn(
-                "pointer-events-auto flex gap-3 rounded-xl border bg-card p-3 shadow-lg",
+                "pointer-events-auto flex gap-3 rounded-card border bg-card p-3.5 shadow-relevo-alto",
                 visual.borda,
               )}
             >
@@ -111,7 +113,7 @@ export function PilhaDeCartoes() {
                   <button
                     type="button"
                     onClick={() => void abrir(cartao.id, cartao.avisoId, cartao.link)}
-                    className="mt-2 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"
+                    className="mt-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-brilho-ouro"
                   >
                     {cartao.fixo ? "Ver o que parou" : "Abrir"}
                   </button>
@@ -122,7 +124,7 @@ export function PilhaDeCartoes() {
                 type="button"
                 onClick={() => dispensarCartao(cartao.id)}
                 aria-label="Dispensar"
-                className="h-fit rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="h-fit rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

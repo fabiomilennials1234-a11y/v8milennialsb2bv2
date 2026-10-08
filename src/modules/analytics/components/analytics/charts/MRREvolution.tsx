@@ -33,7 +33,7 @@ interface TooltipProps {
 function CustomTooltip({ active, payload, label }: TooltipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-md text-xs space-y-1">
+    <div className="rounded-xl border border-border/60 bg-popover px-3 py-2 shadow-relevo-alto text-xs space-y-1">
       <p className="font-medium">{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2">
@@ -109,17 +109,17 @@ export function MRREvolution({ data }: Props) {
 
         {/* Summary row */}
         <div className="grid grid-cols-3 gap-2 pt-1">
-          <div className="rounded-lg bg-muted/40 p-2 text-center">
+          <div className="rounded-xl bg-sunken p-2 text-center">
             <p className="text-xs text-muted-foreground">Nova Rec.</p>
-            <p className="text-sm font-semibold text-green-600">{formatCurrency(totalNewMRR)}</p>
+            <p className="text-sm font-semibold text-success">{formatCurrency(totalNewMRR)}</p>
           </div>
-          <div className="rounded-lg bg-muted/40 p-2 text-center">
+          <div className="rounded-xl bg-sunken p-2 text-center">
             <p className="text-xs text-muted-foreground">Churn Rec.</p>
             <p className="text-sm font-semibold text-destructive">{formatCurrency(totalChurned)}</p>
           </div>
-          <div className="rounded-lg bg-muted/40 p-2 text-center">
+          <div className="rounded-xl bg-sunken p-2 text-center">
             <p className="text-xs text-muted-foreground">Net Change</p>
-            <p className={`text-sm font-semibold ${netChange >= 0 ? "text-green-600" : "text-destructive"}`}>
+            <p className={`text-sm font-semibold ${netChange >= 0 ? "text-success" : "text-destructive"}`}>
               {netChange >= 0 ? "+" : ""}{formatCurrency(netChange)}
             </p>
           </div>

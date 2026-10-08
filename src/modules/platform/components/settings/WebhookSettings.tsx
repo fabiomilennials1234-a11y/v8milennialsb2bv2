@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, type ReactNode } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Webhook as WebhookIcon,
   Plus,
@@ -43,6 +44,7 @@ import {
   useCreateWebhook,
   useUpdateWebhook,
   useDeleteWebhook,
+  useWebhookDeliveryLogs,
   WEBHOOK_EVENTS,
   HTTP_METHODS,
   Webhook,
@@ -52,7 +54,9 @@ import { useOrganization } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { AlertsBanner } from "@/modules/platform/components/system-alerts/AlertsBanner";
+import { userMessageOf } from "@/shared/errors";
 
 const DEFAULT_HEADERS = [{ key: "", value: "" }];
 
@@ -69,6 +73,81 @@ function headersToObject(arr: { key: string; value: string }[]): Record<string, 
     if (key.trim()) out[key.trim()] = value;
   }
   return out;
+}
+
+/**
+ * Uma linha da tabela de webhooks: endpoint + eventos, a última entrega
+ * registrada (`webhook_delivery_logs`, o mesmo `useWebhookDeliveryLogs`) e o
+ * estado. Sem entrega registrada, diz isso — não inventa sucesso.
+ */
+function LinhaDeWebhook({ webhook: wh, acoes }: { webhook: Webhook; acoes: ReactNode }) {
+  const { data: entregas = [], isLoading } = useWebhookDeliveryLogs(wh.id);
+  const ultima = entregas[0];
+  const ok = ultima?.status_code != null && ultima.status_code >= 200 && ultima.status_code < 300;
+  const eventos = wh.events ?? [];
+
+  return (
+    <li className="grid gap-3 px-5 py-3.5 sm:px-6 md:grid-cols-[minmax(0,1fr)_170px_96px_36px] md:items-center md:gap-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-muted text-foreground/70">
+            <WebhookIcon className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          <p className="truncate text-sm font-bold">{wh.name}</p>
+          <span className="ml-auto md:hidden">{acoes}</span>
+        </div>
+        <p className="mt-1 truncate font-mono text-[12px] text-muted-foreground" title={wh.url}>
+          {wh.url}
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {eventos.slice(0, 3).map((e) => (
+            <span key={e} className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-foreground/75">
+              {e}
+            </span>
+          ))}
+          {eventos.length > 3 && (
+            <span className="px-1 text-[11px] font-semibold text-muted-foreground">+{eventos.length - 3}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 md:block">
+        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground md:hidden">Última entrega</span>
+        {isLoading ? (
+          <span className="inline-block h-5 w-24 animate-pulse rounded-full bg-muted" />
+        ) : ultima ? (
+          <span
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-bold tabular-nums",
+              ok ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
+            )}
+            title={ultima.error_message ?? undefined}
+          >
+            <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ok ? "bg-success" : "bg-destructive")} />
+            <span className="truncate">
+              {ultima.status_code ?? "falhou"} · {formatDistanceToNow(new Date(ultima.delivered_at), { addSuffix: true, locale: ptBR })}
+            </span>
+          </span>
+        ) : (
+          <span className="text-[12px] text-muted-foreground">Sem entregas</span>
+        )}
+        {wh.consecutive_failures > 0 && (
+          <p className="text-[11px] font-semibold text-destructive md:mt-1">
+            {wh.consecutive_failures} {wh.consecutive_failures === 1 ? "falha seguida" : "falhas seguidas"}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 md:block">
+        <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground md:hidden">Estado</span>
+        <Badge variant={wh.is_active ? "success" : "soft"} title={wh.disabled_reason ?? undefined}>
+          {wh.is_active ? "Ativo" : "Inativo"}
+        </Badge>
+      </div>
+
+      <div className="hidden justify-end md:flex">{acoes}</div>
+    </li>
+  );
 }
 
 export function WebhookSettings() {
@@ -212,7 +291,9 @@ export function WebhookSettings() {
         success: false,
         status_code: null,
         response_body: "",
-        error_message: err instanceof Error ? err.message : String(err),
+        // Vai para o painel do teste, na tela: é a falha da NOSSA chamada, não a
+        // resposta do endpoint do cliente (essa vem em `data.error_message`).
+        error_message: userMessageOf(err, "Não foi possível enviar o teste do webhook."),
       });
     } finally {
       setSendingTestId(null);
@@ -254,99 +335,86 @@ export function WebhookSettings() {
       {/* Onda 2: alerts críticos webhook circuit breaker */}
       <AlertsBanner category="webhook_circuit_breaker" organizationId={organizationId} />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Webhooks</h3>
-          <p className="text-sm text-muted-foreground">
-            Configure endpoints para receber eventos (leads criados/atualizados, etc.)
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-bold tracking-tight">Webhooks</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Eventos do CRM enviados para as suas URLs (leads criados/atualizados, etc.)
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => openDialog()} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
+          <Button onClick={() => openDialog()} size="sm" variant="ink">
+            <Plus />
             Novo webhook
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />
+            <div key={i} className="h-14 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       ) : webhooks.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+        <div className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
           Nenhum webhook configurado
         </div>
       ) : (
-        <div className="grid gap-3">
-          {webhooks.map((wh) => (
-            <motion.div
-              key={wh.id}
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <WebhookIcon className="w-5 h-5 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{wh.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{wh.url}</p>
-                  <div className="flex gap-1 mt-1 flex-wrap">
-                    {(wh.events ?? []).slice(0, 3).map((e) => (
-                      <span key={e} className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                        {e}
-                      </span>
-                    ))}
-                    {(wh.events?.length ?? 0) > 3 && (
-                      <span className="text-xs text-muted-foreground">
-                        +{(wh.events?.length ?? 0) - 3}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {!wh.is_active && (
-                  <Badge variant="secondary" className="shrink-0">
-                    Inativo
-                  </Badge>
-                )}
-              </div>
-              {isAdmin && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openDialog(wh)}>
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleSendTest(wh.id)}
-                      disabled={sendingTestId === wh.id}
-                    >
-                      {sendingTestId === wh.id ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4 mr-2" />
-                      )}
-                      Enviar teste
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => setDeleteId(wh.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remover
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </motion.div>
-          ))}
+        <div className="-mx-5 sm:-mx-6">
+          {/* Cabeçalho de coluna — some no celular, onde cada linha empilha. */}
+          <div
+            aria-hidden
+            className="hidden grid-cols-[minmax(0,1fr)_170px_96px_36px] gap-4 border-y border-border bg-muted/40 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground sm:px-6 md:grid"
+          >
+            <span>Endpoint</span>
+            <span>Última entrega</span>
+            <span>Estado</span>
+            <span />
+          </div>
+          <ul className="divide-y divide-border border-b border-border max-md:border-t">
+            {webhooks.map((wh) => (
+              <LinhaDeWebhook
+                key={wh.id}
+                webhook={wh}
+                acoes={
+                  isAdmin ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Ações do webhook ${wh.name}`}>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openDialog(wh)}>
+                          <Edit2 className="w-4 h-4 mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleSendTest(wh.id)}
+                          disabled={sendingTestId === wh.id}
+                        >
+                          {sendingTestId === wh.id ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4 mr-2" />
+                          )}
+                          Enviar teste
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteId(wh.id)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Remover
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null
+                }
+              />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -399,7 +467,7 @@ export function WebhookSettings() {
             <div className="grid gap-2">
               <Label>Método HTTP</Label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={formData.http_method}
                 onChange={(e) =>
                   setFormData((p) => ({
@@ -455,7 +523,7 @@ export function WebhookSettings() {
               <Label htmlFor="wh-active">Ativo</Label>
             </div>
             {testResult && testResult.webhookId === editingWebhook?.id && (
-              <div className="rounded-md border p-3 text-sm">
+              <div className="rounded-xl border border-border p-3 text-sm">
                 <p className="font-medium">
                   {testResult.success ? "Teste enviado com sucesso" : "Falha no teste"}
                 </p>
@@ -466,7 +534,7 @@ export function WebhookSettings() {
                   <p className="text-destructive">{testResult.error_message}</p>
                 )}
                 {testResult.response_body && (
-                  <pre className="mt-2 overflow-auto max-h-24 text-xs bg-muted p-2 rounded">
+                  <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-muted p-2 text-xs">
                     {testResult.response_body}
                   </pre>
                 )}

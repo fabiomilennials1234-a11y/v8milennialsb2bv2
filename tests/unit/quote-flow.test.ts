@@ -168,7 +168,7 @@ describe('quote generation workflow', () => {
     const {db,calls}=database([...contextRows(),q,{...q,status:'failed'},{...q,status:'generating'},{...q,status:'ready'}]);
     mocks.service.mockResolvedValue({format:'docx',file:btoa('PKtest')});
     expect(await runQuoteTool(db,{...ctx,userMessage:'confirmo'},{operation:'generate'})).toMatchObject({success:true,status:'ready'});
-    expect(calls.some(c=>c.operations.some(op=>op[0]==='update'&&(op[1] as any).error_code==='generation_interrupted'))).toBe(true);
+    expect(calls.some(c=>c.operations.some(op=>op[0]==='update'&&(op[1] as Record<string, unknown>).error_code==='generation_interrupted'))).toBe(true);
   });
   it.each([false,true])('runs natural confirmation through render, queue and provider, preserving format %s',async pdf=>{
     const q={...quote,confirmation_code:null,convert_to_pdf:pdf};
@@ -206,16 +206,16 @@ describe('quote delivery safety',()=>{
     expect(denied.db.from).not.toHaveBeenCalled();
   });
   it('two competing workers atomically claim one revision and send only once',async()=>{
-    let state={...quote,status:'ready'};
+    let state: Record<string, unknown>={...quote,status:'ready'};
     const rows=contextRows();
     const tables:Record<string,unknown>={copilot_agents:rows[0],conversations:rows[1],leads:rows[2],copilot_quote_templates:rows[3],phone_ai_preferences:null};
     const db={from(table:string){
       let patch:Record<string,unknown>|undefined;
       const filters:Array<[string,unknown]>=[];
-      const chain:any={select:()=>chain,update:(value:Record<string,unknown>)=>{patch=value;return chain;},eq:(key:string,value:unknown)=>{filters.push([key,value]);return chain;},in:()=>chain,limit:()=>chain,single:()=>chain,maybeSingle:()=>chain,upsert:()=>chain,insert:()=>chain,
-        then:(resolve:any)=>Promise.resolve().then(()=>{
+      const chain={select:()=>chain,update:(value:Record<string,unknown>)=>{patch=value;return chain;},eq:(key:string,value:unknown)=>{filters.push([key,value]);return chain;},in:()=>chain,limit:()=>chain,single:()=>chain,maybeSingle:()=>chain,upsert:()=>chain,insert:()=>chain,
+        then:(resolve:(result: {data: unknown; error: null}) => unknown)=>Promise.resolve().then(()=>{
           if(table!=='copilot_quotes')return {data:tables[table]??null,error:null};
-          if(!filters.every(([key,value])=>(state as any)[key]===value))return {data:null,error:null};
+          if(!filters.every(([key,value])=>state[key]===value))return {data:null,error:null};
           if(patch) state={...state,...patch};
           return {data:{...state},error:null};
         }).then(resolve)};return chain;

@@ -1386,9 +1386,9 @@ test('seleciona número personalizado com comparação numérica e preserva UUID
   await page.getByLabel('Comparação', { exact: true }).selectOption('greater_than');
   await value.fill('10.5');
   await expect(page.locator('.react-flow__node-condition')).toContainText('Quantidade prevista é maior que 10.5');
-  await selectInformation(page, 'lead.qualification_score');
-  await expect(value).toHaveValue('10.5');
-  await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('greater_than');
+  // A troca número→número passava por "Pontuação de qualificação", que saiu do
+  // catálogo (score do lead descontinuado, CTO 02/10). O valor continua preservado
+  // ao reabrir o mesmo campo, abaixo.
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Quantidade');
   await page.getByRole('option', { name: 'Quantidade prevista', exact: true }).click();
@@ -1471,122 +1471,19 @@ for (const [field, label, value] of [['lead.email', 'Email', 'comercial@aurora.e
   });
 }
 
-test('configura pontuação numérica sem confundir zero com comparação incompleta', async ({ page }) => {
+// Score do lead descontinuado (CTO, 02/10): a pontuação de qualificação não é
+// mais oferecida para condição nova. O executor continua avaliando condições já
+// salvas; a UI só as mostra com o selo "Descontinuado".
+test('pontuação de qualificação não é mais oferecida no catálogo guiado', async ({ page }) => {
   await openGuidedEditor(page, 'JOSE');
-  await page.route('**/functions/v1/test-guided-condition', route => {
-    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.qualification_score', operator: 'equals', value: 0 });
-    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 0 }] } });
-  });
   await page.getByText('Nome informado', { exact: true }).click();
-  await selectInformation(page, 'lead.qualification_score');
-  const value = page.getByLabel('Valor da comparação');
-  await expect(value).toHaveAttribute('type', 'number');
-  await expect(value).toHaveValue('');
-  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
-  await expect(page.getByLabel('Comparação', { exact: true }).getByRole('option', { name: 'contém', exact: true })).toHaveCount(0);
-  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
-  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
-  await value.fill('0');
-  await expect(page.locator('.react-flow__node-condition')).toContainText('Pontuação de qualificação é igual a 0');
-  await page.getByRole('button', { name: 'Testar condição' }).click();
-  await expect(page.getByRole('status')).toContainText('Pontuação de qualificação do lead: 0');
-  for (const [operator, label] of [
-    ['greater_than', 'é maior que'], ['greater_than_or_equal', 'é maior ou igual a'],
-    ['less_than', 'é menor que'], ['less_than_or_equal', 'é menor ou igual a'],
-  ]) {
-    await page.getByLabel('Comparação', { exact: true }).selectOption(operator);
-    await expect(value).toHaveValue('0');
-    await expect(page.locator('.react-flow__node-condition')).toContainText(`Pontuação de qualificação ${label} 0`);
-  }
-  await value.fill('');
-  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
-  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
-  await expect(value).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
-});
-
-for (const [field, label] of [['utm_campaign', 'UTM Campaign'], ['utm_source', 'UTM Source'], ['utm_medium', 'UTM Medium'], ['utm_content', 'UTM Content'], ['utm_term', 'UTM Term']]) test(`seleciona ${label} por busca e aceita texto fora das sugestões`, async ({ page }) => {
-  await openGuidedEditor(page, '');
-  await page.route('**/rest/v1/leads?*', route => {
-    const params = new URL(route.request().url()).searchParams;
-    if (params.get('select') !== field) return route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
-    expect(params.get('limit')).toBe('25');
-    return route.fulfill({ json: params.getAll(field).some(value => value.includes('Atacado'))
-      ? [{ [field]: 'Atacado verão' }] : [{ [field]: 'Campanha inicial' }] });
-  });
-  await page.getByText('Nome informado', { exact: true }).click();
-  await selectInformation(page, `lead.${field}`);
-  const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
-  await picker.click();
-  await expect(page.getByRole('option', { name: 'Campanha inicial', exact: true })).toBeVisible();
-  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Atacado');
-  await page.getByRole('option', { name: 'Atacado verão', exact: true }).click();
-  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é igual a “Atacado verão”`);
-  await picker.click();
-  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Nova campanha');
-  await page.getByRole('option', { name: 'Usar "Nova campanha"', exact: true }).click();
-  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é igual a “Nova campanha”`);
-  await page.route('**/functions/v1/test-guided-condition', route => {
-    expect(route.request().postDataJSON().condition).toMatchObject({ field: `lead.${field}`, value: 'Nova campanha' });
-    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false, actual: 'Outra campanha' }] } });
-  });
-  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
-  await page.getByRole('button', { name: 'Testar condição' }).click();
-  await expect(page.getByRole('status')).toContainText(`${label} do lead: Outra campanha`);
-});
-
-test('falha de sugestões UTM não vira lista vazia nem impede valor manual', async ({ page }) => {
-  await openGuidedEditor(page, '');
-  let failed = true;
-  await page.route('**/rest/v1/leads?*', route => new URL(route.request().url()).searchParams.get('select') === 'utm_campaign'
-    ? route.fulfill(failed ? { status: 503, json: { message: 'unavailable' } } : { json: [] })
-    : route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
-  await page.getByText('Nome informado', { exact: true }).click();
-  await selectInformation(page, 'lead.utm_campaign');
-  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
-  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
-  await expect(page.getByText('Nenhum valor encontrado nesta org — digite manualmente.')).toHaveCount(0);
-  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Campanha manual');
-  await page.getByRole('option', { name: 'Usar "Campanha manual"', exact: true }).click();
-  await expect(page.locator('.react-flow__node-condition')).toContainText('“Campanha manual”');
-  failed = false;
-  await page.getByRole('button', { name: 'Tentar carregar sugestões novamente' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toHaveCount(0);
-});
-
-test('valor manual UTM pode ser confirmado antes das sugestões responderem', async ({ page }) => {
-  await openGuidedEditor(page, '');
-  await page.route('**/rest/v1/leads?*', async route => {
-    if (new URL(route.request().url()).searchParams.get('select') === 'utm_campaign') return;
-    await route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
-  });
-  await page.getByText('Nome informado', { exact: true }).click();
-  await selectInformation(page, 'lead.utm_campaign');
-  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
-  await expect(page.getByText('Carregando valores…')).toBeVisible();
-  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Campanha urgente');
-  await expect(page.getByRole('option', { name: 'Usar "Campanha urgente"', exact: true })).toBeVisible();
-  await page.getByPlaceholder('Buscar ou digitar valor…').press('Enter');
-  await expect(page.locator('.react-flow__node-condition')).toContainText('“Campanha urgente”');
-});
-
-test('troca de usuário não reutiliza sugestões UTM da conta anterior', async ({ page }) => {
-  await page.route('**/rest/v1/leads?*', route => new URL(route.request().url()).searchParams.get('select') === 'utm_campaign'
-    ? route.fulfill({ json: [{ utm_campaign: 'Campanha restrita' }] }) : route.fulfill({ json: [] }));
-  await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
-  await selectInformation(page, 'lead.utm_campaign');
-  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
-  await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toBeVisible();
-  await page.getByPlaceholder('Buscar ou digitar valor…').press('Escape');
-  await page.route('**/rest/v1/leads?*', route => route.fulfill({ status: 403, json: { message: 'denied' } }));
-  await page.getByRole('button', { name: 'Trocar usuário' }).click();
-  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
-  await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('pontuacao');
+  await expect(page.getByRole('option', { name: 'Pontuação de qualificação', exact: true })).toHaveCount(0);
 });
 
 
-for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qualification_score', 'Pontuação de qualificação', 0], ['lead.origin', 'Origem', 'web'], ['lead.pre_sale_responsible_id', 'Responsável de pré-vendas', 'abcd0000-0000-4000-8000-000000000001'], ['lead.sale_responsible_id', 'Responsável de vendas', 'abcd0000-0000-4000-8000-000000000001']] as const) {
+for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.origin', 'Origem', 'web'], ['lead.pre_sale_responsible_id', 'Responsável de pré-vendas', 'abcd0000-0000-4000-8000-000000000001'], ['lead.sale_responsible_id', 'Responsável de vendas', 'abcd0000-0000-4000-8000-000000000001']] as const) {
   test(`configura ${label} preenchido sem valor adicional e mantém foco ao duplicar`, async ({ page }) => {
     await openGuidedEditor(page, 'JOSE');
     await page.getByText('Nome informado', { exact: true }).click();
@@ -2212,8 +2109,8 @@ test('busca informação sem acento e cancela sem perder comparação', async ({
   const information = page.getByRole('combobox', { name: 'Informação', exact: true });
   await information.click();
   const search = page.getByRole('combobox', { name: 'Buscar informação', exact: true });
-  await search.fill('  QUALIFICACAO  ');
-  await expect(page.getByRole('option', { name: 'Pontuação de qualificação', exact: true })).toBeVisible();
+  await search.fill('  URGENCIA  ');
+  await expect(page.getByRole('option', { name: 'Urgência', exact: true })).toBeVisible();
   await search.fill('campo inexistente xyz');
   await expect(page.getByText('Nenhuma informação encontrada. Tente outro termo.')).toBeVisible();
   await expect(page.getByRole('listbox', { name: 'Informações disponíveis' }).getByRole('option')).toHaveCount(0);

@@ -35,7 +35,7 @@ function AssignResponsibleNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="assign_responsible"
-      icon={<UserRoundPlus className="w-5 h-5 text-rose-500" />}
+      icon={<UserRoundPlus />}
       title={nodeData.label || "Definir Responsável"}
       subtitle={subtitle}
       selected={selected}

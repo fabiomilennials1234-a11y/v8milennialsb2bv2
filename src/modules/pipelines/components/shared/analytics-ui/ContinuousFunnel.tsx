@@ -22,7 +22,7 @@ const GOLD_OPACITY = [1, 0.8, 0.6, 0.45, 0.32, 0.22];
 
 function passRateColor(rate: number) {
   if (rate >= 60) return "text-success";
-  if (rate >= 30) return "text-primary";
+  if (rate >= 30) return "text-primary-soft-foreground";
   return "text-destructive";
 }
 
@@ -40,7 +40,7 @@ export function ContinuousFunnel({ stages, unit = "registros" }: ContinuousFunne
 
   if (max === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-10 text-center border border-dashed border-border/50 rounded-lg">
+      <p className="rounded-2xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
         Nenhum {unit.replace(/s$/, "")} no período
       </p>
     );
@@ -112,7 +112,7 @@ export function ContinuousFunnel({ stages, unit = "registros" }: ContinuousFunne
                 </div>
               )}
               <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <span className="text-[22px] leading-7 font-bold tabular-nums tracking-tight">
+                <span className="text-[22px] font-extrabold leading-7 tabular-nums tracking-[-0.04em]">
                   {stage.count}
                 </span>
                 <span className="text-[11px] text-muted-foreground truncate">{stage.label}</span>
@@ -120,7 +120,7 @@ export function ContinuousFunnel({ stages, unit = "registros" }: ContinuousFunne
                   <span
                     className={cn(
                       "text-[11px] font-semibold tabular-nums",
-                      stage.tone === "success" ? "text-success" : "text-primary"
+                      stage.tone === "success" ? "text-success" : "text-primary-soft-foreground"
                     )}
                   >
                     {stage.valueLabel}

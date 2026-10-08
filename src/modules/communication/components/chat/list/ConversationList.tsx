@@ -13,7 +13,7 @@
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, MessageSquare, Archive, Users } from "lucide-react";
+import { Loader2, Search, MessageSquare, Archive, Users, ArrowLeft, ChevronRight, SquarePen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -27,12 +27,15 @@ import {
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
+import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { SeletorDeCaixas } from "./SeletorDeCaixas";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
-import { InboxFilterBar } from "./InboxFilterBar";
+import { InboxFilterBar, InboxActiveFiltersButton } from "./InboxFilterBar";
+import { AtalhosDeCanal } from "./AtalhosDeCanal";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InboxEnrichmentNotice } from "./InboxEnrichmentNotice";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import {
@@ -44,6 +47,11 @@ import {
 } from "@/modules/communication/lib/inboxFilter";
 import type { InboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RIOFIX_ORG_ID } from "@/modules/communication/lib/negocioNoChat";
+import { useConversationSelection } from "@/modules/communication/hooks/chat/useConversationSelection";
+import { ConversationBulkToolbar } from "./ConversationBulkToolbar";
+import type { ReactNode } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -52,11 +60,26 @@ const VIRTUALIZE_THRESHOLD = 50;
 /** Altura estimada por item baseada em density CSS vars de useChatDensity. */
 function estimateItemHeight(density: DensityMode): number {
   switch (density) {
-    case "compact": return 56;
+    // Linha de três andares (nome · prévia · caixa/etapa) — V5.
+    case "compact": return 72;
     case "spacious": return 88;
-    default: return 72;
+    default: return 80;
   }
 }
+
+/**
+ * V5 — alternador segmentado sobre a tinta: Todas · Não lidas · Grupos. É um
+ * RECORTE da lista (escopo + `unread`), não navegação — por isso continuam
+ * botões com `aria-pressed`, e não abas.
+ */
+const SEGMENTO =
+  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const SEGMENTO_ATIVO = "bg-foreground text-background";
+const SEGMENTO_INATIVO = "text-muted-foreground hover:text-foreground";
+
+/** Botão-ícone do cabeçalho do inbox (Filtros, Nova conversa). */
+const ICONE_CABECALHO =
+  "grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-foreground/[.07] text-foreground/85 transition-colors hover:bg-foreground/[.12] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +104,8 @@ interface ConversationListProps {
   onAlternarCaixa?: (boxId: string) => void;
   onSomenteCaixa?: (boxId: string) => void;
   onTodasAsCaixas?: () => void;
+  /** Atalho de canal: marca exatamente as caixas de um canal no seletor. */
+  onMarcarConjunto?: (ids: string[]) => void;
   /**
    * Não lidas por caixa, INCLUSIVE as desmarcadas — é o que faz o seletor
    * apontar onde está o que a lista não mostra (D8).
@@ -157,6 +182,7 @@ export function ConversationList({
   onAlternarCaixa,
   onSomenteCaixa,
   onTodasAsCaixas,
+  onMarcarConjunto,
   naoLidasPorCaixa,
   metaPorLinha,
   activeTab,
@@ -191,6 +217,7 @@ export function ConversationList({
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useViewport();
+  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
   // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
@@ -272,8 +299,8 @@ export function ConversationList({
     if (universo.length === 0) return universo;
     const q = searchQuery.trim().toLowerCase();
     if (!q) return universo;
-    return universo.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
-  }, [isSocialBox, modoUnificado, contacts, searchQuery]);
+    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro).toLowerCase().includes(q));
+  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro]);
 
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
@@ -308,11 +335,23 @@ export function ConversationList({
     return contacts.filter((c) => sobreviventes.has(contactKey(c)));
   }, [modoUnificado, isSocialBox, socialContacts, whatsappFiltered, contacts]);
 
+  const bulkEnabled = organizationId === RIOFIX_ORG_ID && !isSocialBox;
+  const bulkScope = JSON.stringify([organizationId, marcadas?.length ? [...marcadas].sort() : [instanceId], activeTab, searchQuery, filter, mobileFilter, isMobile, isAdmin]);
+  const bulk = useConversationSelection(bulkScope, filteredContacts, bulkEnabled && !isLoading && filterGate === "ok");
+  const selectableRow = (contact: InboxContact, row: ReactNode) => {
+    if (!bulk.selecting || !isWhatsAppContact(contact) || !contact.instance_id) return row;
+    const key = contactKey(contact);
+    return (
+      <div className="flex min-w-0 items-center gap-1">
+        <Checkbox className="ml-2 shrink-0" aria-label={`Selecionar ${contactDisplayName(contact, nomeDoLeadPrimeiro)}`}
+          checked={bulk.selected.some(c => contactKey(c) === key)} disabled={bulk.busy}
+          onCheckedChange={() => bulk.toggle(key)} />
+        <div className="min-w-0 flex-1">{row}</div>
+      </div>
+    );
+  };
+
   // Contagens reagem ao filtro aplicado (menos a própria tab).
-  const activeCount = useMemo(
-    () => (isMobile ? whatsappFiltered.length : applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "active", includeGroups: abasDeGrupos }).length),
-    [isMobile, whatsappFiltered.length, whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos],
-  );
   const archivedCount = useMemo(
     () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived", includeGroups: abasDeGrupos }).length,
     [whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos],
@@ -356,6 +395,27 @@ export function ConversationList({
    */
   const tabDoMenu: "active" | "archived" = activeTab === "archived" ? "archived" : "active";
 
+  const emArquivadas = !isSocialBox && activeTab === "archived";
+
+  /**
+   * O segmento aceso sai do estado que JÁ existe — escopo (`activeTab`) e
+   * `filter.unread` —, nunca de um estado paralelo. Grupos é escopo; Não lidas
+   * é o recorte persistido de sempre.
+   */
+  const segmentoAtivo: "todas" | "naoLidas" | "grupos" =
+    activeTab === "grupos" ? "grupos" : filter.unread ? "naoLidas" : "todas";
+  const escolherSegmento = (seg: "todas" | "naoLidas" | "grupos") => {
+    if (seg === "grupos") {
+      if (filter.unread) patch({ unread: false });
+      onTabChange("grupos");
+      return;
+    }
+    const unread = seg === "naoLidas";
+    if (filter.unread !== unread) patch({ unread });
+    // Em Arquivadas o escopo fica; nas demais, Todas/Não lidas voltam ao ativo.
+    if (activeTab === "grupos") onTabChange("active");
+  };
+
   const shouldVirtualize = filteredContacts.length > VIRTUALIZE_THRESHOLD;
 
   const getScrollElement = useCallback(() => {
@@ -372,9 +432,11 @@ export function ConversationList({
   });
 
   return (
+    // Desktop: a coluna é o cartão de TINTA do ChatShell (o fundo vem de lá).
+    // Mobile: ocupa a tela inteira e mantém a superfície clara.
     <div className={cn(
-      "flex flex-col h-full min-h-0 bg-muted/20",
-      !isMobile && "border-r border-border/60",
+      "flex flex-col h-full min-h-0",
+      isMobile && "bg-muted/20",
     )}>
       {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
       {isMobile ? (
@@ -413,7 +475,82 @@ export function ConversationList({
           canSeeUnassigned={canSeeUnassigned}
         />
       ) : (
-      <div className="p-3 border-b bg-background shrink-0">
+      <div className="shrink-0 space-y-2.5 px-3 pb-2.5 pt-3.5">
+        {/* Cabeçalho compacto — a rota não tem PageHeader (decisão D2): o
+            título mora aqui, na própria coluna, e a lista ganha a altura. */}
+        {emArquivadas ? (
+          <div className="flex items-center gap-2 px-1">
+            <button
+              type="button"
+              onClick={() => onTabChange("active")}
+              aria-label="Voltar para as conversas ativas"
+              className={ICONE_CABECALHO}
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+            </button>
+            <p className="text-base font-bold tracking-tight text-foreground">Arquivadas</p>
+            <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
+              {fmtCount(archivedCount)}
+            </span>
+            <span className="flex-1" />
+            <InboxActiveFiltersButton
+              filter={filter}
+              patch={patch}
+              clearFilter={clearFilter}
+              funnelOptions={funnelOptions}
+              vendorOptions={vendorOptions}
+              allTags={allTags}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-1">
+            <p className="text-base font-bold tracking-tight text-foreground">Inbox</p>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
+                unreadCount > 0 ? "bg-foreground/10 text-foreground" : "bg-foreground/[.06] text-muted-foreground",
+              )}
+            >
+              {unreadCount > 0 ? `${unreadCount} não ${unreadCount === 1 ? "lida" : "lidas"}` : "Em dia"}
+            </span>
+            <span className="flex-1" />
+            {!isSocialBox && (
+              <InboxActiveFiltersButton
+                filter={filter}
+                patch={patch}
+                clearFilter={clearFilter}
+                funnelOptions={funnelOptions}
+                vendorOptions={vendorOptions}
+                allTags={allTags}
+              />
+            )}
+            {onNewConversation && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onNewConversation}
+                    aria-label="Nova conversa"
+                    className={ICONE_CABECALHO}
+                  >
+                    <SquarePen className="h-4 w-4" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Nova conversa</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+
+        {!emArquivadas && boxes && marcadas && onMarcarConjunto && (
+          <AtalhosDeCanal
+            caixas={boxes}
+            marcadas={marcadas}
+            naoLidas={naoLidasPorCaixa}
+            onMarcarConjunto={onMarcarConjunto}
+          />
+        )}
+
         {boxes && boxes.length > 0 && marcadas && onAlternarCaixa && (
           <SeletorDeCaixas
             caixas={boxes}
@@ -427,31 +564,26 @@ export function ConversationList({
           />
         )}
 
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-          Inbox
-        </p>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar conversa..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-9 bg-background"
+            className="h-9 rounded-full border-foreground/10 bg-foreground/[.06] pl-9 shadow-none focus-visible:ring-offset-0"
           />
         </div>
 
-        {/* ─── Filtro (modelo Linear) ──────────────────────────────────────── */}
+        {/* ─── Trilho de filtros ───────────────────────────────────────────── */}
         {/* Some inteiro na caixa social: funil, etapa, qualificação, vendedor e
             etiqueta são dimensões de lead, e a RPC social não aplica nenhuma.
             Um chip que não recorta nada é pior que chip nenhum. */}
         {!isSocialBox && (
           <InboxFilterBar
-            onNewConversation={onNewConversation}
             filter={filter}
             patch={patch}
             toggleMulti={toggleMulti}
             clearFilter={clearFilter}
-            unreadCount={unreadCount}
             waitingHumanCount={waitingHumanCount}
             funnelOptions={funnelOptions}
             vendorOptions={vendorOptions}
@@ -461,60 +593,57 @@ export function ConversationList({
           />
         )}
 
-        <p className="mt-2 text-xs text-muted-foreground">
-          Total: {isSocialBox ? filteredContacts.length : fmtCount(filteredContacts.length)}
-        </p>
-
-        {/* Arquivamento vive em `whatsapp_conversations`; não há equivalente
-            para canal social, então as abas não nascem em vez de nascerem
-            mortas. */}
+        {/* Todas · Não lidas · Grupos. Arquivamento vive em
+            `whatsapp_conversations`; não há equivalente para canal social,
+            então o alternador não nasce em vez de nascer morto. Em Arquivadas
+            o escopo é fixo e sobra só o recorte de não lidas. */}
         {!isSocialBox && (
-          <div className="flex mt-2 bg-muted rounded-md p-0.5">
-            <button
-              type="button"
-              onClick={() => onTabChange("active")}
-              className={cn(
-                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                activeTab === "active"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Ativas ({fmtCount(activeCount)})
-            </button>
-            <button
-              type="button"
-              onClick={() => onTabChange("archived")}
-              className={cn(
-                "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                activeTab === "archived"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Arquivadas ({fmtCount(archivedCount)})
-            </button>
-            {/* Atalho para filtrar apenas grupos; eles também aparecem em Ativas. */}
-            {abasDeGrupos && (
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 rounded-full bg-foreground/[.07] p-[3px]" role="group" aria-label="Recorte da lista">
               <button
                 type="button"
-                onClick={() => onTabChange("grupos")}
-                className={cn(
-                  "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-                  activeTab === "grupos"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                aria-pressed={segmentoAtivo === "todas"}
+                onClick={() => escolherSegmento("todas")}
+                className={cn(SEGMENTO, segmentoAtivo === "todas" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
               >
-                Grupos ({fmtCount(gruposCount)})
+                Todas
               </button>
-            )}
+              <button
+                type="button"
+                aria-pressed={segmentoAtivo === "naoLidas"}
+                onClick={() => escolherSegmento("naoLidas")}
+                className={cn(SEGMENTO, segmentoAtivo === "naoLidas" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
+              >
+                Não lidas
+              </button>
+              {/* Atalho para filtrar apenas grupos; eles também aparecem em Todas. */}
+              {abasDeGrupos && !emArquivadas && (
+                <button
+                  type="button"
+                  aria-pressed={segmentoAtivo === "grupos"}
+                  onClick={() => escolherSegmento("grupos")}
+                  className={cn(SEGMENTO, segmentoAtivo === "grupos" ? SEGMENTO_ATIVO : SEGMENTO_INATIVO)}
+                >
+                  Grupos
+                </button>
+              )}
+            </div>
+            <span className="flex-1" />
+            <p className="whitespace-nowrap text-[11px] font-semibold tabular-nums text-muted-foreground">
+              {fmtCount(filteredContacts.length)} {filteredContacts.length === 1 ? "conversa" : "conversas"}
+            </p>
           </div>
         )}
       </div>
       )}
 
       {/* ─── Lista ──────────────────────────────────────────────────────────── */}
+      {bulkEnabled && organizationId && (
+        <ConversationBulkToolbar key={bulk.revision} organizationId={organizationId} isAdmin={isAdmin}
+          archived={!isMobile && activeTab === "archived"} selecting={bulk.selecting}
+          disabled={isLoading || filterGate !== "ok"} eligible={bulk.eligible} selected={bulk.selected}
+          onSelecting={bulk.setSelecting} onSelection={bulk.setSelection} onBusy={bulk.setBusy} />
+      )}
       {/* Radix's table wrapper takes the preview's intrinsic width; block keeps long messages inside the sidebar. */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
         {isLoading || filterGate === "pending" ? (
@@ -530,12 +659,12 @@ export function ConversationList({
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             {!isSocialBox && activeTab === "archived" ? (
               <>
-                <Archive className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <Archive className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">Nenhuma conversa arquivada</p>
               </>
             ) : !isSocialBox && activeTab === "grupos" ? (
               <>
-                <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <Users className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 {/* Vazio aqui quase nunca é "não há grupo": é `capture_groups`
                     desligada na org, e aí o webhook derruba a mensagem de grupo
                     antes de gravar. Dizer só "nenhum grupo" mandaria o vendedor
@@ -552,7 +681,7 @@ export function ConversationList({
               </>
             ) : (
               <>
-                <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <MessageSquare className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
                   {searchQuery
                     ? "Nenhuma conversa encontrada"
@@ -569,7 +698,7 @@ export function ConversationList({
           // ── Modo virtualizado ──────────────────────────────────────────────
           <div
             style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-            className="divide-y divide-border/60"
+            className="mx-2"
           >
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const contact = filteredContacts[virtualItem.index];
@@ -585,8 +714,9 @@ export function ConversationList({
                     width: "100%",
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
+                  className="pb-0.5"
                 >
-                  <ConversationListItem
+                  {selectableRow(contact, <ConversationListItem
                     contact={contact}
                     isSelected={selectedKey === contactKey(contact)}
                     onSelect={onSelectContact}
@@ -605,21 +735,24 @@ export function ConversationList({
                     stageLabel={stageLabelFor(contact)}
                     caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                     tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
-                  />
+                  />)}
                 </div>
               );
             })}
           </div>
         ) : (
           // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
-          <div className={cn(!isMobile && "divide-y divide-border/60")}>
-            {filteredContacts.map((contact) =>
-              isMobile ? (
+          <div className={cn("flex flex-col gap-0.5 pb-2", !isMobile && "mx-2")}>
+            {filteredContacts.map((contact) => (
+              <div key={contactKey(contact)}>
+              {selectableRow(contact, isMobile ? (
                 <MobileConversationRow
                   key={contactKey(contact)}
                   contact={contact}
                   isSelected={selectedKey === contactKey(contact)}
                   onPress={onSelectContact}
+                  waitingHumanLeadIds={waitingHumanLeadIds}
+                  caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                 />
               ) : (
                 <ConversationListItem
@@ -643,11 +776,28 @@ export function ConversationList({
                   caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                   tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                 />
-              ),
-            )}
+              ))}
+              </div>
+            ))}
           </div>
         )}
       </ScrollArea>
+
+      {/* Arquivadas no rodapé da coluna, como no mockup: é um lugar que se
+          visita, não um recorte que se alterna a cada minuto. */}
+      {!isMobile && !isSocialBox && !emArquivadas && (
+        <button
+          type="button"
+          onClick={() => onTabChange("archived")}
+          className="flex shrink-0 items-center gap-2.5 border-t border-foreground/10 px-4 py-3 text-left text-[13px] font-semibold text-foreground/80 transition-colors hover:bg-foreground/[.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        >
+          <Archive className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <span className="flex-1">
+            Arquivadas <span className="tabular-nums text-muted-foreground">({fmtCount(archivedCount)})</span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }

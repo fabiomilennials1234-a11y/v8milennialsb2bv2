@@ -134,7 +134,13 @@ BEGIN
       WHERE m.organization_id = r.organization_id AND (
         m.id::text = r.metadata #>> '{agenda_espelho,meeting_id}'
         OR ((m.pipeline_entry_id = r.id OR m.deal_id = r.deal_id) AND m.start_at = v_data)
-        OR (m.lead_id = r.lead_id AND m.start_at = v_data)));
+        -- Lead/time is only a legacy fallback. Explicit links above already
+        -- cover matching IDs; a different meeting, entry or deal is another
+        -- appointment even when its lead and scheduled instant coincide.
+        OR (m.lead_id = r.lead_id AND m.start_at = v_data
+          AND NULLIF(r.metadata #>> '{agenda_espelho,meeting_id}', '') IS NULL
+          AND m.pipeline_entry_id IS NULL
+          AND (m.deal_id IS NULL OR r.deal_id IS NULL))));
     CONTINUE WHEN EXISTS (SELECT 1 FROM public.meeting_events booked
       JOIN public.meeting_events outcome ON outcome.booked_event_id = booked.id
         AND outcome.organization_id = booked.organization_id

@@ -42,6 +42,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +87,7 @@ const LEAD_FIELD_OPTIONS = [
   { value: "segment", label: "Segmento" },
   { value: "urgency", label: "Urgencia" },
   { value: "faturamento", label: "Faturamento" },
-  { value: "notes", label: "Observacoes" },
+  { value: "notes", label: "Observações" },
   { value: "utm_campaign", label: "UTM Campaign" },
   { value: "utm_source", label: "UTM Source" },
   { value: "utm_medium", label: "UTM Medium" },
@@ -480,15 +481,15 @@ function PageLeadgenCard({
                   Erro ao carregar formularios: {(formsError as Error)?.message || "Desconhecido"}. Clique em Atualizar.
                 </p>
               ) : tosNotAccepted ? (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mt-1">
+                <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 mt-1">
                   <div className="flex items-start gap-2.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-warning-strong mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="font-medium text-amber-800 text-xs">
-                        Termos do Lead Ads nao aceitos
+                      <p className="font-medium text-warning-strong text-xs">
+                        Termos do Lead Ads não aceitos
                       </p>
-                      <p className="text-amber-700 text-xs mt-1">
-                        O administrador desta pagina precisa aceitar os Termos de
+                      <p className="text-warning-strong text-xs mt-1">
+                        O administrador desta página precisa aceitar os Termos de
                         Servico do Lead Ads do Facebook para que os formularios
                         aparecam aqui.
                       </p>
@@ -497,14 +498,14 @@ function PageLeadgenCard({
                           href={tosAcceptUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-amber-800 underline"
+                          className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-warning-strong underline"
                         >
                           Aceitar os Termos agora
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
-                      <p className="text-amber-600 text-xs mt-1.5">
-                        Apos aceitar, clique em "Atualizar" para carregar os formularios.
+                      <p className="text-warning-strong text-xs mt-1.5">
+                        Após aceitar, clique em "Atualizar" para carregar os formulários.
                       </p>
                     </div>
                   </div>
@@ -549,7 +550,7 @@ function PageLeadgenCard({
               )}
               {!formsLoading && forms.length === 0 && !formsError && !tosNotAccepted && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Nenhum formulario encontrado nesta pagina.
+                  Nenhum formulário encontrado nesta página.
                 </p>
               )}
             </div>
@@ -750,7 +751,7 @@ export function MetaLeadgenConfig() {
   // Upsert config
   const upsertConfig = useMutation({
     mutationFn: async (config: Partial<LeadgenConfig> & { meta_page_id: string }) => {
-      if (!orgId) throw new Error("Org nao encontrada");
+      if (!orgId) throw new Error("Org não encontrada");
 
       // Se tem id existente, faz update; senao, faz insert
       const { id, ...rest } = config;
@@ -771,9 +772,9 @@ export function MetaLeadgenConfig() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meta_leadgen_configs"] });
-      toast.success("Configuracao salva!");
+      toast.success("Configuração salva!");
     },
-    onError: () => toast.error("Erro ao salvar configuracao"),
+    onError: (caught: unknown) => notifyError(caught, { fallback: "Não foi possível salvar configuração." }),
   });
 
   if (!isConnected) {
@@ -797,7 +798,7 @@ export function MetaLeadgenConfig() {
       <div>
         <h4 className="text-sm font-medium flex items-center gap-2">
           <Megaphone className="w-4 h-4 text-primary" />
-          Lead Ads — Acoes Pos-Captura
+          Lead Ads — Ações pós-captura
         </h4>
         <p className="text-xs text-muted-foreground mt-1">
           Configure o que acontece automaticamente quando um lead chega de um
@@ -835,7 +836,7 @@ export function MetaLeadgenConfig() {
 
       {pages.length === 0 && (
         <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
-          Nenhuma pagina conectada com Lead Ads.
+          Nenhuma página conectada com Lead Ads.
         </div>
       )}
     </div>

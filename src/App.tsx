@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,6 +10,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "
 import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
+import { createQueryErrorHandlers } from "@/shared/errors/query-error-handlers";
+import { setReportIdentity } from "@/shared/errors";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
 import { ProtectedRoute } from "@/modules/identity/auth";
@@ -28,23 +30,10 @@ import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
+import { lazyRetry } from "@/core/stale-build-recovery";
 
-// Retry helper para chunks que falham ao carregar (comum após deploy)
-function lazyRetry<T extends { default: any }>(
-  importFn: () => Promise<T>,
-  retries = 2
-): Promise<T> {
-  return importFn().catch((err) => {
-    if (retries > 0) {
-      return new Promise<T>((resolve) =>
-        setTimeout(() => resolve(lazyRetry(importFn, retries - 1)), 1000)
-      );
-    }
-    throw err;
-  });
-}
-
-// Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
+// lazyRetry: uma nova tentativa para falha passageira; chunk velho aciona a
+// recuperação de build (src/core/stale-build-recovery.ts).
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
@@ -85,6 +74,7 @@ const Funil = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Funil
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
+const Pitstop = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Pitstop")));
 // Área do Gestor (ADR-0021) — hub do Gestor de Portfólio + página master de gestores.
 const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
 const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
@@ -118,7 +108,12 @@ const MasterPaymentLinks = lazy(() => lazyRetry(() => import("@/modules/identity
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
-const MasterSupportTickets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterSupportTickets")));
+// Área Dev — as 5 centrais (board "18 telas → 5 centrais"). As páginas antigas
+// continuam nas rotas de sempre, agora como abas das centrais.
+const OperacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/OperacaoCentral")));
+const ImplementacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/ImplementacaoCentral")));
+const MonitoramentoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/MonitoramentoCentral")));
+const TestesCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/TestesCentral")));
 const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
 const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
 const MasterOraculoFeedback = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOraculoFeedback")));
@@ -133,6 +128,7 @@ const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/mas
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
 import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
+import { MasterIndexRedirect } from "@/modules/identity/master/components/MasterSidebar";
 
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/modules/platform/components/command/CommandPaletteProvider";
@@ -144,7 +140,10 @@ import { SupportPanel } from "@/modules/platform/components/support/SupportPanel
 import { SupportAccess } from "@/modules/platform/components/support/SupportAccess";
 import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
 
+// ADR-0038: nenhum erro de query ou mutation some em silêncio. Os caches só
+// relatam; o toast continua com a tela (ver `createQueryErrorHandlers`).
 const queryClient = new QueryClient({
+  ...createQueryErrorHandlers(),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,        // 5 minutos — dados são considerados frescos por 5 min
@@ -194,6 +193,22 @@ function EnvMissingScreen() {
 function RealtimeOrgBridge({ children }: { children: React.ReactNode }) {
   const { organizationId } = useOrganization();
   return <RealtimeOrgProvider organizationId={organizationId}>{children}</RealtimeOrgProvider>;
+}
+
+// Quem estava usando, nos relatórios de erro (ADR-0038): só UUIDs e o papel —
+// nunca nome, e-mail ou telefone. Sem isto um evento no Sentry não diz de que
+// organização veio, e o suporte não casa o evento com o Chamado.
+function ReportIdentityBridge() {
+  const { user } = useAuth();
+  const { organizationId, role } = useOrganization();
+  const { isMaster } = useMasterAuth();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    setReportIdentity(userId ? { userId, organizationId, role: isMaster ? "master" : role } : null);
+  }, [userId, organizationId, role, isMaster]);
+
+  return null;
 }
 
 // Wrapper for pages that need the main layout
@@ -679,6 +694,18 @@ function AppRoutes() {
       {/* Rota antiga do funil custom — redirect permanente pra página nova.
           A página CustomPipeline.tsx segue no repo (morre na SCRUM-637). */}
       <Route path="/pipe/custom/:slug" element={<RedirectPipeCustomParaFunil />} />
+      {/* V5: o Pitstop virou página-hub. Cada atalho dentro dela carrega o
+          próprio gate (permissão/plano) na rota de destino. */}
+      <Route
+        path="/pitstop"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Pitstop />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/agenda"
         element={
@@ -779,12 +806,25 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MasterRoute>
-              <MasterLayout />
+              {/* V5: a área Master mora no shell normal (trilho + barra
+                  superior), sem os portões de onboarding e assinatura do
+                  `LayoutWrapper` — o master olha organizações que podem não
+                  ter plano nem onboarding concluído. */}
+              <OrgFeaturesProvider>
+                <MainLayout>
+                  <MasterLayout />
+                </MainLayout>
+              </OrgFeaturesProvider>
             </MasterRoute>
           </ProtectedRoute>
         }
       >
-        <Route index element={<MasterDashboard />} />
+        <Route index element={<MasterIndexRedirect />} />
+        <Route path="operacao" element={<OperacaoCentral />} />
+        <Route path="implementacao" element={<ImplementacaoCentral />} />
+        <Route path="monitoramento" element={<MonitoramentoCentral />} />
+        <Route path="testes" element={<TestesCentral />} />
+        <Route path="panorama" element={<MasterDashboard />} />
         <Route path="organizations" element={<MasterOrganizations />} />
         <Route path="users" element={<MasterUsers />} />
         <Route path="plans" element={<MasterPlans />} />
@@ -800,7 +840,8 @@ function AppRoutes() {
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
         <Route path="onboarding" element={<MasterOnboarding />} />
         <Route path="meta-assets" element={<MasterMetaAssets />} />
-        <Route path="support-tickets" element={<MasterSupportTickets />} />
+        {/* A lista de Suporte virou o kanban da Operação; o link do e-mail ao staff ainda aponta para cá. */}
+        <Route path="support-tickets" element={<Navigate to="/master/operacao" replace />} />
         <Route path="stage-roles" element={<MasterStageRoleReview />} />
         <Route path="usuarios-ativos" element={<MasterUsuariosAtivos />} />
       </Route>
@@ -811,7 +852,11 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MasterRoute>
-              <MasterInsights />
+              <OrgFeaturesProvider>
+                <MainLayout>
+                  <MasterInsights />
+                </MainLayout>
+              </OrgFeaturesProvider>
             </MasterRoute>
           </ProtectedRoute>
         }
@@ -878,13 +923,19 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
+        {/* Os toasts ficam FORA do ThemeTransitionProvider: ele embrulha o app
+            numa `div.relative z-[1]`, e esse z-index cria um contexto de
+            empilhamento que prendia o toaster abaixo do overlay de qualquer
+            modal (z-50, portado no body). Todo erro disparado de dentro de um
+            formulário aparecia apagado atrás do modal (ADR-0038, validação). */}
+        <Toaster />
+        <Sonner />
         <ThemeTransitionProvider>
           <TooltipProvider>
-            <Toaster />
-            <Sonner />
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
+                <ReportIdentityBridge />
                 <TorqueIntro />
                 {/* PilhaDeCartoes usa useNavigate() para abrir o link do
                     cartão, então PRECISA ficar dentro do BrowserRouter.

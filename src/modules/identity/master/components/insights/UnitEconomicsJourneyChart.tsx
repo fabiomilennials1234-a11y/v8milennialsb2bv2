@@ -144,7 +144,7 @@ function JourneyTooltip({ data, plotWidth }: { data: TooltipData; plotWidth: num
   const flip = data.x > plotWidth * 0.62;
   return (
     <div
-      className="pointer-events-none absolute z-10 w-[200px] -translate-y-full rounded-xl border border-border bg-popover/95 px-3 py-2.5 shadow-lg backdrop-blur"
+      className="pointer-events-none absolute z-10 w-[200px] -translate-y-full rounded-xl border border-card-border bg-popover/95 px-3 py-2.5 shadow-relevo-alto backdrop-blur"
       style={{
         left: data.x,
         top: 8,
@@ -290,15 +290,15 @@ export function UnitEconomicsJourneyChart({ timeline, ghostCaixa, mode }: Journe
   return (
     <div
       ref={inViewRef}
-      className="rounded-2xl border border-border bg-card p-6 md:p-8"
+      className="rounded-card border border-card-border bg-card text-card-foreground shadow-relevo p-6 md:p-8"
     >
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
             Linha do tempo
           </p>
-          <p className="mt-0.5 font-display text-[17px] tracking-[-0.02em] text-foreground md:text-lg">
+          <p className="mt-1 text-base font-bold leading-tight tracking-tight text-foreground md:text-lg">
             Jornada de unit economics
           </p>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -604,12 +604,12 @@ export function UnitEconomicsJourneyChart({ timeline, ghostCaixa, mode }: Journe
       </div>
 
       {/* Footer de fases */}
-      <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden rounded-lg">
+      <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden rounded-xl bg-sunken">
         {timeline.phases.map((p) => (
           <div key={p.key} className="border-l border-border/40 px-3 py-2 first:border-l-0">
             <span
               className={cn(
-                "text-[10px] font-semibold uppercase tracking-[0.08em]",
+                "text-[10px] font-bold uppercase tracking-[.06em]",
                 PHASE_CHIP_CLASS[p.key],
               )}
             >

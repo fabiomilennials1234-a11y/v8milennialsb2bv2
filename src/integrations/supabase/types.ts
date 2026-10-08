@@ -15988,6 +15988,89 @@ export type Database = {
           },
         ]
       }
+      support_ticket_diagnoses: {
+        Row: {
+          actual_cost_usd: number | null
+          complexity: string
+          created_at: string
+          customer_reply: string | null
+          diagnosed_by: string | null
+          estimated_cost_usd: number | null
+          executed_at: string | null
+          execution_outcome: string | null
+          extra_commits: number | null
+          keystones: Json
+          kind: string
+          recommended_effort: string
+          recommended_model: string
+          reply_contradicted: boolean | null
+          resolution_prompt: string
+          root_cause: string | null
+          root_cause_confirmed: string | null
+          source: string
+          summary: string
+          template_version: number
+          ticket_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual_cost_usd?: number | null
+          complexity: string
+          created_at?: string
+          customer_reply?: string | null
+          diagnosed_by?: string | null
+          estimated_cost_usd?: number | null
+          executed_at?: string | null
+          execution_outcome?: string | null
+          extra_commits?: number | null
+          keystones: Json
+          kind: string
+          recommended_effort: string
+          recommended_model: string
+          reply_contradicted?: boolean | null
+          resolution_prompt: string
+          root_cause?: string | null
+          root_cause_confirmed?: string | null
+          source?: string
+          summary: string
+          template_version?: number
+          ticket_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual_cost_usd?: number | null
+          complexity?: string
+          created_at?: string
+          customer_reply?: string | null
+          diagnosed_by?: string | null
+          estimated_cost_usd?: number | null
+          executed_at?: string | null
+          execution_outcome?: string | null
+          extra_commits?: number | null
+          keystones?: Json
+          kind?: string
+          recommended_effort?: string
+          recommended_model?: string
+          reply_contradicted?: boolean | null
+          resolution_prompt?: string
+          root_cause?: string | null
+          root_cause_confirmed?: string | null
+          source?: string
+          summary?: string
+          template_version?: number
+          ticket_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_diagnoses_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: true
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_tickets: {
         Row: {
           assigned_master_user_id: string | null
@@ -18758,6 +18841,7 @@ export type Database = {
           is_group: boolean
           lead_id: string | null
           media_expired: boolean
+          media_file_name: string | null
           media_url: string | null
           message_id: string
           message_type: string
@@ -18790,6 +18874,7 @@ export type Database = {
           is_group?: boolean
           lead_id?: string | null
           media_expired?: boolean
+          media_file_name?: string | null
           media_url?: string | null
           message_id: string
           message_type?: string
@@ -18822,6 +18907,7 @@ export type Database = {
           is_group?: boolean
           lead_id?: string | null
           media_expired?: boolean
+          media_file_name?: string | null
           media_url?: string | null
           message_id?: string
           message_type?: string
@@ -22862,6 +22948,83 @@ export type Database = {
       master_get_org_sales_summary: {
         Args: { p_end: string; p_org_id: string; p_start: string }
         Returns: Json
+      }
+      master_advance_implementation: {
+        Args: { p_org_id: string; p_to_stage: string }
+        Returns: Json
+      }
+      master_list_implementations: {
+        Args: never
+        Returns: {
+          call_participants: string | null
+          call_scheduled_at: string | null
+          completed_at: string | null
+          gates: Json
+          org_created_at: string
+          org_name: string
+          organization_id: string
+          owner_master_user_id: string | null
+          owner_name: string | null
+          stage: string
+          stage_entered_at: string
+          subscription_plan: string | null
+        }[]
+      }
+      master_copilot_eval_summary: {
+        Args: { p_days?: number }
+        Returns: {
+          agent_id: string
+          agent_name: string | null
+          avg_conciseness: number | null
+          avg_goal_align: number | null
+          avg_overall: number | null
+          avg_relevance: number | null
+          avg_tone: number | null
+          below_6: number
+          evaluations: number
+          last_evaluated_at: string
+          org_name: string | null
+          organization_id: string
+          previous_avg_overall: number | null
+          previous_evaluations: number
+        }[]
+      }
+      master_org_health_signals: {
+        Args: never
+        Returns: {
+          active_users_7d: number
+          events_7d: number
+          last_login_at: string | null
+          members_active: number
+          open_tickets: number
+          organization_id: string
+          quota_max_ratio: number | null
+          quota_max_resource: string | null
+          reopen_alert_tickets: number
+          whatsapp_connected: number
+          whatsapp_instances: number
+        }[]
+      }
+      master_list_staff: {
+        Args: never
+        Returns: { master_user_id: string; name: string }[]
+      }
+      master_update_implementation: {
+        Args: {
+          p_call_participants: string | null
+          p_call_scheduled_at: string | null
+          p_org_id: string
+          p_owner_master_user_id: string | null
+        }
+        Returns: Json
+      }
+      master_ticket_send_reply: {
+        Args: { p_ticket_id: string }
+        Returns: Database["public"]["Tables"]["support_tickets"]["Row"]
+      }
+      master_ticket_move: {
+        Args: { p_ticket_id: string; p_to_column: string; p_send_reply?: boolean }
+        Returns: Database["public"]["Tables"]["support_tickets"]["Row"]
       }
       master_org_user_activity: {
         Args: { p_window_minutes?: number }

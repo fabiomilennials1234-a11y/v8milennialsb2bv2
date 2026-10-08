@@ -3,6 +3,7 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { LAYER_CLASS, PopperLayerContext } from "@/components/ui/layers";
 
 const AlertDialog = AlertDialogPrimitive.Root;
 
@@ -16,7 +17,8 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      LAYER_CLASS.alertOverlay,
       className,
     )}
     {...props}
@@ -26,36 +28,41 @@ const AlertDialogOverlay = React.forwardRef<
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
 /**
- * `overlayClassName` existe para o caso em que o `z-50` padrão perde.
+ * Camadas: overlay e caixa vêm da escala de `ui/layers.ts` — `alertOverlay`
+ * (70) e `alertContent` (71), acima de gaveta, diálogo e listas. Uma
+ * confirmação aberta de dentro de uma `Sheet` (o painel do Negócio no celular,
+ * a gaveta do Chamado em /master/operacao) pinta acima dela e o escurecido
+ * cobre a gaveta também. Antes, com `z-50` contra o `z-[51]` da gaveta, ela
+ * nascia ATRÁS e travava a tela (modal, sem Esc no celular).
  *
- * O overlay é irmão do conteúdo dentro do mesmo portal, então subir só o
- * `className` deixa o escurecido para trás — e um AlertDialog pintado acima de
- * um overlay que ficou abaixo do painel é meio conserto. Quem sobe, sobe os
- * dois. O caso conhecido é o `SheetContent`, que é `z-[51]`: qualquer
- * confirmação aberta de dentro de uma folha (o painel do Negócio no celular,
- * por exemplo) nasce ATRÁS dela e trava a tela, porque é modal e no celular não
- * há Esc. A convenção do repo para "acima da folha" é `z-[60]`.
+ * O conteúdo publica `alertPopper` em `PopperLayerContext`: Select/Popover/
+ * DropdownMenu abertos de DENTRO do alerta pintam acima da caixa dele, sem o
+ * chamador precisar saber disso.
  *
- * Opcional e sem default novo: omitir mantém exatamente o comportamento antigo.
+ * `overlayClassName` continua aceito por compatibilidade. Quem passar z nele
+ * ou em `className` sai da escala — passe os dois juntos, ou nenhum.
  */
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content> & {
     overlayClassName?: string;
   }
->(({ className, overlayClassName, ...props }, ref) => (
+>(({ className, overlayClassName, children, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay className={overlayClassName} />
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-card-border bg-card p-6 shadow-relevo-alto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-panel",
+        LAYER_CLASS.alertContent,
         // Mobile: bottom-sheet (igual Dialog) — ancora embaixo, altura limitada, safe-area.
         "max-sm:left-0 max-sm:right-0 max-sm:top-auto max-sm:bottom-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-sm:data-[state=open]:slide-in-from-bottom-4 max-sm:data-[state=closed]:slide-out-to-bottom-4",
         className,
       )}
       {...props}
-    />
+    >
+      <PopperLayerContext.Provider value={LAYER_CLASS.alertPopper}>{children}</PopperLayerContext.Provider>
+    </AlertDialogPrimitive.Content>
   </AlertDialogPortal>
 ));
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName;

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
 import { useOutboundMetrics } from "@/modules/analytics/hooks/useOutboundMetrics";
 import { useBadges, useUserBadges } from "@/modules/engagement/hooks/useBadges";
 import { useOrganization } from "@/modules/identity";
@@ -25,7 +26,7 @@ export default function DashboardOutbound() {
 
   if (metricsLoading || badgesLoading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="space-y-5">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28" />)}
@@ -39,15 +40,13 @@ export default function DashboardOutbound() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="p-6 space-y-6"
+      className="space-y-5"
     >
-      <h1 className="text-2xl font-bold">
-        {greeting}, {userName}
-      </h1>
+      <PageHeader title={`${greeting}, ${userName}`} subtitle="Sua central de trabalho." />
 
       {metrics && <OutboundMetricCards metrics={metrics} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <MilestoneTracker badges={badges} userBadges={userBadges} />
         <BadgeGrid badges={badges} userBadges={userBadges} />
       </div>

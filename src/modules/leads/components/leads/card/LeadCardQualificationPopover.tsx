@@ -160,7 +160,7 @@ export const LeadCardQualificationPopover = memo(function LeadCardQualificationP
                         ativo ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60",
                       )}
                     >
-                      {/* `colorClass` é classe Tailwind (text-cyan-300, …), não hex. */}
+                      {/* `colorClass` é classe Tailwind (text-insights, …), não hex. */}
                       {Icone && <Icone className={cn("size-[13px] shrink-0", cfg.colorClass)} />}
                       <span className="flex-1 truncate">{cfg.label}</span>
                       {/* Dizer que clicar de novo limpa — senão ninguém descobre. */}

@@ -43,6 +43,9 @@ describe("isInstanceRoutedAction — quem declara política", () => {
     expect(isInstanceRoutedAction("move_stage")).toBe(false);
     expect(isInstanceRoutedAction("send_meta_message")).toBe(false);
     expect(isInstanceRoutedAction("generate_ai_message")).toBe(false);
+    // O grupo é da instância: o nó `send_to_group` não tem política, só um
+    // número preso. Fora da lista, o seletor de política nunca aparece nele.
+    expect(isInstanceRoutedAction("send_to_group")).toBe(false);
   });
 });
 

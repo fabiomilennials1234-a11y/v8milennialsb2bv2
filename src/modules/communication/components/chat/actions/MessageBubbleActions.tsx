@@ -10,11 +10,12 @@
  */
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useState } from "react";
-import { Reply, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
+import { Reply, Pencil, Pin, Trash2, Check, Download, Forward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/shared/errors";
 
 import {
   useReactMessage,
@@ -28,6 +29,7 @@ import {
 import { useInstanceCapabilities } from "@/modules/communication/hooks/useInstanceCapabilities";
 import { EmojiPickerPopover } from "./EmojiPickerPopover";
 import { DeleteMessageConfirm } from "./DeleteMessageConfirm";
+import { ForwardMessageDialog } from "./ForwardMessageDialog";
 
 export interface MessageBubbleActionsProps {
   instanceId: string;
@@ -42,6 +44,8 @@ export interface MessageBubbleActionsProps {
   isPinned: boolean;
   /** true when message has downloadable media (image/video/audio/doc) */
   hasMedia?: boolean;
+  /** Texto ou mídia — o que o servidor aceita encaminhar. */
+  canForward?: boolean;
   /** Fired when user clicks the edit pencil — parent swaps to EditMessageInline */
   onRequestEdit: () => void;
   className?: string;
@@ -56,6 +60,7 @@ export function MessageBubbleActions({
   canDelete,
   isPinned,
   hasMedia,
+  canForward = false,
   onRequestEdit,
   className,
 }: MessageBubbleActionsProps) {
@@ -66,6 +71,7 @@ export function MessageBubbleActions({
   const markReadMut = useMarkMessageRead();
   const downloadMut = useDownloadMedia();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
   // Provider-aware gating (Rule 13): react/edit/pin/markRead/download/delete are
   // all Uazapi-only here. Hide the whole bar for Meta/Evolution instances.
   const caps = useInstanceCapabilities(instanceId);
@@ -75,15 +81,14 @@ export function MessageBubbleActions({
       toast.error("Disponível apenas em instâncias Uazapi");
       return;
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    toast.error(`${fallback}: ${msg}`);
+    notifyError(err, { fallback });
   };
 
   const handleReact = async (emoji: string) => {
     try {
       await reactMut.mutateAsync({ instanceId, messageId, number, emoji });
     } catch (e) {
-      handleError(e, "Erro ao reagir");
+      handleError(e, "Não foi possível reagir à mensagem.");
     }
   };
 
@@ -92,7 +97,7 @@ export function MessageBubbleActions({
       await pinMut.mutateAsync({ instanceId, messageId, number });
       toast.success(isPinned ? "Mensagem desafixada" : "Mensagem fixada");
     } catch (e) {
-      handleError(e, "Erro ao fixar");
+      handleError(e, isPinned ? "Não foi possível desafixar a mensagem." : "Não foi possível fixar a mensagem.");
     }
   };
 
@@ -101,7 +106,7 @@ export function MessageBubbleActions({
       await markReadMut.mutateAsync({ instanceId, messageId, number });
       toast.success("Marcada como lida");
     } catch (e) {
-      handleError(e, "Erro ao marcar como lida");
+      handleError(e, "Não foi possível marcar a mensagem como lida.");
     }
   };
 
@@ -115,7 +120,7 @@ export function MessageBubbleActions({
       link.click();
       toast.success("Download iniciado");
     } catch (e) {
-      handleError(e, "Erro ao baixar mídia");
+      handleError(e, "Não foi possível baixar a mídia.");
     }
   };
 
@@ -125,7 +130,7 @@ export function MessageBubbleActions({
       setDeleteOpen(false);
       toast.success("Mensagem apagada");
     } catch (e) {
-      handleError(e, "Erro ao apagar");
+      handleError(e, "Não foi possível apagar a mensagem.");
     }
   };
 
@@ -178,6 +183,24 @@ export function MessageBubbleActions({
           </TooltipTrigger>
           <TooltipContent>{isPinned ? "Desafixar" : "Fixar"}</TooltipContent>
         </Tooltip>
+
+        {canForward && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setForwardOpen(true)}
+                aria-label="Encaminhar mensagem"
+              >
+                <Forward className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Encaminhar</TooltipContent>
+          </Tooltip>
+        )}
 
         {hasMedia && (
           <Tooltip>
@@ -243,6 +266,18 @@ export function MessageBubbleActions({
         onConfirm={handleDelete}
         isPending={deleteMut.isPending}
       />
+
+      {/* Montado só quando aberto: a lista de conversas não deve ser buscada
+          para cada balão da thread. */}
+      {canForward && forwardOpen && (
+        <ForwardMessageDialog
+          open={forwardOpen}
+          onOpenChange={setForwardOpen}
+          sourceInstanceId={instanceId}
+          sourceMessageId={messageId}
+          sourceNumber={number}
+        />
+      )}
     </TooltipProvider>
   );
 }

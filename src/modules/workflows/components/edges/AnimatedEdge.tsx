@@ -73,8 +73,9 @@ function AnimatedEdgeComponent({
         >
           <button
             onClick={handleDisconnect}
-            className="flex items-center justify-center w-5 h-5 rounded-full bg-muted border border-border text-muted-foreground shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-relevo transition-colors hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
             title="Desconectar"
+            aria-label="Desconectar"
           >
             <X className="w-3 h-3" />
           </button>

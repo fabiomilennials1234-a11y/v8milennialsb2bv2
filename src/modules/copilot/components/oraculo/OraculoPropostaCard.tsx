@@ -51,13 +51,13 @@ export function OraculoPropostaCard({ proposta, onConfirmar, ocupada, desabilita
   const executed = proposta.status !== "pending";
 
   return (
-    <section className="mt-3 overflow-hidden rounded-xl border border-amber-400/25 bg-amber-400/[0.04]">
+    <section className="mt-3 overflow-hidden rounded-2xl border border-warning/30 bg-warning/[.06]">
       <div className="space-y-1.5 px-3 py-3">
-        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-amber-500">
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.06em] text-warning-strong">
           <Sparkles className="h-3.5 w-3.5" />
           Proposta de ação
         </div>
-        <p className="font-medium text-foreground">{descricao(proposta)}</p>
+        <p className="font-semibold text-foreground">{descricao(proposta)}</p>
         <p className="text-xs text-muted-foreground">{criterio(proposta)}</p>
         <p className="text-xs tabular-nums text-muted-foreground">
           Previsão: {proposta.previsao} {proposta.previsao === 1 ? "lead" : "leads"}. O total será recalculado no clique.
@@ -65,20 +65,20 @@ export function OraculoPropostaCard({ proposta, onConfirmar, ocupada, desabilita
       </div>
 
       {executed ? (
-        <div className="flex items-center gap-2 border-t border-amber-400/15 px-3 py-2.5 text-xs" aria-live="polite">
+        <div className="flex items-center gap-2 border-t border-warning/20 px-3 py-2.5 text-xs" aria-live="polite">
           {result?.status === "sucesso" ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
           ) : (
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning-strong" />
           )}
           <span>{descricaoResultado(proposta)}</span>
         </div>
       ) : (
-        <div className="border-t border-amber-400/15 px-3 py-2.5">
+        <div className="border-t border-warning/20 px-3 py-2.5">
           <Button
             type="button"
             size="sm"
-            className="h-8 bg-amber-400 text-amber-950 hover:bg-amber-300"
+            className="h-8 bg-warning text-warning-foreground shadow-none hover:bg-warning/90"
             disabled={ocupada || desabilitada}
             onClick={() => onConfirmar(proposta.id)}
           >

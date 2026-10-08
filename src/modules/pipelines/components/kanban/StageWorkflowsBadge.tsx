@@ -62,22 +62,24 @@ export function StageWorkflowsBadge({
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-xs transition-colors",
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             hasWorkflows
               ? active > 0
-                ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                : "text-muted-foreground bg-muted/50 hover:bg-muted"
-              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/50"
+                ? "bg-insights/10 text-insights hover:bg-insights/15"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground"
           )}
           title={hasWorkflows ? `${total} automação(ões)` : "Criar automação"}
+          aria-label={hasWorkflows ? `${total} automação(ões) na etapa ${stageName}` : `Criar automação na etapa ${stageName}`}
         >
-          <Zap className="w-3 h-3" />
-          {hasWorkflows && <span className="font-medium">{total}</span>}
+          <Zap className="h-3 w-3" aria-hidden />
+          {hasWorkflows && <span>{total}</span>}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-0" sideOffset={8}>
-        <div className="px-3 py-2 border-b">
-          <p className="text-sm font-medium">
+      <PopoverContent align="start" className="w-72 overflow-hidden p-0" sideOffset={8}>
+        <div className="border-b px-3.5 py-3">
+          <p className="text-sm font-bold tracking-tight">
             Automações — {stageName}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -92,14 +94,14 @@ export function StageWorkflowsBadge({
             {workflows.map((w) => (
               <button
                 key={w.id}
-                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left"
+                className="flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted"
                 onClick={() => navigate(`/automacoes/${w.id}`)}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className={cn(
                       "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      w.is_active ? "bg-green-500" : "bg-muted-foreground/50"
+                      w.is_active ? "bg-success" : "bg-muted-foreground/50"
                     )}
                   />
                   <span className="truncate">{w.name}</span>

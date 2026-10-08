@@ -9,6 +9,7 @@ import { useFeaturePermission } from "@/modules/identity";
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "../custom/CreatePipelineModal";
 import { useUpdatePipelineIdentity } from "../../hooks/config/usePipelineIdentity";
 import { DeletePipelineDialog } from "./DeletePipelineDialog";
+import { notifyError } from "@/shared/errors";
 
 export interface FunnelIdentitySectionProps {
   /** Linha canônica do funil em `pipelines` — qualquer espécie. */
@@ -81,14 +82,14 @@ export function FunnelIdentitySection({
       toast.success("Funil atualizado");
       onSaved?.();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar");
+      notifyError(error, { fallback: "Não foi possível atualizar." });
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor={nomeId}>Nome do Funil</Label>
+        <Label htmlFor={nomeId}>Nome do funil</Label>
         <Input id={nomeId} value={name} onChange={(e) => setName(e.target.value)} />
       </div>
 
@@ -104,7 +105,7 @@ export function FunnelIdentitySection({
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-all",
                   icon === item.name
-                    ? "border-primary bg-primary/10 text-primary"
+                    ? "border-primary bg-primary-soft text-primary-soft-foreground"
                     : "border-border hover:border-primary/50"
                 )}
               >
@@ -144,7 +145,7 @@ export function FunnelIdentitySection({
 
       {mostrarZonaDePerigo && podeExcluir && (
         <div className="pt-6 mt-2 border-t border-destructive/20 space-y-2">
-          <p className="text-sm font-semibold text-destructive">Zona de Perigo</p>
+          <p className="text-sm font-semibold text-destructive">Zona de perigo</p>
           <p className="text-xs text-muted-foreground">
             Excluir apaga o funil, suas etapas e todos os cards em definitivo — junto com
             o histórico de etapas que alimenta as métricas deste funil. Os leads
@@ -156,7 +157,7 @@ export function FunnelIdentitySection({
             onClick={() => setConfirmandoExclusao(true)}
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            Excluir Funil
+            Excluir funil
           </Button>
         </div>
       )}

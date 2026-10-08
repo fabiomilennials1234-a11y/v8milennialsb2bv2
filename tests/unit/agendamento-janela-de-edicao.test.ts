@@ -102,7 +102,8 @@ describe("useCancelScheduledMessage — janela de cancelamento", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe(AGENDAMENTO_FORA_DE_JANELA);
     expect(toastSuccess).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalledWith(AGENDAMENTO_FORA_DE_JANELA);
+    // O toast padrão (ADR-0038) leva as opções com o código copiável.
+    expect(toastError).toHaveBeenCalledWith(AGENDAMENTO_FORA_DE_JANELA, expect.anything());
   });
 });
 
@@ -138,7 +139,8 @@ describe("useUpdateScheduledMessage — janela de edição", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe(AGENDAMENTO_FORA_DE_JANELA);
-    expect(toastError).toHaveBeenCalledWith(AGENDAMENTO_FORA_DE_JANELA);
+    // O toast padrão (ADR-0038) leva as opções com o código copiável.
+    expect(toastError).toHaveBeenCalledWith(AGENDAMENTO_FORA_DE_JANELA, expect.anything());
   });
 
   it("sem nada para gravar não vai à rede — e não acusa janela fechada", async () => {

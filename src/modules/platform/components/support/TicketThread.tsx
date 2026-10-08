@@ -36,6 +36,7 @@ import {
 import { StatusDot } from "./StatusDot";
 import { AttachmentGallery } from "./AttachmentGallery";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { notifyError } from "@/shared/errors";
 
 interface Props {
   ticketId: string;
@@ -88,7 +89,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
         toast.error(`Não deu para anexar: ${falhas.join(", ")}. Tente enviar de novo.`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu para enviar.");
+      notifyError(err, { fallback: "Não deu para enviar." });
     }
   }
 
@@ -115,7 +116,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Meus chamados
         </button>
-        <h3 className="text-sm font-medium leading-snug text-foreground">{ticket.title}</h3>
+        <h3 className="text-sm font-bold leading-snug tracking-tight text-foreground">{ticket.title}</h3>
         <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
           <StatusDot status={ticket.status} />
           {STATUS_LABELS[ticket.status]}
@@ -178,7 +179,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
             disabled={reopen.isPending}
             onClick={() =>
               reopen.mutate(ticketId, {
-                onError: () => toast.error("Não deu para reabrir o chamado."),
+                onError: (caught: unknown) => notifyError(caught, { fallback: "Não deu para reabrir o chamado." }),
               })
             }
           >
@@ -253,8 +254,8 @@ function Bubble({
           className={cn(
             "whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
             fromOrg
-              ? "rounded-br-sm bg-primary/10 text-foreground"
-              : "rounded-bl-sm border border-border/60 bg-muted/30 text-foreground",
+              ? "rounded-br-sm bg-primary-soft text-foreground"
+              : "rounded-bl-sm border border-border/60 bg-muted/40 text-foreground",
           )}
         >
           {body}

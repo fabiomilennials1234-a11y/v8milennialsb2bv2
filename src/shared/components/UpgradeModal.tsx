@@ -42,11 +42,11 @@ export function UpgradeModal({ open, onOpenChange, featureKey }: UpgradeModalPro
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center justify-center mb-3">
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Lock className="h-6 w-6 text-primary" />
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary-soft-foreground">
+              <Lock className="h-6 w-6" />
             </div>
           </div>
-          <DialogTitle className="text-xl text-center" style={{ letterSpacing: "-0.02em" }}>
+          <DialogTitle className="text-center text-xl font-extrabold tracking-[-0.02em]">
             Desbloqueie {featureLabel}
           </DialogTitle>
           <DialogDescription className="text-center">
@@ -59,7 +59,7 @@ export function UpgradeModal({ open, onOpenChange, featureKey }: UpgradeModalPro
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
+        <div className="space-y-2 rounded-xl bg-muted/60 p-4">
           <p className="text-sm font-medium">
             {targetName
               ? <>Faça upgrade para o {targetName} e libere {featureLabel} e os demais recursos do plano.</>
@@ -68,13 +68,10 @@ export function UpgradeModal({ open, onOpenChange, featureKey }: UpgradeModalPro
           <p className="text-xs text-muted-foreground">Nosso time resolve rápido.</p>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Voltar</Button>
-          <Button
-            className="gradient-primary gradient-primary-hover text-white font-semibold border-0"
-            onClick={handleUpgrade}
-          >
-            <Sparkles className="w-4 h-4 mr-2" />
+          <Button onClick={handleUpgrade}>
+            <Sparkles />
             {targetName ? "Fazer upgrade" : "Falar com Comercial"}
           </Button>
         </DialogFooter>

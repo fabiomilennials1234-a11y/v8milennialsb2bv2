@@ -14,14 +14,14 @@ function database(incoming = [input], outgoing = [output]) {
   const calls: Array<{table:string,filters:Array<[string,string,unknown]>}> = [];
   const db = {from(table:string) {
     const call = {table,filters:[] as Array<[string,string,unknown]>}; calls.push(call);
-    let rows: any[] = table === 'channel_messages' ? incoming : outgoing;
-    const chain: any = {
+    let rows: Record<string, string>[] = table === 'channel_messages' ? incoming : outgoing;
+    const chain = {
       select:()=>chain,order:()=>chain,limit:()=>chain,
       eq:(key:string,value:unknown)=>{call.filters.push(['eq',key,value]);return chain;},
       in:(key:string,value:unknown)=>{call.filters.push(['in',key,value]);return chain;},
       gte:(key:string,value:string)=>{rows=rows.filter(row=>Date.parse(row[key])>=Date.parse(value));return chain;},
       lt:(key:string,value:string)=>{rows=rows.filter(row=>Date.parse(row[key])<Date.parse(value));return chain;},
-      then:(resolve:any)=>Promise.resolve({data:rows,error:null}).then(resolve),
+      then:(resolve:(result: {data: Record<string, string>[]; error: null}) => unknown)=>Promise.resolve({data:rows,error:null}).then(resolve),
     }; return chain;
   }};
   return {db:db as Parameters<typeof receivedAfterSummary>[0],calls};

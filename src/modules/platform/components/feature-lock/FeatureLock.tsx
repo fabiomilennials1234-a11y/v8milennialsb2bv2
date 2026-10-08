@@ -33,7 +33,7 @@ export function FeatureLock({ feature, children, variant = "inline", className }
     setModalOpen(true);
   };
 
-  const icon = <Lock data-testid="feature-lock-icon" className="w-3 h-3 text-amber-500 shrink-0" />;
+  const icon = <Lock data-testid="feature-lock-icon" className="w-3 h-3 text-warning-strong shrink-0" />;
 
   return (
     <>

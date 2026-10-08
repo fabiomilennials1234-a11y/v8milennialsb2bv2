@@ -2,6 +2,10 @@
 
 > Estado técnico dos boundaries que mais de um componente depende. Atualizar ao mudar contrato.
 
+WhatsApp TorqueSDR: **rota direta VPS ativa desde 2026-09-25 01:23:45 UTC**;
+demais instâncias sem mudança. Evidência atual no fim deste arquivo e no
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
 ## Métricas Montáveis — Camada 2 (#1194 / ADR-0023) — fundação DB
 
 Status: **construído, atrás de flag, pgTAP pendente de run local** (2026-07-23). v1 liga só a TV.
@@ -213,3 +217,231 @@ SQL32 aplicada em produção no ledger `20260924143904` (fonte
 `20271021000032_whatsapp_ingress_worker_pause.sql`). Smoke transacional com
 service_role desfeito integralmente: fila/controles/orçamento zerados. ACL e RLS
 conferidos no alvo. Sem ativação de Edge, worker ou rota de fornecedor.
+
+
+## Tickets de execução Edge — 2026-09-24
+
+SQL33 prepara gate privado inline/queued com revisão CAS e tickets de execução
+sem expiração. Admissão inline registra ticket antes dos efeitos; queued grava
+na inbox antes do ACK. Worker só avança com gate queued e nenhum ticket. Mudar
+para inline exige tickets e trabalho não concluído zerados. Pausa/FIFO continuam.
+Até64 tickets por instância; erro ou resultado incerto exige reconciliação.
+
+`WHATSAPP_EDGE_EXECUTION_INSTANCE_IDS` vazio por padrão. Somente messages_update
+autenticados da instância resolvida entram. Conclusão acompanha a promise real,
+inclusive após timeout HTTP12s. Modo instrumentado exige validação estrita;
+falha não libera ticket nem cai silenciosamente no processamento antigo.
+
+Sem ativação nesta entrega. Gate não cobre isolates antigos não instrumentados.
+A documentação Uazapi não estabelece recuperação completa pré-commit: buffer
+de erros em memória e histórico de mensagens não são diário durável de eventos.
+Ponte Edge ainda consome invocações; nenhuma economia nova contabilizada.
+Contrato: `docs/operations/whatsapp-ingress-worker-handoff.md`.
+
+
+SQL33 aplicada em produção no ledger real `20260924151218`; arquivo-fonte
+`20271021000033_whatsapp_edge_execution_gate.sql`. Smoke com service_role validou
+admissão, revisão, tenant, ticket bloqueando claim, quitação e reabertura; ROLLBACK
+removeu todos os dados de teste. Gates/tickets/fila/controles zerados, grants e
+RLS conferidos. Edge instrumentada não implantada; nenhuma instância habilitada.
+Validação:140 unit direcionados,3 SQL; build/Deno/ratchet TS passaram.151 falhas
+unit herdadas permanecem; regressão strictfalse corrigida e rerodada. Lint mantém
+cinco avisos anteriores de quotes. Revisão independente GPT-6 Sol concluída.
+
+
+## Webhook live atualizado — 2026-09-24
+
+Versão119 implantada com patch mínimo sobre118.53 arquivos anteriores intactos;
+index delega updates ao módulo canônico novo, quotes recebe propagação estrita
+de falhas; V2 preserva campos extras.56 arquivos publicados conferidos byte a byte.
+Status não regride com receipt atrasado; reação repetida não incrementa contagem;
+falhas de persistência não viram sucesso. Alvos ausentes continuam permissivos
+no caminho live. Nenhuma rota/flag/worker ativado; economia Edge adicional zero.
+
+Validação:89 testes direcionados+16 do bundle real, build/TS e Deno do módulo
+passaram.151 falhas unit e5 avisos lint anteriores permanecem. Gate operacional
+refinado: retry Uazapi não bloqueia absolutamente piloto na MESMA URL Edge;
+continua risco preexistente, com novas rejeições da fila a controlar. Próximo
+bloqueio concreto: TorqueSDR teve7 logs de receipts sem alvo em24h; worker estrito
+pode travar FIFO nesses casos. Definir desfecho auditado antes de ativar.
+Evidências e sequência: `docs/operations/whatsapp-live-update-parity-2026-09-24.md`.
+
+
+## Desfecho de receipts e estado do piloto — 2026-09-24
+
+SQL34 (`20271021000034_whatsapp_ingress_completion_outcome.sql`) consta no ledger
+de produção `20260924155231`. A migration prepara desfecho auditável para
+receipts sem alvo e lane de adiamento: recibo ainda dentro de cinco minutos
+pode aguardar sem segurar o fluxo regular da instância; após esse prazo, o
+resultado sem alvo fica registrado. Claims preservam pausa, ticket e bloqueio
+por dead letter regular. Esta aplicação de schema não ativa processamento.
+
+No estado validado nesta atualização, worker permanece pausado, rota do
+fornecedor inalterada e piloto Edge → inbox ainda não ativo. Não atribuir
+economia Edge à migration nem inferir merge/deploy final do código do piloto.
+
+### Atualização operacional — piloto ligado em24/09/2026 às16:04 UTC
+
+TorqueSDR `messages_update` agora passa pela Edge v121 para inbox e worker único
+na VPS. Gate queued/revision2; worker retomado/revision2; provider/URL inalterados.
+Recibo controlado de mensagem já lida:200, processed em1,84s, uma tentativa,
+sem erro; nenhuma mensagem enviada. SQL34 ledger20260924155231;58 arquivos live
+conferidos.149 testes direcionados e quatro integrações SQL aprovados; suíte
+completa13.780 aprovados e151 falhas idênticas às anteriores.
+
+**Rota direta VPS ainda desligada; economia Edge desta ponte=zero.** Documentação
+Uazapi declara que messages_update não repete entrega HTTP malsucedida. Falta
+recuperação/reconciliação testada antes da migração direta. Estado anterior de
+piloto desligado registra preparação; esta entrada supersede esse estado.
+Procedimento/readbacks: `docs/operations/whatsapp-edge-to-inbox-pilot.md`.
+
+
+## Recuperação parcial de recibos — 2026-09-24
+
+SQL35 aplicado em produção (ledger `20260924163948`). Estado/cursor e lacunas
+privados, lease de dois minutos, página de 50 mensagens outgoing conhecidas na
+janela fixa de sete dias. RPC admite somente avanço confirmado entregue/lida;
+worker usa origem confiável da fila para impedir efeitos comerciais e limitar
+alvo a ID exato/chat/org/instância. Payload externo não concede esse privilégio.
+
+Recuperação não recompõe eventos de edição/exclusão/reação/pin, nem eventos
+perdidos antes da persistência. Rota direta permanece bloqueada; ponte Edge
+atual não economiza invocações. Flags e evidência operacional atualizada:
+`docs/operations/whatsapp-receipt-recovery-2026-09-24.md`.
+
+Ativação: imagem `recovery-20260924-v3`, worker único, pausa retomada/revision4.
+Recuperação ligada só TorqueSDR; primeira página finalizada às16:45:09UTC:50
+verificadas,0 correções confirmadas,9 inconclusivas persistidas,0 erros. Cursor
+avançou/lease liberada; demais páginas pendentes.194 testes direcionados e
+integração SQL aprovados. Provider e Edge v121 inalterados; rota direta OFF.
+
+Ciclo automático confirmado às16:49:34UTC: mais50 mensagens,11 estados de leitura
+recuperados,8 inconclusivas,0 erros.11 eventos completed/processed,1 tentativa;
+11 alvos exatos conferidos. Total parcial:100 verificadas,11 reparadas,17 lacunas.
+PR2178 merge `d28871396`;198 testes direcionados +3 integrações SQL aprovados.
+GitHub Actions não iniciou por cobrança/limite da conta. Rota direta permanece
+OFF; economia de invocações desta recuperação=zero.
+
+
+## FileDownloaded FIFO barrier repaired — 2026-09-24
+
+TorqueSDR's FileDownloaded head failed strict validation eight times, blocking
+61 pending updates while the process remained alive. SQL36 (production ledger
+20260924185213) and worker notification-20260924-v2 add a strict observed-shape
+provider_notification outcome and one-shot audited replay, preserving payload
+and order. Claims paused at revision 5 and resumed at revision 6.
+The dead letter completed as a notification; pending and new natural traffic
+drained. Readback: 109 normal processed, 23 recovery processed, one notification,
+zero noncompleted events. New /worker-health and Docker probe detect blocked or
+aged queues independently of direct admission. Healthy with zero restarts;
+179 focused unit tests and three SQL integrations passed. Provider and Edge v121
+remain unchanged; direct routing remains off. Remaining activation gates:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## HTTPS para rota direta WhatsApp — preparação, 2026-09-24
+
+Registro do checkpoint até20:17UTC; estado de implantação/fila supersedido pela
+atualização de20:26UTC abaixo.
+
+`ingress.torquecrm.com.br` aponta para `46.202.148.241` (DNS A, TTL 300s).
+Certificado TLS real emitido em 24/09/2026, válido até 23/12/2026. Traefik usa
+configuração separada em `services/whatsapp-ingress/deploy/traefik.yaml`, sem
+editar a configuração principal gerada pelo EasyPanel. O overlay precisa manter
+o alias `torque-whatsapp-ingress` a cada recriação do container; sem ele, o
+upstream do Traefik não resolve. Access logs da rota estão desativados para
+não registrar URLs com segredo.
+
+Sondas públicas iniciais: `/health` 200, `/worker-health` 200, `/ready` 503 com
+admissão direta desligada. Validaram alcance/TLS, não entrega do fornecedor.
+Às20:17UTC, `/worker-health` passou a 503 `dead_letter`: 204 eventos concluídos,
+40 pendentes, um dead letter, nenhum processing/lease vencido, worker não pausado
+na revisão6. Novo head `FileDownloaded` tem `IsFromMe=false`, nenhum campo de
+mutação comercial e mensagem exata com media URL já preenchida. SQL37 e regra
+TypeScript correspondentes estão em preparo, sem aplicação/deploy. Drenagem
+saudável anterior é histórico. `event-router.ts` prepara opção desligada por padrão
+(`INGRESS_FORWARD_LEGACY_EVENTS=false`): `messages` e `connection` seguem para
+origem Edge fixa após autenticação/escopo; `messages_update` entra na inbox
+durável. Imagem nova e mudança da URL Uazapi ainda **não implantadas/ativadas**.
+Ambiente da guarda salvo às20:17:39UTC só com UUID piloto; presença/digest
+verificados. Probe real de rebind retornou401, não demonstra bloqueio409; nenhuma
+alteração do fornecedor foi confirmada. Confirmar guarda live antes do cutover.
+Edge permanece dono da rota do fornecedor.
+
+Plano de cutover: proteger writers, confirmar tickets Edge antigos resolvidos,
+testar roteamento e falhas pelo HTTPS público, atualizar uma vez a URL do mesmo
+webhook ID preservando eventos/filtros/flags e conferir readback+tráfego real.
+Rollback restaura URL original no mesmo ID; worker segue drenando os eventos
+aceitos. VPS vira dependência também para `messages`/`connection` encaminhados.
+Antes do commit, falhas de rede/host/banco podem perder callback porque Uazapi
+não garante retry automático de `messages_update`; risco já existe no Edge e
+deve ser medido/aceito para piloto limitado, sem promessa de perda zero. Esta
+avaliação substitui o veto absoluto de recuperação pré-commit citado nas
+entradas históricas acima; não altera a limitação técnica da recuperação.
+Reconciliação atual cobre só delivered/read de saídas conhecidas, não histórico
+de edição/exclusão/reação/pin. Economia Edge e meta 1,4M não realizadas por esta
+preparação. Procedimento: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+
+## Estado atual do ingress WhatsApp — 2026-09-24 20:26 UTC
+
+PR2183 `da906699d`, SQL37 ledger `20260924202412` e imagem
+`readiness-20260924-v1` publicados. Replay auditado concluiu o segundo
+FileDownloaded com uma nova tentativa; oito falhas anteriores preservadas.
+Snapshot: 249 concluídos (240 `processed`, nove `provider_notification`), zero
+pendentes/processando/dead letter; worker e Docker saudáveis, zero reinícios,
+claims retomados na revisão8. Rota Uazapi/Edge v121 intacta, admissão direta e
+forward OFF: economia Edge adicional zero. Ambiente da guarda presente só no
+piloto; rebind com service key retornou401 duas vezes, sem provar409. Exigir
+proteção autenticada e ensaios públicos antes da mudança única da URL existente.
+Testes focados e CodeQL passaram; CI completo segue vermelho em falhas
+preexistentes. Evidência detalhada e próximos gates:
+`docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Rota direta TorqueSDR ativa — 2026-09-25 01:23:45 UTC
+
+`scripts/ops/whatsapp-direct-route-switch.py activate` atualizou uma vez o
+webhook Uazapi existente (ID `rfeaf66debd4692`) para
+`ingress.torquecrm.com.br`, preservando ID, eventos, exclusões, flags e caminho
+secreto; readback exato `true`, uma rota, global desativado. Backup privado
+do antes e do ambiente do piloto mantidos na VPS. Imagem
+`readiness-20260924-v1` recriada como worker único com admissão/forward ON;
+claims pausa9/retomada10, gate Edge queued revisão2. Testes públicos 404/405/
+413, `/ready` e `/worker-health` 200, Docker saudável sem reinícios. Rebind dry
+e real, autenticados por cron_config, retornaram200 com
+`skip=webhook_route_protected`; proxy v128/rebind v58 contêm guardas conferidas,
+mas caminho proxy com JWT de usuário não foi exercitado.
+
+Após corte, oito eventos regulares (`receipt_recovery=false`) foram concluídos;
+quatro mensagens novas constam no mesmo escopo, sem atribuir autoria. Fila:
+318 concluídos na primeira amostra; leitura posterior: 332 concluídos, 22
+eventos regulares pós-corte, zero pendentes/processando/leases vencidos/dead
+letter, revisão10. Instância conectada.
+`/webhook/errors` listou16 erros todos anteriores ao corte; amostra curta não
+garante ausência futura. Listagem atual mostra Edge webhook ACTIVE v122; nenhum
+bundle Edge novo foi publicado neste corte. Economia de invocações ainda não
+medida; 1,4M/mês não garantido. Rollback usa ação `rollback` do mesmo script,
+restaura uma vez a URL Edge do backup sob pré-condição/readback exatos e mantém
+fila/worker drenando. Risco de perda antes do commit persiste. Detalhes e
+evidência: `docs/operations/whatsapp-direct-route-next-gates-2026-09-24.md`.
+
+## Front estático na Cloudflare — fase `workers.dev`, 2026-10-06
+
+**Produção sem mudança:** `torquecrm.com.br` segue no nginx do EasyPanel; DNS
+intocado. `cloudflare/` é inerte até alguém rodar `cf:deploy` com a conta do
+CTO. Contrato do Worker `torque-front` (`cloudflare/wrangler.jsonc`):
+- `/assets/*` sai direto do servidor de assets; todo o resto passa pelo Worker
+  (`run_worker_first`). `routing.ts` replica a precedência do nginx
+  (`Dockerfile:117-180`); cookie `torque_ui` escolhe V5 ou clássica.
+- Headers: fonte única `cloudflare/headers.json`, espelho do `Dockerfile`;
+  `tests/unit/cloudflare/headers-drift.test.ts` quebra se divergirem. Mudou
+  header no nginx → muda o JSON no mesmo PR.
+- `/api/v1/*` → edge function `api` (`API_UPSTREAM`), repassa `X-API-Key` sem
+  tocar, 1 MiB / 30 s, recusa `..`. CORS das edge functions não aceita a origem
+  `workers.dev` (esperado no teste).
+- Log do Worker: método, caminho, rota, status, ms. Caminho por negar por
+  padrão (`routing.ts` `logPath`); `invocation_logs: false`,
+  `redact_query_string: true`.
+- Divergências intencionais Div1–Div12: `docs/DEPLOY_CLOUDFLARE.md`.
+
+Gates abertos: smoke g–k no `workers.dev` (login do CTO); corte de DNS só com
+checklist a–o + ADR (decide o item j).

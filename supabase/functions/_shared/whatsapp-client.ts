@@ -58,6 +58,8 @@ export type SendTextOptions = {
   delay?: number;
   replyid?: string;
   readchat?: boolean;
+  /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
+  forward?: boolean;
   trackSource?: string;
   trackId?: string;
 };
@@ -70,6 +72,8 @@ export type SendMediaOptions = {
   filename?: string;
   caption?: string;
   delay?: number;
+  /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
+  forward?: boolean;
   trackSource?: string;
   trackId?: string;
 };
@@ -230,7 +234,6 @@ export interface WhatsAppProvider {
   sendText(opts: SendTextOptions): Promise<SendResult>;
   sendMedia(opts: SendMediaOptions): Promise<SendResult>;
   setPresence(number: string, state: "composing" | "available"): Promise<void>;
-  transcribeAudio?(messageId: string): Promise<string>;
   downloadMedia(messageId: string): Promise<{ base64: string; mimetype: string }>;
 
   // Meta-only — send a pre-approved template (ignores the 24h window). Absent on

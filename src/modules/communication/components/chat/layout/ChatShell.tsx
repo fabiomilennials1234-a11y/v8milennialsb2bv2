@@ -138,40 +138,54 @@ export function ChatShell({
     <ResizablePanelGroup
       direction="horizontal"
       onLayout={handleLayout}
-      className="flex h-full w-full overflow-hidden rounded-lg border bg-background"
+      className="flex h-full w-full"
       aria-label="Layout do chat"
-      style={densityCssVars as React.CSSProperties}
+      // V5: as três colunas são cartões separados pousados na bancada. A lib
+      // põe `overflow: hidden` inline no grupo e em cada painel — isso cortaria
+      // a sombra dos cartões. O que o `overflow` protegia (conteúdo empurrando
+      // o tamanho do painel) fica com `min-w-0` em cada painel e com o
+      // `overflow-hidden` do próprio cartão.
+      style={{ ...(densityCssVars as React.CSSProperties), overflow: "visible" }}
     >
       {/* ── Painel esquerdo: lista de conversas ──────────────────────────── */}
       <ResizablePanel
         defaultSize={initialSizes[0]}
         minSize={20}
         maxSize={35}
-        className={
+        style={PANEL_STYLE}
+        className={cn(
+          "min-w-0",
           // Mobile: esconde a lista quando uma conversa está selecionada
-          selectedPhone ? "hidden md:flex md:flex-col" : "flex flex-col"
-        }
+          selectedPhone ? "hidden md:flex md:flex-col" : "flex flex-col",
+        )}
       >
-        <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
-          {list}
+        {/* A caixa de entrada é a coluna de TINTA (o painel-herói do chat: é a
+            fila do que pede resposta). O fundo de tinta fica no cartão; o
+            conteúdo recebe o tema escuro (`dark`) para que busca, filtros,
+            selos e linhas — todos escritos em tokens — leiam claro sobre a
+            tinta sem cada componente precisar de uma segunda paleta. Menus e
+            popovers saem por portal e continuam no tema da página. */}
+        <div className={cn(COLUMN_CLASSES, "bg-tinta shadow-relevo-tinta")}>
+          <div className="dark flex h-full min-h-0 min-w-0 flex-col text-foreground">
+            {list}
+          </div>
         </div>
       </ResizablePanel>
 
-      <ResizableHandle
-        className="transition-opacity duration-[80ms] ease-out data-[resize-handle-state=drag]:opacity-100 opacity-60 hover:opacity-100"
-      />
+      <ResizableHandle className={HANDLE_CLASSES} />
 
       {/* ── Painel central: chat ──────────────────────────────────────────── */}
       <ResizablePanel
         defaultSize={hasContext ? initialSizes[1] : initialSizes[1] + initialSizes[2]}
         minSize={40}
+        style={PANEL_STYLE}
         className={cn(
-          "flex flex-col min-h-0 min-w-0 overflow-hidden",
+          "flex flex-col min-h-0 min-w-0",
           // Mobile: esconde o centro quando nenhuma conversa selecionada
           !selectedPhone ? "hidden md:flex" : "flex",
         )}
       >
-        <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
+        <div className={cn(COLUMN_CLASSES, CARD_CLASSES)}>
           {view}
         </div>
       </ResizablePanel>
@@ -179,17 +193,16 @@ export function ChatShell({
       {/* ── Painel direito: contexto (opcional, colapsável) ───────────────── */}
       {hasContext && (
         <>
-          <ResizableHandle
-            className="transition-opacity duration-[80ms] ease-out data-[resize-handle-state=drag]:opacity-100 opacity-60 hover:opacity-100"
-          />
+          <ResizableHandle className={HANDLE_CLASSES} />
           <ResizablePanel
             defaultSize={initialSizes[2]}
             minSize={23}
             maxSize={42}
             collapsible
-            className="flex flex-col min-h-0 min-w-0 overflow-hidden"
+            style={PANEL_STYLE}
+            className="flex flex-col min-h-0 min-w-0"
           >
-            <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
+            <div className={cn(COLUMN_CLASSES, CARD_CLASSES)}>
               {context}
             </div>
           </ResizablePanel>
@@ -198,6 +211,26 @@ export function ChatShell({
     </ResizablePanelGroup>
   );
 }
+
+// ─── Forma V5 das colunas ────────────────────────────────────────────────────
+
+/** Painel sem o `overflow: hidden` inline da lib — ver comentário no grupo. */
+const PANEL_STYLE: React.CSSProperties = { overflow: "visible" };
+
+/** Cartão de coluna: raio de painel, conteúdo recortado nas bordas. */
+const COLUMN_CLASSES = "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-panel";
+
+const CARD_CLASSES = "border border-card-border bg-card text-card-foreground shadow-relevo";
+
+/**
+ * A alça vira o vão de 12 px entre os cartões. A área de arraste é o vão
+ * inteiro; o traço só aparece sob o mouse (e em ouro durante o arraste).
+ */
+const HANDLE_CLASSES = [
+  "w-3 bg-transparent after:w-3",
+  "before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-1 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:bg-transparent before:transition-colors before:duration-150",
+  "hover:before:bg-foreground/15 data-[resize-handle-state=drag]:before:bg-primary",
+].join(" ");
 
 // ─── Utilitário local ────────────────────────────────────────────────────────
 

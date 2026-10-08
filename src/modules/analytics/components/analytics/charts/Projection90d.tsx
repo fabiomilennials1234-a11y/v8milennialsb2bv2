@@ -106,7 +106,7 @@ export function Projection90d({ mrrEvolution, totalRevenue, newCustomers }: Prop
             projectedMRR={pessimisticMRR}
             projectedRevenue={pessimisticRevenue}
             colorClass="text-destructive"
-            bgClass="bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-800"
+            bgClass="bg-destructive/5 border-destructive/30"
           />
           <ScenarioCard
             label="Realista"
@@ -119,8 +119,8 @@ export function Projection90d({ mrrEvolution, totalRevenue, newCustomers }: Prop
             label="Otimista"
             projectedMRR={optimisticMRR}
             projectedRevenue={optimisticRevenue}
-            colorClass="text-green-600"
-            bgClass="bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
+            colorClass="text-success"
+            bgClass="bg-success/5 border-success/30"
           />
         </div>
         <p className="text-xs text-muted-foreground mt-3 text-center">
