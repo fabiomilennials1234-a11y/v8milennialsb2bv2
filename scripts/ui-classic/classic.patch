@@ -1,3 +1,31 @@
+diff --git a/classic/src/integrations/supabase/types.ts b/classic/src/integrations/supabase/types.ts
+index 8b757e586..e90d46696 100644
+--- a/classic/src/integrations/supabase/types.ts
++++ b/classic/src/integrations/supabase/types.ts
+@@ -18841,6 +18841,7 @@ export type Database = {
+           is_group: boolean
+           lead_id: string | null
+           media_expired: boolean
++          media_file_name: string | null
+           media_url: string | null
+           message_id: string
+           message_type: string
+@@ -18873,6 +18874,7 @@ export type Database = {
+           is_group?: boolean
+           lead_id?: string | null
+           media_expired?: boolean
++          media_file_name?: string | null
+           media_url?: string | null
+           message_id: string
+           message_type?: string
+@@ -18905,6 +18907,7 @@ export type Database = {
+           is_group?: boolean
+           lead_id?: string | null
+           media_expired?: boolean
++          media_file_name?: string | null
+           media_url?: string | null
+           message_id?: string
+           message_type?: string
 diff --git a/classic/src/lib/analytics.ts b/classic/src/lib/analytics.ts
 index 9650d31ea..ccdced535 100644
 --- a/classic/src/lib/analytics.ts
@@ -323,6 +351,113 @@ index 03a54f8e6..d61b00594 100644
                />
              )
            ) : undefined
+diff --git a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx b/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
+index a15833a9f..764a3c26b 100644
+--- a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
++++ b/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
+@@ -38,6 +38,7 @@ import {
+ import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
+ import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
+ import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
++import { readDocumentFileName, type DocumentFileNameFields } from "@/modules/communication/lib/documentFileName";
+ import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
+ import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
+ import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
+@@ -45,6 +46,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
+ import { format, isToday, isYesterday } from "date-fns";
+ import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
+ import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
++import { OnDemandMedia } from "./media/OnDemandMedia";
+ import { Button } from "@/components/ui/button";
+ import { Reply } from "lucide-react";
+ import {
+@@ -142,6 +144,7 @@ export function MessageBubble({
+   onImagePreview,
+   isFirstInGroup = true,
+   isLastInGroup = true,
++  senderName,
+   mountTime,
+   onRetry,
+   instanceId,
+@@ -154,6 +157,8 @@ export function MessageBubble({
+   onImagePreview: (url: string) => void;
+   isFirstInGroup?: boolean;
+   isLastInGroup?: boolean;
++  /** Remetente em conversa de grupo (só na 1ª da sequência). Ver `groupSenderName`. */
++  senderName?: string | null;
+   mountTime?: number;
+   onRetry?: (message: FailedMessage) => void;
+   /** When set + enableActions=true, reveals S1 action bar on hover */
+@@ -171,6 +176,8 @@ export function MessageBubble({
+       ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
+       : "manual";
+   const isWhatsAppMsg = "message_type" in message;
++  const waInstanceId = isWhatsAppMsg ? (message as WhatsAppMessage).instance_id : undefined;
++  const waMessageId = isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined;
+   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
+   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
+   const isAudio = messageType === "audio" || messageType === "ptt";
+@@ -393,6 +400,12 @@ export function MessageBubble({
+           </div>
+         )}
+ 
++        {senderName && !isOutgoing && (
++          <p data-group-sender className="mb-1 truncate text-xs font-semibold text-muted-foreground">
++            {senderName}
++          </p>
++        )}
++
+         {isDeleted ? (
+           <DeletedPlaceholder deletedAt={meta.deleted_at} />
+         ) : isEditing ? (
+@@ -458,23 +471,29 @@ export function MessageBubble({
+ 
+             {/* Imagem */}
+             {isImage && message.media_url && (
+-              <MessageImage
+-                src={message.media_url}
+-                onPreview={() => onImagePreview(message.media_url!)}
+-              />
++              <OnDemandMedia kind="image" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
++                {(url) => <MessageImage src={url} onPreview={() => onImagePreview(url)} />}
++              </OnDemandMedia>
+             )}
+ 
+             {/* Vídeo */}
+             {isVideo && message.media_url && (
+-              <MessageVideo src={message.media_url} />
++              <OnDemandMedia kind="video" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
++                {(url) => <MessageVideo src={url} />}
++              </OnDemandMedia>
+             )}
+ 
+             {/* Documento */}
+             {isDocument && message.media_url && (
+-              <MessageDocument
+-                src={message.media_url}
+-                isOutgoing={isOutgoing}
+-              />
++              <OnDemandMedia kind="document" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
++                {(url) => (
++                  <MessageDocument
++                    src={url}
++                    fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
++                    isOutgoing={isOutgoing}
++                  />
++                )}
++              </OnDemandMedia>
+             )}
+ 
+             {/* Sticker */}
+@@ -581,7 +600,7 @@ export function MessageBubble({
+                   return <MessageVideo src={mediaUrl} />;
+                 if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
+                   return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
+-                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
++                return <MessageDocument src={mediaUrl} fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined} isOutgoing={isOutgoing} />;
+               })()
+             )}
+ 
 diff --git a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx b/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
 index e6b5a8c89..39071a847 100644
 --- a/classic/src/modules/communication/components/chat/RealtimeStatusBadge.tsx
@@ -616,6 +751,205 @@ index 72a92dbad..e105658d1 100644
    const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
    const hasUnread = contact.unread_count > 0 && !isSelected;
    const key = contactKey(contact);
+diff --git a/classic/src/modules/communication/components/chat/media/AudioPlayer.tsx b/classic/src/modules/communication/components/chat/media/AudioPlayer.tsx
+index 73ff09f5c..7db761564 100644
+--- a/classic/src/modules/communication/components/chat/media/AudioPlayer.tsx
++++ b/classic/src/modules/communication/components/chat/media/AudioPlayer.tsx
+@@ -9,6 +9,7 @@
+ import { useState, useRef, useEffect, useCallback } from "react";
+ import { Loader2 } from "lucide-react";
+ import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";
++import { isWhatsAppCdnUrl } from "@/modules/communication/lib/whatsappMediaUrl";
+ import { supabase } from "@/integrations/supabase/client";
+ 
+ // Edge Function exige Authorization; <audio src="..."> não envia header → 401. Resolvemos via fetch com token e blob.
+@@ -29,10 +30,6 @@ interface AudioPlayerProps {
+   whatsappMessageId?: string | null;
+ }
+ 
+-function isEncryptedWhatsAppUrl(url: string): boolean {
+-  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
+-}
+-
+ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsappMessageId }: AudioPlayerProps) {
+   const [error, setError] = useState(false);
+   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+@@ -160,7 +157,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
+     }
+ 
+     // Encrypted WhatsApp CDN URL — download decrypted media via proxy
+-    if (isEncryptedWhatsAppUrl(src) && instanceId && whatsappMessageId && !proxyDownloadAttemptedRef.current) {
++    if (isWhatsAppCdnUrl(src) && instanceId && whatsappMessageId && !proxyDownloadAttemptedRef.current) {
+       proxyDownloadAttemptedRef.current = true;
+       setLoading(true);
+       try {
+diff --git a/classic/src/modules/communication/components/chat/media/MessageMedia.tsx b/classic/src/modules/communication/components/chat/media/MessageMedia.tsx
+index 1dcde8046..c2e59627f 100644
+--- a/classic/src/modules/communication/components/chat/media/MessageMedia.tsx
++++ b/classic/src/modules/communication/components/chat/media/MessageMedia.tsx
+@@ -181,8 +181,10 @@ interface MessageDocumentProps {
+   isOutgoing: boolean;
+ }
+ 
+-function getFileIcon(displayName: string) {
+-  const ext = displayName.split(".").pop()?.toLowerCase();
++function getFileIcon(fileName: string | undefined, src: string) {
++  // Extensão real: do nome, ou do path da URL (sem query string) quando não há nome.
++  const source = fileName || src.split(/[?#]/)[0].split("/").pop() || "";
++  const ext = source.includes(".") ? source.split(".").pop()?.toLowerCase() : undefined;
+   switch (ext) {
+     case "pdf":
+     case "doc":
+@@ -196,14 +198,17 @@ function getFileIcon(displayName: string) {
+ }
+ 
+ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentProps) {
+-  // Tentar extrair nome do arquivo da URL se não fornecido
+-  const displayName = fileName || src.split("/").pop() || "Documento";
++  // O basename da URL NÃO é nome: é um sha256 ou um link `.enc?…` do provider.
++  // O nome real vem de `readDocumentFileName` (coluna > payload > upload do CRM).
++  const displayName = fileName?.trim() || "Documento";
+ 
+   return (
+     <a
+       href={src}
+       target="_blank"
+       rel="noopener noreferrer"
++      // Blob carregado sob demanda não tem nome na URL: o `download` dá o nome real.
++      download={src.startsWith("blob:") ? displayName : undefined}
+       className={cn(
+         "flex items-center gap-3 p-3 rounded-lg transition-colors w-full max-w-full min-w-0 overflow-hidden",
+         isOutgoing
+@@ -217,7 +222,7 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
+           isOutgoing ? "bg-primary-foreground/20" : "bg-primary/20",
+         )}
+       >
+-        {getFileIcon(displayName)}
++        {getFileIcon(fileName, src)}
+       </div>
+       <div className="flex-1 min-w-0 overflow-hidden">
+         <p className="text-sm font-medium truncate">{displayName}</p>
+diff --git a/classic/src/modules/communication/components/chat/media/OnDemandMedia.tsx b/classic/src/modules/communication/components/chat/media/OnDemandMedia.tsx
+new file mode 100644
+index 000000000..f1940a4c9
+--- /dev/null
++++ b/classic/src/modules/communication/components/chat/media/OnDemandMedia.tsx
+@@ -0,0 +1,95 @@
++/**
++ * OnDemandMedia — carrega sob clique a mídia que o navegador não abre sozinho.
++ *
++ * Mídia de grupo e documento 1:1 com download falho ficam com o link
++ * criptografado da CDN do WhatsApp (Chamado 6dfcae6d). O servidor não baixa
++ * mídia de grupo (gate de custo de 10/08), então o download acontece aqui, no
++ * clique, pelo mesmo `downloadMedia` que o áudio e o botão Baixar já usam.
++ *
++ * Qualquer outra URL (Storage, blob, http comum) passa direto para o filho.
++ */
++import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
++import { AlertCircle, Download, FileImage, FileText, FileVideo, Loader2, type LucideIcon } from "lucide-react";
++import { downloadMedia } from "@/modules/communication/lib/whatsappApi";
++import { base64ToBlob, isWhatsAppCdnUrl } from "@/modules/communication/lib/whatsappMediaUrl";
++
++export type OnDemandMediaKind = "image" | "video" | "document";
++
++const KIND_UI: Record<OnDemandMediaKind, { label: string; Icon: LucideIcon }> = {
++  image: { label: "Carregar imagem", Icon: FileImage },
++  video: { label: "Carregar vídeo", Icon: FileVideo },
++  document: { label: "Carregar documento", Icon: FileText },
++};
++
++interface OnDemandMediaProps {
++  kind: OnDemandMediaKind;
++  src: string;
++  instanceId?: string | null;
++  messageId?: string | null;
++  /** Recebe a URL utilizável: `src` original, ou o blob depois do clique. */
++  children: (url: string) => ReactNode;
++}
++
++type Status = "idle" | "loading" | "error";
++
++export function OnDemandMedia({ kind, src, instanceId, messageId, children }: OnDemandMediaProps) {
++  const [status, setStatus] = useState<Status>("idle");
++  const [blobUrl, setBlobUrl] = useState<string | null>(null);
++  const blobRef = useRef<string | null>(null);
++  const mountedRef = useRef(true);
++
++  useEffect(() => {
++    mountedRef.current = true;
++    return () => {
++      mountedRef.current = false;
++      if (blobRef.current) URL.revokeObjectURL(blobRef.current);
++    };
++  }, []);
++
++  const load = useCallback(async () => {
++    if (!instanceId || !messageId) return;
++    setStatus("loading");
++    try {
++      const { base64, mimetype } = await downloadMedia(instanceId, messageId);
++      if (!base64) throw new Error("empty_media");
++      const url = URL.createObjectURL(base64ToBlob(base64, mimetype));
++      if (!mountedRef.current) {
++        URL.revokeObjectURL(url);
++        return;
++      }
++      blobRef.current = url;
++      setBlobUrl(url);
++      setStatus("idle");
++    } catch (err) {
++      console.warn("[OnDemandMedia] download failed:", err);
++      if (mountedRef.current) setStatus("error");
++    }
++  }, [instanceId, messageId]);
++
++  if (blobUrl) return <>{children(blobUrl)}</>;
++  if (!isWhatsAppCdnUrl(src) || !instanceId || !messageId) return <>{children(src)}</>;
++
++  const { label, Icon } = KIND_UI[kind];
++  const loading = status === "loading";
++
++  return (
++    <div className="flex flex-col gap-1.5 items-start">
++      <button
++        type="button"
++        onClick={load}
++        disabled={loading}
++        className="flex items-center gap-2.5 py-2 px-3 rounded-lg bg-muted/40 hover:bg-muted/60 text-foreground transition-colors disabled:opacity-60 max-w-[240px]"
++      >
++        {loading ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Icon className="w-5 h-5 shrink-0 opacity-70" />}
++        <span className="text-xs font-medium">{status === "error" ? "Tentar de novo" : label}</span>
++        {!loading && <Download className="w-3.5 h-3.5 shrink-0 opacity-60" />}
++      </button>
++      {status === "error" && (
++        <p role="alert" className="flex items-center gap-1 text-[11px] text-destructive">
++          <AlertCircle className="w-3 h-3 shrink-0" />
++          Não foi possível carregar.
++        </p>
++      )}
++    </div>
++  );
++}
+diff --git a/classic/src/modules/communication/components/chat/view/MessageList.tsx b/classic/src/modules/communication/components/chat/view/MessageList.tsx
+index c86c0946b..ca8f69a5a 100644
+--- a/classic/src/modules/communication/components/chat/view/MessageList.tsx
++++ b/classic/src/modules/communication/components/chat/view/MessageList.tsx
+@@ -36,6 +36,7 @@ import { MessageBubble } from "@/modules/communication/components/chat/MessagePr
+ import { CallMarker } from "@/modules/communication/components/chat/view/CallMarker";
+ import type { WhatsAppMessage, FailedMessage } from "@/modules/communication/hooks/useWhatsAppChat";
+ import type { ConversationCall } from "@/modules/communication/lib/conversationCallsQuery";
++import { groupSenderName } from "@/modules/communication/lib/groupSenderName";
+ import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
+ 
+ export interface TransferEvent {
+@@ -443,6 +444,7 @@ export function MessageList({
+           onImagePreview={onImagePreview}
+           isFirstInGroup={isFirstInGroup}
+           isLastInGroup={isLastInGroup}
++          senderName={groupSenderName(message, sep.show ? null : prevMsg)}
+           mountTime={mountTime}
+           onRetry={message.status === "failed" ? onRetry : undefined}
+           instanceId={instanceId}
 diff --git a/classic/src/modules/communication/hooks/chat/chatReconcile.ts b/classic/src/modules/communication/hooks/chat/chatReconcile.ts
 new file mode 100644
 index 000000000..d492b2fb6
@@ -980,7 +1314,7 @@ index 8feeb5b50..a63f8be8c 100644
    throw new SendRetriesExhausted();
  }
 diff --git a/classic/src/modules/communication/hooks/chat/types.ts b/classic/src/modules/communication/hooks/chat/types.ts
-index eccb97e9e..c31a59f7a 100644
+index eccb97e9e..71f51e52b 100644
 --- a/classic/src/modules/communication/hooks/chat/types.ts
 +++ b/classic/src/modules/communication/hooks/chat/types.ts
 @@ -6,6 +6,7 @@
@@ -991,7 +1325,21 @@ index eccb97e9e..c31a59f7a 100644
  
  export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
  
-@@ -334,8 +335,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string |
+@@ -30,7 +31,13 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
+   media_url: string | null;
+   /** True when media was purged by the 30-day retention job. Renders "expired" state. */
+   media_expired?: boolean | null;
++  /** Original document name, copied from raw_payload on INSERT (survives the 14-day payload retention). */
++  media_file_name?: string | null;
+   push_name: string | null;
++  /** Mensagem de conversa de grupo (`@g.us`). Em grupo, `push_name` é o remetente. */
++  is_group?: boolean | null;
++  /** Mensagem de conversa de grupo (`@g.us`). Em grupo, `push_name` é o remetente. */
++  is_group?: boolean | null;
+   status: string;
+   lead_id: string | null;
+   timestamp: string;
+@@ -334,8 +341,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string |
   * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
   * na lista.
   */
@@ -1627,7 +1975,7 @@ index f2fec0c89..b23e27012 100644
    });
  }
 diff --git a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
-index 5ff3c7d49..ee123229a 100644
+index 5ff3c7d49..21b93be58 100644
 --- a/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
 +++ b/classic/src/modules/communication/hooks/chat/useWhatsAppSend.ts
 @@ -1,4 +1,5 @@
@@ -1777,7 +2125,25 @@ index 5ff3c7d49..ee123229a 100644
        const d = data as Record<string, any>;
        const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
  
-@@ -595,6 +633,10 @@ export function useSendWhatsAppMedia() {
+@@ -539,6 +577,9 @@ export function useSendWhatsAppMedia() {
+         message_type: mediaType,
+         content: caption || null,
+         media_url: mediaUrl,
++        // Este fallback não tem raw_payload: sem isto o trigger não acha nome
++        // e, se ele chegar antes do eco do webhook, o nome se perde.
++        ...(mediaType === "document" && fileName?.trim() ? { media_file_name: fileName.trim().slice(0, 255) } : {}),
+         ...(replyContext ? { reply_context: replyContext } : {}),
+         status: providerSendStatus(data),
+         timestamp: new Date().toISOString(),
+@@ -575,6 +616,7 @@ export function useSendWhatsAppMedia() {
+         message_type: variables.mediaType,
+         content: variables.caption || null,
+         media_url: null,
++        media_file_name: variables.mediaType === "document" ? variables.fileName?.trim() || null : null,
+         push_name: null,
+         status: "pending",
+         lead_id: null,
+@@ -595,6 +637,10 @@ export function useSendWhatsAppMedia() {
      onSuccess: (data, variables, context) => {
        if (variables.replyContext) reply?.clear(variables.replyContext.messageId);
        // Mesma promoção do envio de texto — ver comentário lá.
@@ -1788,7 +2154,7 @@ index 5ff3c7d49..ee123229a 100644
        const realMessageId = readProviderMessageId(data);
        if (context?.optimisticId) {
          queryClient.setQueryData<WhatsAppMessage[]>(
-@@ -614,7 +656,7 @@ export function useSendWhatsAppMedia() {
+@@ -614,7 +660,7 @@ export function useSendWhatsAppMedia() {
        }
        const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
        queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
@@ -1920,6 +2286,128 @@ index df75f5544..234de550f 100644
   */
  
  import { useEffect, useRef } from "react";
+diff --git a/classic/src/modules/communication/lib/documentFileName.ts b/classic/src/modules/communication/lib/documentFileName.ts
+new file mode 100644
+index 000000000..ffaa52181
+--- /dev/null
++++ b/classic/src/modules/communication/lib/documentFileName.ts
+@@ -0,0 +1,78 @@
++/**
++ * Nome original de um documento do chat (Chamado f6fc3c9e).
++ *
++ * Ordem:
++ *   1. `media_file_name` — coluna gravada no INSERT por trigger; sobrevive à
++ *      retenção de 14 dias do `raw_payload`.
++ *   2. `raw_payload.content.fileName` / `.title` (Uazapi) e
++ *      `raw_payload.document.filename` (Meta) — linhas de realtime que chegam
++ *      antes de a coluna existir no cache, ou bolhas otimistas.
++ *   3. Nome derivado da URL de upload do CRM
++ *      (`whatsapp-media/<org>/<uuid>/<nome>_<13 dígitos>.<ext>`).
++ *   4. `null` — o chamador mostra "Documento".
++ *
++ * Nunca devolve o basename de uma URL de provider: sha256 de 64 hex, link
++ * `.enc` do CDN do WhatsApp ou qualquer coisa com query string não são nome.
++ */
++
++export interface DocumentFileNameFields {
++  media_file_name?: string | null;
++  raw_payload?: unknown;
++  media_url?: string | null;
++}
++
++const MAX_LENGTH = 255;
++const CRM_UPLOAD_SEGMENT = "/whatsapp-media/";
++const CRM_UPLOAD_BASENAME = /^(.+)_\d{13}\.([a-z0-9]{1,10})$/i;
++const GENERIC_UPLOAD_BASE = /^(document|image|video|audio|sticker|file)_\d{13}$/i;
++const HAS_EXTENSION = /\.[a-z0-9]{1,10}$/i;
++const HEX_HASH_BASENAME = /^[0-9a-f]{32,}(\.[a-z0-9]{1,10})?$/i;
++
++// Controle ASCII + controle de direção bidi (U+200E, U+200F, U+202A–U+202E,
++// U+2066–U+2069). Sem isso `fatura<U+202E>fdp.exe` aparece como `faturaexe.pdf`.
++// Mesmo conjunto de `whatsapp_messages_clean_file_name` no banco.
++// eslint-disable-next-line no-control-regex
++const UNSAFE_CHARS = /[\u0000-\u001F\u007F‎‏‪-‮⁦-⁩]/g;
++
++function clean(value: unknown): string | null {
++  if (typeof value !== "string") return null;
++  const trimmed = value.replace(UNSAFE_CHARS, "").trim();
++  if (!trimmed || isOpaqueName(trimmed)) return null;
++  return trimmed.slice(0, MAX_LENGTH);
++}
++
++function isOpaqueName(name: string): boolean {
++  return name.includes("?") || /\.enc$/i.test(name) || HEX_HASH_BASENAME.test(name);
++}
++
++function asRecord(value: unknown): Record<string, unknown> | null {
++  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
++}
++
++function fromPayload(payload: unknown): string | null {
++  const root = asRecord(payload);
++  if (!root) return null;
++  const content = asRecord(root.content);
++  const document = asRecord(root.document);
++  return clean(content?.fileName) ?? clean(content?.title) ?? clean(document?.filename);
++}
++
++function fromCrmUploadUrl(url: string | null | undefined): string | null {
++  if (!url || !url.includes(CRM_UPLOAD_SEGMENT)) return null;
++  const path = url.split(/[?#]/)[0];
++  let basename = path.slice(path.lastIndexOf("/") + 1);
++  try {
++    basename = decodeURIComponent(basename);
++  } catch {
++    // basename malformado: usa como veio
++  }
++  const match = CRM_UPLOAD_BASENAME.exec(basename);
++  if (!match) return null;
++  const [, base, ext] = match;
++  if (GENERIC_UPLOAD_BASE.test(base)) return null;
++  return clean(HAS_EXTENSION.test(base) ? base : `${base}.${ext}`);
++}
++
++export function readDocumentFileName(message: DocumentFileNameFields): string | null {
++  return clean(message.media_file_name) ?? fromPayload(message.raw_payload) ?? fromCrmUploadUrl(message.media_url);
++}
+diff --git a/classic/src/modules/communication/lib/groupSenderName.ts b/classic/src/modules/communication/lib/groupSenderName.ts
+new file mode 100644
+index 000000000..b5d40a255
+--- /dev/null
++++ b/classic/src/modules/communication/lib/groupSenderName.ts
+@@ -0,0 +1,32 @@
++/**
++ * Nome de quem escreveu, para o balão de uma mensagem de GRUPO.
++ *
++ * Só mensagem RECEBIDA de grupo tem remetente a identificar: na saída o autor
++ * somos nós, e em 1:1 o interlocutor já é o título da conversa. Sem `push_name`
++ * (cerca de 0,2% das mensagens de grupo) não se mostra nada: nunca "undefined",
++ * nunca o telefone cru.
++ *
++ * O nome aparece só na PRIMEIRA mensagem de uma sequência do mesmo remetente —
++ * como no WhatsApp. `anterior` é a mensagem imediatamente acima na thread (ou
++ * `null` quando não há uma, ou quando um separador de dia as divide).
++ */
++export interface GroupSenderFields {
++  direction: string;
++  is_group?: boolean | null;
++  push_name?: string | null;
++}
++
++function nomeLimpo(m: GroupSenderFields | null | undefined): string | null {
++  if (!m || m.is_group !== true || m.direction !== "incoming") return null;
++  const nome = typeof m.push_name === "string" ? m.push_name.trim() : "";
++  return nome || null;
++}
++
++export function groupSenderName(
++  mensagem: GroupSenderFields,
++  anterior: GroupSenderFields | null,
++): string | null {
++  const nome = nomeLimpo(mensagem);
++  if (!nome) return null;
++  return nomeLimpo(anterior) === nome ? null : nome;
++}
 diff --git a/classic/src/modules/communication/lib/media-operation.ts b/classic/src/modules/communication/lib/media-operation.ts
 new file mode 100644
 index 000000000..b8aaa4f8d
@@ -2066,6 +2554,56 @@ index 3512f30c7..396846dea 100644
 +    "Contato"
 +  );
 +}
+diff --git a/classic/src/modules/communication/lib/whatsappMediaUrl.ts b/classic/src/modules/communication/lib/whatsappMediaUrl.ts
+new file mode 100644
+index 000000000..0967ae64f
+--- /dev/null
++++ b/classic/src/modules/communication/lib/whatsappMediaUrl.ts
+@@ -0,0 +1,31 @@
++/**
++ * Mídia do WhatsApp que o navegador não consegue abrir sozinha.
++ *
++ * Mídia de grupo (e documento 1:1 cujo download falhou) fica com o link
++ * criptografado da CDN do WhatsApp em `media_url` — `.enc` sem chave. O gate de
++ * custo de 10/08 impede o servidor de baixar mídia de grupo, então a única
++ * forma de abrir é pedir sob clique pelo `downloadMedia`.
++ */
++
++const WHATSAPP_CDN_DOMAINS = ["whatsapp.net", "whatsapp.com"];
++
++/** Só subdomínio de whatsapp.net/.com: `evil.com/?x=.whatsapp.net/` e `whatsapp.net.evil.com` não passam. */
++export function isWhatsAppCdnUrl(url: string | null | undefined): boolean {
++  if (!url) return false;
++  let host: string;
++  try {
++    const parsed = new URL(url);
++    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
++    host = parsed.hostname.toLowerCase();
++  } catch {
++    return false;
++  }
++  return WHATSAPP_CDN_DOMAINS.some((d) => host.endsWith(`.${d}`));
++}
++
++/** Decodifica o base64 (com ou sem prefixo `data:`) devolvido por `downloadMedia`. */
++export function base64ToBlob(base64: string, mimetype: string | null | undefined): Blob {
++  const pure = base64.includes(",") ? base64.split(",")[1] : base64;
++  const bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
++  return new Blob([bin], { type: mimetype || "application/octet-stream" });
++}
+diff --git a/classic/src/modules/communication/lib/whatsappMessagesQuery.ts b/classic/src/modules/communication/lib/whatsappMessagesQuery.ts
+index af1ecc85c..9c87b891f 100644
+--- a/classic/src/modules/communication/lib/whatsappMessagesQuery.ts
++++ b/classic/src/modules/communication/lib/whatsappMessagesQuery.ts
+@@ -55,7 +55,7 @@ import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
+ 
+ /** Colunas devolvidas pra o chat. Mantém em sync hook + prefetch. */
+ export const WHATSAPP_MESSAGE_COLUMNS =
+-  "id, transcription_text, transcription_provider, transcription_created_at, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context, reactions, edited, pinned_at, deleted_at, uazapi_interactive_display:raw_payload->torqueInteractive, uazapi_pix_key:raw_payload->sendPayload->pixKey, uazapi_pix_name:raw_payload->sendPayload->pixName, uazapi_pix_type:raw_payload->sendPayload->pixType, uazapi_native_buttons:raw_payload->content->InteractiveMessage->NativeFlowMessage->buttons, uazapi_menu_sections:raw_payload->content->sections, uazapi_menu_title:raw_payload->content->title, uazapi_menu_description:raw_payload->content->description, uazapi_menu_button:raw_payload->content->buttonText, uazapi_menu_footer:raw_payload->content->footerText";
++  "id, transcription_text, transcription_provider, transcription_created_at, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, media_file_name, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context, reactions, edited, pinned_at, deleted_at, uazapi_interactive_display:raw_payload->torqueInteractive, uazapi_pix_key:raw_payload->sendPayload->pixKey, uazapi_pix_name:raw_payload->sendPayload->pixName, uazapi_pix_type:raw_payload->sendPayload->pixType, uazapi_native_buttons:raw_payload->content->InteractiveMessage->NativeFlowMessage->buttons, uazapi_menu_sections:raw_payload->content->sections, uazapi_menu_title:raw_payload->content->title, uazapi_menu_description:raw_payload->content->description, uazapi_menu_button:raw_payload->content->buttonText, uazapi_menu_footer:raw_payload->content->footerText";
+ 
+ /**
+  * Limite independente do histórico de ligações. Mensagens usam MESSAGE_PAGE_SIZE.
 diff --git a/classic/src/modules/copilot/hooks/useCopilotPause.ts b/classic/src/modules/copilot/hooks/useCopilotPause.ts
 index aacc3ed82..f83352526 100644
 --- a/classic/src/modules/copilot/hooks/useCopilotPause.ts
