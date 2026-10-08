@@ -28,6 +28,14 @@ export interface CorrecaoVendaHistorica {
   versao?: string;
 }
 
+/** Nova data de "Vendido em" / "Perdido em". O valor não viaja: quem decide é o banco. */
+export interface CorrecaoDataDoDesfecho {
+  /** AAAA-MM-DD, no dia civil da organização. */
+  data: string;
+  motivo: string;
+  versao?: string;
+}
+
 /**
  * `meetings.status` — o desfecho da reunião, como a Agenda o grava.
  *
