@@ -1,6 +1,6 @@
 /**
- * Financeiro da central Organizações — fatos de `master_org_finance`, custos
- * unitários de `master_cost_settings` e preço de lista de `subscription_plans`.
+ * Financeiro da central Organizações — fatos de `master_org_finance` e custos
+ * unitários de `master_cost_settings`. Preço de lista vem de `usePlanCatalog`.
  * A conta fica em `lib/org-finance.ts`.
  *
  * Só master pleno: as RPCs recusam outbounder (42501), então a query nem sai.
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyError } from "@/shared/errors";
 import { useMasterAuth } from "./useMasterAuth";
-import type { CostSettings, OrgFinanceFacts, PlanPricing } from "../lib/org-finance";
+import type { CostSettings, OrgFinanceFacts } from "../lib/org-finance";
 
 const FINANCE_KEY = ["master-org-finance"] as const;
 const COSTS_KEY = ["master-cost-settings"] as const;
@@ -69,24 +69,6 @@ export function useCostSettings() {
     },
     enabled: isFullMaster,
     staleTime: 5 * 60_000,
-  });
-}
-
-export function usePlanPricing() {
-  const { isFullMaster } = useMasterAuth();
-  return useQuery({
-    queryKey: ["master-plan-pricing"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("subscription_plans")
-        .select(
-          "name, price_monthly, base_price_monthly, price_per_user_monthly, included_users, extra_user_price, min_users",
-        );
-      if (error) throw error;
-      return new Map(((data ?? []) as PlanPricing[]).map((p) => [p.name, p]));
-    },
-    enabled: isFullMaster,
-    staleTime: 10 * 60_000,
   });
 }
 

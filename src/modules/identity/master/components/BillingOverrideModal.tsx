@@ -30,6 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, CreditCard, Flag, Gauge } from "lucide-react";
 import { useMasterBillingOverride } from "../hooks/useMasterOrganizations";
+import { usePlanCatalog } from "../hooks/usePlanCatalog";
+import { planLabel } from "../lib/plan-label";
 import { QuotaManagementPanel } from "./QuotaManagementPanel";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
@@ -67,6 +69,8 @@ export function BillingOverrideModal({
   const [featureReason, setFeatureReason] = useState("");
 
   const billingOverride = useMasterBillingOverride();
+  // Catálogo inteiro, não só os ativos: o plano atual da org pode ser legado.
+  const { data: catalogo } = usePlanCatalog();
 
   // Fetch available plans
   const { data: plans } = useQuery({
@@ -213,8 +217,8 @@ export function BillingOverrideModal({
               >
                 {organization.subscription_status}
               </Badge>
-              <span className="font-medium capitalize">
-                {organization.subscription_plan || "free"}
+              <span className="font-medium">
+                {planLabel(organization.subscription_plan, catalogo)}
               </span>
               {organization.billing_override && (
                 <Badge variant="gold">Override ativo</Badge>

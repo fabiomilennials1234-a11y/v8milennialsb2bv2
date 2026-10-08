@@ -36,7 +36,9 @@ import {
   BadgeDollarSign,
 } from "lucide-react";
 import { formatBRL } from "@/lib/format";
-import { useCostSettings, useOrgFinance, usePlanPricing } from "../hooks/useOrgFinance";
+import { useCostSettings, useOrgFinance } from "../hooks/useOrgFinance";
+import { usePlanCatalog } from "../hooks/usePlanCatalog";
+import { planLabel } from "../lib/plan-label";
 import { costsConfigured, orgFinance, sumFinance, type OrgFinance } from "../lib/org-finance";
 import { CostSettingsDialog, MonthlyFeeDialog } from "../components/org/OrgFinanceDialogs";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
@@ -210,7 +212,7 @@ export default function MasterOrganizations() {
   // Financeiro: só master pleno (as RPCs recusam outbounder).
   const { data: finFacts, isError: finFactsErro } = useOrgFinance();
   const { data: costSettings, isError: custosErro } = useCostSettings();
-  const { data: plans, isError: planosErro } = usePlanPricing();
+  const { data: plans, isError: planosErro } = usePlanCatalog();
   // Sem a migration aplicada a RPC falha: some com o financeiro em vez de carregar para sempre.
   const finDisponivel = isFullMaster && !finFactsErro && !custosErro && !planosErro;
   const financeiro = useMemo(() => {
@@ -473,7 +475,7 @@ export default function MasterOrganizations() {
                         <p className="truncate text-sm text-muted-foreground">{org.slug}</p>
                         <p className="truncate text-xs text-muted-foreground md:hidden">
                           <span className="sm:hidden">{org.org_type === "outbound" ? "Outbound" : "CRM"} · </span>
-                          <span className="capitalize">{org.subscription_plan || "free"}</span>
+                          <span>{planLabel(org.subscription_plan, plans)}</span>
                         </p>
                       </div>
                     </TableCell>
@@ -486,7 +488,7 @@ export default function MasterOrganizations() {
                       {getStatusBadge(org.subscription_status, org.billing_override)}
                     </TableCell>
                     <TableCell className="max-md:hidden">
-                      <span className="capitalize">{org.subscription_plan || "free"}</span>
+                      <span>{planLabel(org.subscription_plan, plans)}</span>
                     </TableCell>
                     <TableCell>
                       <HealthChip health={saude.get(org.id)} />
