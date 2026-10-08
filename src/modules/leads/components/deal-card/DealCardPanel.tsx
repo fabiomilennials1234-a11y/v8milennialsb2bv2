@@ -31,7 +31,8 @@ import {
 } from "../lead-detail/hooks/useLeadComments";
 import { GavetaLateral } from "../lead-card/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
-import { TelefoneDoNegocioFaixa, useResolucaoDoTelefoneDoNegocio } from "./TelefoneDoNegocio";
+import { TelefoneDoNegocioFaixa } from "./TelefoneDoNegocio";
+import { useResolucaoDoTelefoneDoNegocio } from "../../hooks/useTelefoneDoNegocio";
 import { numeroDoNegocio } from "@/modules/communication/lib/telefoneDoNegocio";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";

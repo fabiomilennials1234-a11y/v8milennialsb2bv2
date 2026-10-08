@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import { Check, Loader2, MessageCircle, Pencil, X } from "lucide-react";
-import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLeadPhones, useNomearContatoDoTelefone, rotuloDoTelefone } from "@/modules/leads";
@@ -38,7 +38,7 @@ export function FalandoCom({ leadId, telefone }: { leadId: string; telefone: str
       await nomear.mutateAsync({ phone: telefone, label: rascunho });
       setEditando(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não foi possível nomear o contato");
+      notifyError(e, { fallback: "Não foi possível nomear o contato." });
     }
   };
 

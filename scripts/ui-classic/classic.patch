@@ -1023,7 +1023,7 @@ index bae373207..e16a4829f 100644
        {/* Tabs */}
 diff --git a/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx b/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx
 new file mode 100644
-index 000000000..9959934eb
+index 000000000..9700c1e81
 --- /dev/null
 +++ b/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx
 @@ -0,0 +1,111 @@
@@ -1038,7 +1038,7 @@ index 000000000..9959934eb
 + */
 +import { useState } from "react";
 +import { Check, Loader2, MessageCircle, Pencil, X } from "lucide-react";
-+import { toast } from "sonner";
++import { notifyError } from "@/shared/errors";
 +import { Button } from "@/components/ui/button";
 +import { Input } from "@/components/ui/input";
 +import { useLeadPhones, useNomearContatoDoTelefone, rotuloDoTelefone } from "@/modules/leads";
@@ -1067,7 +1067,7 @@ index 000000000..9959934eb
 +      await nomear.mutateAsync({ phone: telefone, label: rascunho });
 +      setEditando(false);
 +    } catch (e) {
-+      toast.error(e instanceof Error ? e.message : "Não foi possível nomear o contato");
++      notifyError(e, { fallback: "Não foi possível nomear o contato." });
 +    }
 +  };
 +

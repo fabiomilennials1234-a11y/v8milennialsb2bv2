@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { userMessageOf } from "@/shared/errors";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { useLeadPhones, useSalvarTelefonesDoLead, type TelefoneEditado } from "../../hooks/useLeadPhones";
 import { agruparPorContato } from "../../lib/lead-phones";
@@ -80,7 +81,7 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
       setEditando(false);
       toast.success("Contatos salvos");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar os telefones");
+      setErro(userMessageOf(e, "Não foi possível salvar os telefones."));
     }
   };
 
