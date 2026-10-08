@@ -38,6 +38,7 @@ import {
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
+import { readDocumentFileName, type DocumentFileNameFields } from "@/modules/communication/lib/documentFileName";
 import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
 import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
@@ -45,6 +46,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
+import { OnDemandMedia } from "./media/OnDemandMedia";
 import { Button } from "@/components/ui/button";
 import { Reply } from "lucide-react";
 import {
@@ -142,6 +144,7 @@ export function MessageBubble({
   onImagePreview,
   isFirstInGroup = true,
   isLastInGroup = true,
+  senderName,
   mountTime,
   onRetry,
   instanceId,
@@ -154,6 +157,8 @@ export function MessageBubble({
   onImagePreview: (url: string) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Remetente em conversa de grupo (só na 1ª da sequência). Ver `groupSenderName`. */
+  senderName?: string | null;
   mountTime?: number;
   onRetry?: (message: FailedMessage) => void;
   /** When set + enableActions=true, reveals S1 action bar on hover */
@@ -171,6 +176,8 @@ export function MessageBubble({
       ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
       : "manual";
   const isWhatsAppMsg = "message_type" in message;
+  const waInstanceId = isWhatsAppMsg ? (message as WhatsAppMessage).instance_id : undefined;
+  const waMessageId = isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined;
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
@@ -393,6 +400,12 @@ export function MessageBubble({
           </div>
         )}
 
+        {senderName && !isOutgoing && (
+          <p data-group-sender className="mb-1 truncate text-xs font-semibold text-muted-foreground">
+            {senderName}
+          </p>
+        )}
+
         {isDeleted ? (
           <DeletedPlaceholder deletedAt={meta.deleted_at} />
         ) : isEditing ? (
@@ -458,23 +471,29 @@ export function MessageBubble({
 
             {/* Imagem */}
             {isImage && message.media_url && (
-              <MessageImage
-                src={message.media_url}
-                onPreview={() => onImagePreview(message.media_url!)}
-              />
+              <OnDemandMedia kind="image" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageImage src={url} onPreview={() => onImagePreview(url)} />}
+              </OnDemandMedia>
             )}
 
             {/* Vídeo */}
             {isVideo && message.media_url && (
-              <MessageVideo src={message.media_url} />
+              <OnDemandMedia kind="video" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageVideo src={url} />}
+              </OnDemandMedia>
             )}
 
             {/* Documento */}
             {isDocument && message.media_url && (
-              <MessageDocument
-                src={message.media_url}
-                isOutgoing={isOutgoing}
-              />
+              <OnDemandMedia kind="document" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => (
+                  <MessageDocument
+                    src={url}
+                    fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
+                    isOutgoing={isOutgoing}
+                  />
+                )}
+              </OnDemandMedia>
             )}
 
             {/* Sticker */}
@@ -581,7 +600,7 @@ export function MessageBubble({
                   return <MessageVideo src={mediaUrl} />;
                 if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
                   return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
-                return <MessageDocument src={mediaUrl} isOutgoing={isOutgoing} />;
+                return <MessageDocument src={mediaUrl} fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined} isOutgoing={isOutgoing} />;
               })()
             )}
 

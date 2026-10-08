@@ -577,6 +577,9 @@ export function useSendWhatsAppMedia() {
         message_type: mediaType,
         content: caption || null,
         media_url: mediaUrl,
+        // Este fallback não tem raw_payload: sem isto o trigger não acha nome
+        // e, se ele chegar antes do eco do webhook, o nome se perde.
+        ...(mediaType === "document" && fileName?.trim() ? { media_file_name: fileName.trim().slice(0, 255) } : {}),
         ...(replyContext ? { reply_context: replyContext } : {}),
         status: providerSendStatus(data),
         timestamp: new Date().toISOString(),
@@ -613,6 +616,7 @@ export function useSendWhatsAppMedia() {
         message_type: variables.mediaType,
         content: variables.caption || null,
         media_url: null,
+        media_file_name: variables.mediaType === "document" ? variables.fileName?.trim() || null : null,
         push_name: null,
         status: "pending",
         lead_id: null,
