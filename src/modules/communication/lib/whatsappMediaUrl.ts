@@ -7,9 +7,20 @@
  * forma de abrir é pedir sob clique pelo `downloadMedia`.
  */
 
+const WHATSAPP_CDN_DOMAINS = ["whatsapp.net", "whatsapp.com"];
+
+/** Só subdomínio de whatsapp.net/.com: `evil.com/?x=.whatsapp.net/` e `whatsapp.net.evil.com` não passam. */
 export function isWhatsAppCdnUrl(url: string | null | undefined): boolean {
   if (!url) return false;
-  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
+  let host: string;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    host = parsed.hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return WHATSAPP_CDN_DOMAINS.some((d) => host.endsWith(`.${d}`));
 }
 
 /** Decodifica o base64 (com ou sem prefixo `data:`) devolvido por `downloadMedia`. */
