@@ -30,12 +30,12 @@ type ClienteComPresenca = {
   ) => Promise<{ error: { message: string } | null }>;
 };
 
-export function usePresenca(): void {
+export function usePresenca(habilitado = true): void {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
 
   useEffect(() => {
-    if (!user?.id || !organizationId) return;
+    if (!habilitado || !user?.id || !organizationId) return;
 
     let vivo = true;
 
@@ -65,5 +65,5 @@ export function usePresenca(): void {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", carimbar);
     };
-  }, [organizationId, user?.id]);
+  }, [habilitado, organizationId, user?.id]);
 }

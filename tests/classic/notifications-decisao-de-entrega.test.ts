@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { decidirEntrega, type ContextoDeEntrega } from "./decisao-de-entrega";
-import { empilhar } from "./pilha-de-cartoes";
-import { resolverPreferencias } from "./preferencias-de-aviso";
-import type { Aviso } from "./aviso-stream";
+import { decidirEntrega, type ContextoDeEntrega } from "@/modules/platform/lib/decisao-de-entrega";
+import { empilhar } from "@/modules/platform/lib/pilha-de-cartoes";
+import { resolverPreferencias } from "@/modules/platform/lib/preferencias-de-aviso";
+import type { Aviso } from "@/modules/platform/lib/aviso-stream";
 
 const AGORA = new Date("2026-08-31T17:00:00.000Z").getTime();
 

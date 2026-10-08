@@ -72,9 +72,18 @@ export class MotorDeSom {
    * O navegador só deixa tocar depois de um gesto da pessoa. Chamar isto DENTRO
    * do gesto (um clique no sino, por exemplo) é o que destrava o áudio.
    */
-  destravar(): void {
-    const ctx = this.contextoAtivo();
-    this.destravado = ctx?.state === "running";
+  async destravar(): Promise<boolean> {
+    try {
+      const ctx = this.contextoAtivo();
+      if (!ctx) return false;
+      // resume precisa começar dentro do gesto, antes de esperar rede ou timers.
+      if (ctx.state !== "running") await ctx.resume();
+      this.destravado = ctx.state === "running";
+      return this.destravado;
+    } catch {
+      this.destravado = false;
+      return false;
+    }
   }
 
   /**
@@ -94,12 +103,12 @@ export class MotorDeSom {
     this.escutando = true;
 
     const aoGesto = () => {
-      this.destravar();
-      if (this.destravado) {
+      void this.destravar().then((ok) => {
+        if (!ok) return;
         window.removeEventListener("pointerdown", aoGesto);
         window.removeEventListener("keydown", aoGesto);
         this.escutando = false;
-      }
+      });
     };
 
     window.addEventListener("pointerdown", aoGesto);
@@ -111,21 +120,19 @@ export class MotorDeSom {
   }
 
   /** Toca o timbre. Volume de 0 a 100. Silencioso e sem exceção onde não há áudio. */
-  tocar(timbre: Timbre, volume: number): void {
+  async tocar(timbre: Timbre, volume: number): Promise<boolean> {
     const ctx = this.contextoAtivo();
-    if (!ctx) return;
+    if (!ctx || volume <= 0) return false;
 
     // Contexto suspenso toca no vazio: os osciladores rodam, ninguém ouve. Só
     // vale agendar as notas depois que ele estiver de fato correndo.
-    if (ctx.state === "suspended") {
-      void ctx.resume().then(
-        () => this.agendar(ctx, timbre, volume),
-        () => undefined,
-      );
-      return;
+    if (ctx.state !== "running" && !(await this.destravar())) return false;
+    try {
+      this.agendar(ctx, timbre, volume);
+      return true;
+    } catch {
+      return false;
     }
-
-    this.agendar(ctx, timbre, volume);
   }
 
   private agendar(ctx: AudioContext, timbre: Timbre, volume: number): void {
@@ -159,7 +166,7 @@ export class MotorDeSom {
 
   private contextoAtivo(): AudioContext | null {
     try {
-      if (!this.contexto) this.contexto = this.fabrica();
+      if (!this.contexto || this.contexto.state === "closed") this.contexto = this.fabrica();
       // A retomada acontece num lugar só (`tocar`), porque ela é ASSÍNCRONA:
       // pedir aqui e agendar em seguida agendaria com o contexto ainda suspenso.
       return this.contexto;

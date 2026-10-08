@@ -43,6 +43,10 @@ const CANAL_QUENTE = new Set([
   "cron_drift",
   "lead_message",
   "lead_new",
+  "transfer_to_human",
+  "meeting_soon",
+  "follow_up_due",
+  "follow_up_overdue",
   "scheduled_message_sent",
   "scheduled_message_failed",
 ]);
@@ -108,6 +112,8 @@ export function decidirEntrega(
   // A conversa que já está na tela não precisa ser anunciada a quem a está lendo.
   if (
     preferencias.mute_active_conversation &&
+    aviso.type === "lead_message" &&
+    contexto.abaVisivel &&
     aviso.lead_id !== null &&
     aviso.lead_id === contexto.conversaAbertaLeadId
   ) {

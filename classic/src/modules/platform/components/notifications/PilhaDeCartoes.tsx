@@ -1,11 +1,12 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, MessageSquare, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Calendar, CalendarCheck, CalendarX, Clock, MessageSquare, UserPlus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useAvisos } from "../../hooks/useAvisos";
 
 import {
   assinarCartoes,
@@ -25,12 +26,18 @@ import {
 
 const VISUAL: Record<string, { icone: typeof MessageSquare; classe: string; borda: string }> = {
   lead_message: { icone: MessageSquare, classe: "text-chart-5", borda: "border-border" },
+  meeting_soon: { icone: Calendar, classe: "text-warning", borda: "border-warning/40" },
+  follow_up_due: { icone: Clock, classe: "text-warning", borda: "border-warning/40" },
+  follow_up_overdue: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
+  scheduled_message_sent: { icone: CalendarCheck, classe: "text-success", borda: "border-success/40" },
+  scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", borda: "border-destructive/50" },
   lead_new: { icone: UserPlus, classe: "text-success", borda: "border-success/40" },
   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
   cron_drift: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
 };
 
 export function PilhaDeCartoes() {
+  useAvisos({ entregar: true });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { pilha, excedente } = useSyncExternalStore(assinarCartoes, estadoDosCartoes, estadoDosCartoes);

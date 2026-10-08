@@ -96,3 +96,31 @@ A revisão do PR #2125 preserva também a restrição opcional por responsável:
 produtor, sino e push intersectam o vínculo ao número com o mesmo predicado de
 acesso usado pelo chat. Sem lead, a entrega depende de esse predicado permitir
 o telefone. Preferências de entrega continuam sem alterar o registro elegível.
+
+## Emenda — 2026-09-24: lembretes da agenda e entrega recuperável
+
+Reuniões e follow-ups da agenda interna também exigem aviso com antecedência.
+As varreduras passam a executar a cada minuto e avisam na janela de 15 minutos
+antes do compromisso. `meetings` inclui criador e participantes ativos da mesma
+organização, exceto convites recusados; compromissos sem lead são válidos.
+Reuniões dos funis continuam cobertas, sem repetir a projeção da agenda nem
+ressuscitar compromissos cancelados ou concluídos. Eventos de dia inteiro não
+ganham alarme por horário. Follow-ups atrasados preservam o lembrete diário a
+partir das 7h de São Paulo.
+
+A identidade do lembrete inclui o instante completo do agendamento. Ler o aviso
+não o recria na próxima varredura; remarcar dentro da mesma hora permite outro
+aviso. A preferência de Agenda governa som e a preferência por tipo governa
+entrega na tela. Reunião próxima e follow-up devido/atrasado entram nos cartões;
+uma marcação futura continua apenas no sino.
+
+A entrega no navegador tem um receptor global, independente dos sinos desktop e
+móvel. Realtime e recuperação por consulta a cada 30s usam a mesma deduplicação
+por versão do aviso. A primeira consulta é histórico e não toca uma rajada. Ao
+trocar organização/usuário, o receptor limpa a pilha e reinicia a deduplicação.
+Silenciar conversa aberta se aplica só a mensagens e com a aba visível, nunca
+a um lembrete da agenda do mesmo lead.
+
+Desbloquear áudio chama e aguarda `AudioContext.resume()` dentro do gesto. O botão
+de ativar som reproduz uma amostra e informa falha de gravação. A preferência é
+otimista, com rollback em erro e gravações serializadas por usuário/organização.

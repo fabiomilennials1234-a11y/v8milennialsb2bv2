@@ -6133,6 +6133,126 @@ index 64976bc8c..4d1ab20b5 100644
        {featureFlags.chatBubble && <ChatBubble />}
  
        <QuickBlastProgressPanel />
+diff --git a/classic/src/modules/platform/components/notifications/AlertsDropdown.tsx b/classic/src/modules/platform/components/notifications/AlertsDropdown.tsx
+index 099903839..28a64b3ff 100644
+--- a/classic/src/modules/platform/components/notifications/AlertsDropdown.tsx
++++ b/classic/src/modules/platform/components/notifications/AlertsDropdown.tsx
+@@ -1,4 +1,6 @@
+ import { useMemo, useState } from "react";
++import { toast } from "sonner";
++import { notifyError } from "@/shared/errors";
+ import { motion, AnimatePresence } from "framer-motion";
+ import {
+   AlertTriangle,
+@@ -69,7 +71,20 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
+   const [open, setOpen] = useState(false);
+   const [familia, setFamilia] = useState<Familia>("tudo");
+   const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
+-  const { preferencias, salvar } = usePreferenciasDeAviso();
++  const { preferencias, salvar, carregando, salvando } = usePreferenciasDeAviso();
++
++  const alternarSom = async () => {
++    const ligar = !preferencias.sound_enabled;
++    // Inicia o áudio no clique, antes da gravação assíncrona da preferência.
++    const teste = ligar ? motorDeSom.tocar("sistema", preferencias.volume) : null;
++    try {
++      await salvar({ sound_enabled: ligar });
++      if (teste && !(await teste)) toast.info("Som habilitado. Confira o volume e a permissão de áudio do navegador.");
++      else toast.success(ligar ? "Som das notificações ativado" : "Notificações silenciadas");
++    } catch (caught) {
++      notifyError(caught, { fallback: "Não foi possível salvar o som. Tente novamente." });
++    }
++  };
+ 
+   const contagem = useMemo(() => contarPorFamilia(avisos), [avisos]);
+   const grupos = useMemo(
+@@ -136,7 +151,9 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
+                 a tela de configurações. */}
+             <button
+               type="button"
+-              onClick={() => void salvar({ sound_enabled: !preferencias.sound_enabled })}
++              onClick={() => void alternarSom()}
++              disabled={carregando || salvando}
++              aria-label={preferencias.sound_enabled ? "Silenciar notificações" : "Ativar som das notificações"}
+               aria-pressed={!preferencias.sound_enabled}
+               title={preferencias.sound_enabled ? "Silenciar tudo" : "Voltar a tocar"}
+               className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+diff --git a/classic/src/modules/platform/components/notifications/PilhaDeCartoes.tsx b/classic/src/modules/platform/components/notifications/PilhaDeCartoes.tsx
+index aba455faa..7cfc31164 100644
+--- a/classic/src/modules/platform/components/notifications/PilhaDeCartoes.tsx
++++ b/classic/src/modules/platform/components/notifications/PilhaDeCartoes.tsx
+@@ -1,11 +1,12 @@
+ import { useEffect, useSyncExternalStore } from "react";
+ import { AnimatePresence, motion } from "framer-motion";
+-import { AlertTriangle, MessageSquare, UserPlus, X } from "lucide-react";
++import { AlertTriangle, Calendar, CalendarCheck, CalendarX, Clock, MessageSquare, UserPlus, X } from "lucide-react";
+ import { useNavigate } from "react-router-dom";
+ import { useQueryClient } from "@tanstack/react-query";
+ 
+ import { supabase } from "@/integrations/supabase/client";
+ import { cn } from "@/lib/utils";
++import { useAvisos } from "../../hooks/useAvisos";
+ 
+ import {
+   assinarCartoes,
+@@ -25,12 +26,18 @@ import {
+ 
+ const VISUAL: Record<string, { icone: typeof MessageSquare; classe: string; borda: string }> = {
+   lead_message: { icone: MessageSquare, classe: "text-chart-5", borda: "border-border" },
++  meeting_soon: { icone: Calendar, classe: "text-warning", borda: "border-warning/40" },
++  follow_up_due: { icone: Clock, classe: "text-warning", borda: "border-warning/40" },
++  follow_up_overdue: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
++  scheduled_message_sent: { icone: CalendarCheck, classe: "text-success", borda: "border-success/40" },
++  scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", borda: "border-destructive/50" },
+   lead_new: { icone: UserPlus, classe: "text-success", borda: "border-success/40" },
+   workflow_alert: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
+   cron_drift: { icone: AlertTriangle, classe: "text-destructive", borda: "border-destructive/50" },
+ };
+ 
+ export function PilhaDeCartoes() {
++  useAvisos({ entregar: true });
+   const navigate = useNavigate();
+   const queryClient = useQueryClient();
+   const { pilha, excedente } = useSyncExternalStore(assinarCartoes, estadoDosCartoes, estadoDosCartoes);
+diff --git a/classic/src/modules/platform/components/notifications/PreferenciasDeAviso.tsx b/classic/src/modules/platform/components/notifications/PreferenciasDeAviso.tsx
+index bd0936570..38a13c171 100644
+--- a/classic/src/modules/platform/components/notifications/PreferenciasDeAviso.tsx
++++ b/classic/src/modules/platform/components/notifications/PreferenciasDeAviso.tsx
+@@ -43,7 +43,7 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[] }[] =
+   },
+   {
+     rotulo: "Agenda",
+-    descricao: "Reunião marcada, reunião em uma hora, follow-up do dia",
++    descricao: "Avisos na tela e som 15 minutos antes de reuniões e follow-ups, e lembretes de follow-ups atrasados",
+     tipos: ["meeting_booked", "meeting_soon", "follow_up_due", "follow_up_overdue"],
+   },
+   {
+@@ -56,13 +56,15 @@ const GRUPOS_DE_SOM: { rotulo: string; descricao: string; tipos: string[] }[] =
+ const HORAS = Array.from({ length: 24 }, (_, h) => h);
+ 
+ export function PreferenciasDeAviso() {
+-  const { preferencias, carregando, salvar } = usePreferenciasDeAviso();
++  const { preferencias, carregando, salvar, salvando } = usePreferenciasDeAviso();
+   const { isSupported, permission, requestPermission, unsubscribe } = usePushSubscription();
+   const [volumeLocal, setVolumeLocal] = useState<number | null>(null);
+ 
+   const aplicar = async (mudanca: Partial<Preferencias>) => {
++    const teste = mudanca.sound_enabled === true ? motorDeSom.tocar("sistema", preferencias.volume) : null;
+     try {
+       await salvar(mudanca);
++      if (teste && !(await teste)) toast.info("Som habilitado. Confira o volume e a permissão de áudio do navegador.");
+     } catch (caught) {
+       notifyError(caught, { fallback: "Não deu para salvar. Tente de novo." });
+     }
+@@ -101,6 +103,8 @@ export function PreferenciasDeAviso() {
+             </p>
+           </div>
+           <Switch
++            aria-label="Som das notificações"
++            disabled={carregando || salvando}
+             checked={preferencias.sound_enabled}
+             onCheckedChange={(v) => aplicar({ sound_enabled: v })}
+           />
 diff --git a/classic/src/modules/platform/hooks/use-sw-update.ts b/classic/src/modules/platform/hooks/use-sw-update.ts
 index 76afbc226..1848457df 100644
 --- a/classic/src/modules/platform/hooks/use-sw-update.ts
@@ -6249,6 +6369,276 @@ index 76afbc226..1848457df 100644
        onNeedRefresh() {
          // workbox-window classifica um update achado >60s após o register
          // como "externo" e emite installed + waiting para o MESMO SW — o build
+diff --git a/classic/src/modules/platform/hooks/useAvisos.ts b/classic/src/modules/platform/hooks/useAvisos.ts
+index f1eb2c1ec..717b837b3 100644
+--- a/classic/src/modules/platform/hooks/useAvisos.ts
++++ b/classic/src/modules/platform/hooks/useAvisos.ts
+@@ -29,7 +29,7 @@ import {
+ import { conversaAberta } from "../lib/conversa-aberta";
+ import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
+ import { motorDeSom } from "../lib/motor-de-som";
+-import { mostrarCartao } from "../lib/cartoes-store";
++import { mostrarCartao, reiniciarCartoes } from "../lib/cartoes-store";
+ import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
+ import { usePresenca } from "./usePresenca";
+ 
+@@ -38,9 +38,10 @@ const TETO = 50;
+ 
+ /**
+  * A consulta periódica deixa de ser o mecanismo e vira rede de segurança: se o
+- * canal cair sem avisar, o sino se corrige em minutos em vez de nunca.
++ * canal cair sem avisar, a consulta recupera a entrega em até 30 segundos.
+  */
+-const REDE_DE_SEGURANCA_MS = 5 * 60_000;
++const REDE_DE_SEGURANCA_MS = 30_000;
++const LISTA_VAZIA: Aviso[] = [];
+ 
+ export interface UseAvisosResult {
+   avisos: Aviso[];
+@@ -61,7 +62,8 @@ function horaLocalDeSaoPaulo(instante: number): number {
+   );
+ }
+ 
+-export function useAvisos(): UseAvisosResult {
++// Só PilhaDeCartoes é receptor. Os sinos desktop/mobile compartilham a consulta.
++export function useAvisos({ entregar = false } = {}): UseAvisosResult {
+   const { user } = useAuth();
+   const { organizationId, isReady } = useOrganization();
+   const queryClient = useQueryClient();
+@@ -76,16 +78,48 @@ export function useAvisos(): UseAvisosResult {
+   const preferenciasRef = useRef(preferencias);
+   preferenciasRef.current = preferencias;
+ 
+-  useEffect(() => motorDeSom.destravarNoPrimeiroGesto(), []);
++  useEffect(() => {
++    if (entregar) return motorDeSom.destravarNoPrimeiroGesto();
++  }, [entregar]);
+ 
+-  // O sino vive no cabeçalho de toda tela autenticada: é o lugar natural para
+-  // carimbar "tem alguém olhando".
+-  usePresenca();
++  // Só o receptor global registra presença; montar outro sino não cria timer.
++  usePresenca(entregar);
+ 
+   const queryKey = useMemo(() => ["avisos", organizationId, user?.id], [organizationId, user?.id]);
+   const habilitado = isReady && !!organizationId && !!user?.id;
+-
+-  const { data: avisos = [], isLoading } = useQuery({
++  const recebidos = useMemo(() => ({ organizationId, userId: user?.id, versoes: new Map<string, string>(), inicializado: false }),
++    [organizationId, user?.id]);
++
++  useEffect(() => {
++    if (!entregar) return;
++    ultimoSomPorChave.current = {};
++    reiniciarCartoes();
++    return reiniciarCartoes;
++  }, [entregar, organizationId, user?.id]);
++
++  const receber = useCallback((aviso: Aviso, anunciar: boolean) => {
++    if (!entregar || !habilitado || aviso.organization_id !== recebidos.organizationId || aviso.user_id !== recebidos.userId) return;
++    const versao = `${aviso.event_count}:${aviso.last_event_at ?? aviso.created_at}`;
++    const anterior = recebidos.versoes.get(aviso.id);
++    recebidos.versoes.set(aviso.id, versao);
++    if (recebidos.versoes.size > 500) recebidos.versoes.delete(recebidos.versoes.keys().next().value!);
++    if (!anunciar || anterior === versao || aviso.read_at !== null) return;
++
++    const agora = Date.now();
++    const abaVisivel = document.visibilityState === "visible";
++    const decisao: Entrega = decidirEntrega(aviso, anterior ? "UPDATE" : "INSERT", {
++      preferencias: preferenciasRef.current, abaVisivel,
++      conversaAbertaLeadId: conversaAberta(), ultimoSomPorChave: ultimoSomPorChave.current,
++      horaLocal: horaLocalDeSaoPaulo(agora), agora,
++    });
++    if (decisao.som) {
++      void motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
++      if (aviso.group_key) ultimoSomPorChave.current[aviso.group_key] = agora;
++    }
++    if (decisao.cartao) mostrarCartao(aviso, agora, abaVisivel);
++  }, [entregar, habilitado, recebidos]);
++
++  const { data: avisos = LISTA_VAZIA, isLoading, isSuccess } = useQuery({
+     queryKey,
+     queryFn: async (): Promise<Aviso[]> => {
+       if (!organizationId || !user?.id) return [];
+@@ -109,50 +143,35 @@ export function useAvisos(): UseAvisosResult {
+       return (data ?? []) as unknown as Aviso[];
+     },
+     enabled: habilitado,
+-    refetchInterval: REDE_DE_SEGURANCA_MS,
++    refetchInterval: entregar ? REDE_DE_SEGURANCA_MS : false,
++    refetchIntervalInBackground: entregar,
+   });
+ 
++  useEffect(() => {
++    if (!entregar || !isSuccess) return;
++    // A primeira fotografia é histórico. Depois disso, polling e realtime
++    // passam pela mesma deduplicação: recuperar conexão não pode deixar mudo.
++    for (const aviso of avisos) receber(aviso, recebidos.inicializado);
++    recebidos.inicializado = true;
++  }, [avisos, entregar, isSuccess, receber, recebidos]);
++
+   useRealtimeChannel({
+     table: "notifications",
+     filter: user?.id ? `user_id=eq.${user.id}` : undefined,
+-    enabled: habilitado,
++    enabled: habilitado && entregar,
+     statusKey: "avisos",
+     onEvent: (payload) => {
+       if (!organizationId) return;
+ 
+       const evento = paraEvento(payload);
+       if (!evento) return;
++      if (evento.tipo !== "DELETE" && (evento.aviso.organization_id !== organizationId || evento.aviso.user_id !== user?.id)) return;
+ 
+       queryClient.setQueryData<Aviso[]>(queryKey, (atual = []) =>
+-        aplicarEventoDeAviso(atual, evento, organizationId),
++        aplicarEventoDeAviso(atual, evento, organizationId).slice(0, TETO),
+       );
+ 
+-      if (evento.tipo === "DELETE") return;
+-      if (evento.aviso.organization_id !== organizationId) return;
+-      // Aviso que já nasceu lido (o próprio usuário agindo noutra aba) não toca.
+-      if (evento.aviso.read_at !== null) return;
+-
+-      const agora = Date.now();
+-      const abaVisivel = typeof document === "undefined" || document.visibilityState === "visible";
+-      const decisao: Entrega = decidirEntrega(evento.aviso, evento.tipo, {
+-        preferencias: preferenciasRef.current,
+-        abaVisivel,
+-        conversaAbertaLeadId: conversaAberta(),
+-        ultimoSomPorChave: ultimoSomPorChave.current,
+-        horaLocal: horaLocalDeSaoPaulo(agora),
+-        agora,
+-      });
+-
+-      if (decisao.som) {
+-        motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
+-        if (evento.aviso.group_key) {
+-          ultimoSomPorChave.current[evento.aviso.group_key] = agora;
+-        }
+-      }
+-
+-      if (decisao.cartao) {
+-        mostrarCartao(evento.aviso, agora, abaVisivel);
+-      }
++      if (evento.tipo !== "DELETE") receber(evento.aviso, true);
+     },
+   });
+ 
+diff --git a/classic/src/modules/platform/hooks/usePreferenciasDeAviso.ts b/classic/src/modules/platform/hooks/usePreferenciasDeAviso.ts
+index e92d0fd7d..9ae686eb0 100644
+--- a/classic/src/modules/platform/hooks/usePreferenciasDeAviso.ts
++++ b/classic/src/modules/platform/hooks/usePreferenciasDeAviso.ts
+@@ -6,8 +6,8 @@
+  * localStorage não existe.
+  */
+ 
+-import { useCallback, useMemo } from "react";
+-import { useQuery, useQueryClient } from "@tanstack/react-query";
++import { useMemo } from "react";
++import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ 
+ import { supabase } from "@/integrations/supabase/client";
+ import { useAuth, useOrganization } from "@/modules/identity";
+@@ -61,7 +61,7 @@ export function usePreferenciasDeAviso(): UsePreferenciasDeAvisoResult {
+   );
+   const habilitado = isReady && !!organizationId && !!user?.id;
+ 
+-  const { data, isLoading, isFetching } = useQuery({
++  const { data, isLoading } = useQuery({
+     queryKey,
+     queryFn: async (): Promise<PreferenciasDeAviso> => {
+       if (!organizationId || !user?.id) return resolverPreferencias(null);
+@@ -85,36 +85,40 @@ export function usePreferenciasDeAviso(): UsePreferenciasDeAvisoResult {
+ 
+   const preferencias = data ?? resolverPreferencias(null);
+ 
+-  const salvar = useCallback(
+-    async (mudanca: Partial<PreferenciasDeAviso>) => {
+-      if (!organizationId || !user?.id) return;
+-
+-      const proximas = { ...preferencias, ...mudanca };
++  const mutationKey = ["salvar-preferencias-de-aviso", organizationId, user?.id];
++  const pendentes = useIsMutating({ mutationKey });
++  const mutation = useMutation({
++    mutationKey,
++    scope: { id: JSON.stringify(queryKey) },
++    mutationFn: async (mudanca: Partial<PreferenciasDeAviso>) => {
++      if (!habilitado || !organizationId || !user?.id) throw new Error("Aguarde a organização carregar.");
++      await queryClient.cancelQueries({ queryKey });
++      const anteriores = queryClient.getQueryData<PreferenciasDeAviso>(queryKey) ?? preferencias;
++      const proximas = { ...anteriores, ...mudanca };
+       queryClient.setQueryData(queryKey, proximas);
+-
+-      const { error } = await db.from("notification_preferences").upsert(
+-        {
+-          user_id: user.id,
+-          organization_id: organizationId,
+-          ...proximas,
+-          updated_at: new Date().toISOString(),
+-        },
+-        { onConflict: "user_id,organization_id" },
+-      );
+-
+-      if (error) {
+-        // Devolve a tela ao estado do banco em vez de mentir que salvou.
+-        await queryClient.invalidateQueries({ queryKey });
++      try {
++        const { error } = await db.from("notification_preferences").upsert(
++          {
++            user_id: user.id,
++            organization_id: organizationId,
++            ...proximas,
++            updated_at: new Date().toISOString(),
++          },
++          { onConflict: "user_id,organization_id" },
++        );
++
++        if (error) throw error;
++      } catch (error) {
++        queryClient.setQueryData(queryKey, anteriores);
+         throw error;
+       }
+     },
+-    [organizationId, preferencias, queryClient, queryKey, user?.id],
+-  );
++  });
+ 
+   return {
+     preferencias,
+     carregando: isLoading,
+-    salvar,
+-    salvando: isFetching && !isLoading,
++    salvar: mutation.mutateAsync,
++    salvando: pendentes > 0,
+   };
+ }
+diff --git a/classic/src/modules/platform/hooks/usePresenca.ts b/classic/src/modules/platform/hooks/usePresenca.ts
+index 798be5e32..2271d1b62 100644
+--- a/classic/src/modules/platform/hooks/usePresenca.ts
++++ b/classic/src/modules/platform/hooks/usePresenca.ts
+@@ -30,12 +30,12 @@ type ClienteComPresenca = {
+   ) => Promise<{ error: { message: string } | null }>;
+ };
+ 
+-export function usePresenca(): void {
++export function usePresenca(habilitado = true): void {
+   const { user } = useAuth();
+   const { organizationId } = useOrganization();
+ 
+   useEffect(() => {
+-    if (!user?.id || !organizationId) return;
++    if (!habilitado || !user?.id || !organizationId) return;
+ 
+     let vivo = true;
+ 
+@@ -65,5 +65,5 @@ export function usePresenca(): void {
+       window.clearInterval(id);
+       document.removeEventListener("visibilitychange", carimbar);
+     };
+-  }, [organizationId, user?.id]);
++  }, [habilitado, organizationId, user?.id]);
+ }
 diff --git a/classic/src/modules/platform/hooks/useSavedViews.ts b/classic/src/modules/platform/hooks/useSavedViews.ts
 index 82fb19bff..081a21cfb 100644
 --- a/classic/src/modules/platform/hooks/useSavedViews.ts
@@ -6369,6 +6759,151 @@ index 82fb19bff..081a21cfb 100644
        });
      },
    });
+diff --git a/classic/src/modules/platform/lib/decisao-de-entrega.ts b/classic/src/modules/platform/lib/decisao-de-entrega.ts
+index 4d589b2eb..ee3ea2808 100644
+--- a/classic/src/modules/platform/lib/decisao-de-entrega.ts
++++ b/classic/src/modules/platform/lib/decisao-de-entrega.ts
+@@ -26,13 +26,30 @@ const TIMBRE_POR_TIPO: Record<string, Timbre> = {
+   follow_up_overdue: "reuniao",
+   workflow_alert: "erro",
+   cron_drift: "erro",
++  scheduled_message_sent: "mensagem",
++  scheduled_message_failed: "erro",
+ };
+ 
+ /** Automação parada atravessa o horário silencioso: parada de madrugada é prejuízo de manhã. */
+ const ATRAVESSA_O_SILENCIO = new Set(["workflow_alert", "cron_drift"]);
+ 
+-/** O que exige reação em minutos — o resto conta no sino sem roubar a tela. */
+-const CANAL_QUENTE = new Set(["workflow_alert", "cron_drift", "lead_message", "lead_new"]);
++/**
++ * O que exige reação em minutos — o resto conta no sino sem roubar a tela.
++ * Mensagem agendada entra: quem agendou quer saber na hora que saiu (ou que
++ * falhou e o lead ficou sem resposta), não dias depois abrindo o sino.
++ */
++const CANAL_QUENTE = new Set([
++  "workflow_alert",
++  "cron_drift",
++  "lead_message",
++  "lead_new",
++  "transfer_to_human",
++  "meeting_soon",
++  "follow_up_due",
++  "follow_up_overdue",
++  "scheduled_message_sent",
++  "scheduled_message_failed",
++]);
+ 
+ /**
+  * Rajada: enquanto a conversa está viva, o Aviso engorda em vez de nascer de
+@@ -95,6 +112,8 @@ export function decidirEntrega(
+   // A conversa que já está na tela não precisa ser anunciada a quem a está lendo.
+   if (
+     preferencias.mute_active_conversation &&
++    aviso.type === "lead_message" &&
++    contexto.abaVisivel &&
+     aviso.lead_id !== null &&
+     aviso.lead_id === contexto.conversaAbertaLeadId
+   ) {
+diff --git a/classic/src/modules/platform/lib/motor-de-som.ts b/classic/src/modules/platform/lib/motor-de-som.ts
+index 945e01a83..9d715412c 100644
+--- a/classic/src/modules/platform/lib/motor-de-som.ts
++++ b/classic/src/modules/platform/lib/motor-de-som.ts
+@@ -72,9 +72,18 @@ export class MotorDeSom {
+    * O navegador só deixa tocar depois de um gesto da pessoa. Chamar isto DENTRO
+    * do gesto (um clique no sino, por exemplo) é o que destrava o áudio.
+    */
+-  destravar(): void {
+-    const ctx = this.contextoAtivo();
+-    this.destravado = ctx?.state === "running";
++  async destravar(): Promise<boolean> {
++    try {
++      const ctx = this.contextoAtivo();
++      if (!ctx) return false;
++      // resume precisa começar dentro do gesto, antes de esperar rede ou timers.
++      if (ctx.state !== "running") await ctx.resume();
++      this.destravado = ctx.state === "running";
++      return this.destravado;
++    } catch {
++      this.destravado = false;
++      return false;
++    }
+   }
+ 
+   /**
+@@ -94,12 +103,12 @@ export class MotorDeSom {
+     this.escutando = true;
+ 
+     const aoGesto = () => {
+-      this.destravar();
+-      if (this.destravado) {
++      void this.destravar().then((ok) => {
++        if (!ok) return;
+         window.removeEventListener("pointerdown", aoGesto);
+         window.removeEventListener("keydown", aoGesto);
+         this.escutando = false;
+-      }
++      });
+     };
+ 
+     window.addEventListener("pointerdown", aoGesto);
+@@ -111,21 +120,19 @@ export class MotorDeSom {
+   }
+ 
+   /** Toca o timbre. Volume de 0 a 100. Silencioso e sem exceção onde não há áudio. */
+-  tocar(timbre: Timbre, volume: number): void {
++  async tocar(timbre: Timbre, volume: number): Promise<boolean> {
+     const ctx = this.contextoAtivo();
+-    if (!ctx) return;
++    if (!ctx || volume <= 0) return false;
+ 
+     // Contexto suspenso toca no vazio: os osciladores rodam, ninguém ouve. Só
+     // vale agendar as notas depois que ele estiver de fato correndo.
+-    if (ctx.state === "suspended") {
+-      void ctx.resume().then(
+-        () => this.agendar(ctx, timbre, volume),
+-        () => undefined,
+-      );
+-      return;
++    if (ctx.state !== "running" && !(await this.destravar())) return false;
++    try {
++      this.agendar(ctx, timbre, volume);
++      return true;
++    } catch {
++      return false;
+     }
+-
+-    this.agendar(ctx, timbre, volume);
+   }
+ 
+   private agendar(ctx: AudioContext, timbre: Timbre, volume: number): void {
+@@ -159,7 +166,7 @@ export class MotorDeSom {
+ 
+   private contextoAtivo(): AudioContext | null {
+     try {
+-      if (!this.contexto) this.contexto = this.fabrica();
++      if (!this.contexto || this.contexto.state === "closed") this.contexto = this.fabrica();
+       // A retomada acontece num lugar só (`tocar`), porque ela é ASSÍNCRONA:
+       // pedir aqui e agendar em seguida agendaria com o contexto ainda suspenso.
+       return this.contexto;
+diff --git a/classic/src/modules/platform/lib/pilha-de-cartoes.ts b/classic/src/modules/platform/lib/pilha-de-cartoes.ts
+index 5c3c80513..196f2a4a3 100644
+--- a/classic/src/modules/platform/lib/pilha-de-cartoes.ts
++++ b/classic/src/modules/platform/lib/pilha-de-cartoes.ts
+@@ -17,8 +17,11 @@ export const TETO_DE_CARTOES = 3;
+ /** Mensagem e lead somem sozinhos; quem não olhou em 8 segundos vê no sino. */
+ export const VIDA_PADRAO_MS = 8_000;
+ 
+-/** Automação parada não expira: some por ação ou por dispensa explícita. */
+-const FIXOS = new Set(["workflow_alert", "cron_drift"]);
++/**
++ * Não expiram: somem por ação ou por dispensa explícita. Automação parada e
++ * mensagem agendada que não saiu pedem ação — 8 segundos não bastam.
++ */
++const FIXOS = new Set(["workflow_alert", "cron_drift", "scheduled_message_failed"]);
+ 
+ export interface Cartao {
+   id: string;
 diff --git a/classic/src/modules/platform/pages/Configuracoes.tsx b/classic/src/modules/platform/pages/Configuracoes.tsx
 index 5b3df4c08..8744049ce 100644
 --- a/classic/src/modules/platform/pages/Configuracoes.tsx

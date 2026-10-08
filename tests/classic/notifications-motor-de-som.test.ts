@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-import { MotorDeSom } from "./motor-de-som";
+import { MotorDeSom } from "@/modules/platform/lib/motor-de-som";
 
 /**
  * O motor não é testado pelo som que produz — isso é ouvido, não asserção. O

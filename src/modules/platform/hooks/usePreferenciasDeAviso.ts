@@ -6,8 +6,8 @@
  * localStorage não existe.
  */
 
-import { useCallback, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useOrganization } from "@/modules/identity";
@@ -61,7 +61,7 @@ export function usePreferenciasDeAviso(): UsePreferenciasDeAvisoResult {
   );
   const habilitado = isReady && !!organizationId && !!user?.id;
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey,
     queryFn: async (): Promise<PreferenciasDeAviso> => {
       if (!organizationId || !user?.id) return resolverPreferencias(null);
@@ -85,36 +85,40 @@ export function usePreferenciasDeAviso(): UsePreferenciasDeAvisoResult {
 
   const preferencias = data ?? resolverPreferencias(null);
 
-  const salvar = useCallback(
-    async (mudanca: Partial<PreferenciasDeAviso>) => {
-      if (!organizationId || !user?.id) return;
-
-      const proximas = { ...preferencias, ...mudanca };
+  const mutationKey = ["salvar-preferencias-de-aviso", organizationId, user?.id];
+  const pendentes = useIsMutating({ mutationKey });
+  const mutation = useMutation({
+    mutationKey,
+    scope: { id: JSON.stringify(queryKey) },
+    mutationFn: async (mudanca: Partial<PreferenciasDeAviso>) => {
+      if (!habilitado || !organizationId || !user?.id) throw new Error("Aguarde a organização carregar.");
+      await queryClient.cancelQueries({ queryKey });
+      const anteriores = queryClient.getQueryData<PreferenciasDeAviso>(queryKey) ?? preferencias;
+      const proximas = { ...anteriores, ...mudanca };
       queryClient.setQueryData(queryKey, proximas);
+      try {
+        const { error } = await db.from("notification_preferences").upsert(
+          {
+            user_id: user.id,
+            organization_id: organizationId,
+            ...proximas,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,organization_id" },
+        );
 
-      const { error } = await db.from("notification_preferences").upsert(
-        {
-          user_id: user.id,
-          organization_id: organizationId,
-          ...proximas,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,organization_id" },
-      );
-
-      if (error) {
-        // Devolve a tela ao estado do banco em vez de mentir que salvou.
-        await queryClient.invalidateQueries({ queryKey });
+        if (error) throw error;
+      } catch (error) {
+        queryClient.setQueryData(queryKey, anteriores);
         throw error;
       }
     },
-    [organizationId, preferencias, queryClient, queryKey, user?.id],
-  );
+  });
 
   return {
     preferencias,
     carregando: isLoading,
-    salvar,
-    salvando: isFetching && !isLoading,
+    salvar: mutation.mutateAsync,
+    salvando: pendentes > 0,
   };
 }

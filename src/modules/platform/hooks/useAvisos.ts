@@ -29,7 +29,7 @@ import {
 import { conversaAberta } from "../lib/conversa-aberta";
 import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
 import { motorDeSom } from "../lib/motor-de-som";
-import { mostrarCartao } from "../lib/cartoes-store";
+import { mostrarCartao, reiniciarCartoes } from "../lib/cartoes-store";
 import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
 import { usePresenca } from "./usePresenca";
 
@@ -38,9 +38,10 @@ const TETO = 50;
 
 /**
  * A consulta periódica deixa de ser o mecanismo e vira rede de segurança: se o
- * canal cair sem avisar, o sino se corrige em minutos em vez de nunca.
+ * canal cair sem avisar, a consulta recupera a entrega em até 30 segundos.
  */
-const REDE_DE_SEGURANCA_MS = 5 * 60_000;
+const REDE_DE_SEGURANCA_MS = 30_000;
+const LISTA_VAZIA: Aviso[] = [];
 
 export interface UseAvisosResult {
   avisos: Aviso[];
@@ -61,7 +62,8 @@ function horaLocalDeSaoPaulo(instante: number): number {
   );
 }
 
-export function useAvisos(): UseAvisosResult {
+// Só PilhaDeCartoes é receptor. Os sinos desktop/mobile compartilham a consulta.
+export function useAvisos({ entregar = false } = {}): UseAvisosResult {
   const { user } = useAuth();
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
@@ -76,16 +78,48 @@ export function useAvisos(): UseAvisosResult {
   const preferenciasRef = useRef(preferencias);
   preferenciasRef.current = preferencias;
 
-  useEffect(() => motorDeSom.destravarNoPrimeiroGesto(), []);
+  useEffect(() => {
+    if (entregar) return motorDeSom.destravarNoPrimeiroGesto();
+  }, [entregar]);
 
-  // O sino vive no cabeçalho de toda tela autenticada: é o lugar natural para
-  // carimbar "tem alguém olhando".
-  usePresenca();
+  // Só o receptor global registra presença; montar outro sino não cria timer.
+  usePresenca(entregar);
 
   const queryKey = useMemo(() => ["avisos", organizationId, user?.id], [organizationId, user?.id]);
   const habilitado = isReady && !!organizationId && !!user?.id;
+  const recebidos = useMemo(() => ({ organizationId, userId: user?.id, versoes: new Map<string, string>(), inicializado: false }),
+    [organizationId, user?.id]);
 
-  const { data: avisos = [], isLoading } = useQuery({
+  useEffect(() => {
+    if (!entregar) return;
+    ultimoSomPorChave.current = {};
+    reiniciarCartoes();
+    return reiniciarCartoes;
+  }, [entregar, organizationId, user?.id]);
+
+  const receber = useCallback((aviso: Aviso, anunciar: boolean) => {
+    if (!entregar || !habilitado || aviso.organization_id !== recebidos.organizationId || aviso.user_id !== recebidos.userId) return;
+    const versao = `${aviso.event_count}:${aviso.last_event_at ?? aviso.created_at}`;
+    const anterior = recebidos.versoes.get(aviso.id);
+    recebidos.versoes.set(aviso.id, versao);
+    if (recebidos.versoes.size > 500) recebidos.versoes.delete(recebidos.versoes.keys().next().value!);
+    if (!anunciar || anterior === versao || aviso.read_at !== null) return;
+
+    const agora = Date.now();
+    const abaVisivel = document.visibilityState === "visible";
+    const decisao: Entrega = decidirEntrega(aviso, anterior ? "UPDATE" : "INSERT", {
+      preferencias: preferenciasRef.current, abaVisivel,
+      conversaAbertaLeadId: conversaAberta(), ultimoSomPorChave: ultimoSomPorChave.current,
+      horaLocal: horaLocalDeSaoPaulo(agora), agora,
+    });
+    if (decisao.som) {
+      void motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
+      if (aviso.group_key) ultimoSomPorChave.current[aviso.group_key] = agora;
+    }
+    if (decisao.cartao) mostrarCartao(aviso, agora, abaVisivel);
+  }, [entregar, habilitado, recebidos]);
+
+  const { data: avisos = LISTA_VAZIA, isLoading, isSuccess } = useQuery({
     queryKey,
     queryFn: async (): Promise<Aviso[]> => {
       if (!organizationId || !user?.id) return [];
@@ -109,50 +143,35 @@ export function useAvisos(): UseAvisosResult {
       return (data ?? []) as unknown as Aviso[];
     },
     enabled: habilitado,
-    refetchInterval: REDE_DE_SEGURANCA_MS,
+    refetchInterval: entregar ? REDE_DE_SEGURANCA_MS : false,
+    refetchIntervalInBackground: entregar,
   });
+
+  useEffect(() => {
+    if (!entregar || !isSuccess) return;
+    // A primeira fotografia é histórico. Depois disso, polling e realtime
+    // passam pela mesma deduplicação: recuperar conexão não pode deixar mudo.
+    for (const aviso of avisos) receber(aviso, recebidos.inicializado);
+    recebidos.inicializado = true;
+  }, [avisos, entregar, isSuccess, receber, recebidos]);
 
   useRealtimeChannel({
     table: "notifications",
     filter: user?.id ? `user_id=eq.${user.id}` : undefined,
-    enabled: habilitado,
+    enabled: habilitado && entregar,
     statusKey: "avisos",
     onEvent: (payload) => {
       if (!organizationId) return;
 
       const evento = paraEvento(payload);
       if (!evento) return;
+      if (evento.tipo !== "DELETE" && (evento.aviso.organization_id !== organizationId || evento.aviso.user_id !== user?.id)) return;
 
       queryClient.setQueryData<Aviso[]>(queryKey, (atual = []) =>
-        aplicarEventoDeAviso(atual, evento, organizationId),
+        aplicarEventoDeAviso(atual, evento, organizationId).slice(0, TETO),
       );
 
-      if (evento.tipo === "DELETE") return;
-      if (evento.aviso.organization_id !== organizationId) return;
-      // Aviso que já nasceu lido (o próprio usuário agindo noutra aba) não toca.
-      if (evento.aviso.read_at !== null) return;
-
-      const agora = Date.now();
-      const abaVisivel = typeof document === "undefined" || document.visibilityState === "visible";
-      const decisao: Entrega = decidirEntrega(evento.aviso, evento.tipo, {
-        preferencias: preferenciasRef.current,
-        abaVisivel,
-        conversaAbertaLeadId: conversaAberta(),
-        ultimoSomPorChave: ultimoSomPorChave.current,
-        horaLocal: horaLocalDeSaoPaulo(agora),
-        agora,
-      });
-
-      if (decisao.som) {
-        motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
-        if (evento.aviso.group_key) {
-          ultimoSomPorChave.current[evento.aviso.group_key] = agora;
-        }
-      }
-
-      if (decisao.cartao) {
-        mostrarCartao(evento.aviso, agora, abaVisivel);
-      }
+      if (evento.tipo !== "DELETE") receber(evento.aviso, true);
     },
   });
 

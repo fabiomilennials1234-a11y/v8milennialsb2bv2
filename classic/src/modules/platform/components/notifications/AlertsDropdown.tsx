@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
@@ -69,7 +71,20 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
   const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
-  const { preferencias, salvar } = usePreferenciasDeAviso();
+  const { preferencias, salvar, carregando, salvando } = usePreferenciasDeAviso();
+
+  const alternarSom = async () => {
+    const ligar = !preferencias.sound_enabled;
+    // Inicia o áudio no clique, antes da gravação assíncrona da preferência.
+    const teste = ligar ? motorDeSom.tocar("sistema", preferencias.volume) : null;
+    try {
+      await salvar({ sound_enabled: ligar });
+      if (teste && !(await teste)) toast.info("Som habilitado. Confira o volume e a permissão de áudio do navegador.");
+      else toast.success(ligar ? "Som das notificações ativado" : "Notificações silenciadas");
+    } catch (caught) {
+      notifyError(caught, { fallback: "Não foi possível salvar o som. Tente novamente." });
+    }
+  };
 
   const contagem = useMemo(() => contarPorFamilia(avisos), [avisos]);
   const grupos = useMemo(
@@ -136,7 +151,9 @@ export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
                 a tela de configurações. */}
             <button
               type="button"
-              onClick={() => void salvar({ sound_enabled: !preferencias.sound_enabled })}
+              onClick={() => void alternarSom()}
+              disabled={carregando || salvando}
+              aria-label={preferencias.sound_enabled ? "Silenciar notificações" : "Ativar som das notificações"}
               aria-pressed={!preferencias.sound_enabled}
               title={preferencias.sound_enabled ? "Silenciar tudo" : "Voltar a tocar"}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
