@@ -15,6 +15,7 @@ import {
   deleteMessage,
   markMessageRead,
   downloadMedia,
+  forwardMessage,
 } from "@/modules/communication/lib/whatsappApi";
 import { useCurrentTeamMember } from "@/modules/identity";
 type ActionArgs = {
@@ -93,6 +94,20 @@ export function useDownloadMedia() {
     mutationFn: async ({ instanceId, messageId }: { instanceId: string; messageId: string }) => {
       return downloadMedia(instanceId, messageId);
     },
+  });
+}
+
+export function useForwardMessage() {
+  return useMutation({
+    mutationFn: async ({
+      instanceId,
+      sourceMessageId,
+      targets,
+    }: {
+      instanceId: string;
+      sourceMessageId: string;
+      targets: string[];
+    }) => forwardMessage(instanceId, sourceMessageId, targets),
   });
 }
 

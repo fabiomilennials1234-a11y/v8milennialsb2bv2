@@ -10,7 +10,7 @@
  */
 import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useState } from "react";
-import { Reply, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
+import { Reply, Forward, Pencil, Pin, Trash2, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -45,6 +45,10 @@ export interface MessageBubbleActionsProps {
   hasMedia?: boolean;
   /** Fired when user clicks the edit pencil — parent swaps to EditMessageInline */
   onRequestEdit: () => void;
+  /** Mensagem encaminhável (ver `isForwardableMessage`); com `onRequestForward` mostra o botão. */
+  canForward?: boolean;
+  /** Fired when user clicks "Encaminhar" — parent abre o seletor de conversas */
+  onRequestForward?: () => void;
   className?: string;
 }
 
@@ -58,6 +62,8 @@ export function MessageBubbleActions({
   isPinned,
   hasMedia,
   onRequestEdit,
+  canForward,
+  onRequestForward,
   className,
 }: MessageBubbleActionsProps) {
   const reply = useChatReply();
@@ -142,6 +148,11 @@ export function MessageBubbleActions({
         aria-label="Ações da mensagem"
       >
         {reply && <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Responder mensagem" title="Responder" onClick={() => reply.select(messageId)}><Reply className="h-3.5 w-3.5" /></Button>}
+        {canForward && onRequestForward && (
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Encaminhar mensagem" title="Encaminhar" onClick={onRequestForward}>
+            <Forward className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <EmojiPickerPopover onSelect={handleReact} disabled={reactMut.isPending} />
 
         {canEdit && (

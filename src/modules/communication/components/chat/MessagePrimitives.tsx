@@ -47,6 +47,8 @@ import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
 import { OnDemandMedia } from "./media/OnDemandMedia";
+import { ForwardMessageDialog } from "./actions/ForwardMessageDialog";
+import { isForwardableMessage } from "@/modules/communication/lib/forwardable";
 import { Button } from "@/components/ui/button";
 import { Reply } from "lucide-react";
 import {
@@ -249,6 +251,7 @@ export function MessageBubble({
   const idEstavel = alvoDaAcao.provider_message_id ?? null;
   const mostrarBarraOficial = (!!onReagir || !!onResponder) && !isDeleted && !!idEstavel;
   const [isEditing, setIsEditing] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
   const editMut = useEditMessage();
 
   const showActions =
@@ -260,6 +263,8 @@ export function MessageBubble({
   const phone = (meta.remote_jid ?? "").split("@")[0] ?? "";
   const canEdit = isOutgoing && !!message.content && !hasMedia;
   const canDelete = isOutgoing;
+  // O servidor relê a mensagem do banco; a UI só esconde o botão do que não vai.
+  const canForward = isWhatsAppMsg && isForwardableMessage(message as WhatsAppMessage);
 
   const handleEditSave = async (newText: string) => {
     if (!instanceId || !message.message_id || !phone) return;
@@ -378,6 +383,8 @@ export function MessageBubble({
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
             onRequestEdit={() => setIsEditing(true)}
+            canForward={canForward}
+            onRequestForward={() => setForwardOpen(true)}
           />
         </div>
       )}
@@ -699,8 +706,20 @@ export function MessageBubble({
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
             onRequestEdit={() => {}}
+            canForward={canForward}
+            onRequestForward={() => setForwardOpen(true)}
           />
         </div>
+      )}
+
+      {canForward && showActions && forwardOpen && (
+        <ForwardMessageDialog
+          open={forwardOpen}
+          onOpenChange={setForwardOpen}
+          instanceId={instanceId!}
+          sourceMessageId={(message as WhatsAppMessage).id}
+          preview={(message as WhatsAppMessage).content ?? undefined}
+        />
       )}
     </motion.div>
   );

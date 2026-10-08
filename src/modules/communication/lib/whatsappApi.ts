@@ -309,6 +309,26 @@ export async function downloadMedia(
   });
 }
 
+export type ForwardMessageResult = {
+  results: Array<{ number: string; ok: boolean; error?: "send_failed" | "skipped" }>;
+};
+
+/**
+ * Encaminha UMA mensagem (pelo id da linha em `whatsapp_messages`) para até 5
+ * conversas. O servidor lê o conteúdo do banco e aplica teto e pausa entre
+ * envios; aqui só vão o id e os telefones.
+ */
+export async function forwardMessage(
+  instanceId: string,
+  sourceMessageId: string,
+  targets: string[]
+): Promise<ForwardMessageResult> {
+  return callProxy<ForwardMessageResult>("forwardMessage", {
+    instance_id: instanceId,
+    payload: { source_message_id: sourceMessageId, targets },
+  });
+}
+
 export async function syncHistory(
   instanceId: string,
   opts?: { chatJid?: string; limit?: number; cursor?: string }

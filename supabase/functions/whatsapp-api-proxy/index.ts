@@ -40,6 +40,14 @@ import {
 } from "../_shared/chat-owner-guard.ts";
 import { readTemplateRequest } from "../_shared/whatsapp-template-request.ts";
 import {
+  ForwardSkippedError,
+  parseForwardRequest,
+  planForward,
+  runForward,
+  type ForwardPlan,
+} from "../_shared/forward-message.ts";
+import { governSend, isSkippedSend } from "../_shared/send-governor/gate.ts";
+import {
   espelharMidiaDosComponentes,
 } from "../_shared/mirror-template-media.ts";
 import {
@@ -1053,6 +1061,117 @@ Deno.serve(
         // -------------------------------------------------------------------
         // Direct send actions — routed through adapter
         // -------------------------------------------------------------------
+        // -------------------------------------------------------------------
+        // forwardMessage — encaminha UMA mensagem para até 5 conversas.
+        //
+        // O conteúdo vem do registro no banco (org + instância do chamador),
+        // nunca do corpo do pedido. O envio manual é isento do ritmo do send
+        // governor, então teto de destinos e pausa entre envios são desta ação
+        // (_shared/forward-message.ts). Falha por destino não derruba o resto.
+        // -------------------------------------------------------------------
+        case "forwardMessage": {
+          const parsed = parseForwardRequest(payload);
+          if (!parsed.ok) {
+            return jsonResponse(parsed.error === "too_many_targets" ? 422 : 400, { error: parsed.error }, corsHeaders);
+          }
+
+          const { data: source, error: sourceError } = await supabaseAdmin
+            .from("whatsapp_messages")
+            .select("message_id,remote_jid,message_type,content,media_url,media_file_name,media_expired,deleted_at")
+            .eq("id", parsed.messageId)
+            .eq("organization_id", callerOrgId)
+            .eq("instance_id", instanceId)
+            .maybeSingle();
+          if (sourceError || !source) {
+            return jsonResponse(404, { error: "source_not_found" }, corsHeaders);
+          }
+
+          // Quem não enxerga a conversa de origem (ou algum destino) não encaminha.
+          const origemOk = await isChatTargetAllowed(supabaseUser, callerOrgId, instanceId, {
+            leadId: null,
+            rawPhone: source.remote_jid ?? null,
+            messageId: source.message_id ?? null,
+          });
+          let destinosOk = origemOk;
+          for (const t of parsed.targets) {
+            if (!destinosOk) break;
+            destinosOk = await isChatTargetAllowed(supabaseUser, callerOrgId, instanceId, {
+              leadId: null,
+              rawPhone: t,
+              messageId: null,
+            });
+          }
+          if (!destinosOk) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp",
+              action: "chat_owner_denied",
+              status: "error",
+              payloadSnapshot: { user_id: user.id, action, instance_id: instanceId, targets: parsed.targets.length },
+            });
+            return jsonResponse(403, { error: "Forbidden", reason: "chat_owner" }, corsHeaders);
+          }
+
+          const planned = planForward(source);
+          if (!planned.ok) {
+            return jsonResponse(422, { error: planned.error }, corsHeaders);
+          }
+
+          const send = async (number: string, plan: ForwardPlan) => {
+            const sent = await governSend(
+              supabaseAdmin,
+              {
+                orgId: callerOrgId,
+                instanceId,
+                category: "manual",
+                recipientPhone: number,
+                trackSource: "whatsapp-api-proxy",
+                content: plan.kind === "text" ? plan.text : plan.caption ?? null,
+              },
+              () =>
+                plan.kind === "text"
+                  ? provider.sendText({
+                    number,
+                    text: plan.text,
+                    trackSource: "whatsapp-api-proxy",
+                    trackId: callerTeamMemberId ?? undefined,
+                  })
+                  : provider.sendMedia({
+                    number,
+                    type: plan.type,
+                    file: plan.file,
+                    filename: plan.filename,
+                    caption: plan.caption,
+                    trackSource: "whatsapp-api-proxy",
+                    trackId: callerTeamMemberId ?? undefined,
+                  }),
+            );
+            if (isSkippedSend(sent)) throw new ForwardSkippedError();
+            return sent;
+          };
+
+          const results = await runForward(planned.plan, parsed.targets, send, {
+            sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+            random: Math.random,
+          });
+
+          await logRuntime({
+            organizationId: callerOrgId,
+            module: "whatsapp",
+            action: "forward_message",
+            status: results.every((r) => r.ok) ? "success" : "error",
+            payloadSnapshot: {
+              user_id: user.id,
+              instance_id: instanceId,
+              kind: planned.plan.kind,
+              targets: results.length,
+              failed: results.filter((r) => !r.ok).length,
+            },
+          });
+          result = { results };
+          break;
+        }
+
         case "sendText": {
           const { number, text, delay, replyid } = payload as {
             number?: string;
