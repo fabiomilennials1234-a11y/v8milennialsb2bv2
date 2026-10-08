@@ -46,6 +46,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
+import { OnDemandMedia } from "./media/OnDemandMedia";
 import { Button } from "@/components/ui/button";
 import { Reply } from "lucide-react";
 import {
@@ -176,6 +177,8 @@ export function MessageBubble({
       ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
       : "manual";
   const isWhatsAppMsg = "message_type" in message;
+  const waInstanceId = isWhatsAppMsg ? (message as WhatsAppMessage).instance_id : undefined;
+  const waMessageId = isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined;
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
@@ -476,24 +479,29 @@ export function MessageBubble({
 
             {/* Imagem */}
             {isImage && message.media_url && (
-              <MessageImage
-                src={message.media_url}
-                onPreview={() => onImagePreview(message.media_url!)}
-              />
+              <OnDemandMedia kind="image" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageImage src={url} onPreview={() => onImagePreview(url)} />}
+              </OnDemandMedia>
             )}
 
             {/* Vídeo */}
             {isVideo && message.media_url && (
-              <MessageVideo src={message.media_url} />
+              <OnDemandMedia kind="video" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => <MessageVideo src={url} />}
+              </OnDemandMedia>
             )}
 
             {/* Documento */}
             {isDocument && message.media_url && (
-              <MessageDocument
-                src={message.media_url}
-                fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
-                isOutgoing={isAiOutgoing}
-              />
+              <OnDemandMedia kind="document" src={message.media_url} instanceId={waInstanceId} messageId={waMessageId}>
+                {(url) => (
+                  <MessageDocument
+                    src={url}
+                    fileName={readDocumentFileName(message as DocumentFileNameFields) ?? undefined}
+                    isOutgoing={isAiOutgoing}
+                  />
+                )}
+              </OnDemandMedia>
             )}
 
             {/* Sticker */}

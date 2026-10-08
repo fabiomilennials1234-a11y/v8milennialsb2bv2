@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { convertAudioBlobToMp3 } from "@/modules/communication/lib/audioToMp3";
+import { isWhatsAppCdnUrl } from "@/modules/communication/lib/whatsappMediaUrl";
 import { supabase } from "@/integrations/supabase/client";
 
 // Edge Function exige Authorization; <audio src="..."> não envia header → 401. Resolvemos via fetch com token e blob.
@@ -27,10 +28,6 @@ interface AudioPlayerProps {
   isOutgoing: boolean;
   instanceId?: string | null;
   whatsappMessageId?: string | null;
-}
-
-function isEncryptedWhatsAppUrl(url: string): boolean {
-  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
 }
 
 export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsappMessageId }: AudioPlayerProps) {
@@ -160,7 +157,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
     }
 
     // Encrypted WhatsApp CDN URL — download decrypted media via proxy
-    if (isEncryptedWhatsAppUrl(src) && instanceId && whatsappMessageId && !proxyDownloadAttemptedRef.current) {
+    if (isWhatsAppCdnUrl(src) && instanceId && whatsappMessageId && !proxyDownloadAttemptedRef.current) {
       proxyDownloadAttemptedRef.current = true;
       setLoading(true);
       try {
