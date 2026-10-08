@@ -5507,6 +5507,43 @@ index 000000000..f348cb821
 +  }
 +  return map;
 +}
+diff --git a/classic/src/modules/pipelines/pages/Funil.tsx b/classic/src/modules/pipelines/pages/Funil.tsx
+index 1bc881b62..66ccd3d8c 100644
+--- a/classic/src/modules/pipelines/pages/Funil.tsx
++++ b/classic/src/modules/pipelines/pages/Funil.tsx
+@@ -1,5 +1,5 @@
+ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+-import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
++import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+ import { Button } from "@/components/ui/button";
+ import {
+   DropdownMenu,
+@@ -96,7 +96,6 @@ import {
+   useResponsibleMembers,
+ } from "@/modules/identity";
+ import { useTags } from "@/modules/leads/hooks/useTags";
+-import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+ import { trackModuleVisit } from "@/lib/analytics";
+ import {
+   startOfDay,
+@@ -998,15 +997,8 @@ function FunilPageInner() {
+ }
+ 
+ export default function FunilPage() {
+-  const { slug: param } = useParams<{ slug: string }>();
+-  const { hasFeature } = useOrgFeatures();
+-
+-  // Agendamentos foi mergeado em Oportunidades — board standalone aposentado
+-  // (ADR-0004). Mesma guarda que a página velha de Confirmação carregava.
+-  if (param === "confirmacao" && hasFeature("merged_opportunity_funnel")) {
+-    return <Navigate to="/funis" replace />;
+-  }
+-
++  // A navegação já é decidida por pipelines.config.navigation. Slug e UUID
++  // resolvem o mesmo funil; acesso de master/loading não representa rollout.
+   return (
+     <LeadPanelProvider>
+       <DealPanelProvider>
 diff --git a/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx b/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx
 index f09ea1c75..63c04b877 100644
 --- a/classic/src/modules/platform/components/ServiceWorkerUpdater.tsx
