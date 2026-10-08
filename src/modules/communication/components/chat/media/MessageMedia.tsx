@@ -207,6 +207,8 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
       href={src}
       target="_blank"
       rel="noopener noreferrer"
+      // Blob carregado sob demanda não tem nome na URL: o `download` dá o nome real.
+      download={src.startsWith("blob:") ? displayName : undefined}
       className={cn(
         "flex items-center gap-3 p-3 rounded-lg transition-colors w-full max-w-full min-w-0 overflow-hidden",
         isOutgoing
