@@ -83,9 +83,19 @@ import { toast } from "sonner";
 import { MasterPageHeader } from "../components/MasterPageHeader";
 import { OrgFicha } from "../components/org/OrgFicha";
 import { useOrgHealthSignals } from "../hooks/useOrgFicha";
-import { healthBand, orgHealth, RISK_NO_LOGIN_DAYS, type OrgHealth } from "../lib/org-health";
+import {
+  healthBand,
+  IN_USE_LOGIN_DAYS,
+  isOrgInUse,
+  orgHealth,
+  RISK_NO_LOGIN_DAYS,
+  type OrgHealth,
+} from "../lib/org-health";
 
 type Recorte = "todas" | "risco" | "limite";
+/** Em uso = login de membro nos últimos 30 dias (`isOrgInUse`). Vive na URL (`?uso=`) para o link do recorte ser compartilhável. */
+type Uso = "todas" | "ativas" | "inativas";
+const USOS: readonly Uso[] = ["todas", "ativas", "inativas"];
 
 const BAND_CHIP = {
   good: "bg-success/10 text-success-strong",
@@ -105,6 +115,17 @@ export default function MasterOrganizations() {
   const [recorte, setRecorte] = useState<Recorte>("todas");
   const [params, setParams] = useSearchParams();
   const fichaId = params.get("org");
+  const usoParam = params.get("uso") as Uso | null;
+  const uso: Uso = usoParam && USOS.includes(usoParam) ? usoParam : "todas";
+  const setUso = (v: Uso) =>
+    setParams(
+      (p) => {
+        if (v === "todas") p.delete("uso");
+        else p.set("uso", v);
+        return p;
+      },
+      { replace: true },
+    );
   const abrirFicha = (id: string | null) =>
     setParams(
       (p) => {
@@ -149,7 +170,17 @@ export default function MasterOrganizations() {
     ? Math.round(vivas.reduce((acc, o) => acc + (saude.get(o.id)?.score ?? 0), 0) / vivas.length)
     : 0;
 
-  const recortadas = recorte === "risco" ? emRisco : recorte === "limite" ? pertoDoLimite : baseOrgs;
+  // Ativa/inativa olha TODAS as orgs, encerradas inclusive: a pergunta é
+  // "quantos clientes usam o Torque hoje", não "quantos pagam".
+  const emUso = useMemo(() => {
+    const now = new Date();
+    return new Set((baseOrgs ?? []).filter((o) => isOrgInUse(signals?.get(o.id), now)).map((o) => o.id));
+  }, [baseOrgs, signals]);
+  const totalOrgs = (baseOrgs ?? []).length;
+
+  const recortadas = (recorte === "risco" ? emRisco : recorte === "limite" ? pertoDoLimite : baseOrgs)?.filter(
+    (o) => uso === "todas" || emUso.has(o.id) === (uso === "ativas"),
+  );
 
   const filteredOrgs = recortadas
     ?.filter(
@@ -238,11 +269,11 @@ export default function MasterOrganizations() {
       <KpiRow cols={4}>
         <KpiTile
           label="Orgs ativas"
-          value={vivas.length}
+          value={emUso.size}
           icon={Building2}
           tone="info"
-          loading={isLoading}
-          note={`${(baseOrgs ?? []).length} no total`}
+          loading={sinaisCarregando}
+          note={`de ${totalOrgs} · login nos últimos ${IN_USE_LOGIN_DAYS} dias`}
         />
         <KpiTile
           label="Em risco"
@@ -264,28 +295,28 @@ export default function MasterOrganizations() {
       </KpiRow>
 
       <div className="flex flex-wrap items-center gap-3">
-        <nav aria-label="Recorte" className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide">
-          {(
-            [
-              ["todas", "Todas"],
-              ["risco", `Em risco · ${emRisco.length}`],
-              ["limite", `Perto do limite · ${pertoDoLimite.length}`],
-            ] as [Recorte, string][]
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={recorte === k}
-              onClick={() => setRecorte(k)}
-              className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
-                recorte === k ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        <Segmented
+          label="Uso"
+          value={uso}
+          onChange={setUso}
+          title={`Ativa = alguém do cliente entrou nos últimos ${IN_USE_LOGIN_DAYS} dias (master não conta)`}
+          options={[
+            ["todas", sinaisCarregando ? "Todas" : `Todas · ${totalOrgs}`],
+            ["ativas", sinaisCarregando ? "Ativas" : `Ativas · ${emUso.size}`],
+            ["inativas", sinaisCarregando ? "Inativas" : `Inativas · ${totalOrgs - emUso.size}`],
+          ]}
+        />
+
+        <Segmented
+          label="Recorte"
+          value={recorte}
+          onChange={setRecorte}
+          options={[
+            ["todas", "Todas"],
+            ["risco", `Em risco · ${emRisco.length}`],
+            ["limite", `Perto do limite · ${pertoDoLimite.length}`],
+          ]}
+        />
 
       {/* Search */}
       <div className="relative w-full max-w-md sm:w-auto sm:flex-1">
@@ -566,6 +597,43 @@ export default function MasterOrganizations() {
         }}
       />
     </div>
+  );
+}
+
+function Segmented<K extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  title,
+}: {
+  label: string;
+  value: K;
+  onChange: (k: K) => void;
+  options: [K, string][];
+  title?: string;
+}) {
+  return (
+    <nav
+      aria-label={label}
+      title={title}
+      className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-[3px] scrollbar-hide"
+    >
+      {options.map(([k, text]) => (
+        <button
+          key={k}
+          type="button"
+          aria-pressed={value === k}
+          onClick={() => onChange(k)}
+          className={cn(
+            "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold tabular-nums transition-[background-color,color,box-shadow] duration-150",
+            value === k ? "bg-card text-foreground shadow-relevo" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {text}
+        </button>
+      ))}
+    </nav>
   );
 }
 

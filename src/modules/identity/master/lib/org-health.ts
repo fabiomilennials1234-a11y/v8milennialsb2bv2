@@ -118,6 +118,22 @@ export function orgHealth(s: OrgHealthSignals, now: Date = new Date()): OrgHealt
   return { score, parts, daysSinceLogin, atRisk: riskReasons.length > 0, riskReasons, quotaWarning };
 }
 
+/**
+ * Org EM USO — o número real de clientes usando o Torque.
+ *
+ * Em uso = alguém do cliente (membro ativo, master não conta) entrou nos
+ * últimos 30 dias. É o único sinal que só existe com gente usando: status de
+ * assinatura não diz nada (medido 2026-10-08: dezenas de orgs `active` sem
+ * login há meses), e mensagem recebida, lead de webhook e evento de automação
+ * continuam chegando com o chip conectado e ninguém olhando.
+ */
+export const IN_USE_LOGIN_DAYS = 30;
+
+export function isOrgInUse(s: OrgHealthSignals | undefined, now: Date = new Date()): boolean {
+  if (!s?.last_login_at) return false;
+  return now.getTime() - new Date(s.last_login_at).getTime() < IN_USE_LOGIN_DAYS * DAY;
+}
+
 export type HealthBand = "good" | "warn" | "bad";
 
 export function healthBand(score: number): HealthBand {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { healthBand, orgHealth, type OrgHealthSignals } from "./org-health";
+import { healthBand, isOrgInUse, orgHealth, type OrgHealthSignals } from "./org-health";
 
 const NOW = new Date("2026-10-05T12:00:00Z");
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000).toISOString();
@@ -66,6 +66,26 @@ describe("orgHealth", () => {
       resource: "max_users",
       ratio: 0.9,
     });
+  });
+});
+
+describe("isOrgInUse", () => {
+  it("login de membro nos últimos 30 dias = em uso", () => {
+    expect(isOrgInUse(signals({ last_login_at: daysAgo(0) }), NOW)).toBe(true);
+    expect(isOrgInUse(signals({ last_login_at: daysAgo(29) }), NOW)).toBe(true);
+  });
+
+  it("30 dias ou mais sem login = inativa", () => {
+    expect(isOrgInUse(signals({ last_login_at: daysAgo(30) }), NOW)).toBe(false);
+    expect(isOrgInUse(signals({ last_login_at: daysAgo(120) }), NOW)).toBe(false);
+  });
+
+  it("chip e automação rodando não tornam a org ativa sem login", () => {
+    expect(isOrgInUse(signals({ last_login_at: null, events_7d: 5000, whatsapp_connected: 1 }), NOW)).toBe(false);
+  });
+
+  it("org sem sinal (sandbox, fora da RPC) = inativa", () => {
+    expect(isOrgInUse(undefined, NOW)).toBe(false);
   });
 });
 
